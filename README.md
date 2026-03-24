@@ -61,6 +61,21 @@ argus-redact is **semantic encryption**: it hides identity while preserving mean
 | Reversible? | Yes, with key | Yes, with key |
 | Key leaked = ? | Plaintext exposed | Identities exposed |
 
+## Performance
+
+Regex layer (mode="fast"), no GPU required:
+
+| | Apple M1 Max | Raspberry Pi Zero 2W |
+|-|-------------|---------------------|
+| Short text (17 chars) | 0.06ms | 0.98ms |
+| Medium text (770 chars) | 0.28ms | 4.29ms |
+| Long text (10K chars) | 3.70ms | 52.93ms |
+| restore() | <0.01ms | 0.04ms |
+| Throughput | 42,789 docs/sec | 3,433 docs/sec |
+| 4-language overhead | 2.5x | 2.0x |
+
+The cloud LLM call (500-3000ms) dominates any pipeline. argus-redact adds negligible latency.
+
 ## Per-Message Random Keys
 
 Every `redact()` call generates a fresh random key — like a new encryption key per message.
