@@ -88,8 +88,12 @@ def redact(
     lang: str | list[str] = "zh",
     mode: str = "auto",
     seed: int | None = None,
-) -> tuple[str, dict]:
-    """Detect and replace PII in text. Returns (redacted_text, key)."""
+    detailed: bool = False,
+) -> tuple[str, dict] | tuple[str, dict, dict]:
+    """Detect and replace PII in text.
+
+    Returns (redacted_text, key), or (redacted_text, key, details) when detailed=True.
+    """
     if not isinstance(text, str):
         raise TypeError(f"text must be a string, got {type(text).__name__}")
 
@@ -132,9 +136,31 @@ def redact(
 
     entities = merge_entities(entities)
 
-    redacted, result_key = replace(text, entities, seed=seed, key=existing_key)
+    # Build reverse mapping: original -> replacement (for details)
+    merged_entities = entities
+
+    redacted, result_key = replace(text, merged_entities, seed=seed, key=existing_key)
 
     if key_file is not None and result_key:
         Path(key_file).write_text(json.dumps(result_key, ensure_ascii=False, indent=2))
+
+    if detailed:
+        reverse_key = {v: k for k, v in result_key.items()}
+        entity_details = [
+            {
+                "original": e.text,
+                "replacement": reverse_key.get(e.text, ""),
+                "type": e.type,
+                "start": e.start,
+                "end": e.end,
+                "confidence": e.confidence,
+            }
+            for e in merged_entities
+        ]
+        details = {
+            "entities": entity_details,
+            "stats": {"total": len(entity_details)},
+        }
+        return redacted, result_key, details
 
     return redacted, result_key
