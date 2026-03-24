@@ -1,5 +1,7 @@
 """redact() — public API that composes pure + impure layers."""
 
+from __future__ import annotations
+
 import importlib
 import json
 from pathlib import Path
@@ -11,6 +13,11 @@ from argus_redact.pure.replacer import replace
 _LANG_PATTERNS = {
     "zh": "argus_redact.lang.zh.patterns",
     "en": "argus_redact.lang.en.patterns",
+}
+
+_LANG_NER_ADAPTERS = {
+    "zh": "argus_redact.lang.zh.ner_adapter",
+    "en": "argus_redact.lang.en.ner_adapter",
 }
 
 VALID_MODES = ("auto", "fast", "ner")
@@ -36,6 +43,25 @@ def _load_patterns(lang: str | list[str]) -> list[dict]:
             )
 
     return all_patterns
+
+
+def _get_ner_adapter(lang: str | list[str]):
+    """Load and return a NER adapter for the given language. Returns None if unavailable."""
+
+    langs = [lang] if isinstance(lang, str) else list(lang)
+
+    for code in langs:
+        if code not in _LANG_NER_ADAPTERS:
+            continue
+        try:
+            mod = importlib.import_module(_LANG_NER_ADAPTERS[code])
+            adapter = mod.create_adapter()
+            adapter.load()
+            return adapter
+        except (ModuleNotFoundError, ImportError):
+            pass
+
+    return None
 
 
 def redact(
@@ -65,6 +91,15 @@ def redact(
 
     # Layer 1: regex
     entities = match_patterns(text, _load_patterns(lang))
+
+    # Layer 2: NER (auto or ner mode)
+    if mode in ("auto", "ner"):
+        adapter = _get_ner_adapter(lang)
+        if adapter is not None:
+            from argus_redact.impure.ner import detect_ner
+
+            ner_entities = detect_ner(text, adapter=adapter)
+            entities.extend(e.to_pattern_match() for e in ner_entities)
 
     redacted, result_key = replace(text, entities, seed=seed, key=existing_key)
 

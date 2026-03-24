@@ -1,0 +1,64 @@
+[
+  {
+    "id": "single_person",
+    "input": "张三去了北京",
+    "expected_entities": [
+      {"text": "张三", "type": "person"},
+      {"text": "北京", "type": "location"}
+    ],
+    "description": "一个人名一个地名"
+  },
+  {
+    "id": "two_persons",
+    "input": "张三和李四在聊天",
+    "expected_entities": [
+      {"text": "张三", "type": "person"},
+      {"text": "李四", "type": "person"}
+    ],
+    "description": "两个人名"
+  },
+  {
+    "id": "person_org_location",
+    "input": "王五在阿里巴巴的杭州总部工作",
+    "expected_entities": [
+      {"text": "王五", "type": "person"},
+      {"text": "阿里巴巴", "type": "organization"},
+      {"text": "杭州", "type": "location"}
+    ],
+    "description": "人名+机构+地点"
+  },
+  {
+    "id": "person_with_phone",
+    "input": "张三的手机号是13812345678",
+    "expected_entities": [
+      {"text": "张三", "type": "person"}
+    ],
+    "description": "人名+手机号（手机号由regex层处理）"
+  },
+  {
+    "id": "no_entities",
+    "input": "今天天气不错",
+    "expected_entities": [],
+    "description": "无实体"
+  },
+  {
+    "id": "hospital_visit",
+    "input": "王五在协和医院做了体检",
+    "expected_entities": [
+      {"text": "王五", "type": "person"},
+      {"text": "协和医院", "type": "organization"}
+    ],
+    "description": "人名+医院名"
+  },
+  {
+    "id": "complex_sentence",
+    "input": "张三和李四在星巴克讨论了去阿里面试的事",
+    "expected_entities": [
+      {"text": "张三", "type": "person"},
+      {"text": "李四", "type": "person"},
+      {"text": "星巴克", "type": "organization"},
+      {"text": "阿里", "type": "organization"}
+    ],
+    "description": "多人名+多机构名"
+  }
+]
