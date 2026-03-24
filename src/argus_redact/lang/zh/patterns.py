@@ -46,7 +46,11 @@ PATTERNS = [
     {
         "type": "id_number",
         "label": "[身份证号已脱敏]",
-        "pattern": r"(?<!\d)[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)",
+        "pattern": (
+            r"(?<!\d)[1-9]\d{5}(?:19|20)\d{2}"
+            r"(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])"
+            r"\d{3}[\dXx](?!\d)"
+        ),
         "validate": _validate_id_number,
         "description": "Chinese 18-digit national ID (MOD 11-2 checksum)",
     },

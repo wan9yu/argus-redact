@@ -24,12 +24,14 @@ def match_patterns(text: str, patterns: list[dict]) -> list[PatternMatch]:
             matched = m.group()
             if validate and not validate(matched):
                 continue
-            results.append(PatternMatch(
-                text=matched,
-                type=pat["type"],
-                start=m.start(),
-                end=m.end(),
-            ))
+            results.append(
+                PatternMatch(
+                    text=matched,
+                    type=pat["type"],
+                    start=m.start(),
+                    end=m.end(),
+                )
+            )
 
     results.sort(key=lambda r: r.start)
     return results

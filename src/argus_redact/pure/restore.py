@@ -8,13 +8,12 @@ def restore(text: str, key: dict | str) -> str:
     """
     if isinstance(key, str):
         import json
+
         with open(key) as f:
             key = json.load(f)
 
     if not isinstance(key, dict):
-        raise TypeError(
-            f"key must be a dict or str (file path), got {type(key).__name__}"
-        )
+        raise TypeError(f"key must be a dict or str (file path), got {type(key).__name__}")
 
     if not key:
         return text

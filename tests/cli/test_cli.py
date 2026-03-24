@@ -17,12 +17,17 @@ def run_cli(*args, stdin=None):
 
 
 class TestRedactCommand:
-
     def test_should_redact_stdin_when_pipe_mode(self, tmp_path):
         key_file = tmp_path / "key.json"
 
         code, stdout, _ = run_cli(
-            "redact", "-k", str(key_file), "-m", "fast", "-s", "42",
+            "redact",
+            "-k",
+            str(key_file),
+            "-m",
+            "fast",
+            "-s",
+            "42",
             stdin="电话13812345678",
         )
 
@@ -38,7 +43,12 @@ class TestRedactCommand:
         key_file = tmp_path / "key.json"
 
         code, stdout, _ = run_cli(
-            "redact", str(input_file), "-k", str(key_file), "-m", "fast",
+            "redact",
+            str(input_file),
+            "-k",
+            str(key_file),
+            "-m",
+            "fast",
         )
 
         assert code == 0
@@ -49,8 +59,15 @@ class TestRedactCommand:
         output_file = tmp_path / "out.txt"
 
         code, _, _ = run_cli(
-            "redact", "-k", str(key_file), "-o", str(output_file),
-            "-m", "fast", "-s", "42",
+            "redact",
+            "-k",
+            str(key_file),
+            "-o",
+            str(output_file),
+            "-m",
+            "fast",
+            "-s",
+            "42",
             stdin="电话13812345678",
         )
 
@@ -61,12 +78,12 @@ class TestRedactCommand:
     def test_should_reuse_key_when_key_file_exists(self, tmp_path):
         key_file = tmp_path / "key.json"
 
-        run_cli("redact", "-k", str(key_file), "-m", "fast", "-s", "42",
-                stdin="电话13812345678")
+        run_cli("redact", "-k", str(key_file), "-m", "fast", "-s", "42", stdin="电话13812345678")
         key1 = json.loads(key_file.read_text())
 
-        run_cli("redact", "-k", str(key_file), "-m", "fast", "-s", "42",
-                stdin="邮箱test@example.com")
+        run_cli(
+            "redact", "-k", str(key_file), "-m", "fast", "-s", "42", stdin="邮箱test@example.com"
+        )
         key2 = json.loads(key_file.read_text())
 
         assert len(key2) > len(key1)
@@ -78,7 +95,10 @@ class TestRedactCommand:
         key_file = tmp_path / "key.json"
 
         code, _, stderr = run_cli(
-            "redact", "/nonexistent/file.txt", "-k", str(key_file),
+            "redact",
+            "/nonexistent/file.txt",
+            "-k",
+            str(key_file),
         )
 
         assert code == 1
@@ -87,7 +107,13 @@ class TestRedactCommand:
         key_file = tmp_path / "key.json"
 
         code, stdout, _ = run_cli(
-            "redact", "-k", str(key_file), "-m", "fast", "-l", "zh",
+            "redact",
+            "-k",
+            str(key_file),
+            "-m",
+            "fast",
+            "-l",
+            "zh",
             stdin="电话13812345678",
         )
 
@@ -96,13 +122,14 @@ class TestRedactCommand:
 
 
 class TestRestoreCommand:
-
     def test_should_restore_stdin_when_pipe_mode(self, tmp_path):
         key_file = tmp_path / "key.json"
         key_file.write_text(json.dumps({"P-037": "王五", "P-012": "张三"}))
 
         code, stdout, _ = run_cli(
-            "restore", "-k", str(key_file),
+            "restore",
+            "-k",
+            str(key_file),
             stdin="P-037和P-012开会",
         )
 
@@ -117,7 +144,10 @@ class TestRestoreCommand:
         input_file.write_text("P-037说了话")
 
         code, stdout, _ = run_cli(
-            "restore", str(input_file), "-k", str(key_file),
+            "restore",
+            str(input_file),
+            "-k",
+            str(key_file),
         )
 
         assert code == 0
@@ -129,7 +159,11 @@ class TestRestoreCommand:
         output_file = tmp_path / "out.txt"
 
         code, _, _ = run_cli(
-            "restore", "-k", str(key_file), "-o", str(output_file),
+            "restore",
+            "-k",
+            str(key_file),
+            "-o",
+            str(output_file),
             stdin="P-037说了话",
         )
 
@@ -138,7 +172,9 @@ class TestRestoreCommand:
 
     def test_should_exit_4_when_key_file_not_found(self):
         code, _, stderr = run_cli(
-            "restore", "-k", "/nonexistent/key.json",
+            "restore",
+            "-k",
+            "/nonexistent/key.json",
             stdin="some text",
         )
 
@@ -149,7 +185,9 @@ class TestRestoreCommand:
         key_file.write_text("not valid json{{{")
 
         code, _, stderr = run_cli(
-            "restore", "-k", str(key_file),
+            "restore",
+            "-k",
+            str(key_file),
             stdin="some text",
         )
 
@@ -157,18 +195,25 @@ class TestRestoreCommand:
 
 
 class TestRedactRestoreRoundtrip:
-
     def test_should_recover_original_when_redact_then_restore(self, tmp_path):
         key_file = tmp_path / "key.json"
         original = "张三电话13812345678，邮箱zhang@test.com"
 
         _, redacted, _ = run_cli(
-            "redact", "-k", str(key_file), "-m", "fast", "-s", "42",
+            "redact",
+            "-k",
+            str(key_file),
+            "-m",
+            "fast",
+            "-s",
+            "42",
             stdin=original,
         )
 
         _, restored, _ = run_cli(
-            "restore", "-k", str(key_file),
+            "restore",
+            "-k",
+            str(key_file),
             stdin=redacted.strip(),
         )
 
@@ -177,7 +222,6 @@ class TestRedactRestoreRoundtrip:
 
 
 class TestInfoCommand:
-
     def test_should_show_version_when_info(self):
         code, stdout, _ = run_cli("info")
 
@@ -192,7 +236,6 @@ class TestInfoCommand:
 
 
 class TestCliErrors:
-
     def test_should_show_help_when_no_subcommand(self):
         code, _, stderr = run_cli()
 

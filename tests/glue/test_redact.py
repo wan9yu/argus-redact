@@ -1,13 +1,12 @@
 """Tests for redact() glue function — the public API."""
 
 import pytest
-
 from argus_redact import redact, restore
+
 from tests.conftest import parametrize_examples
 
 
 class TestRedactBasic:
-
     def test_should_remove_phone_when_text_contains_phone(self):
         redacted, key = redact("电话13812345678", seed=42, mode="fast")
 
@@ -49,7 +48,6 @@ class TestRedactBasic:
 
 
 class TestRedactRoundtrip:
-
     @parametrize_examples("redact_roundtrip.json")
     def test_should_recover_pii_when_redact_then_restore(self, example):
         original = example["input"]
@@ -58,21 +56,18 @@ class TestRedactRoundtrip:
 
         if example["pii_values"]:
             for pii in example["pii_values"]:
-                assert pii not in redacted, (
-                    f"PII '{pii}' still in redacted text: {example['description']}"
-                )
+                assert (
+                    pii not in redacted
+                ), f"PII '{pii}' still in redacted text: {example['description']}"
             restored = restore(redacted, key)
             for pii in example["pii_values"]:
-                assert pii in restored, (
-                    f"PII '{pii}' not recovered: {example['description']}"
-                )
+                assert pii in restored, f"PII '{pii}' not recovered: {example['description']}"
         else:
             assert redacted == original
             assert key == {}
 
 
 class TestRedactSeedDeterminism:
-
     def test_should_produce_same_output_when_same_seed(self):
         text = "电话13812345678"
 
@@ -83,7 +78,6 @@ class TestRedactSeedDeterminism:
 
 
 class TestRedactKeyReuse:
-
     def test_should_grow_key_when_new_entity_with_existing_key(self):
         _, key = redact("电话13812345678", seed=42, mode="fast")
         size1 = len(key)
@@ -101,7 +95,6 @@ class TestRedactKeyReuse:
 
 
 class TestRedactMode:
-
     def test_should_raise_when_invalid_mode(self):
         with pytest.raises(ValueError):
             redact("text", mode="invalid")
@@ -113,7 +106,6 @@ class TestRedactMode:
 
 
 class TestRedactTypeErrors:
-
     def test_should_raise_type_error_when_text_is_not_string(self):
         with pytest.raises(TypeError):
             redact(123)

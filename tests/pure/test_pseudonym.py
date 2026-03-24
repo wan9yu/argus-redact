@@ -1,6 +1,6 @@
 """Tests for pseudonym generation."""
 
-from argus_redact.pure.pseudonym import generate_pseudonym, PseudonymGenerator
+from argus_redact.pure.pseudonym import PseudonymGenerator, generate_pseudonym
 
 
 class TestGeneratePseudonym:

@@ -1,6 +1,7 @@
 """Tests for replacer — converts pattern matches to redacted text + key."""
 
 from argus_redact.pure.replacer import replace
+
 from tests.conftest import make_match
 
 

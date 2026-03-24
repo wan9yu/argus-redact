@@ -80,8 +80,8 @@ def cmd_restore(args):
 
 
 def cmd_info(args):
-    from argus_redact.lang.zh.patterns import PATTERNS as ZH_PATTERNS
     from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
+    from argus_redact.lang.zh.patterns import PATTERNS as ZH_PATTERNS
 
     print("argus-redact v0.1.0")
     print()

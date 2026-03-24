@@ -4,9 +4,9 @@ import importlib
 import json
 from pathlib import Path
 
+from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.patterns import match_patterns
 from argus_redact.pure.replacer import replace
-from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 
 _LANG_PATTERNS = {
     "zh": "argus_redact.lang.zh.patterns",
@@ -24,8 +24,7 @@ def _load_patterns(lang: str | list[str]) -> list[dict]:
     for code in langs:
         if code not in _LANG_PATTERNS:
             raise ValueError(
-                f"Unknown language '{code}'. "
-                f"Available: {list(_LANG_PATTERNS.keys())}"
+                f"Unknown language '{code}'. " f"Available: {list(_LANG_PATTERNS.keys())}"
             )
         try:
             mod = importlib.import_module(_LANG_PATTERNS[code])
@@ -52,9 +51,7 @@ def redact(
         raise TypeError(f"text must be a string, got {type(text).__name__}")
 
     if mode not in VALID_MODES:
-        raise ValueError(
-            f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}"
-        )
+        raise ValueError(f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}")
 
     # Resolve key
     existing_key = None
@@ -72,8 +69,6 @@ def redact(
     redacted, result_key = replace(text, entities, seed=seed, key=existing_key)
 
     if key_file is not None and result_key:
-        Path(key_file).write_text(
-            json.dumps(result_key, ensure_ascii=False, indent=2)
-        )
+        Path(key_file).write_text(json.dumps(result_key, ensure_ascii=False, indent=2))
 
     return redacted, result_key

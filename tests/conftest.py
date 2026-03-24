@@ -4,11 +4,9 @@ import json
 from pathlib import Path
 
 import pytest
-
 from argus_redact._types import PatternMatch
-from argus_redact.lang.zh.patterns import PATTERNS as ZH_PATTERNS
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
-
+from argus_redact.lang.zh.patterns import PATTERNS as ZH_PATTERNS
 
 # ── Fixture data directory ──
 
@@ -37,6 +35,7 @@ def parametrize_examples(filename: str):
 
 # ── Pattern fixtures ──
 
+
 @pytest.fixture
 def zh_patterns():
     """Chinese regex patterns + shared patterns."""
@@ -51,6 +50,7 @@ def shared_patterns():
 
 # ── Key fixtures ──
 
+
 @pytest.fixture
 def sample_key():
     """A typical key mapping pseudonyms to originals."""
@@ -64,6 +64,7 @@ def sample_key():
 
 
 # ── Helpers ──
+
 
 def make_match(text, entity_type, start, end=None):
     """Helper to create a PatternMatch with less boilerplate."""

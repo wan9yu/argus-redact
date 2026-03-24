@@ -3,7 +3,6 @@
 from argus_redact._types import PatternMatch
 from argus_redact.pure.pseudonym import PseudonymGenerator
 
-
 # Default strategies per entity type
 DEFAULT_STRATEGIES = {
     "person": "pseudonym",
@@ -141,6 +140,6 @@ def replace(
             continue
         seen_positions.add(pos)
         replacement = entity_replacements[entity.text]
-        result = result[:entity.start] + replacement + result[entity.end:]
+        result = result[: entity.start] + replacement + result[entity.end :]
 
     return result, result_key
