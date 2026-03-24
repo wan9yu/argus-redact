@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import importlib
 import json
+import logging
 from pathlib import Path
 
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.merger import merge_entities
 from argus_redact.pure.patterns import match_patterns
 from argus_redact.pure.replacer import replace
+
+logger = logging.getLogger(__name__)
 
 _LANG_PATTERNS = {
     "zh": "argus_redact.lang.zh.patterns",
@@ -52,7 +55,6 @@ def _load_patterns(lang: str | list[str]) -> list[dict]:
 
 def _get_ner_adapter(lang: str | list[str]):
     """Load and return a NER adapter for the given language. Returns None if unavailable."""
-
     langs = [lang] if isinstance(lang, str) else list(lang)
 
     for code in langs:
@@ -67,6 +69,16 @@ def _get_ner_adapter(lang: str | list[str]):
             pass
 
     return None
+
+
+def _get_semantic_adapter():
+    """Create an Ollama semantic adapter. Returns None if unavailable."""
+    try:
+        from argus_redact.impure.ollama_adapter import OllamaAdapter
+
+        return OllamaAdapter()
+    except ImportError:
+        return None
 
 
 def redact(
@@ -105,6 +117,18 @@ def redact(
 
             ner_entities = detect_ner(text, adapter=adapter)
             entities.extend(e.to_pattern_match() for e in ner_entities)
+
+    # Layer 3: Semantic LLM (auto mode only)
+    if mode == "auto":
+        semantic_adapter = _get_semantic_adapter()
+        if semantic_adapter is not None:
+            from argus_redact.impure.semantic import detect_semantic
+
+            try:
+                sem_entities = detect_semantic(text, adapter=semantic_adapter)
+                entities.extend(e.to_pattern_match() for e in sem_entities)
+            except Exception:
+                logger.warning("Layer 3 semantic detection failed", exc_info=True)
 
     entities = merge_entities(entities)
 
