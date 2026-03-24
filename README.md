@@ -99,14 +99,20 @@ redacted, key = redact("张三 13812345678", seed=42)   # P-037 — identical
 ## Mixed Language
 
 ```python
+# Chinese + English
 redacted, key = redact(
     "王五给John发了邮件，讨论了Apple的offer，电话13812345678",
     lang=["zh", "en"],
 )
-# "P-037给P-012发了邮件，讨论了[某公司]的offer，电话[手机号已脱敏]"
+
+# All four languages
+redacted, key = redact(
+    "手机13812345678，SSN 123-45-6789，携帯090-1234-5678，전화010-1234-5678",
+    lang=["zh", "en", "ja", "ko"],
+)
 ```
 
-Chinese names → Chinese NER. English names → English NER. Phone patterns → regex. Merged automatically.
+Each language's patterns run independently, results merged automatically.
 
 ## What Gets Redacted
 
@@ -126,19 +132,23 @@ Layer 2 (NER):    老王 → PERSON, 老李 → PERSON
 Layer 3 (LLM):    "那个地方" → sensitive location, "那件事" → sensitive topic
 ```
 
-### Supported PII types
+### Supported Languages & PII Types
 
-| | Chinese | English |
-|-|---------|---------|
-| Phone | 1xx-xxxx-xxxx | (xxx) xxx-xxxx |
-| National ID | 18-digit, MOD 11-2 checksum | SSN (xxx-xx-xxxx) |
-| Bank card | 16-19 digits | Credit card (Luhn) |
-| Person names | NER (HanLP) | NER (spaCy) |
-| Locations | NER + semantic | NER + semantic |
-| Organizations | NER + semantic | NER + semantic |
-| Email | Shared regex | Shared regex |
+| PII Type | Chinese (zh) | English (en) | Japanese (ja) | Korean (ko) |
+|----------|-------------|-------------|--------------|-------------|
+| Phone | 1xx-xxxx-xxxx, landline | (xxx) xxx-xxxx | 0x0-xxxx-xxxx, landline | 01x-xxxx-xxxx, landline |
+| National ID | 18-digit, MOD 11-2 | SSN (xxx-xx-xxxx) | My Number (12-digit) | RRN (YYMMDD-XXXXXXX) |
+| Bank card | 16-19 digits (Luhn) | Credit card (Luhn) | — | — |
+| License plate | 京A12345 | — | — | — |
+| Address | Structured (省/市/区/路/号) | — | — | — |
+| Passport | X12345678 | — | — | — |
+| Person names | NER (HanLP) | NER (spaCy) | — | — |
+| Locations | NER + semantic | NER + semantic | — | — |
+| Organizations | NER + semantic | NER + semantic | — | — |
+| Email | Shared regex | Shared regex | Shared regex | Shared regex |
+| Implicit PII | Layer 3 (Ollama) | Layer 3 (Ollama) | Layer 3 (Ollama) | Layer 3 (Ollama) |
 
-Japanese, Korean — contributions welcome.
+Mixed language — combine any languages with `lang=["zh", "en", "ja", "ko"]`.
 
 ## LLM Integration
 
@@ -224,51 +234,45 @@ See [docs/architecture.md](docs/architecture.md) for the full purity model.
 
 ### v0.1 — Core (current)
 
-| Milestone | Scope | Status |
-|-----------|-------|--------|
-| **M1: Pure Core** | `restore()`, `match_patterns()`, Chinese regex patterns (phone, ID, bank card, email), `seed` determinism, key generation | |
-| **M2: Glue + CLI** | `redact()` composition, CLI `redact`/`restore` commands, `-k` key file read/write, `-s` seed | |
-| **M3: NER** | HanLP Chinese NER adapter, `pip install argus-redact[zh]`, `mode` parameter (fast/ner/auto) | |
-| **M4: Ship** | PyPI publish, README GIF demo, `argus-redact info` command | |
+| Milestone | Status |
+|-----------|--------|
+| Pure Core: `restore()`, `match_patterns()`, `replace()`, `merge_entities()`, `seed` determinism | Done |
+| Glue + CLI: `redact()` composition, CLI `redact`/`restore`/`info`, `-k` key file | Done |
+| Layer 1 Regex: zh, en, ja, ko patterns (phone, ID, bank card, email, license plate, address) | Done |
+| Layer 2 NER: HanLP Chinese NER adapter, `mode` parameter (fast/ner/auto) | Done |
+| Layer 3 Semantic: Ollama adapter for implicit PII detection | Done |
+| Collision numbering (①②③) for remove/category strategies | Done |
+| Mixed language (`lang=["zh", "en", "ja", "ko"]`) | Done |
+| PyPI publish | Pending |
 
-### v0.2 — Semantic Layer
+### v0.2 — Ecosystem
 
-| Milestone | Scope |
-|-----------|-------|
-| Layer 3 semantic detection via local LLM (Qwen 1.5B-3B, llama.cpp) |
-| English NER (`[en]` extras, spaCy) |
-| `detailed=True` with entity metadata |
-| Collision numbering (①②③) for remove/category strategies |
-
-### v0.3 — Ecosystem
-
-| Milestone | Scope |
-|-----------|-------|
-| LangChain / LlamaIndex adapters |
-| FastAPI middleware |
-| Docker image |
-| Mixed language (`lang=["zh", "en"]`) |
+| Milestone | Status |
+|-----------|--------|
+| English NER (spaCy adapter) | Planned |
+| Japanese / Korean NER adapters | Planned |
+| `detailed=True` with entity metadata | Planned |
+| LangChain / LlamaIndex adapters | Planned |
+| FastAPI middleware | Planned |
+| Docker image | Planned |
 
 ### v1.0 — Production
 
-| Milestone | Scope |
-|-----------|-------|
-| Rust core via PyO3 (regex, replace, key management, restore) |
-| Standalone Rust CLI binary (no Python runtime) |
-| Precision/recall benchmarks (Chinese + English) |
-| Community language packs (Japanese, Korean) |
-| CONTRIBUTING.md + contributor guide |
+| Milestone | Status |
+|-----------|--------|
+| Rust core via PyO3 (regex, replace, key management, restore) | Planned |
+| Standalone Rust CLI binary (no Python runtime) | Planned |
+| Precision/recall benchmarks | Planned |
+| CONTRIBUTING.md + contributor guide | Planned |
 
 ## Contributing
 
 We welcome contributions:
 
-- **Language packs** — Japanese, Korean, and beyond
+- **NER adapters** — spaCy English, GiNZA Japanese, KoNLPy Korean
 - **Regex patterns** — Country-specific PII formats
 - **Benchmarks** — PII detection test cases (synthetic only, no real PII)
 - **Integrations** — LangChain, LlamaIndex, FastAPI middleware
-
-<!-- See CONTRIBUTING.md (coming soon) -->
 
 ## License
 
