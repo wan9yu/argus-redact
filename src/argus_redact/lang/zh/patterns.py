@@ -63,4 +63,40 @@ PATTERNS = [
         "pattern": r"(?<![A-Za-z])[A-Z]\d{8}(?!\d)",
         "description": "Chinese passport number",
     },
+    {
+        "type": "license_plate",
+        "label": "[车牌号已脱敏]",
+        "pattern": (
+            r"[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁]"
+            r"[A-Z]"
+            r"[·.]?"
+            r"[A-Z0-9]{5,6}"
+        ),
+        "description": "Chinese license plate (normal + new energy)",
+    },
+    {
+        "type": "address",
+        "label": "[地址已脱敏]",
+        "pattern": (
+            r"(?:"
+            # Branch 1: Province + city
+            r"(?:(?:河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|"
+            r"河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海|台湾)省|"
+            r"(?:内蒙古|广西|西藏|宁夏|新疆)(?:自治区)?)"
+            r"[\u4e00-\u9fff]{2,6}(?:市|州)"
+            r"|"
+            # Branch 2: Municipality or standalone city (not preceded by CJK)
+            r"(?:(?<![一-龥])(?:北京市|天津市|上海市|重庆市|[\u4e00-\u9fff]{2,5}(?:市|州)))"
+            r")"
+            # District
+            r"[\u4e00-\u9fff]{1,8}(?:区|县|市|旗|新区)"
+            # Street
+            r"[\u4e00-\u9fff]{1,20}(?:路|街|道|巷|里|弄|村)"
+            # Number / building / room (optional)
+            r"(?:\d{1,5}(?:号|弄))?"
+            r"(?:\d{1,3}(?:栋|幢|楼|座))?"
+            r"(?:\d{1,4}(?:室|房))?"
+        ),
+        "description": "Chinese structured address (city+district+street+number)",
+    },
 ]

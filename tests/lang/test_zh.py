@@ -61,6 +61,44 @@ class TestBankCard:
             )
 
 
+class TestLicensePlate:
+
+    @parametrize_examples("zh_license_plate.json")
+    def test_should_match_or_reject_when_license_plate_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        plate_results = [r for r in results if r.type == "license_plate"]
+
+        if example["should_match"]:
+            assert len(plate_results) >= 1, (
+                f"Expected match: {example['description']}"
+            )
+            if "expected_text" in example:
+                assert any(r.text == example["expected_text"] for r in plate_results)
+        else:
+            assert len(plate_results) == 0, (
+                f"Should NOT match: {example['description']}"
+            )
+
+
+class TestAddress:
+
+    @parametrize_examples("zh_address.json")
+    def test_should_match_or_reject_when_address_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        addr_results = [r for r in results if r.type == "address"]
+
+        if example["should_match"]:
+            assert len(addr_results) >= 1, (
+                f"Expected match: {example['description']}"
+            )
+            if "expected_text" in example:
+                assert any(r.text == example["expected_text"] for r in addr_results)
+        else:
+            assert len(addr_results) == 0, (
+                f"Should NOT match: {example['description']}"
+            )
+
+
 class TestMultiplePII:
 
     def test_should_detect_both_types_when_phone_and_id_in_text(self, zh_patterns):

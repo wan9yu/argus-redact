@@ -1,0 +1,79 @@
+[
+  {
+    "id": "beijing_normal",
+    "input": "车牌京A12345",
+    "should_match": true,
+    "type": "license_plate",
+    "expected_text": "京A12345",
+    "description": "北京普通车牌"
+  },
+  {
+    "id": "guangdong_with_dot",
+    "input": "粤B·12345",
+    "should_match": true,
+    "type": "license_plate",
+    "expected_text": "粤B·12345",
+    "description": "广东车牌带中间点"
+  },
+  {
+    "id": "shanghai_normal",
+    "input": "沪C67890",
+    "should_match": true,
+    "type": "license_plate",
+    "expected_text": "沪C67890",
+    "description": "上海普通车牌"
+  },
+  {
+    "id": "new_energy_6digits",
+    "input": "京AD12345",
+    "should_match": true,
+    "type": "license_plate",
+    "expected_text": "京AD12345",
+    "description": "新能源车牌（6位）"
+  },
+  {
+    "id": "new_energy_f_prefix",
+    "input": "沪AF01234",
+    "should_match": true,
+    "type": "license_plate",
+    "expected_text": "沪AF01234",
+    "description": "新能源车牌F前缀"
+  },
+  {
+    "id": "sichuan",
+    "input": "川A123AB",
+    "should_match": true,
+    "type": "license_plate",
+    "expected_text": "川A123AB",
+    "description": "四川车牌字母尾号"
+  },
+  {
+    "id": "embedded_in_sentence",
+    "input": "他的车是京A88888，停在楼下",
+    "should_match": true,
+    "type": "license_plate",
+    "expected_text": "京A88888",
+    "description": "车牌嵌在句子中"
+  },
+  {
+    "id": "too_short",
+    "input": "京A123",
+    "should_match": false,
+    "type": "license_plate",
+    "description": "号码太短"
+  },
+  {
+    "id": "invalid_province",
+    "input": "中A12345",
+    "should_match": false,
+    "type": "license_plate",
+    "description": "无效省份简称"
+  },
+  {
+    "id": "plain_text",
+    "input": "这不是车牌号",
+    "should_match": false,
+    "type": "license_plate",
+    "description": "纯文本无车牌"
+  }
+]

@@ -14,12 +14,16 @@ DEFAULT_STRATEGIES = {
     "email": "mask",
     "bank_card": "mask",
     "passport": "remove",
+    "license_plate": "remove",
+    "address": "remove",
 }
 
 # Default labels for remove strategy
 DEFAULT_REMOVE_LABELS = {
     "id_number": "[身份证号已脱敏]",
     "passport": "[护照号已脱敏]",
+    "license_plate": "[车牌号已脱敏]",
+    "address": "[地址已脱敏]",
 }
 
 # Default label for category strategy
