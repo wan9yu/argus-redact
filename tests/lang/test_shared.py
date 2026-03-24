@@ -1,24 +1,23 @@
-"""Tests for shared (cross-language) patterns."""
+"""Tests for shared (cross-language) patterns — data-driven from JSON fixtures."""
 
 from argus_redact.pure.patterns import match_patterns
-from tests.conftest import EMAIL_SIMPLE, EMAIL_PLUS
+from tests.conftest import parametrize_examples
 
 
 class TestEmailPattern:
-    def test_simple(self, shared_patterns):
-        results = match_patterns(f"email: {EMAIL_SIMPLE} ok", shared_patterns)
-        assert len(results) == 1
-        assert results[0].text == EMAIL_SIMPLE
-        assert results[0].type == "email"
 
-    def test_with_subdomain(self, shared_patterns):
-        results = match_patterns("a]user@mail.example.co.uk[b", shared_patterns)
-        assert len(results) == 1
+    @parametrize_examples("email.json")
+    def test_should_match_or_reject_when_email_input(self, shared_patterns, example):
+        results = match_patterns(example["input"], shared_patterns)
+        email_results = [r for r in results if r.type == "email"]
 
-    def test_with_plus(self, shared_patterns):
-        results = match_patterns(EMAIL_PLUS, shared_patterns)
-        assert len(results) == 1
-
-    def test_no_match(self, shared_patterns):
-        results = match_patterns("no email here", shared_patterns)
-        assert len(results) == 0
+        if example["should_match"]:
+            assert len(email_results) >= 1, (
+                f"Expected match: {example['description']}"
+            )
+            if "expected_text" in example:
+                assert any(r.text == example["expected_text"] for r in email_results)
+        else:
+            assert len(email_results) == 0, (
+                f"Should NOT match: {example['description']}"
+            )

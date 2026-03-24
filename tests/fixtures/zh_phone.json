@@ -1,0 +1,108 @@
+[
+  {
+    "id": "mobile_standard",
+    "input": "手机号13812345678",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "13812345678",
+    "description": "标准手机号"
+  },
+  {
+    "id": "mobile_with_country_code",
+    "input": "电话+8613812345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "带国际区号"
+  },
+  {
+    "id": "mobile_prefix_13",
+    "input": "13012345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "13x前缀"
+  },
+  {
+    "id": "mobile_prefix_14",
+    "input": "14012345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "14x前缀"
+  },
+  {
+    "id": "mobile_prefix_15",
+    "input": "15012345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "15x前缀"
+  },
+  {
+    "id": "mobile_prefix_16",
+    "input": "16012345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "16x前缀"
+  },
+  {
+    "id": "mobile_prefix_17",
+    "input": "17012345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "17x前缀"
+  },
+  {
+    "id": "mobile_prefix_18",
+    "input": "18012345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "18x前缀"
+  },
+  {
+    "id": "mobile_prefix_19",
+    "input": "19012345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "19x前缀"
+  },
+  {
+    "id": "mobile_too_short",
+    "input": "1381234567",
+    "should_match": false,
+    "type": "phone",
+    "description": "只有10位，不匹配"
+  },
+  {
+    "id": "mobile_invalid_prefix_10",
+    "input": "10012345678",
+    "should_match": false,
+    "type": "phone",
+    "description": "第二位是0，无效"
+  },
+  {
+    "id": "mobile_invalid_prefix_11",
+    "input": "11012345678",
+    "should_match": false,
+    "type": "phone",
+    "description": "第二位是1，无效"
+  },
+  {
+    "id": "mobile_invalid_prefix_12",
+    "input": "12012345678",
+    "should_match": false,
+    "type": "phone",
+    "description": "第二位是2，无效"
+  },
+  {
+    "id": "landline_beijing",
+    "input": "座机010-12345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "北京座机"
+  },
+  {
+    "id": "landline_shanghai",
+    "input": "电话021-87654321",
+    "should_match": true,
+    "type": "phone",
+    "description": "上海座机"
+  }
+]

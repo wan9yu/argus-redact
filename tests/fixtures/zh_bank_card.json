@@ -1,0 +1,25 @@
+[
+  {
+    "id": "visa_valid",
+    "input": "银行卡4111111111111111",
+    "should_match": true,
+    "type": "bank_card",
+    "expected_text": "4111111111111111",
+    "description": "Visa测试卡号（Luhn校验通过）"
+  },
+  {
+    "id": "unionpay_valid",
+    "input": "卡号6212262200000000004",
+    "should_match": true,
+    "type": "bank_card",
+    "expected_text": "6212262200000000004",
+    "description": "银联卡号（62开头，Luhn通过）"
+  },
+  {
+    "id": "luhn_invalid",
+    "input": "4111111111111112",
+    "should_match": false,
+    "type": "bank_card",
+    "description": "Luhn校验失败"
+  }
+]

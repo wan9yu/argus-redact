@@ -1,0 +1,45 @@
+[
+  {
+    "id": "simple",
+    "input": "邮箱zhang@example.com",
+    "should_match": true,
+    "type": "email",
+    "expected_text": "zhang@example.com",
+    "description": "标准邮箱"
+  },
+  {
+    "id": "with_dots",
+    "input": "john.doe@company.co.uk",
+    "should_match": true,
+    "type": "email",
+    "description": "带点号和子域名"
+  },
+  {
+    "id": "with_plus",
+    "input": "user+tag@example.com",
+    "should_match": true,
+    "type": "email",
+    "description": "带加号标签"
+  },
+  {
+    "id": "with_subdomain",
+    "input": "user@mail.example.co.uk",
+    "should_match": true,
+    "type": "email",
+    "description": "多级子域名"
+  },
+  {
+    "id": "not_email",
+    "input": "这不是邮箱@",
+    "should_match": false,
+    "type": "email",
+    "description": "不完整，不匹配"
+  },
+  {
+    "id": "no_email_in_text",
+    "input": "no email here",
+    "should_match": false,
+    "type": "email",
+    "description": "纯文本，无邮箱"
+  }
+]

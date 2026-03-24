@@ -1,0 +1,32 @@
+[
+  {
+    "id": "phone_only",
+    "input": "张三的电话是13812345678",
+    "pii_values": ["13812345678"],
+    "description": "手机号脱敏后可还原"
+  },
+  {
+    "id": "id_number_only",
+    "input": "身份证号110101199003074610ok",
+    "pii_values": ["110101199003074610"],
+    "description": "身份证号脱敏后可还原"
+  },
+  {
+    "id": "email_only",
+    "input": "邮箱zhang@example.com请查收",
+    "pii_values": ["zhang@example.com"],
+    "description": "邮箱脱敏后可还原"
+  },
+  {
+    "id": "multiple_pii",
+    "input": "电话13812345678，邮箱test@example.com",
+    "pii_values": ["13812345678", "test@example.com"],
+    "description": "多种PII混合脱敏后均可还原"
+  },
+  {
+    "id": "no_pii",
+    "input": "今天天气不错",
+    "pii_values": [],
+    "description": "无PII时原文不变"
+  }
+]

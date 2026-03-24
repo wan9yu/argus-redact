@@ -1,0 +1,32 @@
+[
+  {
+    "id": "valid_id",
+    "input": "身份证号110101199003074610",
+    "should_match": true,
+    "type": "id_number",
+    "expected_text": "110101199003074610",
+    "description": "有效身份证号（MOD 11-2校验通过）"
+  },
+  {
+    "id": "valid_id_x_check",
+    "input": "身份证11010119900307002X",
+    "should_match": true,
+    "type": "id_number",
+    "expected_text": "11010119900307002X",
+    "description": "校验位为X（代表10）"
+  },
+  {
+    "id": "invalid_checksum",
+    "input": "110101199003071235",
+    "should_match": false,
+    "type": "id_number",
+    "description": "末位校验错误"
+  },
+  {
+    "id": "too_short",
+    "input": "11010119900307123",
+    "should_match": false,
+    "type": "id_number",
+    "description": "只有17位，不匹配"
+  }
+]
