@@ -1,0 +1,46 @@
+[
+  {
+    "id": "mobile_standard",
+    "input": "전화번호 010-1234-5678",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "010-1234-5678",
+    "description": "한국 휴대전화 (010)"
+  },
+  {
+    "id": "mobile_no_dash",
+    "input": "01012345678",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "01012345678",
+    "description": "하이픈 없음"
+  },
+  {
+    "id": "landline_seoul",
+    "input": "02-123-4567",
+    "should_match": true,
+    "type": "phone",
+    "description": "서울 유선전화"
+  },
+  {
+    "id": "landline_busan",
+    "input": "051-123-4567",
+    "should_match": true,
+    "type": "phone",
+    "description": "부산 유선전화"
+  },
+  {
+    "id": "too_short",
+    "input": "010-1234",
+    "should_match": false,
+    "type": "phone",
+    "description": "자릿수 부족"
+  },
+  {
+    "id": "plain_text",
+    "input": "전화번호 없음",
+    "should_match": false,
+    "type": "phone",
+    "description": "전화번호 없음"
+  }
+]

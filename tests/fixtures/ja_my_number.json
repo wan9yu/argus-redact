@@ -1,0 +1,38 @@
+[
+  {
+    "id": "valid_my_number",
+    "input": "マイナンバー123456789018",
+    "should_match": true,
+    "type": "my_number",
+    "expected_text": "123456789018",
+    "description": "有効なマイナンバー（12桁、チェックディジット正）"
+  },
+  {
+    "id": "valid_with_spaces",
+    "input": "番号は 1234 5678 9018",
+    "should_match": true,
+    "type": "my_number",
+    "description": "スペース区切り"
+  },
+  {
+    "id": "invalid_check_digit",
+    "input": "123456789019",
+    "should_match": false,
+    "type": "my_number",
+    "description": "チェックディジット不正"
+  },
+  {
+    "id": "too_short",
+    "input": "12345678901",
+    "should_match": false,
+    "type": "my_number",
+    "description": "11桁は不正"
+  },
+  {
+    "id": "plain_text",
+    "input": "マイナンバーはありません",
+    "should_match": false,
+    "type": "my_number",
+    "description": "番号なし"
+  }
+]

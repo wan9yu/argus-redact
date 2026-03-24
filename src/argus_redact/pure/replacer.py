@@ -17,6 +17,8 @@ DEFAULT_STRATEGIES = {
     "address": "remove",
     "ssn": "remove",
     "credit_card": "mask",
+    "my_number": "remove",
+    "rrn": "remove",
 }
 
 # Default labels for remove strategy
@@ -26,6 +28,8 @@ DEFAULT_REMOVE_LABELS = {
     "license_plate": "[车牌号已脱敏]",
     "address": "[地址已脱敏]",
     "ssn": "[SSN REDACTED]",
+    "my_number": "[マイナンバー]",
+    "rrn": "[주민등록번호]",
 }
 
 # Default label for category strategy

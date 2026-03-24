@@ -14,11 +14,15 @@ from argus_redact.pure.replacer import replace
 _LANG_PATTERNS = {
     "zh": "argus_redact.lang.zh.patterns",
     "en": "argus_redact.lang.en.patterns",
+    "ja": "argus_redact.lang.ja.patterns",
+    "ko": "argus_redact.lang.ko.patterns",
 }
 
 _LANG_NER_ADAPTERS = {
     "zh": "argus_redact.lang.zh.ner_adapter",
     "en": "argus_redact.lang.en.ner_adapter",
+    "ja": "argus_redact.lang.ja.ner_adapter",
+    "ko": "argus_redact.lang.ko.ner_adapter",
 }
 
 VALID_MODES = ("auto", "fast", "ner")

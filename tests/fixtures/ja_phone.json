@@ -1,0 +1,62 @@
+[
+  {
+    "id": "mobile_standard",
+    "input": "携帯番号は090-1234-5678です",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "090-1234-5678",
+    "description": "日本携帯電話（090）"
+  },
+  {
+    "id": "mobile_080",
+    "input": "080-9876-5432",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "080-9876-5432",
+    "description": "日本携帯電話（080）"
+  },
+  {
+    "id": "mobile_070",
+    "input": "070-1111-2222",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "070-1111-2222",
+    "description": "日本携帯電話（070）"
+  },
+  {
+    "id": "mobile_no_dash",
+    "input": "09012345678",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "09012345678",
+    "description": "ハイフンなし"
+  },
+  {
+    "id": "landline_tokyo",
+    "input": "電話03-1234-5678",
+    "should_match": true,
+    "type": "phone",
+    "description": "東京固定電話"
+  },
+  {
+    "id": "landline_osaka",
+    "input": "06-6123-4567",
+    "should_match": true,
+    "type": "phone",
+    "description": "大阪固定電話"
+  },
+  {
+    "id": "too_short",
+    "input": "090-1234",
+    "should_match": false,
+    "type": "phone",
+    "description": "桁数不足"
+  },
+  {
+    "id": "plain_text",
+    "input": "電話番号はありません",
+    "should_match": false,
+    "type": "phone",
+    "description": "電話番号なし"
+  }
+]

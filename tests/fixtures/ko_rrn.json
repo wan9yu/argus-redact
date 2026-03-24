@@ -1,0 +1,39 @@
+[
+  {
+    "id": "valid_rrn",
+    "input": "주민등록번호 900307-1234567",
+    "should_match": true,
+    "type": "rrn",
+    "expected_text": "900307-1234567",
+    "description": "유효한 주민등록번호"
+  },
+  {
+    "id": "rrn_entire_text",
+    "input": "900307-1234567",
+    "should_match": true,
+    "type": "rrn",
+    "expected_text": "900307-1234567",
+    "description": "전체 텍스트가 주민번호"
+  },
+  {
+    "id": "invalid_month",
+    "input": "901307-1234567",
+    "should_match": false,
+    "type": "rrn",
+    "description": "월 13은 무효"
+  },
+  {
+    "id": "invalid_day",
+    "input": "900332-1234567",
+    "should_match": false,
+    "type": "rrn",
+    "description": "일 32는 무효"
+  },
+  {
+    "id": "plain_text",
+    "input": "주민등록번호 없음",
+    "should_match": false,
+    "type": "rrn",
+    "description": "주민번호 없음"
+  }
+]
