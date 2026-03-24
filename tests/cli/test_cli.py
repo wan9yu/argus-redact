@@ -3,9 +3,6 @@
 import json
 import subprocess
 import sys
-from pathlib import Path
-
-import pytest
 
 
 def run_cli(*args, stdin=None):
