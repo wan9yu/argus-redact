@@ -1,0 +1,38 @@
+[
+  {
+    "id": "phone_pseudonym_with_prefix",
+    "config": {"phone": {"strategy": "pseudonym", "prefix": "TEL"}},
+    "input": "电话13812345678",
+    "entity_type": "phone",
+    "entity_text": "13812345678",
+    "replacement_should_start_with": "TEL-",
+    "description": "phone改用带自定义前缀的pseudonym策略"
+  },
+  {
+    "id": "phone_remove_instead_of_mask",
+    "config": {"phone": {"strategy": "remove", "replacement": "[TEL]"}},
+    "input": "电话13812345678",
+    "entity_type": "phone",
+    "entity_text": "13812345678",
+    "replacement_should_contain": "TEL",
+    "description": "phone改用remove策略"
+  },
+  {
+    "id": "id_number_mask_instead_of_remove",
+    "config": {"id_number": {"strategy": "mask"}},
+    "input": "身份证110101199003074610",
+    "entity_type": "id_number",
+    "entity_text": "110101199003074610",
+    "replacement_should_contain": "*",
+    "description": "id_number改用mask策略"
+  },
+  {
+    "id": "default_config_unchanged",
+    "config": {},
+    "input": "电话13812345678",
+    "entity_type": "phone",
+    "entity_text": "13812345678",
+    "replacement_should_contain": "*",
+    "description": "空config不影响默认行为"
+  }
+]

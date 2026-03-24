@@ -1,38 +1,19 @@
 # Configuration
 
-> **Note:** Custom configuration is not yet implemented. The content below describes the planned design. Currently, built-in defaults are used for all redaction strategies.
+argus-redact supports per-entity-type configuration to control redaction strategies. Pass a `config` dict to `redact()`. Without config, built-in defaults are used.
 
-argus-redact will use a YAML configuration file to control redaction strategies per entity type. Without a config file, built-in defaults are used.
-
-## Loading Configuration
+## Usage
 
 ```python
 # Use built-in defaults
 redacted, key = redact(text)
 
-# Load from file
-redacted, key = redact(text, config="redact_config.yaml")
-
-# Pass as dict
+# Pass config as dict
 redacted, key = redact(text, config={
-    "person": {"strategy": "pseudonym"},
-    "phone": {"strategy": "mask"},
+    "phone": {"strategy": "remove", "replacement": "[TEL]"},
+    "person": {"strategy": "pseudonym", "prefix": "PERSON"},
 })
 ```
-
-CLI:
-
-```bash
-argus-redact redact input.txt -k key.json -c redact_config.yaml
-```
-
-Environment variable:
-
-```bash
-export ARGUS_REDACT_CONFIG=/path/to/redact_config.yaml
-```
-
-**Precedence:** function argument > environment variable > built-in defaults.
 
 ---
 

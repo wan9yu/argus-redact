@@ -88,6 +88,7 @@ def redact(
     lang: str | list[str] = "zh",
     mode: str = "auto",
     seed: int | None = None,
+    config: dict | None = None,
     detailed: bool = False,
 ) -> tuple[str, dict] | tuple[str, dict, dict]:
     """Detect and replace PII in text.
@@ -139,7 +140,13 @@ def redact(
     # Build reverse mapping: original -> replacement (for details)
     merged_entities = entities
 
-    redacted, result_key = replace(text, merged_entities, seed=seed, key=existing_key)
+    redacted, result_key = replace(
+        text,
+        merged_entities,
+        seed=seed,
+        key=existing_key,
+        config=config,
+    )
 
     if key_file is not None and result_key:
         Path(key_file).write_text(json.dumps(result_key, ensure_ascii=False, indent=2))

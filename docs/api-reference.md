@@ -12,6 +12,7 @@ redact(
     lang: str | list[str] = "zh",
     mode: str = "auto",
     seed: int | None = None,
+    config: dict | None = None,
     detailed: bool = False,
 ) -> tuple[str, dict] | tuple[str, dict, dict]
 ```
@@ -26,7 +27,8 @@ Detect and replace PII in the input text. Returns `(redacted_text, key)`, or `(r
 | `key` | `dict \| str \| None` | `None` | `None` = generate fresh key. `dict` = reuse this mapping (new entities are added, existing preserved). `str` = **file path** — if file exists, load and reuse; after redaction, file is updated with new entries. Behaves like CLI `-k`. |
 | `lang` | `str \| list[str]` | `"zh"` | Language(s). `"zh"`, `"en"`, `"ja"`, `"ko"`, or list like `["zh", "en"]`. |
 | `mode` | `str` | `"auto"` | `"auto"` = all installed layers. `"fast"` = regex only. `"ner"` = regex + NER. |
-| `seed` | `int \| None` | `None` | Random seed for pseudonym generation. `None` = cryptographically random (production). Set to a fixed int for **deterministic, reproducible output** (testing). Same seed + same input = same pseudonyms every time. |
+| `seed` | `int \| None` | `None` | Random seed for pseudonym generation.
+| `config` | `dict \| None` | `None` | Per-entity-type config overriding default strategies. Example: `{"phone": {"strategy": "remove", "replacement": "[TEL]"}}`. See [Configuration](configuration.md). | `None` = cryptographically random (production). Set to a fixed int for **deterministic, reproducible output** (testing). Same seed + same input = same pseudonyms every time. |
 | `detailed` | `bool` | `False` | If `True`, return a 3-tuple with detection details (entities, stats). |
 
 ### Returns
