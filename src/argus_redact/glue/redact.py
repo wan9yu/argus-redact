@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
+from argus_redact.pure.merger import merge_entities
 from argus_redact.pure.patterns import match_patterns
 from argus_redact.pure.replacer import replace
 
@@ -100,6 +101,8 @@ def redact(
 
             ner_entities = detect_ner(text, adapter=adapter)
             entities.extend(e.to_pattern_match() for e in ner_entities)
+
+    entities = merge_entities(entities)
 
     redacted, result_key = replace(text, entities, seed=seed, key=existing_key)
 
