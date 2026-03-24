@@ -1,0 +1,409 @@
+# Python API Reference
+
+## redact()
+
+```python
+from argus_redact import redact
+
+redact(
+    text: str,
+    *,
+    key: dict | str | None = None,
+    lang: str | list[str] = "zh",
+    mode: str = "auto",
+    config: str | dict | None = None,
+    seed: int | None = None,
+    detailed: bool = False,
+) -> tuple[str, dict] | tuple[str, dict, dict]
+```
+
+Detect and replace PII in the input text. Returns `(redacted_text, key)`, or `(redacted_text, key, details)` when `detailed=True`.
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `text` | `str` | *(required)* | Input text to redact. |
+| `key` | `dict \| str \| None` | `None` | `None` = generate fresh key. `dict` = reuse this mapping (new entities are added, existing preserved). `str` = **file path** — if file exists, load and reuse; after redaction, file is updated with new entries. Behaves like CLI `-k`. |
+| `lang` | `str \| list[str]` | `"zh"` | Language(s). `"zh"`, `"en"`, `["zh", "en"]`. |
+| `mode` | `str` | `"auto"` | `"auto"` = all installed layers. `"fast"` = regex only. `"ner"` = regex + NER. |
+| `config` | `str \| dict \| None` | `None` | Redaction strategy config. File path, dict, or `None` for defaults. |
+| `seed` | `int \| None` | `None` | Random seed for pseudonym generation. `None` = cryptographically random (production). Set to a fixed int for **deterministic, reproducible output** (testing). Same seed + same input = same pseudonyms every time. |
+| `detailed` | `bool` | `False` | If `True`, return a 3-tuple with detection details (entities, stats). |
+
+### Returns
+
+`tuple[str, dict]` — `(redacted_text, key)`
+
+- `redacted_text`: the input with all detected PII replaced
+- `key`: mapping from replacement → original. Example: `{"P-037": "王五", "[咖啡店]": "星巴克"}`
+
+**Key uniqueness:** Every replacement string is guaranteed unique within a key. `pseudonym` and `mask` strategies produce naturally unique outputs. `category`, `remove`, and `generalize` append a circled number (①②③) on collision:
+
+```python
+redacted, key = redact("他在星巴克和Costa都喝了咖啡")
+# key = {"[咖啡店]": "星巴克", "[咖啡店①]": "Costa"}
+# First occurrence: no suffix. Second: ①. Third: ②.
+```
+
+### Examples
+
+```python
+# Basic
+redacted, key = redact("张三的手机号是13812345678")
+# redacted = "P-042的手机号是[手机号已脱敏]"
+# key = {"P-042": "张三", "[手机号已脱敏]": "13812345678"}
+
+# Mixed language
+redacted, key = redact("王五给John发邮件", lang=["zh", "en"])
+
+# Reuse key (batch)
+text1, key = redact("张三说了A")
+text2, key = redact("张三说了B", key=key)  # same pseudonyms
+
+# Fast mode
+redacted, key = redact("张三 13812345678", mode="fast")
+# Only phone is redacted; 张三 requires NER (skipped in fast mode)
+
+# Save key to file (auto-read/write)
+redacted, key = redact("张三在星巴克", key="key.json")
+# key.json created (or updated if it existed)
+
+# Batch via file: each call reads, updates, and writes back
+redact("张三说了A", key="key.json")        # key.json doesn't exist → created
+redact("张三和李四说了B", key="key.json")   # key.json exists → loaded, 李四 added, written back
+redact("没有PII的文本", key="key.json")     # key.json exists → loaded, nothing added, NOT rewritten
+
+# Custom config
+redacted, key = redact("张三在星巴克", config={"phone": {"strategy": "remove"}})
+```
+
+### Purity Model
+
+`redact()` is **not** a pure function. Understanding where purity breaks helps you write better tests:
+
+| Aspect | Pure? | Why | How to control |
+|--------|-------|-----|---------------|
+| Pseudonym generation | No — random | Different codes each call | `seed=42` makes it deterministic |
+| Pattern matching (Layer 1) | Yes | Same regex, same input → same matches | — |
+| NER detection (Layer 2) | Mostly | Same model, same input → same output. But model loading is a side effect. | Mock or use real model |
+| LLM detection (Layer 3) | No | LLM output may vary | Mock LLM response |
+| `key=dict` | Yes | No I/O, no mutation of input dict | — |
+| `key=str` (file path) | No — file I/O | Reads and writes the file system | Use `key=dict` in tests |
+| `restore()` | **Yes** | Pure string replacement, fully deterministic | — |
+
+**Rule for tests:** Use `seed` + `key=dict` + `mode="fast"` and your tests become fully deterministic with zero side effects:
+
+```python
+# Fully pure, fully testable
+text, key = redact("张三 13812345678", seed=42, mode="fast")
+assert text == "张三 [手机号已脱敏]"  # deterministic
+assert key == {"[手机号已脱敏]": "13812345678"}  # deterministic
+
+restored = restore(text, key)
+assert restored == "张三 13812345678"  # pure
+```
+
+### Behavior
+
+- **Same entity in one call → same pseudonym.** "张三...张三" → "P-012...P-012"
+- **Different calls without key → different pseudonyms.** Fresh random codes each time.
+- **With same seed → same pseudonyms.** `seed=42` always produces the same mapping.
+- **Pseudonym codes are random, not sequential.** P-037 and P-012, not P-001 and P-002. The code numbers reveal nothing about entity count or order.
+- **Layers run bottom-up.** Layer 1 (regex) first, then Layer 2 (NER), then Layer 3 (semantic). Later layers don't re-detect what earlier layers already caught.
+- **Overlapping detections are deduplicated.** If regex and NER both catch the same span, the higher-confidence match wins.
+
+### Edge Cases
+
+```python
+# Empty text → empty text, empty key
+redacted, key = redact("")
+# redacted = "", key = {}
+
+# No PII detected → text unchanged, empty key
+redacted, key = redact("今天天气不错")
+# redacted = "今天天气不错", key = {}
+
+# restore with empty key → text unchanged
+restored = restore("any text", {})
+# restored = "any text"
+
+# Pseudonym appears as substring in a word — still matched
+redacted, key = redact("王五说了话")
+# redacted = "P-037说了话"
+restored = restore("关于P-037的建议", key)
+# "关于王五的建议"  ← P-037 matched even without whitespace boundaries
+
+# Unknown pseudonyms left unchanged
+restored = restore("P-999 is unknown", {"P-037": "王五"})
+# "P-999 is unknown"  ← P-999 not in key, left as-is
+
+# Multiple same-type entities (collision numbering)
+redacted, key = redact("他的身份证110101199003071234，她的身份证220102198805061234")
+# key has two entries: "[身份证号已脱敏]" and "[身份证号已脱敏①]"
+
+# Reuse key with no matching entities — key returned unchanged
+text, key = redact("今天天气不错", key={"P-037": "王五"})
+# text = "今天天气不错", key = {"P-037": "王五"} (unchanged)
+```
+
+### Testable Invariants
+
+These properties should hold in all cases. Tests use `seed` for determinism and `mode="fast"` to avoid model dependencies:
+
+```python
+import pytest
+from argus_redact import redact, restore
+
+# ── Pure properties (no models needed) ──
+
+def test_roundtrip():
+    """redact → restore recovers all PII."""
+    original = "张三的手机号是13812345678"
+    redacted, key = redact(original, seed=42, mode="fast")
+    restored = restore(redacted, key)
+    assert "13812345678" in restored
+
+def test_pii_removed_from_output():
+    """Original PII must not appear in redacted text."""
+    redacted, key = redact("手机号13812345678", seed=42, mode="fast")
+    for replacement, original in key.items():
+        assert original in "手机号13812345678"    # was in input
+        assert original not in redacted           # NOT in output
+        assert replacement in redacted            # replacement IS in output
+
+def test_empty_input():
+    assert redact("", mode="fast") == ("", {})
+
+def test_no_pii():
+    text = "没有任何敏感信息的普通文本"
+    assert redact(text, mode="fast")[0] == text
+
+def test_key_uniqueness():
+    """All replacement strings in key must be unique."""
+    _, key = redact("身份证110101199003071234和220102198805061234", seed=42, mode="fast")
+    assert len(key) == len(set(key.keys()))
+
+def test_seed_determinism():
+    """Same seed + same input = same output."""
+    r1 = redact("张三 13812345678", seed=42, mode="fast")
+    r2 = redact("张三 13812345678", seed=42, mode="fast")
+    assert r1 == r2
+
+def test_session_isolation():
+    """Different seeds (or no seed) = different pseudonyms."""
+    _, key1 = redact("张三", seed=42)
+    _, key2 = redact("张三", seed=99)
+    assert key1 != key2
+
+def test_key_reuse():
+    """Reusing key preserves existing pseudonyms and adds new ones."""
+    _, key = redact("张三和李四", seed=42)
+    original_key_size = len(key)
+    text2, key = redact("张三和王五", key=key, seed=42)
+    assert len(key) >= original_key_size  # only grows
+
+def test_restore_is_pure():
+    """restore() is deterministic — same input = same output."""
+    key = {"P-037": "王五"}
+    assert restore("P-037", key) == restore("P-037", key) == "王五"
+
+def test_restore_no_match():
+    """Unknown pseudonyms are left unchanged."""
+    assert restore("P-999 is unknown", {"P-037": "王五"}) == "P-999 is unknown"
+
+def test_restore_empty_key():
+    assert restore("any text", {}) == "any text"
+
+def test_detailed_returns_3tuple():
+    result = redact("13812345678", detailed=True, seed=42, mode="fast")
+    assert len(result) == 3
+    text, key, details = result
+    assert "entities" in details
+    assert "stats" in details
+
+# ── Error cases ──
+
+def test_invalid_mode():
+    with pytest.raises(ValueError):
+        redact("text", mode="invalid")
+
+def test_invalid_config():
+    with pytest.raises(Exception):  # ConfigError
+        redact("text", config={"person": {"strategy": "invalid"}})
+
+def test_restore_bad_key_type():
+    with pytest.raises(TypeError):
+        restore("text", 123)
+```
+
+### Errors
+
+| Error | When | Testable assertion |
+|-------|------|-------------------|
+| `ValueError` | `lang` specifies an uninstalled language pack | `pytest.raises(ValueError)` |
+| `ValueError` | `mode` is not one of `"auto"`, `"fast"`, `"ner"` | `pytest.raises(ValueError)` |
+| `FileNotFoundError` | `config` file path doesn't exist, or `key` file path doesn't exist when used in `restore()` | `pytest.raises(FileNotFoundError)` |
+| `ConfigError` | Invalid config structure or unknown strategy | `pytest.raises(ConfigError)` |
+| `TypeError` | `text` is not a string (e.g., `redact(123)`) | `pytest.raises(TypeError)` |
+
+---
+
+## restore()
+
+```python
+from argus_redact import restore
+
+restore(
+    text: str,
+    key: dict | str,
+) -> str
+```
+
+Reverse redaction — replace pseudonyms with originals using the key.
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `text` | `str` | *(required)* | Text containing pseudonyms (typically LLM output). |
+| `key` | `dict \| str` | *(required)* | The key from `redact()`. `dict` = use directly. `str` = load from JSON file path (**read-only** — unlike `redact()`, `restore()` never writes to the file). |
+
+### Returns
+
+`str` — text with pseudonyms replaced by originals.
+
+### Examples
+
+```python
+redacted, key = redact("王五和张三在阿里面试")
+# redacted = "P-037和P-012在[某公司]面试"
+
+llm_output = "P-037 should help P-012 prepare for [某公司]"
+restored = restore(llm_output, key)
+# "王五 should help 张三 prepare for 阿里"
+
+# From saved key file
+restored = restore(llm_output, "key.json")
+```
+
+### Behavior
+
+- **Exact string replacement.** `P-037` in text → looked up in key → replaced with original.
+- **Longer replacements first.** `[某公司总部]` is matched before `[某公司]` to avoid partial replacement.
+- **Unknown pseudonyms are left unchanged.** If the text contains `P-099` but the key has no `P-099`, it stays as `P-099`.
+- **Works on any text.** The text doesn't have to come from an LLM — any string with pseudonyms can be restored.
+
+### Edge Cases
+
+```python
+# Pseudonym at start of text
+restore("P-037是好人", {"P-037": "王五"})  # "王五是好人"
+
+# Pseudonym at end of text
+restore("他是P-037", {"P-037": "王五"})  # "他是王五"
+
+# Multiple occurrences of same pseudonym
+restore("P-037和P-037", {"P-037": "王五"})  # "王五和王五"
+
+# Replacement contains characters that look like another pseudonym
+# key = {"P-037": "P先生"}  ← original contains "P"
+restore("P-037说了话", {"P-037": "P先生"})  # "P先生说了话" (no re-matching)
+
+# Nested-looking keys — longest match first
+restore("[某公司总部]开会", {"[某公司]": "阿里", "[某公司总部]": "阿里西溪园区"})
+# "阿里西溪园区开会"  ← [某公司总部] matched first (longer), [某公司] not triggered
+```
+
+### Errors
+
+| Error | When | Testable assertion |
+|-------|------|-------------------|
+| `FileNotFoundError` | Key file path doesn't exist | `pytest.raises(FileNotFoundError)` |
+| `TypeError` | Key is not dict or str | `pytest.raises(TypeError)` |
+
+---
+
+## Key Format
+
+The key is a `dict[str, str]` mapping replacements to originals:
+
+```python
+{
+    "P-037":         "王五",
+    "P-012":         "张三",
+    "[咖啡店]":       "星巴克",
+    "[某公司]":       "阿里",
+    "[手机号已脱敏]":  "13812345678",
+}
+```
+
+### Serialized format (JSON file)
+
+When saved via `key="path.json"` or `json.dump`:
+
+```json
+{
+    "P-037": "王五",
+    "P-012": "张三",
+    "[咖啡店]": "星巴克",
+    "[某公司]": "阿里"
+}
+```
+
+Plain dict. No envelope, no metadata. Load with `json.load()`, pass to `restore()`.
+
+### Key reuse
+
+When passing `key` to `redact()`:
+- **Existing mappings are preserved.** The function reverse-looks up the key (scans values) to find if an entity already has a pseudonym. If "王五" is already in the key's values mapped to "P-037", the same "P-037" is reused.
+- **New entities get new random codes.** If "李四" appears but isn't in the key's values, a new code (e.g., P-058) is generated (collision-checked against existing keys).
+- **The returned key is the updated version** containing both old and new mappings.
+
+```python
+text1, key = redact("王五和张三聊天")
+# key = {"P-037": "王五", "P-012": "张三"}
+
+text2, key = redact("王五和李四聊天", key=key)
+# key = {"P-037": "王五", "P-012": "张三", "P-058": "李四"}
+#        ↑ preserved                          ↑ new
+```
+
+**Key direction:** The key is always `{replacement → original}` (optimized for `restore()`). When reusing, `redact()` internally builds a reverse index `{original → replacement}` for O(1) lookup. This is transparent to the user.
+
+---
+
+## Inspecting Detection Details
+
+For debugging or quality evaluation, pass `detailed=True`:
+
+```python
+redacted, key, details = redact("张三的手机号是13812345678", detailed=True)
+
+details["entities"]
+# [
+#   {"original": "张三", "replacement": "P-042",
+#    "type": "person", "layer": 2, "confidence": 0.95,
+#    "start": 0, "end": 2},
+#   {"original": "13812345678", "replacement": "[手机号已脱敏]",
+#    "type": "phone", "layer": 1, "confidence": 1.0,
+#    "start": 6, "end": 17},
+# ]
+
+details["stats"]
+# {"layer_1": 1, "layer_2": 1, "layer_3": 0, "total": 2, "duration_ms": 38}
+```
+
+Without `detailed=True`, `redact()` returns `(str, dict)` as usual. With it, returns `(str, dict, dict)`. The extra dict contains `entities` and `stats`.
+
+**Testing note:** Code that always unpacks as `text, key = redact(...)` will break if `detailed=True` is accidentally set. Tests should verify both return shapes:
+
+```python
+# Normal mode
+result = redact("test")
+assert len(result) == 2
+
+# Detailed mode
+result = redact("test", detailed=True)
+assert len(result) == 3
+```
