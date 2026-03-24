@@ -7,8 +7,6 @@
 
 > *Like GPG for personal data in LLM pipelines — your text goes to the cloud, your identity stays home.*
 
-<!-- TODO: Add GIF demo here -->
-
 ---
 
 ## Install

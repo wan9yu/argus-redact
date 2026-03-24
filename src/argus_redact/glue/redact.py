@@ -69,8 +69,6 @@ def redact(
     # Layer 1: regex
     entities = match_patterns(text, _load_patterns(lang))
 
-    # Layer 2 (NER) and Layer 3 (Semantic) — not yet implemented
-
     redacted, result_key = replace(text, entities, seed=seed, key=existing_key)
 
     if key_file is not None and result_key:
