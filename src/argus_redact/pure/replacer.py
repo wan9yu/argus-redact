@@ -15,6 +15,8 @@ DEFAULT_STRATEGIES = {
     "passport": "remove",
     "license_plate": "remove",
     "address": "remove",
+    "ssn": "remove",
+    "credit_card": "mask",
 }
 
 # Default labels for remove strategy
@@ -23,6 +25,7 @@ DEFAULT_REMOVE_LABELS = {
     "passport": "[护照号已脱敏]",
     "license_plate": "[车牌号已脱敏]",
     "address": "[地址已脱敏]",
+    "ssn": "[SSN REDACTED]",
 }
 
 # Default label for category strategy

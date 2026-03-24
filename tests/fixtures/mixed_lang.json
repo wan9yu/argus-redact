@@ -1,0 +1,26 @@
+[
+  {
+    "id": "zh_phone_en_email",
+    "input": "张三的手机13812345678，email是zhang@test.com",
+    "pii_values": ["13812345678", "zhang@test.com"],
+    "description": "中文手机号+英文邮箱混合"
+  },
+  {
+    "id": "en_name_zh_phone",
+    "input": "John的电话是13912345678",
+    "pii_values": ["13912345678"],
+    "description": "英文名+中文手机号"
+  },
+  {
+    "id": "zh_id_en_ssn",
+    "input": "中国身份证110101199003074610，美国SSN 123-45-6789",
+    "pii_values": ["110101199003074610", "123-45-6789"],
+    "description": "中国身份证+美国SSN"
+  },
+  {
+    "id": "all_types_mixed",
+    "input": "Contact: 13812345678, email john@test.com, SSN 123-45-6789",
+    "pii_values": ["13812345678", "john@test.com", "123-45-6789"],
+    "description": "中文手机+英文邮箱+SSN全混合"
+  }
+]

@@ -1,0 +1,47 @@
+[
+  {
+    "id": "standard_ssn",
+    "input": "SSN is 123-45-6789",
+    "should_match": true,
+    "type": "ssn",
+    "expected_text": "123-45-6789",
+    "description": "Standard SSN format"
+  },
+  {
+    "id": "ssn_is_entire_text",
+    "input": "123-45-6789",
+    "should_match": true,
+    "type": "ssn",
+    "expected_text": "123-45-6789",
+    "description": "SSN is the entire text"
+  },
+  {
+    "id": "ssn_embedded",
+    "input": "His SSN 123-45-6789 is on file",
+    "should_match": true,
+    "type": "ssn",
+    "expected_text": "123-45-6789",
+    "description": "SSN embedded in sentence"
+  },
+  {
+    "id": "invalid_format",
+    "input": "12-345-6789",
+    "should_match": false,
+    "type": "ssn",
+    "description": "Wrong grouping"
+  },
+  {
+    "id": "all_zeros_area",
+    "input": "000-45-6789",
+    "should_match": false,
+    "type": "ssn",
+    "description": "Area number 000 is invalid"
+  },
+  {
+    "id": "plain_text",
+    "input": "no ssn here",
+    "should_match": false,
+    "type": "ssn",
+    "description": "No SSN"
+  }
+]

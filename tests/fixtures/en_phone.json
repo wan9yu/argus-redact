@@ -1,0 +1,55 @@
+[
+  {
+    "id": "us_standard",
+    "input": "Call (555) 123-4567",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "(555) 123-4567",
+    "description": "US standard format"
+  },
+  {
+    "id": "us_with_country_code",
+    "input": "Phone +1-555-123-4567",
+    "should_match": true,
+    "type": "phone",
+    "description": "US with +1 country code"
+  },
+  {
+    "id": "us_dots",
+    "input": "555.123.4567",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "555.123.4567",
+    "description": "US dot-separated"
+  },
+  {
+    "id": "us_dashes",
+    "input": "555-123-4567",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "555-123-4567",
+    "description": "US dash-separated"
+  },
+  {
+    "id": "us_no_separator",
+    "input": "5551234567",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "5551234567",
+    "description": "US 10 digits no separator"
+  },
+  {
+    "id": "too_short",
+    "input": "555-1234",
+    "should_match": false,
+    "type": "phone",
+    "description": "Only 7 digits"
+  },
+  {
+    "id": "plain_text",
+    "input": "no phone here",
+    "should_match": false,
+    "type": "phone",
+    "description": "No phone number"
+  }
+]

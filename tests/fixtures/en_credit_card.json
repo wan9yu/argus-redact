@@ -1,0 +1,40 @@
+[
+  {
+    "id": "visa_with_dashes",
+    "input": "Card 4111-1111-1111-1111",
+    "should_match": true,
+    "type": "credit_card",
+    "expected_text": "4111-1111-1111-1111",
+    "description": "Visa with dashes"
+  },
+  {
+    "id": "visa_with_spaces",
+    "input": "Card 4111 1111 1111 1111",
+    "should_match": true,
+    "type": "credit_card",
+    "expected_text": "4111 1111 1111 1111",
+    "description": "Visa with spaces"
+  },
+  {
+    "id": "visa_no_separator",
+    "input": "4111111111111111",
+    "should_match": true,
+    "type": "credit_card",
+    "expected_text": "4111111111111111",
+    "description": "Visa no separators"
+  },
+  {
+    "id": "invalid_luhn",
+    "input": "4111-1111-1111-1112",
+    "should_match": false,
+    "type": "credit_card",
+    "description": "Luhn check fails"
+  },
+  {
+    "id": "plain_text",
+    "input": "no card here",
+    "should_match": false,
+    "type": "credit_card",
+    "description": "No credit card"
+  }
+]
