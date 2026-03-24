@@ -142,6 +142,55 @@ class TestHanLPAdapter:
         assert results[0].confidence > 0
 
 
+class TestHanLPAdapterEdgeCases:
+    """Edge cases for robustness."""
+
+    @patch.dict("sys.modules", {"hanlp": MagicMock()})
+    def test_should_return_empty_when_empty_text(self):
+        from argus_redact.lang.zh.ner_adapter import HanLPAdapter
+
+        adapter = HanLPAdapter()
+
+        results = adapter.detect("")
+
+        assert results == []
+
+    @patch.dict("sys.modules", {"hanlp": MagicMock()})
+    def test_should_skip_unknown_label(self):
+        from argus_redact.lang.zh.ner_adapter import HanLPAdapter
+
+        adapter = HanLPAdapter()
+        mock_model = MagicMock()
+        mock_model.return_value = {
+            "ner/msra": [("something", "UNKNOWN_TYPE", 0, 1)],
+            "tok/fine": ["something"],
+        }
+        adapter._model = mock_model
+
+        results = adapter.detect("something")
+
+        assert results == []
+
+    @patch.dict("sys.modules", {"hanlp": MagicMock()})
+    def test_should_fallback_when_token_offsets_invalid(self):
+        from argus_redact.lang.zh.ner_adapter import HanLPAdapter
+
+        adapter = HanLPAdapter()
+        mock_model = MagicMock()
+        mock_model.return_value = {
+            "ner/msra": [("张三", "PERSON", 99, 100)],
+            "tok/fine": ["张三", "说话"],
+        }
+        adapter._model = mock_model
+
+        results = adapter.detect("张三说话")
+
+        assert len(results) == 1
+        assert results[0].text == "张三"
+        assert results[0].start == 0
+        assert results[0].end == 2
+
+
 class TestCreateAdapter:
     @patch.dict("sys.modules", {"hanlp": MagicMock()})
     def test_should_return_hanlp_adapter(self):

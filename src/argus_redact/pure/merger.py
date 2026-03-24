@@ -23,24 +23,18 @@ def _pick_winner(a: PatternMatch, b: PatternMatch) -> PatternMatch:
     """Given two overlapping entities, pick the one to keep.
 
     Rules:
-    1. If one contains the other, keep the longer (outer) span.
-    2. If partial overlap, keep the longer span.
-    3. If same length, keep the higher confidence.
+    1. Containment — keep the longer (outer) span.
+    2. Partial overlap — keep the longer span.
+    3. Same length / exact overlap — keep the higher confidence.
     """
     len_a = _span_length(a)
     len_b = _span_length(b)
 
-    # Containment: keep the longer (outer) span
-    if _contains(a, b) and len_a > len_b:
-        return a
-    if _contains(b, a) and len_b > len_a:
-        return b
-
-    # Same span or partial overlap with different lengths: longer wins
+    # Different lengths: always prefer the longer span
     if len_a != len_b:
         return a if len_a > len_b else b
 
-    # Same length (including exact overlap): higher confidence wins
+    # Same length (exact overlap or coincidence): higher confidence wins
     return a if a.confidence >= b.confidence else b
 
 
@@ -64,7 +58,6 @@ def merge_entities(entities: list[PatternMatch]) -> list[PatternMatch]:
             merged.append(current)
             continue
 
-        # Overlapping: pick winner, replace last
         winner = _pick_winner(last, current)
         merged[-1] = winner
 

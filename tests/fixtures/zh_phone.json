@@ -154,5 +154,29 @@
     "should_match": true,
     "type": "phone",
     "description": "一段文字中有两个手机号"
+  },
+  {
+    "id": "phone_is_entire_text",
+    "input": "13812345678",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "13812345678",
+    "description": "整段文本就是手机号"
+  },
+  {
+    "id": "phone_adjacent_to_punctuation",
+    "input": "（13812345678）",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "13812345678",
+    "description": "手机号紧贴中文括号"
+  },
+  {
+    "id": "phone_after_colon",
+    "input": "电话：13812345678。",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "13812345678",
+    "description": "手机号跟在冒号后、句号前"
   }
 ]

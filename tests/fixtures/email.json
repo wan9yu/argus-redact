@@ -41,5 +41,36 @@
     "should_match": false,
     "type": "email",
     "description": "纯文本，无邮箱"
+  },
+  {
+    "id": "email_is_entire_text",
+    "input": "zhang@example.com",
+    "should_match": true,
+    "type": "email",
+    "expected_text": "zhang@example.com",
+    "description": "整段文本就是邮箱"
+  },
+  {
+    "id": "email_between_cjk",
+    "input": "张三zhang@example.com李四",
+    "should_match": true,
+    "type": "email",
+    "expected_text": "zhang@example.com",
+    "description": "邮箱夹在中文之间"
+  },
+  {
+    "id": "email_with_numbers",
+    "input": "test123@gmail.com",
+    "should_match": true,
+    "type": "email",
+    "expected_text": "test123@gmail.com",
+    "description": "本地部分带数字"
+  },
+  {
+    "id": "two_emails",
+    "input": "a@b.com and c@d.com",
+    "should_match": true,
+    "type": "email",
+    "description": "一段文字中两个邮箱"
   }
 ]

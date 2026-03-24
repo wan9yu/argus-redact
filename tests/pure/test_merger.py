@@ -173,3 +173,47 @@ class TestMergeComplexScenarios:
         result = merge_entities(entities)
 
         assert len(result) == 2
+
+    def test_should_handle_three_way_overlap_chain(self):
+        entities = [
+            _m("ABC", "person", 0, 3, confidence=0.8),
+            _m("BCD", "person", 1, 4, confidence=0.7),
+            _m("CDE", "person", 2, 5, confidence=0.9),
+        ]
+
+        result = merge_entities(entities)
+
+        assert len(result) == 1
+
+    def test_should_prefer_regex_over_ner_when_same_span(self):
+        entities = [
+            _m("13812345678", "phone", 0, 11, confidence=1.0),
+            _m("13812345678", "phone", 0, 11, confidence=0.85),
+        ]
+
+        result = merge_entities(entities)
+
+        assert len(result) == 1
+        assert result[0].confidence == 1.0
+
+    def test_should_keep_outer_when_lower_confidence_but_longer(self):
+        entities = [
+            _m("北京市朝阳区", "location", 0, 6, confidence=0.6),
+            _m("朝阳", "location", 3, 5, confidence=0.99),
+        ]
+
+        result = merge_entities(entities)
+
+        assert len(result) == 1
+        assert result[0].text == "北京市朝阳区"
+
+    def test_should_handle_different_types_at_same_position(self):
+        entities = [
+            _m("Apple", "organization", 0, 5, confidence=0.9),
+            _m("Apple", "person", 0, 5, confidence=0.7),
+        ]
+
+        result = merge_entities(entities)
+
+        assert len(result) == 1
+        assert result[0].type == "organization"
