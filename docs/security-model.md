@@ -177,3 +177,28 @@ The key maps pseudonyms to originals. Anyone with the key and the redacted text 
 - Review redacted output — no system is 100%
 - Document your pipeline for audit
 - Consult legal counsel for your requirements
+
+---
+
+## Regulatory Context
+
+### China PIPL — Cross-border LLM usage
+
+China's Personal Information Protection Law (PIPL) cross-border data transfer rules (effective January 2026) require organizations to minimize personal data sent to overseas services. When using overseas LLM APIs (OpenAI, Anthropic, Google), user PII must be de-identified before transmission.
+
+argus-redact provides the technical implementation:
+
+1. `redact()` runs locally — PII is replaced before any network call
+2. Only pseudonymized text crosses the border
+3. `restore()` runs locally — original identities never leave the device
+4. Per-message keys prevent cross-request profiling by the overseas provider
+
+This does not replace a Data Protection Impact Assessment (DPIA) or legal review, but it provides the technical layer that such assessments typically require.
+
+### EU AI Act / GDPR
+
+The EU AI Act (effective August 2026) imposes data minimization requirements on AI systems. GDPR Article 25 requires data protection by design. argus-redact supports both by ensuring that only the minimum necessary data — semantically preserved but identity-removed — is processed by external AI services.
+
+### HIPAA
+
+For healthcare applications in the US, argus-redact can serve as a de-identification step before sending clinical notes to LLM APIs. The key file should be treated as PHI and stored on encrypted, access-controlled volumes. Delete key files after restoration.

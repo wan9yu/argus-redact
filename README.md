@@ -210,6 +210,14 @@ answer = safe_ask("王五在协和医院检查了身体", "You are a health advi
 
 See [docs/security-model.md](docs/security-model.md) for the full threat model.
 
+## Compliance
+
+**China PIPL**: Cross-border data transfer rules (2026-01) require PII removal before sending to overseas LLM APIs. argus-redact provides the technical control — PII is replaced locally, only pseudonymized text crosses the border, per-session keys prevent cross-request profiling.
+
+**EU AI Act / GDPR**: Data minimization requirements for AI systems. argus-redact ensures only identity-removed text is processed by external services.
+
+> argus-redact is a technical tool, not a legal certification. Consult legal counsel for your specific requirements.
+
 ## Architecture: Pure Core
 
 argus-redact separates pure functions (testable, deterministic) from impure functions (I/O, models):
