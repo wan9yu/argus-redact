@@ -38,11 +38,13 @@ class OllamaAdapter(SemanticAdapter):
 
     def __init__(
         self,
-        model: str = "qwen2.5:32b",
-        base_url: str = "http://localhost:11434",
+        model: str | None = None,
+        base_url: str | None = None,
     ):
-        self._model = model
-        self._base_url = base_url
+        import os
+
+        self._model = model or os.environ.get("OLLAMA_MODEL", "qwen2.5:32b")
+        self._base_url = base_url or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
     def detect(self, text: str) -> list[NEREntity]:
         if not text:
