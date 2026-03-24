@@ -1,0 +1,43 @@
+[
+  {
+    "id": "ssn_in_sentence",
+    "input": "His SSN is 123-45-6789",
+    "entities": [
+      {"text": "123-45-6789", "type": "ssn", "start": 11, "end": 22}
+    ]
+  },
+  {
+    "id": "phone_standard",
+    "input": "Call me at (555) 123-4567",
+    "entities": [
+      {"text": "(555) 123-4567", "type": "phone", "start": 11, "end": 25}
+    ]
+  },
+  {
+    "id": "credit_card",
+    "input": "Card number 4111-1111-1111-1111",
+    "entities": [
+      {"text": "4111-1111-1111-1111", "type": "credit_card", "start": 12, "end": 31}
+    ]
+  },
+  {
+    "id": "email_only",
+    "input": "Email john@example.com for details",
+    "entities": [
+      {"text": "john@example.com", "type": "email", "start": 6, "end": 22}
+    ]
+  },
+  {
+    "id": "ssn_and_phone",
+    "input": "SSN 123-45-6789, phone (555) 123-4567",
+    "entities": [
+      {"text": "123-45-6789", "type": "ssn", "start": 4, "end": 15},
+      {"text": "(555) 123-4567", "type": "phone", "start": 23, "end": 37}
+    ]
+  },
+  {
+    "id": "no_pii",
+    "input": "The weather is nice today",
+    "entities": []
+  }
+]

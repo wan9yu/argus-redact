@@ -1,0 +1,74 @@
+[
+  {
+    "id": "phone_in_sentence",
+    "input": "请联系张经理，电话13812345678",
+    "entities": [
+      {"text": "13812345678", "type": "phone", "start": 11, "end": 22}
+    ]
+  },
+  {
+    "id": "id_and_phone",
+    "input": "身份证110101199003074610，手机15900001234",
+    "entities": [
+      {"text": "110101199003074610", "type": "id_number", "start": 3, "end": 21},
+      {"text": "15900001234", "type": "phone", "start": 24, "end": 35}
+    ]
+  },
+  {
+    "id": "email_only",
+    "input": "发邮件到zhang@company.com",
+    "entities": [
+      {"text": "zhang@company.com", "type": "email", "start": 4, "end": 21}
+    ]
+  },
+  {
+    "id": "bank_card",
+    "input": "转账到卡号4111111111111111",
+    "entities": [
+      {"text": "4111111111111111", "type": "bank_card", "start": 5, "end": 21}
+    ]
+  },
+  {
+    "id": "license_plate",
+    "input": "车牌京A88888停在门口",
+    "entities": [
+      {"text": "京A88888", "type": "license_plate", "start": 2, "end": 9}
+    ]
+  },
+  {
+    "id": "multiple_phones",
+    "input": "联系人A电话13812345678，联系人B电话15900001234",
+    "entities": [
+      {"text": "13812345678", "type": "phone", "start": 5, "end": 16},
+      {"text": "15900001234", "type": "phone", "start": 22, "end": 33}
+    ]
+  },
+  {
+    "id": "dense_pii",
+    "input": "张三，手机13812345678，邮箱zhang@test.com，身份证110101199003074610",
+    "entities": [
+      {"text": "13812345678", "type": "phone", "start": 5, "end": 16},
+      {"text": "zhang@test.com", "type": "email", "start": 19, "end": 33},
+      {"text": "110101199003074610", "type": "id_number", "start": 37, "end": 55}
+    ]
+  },
+  {
+    "id": "no_pii",
+    "input": "今天天气真不错，适合出去散步",
+    "entities": []
+  },
+  {
+    "id": "phone_at_start",
+    "input": "13812345678是张三的电话",
+    "entities": [
+      {"text": "13812345678", "type": "phone", "start": 0, "end": 11}
+    ]
+  },
+  {
+    "id": "email_between_cjk",
+    "input": "请发送到zhang@test.com查收",
+    "entities": [
+      {"text": "zhang@test.com", "type": "email", "start": 4, "end": 18}
+    ]
+  }
+]
