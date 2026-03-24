@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "=== format ==="
+ruff check --fix src/ tests/
+ruff format src/ tests/
+
+echo ""
 echo "=== lint ==="
 ruff check src/ tests/
 ruff format --check src/ tests/
