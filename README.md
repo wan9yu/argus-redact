@@ -232,28 +232,28 @@ See [docs/architecture.md](docs/architecture.md) for the full purity model.
 
 ## Comparison
 
-| Feature | argus-redact | Presidio | Anonymizer SLM | LLM Guard |
-|---------|-------------|----------|----------------|-----------|
-| API model | `encrypt / decrypt` | Recognizer pipeline | Model inference | Scanner pipeline |
-| Chinese-native | **Yes** | Requires assembly | No | Limited |
-| Reversible | **Yes** (key-based) | Yes | No | Yes |
-| Per-message keys | **Yes** | No | No | No |
-| Deterministic testing | **Yes** (`seed`) | N/A | No | No |
-| Semantic detection | **Yes** (local LLM) | No | Yes | No |
-| Fully local | **Yes** | Yes | Yes | Yes |
-| Zero-config start | **Yes** (regex) | No | Yes | No |
+| Feature | argus-redact | Presidio | AVA Protocol | Tonic Textual | anonLLM |
+|---------|-------------|----------|-------------|--------------|---------|
+| Reversible | **Yes** (key) | Partial | Yes (vault) | No (synthesis) | Yes |
+| Per-message keys | **Yes** | No | No | No | No |
+| Chinese-native PII | **Yes** | No | No | Limited | No |
+| Fully local | **Yes** | Yes | Yes | No (SaaS) | **No** (uses OpenAI) |
+| Semantic detection | **Yes** (Ollama) | No | No | Yes | No |
+| Two-line API | **Yes** | No | No | No | Yes |
+| Deterministic testing | **Yes** (`seed`) | No | No | No | No |
 
-**Already using Presidio?** argus-redact is not a replacement — it solves a different problem. Presidio detects and masks PII. argus-redact adds reversible pseudonymization with per-session key rotation, optimized for the redact → LLM → restore workflow. You can use both.
+> **Why per-message keys matter:** [Research shows](https://arxiv.org/abs/2602.16800) LLMs can deanonymize users for $1-4/person when pseudonyms are fixed across requests. argus-redact generates a fresh random key per `redact()` call — the cloud sees unrelated pseudonyms every time.
+
+**Already using Presidio?** argus-redact is complementary. Presidio detects and masks PII. argus-redact adds reversible pseudonymization with per-session key rotation, optimized for the redact → LLM → restore workflow. You can use both.
 
 ## Roadmap
 
 ### Next
 
-- English / Japanese / Korean NER adapters (spaCy, GiNZA, KoNLPy)
-- `detailed=True` with entity metadata
-- LangChain / LlamaIndex adapters, FastAPI middleware
+- Japanese / Korean NER adapters (GiNZA, KoNLPy)
+- LlamaIndex adapter, FastAPI middleware
+- Presidio bridge (`argus-redact[presidio]`)
 - Rust core via PyO3 for hot paths
-- Precision/recall benchmarks
 
 ## Contributing
 
