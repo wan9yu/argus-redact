@@ -41,7 +41,6 @@ argus-redact redact [input] [options]
 | `-o, --output` | | stdout | Output file for redacted text. |
 | `-l, --lang` | | `zh` | Language(s), comma-separated. `zh`, `en`, `zh,en`. |
 | `-m, --mode` | | `auto` | Detection mode: `auto`, `fast` (regex only), `ner` (regex + NER). |
-| `-c, --config` | | *(built-in)* | Path to `redact_config.yaml`. |
 | `-s, --seed` | | *(random)* | Fixed seed for deterministic pseudonyms. For testing and reproducibility. |
 
 ### Examples
@@ -58,9 +57,6 @@ cat input.txt | argus-redact redact -k key.json -l zh,en
 
 # Fast mode (regex only, no NER)
 cat input.txt | argus-redact redact -k key.json -m fast
-
-# Custom config
-argus-redact redact input.txt -k key.json -c my_config.yaml -o redacted.txt
 
 # Batch: reuse key across multiple files
 argus-redact redact file1.txt -k shared.json -o out1.txt
@@ -129,13 +125,15 @@ argus-redact info
 argus-redact v0.1.0
 
 Languages:
-  zh  regex (6 patterns) + NER (HanLP)
-  en  regex (5 patterns) + NER (spaCy)
+  zh  Chinese    regex (9 patterns) + NER
+  en  English    regex (4 patterns) + NER
+  ja  Japanese   regex (4 patterns)
+  ko  Korean     regex (4 patterns)
 
 Layers:
   1 Pattern (regex)       ✓
   2 Entity (NER)          ✓
-  3 Semantic (LLM)        ✗  (pip install argus-redact[full])
+  3 Semantic (Ollama)     ✓
 ```
 
 ---
@@ -148,7 +146,6 @@ All commands use the same exit codes:
 |------|---------|----------|
 | 0 | Success | `echo $?` → 0 |
 | 1 | Input file not found | Provide nonexistent input path |
-| 2 | Invalid configuration | Provide malformed YAML |
 | 3 | Language pack not installed | Use `-l ja` without Japanese pack |
 | 4 | Key file not found (`restore` only) | Provide nonexistent `-k` path |
 | 5 | Key file invalid / corrupted | Provide non-JSON file as `-k` |
@@ -160,7 +157,6 @@ All commands use the same exit codes:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ARGUS_REDACT_LANG` | `zh` | Default language. |
-| `ARGUS_REDACT_CONFIG` | *(built-in)* | Default config file path. |
 | `ARGUS_REDACT_LOG_LEVEL` | `WARNING` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 
 ---

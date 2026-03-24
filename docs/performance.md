@@ -19,7 +19,7 @@ redact()                              LLM API call              restore()
 
 ## Per-Layer Breakdown
 
-> **Note:** Latency numbers below are estimates based on comparable tools (Anonymizer SLM, HanLP benchmarks, llama.cpp throughput). Actual benchmarks will be published after v0.1 release.
+> **Note:** Latency numbers below are from actual benchmarks on Apple M1 Max and Raspberry Pi Zero 2W. See README for summary.
 
 | Layer | What it does | Estimated latency | Scales with |
 |-------|-------------|----------------|-------------|

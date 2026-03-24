@@ -1,6 +1,8 @@
 # Configuration
 
-argus-redact uses a YAML configuration file to control redaction strategies per entity type. Without a config file, built-in defaults are used.
+> **Note:** Custom configuration is not yet implemented. The content below describes the planned design. Currently, built-in defaults are used for all redaction strategies.
+
+argus-redact will use a YAML configuration file to control redaction strategies per entity type. Without a config file, built-in defaults are used.
 
 ## Loading Configuration
 

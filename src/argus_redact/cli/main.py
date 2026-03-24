@@ -80,20 +80,35 @@ def cmd_restore(args):
 
 
 def cmd_info(args):
-    from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
-    from argus_redact.lang.zh.patterns import PATTERNS as ZH_PATTERNS
+    import importlib
+    import importlib.util
+
+    from argus_redact.lang.shared.patterns import PATTERNS as SHARED
+
+    langs = {"zh": "Chinese", "en": "English", "ja": "Japanese", "ko": "Korean"}
 
     print("argus-redact v0.1.0")
     print()
     print("Languages:")
-    zh_count = len(ZH_PATTERNS)
-    shared_count = len(SHARED_PATTERNS)
-    print(f"  zh  regex ({zh_count + shared_count} patterns)")
+    for code, name in langs.items():
+        try:
+            mod = importlib.import_module(f"argus_redact.lang.{code}.patterns")
+            count = len(mod.PATTERNS) + len(SHARED)
+        except ModuleNotFoundError:
+            count = 0
+        has_ner = importlib.util.find_spec(f"argus_redact.lang.{code}.ner_adapter") is not None
+        ner_label = " + NER" if has_ner else ""
+        print(f"  {code}  {name:10s} regex ({count} patterns){ner_label}")
+
     print()
     print("Layers:")
     print("  1 Pattern (regex)       ✓")
-    print("  2 Entity (NER)          ✗")
-    print("  3 Semantic (LLM)        ✗")
+    has_hanlp = importlib.util.find_spec("hanlp") is not None
+    has_spacy = importlib.util.find_spec("spacy") is not None
+    ner_ok = has_hanlp or has_spacy
+    print(f"  2 Entity (NER)          {'✓' if ner_ok else '✗'}")
+    ollama_ok = importlib.util.find_spec("requests") is not None
+    print(f"  3 Semantic (Ollama)     {'✓' if ollama_ok else '✗'}")
 
 
 def main():

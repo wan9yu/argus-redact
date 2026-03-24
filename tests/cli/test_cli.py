@@ -229,10 +229,13 @@ class TestInfoCommand:
         assert "argus-redact" in stdout
         assert "0.1.0" in stdout
 
-    def test_should_show_languages_when_info(self):
+    def test_should_show_all_languages_when_info(self):
         code, stdout, _ = run_cli("info")
 
         assert "zh" in stdout
+        assert "en" in stdout
+        assert "ja" in stdout
+        assert "ko" in stdout
 
 
 class TestCliErrors:

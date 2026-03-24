@@ -2,31 +2,38 @@
 
 ## LangChain
 
-### As a Runnable
+### Built-in Runnables
 
-Wrap `redact/restore` as LangChain Runnables. Since the key must be shared between the redact and restore steps, use `threading.local` for thread safety:
+argus-redact provides `RedactRunnable` and `RestoreRunnable` that implement the LangChain Runnable protocol:
 
 ```python
-from argus_redact import redact, restore
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from argus_redact.integrations.langchain import RedactRunnable, RestoreRunnable
+from langchain_core.runnables import RunnableLambda
 from langchain_openai import ChatOpenAI
-import threading
 
-_keys = threading.local()
-
-def redact_step(text: str) -> str:
-    redacted, _keys.current = redact(text)
-    return redacted
-
-def restore_step(text: str) -> str:
-    return restore(text, _keys.current)
+redact_r = RedactRunnable(mode="fast", lang="zh")
+restore_r = RestoreRunnable(redact_r)
 
 chain = (
-    RunnableLambda(redact_step)
+    redact_r
     | ChatOpenAI(model="gpt-4o")
     | RunnableLambda(lambda msg: msg.content)
-    | RunnableLambda(restore_step)
+    | restore_r
 )
+
+result = chain.invoke("张三的电话是13812345678")
+```
+
+These also work standalone without LangChain installed:
+
+```python
+from argus_redact.integrations.langchain import RedactRunnable, RestoreRunnable
+
+redact_r = RedactRunnable(mode="fast", lang="zh", seed=42)
+restore_r = RestoreRunnable(redact_r)
+
+redacted = redact_r.invoke("张三的电话是13812345678")
+restored = restore_r.invoke(redacted)
 ```
 
 ### With retrieval (RAG)

@@ -8,6 +8,15 @@ A language pack teaches argus-redact how to detect PII in a specific language. E
 
 You can contribute any one of these independently. A pack with only regex patterns is still useful.
 
+### Current Status
+
+| Language | Regex (Layer 1) | NER (Layer 2) | Semantic (Layer 3) |
+|----------|----------------|--------------|-------------------|
+| Chinese (zh) | Phone, ID, bank card, email, license plate, address, passport | HanLP | Ollama |
+| English (en) | Phone, SSN, credit card, email | spaCy | Ollama |
+| Japanese (ja) | Phone, My Number | — | Ollama |
+| Korean (ko) | Phone, RRN | — | Ollama |
+
 ---
 
 ## Built-in Packs

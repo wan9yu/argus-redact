@@ -11,7 +11,6 @@ redact(
     key: dict | str | None = None,
     lang: str | list[str] = "zh",
     mode: str = "auto",
-    config: str | dict | None = None,
     seed: int | None = None,
     detailed: bool = False,
 ) -> tuple[str, dict] | tuple[str, dict, dict]
@@ -25,9 +24,8 @@ Detect and replace PII in the input text. Returns `(redacted_text, key)`, or `(r
 |-----------|------|---------|-------------|
 | `text` | `str` | *(required)* | Input text to redact. |
 | `key` | `dict \| str \| None` | `None` | `None` = generate fresh key. `dict` = reuse this mapping (new entities are added, existing preserved). `str` = **file path** — if file exists, load and reuse; after redaction, file is updated with new entries. Behaves like CLI `-k`. |
-| `lang` | `str \| list[str]` | `"zh"` | Language(s). `"zh"`, `"en"`, `["zh", "en"]`. |
+| `lang` | `str \| list[str]` | `"zh"` | Language(s). `"zh"`, `"en"`, `"ja"`, `"ko"`, or list like `["zh", "en"]`. |
 | `mode` | `str` | `"auto"` | `"auto"` = all installed layers. `"fast"` = regex only. `"ner"` = regex + NER. |
-| `config` | `str \| dict \| None` | `None` | Redaction strategy config. File path, dict, or `None` for defaults. |
 | `seed` | `int \| None` | `None` | Random seed for pseudonym generation. `None` = cryptographically random (production). Set to a fixed int for **deterministic, reproducible output** (testing). Same seed + same input = same pseudonyms every time. |
 | `detailed` | `bool` | `False` | If `True`, return a 3-tuple with detection details (entities, stats). |
 
@@ -74,8 +72,8 @@ redact("张三说了A", key="key.json")        # key.json doesn't exist → crea
 redact("张三和李四说了B", key="key.json")   # key.json exists → loaded, 李四 added, written back
 redact("没有PII的文本", key="key.json")     # key.json exists → loaded, nothing added, NOT rewritten
 
-# Custom config
-redacted, key = redact("张三在星巴克", config={"phone": {"strategy": "remove"}})
+# Detailed mode
+redacted, key, details = redact("张三在星巴克", detailed=True)
 ```
 
 ### Purity Model
@@ -228,9 +226,9 @@ def test_invalid_mode():
     with pytest.raises(ValueError):
         redact("text", mode="invalid")
 
-def test_invalid_config():
-    with pytest.raises(Exception):  # ConfigError
-        redact("text", config={"person": {"strategy": "invalid"}})
+def test_invalid_mode():
+    with pytest.raises(ValueError):
+        redact("text", mode="invalid")
 
 def test_restore_bad_key_type():
     with pytest.raises(TypeError):
@@ -243,8 +241,7 @@ def test_restore_bad_key_type():
 |-------|------|-------------------|
 | `ValueError` | `lang` specifies an uninstalled language pack | `pytest.raises(ValueError)` |
 | `ValueError` | `mode` is not one of `"auto"`, `"fast"`, `"ner"` | `pytest.raises(ValueError)` |
-| `FileNotFoundError` | `config` file path doesn't exist, or `key` file path doesn't exist when used in `restore()` | `pytest.raises(FileNotFoundError)` |
-| `ConfigError` | Invalid config structure or unknown strategy | `pytest.raises(ConfigError)` |
+| `FileNotFoundError` | `key` file path doesn't exist when used in `restore()` | `pytest.raises(FileNotFoundError)` |
 | `TypeError` | `text` is not a string (e.g., `redact(123)`) | `pytest.raises(TypeError)` |
 
 ---
@@ -391,7 +388,7 @@ details["entities"]
 # ]
 
 details["stats"]
-# {"layer_1": 1, "layer_2": 1, "layer_3": 0, "total": 2, "duration_ms": 38}
+# {"total": 2}
 ```
 
 Without `detailed=True`, `redact()` returns `(str, dict)` as usual. With it, returns `(str, dict, dict)`. The extra dict contains `entities` and `stats`.
