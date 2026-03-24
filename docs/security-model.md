@@ -52,6 +52,14 @@ Per-message keys (argus-redact):
 
 Each `redact()` call generates a fresh random key. Compromising one key reveals nothing about other sessions — similar to the "forward secrecy" concept in cryptography, though without the mathematical proof.
 
+### Why this matters now: LLM deanonymization attacks
+
+Research from ETH Zurich ([arXiv:2602.16800](https://arxiv.org/abs/2602.16800), February 2026) demonstrates that LLM-based agents can deanonymize online users at a cost of $1-4 per person, achieving 67% recall at 90% precision.
+
+The attack relies on correlating pseudonymous activity across multiple requests. Fixed pseudonym schemes — where the same person always maps to `PERSON_1` — are particularly vulnerable, as the attacker can build a profile across requests and cross-reference with public data.
+
+**Per-message key rotation is the primary defense.** When each request uses a completely independent set of pseudonyms, cross-request correlation becomes impossible. This is why argus-redact generates a fresh random key for every `redact()` call by default. All other open-source PII tools we surveyed (Presidio, AVA Protocol, Bridge, anonLLM) use fixed or session-persistent pseudonyms.
+
 ---
 
 ## What's NOT Protected

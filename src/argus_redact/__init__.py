@@ -3,5 +3,5 @@
 from argus_redact.glue.redact import redact
 from argus_redact.pure.restore import restore
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __all__ = ["redact", "restore", "__version__"]

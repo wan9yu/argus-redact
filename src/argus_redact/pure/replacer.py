@@ -30,20 +30,34 @@ DEFAULT_PREFIXES = {
     "organization": "O",
 }
 
-# Default labels for remove strategy
-DEFAULT_REMOVE_LABELS = {
-    "id_number": "[身份证号已脱敏]",
-    "passport": "[护照号已脱敏]",
-    "license_plate": "[车牌号已脱敏]",
-    "address": "[地址已脱敏]",
-    "ssn": "[SSN REDACTED]",
-    "my_number": "[マイナンバー]",
-    "rrn": "[주민등록번호]",
+# Default labels for remove strategy — per language
+_REMOVE_LABELS_BY_LANG = {
+    "zh": {
+        "id_number": "[身份证号已脱敏]",
+        "passport": "[护照号已脱敏]",
+        "license_plate": "[车牌号已脱敏]",
+        "address": "[地址已脱敏]",
+    },
+    "en": {
+        "ssn": "[SSN REDACTED]",
+        "credit_card": "[CARD REDACTED]",
+    },
+    "ja": {
+        "my_number": "[マイナンバー]",
+    },
+    "ko": {
+        "rrn": "[주민등록번호]",
+    },
 }
+
+# Flattened default (all languages merged)
+DEFAULT_REMOVE_LABELS: dict[str, str] = {}
+for _labels in _REMOVE_LABELS_BY_LANG.values():
+    DEFAULT_REMOVE_LABELS.update(_labels)
 
 # Default label for category strategy
 DEFAULT_CATEGORY_LABEL = {
-    "location": "[地点]",
+    "location": "[LOCATION]",
 }
 
 
