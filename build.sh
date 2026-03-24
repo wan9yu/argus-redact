@@ -13,13 +13,20 @@ ruff check src/ tests/
 ruff format --check src/ tests/
 
 echo ""
-if [ "$MODE" = "integration" ]; then
-    echo "=== test (all, including NER integration) ==="
-    pytest -p no:recording -q
-else
-    echo "=== test (fast, skip NER integration) ==="
-    pytest -p no:recording -q -m "not ner"
-fi
+case "$MODE" in
+    integration)
+        echo "=== test (all, including NER + semantic) ==="
+        pytest -p no:recording -q
+        ;;
+    semantic)
+        echo "=== test (semantic only) ==="
+        pytest -p no:recording -q -m "semantic"
+        ;;
+    *)
+        echo "=== test (fast, skip NER + semantic) ==="
+        pytest -p no:recording -q -m "not ner and not semantic"
+        ;;
+esac
 
 echo ""
 echo "=== build ==="
