@@ -71,7 +71,7 @@ class TestSpaCyFullPipeline:
 
         text = "Call John at (555) 123-4567"
 
-        with patch("argus_redact.glue.redact._get_ner_adapter", return_value=adapter):
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted_text, key = redact(text, seed=42, mode="ner", lang="en")
 
         assert "(555) 123-4567" not in redacted_text
@@ -83,7 +83,7 @@ class TestSpaCyFullPipeline:
 
         text = "John Smith, SSN 123-45-6789, works at Google"
 
-        with patch("argus_redact.glue.redact._get_ner_adapter", return_value=adapter):
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted_text, key = redact(text, seed=42, mode="ner", lang="en")
 
         assert "123-45-6789" not in redacted_text

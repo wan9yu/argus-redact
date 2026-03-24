@@ -29,7 +29,7 @@ class TestMultiLanguagePersonNames:
             }
         )
 
-        with patch("argus_redact.glue.redact._get_ner_adapter", return_value=adapter):
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact("张三在北京工作", seed=42, mode="ner", lang="zh")
 
         assert "张三" not in redacted
@@ -46,7 +46,7 @@ class TestMultiLanguagePersonNames:
             }
         )
 
-        with patch("argus_redact.glue.redact._get_ner_adapter", return_value=adapter):
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact(
                 "张三和John在星巴克聊天",
                 seed=42,
@@ -70,7 +70,7 @@ class TestMultiLanguagePersonNames:
             }
         )
 
-        with patch("argus_redact.glue.redact._get_ner_adapter", return_value=adapter):
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             text = "张三和John的电话13812345678，邮箱john@test.com"
             redacted, key = redact(
                 text,
@@ -101,7 +101,7 @@ class TestMultiLanguagePersonNames:
             }
         )
 
-        with patch("argus_redact.glue.redact._get_ner_adapter", return_value=adapter):
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact(
                 "张三和田中和김철수开会",
                 seed=42,
@@ -125,7 +125,7 @@ class TestMultiLanguagePersonNames:
             }
         )
 
-        with patch("argus_redact.glue.redact._get_ner_adapter", return_value=adapter):
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact("张三在北京工作", seed=42, mode="fast", lang="zh")
 
         assert "张三" in redacted

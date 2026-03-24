@@ -62,6 +62,34 @@ class TestRestoreLongestFirst:
         assert result == "阿里西溪园区和阿里"
 
 
+class TestRestoreInjectionSafety:
+    """restore() must not re-scan replaced text (injection prevention)."""
+
+    def test_should_not_chain_replace_when_original_looks_like_marker(self):
+        key = {"P-037": "P-012先生", "P-012": "张三"}
+
+        result = restore("P-037和P-012", key)
+
+        assert result == "P-012先生和张三"
+        assert "张三先生" not in result
+
+    def test_should_not_inject_when_llm_output_contains_marker(self):
+        key = {"P-037": "王五"}
+        text = "P-037 said: the code P-037 is a pseudonym"
+
+        result = restore(text, key)
+
+        assert result == "王五 said: the code 王五 is a pseudonym"
+
+    def test_should_not_double_replace_when_original_contains_another_key(self):
+        key = {"[地点]": "星巴克", "[咖啡]": "拿铁"}
+        text = "在[地点]喝[咖啡]"
+
+        result = restore(text, key)
+
+        assert result == "在星巴克喝拿铁"
+
+
 class TestRestoreEdgeCases:
     """Edge cases and boundary conditions."""
 

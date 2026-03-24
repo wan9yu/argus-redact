@@ -25,11 +25,18 @@ Usage with LangChain:
 
 from __future__ import annotations
 
+import contextvars
+import threading
+
 from argus_redact import redact, restore
+
+_current_key: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "argus_redact_key", default=None
+)
 
 
 class RedactRunnable:
-    """Redact PII from text. Tracks key for later restoration.
+    """Redact PII from text. Thread-safe key tracking via contextvars.
 
     Compatible with LangChain's Runnable protocol (invoke method).
     """
@@ -44,21 +51,26 @@ class RedactRunnable:
         self._mode = mode
         self._lang = lang
         self._seed = seed
+        self._lock = threading.Lock()
         self.last_key: dict | None = None
 
     def invoke(self, text: str) -> str:
-        redacted, self.last_key = redact(
-            text,
-            mode=self._mode,
-            lang=self._lang,
-            seed=self._seed,
-            key=self.last_key,
-        )
+        with self._lock:
+            redacted, self.last_key = redact(
+                text,
+                mode=self._mode,
+                lang=self._lang,
+                seed=self._seed,
+                key=self.last_key,
+            )
+            _current_key.set(self.last_key)
         return redacted
 
     def reset(self):
         """Clear the key for a new session."""
-        self.last_key = None
+        with self._lock:
+            self.last_key = None
+            _current_key.set(None)
 
 
 class RestoreRunnable:
@@ -71,6 +83,7 @@ class RestoreRunnable:
         self._redact = redact_runnable
 
     def invoke(self, text: str) -> str:
-        if self._redact.last_key is None:
+        key = self._redact.last_key
+        if key is None:
             return text
-        return restore(text, self._redact.last_key)
+        return restore(text, key)

@@ -53,9 +53,10 @@ def _load_patterns(lang: str | list[str]) -> list[dict]:
     return all_patterns
 
 
-def _get_ner_adapter(lang: str | list[str]):
-    """Load and return a NER adapter for the given language. Returns None if unavailable."""
+def _get_ner_adapters(lang: str | list[str]) -> list:
+    """Load ALL available NER adapters for the given languages."""
     langs = [lang] if isinstance(lang, str) else list(lang)
+    adapters = []
 
     for code in langs:
         if code not in _LANG_NER_ADAPTERS:
@@ -64,11 +65,11 @@ def _get_ner_adapter(lang: str | list[str]):
             mod = importlib.import_module(_LANG_NER_ADAPTERS[code])
             adapter = mod.create_adapter()
             adapter.load()
-            return adapter
+            adapters.append(adapter)
         except (ModuleNotFoundError, ImportError):
             pass
 
-    return None
+    return adapters
 
 
 def _get_semantic_adapter():
@@ -114,12 +115,11 @@ def redact(
     # Layer 1: regex
     entities = match_patterns(text, _load_patterns(lang))
 
-    # Layer 2: NER (auto or ner mode)
+    # Layer 2: NER (auto or ner mode) — load ALL language adapters
     if mode in ("auto", "ner"):
-        adapter = _get_ner_adapter(lang)
-        if adapter is not None:
-            from argus_redact.impure.ner import detect_ner
+        from argus_redact.impure.ner import detect_ner
 
+        for adapter in _get_ner_adapters(lang):
             ner_entities = detect_ner(text, adapter=adapter)
             entities.extend(e.to_pattern_match() for e in ner_entities)
 

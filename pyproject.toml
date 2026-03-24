@@ -26,6 +26,11 @@ classifiers = [
     "Topic :: Text Processing",
 ]
 
+[project.urls]
+Homepage = "https://github.com/wan9yu/argus-redact"
+Repository = "https://github.com/wan9yu/argus-redact"
+Issues = "https://github.com/wan9yu/argus-redact/issues"
+
 [project.optional-dependencies]
 zh = ["hanlp>=2.1"]
 en = ["spacy>=3.0"]

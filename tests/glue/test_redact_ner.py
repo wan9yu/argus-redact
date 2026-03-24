@@ -33,7 +33,7 @@ class TestRedactWithNER:
             }
         )
 
-        with patch("argus_redact.glue.redact._get_ner_adapter", return_value=adapter):
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact("张三去了北京", seed=42, mode="ner", lang="zh")
 
         assert "张三" not in redacted
@@ -48,7 +48,7 @@ class TestRedactWithNER:
             }
         )
 
-        with patch("argus_redact.glue.redact._get_ner_adapter", return_value=adapter):
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact("张三去了北京", seed=42, mode="auto", lang="zh")
 
         assert "张三" not in redacted
@@ -62,7 +62,7 @@ class TestRedactWithNER:
             }
         )
 
-        with patch("argus_redact.glue.redact._get_ner_adapter", return_value=adapter):
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact("张三去了北京", seed=42, mode="fast", lang="zh")
 
         # fast mode = regex only, 张三 should NOT be redacted
@@ -78,7 +78,7 @@ class TestRedactWithNER:
             }
         )
 
-        with patch("argus_redact.glue.redact._get_ner_adapter", return_value=adapter):
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact(
                 "张三的手机号是13812345678",
                 seed=42,
@@ -99,7 +99,7 @@ class TestRedactWithNER:
             }
         )
 
-        with patch("argus_redact.glue.redact._get_ner_adapter", return_value=adapter):
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact("张三说了话", seed=42, mode="ner", lang="zh")
 
         restored = restore(redacted, key)

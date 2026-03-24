@@ -95,7 +95,7 @@ class TestRedactWithSemantic:
         )
 
         with (
-            patch("argus_redact.glue.redact._get_ner_adapter", return_value=ner_adapter),
+            patch("argus_redact.glue.redact._get_ner_adapters", return_value=[ner_adapter]),
             patch("argus_redact.glue.redact._get_semantic_adapter", return_value=sem_adapter),
         ):
             text = "老王说他上周在那个地方见了人，电话13812345678"

@@ -1,15 +1,22 @@
 """restore(text, key) -> plaintext. Pure string replacement."""
 
+from __future__ import annotations
+
+import re
+
 
 def restore(text: str, key: dict | str) -> str:
     """Replace pseudonyms with originals using the key.
 
-    Keys are applied longest-first to prevent partial matches.
+    Uses regex-based single-pass replacement to avoid injection:
+    - All markers are matched simultaneously in one pass
+    - Replaced text is never re-scanned for further matches
+    - Longest markers are preferred when overlapping
     """
     if isinstance(key, str):
         import json
 
-        with open(key) as f:
+        with open(key, encoding="utf-8") as f:
             key = json.load(f)
 
     if not isinstance(key, dict):
@@ -18,12 +25,9 @@ def restore(text: str, key: dict | str) -> str:
     if not key:
         return text
 
-    # Sort by key length descending — longest match first
+    # Build regex: longest markers first, all escaped
     sorted_keys = sorted(key.keys(), key=len, reverse=True)
+    pattern = "|".join(re.escape(k) for k in sorted_keys)
+    regex = re.compile(pattern)
 
-    result = text
-    for replacement in sorted_keys:
-        original = key[replacement]
-        result = result.replace(replacement, original)
-
-    return result
+    return regex.sub(lambda m: key[m.group()], text)

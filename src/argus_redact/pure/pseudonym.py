@@ -7,7 +7,7 @@ import secrets
 def generate_pseudonym(
     *,
     prefix: str = "P",
-    code_range: tuple[int, int] = (1, 999),
+    code_range: tuple[int, int] = (1, 99999),
     seed: int | None = None,
 ) -> str:
     """Generate a single pseudonym code like P-037."""
@@ -31,7 +31,7 @@ class PseudonymGenerator:
         self,
         *,
         prefix: str = "P",
-        code_range: tuple[int, int] = (1, 999),
+        code_range: tuple[int, int] = (1, 99999),
         seed: int | None = None,
         existing_key: dict[str, str] | None = None,
     ):

@@ -87,7 +87,9 @@ def cmd_info(args):
 
     langs = {"zh": "Chinese", "en": "English", "ja": "Japanese", "ko": "Korean"}
 
-    print("argus-redact v0.1.0")
+    from argus_redact import __version__
+
+    print(f"argus-redact v{__version__}")
     print()
     print("Languages:")
     for code, name in langs.items():
