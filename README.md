@@ -232,38 +232,13 @@ See [docs/architecture.md](docs/architecture.md) for the full purity model.
 
 ## Roadmap
 
-### v0.1 — Core (current)
+### Next
 
-| Milestone | Status |
-|-----------|--------|
-| Pure Core: `restore()`, `match_patterns()`, `replace()`, `merge_entities()`, `seed` determinism | Done |
-| Glue + CLI: `redact()` composition, CLI `redact`/`restore`/`info`, `-k` key file | Done |
-| Layer 1 Regex: zh, en, ja, ko patterns (phone, ID, bank card, email, license plate, address) | Done |
-| Layer 2 NER: HanLP Chinese NER adapter, `mode` parameter (fast/ner/auto) | Done |
-| Layer 3 Semantic: Ollama adapter for implicit PII detection | Done |
-| Collision numbering (①②③) for remove/category strategies | Done |
-| Mixed language (`lang=["zh", "en", "ja", "ko"]`) | Done |
-| PyPI publish | Pending |
-
-### v0.2 — Ecosystem
-
-| Milestone | Status |
-|-----------|--------|
-| English NER (spaCy adapter) | Planned |
-| Japanese / Korean NER adapters | Planned |
-| `detailed=True` with entity metadata | Planned |
-| LangChain / LlamaIndex adapters | Planned |
-| FastAPI middleware | Planned |
-| Docker image | Planned |
-
-### v1.0 — Production
-
-| Milestone | Status |
-|-----------|--------|
-| Rust core via PyO3 (regex, replace, key management, restore) | Planned |
-| Standalone Rust CLI binary (no Python runtime) | Planned |
-| Precision/recall benchmarks | Planned |
-| CONTRIBUTING.md + contributor guide | Planned |
+- English / Japanese / Korean NER adapters (spaCy, GiNZA, KoNLPy)
+- `detailed=True` with entity metadata
+- LangChain / LlamaIndex adapters, FastAPI middleware
+- Rust core via PyO3 for hot paths
+- Precision/recall benchmarks
 
 ## Contributing
 
