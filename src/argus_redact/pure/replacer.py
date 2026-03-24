@@ -101,6 +101,11 @@ def _resolve_collision(label: str, used_labels: set[str]) -> str:
         candidate = f"{label}{c}"
         if candidate not in used_labels:
             return candidate
+    # Fallback to numeric suffix beyond ⑳
+    for i in range(21, 10000):
+        candidate = f"{label}({i})"
+        if candidate not in used_labels:
+            return candidate
     raise RuntimeError(f"Too many collisions for label: {label}")
 
 

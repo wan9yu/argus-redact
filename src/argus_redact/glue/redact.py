@@ -149,7 +149,14 @@ def redact(
     )
 
     if key_file is not None and result_key:
-        Path(key_file).write_text(json.dumps(result_key, ensure_ascii=False, indent=2))
+        # Atomic write: write to temp file then rename
+        target = Path(key_file)
+        tmp = target.with_suffix(".tmp")
+        tmp.write_text(
+            json.dumps(result_key, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        tmp.replace(target)
 
     if detailed:
         reverse_key = {v: k for k, v in result_key.items()}

@@ -46,28 +46,43 @@ class OllamaAdapter(SemanticAdapter):
         self._model = model or os.environ.get("OLLAMA_MODEL", "qwen2.5:32b")
         self._base_url = base_url or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
+    def _call_ollama(self, text: str) -> requests.Response | None:
+        """Call Ollama with retry."""
+        payload = {
+            "model": self._model,
+            "prompt": f"文本：{text}",
+            "system": SYSTEM_PROMPT,
+            "stream": False,
+            "options": {"temperature": 0.0},
+        }
+        for attempt in range(2):
+            try:
+                resp = requests.post(
+                    f"{self._base_url}/api/generate",
+                    json=payload,
+                    timeout=30,
+                )
+                if resp.status_code == 200:
+                    return resp
+                logger.warning(
+                    "Ollama returned status %d (attempt %d)",
+                    resp.status_code,
+                    attempt + 1,
+                )
+            except Exception:
+                logger.warning(
+                    "Ollama request failed (attempt %d)",
+                    attempt + 1,
+                    exc_info=True,
+                )
+        return None
+
     def detect(self, text: str) -> list[NEREntity]:
         if not text:
             return []
 
-        try:
-            response = requests.post(
-                f"{self._base_url}/api/generate",
-                json={
-                    "model": self._model,
-                    "prompt": f"文本：{text}",
-                    "system": SYSTEM_PROMPT,
-                    "stream": False,
-                    "options": {"temperature": 0.0},
-                },
-                timeout=30,
-            )
-        except Exception:
-            logger.warning("Ollama request failed", exc_info=True)
-            return []
-
-        if response.status_code != 200:
-            logger.warning("Ollama returned status %d", response.status_code)
+        response = self._call_ollama(text)
+        if response is None:
             return []
 
         try:

@@ -66,6 +66,10 @@ class RedactRunnable:
             _current_key.set(self.last_key)
         return redacted
 
+    async def ainvoke(self, text: str) -> str:
+        """Async version of invoke for LangChain async chains."""
+        return self.invoke(text)
+
     def reset(self):
         """Clear the key for a new session."""
         with self._lock:
@@ -87,3 +91,7 @@ class RestoreRunnable:
         if key is None:
             return text
         return restore(text, key)
+
+    async def ainvoke(self, text: str) -> str:
+        """Async version of invoke for LangChain async chains."""
+        return self.invoke(text)

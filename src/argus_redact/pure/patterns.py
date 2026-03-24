@@ -1,8 +1,16 @@
 """match_patterns(text, patterns) -> list of PatternMatch. Pure regex matching."""
 
+from __future__ import annotations
+
 import re
+from functools import lru_cache
 
 from argus_redact._types import PatternMatch
+
+
+@lru_cache(maxsize=128)
+def _compile(pattern: str) -> re.Pattern:
+    return re.compile(pattern)
 
 
 def match_patterns(text: str, patterns: list[dict]) -> list[PatternMatch]:
@@ -17,7 +25,7 @@ def match_patterns(text: str, patterns: list[dict]) -> list[PatternMatch]:
     results: list[PatternMatch] = []
 
     for pat in patterns:
-        regex = re.compile(pat["pattern"])
+        regex = _compile(pat["pattern"])
         validate = pat.get("validate")
 
         for m in regex.finditer(text):
