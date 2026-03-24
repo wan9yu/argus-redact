@@ -1,5 +1,8 @@
 # argus-redact
 
+[![Tests](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml/badge.svg)](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact)
+
 **Encrypt PII, not meaning. Locally.**
 
 > *Like GPG for personal data in LLM pipelines — your text goes to the cloud, your identity stays home.*
