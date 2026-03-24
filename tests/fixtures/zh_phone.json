@@ -64,11 +64,40 @@
     "description": "19x前缀"
   },
   {
+    "id": "mobile_embedded_in_sentence",
+    "input": "请联系张三，手机号是13912345678，谢谢",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "13912345678",
+    "description": "手机号嵌入在句子中"
+  },
+  {
+    "id": "mobile_with_spaces",
+    "input": "138 1234 5678",
+    "should_match": false,
+    "type": "phone",
+    "description": "有空格分隔，不匹配"
+  },
+  {
+    "id": "mobile_with_dashes",
+    "input": "138-1234-5678",
+    "should_match": false,
+    "type": "phone",
+    "description": "有短横线分隔，不匹配"
+  },
+  {
     "id": "mobile_too_short",
     "input": "1381234567",
     "should_match": false,
     "type": "phone",
     "description": "只有10位，不匹配"
+  },
+  {
+    "id": "mobile_too_long",
+    "input": "138123456789",
+    "should_match": false,
+    "type": "phone",
+    "description": "12位数字，不应匹配12位"
   },
   {
     "id": "mobile_invalid_prefix_10",
@@ -104,5 +133,26 @@
     "should_match": true,
     "type": "phone",
     "description": "上海座机"
+  },
+  {
+    "id": "landline_three_digit_area",
+    "input": "0755-12345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "三位区号（深圳）"
+  },
+  {
+    "id": "landline_no_dash",
+    "input": "075512345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "座机不带短横线"
+  },
+  {
+    "id": "two_phones_in_text",
+    "input": "张三13812345678，李四15900001111",
+    "should_match": true,
+    "type": "phone",
+    "description": "一段文字中有两个手机号"
   }
 ]

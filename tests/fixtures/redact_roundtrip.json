@@ -18,15 +18,45 @@
     "description": "邮箱脱敏后可还原"
   },
   {
+    "id": "bank_card",
+    "input": "银行卡号4111111111111111请妥善保管",
+    "pii_values": ["4111111111111111"],
+    "description": "银行卡号脱敏后可还原"
+  },
+  {
+    "id": "license_plate",
+    "input": "他开的车是京A88888，停在楼下",
+    "pii_values": ["京A88888"],
+    "description": "车牌号脱敏后可还原"
+  },
+  {
     "id": "multiple_pii",
     "input": "电话13812345678，邮箱test@example.com",
     "pii_values": ["13812345678", "test@example.com"],
     "description": "多种PII混合脱敏后均可还原"
   },
   {
+    "id": "phone_and_id",
+    "input": "联系人电话13812345678，身份证110101199003074610",
+    "pii_values": ["13812345678", "110101199003074610"],
+    "description": "手机号+身份证混合脱敏后可还原"
+  },
+  {
+    "id": "dense_pii_paragraph",
+    "input": "客户张先生，手机13812345678，邮箱zhang@test.com，银行卡4111111111111111，车牌沪A12345",
+    "pii_values": ["13812345678", "zhang@test.com", "4111111111111111", "沪A12345"],
+    "description": "一段话包含多种PII全部可还原"
+  },
+  {
     "id": "no_pii",
     "input": "今天天气不错",
     "pii_values": [],
     "description": "无PII时原文不变"
+  },
+  {
+    "id": "pii_at_boundaries",
+    "input": "13812345678",
+    "pii_values": ["13812345678"],
+    "description": "PII就是整段文本"
   }
 ]
