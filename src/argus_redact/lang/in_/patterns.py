@@ -39,7 +39,7 @@ PATTERNS = [
     {
         "type": "phone",
         "label": "[PHONE]",
-        "pattern": r"(?:\+91[-\s]?)?[6-9]\d{9}(?!\d)",
+        "pattern": r"(?:\+91[-\s]?)?[6-9]\d{4}[-\s]?\d{5}(?!\d)",
         "description": "Indian mobile phone number",
     },
 ]

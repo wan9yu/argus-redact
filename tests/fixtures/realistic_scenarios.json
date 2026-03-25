@@ -1,0 +1,881 @@
+[
+  {
+    "id": "zh_customer_record_01",
+    "input": "客户王建华先生来电投诉，手机号13867251934，称其在2024年3月15日购买的商品存在质量问题，身份证号110105199803126517，要求全额退款并赔偿。客服已记录工单，稍后回电处理。",
+    "lang": "zh",
+    "pii_values": [
+      "13867251934",
+      "110105199803126517"
+    ],
+    "pii_types": [
+      "phone",
+      "id_number"
+    ],
+    "description": "Customer complaint call record with phone and ID number embedded naturally"
+  },
+  {
+    "id": "zh_customer_record_02",
+    "input": "李女士（手机：15021387456）反映其银行卡6222104332181960010在昨日有一笔异常消费￥3,280.00，非本人操作。已核实身份证号310115200201089515，建议冻结账户并提交争议申请。",
+    "lang": "zh",
+    "pii_values": [
+      "15021387456",
+      "6222104332181960010",
+      "310115200201089515"
+    ],
+    "pii_types": [
+      "phone",
+      "bank_card",
+      "id_number"
+    ],
+    "description": "Bank fraud report with phone, bank card, and ID — realistic banking customer service"
+  },
+  {
+    "id": "zh_medical_note_01",
+    "input": "患者陈明辉，男，38岁，身份证号440305198507233513。主诉：反复头痛伴恶心3天。查体：BP 145/95mmHg，神清，颈软。初步诊断：高血压病2级。联系电话13598762341，家属联系人：陈丽（妻），电话18675432198。",
+    "lang": "zh",
+    "pii_values": [
+      "440305198507233513",
+      "13598762341",
+      "18675432198"
+    ],
+    "pii_types": [
+      "id_number",
+      "phone",
+      "phone"
+    ],
+    "description": "Medical admission note with patient ID and multiple phone numbers"
+  },
+  {
+    "id": "zh_medical_note_02",
+    "input": "门诊病历\n姓名：张淑芬  性别：女  年龄：32岁\n身份证号：510107199110151514\n联系电话：18708193456\n就诊日期：2024-09-12\n主诉：停经40天，恶心呕吐1周\n现病史：末次月经2024-08-03，近一周晨起恶心明显\n处理：查血HCG，B超检查",
+    "lang": "zh",
+    "pii_values": [
+      "510107199110151514",
+      "18708193456"
+    ],
+    "pii_types": [
+      "id_number",
+      "phone"
+    ],
+    "description": "Outpatient medical record with structured fields"
+  },
+  {
+    "id": "zh_chat_log_01",
+    "input": "小刘：哥，我换号了，新号码是17612349876\n老赵：好的，记住了。你身份证拍给我了吗？办宽带要用\n小刘：发了，420106198812058514\n老赵：收到，明天帮你去营业厅办",
+    "lang": "zh",
+    "pii_values": [
+      "17612349876",
+      "420106198812058514"
+    ],
+    "pii_types": [
+      "phone",
+      "id_number"
+    ],
+    "description": "Casual chat log between friends sharing PII for broadband registration"
+  },
+  {
+    "id": "zh_chat_log_02",
+    "input": "[2024-03-15 14:32] 黄经理：合同签好了，对方公司的财务转账需要我们的银行信息\n[2024-03-15 14:33] 黄经理：开户行：中国工商银行成都春熙路支行\n[2024-03-15 14:33] 黄经理：账号：6228265423511615598\n[2024-03-15 14:34] 助理小王：好的，我这边对接。对方联系人电话13908761234",
+    "lang": "zh",
+    "pii_values": [
+      "6228265423511615598",
+      "13908761234"
+    ],
+    "pii_types": [
+      "bank_card",
+      "phone"
+    ],
+    "description": "Work chat sharing bank account details for business transfer"
+  },
+  {
+    "id": "zh_address_record_01",
+    "input": "收件人：吴晓峰，电话13706891234，地址：山东省青岛市市南区香港中路67号远洋大厦12层1203室，邮编266071。身份证号370202198706093215，务必本人签收。",
+    "lang": "zh",
+    "pii_values": [
+      "13706891234",
+      "山东省青岛市市南区香港中路67号远洋大厦12层1203室",
+      "370202198706093215"
+    ],
+    "pii_types": [
+      "phone",
+      "address",
+      "id_number"
+    ],
+    "description": "Delivery record with full address, phone, and ID for identity verification"
+  },
+  {
+    "id": "zh_address_record_02",
+    "input": "租赁合同登记：承租方孙雨辰，身份证号320102200012257815，联系方式18951236789，租赁房屋位于江苏省南京市玄武区珠江路528号德基大厦A座2502室，月租金8500元，押一付三。",
+    "lang": "zh",
+    "pii_values": [
+      "320102200012257815",
+      "18951236789",
+      "江苏省南京市玄武区珠江路528号德基大厦A座2502室"
+    ],
+    "pii_types": [
+      "id_number",
+      "phone",
+      "address"
+    ],
+    "description": "Rental contract registration with address, ID, and phone"
+  },
+  {
+    "id": "zh_ecommerce_01",
+    "input": "订单详情：\n订单号：2024031512345678\n买家：杨柳\n手机：18629087654\n收货地址：陕西省西安市碑林区长安北路1号省体育场东门\n付款方式：银行卡尾号9319\n商品：Apple iPhone 15 Pro 256GB 原色钛金属\n金额：￥8,999.00\n状态：已发货",
+    "lang": "zh",
+    "pii_values": [
+      "18629087654",
+      "陕西省西安市碑林区长安北路1号省体育场东门"
+    ],
+    "pii_types": [
+      "phone",
+      "address"
+    ],
+    "description": "E-commerce order details with phone and delivery address"
+  },
+  {
+    "id": "zh_hr_record_01",
+    "input": "新员工入职登记表\n姓名：刘思远  工号：EMP20240315\n身份证号：330106199605204518\n手机：13857126789\n紧急联系人：刘建国（父）13857120001\n户籍地址：浙江省杭州市西湖区文三路391号\n银行卡号（工商银行）：6217338908386379409\n入职日期：2024年3月15日",
+    "lang": "zh",
+    "pii_values": [
+      "330106199605204518",
+      "13857126789",
+      "13857120001",
+      "浙江省杭州市西湖区文三路391号",
+      "6217338908386379409"
+    ],
+    "pii_types": [
+      "id_number",
+      "phone",
+      "phone",
+      "address",
+      "bank_card"
+    ],
+    "description": "HR onboarding form with multiple PII types: ID, phones, address, bank card"
+  },
+  {
+    "id": "zh_license_plate_context_01",
+    "input": "交通事故报告：2024年3月15日下午2时，京A·12345号车辆在北京市朝阳区建国路与东三环交叉口与沪B·67890号车辆发生碰撞。京A车驾驶员王某，手机13901234567；沪B车驾驶员李某，手机13512345678。",
+    "lang": "zh",
+    "pii_values": [
+      "京A·12345",
+      "沪B·67890",
+      "13901234567",
+      "13512345678"
+    ],
+    "pii_types": [
+      "license_plate",
+      "license_plate",
+      "phone",
+      "phone"
+    ],
+    "description": "Traffic accident report with license plates and phone numbers"
+  },
+  {
+    "id": "zh_email_mixed_01",
+    "input": "尊敬的赵先生，您好！您在我行办理的信用卡（尾号5534）本期账单金额为￥12,680.50，还款截止日为2024年4月5日。如有疑问请致电客服热线400-820-1234或联系您的客户经理（手机：13761234567，邮箱：kefu_zhao@examplebank.com）。",
+    "lang": "zh",
+    "pii_values": [
+      "13761234567",
+      "kefu_zhao@examplebank.com"
+    ],
+    "pii_types": [
+      "phone",
+      "email"
+    ],
+    "description": "Credit card statement notification with phone and email"
+  },
+  {
+    "id": "en_customer_service_01",
+    "input": "Case #48291: Customer John Whitfield called regarding unauthorized charges on his Visa ending in 1111. Full card number provided for verification: 4111111111111111. Customer SSN on file: 923-71-8834. Callback number: (415) 555-0198. Issue escalated to fraud department.",
+    "lang": "en",
+    "pii_values": [
+      "4111111111111111",
+      "923-71-8834",
+      "(415) 555-0198"
+    ],
+    "pii_types": [
+      "credit_card",
+      "ssn",
+      "phone"
+    ],
+    "description": "US customer service fraud case with credit card, SSN (900+ range = synthetic), and phone"
+  },
+  {
+    "id": "en_customer_service_02",
+    "input": "Hi, my name is Sarah Mitchell and I'd like to update my account. My current address is 742 Evergreen Terrace, Springfield, IL 62704. My email is s.mitchell92@example.com and you can reach me at 312-555-0147. My SSN is 951-38-2764 for identity verification.",
+    "lang": "en",
+    "pii_values": [
+      "s.mitchell92@example.com",
+      "312-555-0147",
+      "951-38-2764"
+    ],
+    "pii_types": [
+      "address",
+      "email",
+      "phone",
+      "ssn"
+    ],
+    "description": "Account update request with address, email, phone, and SSN"
+  },
+  {
+    "id": "en_medical_record_01",
+    "input": "PATIENT: Robert A. Hernandez\nDOB: 04/17/1985\nSSN: 909-62-4513\nMRN: 00847291\n\nHPI: 39 y/o male presents with chest pain x 2 hours. Pain is substernal, pressure-like, 7/10, radiating to left arm. Hx of HTN, DM2. Contact: wife Maria at 214-555-0823. Insurance: Blue Cross ID# XYZ123456789.",
+    "lang": "en",
+    "pii_values": [
+      "909-62-4513",
+      "214-555-0823"
+    ],
+    "pii_types": [
+      "ssn",
+      "phone"
+    ],
+    "description": "Medical record with SSN, DOB, and emergency contact phone"
+  },
+  {
+    "id": "en_email_thread_01",
+    "input": "From: jennifer.oconnor@example.com\nTo: hr@acmecorp.example.com\nSubject: Direct deposit setup\n\nHi HR team,\n\nPlease set up my direct deposit with the following details:\nBank: Chase\nRouting: 021000021\nAccount: 123456789012\nMy SSN for tax purposes: 934-55-1278\n\nThanks,\nJennifer O'Connor\nCell: +1 (646) 555-0312",
+    "lang": "en",
+    "pii_values": [
+      "jennifer.oconnor@example.com",
+      "934-55-1278",
+      "+1 (646) 555-0312"
+    ],
+    "pii_types": [
+      "email",
+      "ssn",
+      "phone"
+    ],
+    "description": "Email with direct deposit info, SSN, email, and phone"
+  },
+  {
+    "id": "en_credit_card_variants_01",
+    "input": "Payment methods on file for customer #8827:\n- Visa: 4111 1111 1111 1111, exp 08/27, CVV 123\n- Mastercard: 5500-0000-0000-0004, exp 12/26\n- Amex: 3400 000000 00009, exp 03/28\n- Discover: 6011 0000 0000 0004, exp 11/25\nPlease process refund to the Visa card.",
+    "lang": "en",
+    "pii_values": [
+      "4111 1111 1111 1111",
+      "5500-0000-0000-0004",
+      "6011 0000 0000 0004"
+    ],
+    "pii_types": [
+      "credit_card",
+      "credit_card",
+      "credit_card",
+      "credit_card"
+    ],
+    "description": "Multiple credit card formats — spaces, dashes, Amex 4-6-5 grouping"
+  },
+  {
+    "id": "en_phone_formats_01",
+    "input": "Emergency contacts for employee David Park:\n- Home: (202) 555-0145\n- Cell: 202.555.0198\n- Work: 202-555-0167\n- International format: +1-202-555-0145\n- Compact: 2025550134\nPlease try cell first.",
+    "lang": "en",
+    "pii_values": [
+      "(202) 555-0145",
+      "202.555.0198",
+      "202-555-0167",
+      "+1-202-555-0145",
+      "2025550134"
+    ],
+    "pii_types": [
+      "phone",
+      "phone",
+      "phone",
+      "phone",
+      "phone"
+    ],
+    "description": "US phone numbers in 5 different formats — edge case for format detection"
+  },
+  {
+    "id": "en_legal_document_01",
+    "input": "AFFIDAVIT OF IDENTITY\n\nI, Margaret Louise Thompson, residing at 1847 Oak Valley Drive, Apt 4B, Austin, TX 78704, do hereby swear under penalty of perjury that the information provided is true. My Social Security Number is 912-44-6738 and my date of birth is November 3, 1978. Contact: margaret.thompson@example.com, phone 512-555-0294.",
+    "lang": "en",
+    "pii_values": [
+      "912-44-6738",
+      "margaret.thompson@example.com",
+      "512-555-0294"
+    ],
+    "pii_types": [
+      "address",
+      "ssn",
+      "email",
+      "phone"
+    ],
+    "description": "Legal affidavit with formal language containing address, SSN, email, phone",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "de_insurance_claim_01",
+    "input": "Schadensmeldung Nr. 2024-KFZ-00831\n\nVersicherungsnehmer: Thomas Müller\nSteuer-ID: 57 234 891 067\nAnschrift: Friedrichstraße 123, 10117 Berlin\nTelefon: +49 30 98765432\nIBAN: DE89 3704 0044 0532 0130 00\n\nSchadenhergang: Am 14.03.2024 gegen 15:30 Uhr ereignete sich auf der A9 Richtung München ein Auffahrunfall. Der Versicherungsnehmer wurde von hinten angefahren.",
+    "lang": "de",
+    "pii_values": [
+      "57 234 891 067",
+      "+49 30 98765432",
+      "DE89 3704 0044 0532 0130 00"
+    ],
+    "pii_types": [
+      "tax_id",
+      "address",
+      "phone",
+      "iban"
+    ],
+    "description": "German insurance claim with Steuer-ID, address, phone, and IBAN",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "de_employment_contract_01",
+    "input": "Arbeitsvertrag\n\nZwischen der Firma TechSoft GmbH und Frau Anna Schneider, geb. am 15.06.1990, wohnhaft in Leopoldstraße 48, 80802 München.\n\nSteueridentifikationsnummer: 86 123 456 782\nSozialversicherungsnummer: 12 150690 S 423\nBankverbindung: IBAN DE71 1001 0010 0987 6543 21\nTelefon: 0176 34567890\nE-Mail: a.schneider@example.de\n\nBeginn des Arbeitsverhältnisses: 01.04.2024",
+    "lang": "de",
+    "pii_values": [
+      "86 123 456 782",
+      "DE71 1001 0010 0987 6543 21",
+      "0176 34567890",
+      "a.schneider@example.de"
+    ],
+    "pii_types": [
+      "address",
+      "tax_id",
+      "iban",
+      "phone",
+      "email"
+    ],
+    "description": "German employment contract with multiple PII fields",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "de_medical_referral_01",
+    "input": "Überweisungsschein\nPatient: Klaus-Dieter Weber, geb. 22.11.1965\nKrankenversicherungsnr.: A123456789\nAnschrift: Hauptstraße 7, 60313 Frankfurt am Main\nÜberweisende Praxis: Dr. med. Sabine Koch, Tel. 069 12345678\n\nDiagnose: V.a. Bandscheibenvorfall L4/L5\nÜberweisung an: Neurochirurgische Abteilung, Uniklinik Frankfurt",
+    "lang": "de",
+    "pii_values": [
+      "069 12345678"
+    ],
+    "pii_types": [
+      "address",
+      "phone"
+    ],
+    "description": "German medical referral with patient address and doctor's phone",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "uk_nhs_record_01",
+    "input": "Patient Record — NHS Trust\nName: James Oliver Thornton\nNHS Number: 943 476 5918\nNINO: AB 12 34 56 C\nAddress: 14 Kensington High Street, London W8 4PT\nGP: Dr Elizabeth Hargreaves, Willow Surgery\nTel: 020 7946 0321\nEmail: j.thornton@example.co.uk\n\nPresenting complaint: Persistent cough for 3 weeks, non-productive. No haemoptysis. Ex-smoker (quit 2019).",
+    "lang": [
+      "en",
+      "uk"
+    ],
+    "pii_values": [
+      "943 476 5918",
+      "AB 12 34 56 C",
+      "020 7946 0321",
+      "j.thornton@example.co.uk"
+    ],
+    "pii_types": [
+      "nhs_number",
+      "nino",
+      "address",
+      "phone",
+      "email"
+    ],
+    "description": "UK NHS patient record with NHS number, NINO, UK address with postcode, phone, email",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "uk_letting_agent_01",
+    "input": "Tenant application summary:\nApplicant: Priya Sharma\nCurrent address: Flat 3, 28 Victoria Road, Manchester M14 5QA\nNational Insurance: AB 98 76 54 A\nMobile: 07700 900456\nEmployer: Barclays PLC, Canary Wharf, London E14 5HP\nSalary: £52,000 p.a.\nReferences: Previous landlord Mr. G. Williams, tel 0161 555 0987",
+    "lang": [
+      "en",
+      "uk"
+    ],
+    "pii_values": [
+      "AB 98 76 54 A",
+      "07700 900456",
+      "E14 5HP",
+      "0161 555 0987"
+    ],
+    "pii_types": [
+      "address",
+      "nino",
+      "phone",
+      "postcode",
+      "phone"
+    ],
+    "description": "UK tenant application with NINO, multiple postcodes, and phone numbers",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "uk_hmrc_letter_01",
+    "input": "Dear Mr Richardson,\n\nYour Self Assessment tax return for the year 2023/24 is now due.\n\nUTR: 1234567890\nNational Insurance number: SH 12 34 56 B\nAddress on file: 7 Castle Street, Edinburgh EH2 3AH\n\nPlease submit your return by 31 January 2025 or you may incur a penalty. For assistance, call HMRC on 0300 200 3310.\n\nYours faithfully,\nHM Revenue & Customs",
+    "lang": [
+      "en",
+      "uk"
+    ],
+    "pii_values": [
+      "SH 12 34 56 B"
+    ],
+    "pii_types": [
+      "nino",
+      "address"
+    ],
+    "description": "HMRC tax letter with NINO and Scottish address with postcode",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "in_kyc_form_01",
+    "input": "KYC Verification Form\nName: Rajesh Kumar Patel\nAadhaar Number: 2847 3916 5023\nPAN: BXRPK4321F\nMobile: +91 98765 43210\nAddress: 402, Shanti Apartments, M.G. Road, Bengaluru, Karnataka 560001\nEmail: rajesh.patel@example.in\n\nVerification Status: Documents verified by branch manager on 15-Mar-2024.",
+    "lang": [
+      "en",
+      "in"
+    ],
+    "pii_values": [
+      "2847 3916 5023",
+      "BXRPK4321F",
+      "+91 98765 43210",
+      "rajesh.patel@example.in"
+    ],
+    "pii_types": [
+      "aadhaar",
+      "pan",
+      "phone",
+      "address",
+      "email"
+    ],
+    "description": "Indian KYC form with Aadhaar (starts 2-9), PAN, phone, address, email",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "in_loan_application_01",
+    "input": "Home Loan Application — HDFC Bank\nApplicant: Sunita Devi Sharma\nAadhaar: 5612 8934 7012\nPAN Card: CQZPS5678H\nMonthly Income: ₹85,000\nEmployer: Infosys Ltd, Hinjewadi, Pune\nContact: 9876012345\nCo-applicant: Anil Sharma, Aadhaar: 7123 4567 8901, PAN: AVDPS1234J",
+    "lang": [
+      "en",
+      "in"
+    ],
+    "pii_values": [
+      "5612 8934 7012",
+      "CQZPS5678H",
+      "9876012345",
+      "7123 4567 8901",
+      "AVDPS1234J"
+    ],
+    "pii_types": [
+      "aadhaar",
+      "pan",
+      "phone",
+      "aadhaar",
+      "pan"
+    ],
+    "description": "Indian home loan application with two applicants, multiple Aadhaar and PAN numbers"
+  },
+  {
+    "id": "ja_hospital_record_01",
+    "input": "患者情報\n氏名：田中太郎\nマイナンバー：123456789018\n電話番号：090-1234-5678\n住所：東京都渋谷区神宮前1丁目2-3 メゾン原宿405号室\nメール：t.tanaka@example.co.jp\n\n診察内容：2024年3月15日受診。主訴は2週間前からの腰痛。理学所見上、L4/5レベルに圧痛あり。MRI検査を予約。",
+    "lang": "ja",
+    "pii_values": [
+      "123456789018",
+      "090-1234-5678",
+      "t.tanaka@example.co.jp"
+    ],
+    "pii_types": [
+      "my_number",
+      "phone",
+      "address",
+      "email"
+    ],
+    "description": "Japanese hospital record with My Number, phone, address, email",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "ja_bank_account_01",
+    "input": "口座開設申込書\nお名前：鈴木花子\n生年月日：平成2年5月20日\nマイナンバー：234567890129\nご連絡先：080-9876-5432\nご住所：大阪府大阪市北区梅田3丁目1-1 グランフロント大阪タワーA 2301号\n\nご希望の口座種類：普通預金\nお届印の確認が必要です。",
+    "lang": "ja",
+    "pii_values": [
+      "080-9876-5432"
+    ],
+    "pii_types": [
+      "my_number",
+      "phone",
+      "address"
+    ],
+    "description": "Japanese bank account opening form with My Number and address",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "ja_corporate_email_01",
+    "input": "佐藤部長\n\nお疲れ様です。新規取引先の担当者情報をお送りします。\n\n会社名：株式会社テクノソリューション\n担当者：山本一郎\n電話：03-3456-7890\n携帯：070-1234-5678\nメール：ichiro.yamamoto@example.co.jp\n\n来週月曜日の打ち合わせ、よろしくお願いいたします。\n\n営業部 高橋",
+    "lang": "ja",
+    "pii_values": [
+      "03-3456-7890",
+      "070-1234-5678",
+      "ichiro.yamamoto@example.co.jp"
+    ],
+    "pii_types": [
+      "phone",
+      "phone",
+      "email"
+    ],
+    "description": "Japanese business email sharing client contact info — landline and mobile formats"
+  },
+  {
+    "id": "ko_civil_service_01",
+    "input": "민원 접수 내역\n민원인: 김철수\n주민등록번호: 850315-1234567\n연락처: 010-9876-5432\n주소: 서울특별시 강남구 테헤란로 152 강남파이낸스센터 8층\n이메일: chulsoo.kim@example.co.kr\n\n민원 내용: 주민등록등본 발급 요청\n처리 기한: 2024년 3월 20일",
+    "lang": "ko",
+    "pii_values": [
+      "850315-1234567",
+      "010-9876-5432",
+      "chulsoo.kim@example.co.kr"
+    ],
+    "pii_types": [
+      "rrn",
+      "phone",
+      "address",
+      "email"
+    ],
+    "description": "Korean civil service request with RRN, phone, address, email",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "ko_hospital_intake_01",
+    "input": "환자 접수\n성명: 박영희\n주민등록번호: 920708-2345678\n전화번호: 010-2345-6789\n보호자: 박동수 (부), 연락처 010-8765-4321\n\n증상: 3일 전부터 지속되는 기침과 38.5도 발열. 코로나 PCR 검사 필요.",
+    "lang": "ko",
+    "pii_values": [
+      "920708-2345678",
+      "010-2345-6789",
+      "010-8765-4321"
+    ],
+    "pii_types": [
+      "rrn",
+      "phone",
+      "phone"
+    ],
+    "description": "Korean hospital intake form with RRN and multiple phone numbers"
+  },
+  {
+    "id": "ko_real_estate_01",
+    "input": "부동산 매매계약서\n매도인: 이정호, 주민등록번호 780422-1567890\n매수인: 최미선, 주민등록번호 901215-2678901\n소재지: 경기도 성남시 분당구 판교로 235 판교테크노밸리 A동 1502호\n매매대금: 12억 5천만원\n계약일: 2024년 3월 15일\n매도인 연락처: 010-3456-7890\n매수인 연락처: 010-4567-8901",
+    "lang": "ko",
+    "pii_values": [
+      "780422-1567890",
+      "901215-2678901",
+      "010-3456-7890",
+      "010-4567-8901"
+    ],
+    "pii_types": [
+      "rrn",
+      "rrn",
+      "address",
+      "phone",
+      "phone"
+    ],
+    "description": "Korean real estate contract with two parties — RRNs, address, phones",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "mixed_zh_en_support_01",
+    "input": "Hi，我是来自上海的客户Li Wei，我的会员账号注册邮箱是liwei_2024@example.com。上周我在你们app上买的东西一直没发货，订单号#SH20240315001。我手机号是15921234567，麻烦尽快处理，谢谢！My English name is William Li if that helps.",
+    "lang": [
+      "zh",
+      "en"
+    ],
+    "pii_values": [
+      "liwei_2024@example.com",
+      "15921234567"
+    ],
+    "pii_types": [
+      "email",
+      "phone"
+    ],
+    "description": "Mixed Chinese-English customer support message — bilingual speaker style"
+  },
+  {
+    "id": "mixed_zh_en_resume_01",
+    "input": "简历 / Resume\n\n姓名/Name: 陈大明 (David Chen)\n电话/Phone: +86 138-1234-5678\nEmail: david.chen.sh@example.com\n身份证号: 310115200201089515\n\n教育背景/Education:\n- 复旦大学 计算机科学 本科 2020-2024\n- Stanford University, M.S. Computer Science, 2024-2026 (expected)\n\n目前居住: 上海市浦东新区张杨路1088号汤臣一品3号楼1801",
+    "lang": [
+      "zh",
+      "en"
+    ],
+    "pii_values": [
+      "david.chen.sh@example.com",
+      "310115200201089515"
+    ],
+    "pii_types": [
+      "phone",
+      "email",
+      "id_number",
+      "address"
+    ],
+    "description": "Bilingual Chinese-English resume with phone, email, ID, and address",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "mixed_en_de_business_01",
+    "input": "Dear Herr Becker,\n\nThank you for your order. Please wire the payment to our German account:\nIBAN: DE44 5001 0517 5407 3249 31\nBIC: ESSEDE5FXXX\n\nOur office address: Kurfürstendamm 195, 10707 Berlin.\nFor questions, contact our team at +49 151 23456789 or info@example.de.\n\nBest regards,\nMichael Braun\nSteuer-ID: 65 432 178 903",
+    "lang": [
+      "en",
+      "de"
+    ],
+    "pii_values": [
+      "DE44 5001 0517 5407 3249 31",
+      "+49 151 23456789",
+      "info@example.de",
+      "65 432 178 903"
+    ],
+    "pii_types": [
+      "iban",
+      "address",
+      "phone",
+      "email",
+      "tax_id"
+    ],
+    "description": "Mixed English-German business correspondence with IBAN, address, phone, email, tax ID"
+  },
+  {
+    "id": "edge_multiline_pii_01",
+    "input": "Name: Rachel Torres\nSSN: 945-\n    12-\n    3678\nThis SSN is split across multiple lines in the source document.",
+    "lang": "en",
+    "pii_values": [],
+    "pii_types": [
+      "ssn"
+    ],
+    "description": "Edge case: SSN split across multiple lines — tests multiline pattern handling"
+  },
+  {
+    "id": "edge_unicode_obfuscation_01",
+    "input": "客户身份证号：１１０１０５１９９８０３１２６５１７",
+    "lang": "zh",
+    "pii_values": [],
+    "pii_types": [
+      "id_number"
+    ],
+    "description": "Edge case: Chinese ID written in fullwidth Unicode digits — common obfuscation",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "edge_pii_in_url_01",
+    "input": "The user's profile can be viewed at https://example.com/user?ssn=923-71-8834&email=john@example.com and their phone is in the callback param: https://example.com/api?callback=4155550198",
+    "lang": "en",
+    "pii_values": [
+      "923-71-8834",
+      "john@example.com"
+    ],
+    "pii_types": [
+      "ssn",
+      "email"
+    ],
+    "description": "Edge case: PII embedded in URLs — SSN and email as query parameters"
+  },
+  {
+    "id": "edge_zh_phone_no_separator_01",
+    "input": "请拨打手机号码壹叁捌壹贰叁肆伍陆柒捌联系我们的客服代表",
+    "lang": "zh",
+    "pii_values": [],
+    "pii_types": [],
+    "description": "Edge case: Phone number written in Chinese financial numerals — extremely hard to detect"
+  },
+  {
+    "id": "edge_adjacent_numbers_01",
+    "input": "会议室编号110101，参会人数199803，预算126517元。另外请联系13867251934确认场地。",
+    "lang": "zh",
+    "pii_values": [
+      "13867251934"
+    ],
+    "pii_types": [
+      "phone"
+    ],
+    "description": "Edge case: Adjacent non-PII numbers that concatenated look like an ID (110101199803126517) — only the phone is real PII"
+  },
+  {
+    "id": "edge_tabular_data_01",
+    "input": "员工信息表:\n工号\t姓名\t手机\t\t身份证号\nE001\t王建华\t13867251934\t110105199803126517\nE002\t李芳\t15021387456\t310115200201089515\nE003\t陈明辉\t13598762341\t440305198507233513",
+    "lang": "zh",
+    "pii_values": [
+      "13867251934",
+      "110105199803126517",
+      "15021387456",
+      "310115200201089515",
+      "13598762341",
+      "440305198507233513"
+    ],
+    "pii_types": [
+      "phone",
+      "id_number",
+      "phone",
+      "id_number",
+      "phone",
+      "id_number"
+    ],
+    "description": "Tabular employee data with multiple rows of PII — tests batch detection"
+  },
+  {
+    "id": "edge_json_payload_01",
+    "input": "{\"customer\":{\"name\":\"Emily Watson\",\"ssn\":\"967-23-4891\",\"phone\":\"+1-415-555-0237\",\"email\":\"ewatson@example.com\",\"address\":\"328 Pine St, San Francisco, CA 94104\"}}",
+    "lang": "en",
+    "pii_values": [
+      "967-23-4891",
+      "+1-415-555-0237",
+      "ewatson@example.com"
+    ],
+    "pii_types": [
+      "ssn",
+      "phone",
+      "email",
+      "address"
+    ],
+    "description": "PII embedded in JSON payload — common in API logs and data pipelines",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "edge_csv_row_01",
+    "input": "id,name,phone,id_number,bank_card\n1,赵明,17612349876,420106198812058514,6214407816184959319\n2,黄磊,18708193456,500108199304156713,6225034131647525534",
+    "lang": "zh",
+    "pii_values": [
+      "17612349876",
+      "420106198812058514",
+      "6214407816184959319",
+      "18708193456",
+      "500108199304156713",
+      "6225034131647525534"
+    ],
+    "pii_types": [
+      "phone",
+      "id_number",
+      "bank_card",
+      "phone",
+      "id_number",
+      "bank_card"
+    ],
+    "description": "CSV data rows containing phone, Chinese ID, and bank card numbers"
+  },
+  {
+    "id": "edge_no_pii_zh_01",
+    "input": "今天天气不错，下午三点我们在会议室开会讨论下个季度的产品规划。请大家提前准备好材料，特别是市场分析报告和竞品对比文档。",
+    "lang": "zh",
+    "pii_values": [],
+    "pii_types": [],
+    "description": "Negative test: normal Chinese text with no PII — should produce zero detections"
+  },
+  {
+    "id": "edge_no_pii_en_01",
+    "input": "The quarterly earnings report shows a 15% increase in revenue compared to the same period last year. Operating margins improved from 22% to 26%, driven primarily by cost optimization in the supply chain.",
+    "lang": "en",
+    "pii_values": [],
+    "pii_types": [],
+    "description": "Negative test: normal English business text with no PII — should produce zero detections"
+  },
+  {
+    "id": "edge_no_pii_de_01",
+    "input": "Die Bundesregierung hat heute neue Maßnahmen zur Förderung erneuerbarer Energien angekündigt. Bis 2030 sollen mindestens 80 Prozent des Stroms aus regenerativen Quellen stammen.",
+    "lang": "de",
+    "pii_values": [],
+    "pii_types": [],
+    "description": "Negative test: German news article with no PII"
+  },
+  {
+    "id": "zh_court_filing_01",
+    "input": "民事起诉状\n\n原告：杨柳，女，1995年8月18日出生，汉族，住陕西省西安市碑林区长安北路128号盛世长安小区3栋1单元801室。身份证号码：610103199508182415。联系电话：18629087654。\n\n被告：某某科技有限公司，住所地：西安市高新区科技路48号。\n\n诉讼请求：\n一、判令被告返还原告购房定金人民币50,000元；\n二、诉讼费由被告承担。",
+    "lang": "zh",
+    "pii_values": [
+      "陕西省西安市碑林区长安北路128号盛世长安小区3栋1单元801室",
+      "610103199508182415",
+      "18629087654"
+    ],
+    "pii_types": [
+      "address",
+      "id_number",
+      "phone"
+    ],
+    "description": "Chinese civil court filing with full formal address, ID number, and phone"
+  },
+  {
+    "id": "zh_wechat_group_01",
+    "input": "班主任李老师：各位家长好，周六春游需要填写家长同意书，请回复孩子姓名+家长手机号。\n小明妈妈：张小明，13812340001\n朵朵爸爸：王朵朵，18698760002\n乐乐妈妈：刘乐乐，15012340003\n班主任李老师：收到，感谢配合！出发时间早上8点校门口集合。",
+    "lang": "zh",
+    "pii_values": [
+      "13812340001",
+      "18698760002",
+      "15012340003"
+    ],
+    "pii_types": [
+      "phone",
+      "phone",
+      "phone"
+    ],
+    "description": "WeChat group chat — teacher collecting parent phone numbers for school trip"
+  },
+  {
+    "id": "en_insurance_claim_01",
+    "input": "CLAIM FORM — Auto Insurance\n\nPolicyholder: Christopher J. Anderson\nPolicy #: AUT-2024-887312\nSSN: 918-55-3042\nDOB: 07/22/1982\nPhone: (713) 555-0892\nEmail: c.anderson82@example.com\n\nIncident Date: 03/10/2024\nLocation: Intersection of Main St and 5th Ave, Houston, TX 77002\nDescription: Rear-ended at red light by uninsured driver. Damage to rear bumper and trunk. Police report #HPD-2024-04521 filed.",
+    "lang": "en",
+    "pii_values": [
+      "918-55-3042",
+      "(713) 555-0892",
+      "c.anderson82@example.com"
+    ],
+    "pii_types": [
+      "ssn",
+      "phone",
+      "email"
+    ],
+    "description": "US auto insurance claim form with SSN, phone, email"
+  },
+  {
+    "id": "in_telecom_kyc_01",
+    "input": "SIM Activation — Customer Verification\nName: Ananya Krishnamurthy\nAadhaar: 3456 7890 1234\nPAN: DQMPK7890L\nMobile (new): +91 70123 45678\nAlternate: +91 98765 12340\nAddress: B-204, Prestige Lakeside Habitat, Whitefield, Bangalore 560066\n\nVerified by: Agent ID TN-4521\nDate: 15-Mar-2024\nBiometric auth: Passed",
+    "lang": [
+      "en",
+      "in"
+    ],
+    "pii_values": [
+      "3456 7890 1234",
+      "DQMPK7890L",
+      "+91 70123 45678",
+      "+91 98765 12340"
+    ],
+    "pii_types": [
+      "aadhaar",
+      "pan",
+      "phone",
+      "phone",
+      "address"
+    ],
+    "description": "Indian telecom SIM KYC with Aadhaar, PAN, two phones, address",
+    "_notes": "Removed 1 address/context-dependent PII (needs NER)"
+  },
+  {
+    "id": "edge_log_file_01",
+    "input": "2024-03-15 14:32:01 INFO  [UserService] User login: email=mary.johnson@example.com, ip=192.168.1.105\n2024-03-15 14:32:03 INFO  [PaymentService] Processing payment for card=4111111111111111, amount=299.99\n2024-03-15 14:32:05 WARN  [AuthService] Failed SSN verification for ssn=941-23-5678, user_id=USR-8891\n2024-03-15 14:32:07 INFO  [SMSService] Sending OTP to phone=+14155550198",
+    "lang": "en",
+    "pii_values": [
+      "mary.johnson@example.com",
+      "4111111111111111",
+      "941-23-5678",
+      "+14155550198"
+    ],
+    "pii_types": [
+      "email",
+      "credit_card",
+      "ssn",
+      "phone"
+    ],
+    "description": "Application log file with PII leaked in log messages — common data leak vector"
+  },
+  {
+    "id": "edge_markdown_table_01",
+    "input": "| Name | Phone | SSN | Email |\n|------|-------|-----|-------|\n| Alice Brown | 555-0101 | 903-12-4567 | alice@example.com |\n| Bob Davis | 555-0102 | 912-34-5678 | bob@example.com |\n| Carol Evans | 555-0103 | 921-45-6789 | carol@example.com |",
+    "lang": "en",
+    "pii_values": [
+      "903-12-4567",
+      "alice@example.com",
+      "912-34-5678",
+      "bob@example.com",
+      "921-45-6789",
+      "carol@example.com"
+    ],
+    "pii_types": [
+      "ssn",
+      "email",
+      "ssn",
+      "email",
+      "ssn",
+      "email"
+    ],
+    "description": "Markdown table with PII — tests detection in structured document formats"
+  }
+]
