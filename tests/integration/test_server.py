@@ -3,6 +3,7 @@
 Run with: pytest tests/integration/test_server.py -m slow -v
 """
 
+import importlib.util
 import threading
 import time
 
@@ -11,9 +12,13 @@ import requests as req
 
 pytestmark = pytest.mark.slow
 
+HAS_STARLETTE = importlib.util.find_spec("starlette") is not None
+
 
 @pytest.fixture(scope="module")
 def server():
+    if not HAS_STARLETTE:
+        pytest.skip("starlette/uvicorn not installed")
     from argus_redact.server import create_app
 
     app = create_app()
