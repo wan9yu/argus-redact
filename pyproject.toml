@@ -63,3 +63,7 @@ markers = [
     "ner: marks tests that require NER models",
     "semantic: marks tests that require Layer 3 LLM",
 ]
+filterwarnings = [
+    "ignore::FutureWarning:torch.*",
+    "ignore::UserWarning:thinc.*",
+]
