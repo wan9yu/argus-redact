@@ -430,6 +430,26 @@ if final:
 
 ---
 
+## Structured Data
+
+Redact PII in JSON structures and CSV strings:
+
+```python
+from argus_redact.structured import redact_json, restore_json, redact_csv, restore_csv
+
+# JSON — recursively walks all string values
+data = {"user": {"name": "张三", "phone": "13812345678"}, "action": "login"}
+redacted, key = redact_json(data, mode="fast")
+restored = restore_json(redacted, key)
+
+# CSV — header preserved, each cell redacted
+csv_text = "name,phone\n张三,13812345678"
+redacted_csv, key = redact_csv(csv_text, mode="fast")
+restored_csv = restore_csv(redacted_csv, key)
+```
+
+---
+
 ## Limitations
 
 | Limitation | Detail |

@@ -7,7 +7,7 @@ argus-redact has two functions and one data type:
 ```
 redact(plaintext)       → (redacted_text, key)
 restore(text, key)      → plaintext
-key                     = dict[str, str]   # {"P-037": "王五", ...}
+key                     = dict[str, str]   # {"P-00037": "王五", ...}
 ```
 
 Everything else is optional.
@@ -17,23 +17,24 @@ Everything else is optional.
 | Document | Description |
 |----------|-------------|
 | [Getting Started](getting-started.md) | Install, first redact/restore, key management |
-| [Configuration](configuration.md) | Redaction strategies, per-entity-type settings |
-| [Security Model](security-model.md) | Threat model, what's protected, what's not |
+| [Configuration](configuration.md) | Strategies, enterprise mask rules, false positive reduction |
+| [Security Model](security-model.md) | Threat model, per-message keys, compliance (PIPL/GDPR/HIPAA) |
 
 ## Reference
 
 | Document | Description |
 |----------|-------------|
-| [Python API](api-reference.md) | `redact()`, `restore()`, return types, all parameters |
-| [CLI Reference](cli-reference.md) | Commands, flags, stdin/stdout, `-k` keyfile |
-| [Performance](performance.md) | Latency budgets, text scale, memory, Rust strategy |
+| [Python API](api-reference.md) | All parameters, return types, streaming, structured data |
+| [CLI Reference](cli-reference.md) | Commands, flags, serve, setup, MCP server |
+| [Performance](performance.md) | Latency, throughput, benchmark results |
+| [Comparison](comparison.md) | vs Presidio, Tonic Textual, anonLLM, ai4privacy benchmark |
 
 ## Integration
 
 | Document | Description |
 |----------|-------------|
-| [LLM Pipelines](integration-llm.md) | OpenAI, Anthropic, local LLM patterns |
-| [Frameworks](integration-frameworks.md) | LangChain, LlamaIndex, FastAPI middleware |
+| [LLM Pipelines](integration-llm.md) | OpenAI, Anthropic, Ollama, local LLM patterns |
+| [Frameworks](integration-frameworks.md) | LangChain, LlamaIndex, FastAPI, Presidio bridge |
 
 ## Extending
 
