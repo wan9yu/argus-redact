@@ -1,0 +1,51 @@
+[
+  {
+    "id": "book_restaurant",
+    "input": "帮张三预订星巴克明天下午3点的位子，电话13812345678",
+    "lang": "zh",
+    "expected_structure": "redacted text should preserve sentence structure for function calling",
+    "pii_values": ["13812345678"],
+    "semantic_tokens": ["预订", "明天", "下午3点"],
+    "description": "餐厅预订场景：时间、动作等语义信息需保留"
+  },
+  {
+    "id": "send_email",
+    "input": "Send an email to John Smith at john@example.com about the meeting at Google HQ tomorrow",
+    "lang": "en",
+    "pii_values": ["john@example.com"],
+    "semantic_tokens": ["Send", "email", "meeting", "tomorrow"],
+    "description": "发邮件场景：动作和时间语义需保留"
+  },
+  {
+    "id": "transfer_money",
+    "input": "给张三转账5000元到银行卡4111111111111111",
+    "lang": "zh",
+    "pii_values": ["4111111111111111"],
+    "semantic_tokens": ["转账", "5000元"],
+    "description": "转账场景：金额和动作需保留"
+  },
+  {
+    "id": "schedule_meeting",
+    "input": "Schedule a call with Mary Jane at (555) 123-4567 for next Monday 2pm",
+    "lang": "en",
+    "pii_values": ["(555) 123-4567"],
+    "semantic_tokens": ["Schedule", "call", "next Monday", "2pm"],
+    "description": "会议安排：时间和动作需保留"
+  },
+  {
+    "id": "lookup_patient",
+    "input": "查询患者王五的体检报告，身份证110101199003074610",
+    "lang": "zh",
+    "pii_values": ["110101199003074610"],
+    "semantic_tokens": ["查询", "体检报告"],
+    "description": "医疗查询：动作和对象类型需保留"
+  },
+  {
+    "id": "multi_tool_args",
+    "input": "Send 张三 a message at 13812345678 saying the package arrived at 北京市朝阳区建国路100号",
+    "lang": ["zh", "en"],
+    "pii_values": ["13812345678"],
+    "semantic_tokens": ["Send", "message", "package", "arrived"],
+    "description": "多参数场景：多个PII但动作语义完整"
+  }
+]
