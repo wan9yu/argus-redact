@@ -28,6 +28,7 @@ PATTERNS = [
         "label": "[SSN REDACTED]",
         "pattern": r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)",
         "validate": _validate_ssn,
+        "check_context": True,
         "description": "US Social Security Number",
     },
     {
@@ -41,6 +42,7 @@ PATTERNS = [
         "label": "[CARD REDACTED]",
         "pattern": (r"(?<!\d)" r"[3-6]\d{3}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}" r"(?!\d)"),
         "validate": _validate_credit_card_luhn,
+        "check_context": True,
         "description": "Credit card number (Luhn checksum)",
     },
 ]

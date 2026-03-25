@@ -59,6 +59,7 @@ PATTERNS = [
         "label": "[银行卡号已脱敏]",
         "pattern": r"(?<!\d)[3-6]\d{15,18}(?!\d)",
         "validate": _validate_luhn,
+        "check_context": True,
         "description": "Bank card number (16-19 digits, Luhn checksum)",
     },
     {

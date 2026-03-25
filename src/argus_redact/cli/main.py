@@ -51,6 +51,7 @@ def cmd_redact(args):
         mode=args.mode,
         lang=lang,
         key=existing_key,
+        config=args.config,
     )
 
     # Write key file
@@ -113,6 +114,43 @@ def cmd_info(args):
     print(f"  3 Semantic (Ollama)     {'✓' if ollama_ok else '✗'}")
 
 
+def cmd_setup(args):
+    """Pre-download NER models for offline use."""
+    langs = args.lang.split(",") if "," in args.lang else [args.lang]
+
+    for code in langs:
+        print(f"Setting up {code}...")
+        try:
+            if code == "zh":
+                import hanlp
+
+                print("  Downloading HanLP MSRA NER model...")
+                hanlp.load(hanlp.pretrained.mtl.CLOSE_TOK_POS_NER_SRL_DEP_SDP_CON_ELECTRA_BASE_ZH)
+                print("  Done.")
+            elif code in ("en", "ja", "ko"):
+                import spacy
+
+                model_map = {
+                    "en": "en_core_web_sm",
+                    "ja": "ja_core_news_sm",
+                    "ko": "ko_core_news_sm",
+                }
+                model = model_map[code]
+                print(f"  Downloading spaCy model {model}...")
+                try:
+                    spacy.load(model)
+                    print(f"  {model} already installed.")
+                except OSError:
+                    from spacy.cli import download
+
+                    download(model)
+                    print("  Done.")
+            else:
+                print(f"  {code}: regex only, no model to download.")
+        except ImportError:
+            print(f"  {code}: language pack not installed. Run: pip install argus-redact[{code}]")
+
+
 def cmd_serve(args):
     import uvicorn
 
@@ -138,6 +176,7 @@ def main():
     p_redact.add_argument("-l", "--lang", default="zh", help="Language (default: zh)")
     p_redact.add_argument("-m", "--mode", default="auto", help="Detection mode: auto, fast, ner")
     p_redact.add_argument("-s", "--seed", default=None, help="Random seed for determinism")
+    p_redact.add_argument("-c", "--config", default=None, help="Config file (JSON or YAML)")
     p_redact.set_defaults(func=cmd_redact)
 
     # restore
@@ -150,6 +189,11 @@ def main():
     # info
     p_info = subparsers.add_parser("info", help="Show installed capabilities")
     p_info.set_defaults(func=cmd_info)
+
+    # setup
+    p_setup = subparsers.add_parser("setup", help="Pre-download NER models for offline use")
+    p_setup.add_argument("-l", "--lang", default="zh", help="Language(s) to download (default: zh)")
+    p_setup.set_defaults(func=cmd_setup)
 
     # serve
     p_serve = subparsers.add_parser("serve", help="Start HTTP API server")
