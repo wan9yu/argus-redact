@@ -302,7 +302,6 @@ Exposes three tools: `redact`, `restore`, `info`.
 ### Next
 
 - Japanese / Korean NER adapters (GiNZA, KoNLPy)
-- LlamaIndex adapter, FastAPI middleware
 - Rust core via PyO3 for hot paths
 
 ## Contributing
