@@ -6,9 +6,30 @@
 pip install argus-redact[zh]          # Chinese NER (recommended for Chinese text)
 ```
 
-Other install options: `argus-redact` (regex only), `argus-redact[en]` (English NER), `argus-redact[full]` (all languages + semantic layer). Python 3.10+. No GPU.
+Other install options:
 
-**First-run model download:** NER models (~350MB for Chinese, ~50MB for English) are downloaded on first `redact()` call, then cached locally. For offline use, run `argus-redact setup` while connected to pre-download models.
+```bash
+pip install argus-redact              # core (regex only, zero heavy deps)
+pip install argus-redact[zh]          # + Chinese NER (HanLP)
+pip install argus-redact[en]          # + English NER (spaCy)
+pip install argus-redact[ja]          # + Japanese NER (spaCy)
+pip install argus-redact[ko]          # + Korean NER (spaCy)
+pip install argus-redact[full]        # + all NER + semantic layer
+pip install argus-redact[presidio]   # + Presidio bridge
+pip install argus-redact[mcp]        # + MCP server
+pip install argus-redact[serve]      # + HTTP API server
+```
+
+**First-run model download:** NER models (~500MB for Chinese HanLP, ~50MB for English/Japanese/Korean spaCy) are downloaded on first `redact()` call, then cached locally. For offline use, run `argus-redact setup -l zh,en` while connected.
+
+### Platform Support
+
+| Platform | Status |
+|----------|--------|
+| macOS ARM/Intel | ✓ Tested |
+| Linux x86_64 | ✓ CI (Python 3.10-3.13) |
+| Linux ARM (Raspberry Pi) | ✓ Tested |
+| Windows | Untested (encoding fixes applied) |
 
 ## Core Concept
 

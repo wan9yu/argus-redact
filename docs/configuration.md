@@ -228,3 +228,25 @@ Missing fields fall back to defaults — you only need to specify what you want 
 person:
   rotation: fixed
 ```
+
+---
+
+## Reducing False Positives
+
+Regex patterns match format, not semantics. argus-redact includes a context heuristic that checks text immediately before and after a match for non-PII indicators (e.g. "version", "order #", arithmetic operators).
+
+For specific use cases where false positives are a problem, you can:
+
+1. **Disable specific PII types** via config:
+```python
+# Don't detect bank cards in financial calculation documents
+redact(text, config={"bank_card": {"strategy": "remove", "replacement": ""}}, mode="fast")
+```
+
+2. **Use NER mode** for context-aware detection:
+```python
+# NER understands context — won't flag "version 123-45-6789"
+redact(text, mode="ner")
+```
+
+3. **Use `mode="auto"`** for maximum accuracy (regex + NER + semantic LLM).

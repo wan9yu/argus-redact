@@ -406,3 +406,33 @@ assert len(result) == 2
 result = redact("test", detailed=True)
 assert len(result) == 3
 ```
+
+---
+
+## Streaming Restore
+
+For streaming LLM output, use `StreamingRestorer` to restore at sentence boundaries:
+
+```python
+from argus_redact.streaming import StreamingRestorer
+
+restorer = StreamingRestorer(key)
+for chunk in llm_stream:
+    restored = restorer.feed(chunk)
+    if restored:
+        print(restored, end="")
+final = restorer.flush()
+if final:
+    print(final, end="")
+```
+
+---
+
+## Limitations
+
+| Limitation | Detail |
+|-----------|--------|
+| YAML config requires `pyyaml` | Pass dict or JSON file path if pyyaml not installed |
+| Streaming restore is sentence-based | Pseudonyms split across chunks are buffered until a sentence boundary |
+| `restore()` is global replacement | If LLM output naturally contains a pseudonym pattern, it gets replaced. Use a unique `prefix` in `config` to minimize risk |
+| Pseudonym codes auto-expand | 5-digit codes (99,999 per prefix); automatically expands range on exhaustion |
