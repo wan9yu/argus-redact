@@ -10,3 +10,4 @@ build/
 coverage.xml
 htmlcov/
 marketing/
+.claude/
