@@ -140,15 +140,15 @@ text = "老王说他上周在那个地方见了老李，聊了聊那件事"
 
 **Model selection:**
 
-| Model | Size (quantized) | RAM | Quality | Speed |
-|-------|-----------------|-----|---------|-------|
-| Qwen2.5-1.5B-Q4 | ~1GB | 2GB | Good | Fast |
-| Qwen2.5-3B-Q4 | ~2GB | 4GB | Better | Medium |
-| Qwen2.5-7B-Q4 | ~4GB | 8GB | Best | Slow |
+| Model | Size | RAM | Quality | Speed |
+|-------|------|-----|---------|-------|
+| **qwen2.5:3b** (default) | ~2GB | 4GB | Good | ~700ms |
+| qwen2.5:7b | ~4GB | 8GB | Better | ~2s |
+| qwen2.5:32b | ~20GB | 24GB | Best | ~10-20s |
 
-Inference via llama.cpp (CPU, no GPU required).
+Inference via Ollama (CPU, no GPU required). Configure with `OLLAMA_MODEL` environment variable.
 
-**This layer is optional.** Install with `pip install argus-redact[full]`. Without it, Layers 1+2 handle most PII.
+**This layer is optional.** Requires Ollama running locally. Without it, Layers 1+2 handle most PII.
 
 ---
 

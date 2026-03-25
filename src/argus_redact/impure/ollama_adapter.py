@@ -43,7 +43,7 @@ class OllamaAdapter(SemanticAdapter):
     ):
         import os
 
-        self._model = model or os.environ.get("OLLAMA_MODEL", "qwen2.5:32b")
+        self._model = model or os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
         self._base_url = base_url or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
     def _call_ollama(self, text: str) -> requests.Response | None:
