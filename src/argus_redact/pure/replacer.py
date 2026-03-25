@@ -5,7 +5,7 @@ from __future__ import annotations
 from argus_redact._types import PatternMatch
 from argus_redact.pure.pseudonym import PseudonymGenerator
 
-VALID_STRATEGIES = ("pseudonym", "mask", "remove", "category")
+VALID_STRATEGIES = ("pseudonym", "mask", "remove", "category", "name_mask", "landline_mask")
 
 # Default strategies per entity type
 DEFAULT_STRATEGIES = {
@@ -107,8 +107,18 @@ def _validate_config(config: dict | None) -> None:
             )
 
 
-def _mask_value(value: str, entity_type: str) -> str:
-    """Apply mask strategy: show prefix + suffix, mask middle."""
+def _mask_value(
+    value: str,
+    entity_type: str,
+    *,
+    visible_prefix: int = 0,
+    visible_suffix: int = 0,
+) -> str:
+    """Apply mask strategy: show prefix + suffix, mask middle.
+
+    If visible_prefix/suffix are given via config, use those.
+    Otherwise use per-type defaults.
+    """
     if entity_type == "email":
         at = value.find("@")
         if at > 0:
@@ -118,13 +128,78 @@ def _mask_value(value: str, entity_type: str) -> str:
             return f"{visible}{'*' * max(len(local) - 1, 3)}{domain}"
         return value
 
-    # Default: show first 3 + last 4
-    prefix_len = 3
-    suffix_len = 4
+    # Per-type defaults
+    defaults = {
+        "phone": (3, 4),
+        "bank_card": (6, 4),
+        "credit_card": (6, 4),
+        "id_number": (4, 4),
+    }
+    prefix_len = visible_prefix or defaults.get(entity_type, (3, 4))[0]
+    suffix_len = visible_suffix or defaults.get(entity_type, (3, 4))[1]
+
     if len(value) <= prefix_len + suffix_len:
         return "*" * len(value)
     masked_len = len(value) - prefix_len - suffix_len
     return f"{value[:prefix_len]}{'*' * masked_len}{value[-suffix_len:]}"
+
+
+def _mask_name(value: str) -> str:
+    """Chinese name mask: 张* / 李** / 欧阳**."""
+    length = len(value)
+    if length <= 1:
+        return "*"
+    if length <= 3:
+        return value[0] + "*" * (length - 1)
+    # 4+ chars: show first 2
+    return value[:2] + "*" * (length - 2)
+
+
+def _mask_landline(value: str) -> str:
+    """Landline mask: keep area code + last 3, mask middle."""
+    # Split area code (0xx or 0xxx) from number
+    dash_pos = value.find("-")
+    if dash_pos > 0:
+        area = value[: dash_pos + 1]
+        number = value[dash_pos + 1 :]
+    elif value.startswith("0"):
+        # Guess area code length: 3 for 010/02x, 4 for 0xxx
+        area_len = 3 if value[1] in "12" else 4
+        area = value[:area_len]
+        number = value[area_len:]
+    else:
+        area = ""
+        number = value
+
+    if len(number) <= 3:
+        return area + number
+    masked = "*" * (len(number) - 3) + number[-3:]
+    return area + masked
+
+
+def _mask_phone_regional(value: str, *, region: str = "cn") -> str:
+    """Phone mask with regional rules.
+
+    cn (mainland): 137****5678 (3+4+4)
+    hk (Hong Kong): 90****56 (2+4+2)
+    tw (Taiwan): 90****567 (2+4+3)
+    default: first 2 + **** + last 2
+    """
+    digits = value.replace("-", "").replace(" ", "")
+
+    if region == "cn" or (region == "auto" and len(digits) == 11):
+        p, s = 3, 4
+    elif region == "hk" or (region == "auto" and len(digits) == 8):
+        p, s = 2, 2
+    elif region == "tw" or (region == "auto" and len(digits) == 9):
+        p, s = 2, 3
+    else:
+        p, s = 2, 2
+
+    if len(digits) <= p + s:
+        return "*" * len(digits)
+    masked_len = len(digits) - p - s
+    return digits[:p] + "*" * masked_len + digits[-s:]
 
 
 def _resolve_collision(label: str, used_labels: set[str]) -> str:
@@ -218,7 +293,18 @@ def replace(
                     )
                 replacement = pseudo_gen.get(entity.text)
         elif strategy == "mask":
-            replacement = _mask_value(entity.text, entity.type)
+            replacement = _mask_value(
+                entity.text,
+                entity.type,
+                visible_prefix=ec.get("visible_prefix", 0),
+                visible_suffix=ec.get("visible_suffix", 0),
+            )
+            replacement = _resolve_collision(replacement, used_labels)
+        elif strategy == "name_mask":
+            replacement = _mask_name(entity.text)
+            replacement = _resolve_collision(replacement, used_labels)
+        elif strategy == "landline_mask":
+            replacement = _mask_landline(entity.text)
             replacement = _resolve_collision(replacement, used_labels)
         elif strategy == "remove":
             label = ec.get(
