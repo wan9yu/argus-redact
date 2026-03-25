@@ -24,7 +24,7 @@ case "$MODE" in
         ;;
     *)
         echo "=== test (fast, skip NER + semantic) ==="
-        pytest -p no:recording -q -m "not ner and not semantic"
+        pytest -p no:recording -q -m "not ner and not semantic and not slow"
         ;;
 esac
 

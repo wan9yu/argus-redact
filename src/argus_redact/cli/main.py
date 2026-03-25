@@ -113,6 +113,16 @@ def cmd_info(args):
     print(f"  3 Semantic (Ollama)     {'✓' if ollama_ok else '✗'}")
 
 
+def cmd_serve(args):
+    import uvicorn
+
+    from argus_redact.server import create_app
+
+    app = create_app()
+    print(f"argus-redact server starting on {args.host}:{args.port}")
+    uvicorn.run(app, host=args.host, port=args.port)
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="argus-redact",
@@ -140,6 +150,12 @@ def main():
     # info
     p_info = subparsers.add_parser("info", help="Show installed capabilities")
     p_info.set_defaults(func=cmd_info)
+
+    # serve
+    p_serve = subparsers.add_parser("serve", help="Start HTTP API server")
+    p_serve.add_argument("--host", default="0.0.0.0", help="Host (default: 0.0.0.0)")
+    p_serve.add_argument("--port", type=int, default=8000, help="Port (default: 8000)")
+    p_serve.set_defaults(func=cmd_serve)
 
     args = parser.parse_args()
     args.func(args)
