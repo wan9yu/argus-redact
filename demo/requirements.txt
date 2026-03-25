@@ -1,2 +1,3 @@
 argus-redact>=0.1.6
 spacy>=3.0
+huggingface-hub<1.0
