@@ -31,6 +31,9 @@ _LANG_NER_ADAPTERS = {
     "en": "argus_redact.lang.en.ner_adapter",
     "ja": "argus_redact.lang.ja.ner_adapter",
     "ko": "argus_redact.lang.ko.ner_adapter",
+    "de": "argus_redact.lang.de.ner_adapter",
+    "uk": "argus_redact.lang.uk.ner_adapter",
+    "in": "argus_redact.lang.in_.ner_adapter",
 }
 
 VALID_MODES = ("auto", "fast", "ner")
