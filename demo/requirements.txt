@@ -1,3 +1,2 @@
 argus-redact>=0.1.6
-gradio>=5.0
 spacy>=3.0
