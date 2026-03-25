@@ -7,22 +7,31 @@ import gradio as gr
 from argus_redact import __version__, redact, restore
 
 
-def run_redact(text, lang, mode, seed_str):
+def run_redact(text, lang, mode, seed_str, names_str):
     if not text.strip():
         return "", "{}", "", "No input text"
 
     seed = int(seed_str) if seed_str.strip() else None
-    lang_list = [l.strip() for l in lang.split(",")]
+    lang_list = [code.strip() for code in lang.split(",")]
     lang_param = lang_list[0] if len(lang_list) == 1 else lang_list
 
+    names = None
+    if names_str.strip():
+        names = [n.strip() for n in names_str.split(",") if n.strip()]
+
     try:
-        redacted, key, details = redact(
-            text, lang=lang_param, mode=mode, seed=seed, detailed=True,
+        redacted_text, key, details = redact(
+            text,
+            lang=lang_param,
+            mode=mode,
+            seed=seed,
+            names=names,
+            detailed=True,
         )
     except Exception as e:
         return "", "{}", "", f"Error: {e}"
 
-    restored = restore(redacted, key)
+    restored_text = restore(redacted_text, key)
 
     key_json = json.dumps(key, ensure_ascii=False, indent=2)
 
@@ -33,16 +42,17 @@ def run_redact(text, lang, mode, seed_str):
         f"in {stats['duration_ms']:.1f}ms"
     )
 
-    return redacted, key_json, restored, summary
+    return redacted_text, key_json, restored_text, summary
 
 
 EXAMPLES = [
-    ["张三的手机号是13812345678，邮箱zhang@test.com，身份证110101199003074610", "zh", "fast", "42"],
-    ["John Smith called (555) 123-4567, SSN 123-45-6789", "en", "fast", "42"],
-    ["田中太郎の携帯は090-1234-5678", "ja", "fast", "42"],
-    ["김철수 전화번호 010-1234-5678, 주민등록번호 900307-1234567", "ko", "fast", "42"],
-    ["Hans Müller, Steuer-ID: 12 345 678 901, IBAN DE89 3704 0044 0532 0130 00", "de", "fast", "42"],
-    ["张三给John发了邮件zhang@test.com，电话13812345678，SSN 123-45-6789", "zh,en", "fast", "42"],
+    ["你好王一，你的手机号是18630303030", "zh", "fast", "42", "王一"],
+    ["张三的手机号是13812345678，邮箱zhang@test.com", "zh", "fast", "42", "张三"],
+    ["John Smith called (555) 123-4567, SSN 123-45-6789", "en", "fast", "42", "John Smith"],
+    ["田中太郎の携帯は090-1234-5678", "ja", "fast", "42", "田中太郎"],
+    ["김철수 전화번호 010-1234-5678", "ko", "fast", "42", "김철수"],
+    ["Hans Müller, Steuer-ID: 12 345 678 901", "de", "fast", "42", "Hans Müller"],
+    ["张三给John发了邮件zhang@test.com，电话13812345678", "zh,en", "fast", "42", "张三,John"],
 ]
 
 with gr.Blocks(title=f"argus-redact v{__version__}") as demo:
@@ -66,6 +76,10 @@ with gr.Blocks(title=f"argus-redact v{__version__}") as demo:
                 placeholder="Enter text with PII...",
                 lines=5,
             )
+            names_input = gr.Textbox(
+                label="Known Names (comma-separated)",
+                placeholder="王一,张三,John Smith",
+            )
             with gr.Row():
                 lang = gr.Dropdown(
                     choices=["zh", "en", "ja", "ko", "de", "uk", "in", "zh,en", "zh,en,ja,ko"],
@@ -88,13 +102,13 @@ with gr.Blocks(title=f"argus-redact v{__version__}") as demo:
 
     btn.click(
         fn=run_redact,
-        inputs=[input_text, lang, mode, seed],
+        inputs=[input_text, lang, mode, seed, names_input],
         outputs=[redacted_text, key_output, restored_text, stats_output],
     )
 
     gr.Examples(
         examples=EXAMPLES,
-        inputs=[input_text, lang, mode, seed],
+        inputs=[input_text, lang, mode, seed, names_input],
         outputs=[redacted_text, key_output, restored_text, stats_output],
         fn=run_redact,
         cache_examples=False,

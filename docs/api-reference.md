@@ -13,6 +13,7 @@ redact(
     mode: str = "auto",
     seed: int | None = None,
     config: dict | None = None,
+    names: list[str] | None = None,
     detailed: bool = False,
 ) -> tuple[str, dict] | tuple[str, dict, dict]
 ```
@@ -28,7 +29,8 @@ Detect and replace PII in the input text. Returns `(redacted_text, key)`, or `(r
 | `lang` | `str \| list[str]` | `"zh"` | Language(s). `"zh"`, `"en"`, `"ja"`, `"ko"`, or list like `["zh", "en"]`. |
 | `mode` | `str` | `"auto"` | `"auto"` = all installed layers. `"fast"` = regex only. `"ner"` = regex + NER. |
 | `seed` | `int \| None` | `None` | Random seed for pseudonym generation.
-| `config` | `dict \| None` | `None` | Per-entity-type config overriding default strategies. Example: `{"phone": {"strategy": "remove", "replacement": "[TEL]"}}`. See [Configuration](configuration.md). | `None` = cryptographically random (production). Set to a fixed int for **deterministic, reproducible output** (testing). Same seed + same input = same pseudonyms every time. |
+| `config` | `dict \| str \| None` | `None` | Per-entity-type config. Dict, JSON file, or YAML file path. See [Configuration](configuration.md). |
+| `names` | `list[str] \| None` | `None` | Known names to always redact (no NER needed). Combined with NER for best results. |
 | `detailed` | `bool` | `False` | If `True`, return a 3-tuple with detection details (entities, stats). |
 
 ### Returns

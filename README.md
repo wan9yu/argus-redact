@@ -56,7 +56,31 @@ cat redacted.txt | llm "summarize" > llm_output.txt
 cat llm_output.txt | argus-redact restore -k key.json
 ```
 
-> **Core install without `[zh]`?** Regex-only — catches phone numbers, ID cards, emails, bank cards. Person/location/org names require NER (`[zh]` or `[en]`).
+> **Core install without `[zh]`?** Regex-only — catches phone numbers, ID cards, emails, bank cards. Person/location/org names require NER (`[zh]` or `[en]`) or the `names` parameter.
+
+## Names Whitelist
+
+Know your users' names? Pass them directly — no NER model needed:
+
+```python
+redacted, key = redact(
+    "你好王一，你的手机号是18630303030",
+    names=["王一"],
+    mode="fast",
+)
+# "你好P-83811，你的手机号是186****3030"
+```
+
+Combine with NER for 1+1>2 — known names are always caught, NER discovers unknown ones:
+
+```python
+redacted, key = redact(
+    "王一和李四在聊天，电话13812345678",
+    names=["王一"],    # guaranteed hit
+    mode="ner",         # NER catches "李四" too
+    lang="zh",
+)
+```
 
 ## Why
 
