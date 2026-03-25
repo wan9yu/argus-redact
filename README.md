@@ -368,18 +368,27 @@ redacted_csv, key = redact_csv(csv_text, mode="fast")
 
 ## Roadmap
 
-### Next
+### In Progress
+- Dify / FastGPT plugin integration
+- PIPL compliance white paper
+- `argus-pii-bench` — open PII detection benchmark dataset
 
-- Rust core via PyO3 for hot paths
-- CAPID 3B LoRA fine-tuned model for Layer 3
+### Planned
+- CAPID 3B LoRA fine-tuned model for Layer 3 (implicit PII specialist)
+- Configurable sensitivity profiles (industry-specific PII definitions)
+- Rust core via PyO3 → Node.js / WASM / Go bindings
+- Kong / APISIX API Gateway plugin
+- Hugging Face Space (online demo)
 
 ## Contributing
 
-We welcome contributions:
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-- **Language packs** — more country-specific PII patterns
-- **NER adapters** — German, UK, Indian NER models
-- **Benchmarks** — PII detection test cases (synthetic only, no real PII)
+**Good first contributions:**
+- **Language packs** — add your country's PII patterns (phone, ID, tax number)
+- **Test scenarios** — real-world PII examples (synthetic only, no real PII)
+- **Framework integrations** — Dify, FastGPT, CrewAI, etc.
+- **Translations** — docs in your language
 
 ## License
 
