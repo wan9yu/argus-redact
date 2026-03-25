@@ -82,6 +82,23 @@ Regex layer (mode="fast"), no GPU required:
 
 The cloud LLM call (500-3000ms) dominates any pipeline. argus-redact adds negligible latency.
 
+## Benchmark: ai4privacy/pii-masking-300k
+
+Tested against the [ai4privacy PII benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-300k) (English, 200 examples):
+
+| Mode | Precision | Recall | F1 | Speed |
+|------|-----------|--------|-----|-------|
+| `fast` (regex only) | 67.2% | 13.8% | 22.9% | 84 docs/s |
+| `ner` (regex + spaCy) | 41.0% | 32.8% | 36.5% | 4 docs/s |
+| `auto` (regex + NER + Ollama 3B) | 45.1% | 34.8% | 39.3% | 1.0 docs/s |
+| `auto` (regex + NER + Ollama 32B) | 48.5% | 34.8% | 40.5% | 0.2 docs/s |
+
+**Email detection: P=92% R=94%** — strongest single-type performance.
+
+Each layer adds recall: 13.8% → 32.8% → 34.8%. The 3B model is the default — 5x faster than 32B with only 1.2% F1 difference. Override with `OLLAMA_MODEL=qwen2.5:32b`.
+
+> **Note:** argus-redact is the only tool in this comparison that offers **reversible** PII encryption with **per-message keys**. Other tools achieve higher recall by permanently destroying PII — argus-redact preserves it for restoration.
+
 ## Per-Message Random Keys
 
 Every `redact()` call generates a fresh random key — like a new encryption key per message.
