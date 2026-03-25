@@ -1,0 +1,69 @@
+[
+    {
+      "id": "cpf_with_dots",
+      "input": "CPF: 529.982.247-25",
+      "should_match": true,
+      "type": "cpf",
+      "expected_text": "529.982.247-25",
+      "description": "Valid CPF with formatting"
+    },
+    {
+      "id": "cpf_digits_only",
+      "input": "CPF 52998224725",
+      "should_match": true,
+      "type": "cpf",
+      "expected_text": "52998224725",
+      "description": "Valid CPF without formatting"
+    },
+    {
+      "id": "cpf_invalid_check_digit",
+      "input": "CPF: 529.982.247-99",
+      "should_match": false,
+      "type": "cpf",
+      "description": "Invalid CPF check digits"
+    },
+    {
+      "id": "cpf_all_same_digits",
+      "input": "111.111.111-11",
+      "should_match": false,
+      "type": "cpf",
+      "description": "All same digits should be rejected"
+    },
+    {
+      "id": "cnpj_valid",
+      "input": "CNPJ: 11.222.333/0001-81",
+      "should_match": true,
+      "type": "cnpj",
+      "expected_text": "11.222.333/0001-81",
+      "description": "Valid CNPJ with formatting"
+    },
+    {
+      "id": "cnpj_invalid",
+      "input": "CNPJ: 11.222.333/0001-99",
+      "should_match": false,
+      "type": "cnpj",
+      "description": "Invalid CNPJ check digits"
+    },
+    {
+      "id": "phone_with_country_code",
+      "input": "Tel: +55 (11) 99876-5432",
+      "should_match": true,
+      "type": "phone",
+      "expected_text": "+55 (11) 99876-5432",
+      "description": "Brazilian mobile with country code"
+    },
+    {
+      "id": "phone_without_country_code",
+      "input": "Ligar: (21) 3456-7890",
+      "should_match": true,
+      "type": "phone",
+      "description": "Brazilian landline without country code"
+    },
+    {
+      "id": "plain_text",
+      "input": "Bom dia",
+      "should_match": false,
+      "type": "cpf",
+      "description": "No PII"
+    }
+  ]

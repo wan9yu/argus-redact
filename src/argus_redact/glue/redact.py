@@ -24,6 +24,7 @@ _LANG_PATTERNS = {
     "de": "argus_redact.lang.de.patterns",
     "uk": "argus_redact.lang.uk.patterns",
     "in": "argus_redact.lang.in_.patterns",
+    "br": "argus_redact.lang.br.patterns",
 }
 
 _LANG_NER_ADAPTERS = {
