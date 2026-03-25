@@ -113,9 +113,13 @@ def redact(
     mode: str = "auto",
     seed: int | None = None,
     config: dict | str | None = None,
+    names: list[str] | None = None,
     detailed: bool = False,
 ) -> tuple[str, dict] | tuple[str, dict, dict]:
     """Detect and replace PII in text.
+
+    Args:
+        names: List of known names/entities to always redact (no NER needed).
 
     Returns (redacted_text, key), or (redacted_text, key, details) when detailed=True.
     """
@@ -147,6 +151,25 @@ def redact(
 
     timing = {}
     entities: list[PatternMatch] = []
+
+    # Layer 0: user-provided names whitelist
+    if names:
+        import re as _re
+
+        for name in names:
+            if not name:
+                continue
+            for m in _re.finditer(_re.escape(name), text):
+                entities.append(
+                    PatternMatch(
+                        text=name,
+                        type="person",
+                        start=m.start(),
+                        end=m.end(),
+                        confidence=1.0,
+                        layer=0,
+                    )
+                )
 
     # Layer 1: regex
     t0 = time.perf_counter()
