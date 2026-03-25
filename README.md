@@ -16,6 +16,7 @@ pip install argus-redact              # core (regex only, zero heavy deps)
 pip install argus-redact[zh]          # + Chinese NER (person/location/org names)
 pip install argus-redact[en]          # + English NER
 pip install argus-redact[full]        # + all languages + semantic layer
+pip install argus-redact[presidio]   # + Presidio bridge (reversible Presidio)
 ```
 
 Python 3.10+. No GPU. Runs on CPU.
@@ -254,13 +255,29 @@ See [docs/architecture.md](docs/architecture.md) for the full purity model.
 
 **Already using Presidio?** argus-redact is complementary. Presidio detects and masks PII. argus-redact adds reversible pseudonymization with per-session key rotation, optimized for the redact → LLM → restore workflow. You can use both.
 
+## Presidio Bridge
+
+Already using Presidio? Add reversible per-message keys in one line:
+
+```python
+from argus_redact.integrations.presidio import PresidioBridge
+
+bridge = PresidioBridge()
+redacted, key = bridge.redact("John Smith called 555-123-4567", language="en")
+# Presidio detects → argus-redact encrypts with per-message key
+
+llm_output = call_llm(redacted)
+restored = bridge.restore(llm_output, key)
+```
+
+`pip install argus-redact[presidio]`
+
 ## Roadmap
 
 ### Next
 
 - Japanese / Korean NER adapters (GiNZA, KoNLPy)
 - LlamaIndex adapter, FastAPI middleware
-- Presidio bridge (`argus-redact[presidio]`)
 - Rust core via PyO3 for hot paths
 
 ## Contributing
