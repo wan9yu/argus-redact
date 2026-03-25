@@ -13,11 +13,14 @@
 
 ```bash
 pip install argus-redact              # core (regex only, zero heavy deps)
-pip install argus-redact[zh]          # + Chinese NER (person/location/org names)
-pip install argus-redact[en]          # + English NER
-pip install argus-redact[full]        # + all languages + semantic layer
-pip install argus-redact[presidio]   # + Presidio bridge (reversible Presidio)
+pip install argus-redact[zh]          # + Chinese NER (HanLP)
+pip install argus-redact[en]          # + English NER (spaCy)
+pip install argus-redact[ja]          # + Japanese NER (spaCy)
+pip install argus-redact[ko]          # + Korean NER (spaCy)
+pip install argus-redact[full]        # + all NER + semantic layer
+pip install argus-redact[presidio]   # + Presidio bridge
 pip install argus-redact[mcp]        # + MCP server for Claude Desktop / Cursor
+pip install argus-redact[serve]      # + HTTP API server
 ```
 
 Python 3.10+. No GPU. Runs on CPU.
@@ -151,21 +154,21 @@ Layer 3 (LLM):    "那个地方" → sensitive location, "那件事" → sensiti
 
 ### Supported Languages & PII Types
 
-| PII Type | Chinese (zh) | English (en) | Japanese (ja) | Korean (ko) |
-|----------|-------------|-------------|--------------|-------------|
-| Phone | 1xx-xxxx-xxxx, landline | (xxx) xxx-xxxx | 0x0-xxxx-xxxx, landline | 01x-xxxx-xxxx, landline |
-| National ID | 18-digit, MOD 11-2 | SSN (xxx-xx-xxxx) | My Number (12-digit) | RRN (YYMMDD-XXXXXXX) |
-| Bank card | 16-19 digits (Luhn) | Credit card (Luhn) | — | — |
-| License plate | 京A12345 | — | — | — |
-| Address | Structured (省/市/区/路/号) | — | — | — |
-| Passport | X12345678 | — | — | — |
-| Person names | NER (HanLP) | NER (spaCy) | NER (spaCy) | NER (spaCy) |
-| Locations | NER + semantic | NER + semantic | — | — |
-| Organizations | NER + semantic | NER + semantic | — | — |
-| Email | Shared regex | Shared regex | Shared regex | Shared regex |
-| Implicit PII | Layer 3 (Ollama) | Layer 3 (Ollama) | Layer 3 (Ollama) | Layer 3 (Ollama) |
+| PII Type | zh | en | ja | ko | de | uk | in |
+|----------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Phone | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| National ID | ✓ MOD11-2 | SSN | My Number | RRN | Tax ID | NINO | Aadhaar |
+| Bank/Card | Luhn | Luhn | — | — | IBAN | — | PAN |
+| License plate | ✓ | — | — | — | — | — | — |
+| Address | ✓ | — | — | — | — | Postcode | — |
+| Passport | ✓ | — | — | — | — | — | — |
+| NHS number | — | — | — | — | — | ✓ | — |
+| Person names | HanLP | spaCy | spaCy | spaCy | — | — | — |
+| Locations | NER | NER | NER | NER | — | — | — |
+| Email | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Implicit PII | Ollama | Ollama | Ollama | Ollama | Ollama | Ollama | Ollama |
 
-Mixed language — combine any languages with `lang=["zh", "en", "ja", "ko"]`.
+7 languages. Mix freely: `lang=["zh", "en", "de"]`.
 
 ## LLM Integration
 
@@ -297,20 +300,65 @@ Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_deskt
 
 Exposes three tools: `redact`, `restore`, `info`.
 
+## HTTP API Server
+
+Deploy as a service for any language/framework:
+
+```bash
+pip install argus-redact[serve]
+argus-redact serve --port 8000
+```
+
+```bash
+curl -X POST http://localhost:8000/redact \
+  -H 'Content-Type: application/json' \
+  -d '{"text": "电话13812345678", "mode": "fast"}'
+```
+
+Endpoints: `POST /redact`, `POST /restore`, `GET /info`, `GET /health`.
+
+## Structured Data
+
+Redact JSON structures and CSV files:
+
+```python
+from argus_redact.structured import redact_json, restore_json, redact_csv
+
+# JSON — recursively walks all string values
+data = {"user": {"name": "张三", "phone": "13812345678"}, "action": "login"}
+redacted, key = redact_json(data, mode="fast")
+restored = restore_json(redacted, key)
+
+# CSV — header preserved, each cell redacted
+csv_text = "name,phone\n张三,13812345678"
+redacted_csv, key = redact_csv(csv_text, mode="fast")
+```
+
+## Integrations
+
+| Integration | Module | Install |
+|------------|--------|---------|
+| LangChain | `argus_redact.integrations.langchain` | core |
+| LlamaIndex | `argus_redact.integrations.llamaindex` | core |
+| FastAPI | `argus_redact.integrations.fastapi_middleware` | core |
+| Presidio bridge | `argus_redact.integrations.presidio` | `[presidio]` |
+| MCP Server | `argus_redact.integrations.mcp_server` | `[mcp]` |
+| HTTP Server | `argus_redact.server` | `[serve]` |
+
 ## Roadmap
 
 ### Next
 
 - Rust core via PyO3 for hot paths
+- CAPID 3B LoRA fine-tuned model for Layer 3
 
 ## Contributing
 
 We welcome contributions:
 
-- **NER adapters** — additional language models
-- **Regex patterns** — Country-specific PII formats
+- **Language packs** — more country-specific PII patterns
+- **NER adapters** — German, UK, Indian NER models
 - **Benchmarks** — PII detection test cases (synthetic only, no real PII)
-- **Integrations** — LangChain, LlamaIndex, FastAPI middleware
 
 ## License
 
