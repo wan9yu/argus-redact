@@ -45,4 +45,16 @@ PATTERNS = [
         "check_context": True,
         "description": "Credit card number (Luhn checksum)",
     },
+    {
+        "type": "address",
+        "label": "[ADDRESS REDACTED]",
+        "pattern": (
+            r"\d{1,5}\s+"
+            r"(?:[A-Z][a-z]+\s+){1,3}"
+            r"(?:St(?:reet)?|Ave(?:nue)?|Rd|Road|Blvd|Boulevard|"
+            r"Dr(?:ive)?|Ln|Lane|Way|Ct|Court|Pl(?:ace)?|Cir(?:cle)?)"
+            r"(?:\s*,\s*(?:Apt|Suite|Unit|#)\s*\w+)?"
+        ),
+        "description": "US street address (number + street name + type)",
+    },
 ]

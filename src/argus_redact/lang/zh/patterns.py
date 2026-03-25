@@ -35,6 +35,7 @@ PATTERNS = [
         "type": "phone",
         "label": "[手机号已脱敏]",
         "pattern": r"(?:\+86)?1[3-9]\d{9}(?!\d)",
+        "check_context": True,
         "description": "Chinese mobile phone number",
     },
     {

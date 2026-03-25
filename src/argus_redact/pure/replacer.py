@@ -48,6 +48,7 @@ _REMOVE_LABELS_BY_LANG = {
     "en": {
         "ssn": "[SSN REDACTED]",
         "credit_card": "[CARD REDACTED]",
+        "address": "[ADDRESS REDACTED]",
     },
     "de": {
         "tax_id": "[Steuer-ID]",

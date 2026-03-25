@@ -14,7 +14,12 @@ _FALSE_POSITIVE_PREFIX = re.compile(
     re.IGNORECASE,
 )
 
-_CONTEXT_WINDOW = 15  # chars to check before match
+# Arithmetic/code context IMMEDIATELY after a number
+_FALSE_POSITIVE_SUFFIX = re.compile(
+    r"^\s*[/\*\+\-=%\^](?:\s*\d)",
+)
+
+_CONTEXT_WINDOW = 15
 
 
 @lru_cache(maxsize=128)
@@ -23,16 +28,21 @@ def _compile(pattern: str) -> re.Pattern:
 
 
 def _looks_like_false_positive(text: str, start: int, end: int) -> bool:
-    """Check if text immediately before the match suggests non-PII context."""
+    """Check surrounding context for non-PII indicators."""
     before = text[max(0, start - _CONTEXT_WINDOW) : start]
-    return bool(_FALSE_POSITIVE_PREFIX.search(before))
+    after = text[end : end + _CONTEXT_WINDOW]
+    if _FALSE_POSITIVE_PREFIX.search(before):
+        return True
+    if _FALSE_POSITIVE_SUFFIX.match(after):
+        return True
+    return False
 
 
 def match_patterns(text: str, patterns: list[dict]) -> list[PatternMatch]:
     """Run all regex patterns against text, return sorted matches.
 
     Each pattern dict must have: type, label, pattern.
-    Optional: validate (callable), priority (int).
+    Optional: validate (callable), check_context (bool).
     """
     if not text or not patterns:
         return []
