@@ -17,6 +17,7 @@ pip install argus-redact[zh]          # + Chinese NER (person/location/org names
 pip install argus-redact[en]          # + English NER
 pip install argus-redact[full]        # + all languages + semantic layer
 pip install argus-redact[presidio]   # + Presidio bridge (reversible Presidio)
+pip install argus-redact[mcp]        # + MCP server for Claude Desktop / Cursor
 ```
 
 Python 3.10+. No GPU. Runs on CPU.
@@ -271,6 +272,30 @@ restored = bridge.restore(llm_output, key)
 ```
 
 `pip install argus-redact[presidio]`
+
+## MCP Server
+
+Use argus-redact as an MCP tool in Claude Desktop or Cursor:
+
+```bash
+pip install argus-redact[mcp]
+python -m argus_redact.integrations.mcp_server
+```
+
+Add to Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "argus-redact": {
+      "command": "python",
+      "args": ["-m", "argus_redact.integrations.mcp_server"]
+    }
+  }
+}
+```
+
+Exposes three tools: `redact`, `restore`, `info`.
 
 ## Roadmap
 
