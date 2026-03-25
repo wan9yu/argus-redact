@@ -159,7 +159,7 @@ Layer 3 (LLM):    "那个地方" → sensitive location, "那件事" → sensiti
 | License plate | 京A12345 | — | — | — |
 | Address | Structured (省/市/区/路/号) | — | — | — |
 | Passport | X12345678 | — | — | — |
-| Person names | NER (HanLP) | NER (spaCy) | — | — |
+| Person names | NER (HanLP) | NER (spaCy) | NER (spaCy) | NER (spaCy) |
 | Locations | NER + semantic | NER + semantic | — | — |
 | Organizations | NER + semantic | NER + semantic | — | — |
 | Email | Shared regex | Shared regex | Shared regex | Shared regex |
@@ -301,14 +301,13 @@ Exposes three tools: `redact`, `restore`, `info`.
 
 ### Next
 
-- Japanese / Korean NER adapters (GiNZA, KoNLPy)
 - Rust core via PyO3 for hot paths
 
 ## Contributing
 
 We welcome contributions:
 
-- **NER adapters** — spaCy English, GiNZA Japanese, KoNLPy Korean
+- **NER adapters** — additional language models
 - **Regex patterns** — Country-specific PII formats
 - **Benchmarks** — PII detection test cases (synthetic only, no real PII)
 - **Integrations** — LangChain, LlamaIndex, FastAPI middleware
