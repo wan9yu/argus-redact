@@ -16,14 +16,17 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-from typing import Any
-
-from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-from starlette.routing import Route
+from typing import TYPE_CHECKING, Any
 
 from argus_redact import __version__, redact, restore
+
+try:
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
+except ImportError:
+    if TYPE_CHECKING:
+        from starlette.requests import Request
+        from starlette.responses import JSONResponse
 
 
 async def handle_redact(request: Request) -> JSONResponse:
@@ -119,7 +122,11 @@ async def handle_health(request: Request) -> JSONResponse:
     return JSONResponse({"status": "ok"})
 
 
-def create_app() -> Starlette:
+def create_app():
+    """Create Starlette ASGI app. Requires: pip install argus-redact[serve]"""
+    from starlette.applications import Starlette
+    from starlette.routing import Route
+
     routes = [
         Route("/redact", handle_redact, methods=["POST"]),
         Route("/restore", handle_restore, methods=["POST"]),
