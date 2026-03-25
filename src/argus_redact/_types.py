@@ -14,6 +14,7 @@ class PatternMatch:
     start: int
     end: int
     confidence: float = 1.0
+    layer: int = 0  # 1=regex, 2=NER, 3=semantic
 
 
 @dataclass(frozen=True)
@@ -26,11 +27,12 @@ class NEREntity:
     end: int
     confidence: float
 
-    def to_pattern_match(self) -> PatternMatch:
+    def to_pattern_match(self, layer: int = 2) -> PatternMatch:
         return PatternMatch(
             text=self.text,
             type=self.type,
             start=self.start,
             end=self.end,
             confidence=self.confidence,
+            layer=layer,
         )

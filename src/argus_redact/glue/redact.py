@@ -5,8 +5,10 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import time
 from pathlib import Path
 
+from argus_redact._types import PatternMatch
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.merger import merge_entities
 from argus_redact.pure.patterns import match_patterns
@@ -19,6 +21,9 @@ _LANG_PATTERNS = {
     "en": "argus_redact.lang.en.patterns",
     "ja": "argus_redact.lang.ja.patterns",
     "ko": "argus_redact.lang.ko.patterns",
+    "de": "argus_redact.lang.de.patterns",
+    "uk": "argus_redact.lang.uk.patterns",
+    "in": "argus_redact.lang.in_.patterns",
 }
 
 _LANG_NER_ADAPTERS = {
@@ -82,6 +87,21 @@ def _get_semantic_adapter():
         return None
 
 
+def _tag_layer(entities: list[PatternMatch], layer: int) -> list[PatternMatch]:
+    """Tag entities with their source layer if not already tagged."""
+    return [
+        PatternMatch(
+            text=e.text,
+            type=e.type,
+            start=e.start,
+            end=e.end,
+            confidence=e.confidence,
+            layer=layer if e.layer == 0 else e.layer,
+        )
+        for e in entities
+    ]
+
+
 def redact(
     text: str,
     *,
@@ -112,44 +132,57 @@ def redact(
     elif isinstance(key, dict):
         existing_key = dict(key)
 
-    # Layer 1: regex
-    entities = match_patterns(text, _load_patterns(lang))
+    timing = {}
+    entities: list[PatternMatch] = []
 
-    # Layer 2: NER (auto or ner mode) — load ALL language adapters
+    # Layer 1: regex
+    t0 = time.perf_counter()
+    layer1 = match_patterns(text, _load_patterns(lang))
+    timing["layer_1_ms"] = (time.perf_counter() - t0) * 1000
+    entities.extend(_tag_layer(layer1, 1))
+    layer1_count = len(layer1)
+
+    # Layer 2: NER (auto or ner mode)
+    layer2_count = 0
     if mode in ("auto", "ner"):
         from argus_redact.impure.ner import detect_ner
 
+        t0 = time.perf_counter()
         for adapter in _get_ner_adapters(lang):
             ner_entities = detect_ner(text, adapter=adapter)
-            entities.extend(e.to_pattern_match() for e in ner_entities)
+            layer2_matches = [e.to_pattern_match(layer=2) for e in ner_entities]
+            entities.extend(layer2_matches)
+            layer2_count += len(layer2_matches)
+        timing["layer_2_ms"] = (time.perf_counter() - t0) * 1000
 
     # Layer 3: Semantic LLM (auto mode only)
+    layer3_count = 0
     if mode == "auto":
         semantic_adapter = _get_semantic_adapter()
         if semantic_adapter is not None:
             from argus_redact.impure.semantic import detect_semantic
 
+            t0 = time.perf_counter()
             try:
                 sem_entities = detect_semantic(text, adapter=semantic_adapter)
-                entities.extend(e.to_pattern_match() for e in sem_entities)
+                layer3_matches = [e.to_pattern_match(layer=3) for e in sem_entities]
+                entities.extend(layer3_matches)
+                layer3_count += len(layer3_matches)
             except Exception:
                 logger.warning("Layer 3 semantic detection failed", exc_info=True)
+            timing["layer_3_ms"] = (time.perf_counter() - t0) * 1000
 
     entities = merge_entities(entities)
 
-    # Build reverse mapping: original -> replacement (for details)
-    merged_entities = entities
-
     redacted, result_key = replace(
         text,
-        merged_entities,
+        entities,
         seed=seed,
         key=existing_key,
         config=config,
     )
 
     if key_file is not None and result_key:
-        # Atomic write: write to temp file then rename
         target = Path(key_file)
         tmp = target.with_suffix(".tmp")
         tmp.write_text(
@@ -165,15 +198,24 @@ def redact(
                 "original": e.text,
                 "replacement": reverse_key.get(e.text, ""),
                 "type": e.type,
+                "layer": e.layer,
                 "start": e.start,
                 "end": e.end,
                 "confidence": e.confidence,
             }
-            for e in merged_entities
+            for e in entities
         ]
+        total_ms = sum(timing.values())
         details = {
             "entities": entity_details,
-            "stats": {"total": len(entity_details)},
+            "stats": {
+                "total": len(entity_details),
+                "layer_1": layer1_count,
+                "layer_2": layer2_count,
+                "layer_3": layer3_count,
+                "duration_ms": round(total_ms, 2),
+                **{k: round(v, 2) for k, v in timing.items()},
+            },
         }
         return redacted, result_key, details
 

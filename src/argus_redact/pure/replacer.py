@@ -23,6 +23,13 @@ DEFAULT_STRATEGIES = {
     "credit_card": "mask",
     "my_number": "remove",
     "rrn": "remove",
+    "tax_id": "remove",
+    "iban": "remove",
+    "postcode": "remove",
+    "nino": "remove",
+    "nhs_number": "remove",
+    "aadhaar": "remove",
+    "pan": "remove",
 }
 
 DEFAULT_PREFIXES = {
@@ -41,6 +48,19 @@ _REMOVE_LABELS_BY_LANG = {
     "en": {
         "ssn": "[SSN REDACTED]",
         "credit_card": "[CARD REDACTED]",
+    },
+    "de": {
+        "tax_id": "[Steuer-ID]",
+        "iban": "[IBAN]",
+    },
+    "uk": {
+        "postcode": "[POSTCODE]",
+        "nino": "[NINO]",
+        "nhs_number": "[NHS NUMBER]",
+    },
+    "in": {
+        "aadhaar": "[AADHAAR]",
+        "pan": "[PAN]",
     },
     "ja": {
         "my_number": "[マイナンバー]",

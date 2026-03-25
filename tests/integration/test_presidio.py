@@ -101,3 +101,54 @@ class TestPresidioBridgeRoundtrip:
         restored = presidio_bridge.restore(llm_output, key)
 
         assert "John Smith" in restored
+
+
+class TestPresidioNERAdapter:
+    """Use Presidio as a NER adapter inside argus-redact pipeline."""
+
+    @pytest.fixture
+    def presidio_adapter(self):
+        if not HAS_PRESIDIO:
+            pytest.skip("presidio not installed")
+        from argus_redact.integrations.presidio import PresidioNERAdapter
+
+        adapter = PresidioNERAdapter(language="en")
+        adapter.load()
+        return adapter
+
+    def test_should_detect_entities(self, presidio_adapter):
+        results = presidio_adapter.detect("John Smith lives in New York")
+
+        assert len(results) >= 1
+        types = {r.type for r in results}
+        assert "person" in types
+
+    def test_should_work_with_detect_ner(self, presidio_adapter):
+        from argus_redact.impure.ner import detect_ner
+
+        results = detect_ner(
+            "John Smith lives in New York",
+            adapter=presidio_adapter,
+        )
+
+        assert len(results) >= 1
+
+    def test_should_integrate_in_redact_pipeline(self, presidio_adapter):
+        from unittest.mock import patch
+
+        from argus_redact import redact, restore
+
+        with patch(
+            "argus_redact.glue.redact._get_ner_adapters",
+            return_value=[presidio_adapter],
+        ):
+            redacted, key = redact(
+                "John Smith called 555-123-4567",
+                seed=42,
+                mode="ner",
+                lang="en",
+            )
+
+        assert "John Smith" not in redacted
+        restored = restore(redacted, key)
+        assert "John Smith" in restored

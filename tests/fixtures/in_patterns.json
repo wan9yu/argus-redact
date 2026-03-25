@@ -1,0 +1,38 @@
+[
+  {
+    "id": "aadhaar_valid",
+    "input": "Aadhaar: 2345 6789 0123",
+    "should_match": true,
+    "type": "aadhaar",
+    "description": "Indian Aadhaar number"
+  },
+  {
+    "id": "aadhaar_starts_with_0",
+    "input": "0123 4567 8901",
+    "should_match": false,
+    "type": "aadhaar",
+    "description": "Aadhaar cannot start with 0"
+  },
+  {
+    "id": "pan_valid",
+    "input": "PAN: ABCPD1234E",
+    "should_match": true,
+    "type": "pan",
+    "expected_text": "ABCPD1234E",
+    "description": "Indian PAN card"
+  },
+  {
+    "id": "phone_valid",
+    "input": "Mobile: +91 9876543210",
+    "should_match": true,
+    "type": "phone",
+    "description": "Indian mobile phone"
+  },
+  {
+    "id": "plain_text",
+    "input": "Namaste",
+    "should_match": false,
+    "type": "aadhaar",
+    "description": "No PII"
+  }
+]

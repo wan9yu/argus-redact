@@ -27,16 +27,36 @@ class TestDetailedMode:
         assert "original" in entity
         assert "replacement" in entity
         assert "type" in entity
+        assert "layer" in entity
         assert "start" in entity
         assert "end" in entity
         assert "confidence" in entity
 
-    def test_should_include_stats_in_details(self):
+    def test_should_tag_regex_as_layer_1(self):
         _, _, details = redact("电话13812345678", detailed=True, seed=42, mode="fast")
 
-        assert "stats" in details
-        assert "total" in details["stats"]
-        assert details["stats"]["total"] >= 1
+        entity = details["entities"][0]
+        assert entity["layer"] == 1
+
+    def test_should_include_layer_counts_in_stats(self):
+        _, _, details = redact("电话13812345678", detailed=True, seed=42, mode="fast")
+
+        stats = details["stats"]
+        assert "layer_1" in stats
+        assert "layer_2" in stats
+        assert "layer_3" in stats
+        assert stats["layer_1"] >= 1
+        assert stats["layer_2"] == 0
+        assert stats["layer_3"] == 0
+
+    def test_should_include_duration_ms_in_stats(self):
+        _, _, details = redact("电话13812345678", detailed=True, seed=42, mode="fast")
+
+        stats = details["stats"]
+        assert "duration_ms" in stats
+        assert stats["duration_ms"] >= 0
+        assert "layer_1_ms" in stats
+        assert stats["layer_1_ms"] >= 0
 
     def test_should_show_correct_entity_info(self):
         _, key, details = redact("电话13812345678", detailed=True, seed=42, mode="fast")

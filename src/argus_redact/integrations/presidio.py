@@ -13,7 +13,8 @@ Usage:
 
 from __future__ import annotations
 
-from argus_redact._types import PatternMatch
+from argus_redact._types import NEREntity, PatternMatch
+from argus_redact.impure.ner import NERAdapter
 from argus_redact.pure.merger import merge_entities
 from argus_redact.pure.replacer import replace
 from argus_redact.pure.restore import restore
@@ -92,3 +93,47 @@ class PresidioBridge:
     def restore(self, text: str, key: dict) -> str:
         """Restore pseudonyms to originals. Same as argus_redact.restore()."""
         return restore(text, key)
+
+
+class PresidioNERAdapter(NERAdapter):
+    """Use Presidio's AnalyzerEngine as an argus-redact NER adapter.
+
+    Plug Presidio's 46+ entity types into argus-redact's pipeline:
+
+        from argus_redact.integrations.presidio import PresidioNERAdapter
+        from argus_redact import redact
+
+        adapter = PresidioNERAdapter()
+        # Use with detect_ner() or patch into redact() pipeline
+    """
+
+    def __init__(self, analyzer=None, language: str = "en"):
+        self._analyzer = analyzer
+        self._language = language
+
+    def load(self) -> None:
+        if self._analyzer is None:
+            from presidio_analyzer import AnalyzerEngine
+
+            self._analyzer = AnalyzerEngine()
+
+    def detect(self, text: str) -> list[NEREntity]:
+        if not text:
+            return []
+        if self._analyzer is None:
+            self.load()
+
+        results = self._analyzer.analyze(text=text, language=self._language)
+        entities = []
+        for r in results:
+            mapped_type = _PRESIDIO_TYPE_MAP.get(r.entity_type, r.entity_type.lower())
+            entities.append(
+                NEREntity(
+                    text=text[r.start : r.end],
+                    type=mapped_type,
+                    start=r.start,
+                    end=r.end,
+                    confidence=r.score,
+                )
+            )
+        return entities

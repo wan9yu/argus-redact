@@ -1,0 +1,31 @@
+[
+  {
+    "id": "postcode_standard",
+    "input": "Address: SW1A 1AA London",
+    "should_match": true,
+    "type": "postcode",
+    "expected_text": "SW1A 1AA",
+    "description": "UK postcode standard format"
+  },
+  {
+    "id": "nino_valid",
+    "input": "NINO: AB 12 34 56 C",
+    "should_match": true,
+    "type": "nino",
+    "description": "UK National Insurance Number"
+  },
+  {
+    "id": "phone_valid",
+    "input": "Call +44 20 7946 0958",
+    "should_match": true,
+    "type": "phone",
+    "description": "UK phone number"
+  },
+  {
+    "id": "plain_text",
+    "input": "Good morning",
+    "should_match": false,
+    "type": "postcode",
+    "description": "No PII"
+  }
+]

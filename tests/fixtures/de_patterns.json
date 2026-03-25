@@ -1,0 +1,30 @@
+[
+  {
+    "id": "tax_id_valid",
+    "input": "Steuer-ID: 12 345 678 901",
+    "should_match": true,
+    "type": "tax_id",
+    "description": "German tax ID with spaces"
+  },
+  {
+    "id": "iban_valid",
+    "input": "IBAN DE89 3704 0044 0532 0130 00",
+    "should_match": true,
+    "type": "iban",
+    "description": "German IBAN"
+  },
+  {
+    "id": "phone_valid",
+    "input": "Tel: +49 30 12345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "German phone with country code"
+  },
+  {
+    "id": "plain_text",
+    "input": "Guten Tag",
+    "should_match": false,
+    "type": "tax_id",
+    "description": "No PII"
+  }
+]
