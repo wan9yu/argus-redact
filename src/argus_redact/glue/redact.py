@@ -109,7 +109,7 @@ def redact(
     lang: str | list[str] = "zh",
     mode: str = "auto",
     seed: int | None = None,
-    config: dict | None = None,
+    config: dict | str | None = None,
     detailed: bool = False,
 ) -> tuple[str, dict] | tuple[str, dict, dict]:
     """Detect and replace PII in text.
@@ -121,6 +121,16 @@ def redact(
 
     if mode not in VALID_MODES:
         raise ValueError(f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}")
+
+    # Resolve config from file path
+    if isinstance(config, str):
+        config_path = Path(config)
+        if config_path.suffix in (".yaml", ".yml"):
+            import yaml
+
+            config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        else:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
 
     # Resolve key
     existing_key = None

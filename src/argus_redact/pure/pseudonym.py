@@ -17,7 +17,7 @@ def generate_pseudonym(
         num = rng.randint(lo, hi)
     else:
         num = secrets.randbelow(hi - lo + 1) + lo
-    return f"{prefix}-{num:03d}"
+    return f"{prefix}-{num:05d}"
 
 
 class PseudonymGenerator:
@@ -70,7 +70,9 @@ class PseudonymGenerator:
                 num = self._rng.randint(lo, hi)
             else:
                 num = secrets.randbelow(hi - lo + 1) + lo
-            code = f"{self._prefix}-{num:03d}"
+            code = f"{self._prefix}-{num:05d}"
             if code not in self._used_codes:
                 return code
-        raise RuntimeError("Could not generate unique pseudonym code after 1000 attempts")
+        # Auto-expand range and retry
+        self._code_range = (lo, hi * 10)
+        return self._generate_unique()
