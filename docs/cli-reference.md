@@ -122,16 +122,16 @@ argus-redact info
 ### Output
 
 ```
-argus-redact v0.1.3
+argus-redact v0.1.5
 
 Languages:
   zh  Chinese    regex (8 patterns) + NER
-  en  English    regex (4 patterns) + NER
+  en  English    regex (5 patterns) + NER
   ja  Japanese   regex (4 patterns) + NER
   ko  Korean     regex (4 patterns) + NER
-  de  German     regex (4 patterns)
-  uk  British    regex (5 patterns)
-  in  Indian     regex (4 patterns)
+  de  German     regex (4 patterns) + NER
+  uk  British    regex (5 patterns) + NER
+  in  Indian     regex (4 patterns) + NER
 
 Layers:
   1 Pattern (regex)       ✓

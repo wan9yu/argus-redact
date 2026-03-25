@@ -236,6 +236,9 @@ class TestInfoCommand:
         assert "en" in stdout
         assert "ja" in stdout
         assert "ko" in stdout
+        assert "de" in stdout
+        assert "uk" in stdout
+        assert "in" in stdout
 
 
 class TestCliErrors:

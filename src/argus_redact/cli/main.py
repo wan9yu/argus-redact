@@ -86,7 +86,15 @@ def cmd_info(args):
 
     from argus_redact.lang.shared.patterns import PATTERNS as SHARED
 
-    langs = {"zh": "Chinese", "en": "English", "ja": "Japanese", "ko": "Korean"}
+    langs = {
+        "zh": "Chinese",
+        "en": "English",
+        "ja": "Japanese",
+        "ko": "Korean",
+        "de": "German",
+        "uk": "British",
+        "in": "Indian",
+    }
 
     from argus_redact import __version__
 
@@ -94,12 +102,13 @@ def cmd_info(args):
     print()
     print("Languages:")
     for code, name in langs.items():
+        mod_code = "in_" if code == "in" else code
         try:
-            mod = importlib.import_module(f"argus_redact.lang.{code}.patterns")
+            mod = importlib.import_module(f"argus_redact.lang.{mod_code}.patterns")
             count = len(mod.PATTERNS) + len(SHARED)
         except ModuleNotFoundError:
             count = 0
-        has_ner = importlib.util.find_spec(f"argus_redact.lang.{code}.ner_adapter") is not None
+        has_ner = importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
         ner_label = " + NER" if has_ner else ""
         print(f"  {code}  {name:10s} regex ({count} patterns){ner_label}")
 
