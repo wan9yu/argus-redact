@@ -122,19 +122,49 @@ argus-redact info
 ### Output
 
 ```
-argus-redact v0.1.0
+argus-redact v0.1.3
 
 Languages:
-  zh  Chinese    regex (9 patterns) + NER
+  zh  Chinese    regex (8 patterns) + NER
   en  English    regex (4 patterns) + NER
-  ja  Japanese   regex (4 patterns)
-  ko  Korean     regex (4 patterns)
+  ja  Japanese   regex (4 patterns) + NER
+  ko  Korean     regex (4 patterns) + NER
+  de  German     regex (4 patterns)
+  uk  British    regex (5 patterns)
+  in  Indian     regex (4 patterns)
 
 Layers:
   1 Pattern (regex)       ✓
   2 Entity (NER)          ✓
   3 Semantic (Ollama)     ✓
 ```
+
+---
+
+## serve
+
+Start an HTTP API server.
+
+```bash
+argus-redact serve                    # default port 8000
+argus-redact serve --port 9000        # custom port
+```
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--host` | `0.0.0.0` | Bind address |
+| `--port` | `8000` | Port number |
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/redact` | Redact PII from text |
+| POST | `/restore` | Restore redacted text with key |
+| GET | `/info` | Version and capabilities |
+| GET | `/health` | Health check |
 
 ---
 

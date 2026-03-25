@@ -14,8 +14,11 @@ You can contribute any one of these independently. A pack with only regex patter
 |----------|----------------|--------------|-------------------|
 | Chinese (zh) | Phone, ID, bank card, email, license plate, address, passport | HanLP | Ollama |
 | English (en) | Phone, SSN, credit card, email | spaCy | Ollama |
-| Japanese (ja) | Phone, My Number | — | Ollama |
-| Korean (ko) | Phone, RRN | — | Ollama |
+| Japanese (ja) | Phone, My Number | spaCy | Ollama |
+| Korean (ko) | Phone, RRN | spaCy | Ollama |
+| German (de) | Tax ID, IBAN, phone | — | Ollama |
+| UK (uk) | Postcode, NINO, NHS number, phone | — | Ollama |
+| Indian (in) | Aadhaar, PAN, phone | — | Ollama |
 
 ---
 
