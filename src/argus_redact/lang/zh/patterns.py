@@ -64,7 +64,7 @@ PATTERNS = [
     {
         "type": "passport",
         "label": "[护照号已脱敏]",
-        "pattern": r"(?<![A-Za-z])[A-Z]\d{8}(?!\d)",
+        "pattern": r"(?<![A-Za-z0-9])[A-Z]\d{8}(?!\d)",
         "description": "Chinese passport number",
     },
     {

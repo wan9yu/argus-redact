@@ -1,0 +1,452 @@
+[
+  {
+    "id": "fp_math_expression_zh_phone",
+    "input": "calculate 13800000000 / 2 = 6900000000",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": null,
+    "description": "Number 13800000000 in a math expression looks like a Chinese mobile number but is arithmetic operand [KNOWN REGEX FP: Regex matches valid phone format in math - needs context (Layer 2/3)]",
+    "category": "false_positive"
+  },
+  {
+    "id": "fp_order_number_looks_like_id",
+    "input": "Order #110101199003074610 has shipped",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": null,
+    "description": "Order number that coincidentally matches the 18-digit Chinese ID pattern format (but should fail checksum) [KNOWN REGEX FP: Number passes MOD 11-2 checksum - needs context (Layer 2/3)]",
+    "category": "false_positive"
+  },
+  {
+    "id": "fp_email_no_tld",
+    "input": "config value is user@host with no TLD",
+    "lang": "en",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "user@host without a TLD should not match as an email address",
+    "category": "false_positive"
+  },
+  {
+    "id": "fp_product_code_16_digits",
+    "input": "Product code: 4539578763621486 is discontinued",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": null,
+    "description": "16-digit product code that might pass Luhn check; context is clearly a product reference, not a bank card [KNOWN REGEX FP: Number passes Luhn checksum - needs context (Layer 2/3)]",
+    "category": "false_positive"
+  },
+  {
+    "id": "fp_date_looks_like_phone",
+    "input": "The event was on 2023-01-38000 which was a Tuesday",
+    "lang": "zh",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "Garbled date-like text that contains digits resembling partial phone number",
+    "category": "false_positive"
+  },
+  {
+    "id": "fp_version_number_as_ssn",
+    "input": "Software version 123-45-6789 is no longer supported",
+    "lang": "en",
+    "should_find_pii": true,
+    "expected_pii_count": null,
+    "description": "Version number formatted exactly like a US SSN (XXX-XX-XXXX) [KNOWN REGEX FP: Format matches SSN exactly - needs context (Layer 2/3)]",
+    "category": "false_positive"
+  },
+  {
+    "id": "fp_isbn_as_phone",
+    "input": "ISBN 0-306-40615-2 available at all bookstores",
+    "lang": "en",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "ISBN number with dashes that might partially match phone patterns",
+    "category": "false_positive"
+  },
+  {
+    "id": "fp_uk_postcode_in_code",
+    "input": "Error code EC1A was logged at 14:32",
+    "lang": "uk",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "String fragment that looks like the start of a UK postcode but is an error code",
+    "category": "false_positive"
+  },
+  {
+    "id": "fp_german_phone_like_price",
+    "input": "Preis: 0800-1234567 Hotline kostenlos",
+    "lang": "de",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "German toll-free number (0800) is still PII; verifies it is detected even though it resembles a service code",
+    "category": "false_positive"
+  },
+  {
+    "id": "fp_pseudonym_in_natural_text",
+    "input": "P-037 is a product code, not a person identifier",
+    "lang": "en",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "Pseudonym-like pattern P-037 appearing naturally should not be flagged as PII",
+    "category": "false_positive"
+  },
+  {
+    "id": "fp_12_digit_jp_non_mynumber",
+    "input": "Serial number 1234 5678 9012 is for the device",
+    "lang": "ja",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "12 digits formatted like a My Number but failing check digit validation",
+    "category": "false_positive"
+  },
+  {
+    "id": "edge_pii_at_start",
+    "input": "13812345678是我的号码",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "Chinese phone number at the absolute start of text with no preceding context",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_pii_at_end",
+    "input": "My SSN is 123-45-6789",
+    "lang": "en",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "US SSN at absolute end of text with no trailing context",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_multiple_pii_touching",
+    "input": "13812345678zhang@test.com",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": 2,
+    "description": "Phone and email concatenated with no separator; both should be detected",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_pii_in_brackets",
+    "input": "联系方式：[13812345678]（zhang@test.com）",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": 2,
+    "description": "PII inside square brackets and parentheses",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_pii_in_quotes",
+    "input": "Her number is \"(212) 555-0147\" she said",
+    "lang": "en",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "US phone number inside double quotes",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_tab_separated_pii",
+    "input": "Name\t13812345678\tzhang@test.com\tBeijing",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": 2,
+    "description": "PII separated by tab characters (TSV-like format)",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_newline_in_pii",
+    "input": "联系人：张三\n手机：13812345678\n邮箱：zhang@test.com",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": 2,
+    "description": "PII on separate lines with newlines",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_long_text_buried_pii",
+    "input": "This is a very long document about the history of telecommunications in modern society. The telephone was invented in the late 19th century and has since transformed how humans communicate across distances. From the early days of switchboard operators to the modern era of smartphones, the evolution of telephone technology has been nothing short of remarkable. In the early 1900s, telephone networks began spreading across major cities, connecting businesses and households in ways previously unimaginable. The introduction of direct dialing in the mid-20th century eliminated the need for operators, making phone calls faster and more private. The mobile phone revolution of the 1990s untethered communication from fixed locations, giving people the freedom to talk while on the move. Today, smartphones serve as our primary computing devices, capable of far more than simple voice calls. They handle email, web browsing, social media, navigation, and countless other tasks. Speaking of which, you can reach our office at (212) 555-0199 for more information about our telecommunications history exhibit. The exhibit covers everything from Alexander Graham Bell's first patent to the latest 5G technology deployments around the world. Visitors will find interactive displays, historical artifacts, and multimedia presentations that bring the story of telecommunications to life.",
+    "lang": "en",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "1000+ character text with a single phone number buried deep in the middle",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_fullwidth_numbers",
+    "input": "电话：１３８１２３４５６７８",
+    "lang": "zh",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "Chinese phone number written with fullwidth Unicode digits; naive regex with [0-9] or \\d may not match",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_empty_string",
+    "input": "",
+    "lang": "zh",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "Empty string should not crash and should return no PII",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_whitespace_only",
+    "input": "   \t\n  \t  ",
+    "lang": "en",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "Whitespace-only string should not crash and should return no PII",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_pii_spans_sentence_boundary",
+    "input": "His ID starts with 110101. 199003074610 is the rest.",
+    "lang": "zh",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "Chinese ID split across sentence boundary; should NOT be recombined into a false match",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_zero_width_space_in_phone",
+    "input": "Call me at 138​1234​5678",
+    "lang": "zh",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "Phone number with zero-width spaces (U+200B) inserted; regex should not match through invisible characters",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_mixed_script_email",
+    "input": "メールアドレスはtanaka@example.comです",
+    "lang": "ja",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "Email address embedded in Japanese text with no spaces separating scripts",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_korean_phone_at_boundary",
+    "input": "010-1234-5678",
+    "lang": "ko",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "Korean phone number as the entire input string",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_uk_nino_lowercase",
+    "input": "My NINO is ab 12 34 56 c",
+    "lang": "uk",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "UK NINO in lowercase; pattern requires uppercase so this should not match",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_german_iban_no_spaces",
+    "input": "Bitte überweisen Sie an DE89370400440532013000",
+    "lang": "de",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "German IBAN without spaces should still be detected",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_multiple_types_one_text",
+    "input": "张三，身份证：110105196307081218，手机：13912345678，邮箱：zhangsan@qq.com，住在北京市海淀区中关村大街1号",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": 4,
+    "description": "Single text containing Chinese ID, phone, email, and address (4 distinct PII)",
+    "category": "edge_case"
+  },
+  {
+    "id": "adv_json_with_pseudonym_key",
+    "input": "{\"P-037\": \"some value\", \"P-042\": \"another value\"}",
+    "lang": "en",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "JSON with pseudonym-like keys should not trigger PII detection",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_html_pii_in_attribute",
+    "input": "<a href=\"mailto:admin@secret.com\" data-phone=\"13812345678\">Contact</a>",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": 2,
+    "description": "PII hidden inside HTML attributes (mailto and data attribute)",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_markdown_pii",
+    "input": "Contact us at [admin@secret.com](mailto:admin@secret.com) or call **13812345678**",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": 3,
+    "description": "PII embedded in Markdown formatting (link text, link href, bold); email appears twice",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_pii_with_emoji",
+    "input": "Call me 📱13812345678 or email 📧zhang@test.com",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": 2,
+    "description": "PII immediately adjacent to emoji characters",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_repeated_phone_10x",
+    "input": "13812345678 13812345678 13812345678 13812345678 13812345678 13812345678 13812345678 13812345678 13812345678 13812345678",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": 10,
+    "description": "Same phone number repeated 10 times; all 10 occurrences should be detected",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_ssn_in_csv_row",
+    "input": "John,Doe,123-45-6789,1990-01-15,Engineer",
+    "lang": "en",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "SSN embedded in a CSV row with comma delimiters",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_license_plate_in_sentence",
+    "input": "车辆京A12345在小区停放，旁边是沪B·67890",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": 2,
+    "description": "Two different Chinese license plates embedded in Chinese sentence",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_ko_rrn_surrounded_by_digits",
+    "input": "9999950101-1234567999",
+    "lang": "ko",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "Korean RRN pattern surrounded by extra digits; lookbehind/lookahead should prevent match",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_sql_injection_like",
+    "input": "' OR 1=1; SELECT ssn FROM users WHERE phone='13812345678'--",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "SQL injection-like string that contains a real phone number; PII should still be detected",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_base64_encoded_phone",
+    "input": "MTM4MTIzNDU2Nzg=",
+    "lang": "zh",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "Base64-encoded phone number should not be detected as PII (encoded form is not a phone number)",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_url_with_email_param",
+    "input": "https://example.com/unsubscribe?email=admin@secret.com&token=abc123",
+    "lang": "en",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "Email address inside a URL query parameter",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_mixed_lang_pii",
+    "input": "My US number is (212) 555-0100 and my Chinese number is 13912345678, email: user@example.com",
+    "lang": "en",
+    "should_find_pii": true,
+    "expected_pii_count": 3,
+    "description": "Mixed English and Chinese PII in the same text: US phone, Chinese phone, and email",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_jp_phone_with_country_code",
+    "input": "日本からの電話は+81-90-1234-5678です",
+    "lang": "ja",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "Japanese phone with +81 international prefix; patterns only match domestic format starting with 0, so this may not be caught",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_credit_card_with_spaces",
+    "input": "Card: 4532 0151 1283 0366",
+    "lang": "en",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "Credit card number with spaces between groups (passes Luhn: 4532015112830366)",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_german_tax_id_edge",
+    "input": "Ihre Steuer-ID lautet 02 345 678 901 und ist vertraulich",
+    "lang": "de",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "11-digit number starting with 0; German tax ID validator rejects leading zero",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_nino_valid",
+    "input": "Your National Insurance number is AB 12 34 56 C",
+    "lang": "uk",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "Valid UK NINO with spaces",
+    "category": "adversarial"
+  },
+  {
+    "id": "adv_many_near_miss_numbers",
+    "input": "Values: 123456789, 12345678901234, 1234-5678-9012-3456, 000-00-0000, 99999999",
+    "lang": "en",
+    "should_find_pii": true,
+    "expected_pii_count": null,
+    "description": "Collection of digit sequences that almost match PII patterns but fail validation (wrong length, SSN all zeros, non-Luhn card) [KNOWN REGEX FP: Contains substring matching phone pattern]",
+    "category": "adversarial"
+  },
+  {
+    "id": "edge_only_pii_no_context",
+    "input": "123-45-6789",
+    "lang": "en",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "SSN as the entire input with zero surrounding context",
+    "category": "edge_case"
+  },
+  {
+    "id": "edge_consecutive_different_pii",
+    "input": "SSN:123-45-6789Phone:(212)555-0100Email:test@x.com",
+    "lang": "en",
+    "should_find_pii": true,
+    "expected_pii_count": 3,
+    "description": "Three different PII types concatenated with labels but no whitespace separators",
+    "category": "edge_case"
+  },
+  {
+    "id": "fp_hex_looks_like_passport",
+    "input": "Commit hash A12345678 merged into main",
+    "lang": "zh",
+    "should_find_pii": true,
+    "expected_pii_count": null,
+    "description": "Git-like commit hash matching Chinese passport pattern (letter + 8 digits) [KNOWN REGEX FP: uppercase letter+8digits matches passport]",
+    "category": "false_positive"
+  },
+  {
+    "id": "adv_uk_nhs_vs_phone",
+    "input": "Reference number is 1234561234 for your record",
+    "lang": "uk",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "10-digit number matching NHS number pattern; tests whether NHS pattern fires on plain reference numbers",
+    "category": "adversarial"
+  }
+]
