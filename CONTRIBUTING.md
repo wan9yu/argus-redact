@@ -86,6 +86,10 @@ src/argus_redact/
 ├── lang/           # Language packs
 │   ├── zh/ en/ ja/ ko/ de/ uk/ in_/
 │   └── shared/
+├── specs/          # PII type registry (single source of truth)
+│   ├── registry.py     # PIITypeDef + global registry
+│   ├── zh.py           # Chinese PII type definitions
+│   └── fakers_zh.py    # Fake data generators (canonical data pools)
 ├── integrations/   # Framework adapters
 └── cli/            # CLI commands
 ```

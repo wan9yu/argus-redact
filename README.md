@@ -63,7 +63,7 @@ Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张�
 | Medium text (770 chars) | 0.28ms | 4.29ms |
 | restore() | <0.01ms | 0.04ms |
 
-[ai4privacy benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-300k): Email P=92% R=94%. Three-layer F1=39.3%. [Benchmarks →](tests/benchmark/README.md) | [Performance →](docs/performance.md)
+[ai4privacy benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-400k): Email P=95% R=94%. Chinese PII F1=89%. [Benchmarks →](tests/benchmark/README.md) | [Performance →](docs/performance.md)
 
 ## North Star — Six Dimensions of PII
 

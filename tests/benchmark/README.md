@@ -59,7 +59,7 @@ tests/benchmark/
 ├── report.py                # Terminal table + JSON snapshots
 ├── adapters/
 │   ├── base.py              # DatasetAdapter ABC
-│   ├── ai4privacy.py        # ai4privacy/pii-masking-300k
+│   ├── ai4privacy.py        # ai4privacy/pii-masking-400k
 │   ├── nemotron.py          # nvidia/Nemotron-PII
 │   ├── wikiann.py           # unimelb-nlp/wikiann (PAN-X)
 │   ├── gretel_finance.py    # gretelai/synthetic_pii_finance_multilingual

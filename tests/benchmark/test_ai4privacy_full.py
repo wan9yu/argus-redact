@@ -1,4 +1,4 @@
-"""Full three-layer benchmark against ai4privacy/pii-masking-300k.
+"""Full three-layer benchmark against ai4privacy/pii-masking-400k.
 
 Compares: fast (regex) vs ner (regex+NER) vs auto (regex+NER+Ollama)
 Run with: pytest tests/benchmark/test_ai4privacy_full.py -v -s -m slow --timeout=600
@@ -38,7 +38,7 @@ def _run_benchmark(mode, n_examples=200):
     from datasets import load_dataset
 
     ds = load_dataset(
-        "ai4privacy/pii-masking-300k",
+        "ai4privacy/pii-masking-400k",
         split="train",
         streaming=True,
     )

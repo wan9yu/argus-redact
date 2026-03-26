@@ -392,3 +392,45 @@ When `seed=None` (default, production):
 - Pseudonym codes use `secrets.randbelow()` — cryptographically random
 - Each `redact()` call is unique and unpredictable
 - This is what makes per-message keys unlinkable
+
+---
+
+## PII Type Registry (`specs/`)
+
+All PII types are defined in a central registry (`specs/`). Each `PIITypeDef` is the **single source of truth** for a PII type — structure, validation, context, replacement strategy, and evidence.
+
+```
+PIITypeDef (specs/zh.py)
+    │
+    ├── to_patterns()   → regex patterns for match_patterns()
+    ├── to_fixtures()   → test case entries from examples/counterexamples
+    ├── faker()         → generate fake values for smoke tests
+    │
+    ├── structure       — format, length, charset, segment descriptions
+    ├── validation      — checksum algorithm + validator function
+    ├── context         — prefix/suffix words, allowed separators
+    ├── action          — replacement strategy, label, mask rules
+    └── evidence        — examples, counterexamples, authoritative source
+```
+
+### Why this matters
+
+Before the registry, knowledge about each PII type was scattered across patterns, generators, fixtures, and replacer config. Changing one required manually updating the others. Now:
+
+- **Change a separator** → `to_patterns()` reflects it, faker generates it, fixtures test it
+- **Add a context word** → the person name pattern picks it up
+- **Add a new PII type** → one `register()` call, everything derives from it
+
+### Consistency guarantees
+
+The test suite verifies that specs stay in sync with the runtime:
+
+| Test | What it checks |
+|------|---------------|
+| `test_every_pattern_type_has_a_spec` | No pattern type without a spec |
+| `test_spec_label_matches_pattern_label` | Spec and pattern labels agree |
+| `test_spec_strategy_matches_replacer_default` | Spec and replacer strategies agree |
+| `test_examples_should_match_patterns` | Spec examples are detected by patterns |
+| `test_counterexamples_should_not_match` | Spec counterexamples are rejected |
+| `test_faker_output_should_match_own_patterns` | Faker output is detected by patterns |
+| `test_build_patterns_replaces_hand_written` | `build_patterns()` is identical to hand-written `PATTERNS` |

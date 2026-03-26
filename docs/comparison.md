@@ -36,9 +36,9 @@ redacted, key = bridge.redact("John Smith called 555-123-4567", language="en")
 restored = bridge.restore(llm_output, key)
 ```
 
-## Benchmark: ai4privacy/pii-masking-300k
+## Benchmark: ai4privacy/pii-masking-400k
 
-Tested on the [ai4privacy PII benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-300k) (English, 200 examples):
+Tested on the [ai4privacy PII benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-400k) (English, 200 examples):
 
 | Mode | Precision | Recall | F1 | Speed |
 |------|-----------|--------|-----|-------|

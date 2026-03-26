@@ -1,4 +1,4 @@
-"""Benchmark against ai4privacy/pii-masking-300k dataset.
+"""Benchmark against ai4privacy/pii-masking-400k dataset.
 
 Run with: pytest tests/benchmark/test_ai4privacy.py -v -s --timeout=300
 Requires: pip install datasets
@@ -45,7 +45,7 @@ def benchmark_results():
     patterns = EN + DE + UK + IN + SHARED
 
     ds = load_dataset(
-        "ai4privacy/pii-masking-300k",
+        "ai4privacy/pii-masking-400k",
         split="train",
         streaming=True,
     )
@@ -111,7 +111,7 @@ def benchmark_results():
 class TestAi4PrivacyBenchmark:
     def test_should_report_results(self, benchmark_results):
         r = benchmark_results
-        print(f"\n=== ai4privacy/pii-masking-300k (first {r['n_examples']} examples) ===")
+        print(f"\n=== ai4privacy/pii-masking-400k (first {r['n_examples']} examples) ===")
         print(f"  Precision: {r['precision']:.2%}")
         print(f"  Recall:    {r['recall']:.2%}")
         print(f"  F1:        {r['f1']:.2%}")

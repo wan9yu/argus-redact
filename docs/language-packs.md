@@ -288,7 +288,7 @@ assert "三菱商事" not in redacted3
 
 ### Benchmark format
 
-If you have benchmark data, put it in `tests/benchmarks/ja/`:
+If you have benchmark data, put it in `tests/benchmark/`:
 
 ```json
 [
