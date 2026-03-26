@@ -1,10 +1,10 @@
-"""CLI entry point: python -m benchmarks [dataset] [options]
+"""CLI entry point: python -m tests.benchmark [dataset] [options]
 
 Examples:
-    python -m benchmarks ai4privacy --lang en --mode fast --limit 500
-    python -m benchmarks ai4privacy --mode fast,ner --limit 200
-    python -m benchmarks all --mode fast --limit 1000
-    python -m benchmarks list
+    python -m tests.benchmark ai4privacy --lang en --mode fast --limit 500
+    python -m tests.benchmark ai4privacy --mode fast,ner --limit 200
+    python -m tests.benchmark all --mode fast --limit 1000
+    python -m tests.benchmark list
 """
 
 from __future__ import annotations

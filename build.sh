@@ -27,9 +27,9 @@ case "$MODE" in
         LANG="${2:-}"
         LIMIT="${3:-1000}"
         if [ -n "$LANG" ]; then
-            python -m benchmarks all --mode fast --lang "$LANG" --limit "$LIMIT" --save
+            python -m tests.benchmark all --mode fast --lang "$LANG" --limit "$LIMIT" --save
         else
-            python -m benchmarks all --mode fast --limit "$LIMIT" --save
+            python -m tests.benchmark all --mode fast --limit "$LIMIT" --save
         fi
         echo ""
         echo "✅ benchmark complete"

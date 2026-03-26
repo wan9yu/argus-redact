@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 
-from benchmarks.model import Sample
+from tests.benchmark.model import Sample
 
 
 class DatasetAdapter(ABC):

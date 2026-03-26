@@ -41,6 +41,17 @@ Add realistic test cases to `tests/fixtures/realistic_scenarios.json`. Each case
 - Clear description
 - Expected PII values
 
+### Add a Benchmark Dataset
+
+We evaluate against public PII datasets via the `tests/benchmark/` framework. Adding a new dataset:
+
+1. Create `tests/benchmark/adapters/your_dataset.py`
+2. Implement `DatasetAdapter.load()` → normalize to `Sample(text, lang, entities)`
+3. Add `@register` decorator, import in `adapters/__init__.py`
+4. Run: `python -m tests.benchmark your_dataset --limit 100`
+
+See [Benchmarks](tests/benchmark/README.md) for details and existing adapters.
+
 ### Add a Framework Integration
 
 We have LangChain, LlamaIndex, FastAPI, Presidio, MCP. Missing:

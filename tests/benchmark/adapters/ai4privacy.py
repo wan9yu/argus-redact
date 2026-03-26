@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from benchmarks.model import Entity, Sample
+from tests.benchmark.model import Entity, Sample
 
 from . import register
 from .base import DatasetAdapter

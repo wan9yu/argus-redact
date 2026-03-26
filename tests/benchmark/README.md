@@ -26,19 +26,19 @@ Most PII tools only benchmark against English regex patterns. We evaluate across
 pip install datasets  # one-time dependency
 
 # List available datasets
-python -m benchmarks list
+python -m tests.benchmark list
 
 # Run a single dataset
-python -m benchmarks ai4privacy --lang en --mode fast --limit 500
+python -m tests.benchmark ai4privacy --lang en --mode fast --limit 500
 
 # Compare regex vs NER
-python -m benchmarks ai4privacy --mode fast,ner --limit 200
+python -m tests.benchmark ai4privacy --mode fast,ner --limit 200
 
 # Run all datasets
-python -m benchmarks all --mode fast --limit 1000
+python -m tests.benchmark all --mode fast --limit 1000
 
 # Save results as JSON snapshots
-python -m benchmarks nemotron --mode fast --limit 1000 --save
+python -m tests.benchmark nemotron --mode fast --limit 1000 --save
 
 # Via build.sh
 ./build.sh bench en 500
@@ -47,8 +47,9 @@ python -m benchmarks nemotron --mode fast --limit 1000 --save
 ## Architecture
 
 ```
-benchmarks/
-├── __main__.py              # CLI entry point
+tests/benchmark/
+├── README.md
+├── __main__.py              # CLI: python -m tests.benchmark
 ├── model.py                 # Sample, Entity, Result, TypeMetrics
 ├── evaluator.py             # Unified evaluation engine
 ├── report.py                # Terminal table + JSON snapshots
@@ -60,7 +61,13 @@ benchmarks/
 │   ├── gretel_finance.py    # gretelai/synthetic_pii_finance_multilingual
 │   └── conll2003.py         # eriktks/conll2003
 ├── data/                    # Cached downloads (.gitignore'd)
-└── results/                 # JSON result snapshots (git-tracked)
+├── results/                 # JSON result snapshots (git-tracked)
+├── test_benchmark.py        # Hand-labeled zh/en precision/recall
+├── test_ai4privacy.py       # Regex-only ai4privacy evaluation
+├── test_ai4privacy_full.py  # Three-layer comparison
+├── test_prvl.py             # PRvL three-axis benchmark
+├── test_performance.py      # Latency and throughput
+└── test_concurrency.py      # Thread-safe concurrent redaction
 ```
 
 ### Adding a new dataset
@@ -93,7 +100,7 @@ Then import it in `adapters/__init__.py`. Done — CLI, evaluator, and reports a
 - **span** — compare `(start, end, type)` with character tolerance. Better for NER evaluation where boundaries may differ slightly.
 
 ```bash
-python -m benchmarks wikiann --match span --lang zh --limit 500
+python -m tests.benchmark wikiann --match span --lang zh --limit 500
 ```
 
 ## Our approach: three-layer evaluation
@@ -107,3 +114,22 @@ Layer 3 (semantic): context-dependent PII            — catches what patterns m
 ```
 
 Running `--mode fast` measures Layer 1 only. Running `--mode ner` measures Layers 1+2. The delta between them shows exactly what NER adds. This per-layer breakdown helps us focus improvement efforts where they matter most.
+
+## Existing benchmark tests
+
+Besides the dataset framework above, `tests/benchmark/` contains targeted benchmark tests:
+
+| Test file | What it measures |
+|-----------|-----------------|
+| `test_benchmark.py` | Precision/recall against hand-labeled zh/en fixtures |
+| `test_ai4privacy.py` | Regex-only evaluation on ai4privacy (streaming, 1K samples) |
+| `test_ai4privacy_full.py` | Three-layer comparison (fast vs ner vs auto) on ai4privacy |
+| `test_prvl.py` | PRvL three-axis score: Privacy, Reversibility, Language preservation |
+| `test_performance.py` | Latency and throughput (short/medium/long text, batch, multi-lang) |
+| `test_concurrency.py` | Thread-safe concurrent redaction |
+
+Run all: `pytest tests/benchmark/ -v -s -p no:recording`
+
+## Results
+
+Results from `python -m tests.benchmark ... --save` are stored as JSON in `tests/benchmark/results/`. Each snapshot records dataset, mode, language, sample count, per-type metrics, and timestamp for regression tracking.

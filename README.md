@@ -63,7 +63,7 @@ Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张�
 | Medium text (770 chars) | 0.28ms | 4.29ms |
 | restore() | <0.01ms | 0.04ms |
 
-[ai4privacy benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-300k): Email P=92% R=94%. Three-layer F1=39.3%. [Details →](docs/performance.md)
+[ai4privacy benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-300k): Email P=92% R=94%. Three-layer F1=39.3%. [Benchmarks →](tests/benchmark/README.md) | [Performance →](docs/performance.md)
 
 ## Integrations
 
@@ -94,6 +94,7 @@ PII never leaves your device. Per-message keys prevent cross-request profiling. 
 | [Architecture](docs/architecture.md) | Three-layer engine, pure/impure separation |
 | [Language Packs](docs/language-packs.md) | Adding new languages |
 | [Security Model](docs/security-model.md) | Threat model, compliance, per-message keys |
+| [Benchmarks](tests/benchmark/README.md) | Evaluation against 5 public PII datasets |
 | [Performance](docs/performance.md) | Latency, throughput, benchmark results |
 
 ## Contributing

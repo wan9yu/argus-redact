@@ -27,6 +27,7 @@ Everything else is optional.
 | [Python API](api-reference.md) | All parameters, return types, streaming, structured data |
 | [CLI Reference](cli-reference.md) | Commands, flags, serve, setup, MCP server |
 | [Performance](performance.md) | Latency, throughput, benchmark results |
+| [Benchmarks](../tests/benchmark/README.md) | Evaluation against 5 public PII datasets, three-layer methodology |
 | [Comparison](comparison.md) | vs Presidio, Tonic Textual, anonLLM, ai4privacy benchmark |
 
 ## Integration

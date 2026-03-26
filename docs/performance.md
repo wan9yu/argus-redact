@@ -108,6 +108,19 @@ Minimum viable: **~5MB** (regex only, `mode="fast"`).
 
 Full stack: **~1.5GB** (Chinese NER + Layer 3 LLM).
 
+## Benchmark Suite
+
+We evaluate detection quality against 5 public PII datasets. Run benchmarks with:
+
+```bash
+pip install datasets
+python -m tests.benchmark all --mode fast --limit 1000     # all datasets, regex only
+python -m tests.benchmark ai4privacy --mode fast,ner        # compare modes
+python -m tests.benchmark wikiann --lang zh --limit 500     # Chinese NER evaluation
+```
+
+Results are saved as JSON snapshots for regression tracking. See [Benchmarks](../tests/benchmark/README.md) for full documentation.
+
 ## Implementation Language Strategy
 
 v0.1 is Python. Performance-critical paths are candidates for Rust rewrite (via PyO3):

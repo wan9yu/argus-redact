@@ -50,3 +50,19 @@ Tested on the [ai4privacy PII benchmark](https://huggingface.co/datasets/ai4priv
 **Email detection: P=92% R=94%**
 
 > argus-redact is the only tool in this comparison that offers reversible PII encryption with per-message keys. Other tools achieve higher recall by permanently destroying PII.
+
+## Full benchmark suite
+
+We evaluate against 5 public datasets across multiple languages and PII types. See [Benchmarks](../tests/benchmark/README.md) for details.
+
+```bash
+python -m tests.benchmark all --mode fast,ner --limit 1000
+```
+
+| Dataset | Samples | Languages | Focus |
+|---------|---------|-----------|-------|
+| ai4privacy | 300K+ | en, de, fr, es, it, nl | General PII |
+| nemotron | 100K | en | 55+ PII/PHI types |
+| wikiann | 282 langs | zh, en, ja, ko, de, uk | Multilingual NER |
+| gretel_finance | 56K | en, de, fr, es, it, nl, sv | Financial docs |
+| conll2003 | 20K | en | Classic NER baseline |
