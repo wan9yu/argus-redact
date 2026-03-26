@@ -32,13 +32,13 @@ argus-redact is the only tool that combines PII detection with **reversible encr
 | passport | 100.0% | 100.0% | 100.0% | |
 | phone | 98.1% | 100.0% | 99.1% | |
 | address | 91.7% | 88.5% | 90.0% | Complex multi-part matching |
+| person | 100.0% | 48.9% | 65.7% | Surname + context heuristic (Layer 1) |
 | bank_card | 100.0% | 8.4% | 15.6% | Low recall: Luhn validation strict |
-| person | — | 0.0% | — | Requires NER (Layer 2) |
-| **Overall** | **97.9%** | **60.3%** | **74.6%** | |
+| **Overall** | **98.4%** | **76.8%** | **86.3%** | |
 
 **Presidio:** Not applicable — no Chinese language support.
 
-**Key takeaway:** On structured Chinese PII (phone, ID, email, passport, license plate), argus-redact achieves **100% precision and 100% recall**. The overall recall gap is due to person names (requires NER) and bank cards (strict checksum filtering).
+**Key takeaway:** On structured Chinese PII (phone, ID, email, passport, license plate), argus-redact achieves **100% precision and 100% recall**. Person names are detected via surname-prefix heuristic at 100% precision / 49% recall — the remaining 51% are names without context clues (NER adds further coverage). Bank card recall is low due to strict Luhn checksum filtering.
 
 ---
 
@@ -146,14 +146,15 @@ argus-redact in `fast` mode is **~1000x faster** than Presidio for regex-detecta
 ## 7. Limitations & Roadmap
 
 **Current limitations:**
-- Person name detection relies on NER models (Layer 2) — regex can't catch names
+- Chinese person name detection (Layer 1 surname heuristic) covers ~49% of names — the rest lack context clues and need NER
 - Bank card recall is low due to strict Luhn validation
 - English address detection needs improvement
 - HanLP (Chinese NER) requires upgrade for current environment
 
 **Planned improvements:**
-- Improve English/European address patterns
+- Expand surname heuristic context words to cover more scenarios
 - Add bank card BIN-prefix matching to boost card recall
+- Improve English/European address patterns
 - Fine-tune name detection for Kaggle-style educational text
 - Expand pii-bench-zh to 10K+ samples with more diverse templates
 
