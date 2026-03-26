@@ -39,8 +39,21 @@ class PIITypeDef:
     counterexamples: tuple[str, ...] = ()           # should NOT match
     source: str = ""                                # authoritative reference
 
+    # ── Pattern generation ──
+    _patterns: tuple[dict, ...] = ()  # pre-built pattern dicts (override auto-generation)
+
     # ── Description ──
     description: str = ""
+
+    def to_patterns(self) -> list[dict]:
+        """Return pattern dict(s) for use with match_patterns().
+
+        If _patterns is set, returns those directly.
+        Otherwise, returns an empty list (type needs NER or manual patterns).
+        """
+        if self._patterns:
+            return list(self._patterns)
+        return []
 
 
 # ── Global registry ──

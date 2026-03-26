@@ -1,6 +1,16 @@
-"""Chinese PII type definitions."""
+"""Chinese PII type definitions.
 
-from .registry import PIITypeDef, register
+Each register() call defines a PII type AND attaches its regex pattern(s)
+via the _patterns field. build_patterns() collects all of them into a single
+list that can replace the hand-written PATTERNS in lang/zh/patterns.py.
+"""
+
+from argus_redact.lang.zh.patterns import (
+    _SURNAMES,
+    _validate_bank_card,
+    _validate_id_number,
+)
+from .registry import PIITypeDef, register, list_types
 
 # ── Phone ──
 
@@ -27,10 +37,17 @@ register(PIITypeDef(
         "+8613812345678",
     ),
     counterexamples=(
-        "12012345678",   # prefix 12 invalid
-        "1381234567",    # 10 digits
-        "138123456789",  # 12 digits
+        "12012345678",
+        "1381234567",
+        "138123456789",
     ),
+    _patterns=({
+        "type": "phone",
+        "label": "[手机号已脱敏]",
+        "pattern": r"(?:\+86)?1[3-9]\d(?:[\s-]?\d){8}(?!\d)",
+        "check_context": True,
+        "description": "Chinese mobile phone number (with optional spaces/dashes)",
+    },),
     source="工信部《电信网编号计划》(2017)",
     description="Chinese mobile phone number",
 ))
@@ -57,6 +74,12 @@ register(PIITypeDef(
         "075512345678",
     ),
     counterexamples=(),
+    _patterns=({
+        "type": "phone",
+        "label": "[电话号已脱敏]",
+        "pattern": r"0[1-9]\d{1,2}-?\d{7,8}(?!\d)",
+        "description": "Chinese landline phone number",
+    },),
     source="工信部《电信网编号计划》(2017)",
     description="Chinese landline phone number",
 ))
@@ -76,6 +99,7 @@ register(PIITypeDef(
         "check": "1 char — MOD 11-2 checksum, 0-9 or X",
     },
     checksum="MOD 11-2",
+    validate=_validate_id_number,
     prefixes=("身份证", "证件号", "身份证号", "身份证号码", "证件号码"),
     separators=("", " "),
     strategy="remove",
@@ -86,10 +110,21 @@ register(PIITypeDef(
         "110101 19900307 4610",
     ),
     counterexamples=(
-        "110101199003071235",  # checksum wrong
-        "110101199013074610",  # month 13
-        "000000199003074610",  # area 000000
+        "110101199003071235",
+        "110101199013074610",
+        "000000199003074610",
     ),
+    _patterns=({
+        "type": "id_number",
+        "label": "[身份证号已脱敏]",
+        "pattern": (
+            r"(?<!\d)[1-9]\d{5}\s?(?:19|20)\d{2}"
+            r"(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])"
+            r"\s?\d{3}[\dXx](?!\d)"
+        ),
+        "validate": _validate_id_number,
+        "description": "Chinese 18-digit national ID (MOD 11-2, optional spaces)",
+    },),
     source="GB 11643-1999《公民身份号码》",
     description="Chinese 18-digit national ID",
 ))
@@ -108,19 +143,28 @@ register(PIITypeDef(
         "check": "1 digit — Luhn checksum (not always enforced by all issuers)",
     },
     checksum="Luhn (or BIN prefix)",
+    validate=_validate_bank_card,
     prefixes=("银行卡", "卡号", "银行卡号", "转账", "打钱"),
     separators=("", " "),
     strategy="mask",
     label="[银行卡号已脱敏]",
     mask_rule={"visible_prefix": 4, "visible_suffix": 4},
     examples=(
-        "6217001234567890",   # CCB BIN
-        "6222021234567890",   # ICBC BIN
-        "4111111111111111",   # Visa Luhn-valid
+        "6217001234567890",
+        "6222021234567890",
+        "4111111111111111",
     ),
     counterexamples=(
-        "1234567890123456",   # no known BIN, Luhn fails
+        "1234567890123456",
     ),
+    _patterns=({
+        "type": "bank_card",
+        "label": "[银行卡号已脱敏]",
+        "pattern": r"(?<!\d)[3-6]\d{15,18}(?!\d)",
+        "validate": _validate_bank_card,
+        "check_context": True,
+        "description": "Bank card number (16-19 digits, Luhn or BIN prefix)",
+    },),
     source="ISO/IEC 7812, 中国银联BIN分配表",
     description="Chinese bank card number",
 ))
@@ -146,6 +190,12 @@ register(PIITypeDef(
         "G87654321",
     ),
     counterexamples=(),
+    _patterns=({
+        "type": "passport",
+        "label": "[护照号已脱敏]",
+        "pattern": r"(?<![A-Za-z0-9])[A-Z]\d{8}(?!\d)",
+        "description": "Chinese passport number",
+    },),
     source="中华人民共和国护照法",
     description="Chinese passport number",
 ))
@@ -171,9 +221,20 @@ register(PIITypeDef(
     examples=(
         "京A12345",
         "粤B·12345",
-        "沪A12345F",  # new energy
+        "沪A12345F",
     ),
     counterexamples=(),
+    _patterns=({
+        "type": "license_plate",
+        "label": "[车牌号已脱敏]",
+        "pattern": (
+            r"[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁]"
+            r"[A-Z]"
+            r"[·.]?"
+            r"[A-Z0-9]{5,6}"
+        ),
+        "description": "Chinese license plate (normal + new energy)",
+    },),
     source="GA 36-2018《中华人民共和国机动车号牌》",
     description="Chinese license plate",
 ))
@@ -200,11 +261,52 @@ register(PIITypeDef(
     examples=(
         "北京市朝阳区建国路100号",
         "广东省深圳市南山区科技路1号",
-        "朝阳建国路100号",          # informal, no city prefix
+        "朝阳建国路100号",
     ),
     counterexamples=(
-        "北京",           # city name alone
-        "今天天气不错",    # plain text
+        "北京",
+        "今天天气不错",
+    ),
+    _patterns=(
+        {
+            "type": "address",
+            "label": "[地址已脱敏]",
+            "pattern": (
+                r"(?:"
+                r"(?:(?:河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|"
+                r"河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海|台湾)省|"
+                r"(?:内蒙古|广西|西藏|宁夏|新疆)(?:自治区)?)"
+                r"[\u4e00-\u9fff]{2,6}(?:市|州)"
+                r"|"
+                r"(?:(?<![一-龥])(?:北京市|天津市|上海市|重庆市|[\u4e00-\u9fff]{2,5}(?:市|州)))"
+                r")"
+                r"[\u4e00-\u9fff]{1,8}(?:区|县|市|旗|新区)"
+                r"[\u4e00-\u9fff]{1,20}(?:路|街|道|巷|里|弄|村)"
+                r"(?:\d{1,5}(?:号|弄))?"
+                r"(?:\d{1,3}(?:栋|幢|楼|座))?"
+                r"(?:\d{1,4}(?:室|房))?"
+            ),
+            "description": "Chinese structured address (city+district+street+number)",
+        },
+        {
+            "type": "address",
+            "label": "[地址已脱敏]",
+            "pattern": (
+                r"(?:朝阳|海淀|东城|西城|丰台|通州|大兴|昌平|顺义|房山|"
+                r"浦东|黄浦|徐汇|静安|长宁|虹口|杨浦|闵行|宝山|嘉定|"
+                r"天河|越秀|海珠|白云|番禺|荔湾|黄埔|花都|增城|从化|"
+                r"南山|福田|罗湖|宝安|龙岗|龙华|盐田|坪山|光明|"
+                r"西湖|上城|拱墅|滨江|萧山|余杭|临平|钱塘|富阳|"
+                r"武侯|锦江|青羊|金牛|成华|龙泉驿|新都|温江|双流|"
+                r"鼓楼|玄武|建邺|秦淮|栖霞|江宁|雨花台|浦口|六合|"
+                r"武昌|洪山|江汉|汉阳|青山|江岸|硚口|东西湖|蔡甸)"
+                r"[\u4e00-\u9fff]{1,20}(?:路|街|道|大道|大街)"
+                r"(?:\d{1,5}(?:号|弄))?"
+                r"(?:\d{1,3}(?:栋|幢|楼|座))?"
+                r"(?:\d{1,4}(?:室|房))?"
+            ),
+            "description": "Informal Chinese address (district+street, no city prefix)",
+        },
     ),
     source="GB/T 2260《中华人民共和国行政区划代码》",
     description="Chinese structured address",
@@ -238,15 +340,60 @@ register(PIITypeDef(
     strategy="pseudonym",
     label="[姓名已脱敏]",
     examples=(
-        "客户张三",        # prefix context
-        "联系人王小明",     # prefix context
-        "赵敏女士",        # suffix context
+        "客户张三",
+        "联系人王小明",
+        "赵敏女士",
     ),
     counterexamples=(
-        "黄山风景区很漂亮",  # place name
-        "华为公司发布",      # company
-        "唐朝是中国历史",    # dynasty
+        "黄山风景区很漂亮",
+        "华为公司发布",
+        "唐朝是中国历史",
+    ),
+    _patterns=(
+        {
+            "type": "person",
+            "label": "[姓名已脱敏]",
+            "group": "name",
+            "pattern": (
+                r"(?:客户|患者|用户|旅客|车主|联系人|收件人|寄件人|"
+                r"登记人|开户人|申请人|报案人|委托人|当事人|嫌疑人|"
+                r"负责人|经办人|签收人|担保人|受益人|借款人|"
+                r"持卡人|被保险人|投保人|参会人员|"
+                r"主治医生|医生|护士|教授|老板|同事|朋友|同学|"
+                r"姓名|乘客|住户|业主|租户|房东)"
+                r"[：:\s]?"
+                r"(?P<name>[" + _SURNAMES + r"][\u4e00-\u9fff]{1,2}"
+                r"(?<!的)(?<!了)(?<!在)(?<!是)(?<!有)(?<!和)(?<!与)"
+                r"(?<!把)(?<!被)(?<!让)(?<!从)(?<!到)(?<!给)(?<!向)"
+                r"(?<!因)(?<!为)(?<!而)(?<!又)(?<!也)(?<!都)(?<!就)"
+                r"(?<!才)(?<!会)(?<!能)(?<!要)(?<!可)(?<!将)(?<!已)"
+                r"(?<!完)(?<!开)(?<!做))"
+            ),
+            "description": "Chinese person name after context prefix",
+        },
+        {
+            "type": "person",
+            "label": "[姓名已脱敏]",
+            "pattern": (
+                r"[" + _SURNAMES + r"][\u4e00-\u9fff]{1,2}"
+                r"(?=(?:先生|女士|老师|教授|医生|同学|师傅|经理|总监|主任|院长|局长|部长|校长|董事长))"
+            ),
+            "description": "Chinese person name before honorific suffix",
+        },
     ),
     source="公安部全国姓名统计, 百家姓",
     description="Chinese person name (surname + context heuristic)",
 ))
+
+
+# ── build_patterns() ──
+
+def build_patterns() -> list[dict]:
+    """Build the complete pattern list for Chinese from registered specs.
+
+    This is a drop-in replacement for lang/zh/patterns.py PATTERNS.
+    """
+    patterns = []
+    for typedef in list_types("zh"):
+        patterns.extend(typedef.to_patterns())
+    return patterns
