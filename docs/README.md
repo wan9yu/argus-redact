@@ -27,8 +27,9 @@ Everything else is optional.
 | [Python API](api-reference.md) | All parameters, return types, streaming, structured data |
 | [CLI Reference](cli-reference.md) | Commands, flags, serve, setup, MCP server |
 | [Performance](performance.md) | Latency, throughput, benchmark results |
-| [Benchmarks](../tests/benchmark/README.md) | Evaluation against 8 public PII datasets, three-layer methodology |
-| [Comparison](comparison.md) | vs Presidio, Tonic Textual, anonLLM, ai4privacy benchmark |
+| [Benchmark Report](benchmark-report.md) | Full comparison: argus-redact vs Presidio across 3 datasets |
+| [Benchmarks](../tests/benchmark/README.md) | Evaluation framework with 8 public PII datasets |
+| [Comparison](comparison.md) | vs Presidio, Tonic Textual, anonLLM feature matrix |
 
 ## Integration
 
