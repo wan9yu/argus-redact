@@ -27,3 +27,7 @@ def list_adapters() -> list[str]:
 
 # Import adapters so they self-register
 from . import ai4privacy as _ai4privacy  # noqa: E402, F401
+from . import conll2003 as _conll2003  # noqa: E402, F401
+from . import gretel_finance as _gretel_finance  # noqa: E402, F401
+from . import nemotron as _nemotron  # noqa: E402, F401
+from . import wikiann as _wikiann  # noqa: E402, F401
