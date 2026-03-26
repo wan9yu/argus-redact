@@ -65,6 +65,23 @@ Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张�
 
 [ai4privacy benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-300k): Email P=92% R=94%. Three-layer F1=39.3%. [Benchmarks →](tests/benchmark/README.md) | [Performance →](docs/performance.md)
 
+## North Star — Six Dimensions of PII
+
+We evaluate ourselves on six core capabilities. This scorecard evolves with each release.
+
+| Dimension | What it measures | Current (v0.1.7) | Target |
+|-----------|-----------------|:-----------------:|:------:|
+| **Detection** | Find PII without miss or false alarm | Structured PII P=98% R=60%; person names need NER | P>95% R>90% |
+| **Semantic Preservation** | Redacted text stays meaningful for LLM | Pseudonym replacement keeps context readable | — (achieved) |
+| **Reversibility** | Restore original from key, per-message isolation | Per-message random key, full restore | — (achieved) |
+| **Security** | PII never leaves device, resist correlation attacks | Fully local, fresh key per call | Add key rotation & TTL |
+| **Performance** | Fast enough for real-time pipelines | Regex 36K docs/s, NER 3 docs/s | NER >50 docs/s (Rust core) |
+| **Integration** | Drop into any stack in minutes | 2-line API, 6 frameworks, MCP, Docker | Dify, CrewAI, Haystack |
+
+**Our moat is Semantic Preservation + Reversibility.** Other tools delete PII permanently — we encrypt it and give it back. In the LLM era, this is the difference between a privacy tool and a privacy-aware pipeline.
+
+[Full benchmark report →](docs/benchmark-report.md)
+
 ## Integrations
 
 | | Install |
