@@ -22,6 +22,19 @@ case "$MODE" in
         echo "=== test (semantic only) ==="
         pytest -p no:recording -q -m "semantic"
         ;;
+    bench)
+        echo "=== benchmark ==="
+        LANG="${2:-}"
+        LIMIT="${3:-1000}"
+        if [ -n "$LANG" ]; then
+            python -m benchmarks all --mode fast --lang "$LANG" --limit "$LIMIT" --save
+        else
+            python -m benchmarks all --mode fast --limit "$LIMIT" --save
+        fi
+        echo ""
+        echo "✅ benchmark complete"
+        exit 0
+        ;;
     deploy)
         echo "=== test (fast) ==="
         pytest -p no:recording -q -m "not ner and not semantic and not slow"

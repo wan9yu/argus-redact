@@ -10,4 +10,5 @@ build/
 coverage.xml
 htmlcov/
 marketing/
+benchmarks/data/
 .claude/
