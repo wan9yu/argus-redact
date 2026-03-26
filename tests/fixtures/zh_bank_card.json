@@ -21,5 +21,28 @@
     "should_match": false,
     "type": "bank_card",
     "description": "Luhn校验失败"
+  },
+  {
+    "id": "ccb_bin_no_luhn",
+    "input": "卡号6217001234567890",
+    "should_match": true,
+    "type": "bank_card",
+    "expected_text": "6217001234567890",
+    "description": "建设银行BIN前缀（621700），即使Luhn不通过也应匹配"
+  },
+  {
+    "id": "icbc_bin_no_luhn",
+    "input": "工行卡6222021234567890",
+    "should_match": true,
+    "type": "bank_card",
+    "expected_text": "6222021234567890",
+    "description": "工商银行BIN前缀（622202）"
+  },
+  {
+    "id": "random_16_digits_no_bin",
+    "input": "1234567890123456",
+    "should_match": false,
+    "type": "bank_card",
+    "description": "随机16位数字，无BIN前缀且Luhn不通过，不应匹配"
   }
 ]

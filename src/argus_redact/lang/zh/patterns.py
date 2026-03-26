@@ -23,7 +23,8 @@ _COMPOUND_SURNAMES = {
 
 def _validate_id_number(value: str) -> bool:
     """MOD 11-2 checksum for 18-digit Chinese national ID."""
-    value = value.upper()
+    # Strip spaces (chat-style formatting)
+    value = value.replace(" ", "").upper()
     if len(value) != 18:
         return False
     weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
@@ -33,6 +34,24 @@ def _validate_id_number(value: str) -> bool:
     except ValueError:
         return False
     return check_chars[total % 11] == value[17]
+
+
+# Known Chinese bank BIN prefixes (6 digits)
+_BANK_BINS = {
+    "621700", "621660", "621662", "621663",  # 建设银行
+    "622202", "622200", "622208", "621225",  # 工商银行
+    "622848", "622849", "620059", "621282",  # 农业银行
+    "622568", "622569", "625912", "625911",  # 中国银行
+    "622588", "622598", "621483", "622575",  # 招商银行
+    "622155", "622156", "622157", "621002",  # 交通银行
+    "622689", "622688", "621691", "622622",  # 民生银行
+    "622668", "622669", "622670", "622671",  # 中信银行
+    "622630", "622631", "622632", "622633",  # 浦发银行
+    "621283", "621285", "621286", "621484",  # 光大银行
+    "622580", "622581", "622582", "622583",  # 兴业银行
+    "622150", "622151", "622152", "622153",  # 平安银行
+    "622700", "622701", "622690", "622692",  # 邮储银行
+}
 
 
 def _validate_luhn(value: str) -> bool:
@@ -50,13 +69,25 @@ def _validate_luhn(value: str) -> bool:
     return total % 10 == 0
 
 
+def _validate_bank_card(value: str) -> bool:
+    """Validate bank card: Luhn OR known BIN prefix."""
+    digits = "".join(d for d in value if d.isdigit())
+    if len(digits) < 16:
+        return False
+    # Pass if Luhn valid
+    if _validate_luhn(value):
+        return True
+    # Fallback: accept if starts with a known Chinese bank BIN
+    return digits[:6] in _BANK_BINS
+
+
 PATTERNS = [
     {
         "type": "phone",
         "label": "[手机号已脱敏]",
-        "pattern": r"(?:\+86)?1[3-9]\d{9}(?!\d)",
+        "pattern": r"(?:\+86)?1[3-9]\d(?:[\s-]?\d){8}(?!\d)",
         "check_context": True,
-        "description": "Chinese mobile phone number",
+        "description": "Chinese mobile phone number (with optional spaces/dashes)",
     },
     {
         "type": "phone",
@@ -68,20 +99,20 @@ PATTERNS = [
         "type": "id_number",
         "label": "[身份证号已脱敏]",
         "pattern": (
-            r"(?<!\d)[1-9]\d{5}(?:19|20)\d{2}"
+            r"(?<!\d)[1-9]\d{5}\s?(?:19|20)\d{2}"
             r"(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])"
-            r"\d{3}[\dXx](?!\d)"
+            r"\s?\d{3}[\dXx](?!\d)"
         ),
         "validate": _validate_id_number,
-        "description": "Chinese 18-digit national ID (MOD 11-2 checksum)",
+        "description": "Chinese 18-digit national ID (MOD 11-2, optional spaces)",
     },
     {
         "type": "bank_card",
         "label": "[银行卡号已脱敏]",
         "pattern": r"(?<!\d)[3-6]\d{15,18}(?!\d)",
-        "validate": _validate_luhn,
+        "validate": _validate_bank_card,
         "check_context": True,
-        "description": "Bank card number (16-19 digits, Luhn checksum)",
+        "description": "Bank card number (16-19 digits, Luhn or BIN prefix)",
     },
     {
         "type": "passport",
@@ -124,6 +155,26 @@ PATTERNS = [
             r"(?:\d{1,4}(?:室|房))?"
         ),
         "description": "Chinese structured address (city+district+street+number)",
+    },
+    # Informal address: known district/area name + street (no province/city prefix)
+    {
+        "type": "address",
+        "label": "[地址已脱敏]",
+        "pattern": (
+            r"(?:朝阳|海淀|东城|西城|丰台|通州|大兴|昌平|顺义|房山|"
+            r"浦东|黄浦|徐汇|静安|长宁|虹口|杨浦|闵行|宝山|嘉定|"
+            r"天河|越秀|海珠|白云|番禺|荔湾|黄埔|花都|增城|从化|"
+            r"南山|福田|罗湖|宝安|龙岗|龙华|盐田|坪山|光明|"
+            r"西湖|上城|拱墅|滨江|萧山|余杭|临平|钱塘|富阳|"
+            r"武侯|锦江|青羊|金牛|成华|龙泉驿|新都|温江|双流|"
+            r"鼓楼|玄武|建邺|秦淮|栖霞|江宁|雨花台|浦口|六合|"
+            r"武昌|洪山|江汉|汉阳|青山|江岸|硚口|东西湖|蔡甸)"
+            r"[\u4e00-\u9fff]{1,20}(?:路|街|道|大道|大街)"
+            r"(?:\d{1,5}(?:号|弄))?"
+            r"(?:\d{1,3}(?:栋|幢|楼|座))?"
+            r"(?:\d{1,4}(?:室|房))?"
+        ),
+        "description": "Informal Chinese address (district+street, no city prefix)",
     },
     # ── Person name (surname-prefix heuristic) ──
     # Uses named group "name" so match_patterns extracts just the name, not the context.

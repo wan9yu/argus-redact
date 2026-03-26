@@ -74,16 +74,26 @@
   {
     "id": "mobile_with_spaces",
     "input": "138 1234 5678",
-    "should_match": false,
+    "should_match": true,
     "type": "phone",
-    "description": "有空格分隔，不匹配"
+    "expected_text": "138 1234 5678",
+    "description": "空格分隔手机号（聊天常见）"
   },
   {
     "id": "mobile_with_dashes",
     "input": "138-1234-5678",
-    "should_match": false,
+    "should_match": true,
     "type": "phone",
-    "description": "有短横线分隔，不匹配"
+    "expected_text": "138-1234-5678",
+    "description": "短横线分隔手机号（聊天常见）"
+  },
+  {
+    "id": "mobile_with_two_part_space",
+    "input": "138 12345678",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "138 12345678",
+    "description": "两段空格分隔"
   },
   {
     "id": "mobile_too_short",

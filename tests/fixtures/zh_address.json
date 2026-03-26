@@ -56,5 +56,29 @@
     "should_match": false,
     "type": "address",
     "description": "仅城市名不算地址"
+  },
+  {
+    "id": "informal_district_street",
+    "input": "快递寄到朝阳建国路100号",
+    "should_match": true,
+    "type": "address",
+    "expected_text": "朝阳建国路100号",
+    "description": "非正式地址（无省市前缀，仅区+路+号，聊天常见）"
+  },
+  {
+    "id": "informal_district_street_no_num",
+    "input": "地址在海淀中关村大街",
+    "should_match": true,
+    "type": "address",
+    "expected_text": "海淀中关村大街",
+    "description": "非正式地址（区+路名，无号码）"
+  },
+  {
+    "id": "informal_with_building",
+    "input": "南山深南大道100号5栋",
+    "should_match": true,
+    "type": "address",
+    "expected_text": "南山深南大道100号5栋",
+    "description": "非正式地址带栋号"
   }
 ]
