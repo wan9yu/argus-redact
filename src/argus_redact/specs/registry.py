@@ -42,6 +42,9 @@ class PIITypeDef:
     # ── Pattern generation ──
     _patterns: tuple[dict, ...] = ()  # pre-built pattern dicts (override auto-generation)
 
+    # ── Faker ──
+    faker: Callable | None = None  # (rng: random.Random) -> str
+
     # ── Description ──
     description: str = ""
 
@@ -54,6 +57,27 @@ class PIITypeDef:
         if self._patterns:
             return list(self._patterns)
         return []
+
+    def to_fixtures(self) -> list[dict]:
+        """Generate test fixture entries from examples and counterexamples."""
+        fixtures = []
+        for i, ex in enumerate(self.examples):
+            fixtures.append({
+                "id": f"{self.name}_spec_example_{i}",
+                "input": ex,
+                "should_match": True,
+                "type": self.name,
+                "description": f"Spec example for {self.lang}/{self.name}",
+            })
+        for i, cx in enumerate(self.counterexamples):
+            fixtures.append({
+                "id": f"{self.name}_spec_counter_{i}",
+                "input": cx,
+                "should_match": False,
+                "type": self.name,
+                "description": f"Spec counterexample for {self.lang}/{self.name}",
+            })
+        return fixtures
 
 
 # ── Global registry ──

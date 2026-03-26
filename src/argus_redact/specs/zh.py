@@ -10,6 +10,17 @@ from argus_redact.lang.zh.patterns import (
     _validate_bank_card,
     _validate_id_number,
 )
+from .fakers_zh import (
+    fake_address,
+    fake_bank_card,
+    fake_email,
+    fake_id_number,
+    fake_license_plate,
+    fake_passport,
+    fake_person,
+    fake_phone,
+    fake_phone_landline,
+)
 from .registry import PIITypeDef, register, list_types
 
 # ── Phone ──
@@ -48,6 +59,7 @@ register(PIITypeDef(
         "check_context": True,
         "description": "Chinese mobile phone number (with optional spaces/dashes)",
     },),
+    faker=fake_phone,
     source="工信部《电信网编号计划》(2017)",
     description="Chinese mobile phone number",
 ))
@@ -80,6 +92,7 @@ register(PIITypeDef(
         "pattern": r"0[1-9]\d{1,2}-?\d{7,8}(?!\d)",
         "description": "Chinese landline phone number",
     },),
+    faker=fake_phone_landline,
     source="工信部《电信网编号计划》(2017)",
     description="Chinese landline phone number",
 ))
@@ -125,6 +138,7 @@ register(PIITypeDef(
         "validate": _validate_id_number,
         "description": "Chinese 18-digit national ID (MOD 11-2, optional spaces)",
     },),
+    faker=fake_id_number,
     source="GB 11643-1999《公民身份号码》",
     description="Chinese 18-digit national ID",
 ))
@@ -165,6 +179,7 @@ register(PIITypeDef(
         "check_context": True,
         "description": "Bank card number (16-19 digits, Luhn or BIN prefix)",
     },),
+    faker=fake_bank_card,
     source="ISO/IEC 7812, 中国银联BIN分配表",
     description="Chinese bank card number",
 ))
@@ -196,6 +211,7 @@ register(PIITypeDef(
         "pattern": r"(?<![A-Za-z0-9])[A-Z]\d{8}(?!\d)",
         "description": "Chinese passport number",
     },),
+    faker=fake_passport,
     source="中华人民共和国护照法",
     description="Chinese passport number",
 ))
@@ -235,6 +251,7 @@ register(PIITypeDef(
         ),
         "description": "Chinese license plate (normal + new energy)",
     },),
+    faker=fake_license_plate,
     source="GA 36-2018《中华人民共和国机动车号牌》",
     description="Chinese license plate",
 ))
@@ -308,6 +325,7 @@ register(PIITypeDef(
             "description": "Informal Chinese address (district+street, no city prefix)",
         },
     ),
+    faker=fake_address,
     source="GB/T 2260《中华人民共和国行政区划代码》",
     description="Chinese structured address",
 ))
@@ -381,6 +399,7 @@ register(PIITypeDef(
             "description": "Chinese person name before honorific suffix",
         },
     ),
+    faker=fake_person,
     source="公安部全国姓名统计, 百家姓",
     description="Chinese person name (surname + context heuristic)",
 ))
