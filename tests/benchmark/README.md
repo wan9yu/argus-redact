@@ -22,6 +22,7 @@ Most PII tools only benchmark against English regex patterns. We evaluate across
 | **kaggle_piilo** | 7K | en | names, email, phone, address, ID, URL | Real student essays (not synthetic) |
 | **n2c2_2014** | 1.3K | en | 25 PHI subtypes (names, dates, IDs, locations) | Clinical de-identification gold standard |
 | **pii_bench_zh** | 5K | zh | phone, ID, bank card, plate, address, passport, email, person | First open Chinese PII benchmark (ours) |
+| **pii_bench_zh_chat** | 3K | zh | same as above + noisy formatting | Chinese chat/IM noise stress test (ours) |
 
 ## Quick start
 

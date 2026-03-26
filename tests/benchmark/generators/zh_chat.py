@@ -17,20 +17,19 @@ import string
 import sys
 from dataclasses import dataclass
 
-# Reuse surname/name pools from zh generator
-from tests.benchmark.generators.zh import (
+# Import from canonical source (specs/fakers_zh.py)
+from argus_redact.specs.fakers_zh import (
     BANK_BINS,
     EMAIL_DOMAINS,
-    ID_AREA_CODES,
-    PLATE_PREFIXES,
     GIVEN_NAMES,
+    PLATE_PREFIXES,
     SURNAMES,
-    _gen_bank_card,
-    _gen_id_number,
-    _gen_license_plate,
-    _gen_passport,
-    _gen_phone,
-    _gen_name,
+    fake_bank_card as _gen_bank_card,
+    fake_id_number as _gen_id_number,
+    fake_license_plate as _gen_license_plate,
+    fake_passport as _gen_passport,
+    fake_person_name_only as _gen_name,
+    fake_phone as _gen_phone,
 )
 
 

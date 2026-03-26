@@ -111,7 +111,7 @@ PII never leaves your device. Per-message keys prevent cross-request profiling. 
 | [Architecture](docs/architecture.md) | Three-layer engine, pure/impure separation |
 | [Language Packs](docs/language-packs.md) | Adding new languages |
 | [Security Model](docs/security-model.md) | Threat model, compliance, per-message keys |
-| [Benchmarks](tests/benchmark/README.md) | Evaluation against 8 public PII datasets |
+| [Benchmarks](tests/benchmark/README.md) | Evaluation against 9 public PII datasets |
 | [Performance](docs/performance.md) | Latency, throughput, benchmark results |
 
 ## Contributing

@@ -110,7 +110,7 @@ Full stack: **~1.5GB** (Chinese NER + Layer 3 LLM).
 
 ## Benchmark Suite
 
-We evaluate detection quality against 8 public PII datasets. Run benchmarks with:
+We evaluate detection quality against 9 public PII datasets. Run benchmarks with:
 
 ```bash
 pip install datasets

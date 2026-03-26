@@ -28,7 +28,7 @@ Everything else is optional.
 | [CLI Reference](cli-reference.md) | Commands, flags, serve, setup, MCP server |
 | [Performance](performance.md) | Latency, throughput, benchmark results |
 | [Benchmark Report](benchmark-report.md) | Full comparison: argus-redact vs Presidio across 3 datasets |
-| [Benchmarks](../tests/benchmark/README.md) | Evaluation framework with 8 public PII datasets |
+| [Benchmarks](../tests/benchmark/README.md) | Evaluation framework with 9 public PII datasets |
 | [Comparison](comparison.md) | vs Presidio, Tonic Textual, anonLLM feature matrix |
 
 ## Integration

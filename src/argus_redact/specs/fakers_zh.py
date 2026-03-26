@@ -2,6 +2,9 @@
 
 Each function takes a random.Random instance and returns a string.
 These are attached to PIITypeDef.faker for spec-driven data generation.
+
+This module is the SINGLE SOURCE of Chinese fake data pools.
+Generators (tests/benchmark/generators/zh.py) should import from here.
 """
 
 from __future__ import annotations
@@ -9,7 +12,7 @@ from __future__ import annotations
 import random
 import string
 
-# ── Data pools ──
+# ── Data pools (canonical source — do not duplicate elsewhere) ──
 
 SURNAMES = [
     "王", "李", "张", "刘", "陈", "杨", "赵", "黄", "周", "吴",
@@ -24,29 +27,71 @@ GIVEN_NAMES = [
     "勇", "艳", "杰", "娟", "涛", "明", "超", "秀兰", "霞", "平",
     "刚", "桂英", "文", "华", "建华", "玉兰", "建国", "建军", "志强", "秀珍",
     "晓明", "子轩", "浩然", "宇轩", "梓涵", "雨桐", "欣怡", "子墨", "博文", "思远",
+    "嘉琪", "诗涵", "梦瑶", "俊杰", "天佑", "雅琴", "婷婷", "小红", "大伟", "志远",
 ]
 
 ID_AREA_CODES = [
-    "110101", "110102", "110105", "310101", "310104", "310105",
-    "440103", "440105", "440304", "330102", "330106", "320102",
-    "320104", "510104", "510105", "420102", "420103",
+    "110101", "110102", "110105", "110108",  # 北京
+    "310101", "310104", "310105", "310107",  # 上海
+    "440103", "440105", "440106", "440304",  # 广东
+    "330102", "330106", "330108", "330109",  # 浙江
+    "320102", "320104", "320105", "320106",  # 江苏
+    "510104", "510105", "510107", "510108",  # 四川
+    "420102", "420103", "420104", "420106",  # 湖北
 ]
 
 BANK_BINS = [
-    "621700", "622202", "622848", "622568", "622588",
-    "622155", "622689", "622668", "621483", "622630",
+    "621700",  # 建设银行
+    "622202",  # 工商银行
+    "622848",  # 农业银行
+    "622568",  # 中国银行
+    "622588",  # 招商银行
+    "622155",  # 交通银行
+    "622689",  # 民生银行
+    "622668",  # 中信银行
+    "621483",  # 光大银行
+    "622630",  # 浦发银行
 ]
 
 PLATE_PREFIXES = [
     "京", "沪", "粤", "浙", "苏", "鲁", "川", "豫", "鄂", "湘",
+    "闽", "皖", "赣", "辽", "吉", "黑", "陕", "渝", "津", "冀",
 ]
 
-EMAIL_DOMAINS = ["qq.com", "163.com", "126.com", "gmail.com", "foxmail.com"]
+EMAIL_DOMAINS = [
+    "qq.com", "163.com", "126.com", "sina.com", "gmail.com",
+    "outlook.com", "foxmail.com", "yeah.net", "sohu.com", "aliyun.com",
+]
 
 PINYIN_PARTS = [
     "wang", "li", "zhang", "liu", "chen", "yang", "zhao", "huang",
-    "wei", "fang", "na", "min", "jing", "qiang", "lei", "jie",
+    "zhou", "wu", "xu", "sun", "hu", "zhu", "gao", "lin", "he", "guo",
+    "wei", "fang", "na", "min", "jing", "qiang", "lei", "jie", "tao",
+    "ming", "chao", "xia", "ping", "gang", "wen", "hua", "yong",
 ]
+
+PROVINCES = [
+    ("北京市", "北京市", ["朝阳区", "海淀区", "东城区", "西城区", "丰台区", "通州区"]),
+    ("上海市", "上海市", ["浦东新区", "黄浦区", "徐汇区", "静安区", "长宁区", "虹口区"]),
+    ("广东省", "广州市", ["天河区", "越秀区", "海珠区", "白云区", "番禺区", "荔湾区"]),
+    ("广东省", "深圳市", ["南山区", "福田区", "罗湖区", "宝安区", "龙岗区", "龙华区"]),
+    ("浙江省", "杭州市", ["西湖区", "上城区", "拱墅区", "滨江区", "萧山区", "余杭区"]),
+    ("江苏省", "南京市", ["玄武区", "鼓楼区", "建邺区", "秦淮区", "栖霞区", "江宁区"]),
+    ("四川省", "成都市", ["武侯区", "锦江区", "青羊区", "金牛区", "成华区", "龙泉驿区"]),
+    ("湖北省", "武汉市", ["武昌区", "洪山区", "江汉区", "汉阳区", "青山区", "江岸区"]),
+    ("山东省", "济南市", ["历下区", "市中区", "天桥区", "槐荫区", "历城区", "长清区"]),
+    ("河南省", "郑州市", ["金水区", "中原区", "二七区", "管城区", "惠济区", "上街区"]),
+    ("福建省", "福州市", ["鼓楼区", "台江区", "仓山区", "晋安区", "马尾区", "长乐区"]),
+    ("湖南省", "长沙市", ["岳麓区", "芙蓉区", "天心区", "开福区", "雨花区", "望城区"]),
+]
+
+STREETS = [
+    "建国路", "中山路", "人民路", "解放路", "长安街", "南京路",
+    "和平路", "文化路", "科技路", "学院路", "花园路", "创业路",
+    "朝阳路", "光明路", "幸福路", "复兴路", "滨河路", "迎宾路",
+]
+
+PERSON_PREFIXES = ["客户", "用户", "患者", "联系人", "收件人"]
 
 
 # ── Faker functions ──
@@ -103,9 +148,6 @@ def fake_license_plate(rng: random.Random) -> str:
     return prefix + letter + chars
 
 
-PERSON_PREFIXES = ["客户", "用户", "患者", "联系人", "收件人"]
-
-
 def fake_person(rng: random.Random) -> str:
     """Generate name with context prefix so it matches our patterns."""
     prefix = rng.choice(PERSON_PREFIXES)
@@ -121,20 +163,8 @@ def fake_person_name_only(rng: random.Random) -> str:
     return surname + given
 
 
-PROVINCES_CITIES = [
-    ("北京市", "北京市", ["朝阳区", "海淀区", "东城区", "西城区"]),
-    ("上海市", "上海市", ["浦东新区", "黄浦区", "徐汇区", "静安区"]),
-    ("广东省", "广州市", ["天河区", "越秀区", "海珠区", "白云区"]),
-    ("广东省", "深圳市", ["南山区", "福田区", "罗湖区", "宝安区"]),
-    ("浙江省", "杭州市", ["西湖区", "上城区", "拱墅区", "滨江区"]),
-    ("江苏省", "南京市", ["玄武区", "鼓楼区", "建邺区", "秦淮区"]),
-]
-
-STREETS = ["建国路", "中山路", "人民路", "科技路", "学院路", "花园路"]
-
-
 def fake_address(rng: random.Random) -> str:
-    province, city, districts = rng.choice(PROVINCES_CITIES)
+    province, city, districts = rng.choice(PROVINCES)
     district = rng.choice(districts)
     street = rng.choice(STREETS)
     num = rng.randint(1, 999)
