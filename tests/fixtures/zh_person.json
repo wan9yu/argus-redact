@@ -1,0 +1,150 @@
+[
+  {
+    "id": "person_basic_two_char",
+    "input": "客户张三的手机号是13812345678",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "张三",
+    "description": "Common two-char name after context word 客户"
+  },
+  {
+    "id": "person_basic_three_char",
+    "input": "联系人王小明，电话13912345678",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "王小明",
+    "description": "Three-char name after context word 联系人"
+  },
+  {
+    "id": "person_patient",
+    "input": "患者李芳因头痛就诊",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "李芳",
+    "description": "Name after 患者"
+  },
+  {
+    "id": "person_mr",
+    "input": "请联系刘伟先生",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "刘伟",
+    "description": "Name before 先生"
+  },
+  {
+    "id": "person_ms",
+    "input": "赵敏女士已确认",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "赵敏",
+    "description": "Name before 女士"
+  },
+  {
+    "id": "person_teacher",
+    "input": "陈华老师的课程",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "陈华",
+    "description": "Name before 老师"
+  },
+  {
+    "id": "person_doctor",
+    "input": "主治医生黄磊开了处方",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "黄磊",
+    "description": "Name after 医生"
+  },
+  {
+    "id": "person_owner",
+    "input": "车主周杰的车牌京A12345",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "周杰",
+    "description": "Name after 车主"
+  },
+  {
+    "id": "person_cardholder",
+    "input": "持卡人吴静的银行卡",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "吴静",
+    "description": "Name after 持卡人"
+  },
+  {
+    "id": "person_register",
+    "input": "登记人：孙艳，手机13612345678",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "孙艳",
+    "description": "Name after 登记人：with colon"
+  },
+  {
+    "id": "person_name_field",
+    "input": "姓名：马超，身份证110101199003074610",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "马超",
+    "description": "Name after 姓名："
+  },
+  {
+    "id": "person_user",
+    "input": "用户林涛完成实名认证",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "林涛",
+    "description": "Name after 用户"
+  },
+  {
+    "id": "person_sender",
+    "input": "寄件人：何娟，联系方式13712345678",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "何娟",
+    "description": "Name after 寄件人："
+  },
+  {
+    "id": "person_recipient",
+    "input": "收件人高强，电话13812345678",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "高强",
+    "description": "Name after 收件人"
+  },
+  {
+    "id": "person_traveler",
+    "input": "旅客徐明的护照号E12345678",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "徐明",
+    "description": "Name after 旅客"
+  },
+  {
+    "id": "no_person_place",
+    "input": "黄山风景区很漂亮",
+    "should_match": false,
+    "type": "person",
+    "description": "Place name should not match: 黄山 is a mountain"
+  },
+  {
+    "id": "no_person_dynasty",
+    "input": "唐朝是中国历史上的伟大朝代",
+    "should_match": false,
+    "type": "person",
+    "description": "Dynasty name should not match"
+  },
+  {
+    "id": "no_person_company",
+    "input": "华为公司发布了新产品",
+    "should_match": false,
+    "type": "person",
+    "description": "Company name should not match"
+  },
+  {
+    "id": "no_person_generic",
+    "input": "今天天气不错",
+    "should_match": false,
+    "type": "person",
+    "description": "No name in text"
+  }
+]

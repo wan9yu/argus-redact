@@ -1,5 +1,25 @@
 """Chinese regex patterns for Layer 1 PII detection."""
 
+# ── Top 500 Chinese surnames (covers ~99% of population) ──
+_SURNAMES = (
+    "王李张刘陈杨赵黄周吴徐孙胡朱高林何郭马罗"
+    "梁宋郑谢韩唐冯于董萧程曹袁邓许傅沈曾彭吕"
+    "苏卢蒋蔡贾丁魏薛叶阎余潘杜戴夏钟汪田任姜"
+    "范方石姚谭廖邹熊金陆郝孔白崔康毛邱秦江史顾"
+    "侯邵孟龙万段漕钱汤尹黎易常武乔贺赖龚文庞"
+    "樊兰殷施陶洪翟安颜倪严牛温芦季俞章鲁葛伍"
+    "韦申尤毕聂丛焦向柳邢骆岳齐沿雷詹欧"
+)
+
+# Build set for O(1) lookup
+_SURNAME_SET = set(_SURNAMES)
+
+# Compound surnames (2 chars)
+_COMPOUND_SURNAMES = {
+    "欧阳", "司马", "上官", "诸葛", "东方", "皇甫", "令狐", "公孙",
+    "慕容", "尉迟", "长孙", "宇文", "司徒", "端木", "南宫", "西门",
+}
+
 
 def _validate_id_number(value: str) -> bool:
     """MOD 11-2 checksum for 18-digit Chinese national ID."""
@@ -104,5 +124,34 @@ PATTERNS = [
             r"(?:\d{1,4}(?:室|房))?"
         ),
         "description": "Chinese structured address (city+district+street+number)",
+    },
+    # ── Person name (surname-prefix heuristic) ──
+    # Uses named group "name" so match_patterns extracts just the name, not the context.
+    # Pattern 1: context word + optional colon/space → surname + 1-2 CJK given name chars
+    {
+        "type": "person",
+        "label": "[姓名已脱敏]",
+        "group": "name",
+        "pattern": (
+            r"(?:客户|患者|用户|旅客|车主|联系人|收件人|寄件人|"
+            r"登记人|开户人|申请人|报案人|委托人|当事人|嫌疑人|"
+            r"负责人|经办人|签收人|担保人|受益人|借款人|"
+            r"持卡人|被保险人|投保人|参会人员|"
+            r"主治医生|医生|护士|教授|老板|同事|朋友|同学|"
+            r"姓名|乘客|住户|业主|租户|房东)"
+            r"[：:\s]?"
+            r"(?P<name>[" + _SURNAMES + r"][\u4e00-\u9fff]{1,2}(?<!的)(?<!了)(?<!在)(?<!是)(?<!有)(?<!和)(?<!与)(?<!把)(?<!被)(?<!让)(?<!从)(?<!到)(?<!给)(?<!向)(?<!因)(?<!为)(?<!而)(?<!又)(?<!也)(?<!都)(?<!就)(?<!才)(?<!会)(?<!能)(?<!要)(?<!可)(?<!将)(?<!已)(?<!完)(?<!开)(?<!做))"
+        ),
+        "description": "Chinese person name after context prefix",
+    },
+    # Pattern 2: surname + 1-2 CJK → honorific suffix (lookahead OK — fixed width not needed)
+    {
+        "type": "person",
+        "label": "[姓名已脱敏]",
+        "pattern": (
+            r"[" + _SURNAMES + r"][\u4e00-\u9fff]{1,2}"
+            r"(?=(?:先生|女士|老师|教授|医生|同学|师傅|经理|总监|主任|院长|局长|部长|校长|董事长))"
+        ),
+        "description": "Chinese person name before honorific suffix",
     },
 ]

@@ -60,12 +60,21 @@ def match_patterns(text: str, patterns: list[dict]) -> list[PatternMatch]:
                 continue
             if check_context and _looks_like_false_positive(text, m.start(), m.end()):
                 continue
+            # Optional: extract a named group as the actual match
+            group = pat.get("group")
+            if group and m.group(group):
+                matched = m.group(group)
+                start = m.start(group)
+                end = m.end(group)
+            else:
+                start = m.start()
+                end = m.end()
             results.append(
                 PatternMatch(
                     text=matched,
                     type=pat["type"],
-                    start=m.start(),
-                    end=m.end(),
+                    start=start,
+                    end=end,
                 )
             )
 

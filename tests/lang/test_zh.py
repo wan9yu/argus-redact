@@ -75,6 +75,23 @@ class TestAddress:
             assert len(addr_results) == 0, f"Should NOT match: {example['description']}"
 
 
+class TestChinesePerson:
+    @parametrize_examples("zh_person.json")
+    def test_should_match_or_reject_when_person_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        person_results = [r for r in results if r.type == "person"]
+
+        if example["should_match"]:
+            assert len(person_results) >= 1, f"Expected match: {example['description']}"
+            if "expected_text" in example:
+                assert any(r.text == example["expected_text"] for r in person_results), (
+                    f"Expected '{example['expected_text']}' but got "
+                    f"{[r.text for r in person_results]}: {example['description']}"
+                )
+        else:
+            assert len(person_results) == 0, f"Should NOT match: {example['description']}"
+
+
 class TestMultiplePII:
     def test_should_detect_both_types_when_phone_and_id_in_text(self, zh_patterns):
         text = "手机13812345678，身份证110101199003074610"
