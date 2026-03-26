@@ -32,4 +32,5 @@ from . import gretel_finance as _gretel_finance  # noqa: E402, F401
 from . import kaggle_piilo as _kaggle_piilo  # noqa: E402, F401
 from . import n2c2_2014 as _n2c2_2014  # noqa: E402, F401
 from . import nemotron as _nemotron  # noqa: E402, F401
+from . import pii_bench_zh as _pii_bench_zh  # noqa: E402, F401
 from . import wikiann as _wikiann  # noqa: E402, F401

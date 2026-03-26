@@ -53,7 +53,7 @@ Tested on the [ai4privacy PII benchmark](https://huggingface.co/datasets/ai4priv
 
 ## Full benchmark suite
 
-We evaluate against 7 public datasets across multiple languages and PII types. See [Benchmarks](../tests/benchmark/README.md) for details.
+We evaluate against 8 public datasets across multiple languages and PII types. See [Benchmarks](../tests/benchmark/README.md) for details.
 
 ```bash
 python -m tests.benchmark all --mode fast,ner --limit 1000
@@ -68,3 +68,4 @@ python -m tests.benchmark all --mode fast,ner --limit 1000
 | conll2003 | 20K | en | Classic NER baseline |
 | kaggle_piilo | 7K | en | Real student essays |
 | n2c2_2014 | 1.3K | en | Clinical de-identification |
+| pii_bench_zh | 5K | zh | Chinese PII (ours, first open benchmark) |
