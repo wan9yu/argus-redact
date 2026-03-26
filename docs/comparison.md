@@ -53,7 +53,7 @@ Tested on the [ai4privacy PII benchmark](https://huggingface.co/datasets/ai4priv
 
 ## Full benchmark suite
 
-We evaluate against 5 public datasets across multiple languages and PII types. See [Benchmarks](../tests/benchmark/README.md) for details.
+We evaluate against 7 public datasets across multiple languages and PII types. See [Benchmarks](../tests/benchmark/README.md) for details.
 
 ```bash
 python -m tests.benchmark all --mode fast,ner --limit 1000
@@ -61,8 +61,10 @@ python -m tests.benchmark all --mode fast,ner --limit 1000
 
 | Dataset | Samples | Languages | Focus |
 |---------|---------|-----------|-------|
-| ai4privacy | 300K+ | en, de, fr, es, it, nl | General PII |
+| ai4privacy | 400K+ | en, de, fr, es, it, nl | General PII |
 | nemotron | 100K | en | 55+ PII/PHI types |
 | wikiann | 282 langs | zh, en, ja, ko, de, uk | Multilingual NER |
 | gretel_finance | 56K | en, de, fr, es, it, nl, sv | Financial docs |
 | conll2003 | 20K | en | Classic NER baseline |
+| kaggle_piilo | 7K | en | Real student essays |
+| n2c2_2014 | 1.3K | en | Clinical de-identification |

@@ -1,4 +1,4 @@
-"""Adapter for ai4privacy/pii-masking-300k (and 400k)."""
+"""Adapter for ai4privacy/pii-masking-400k dataset."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ LANG_MAP = {
 @register
 class Ai4PrivacyAdapter(DatasetAdapter):
     name = "ai4privacy"
-    url = "https://huggingface.co/datasets/ai4privacy/pii-masking-300k"
+    url = "https://huggingface.co/datasets/ai4privacy/pii-masking-400k"
     languages = ["en", "de", "fr", "it", "es", "nl"]
 
     def load(
@@ -53,7 +53,7 @@ class Ai4PrivacyAdapter(DatasetAdapter):
         from datasets import load_dataset
 
         ds = load_dataset(
-            "ai4privacy/pii-masking-300k",
+            "ai4privacy/pii-masking-400k",
             split="train",
             streaming=True,
         )

@@ -14,11 +14,13 @@ Most PII tools only benchmark against English regex patterns. We evaluate across
 
 | Dataset | Samples | Languages | PII types | Focus |
 |---------|---------|-----------|-----------|-------|
-| **ai4privacy** | 300K+ | en, de, fr, es, it, nl | email, phone, SSN, ID, passport, credit card | General PII, largest open dataset |
+| **ai4privacy** | 400K+ | en, de, fr, es, it, nl | email, phone, SSN, ID, passport, credit card | General PII, largest open dataset |
 | **nemotron** | 100K | en | 55+ types (names, SSN, medical, financial) | Highest quality, broadest type coverage |
 | **wikiann** | 282 langs | zh, en, ja, ko, de, uk + more | PER, ORG, LOC | Multilingual NER, covers all our languages |
 | **gretel_finance** | 56K | en, de, fr, es, it, nl, sv | names, addresses, financial IDs | Realistic financial documents |
 | **conll2003** | 20K | en | PER, ORG, LOC, MISC | Classic NER baseline |
+| **kaggle_piilo** | 7K | en | names, email, phone, address, ID, URL | Real student essays (not synthetic) |
+| **n2c2_2014** | 1.3K | en | 25 PHI subtypes (names, dates, IDs, locations) | Clinical de-identification gold standard |
 
 ## Quick start
 
