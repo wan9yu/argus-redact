@@ -36,12 +36,12 @@ pip install argus-redact
 ## Three Layers
 
 ```
-Layer 1  Regex      phone, ID, bank card, email, address     <1ms
-Layer 2  NER        person names, locations, organizations    10-100ms
-Layer 3  Local LLM  "那个地方", nicknames, implicit PII       ~1s
+Layer 1  Regex+Score  phone, ID, bank card, email, address, person names   <1ms
+Layer 2  NER          locations, organizations, standalone names           10-100ms
+Layer 3  Local LLM    "那个地方", nicknames, implicit PII                   ~1s
 ```
 
-Use what you need: `mode="fast"` (regex only) → `mode="ner"` → `mode="auto"` (all three).
+Use what you need: `mode="fast"` (Layer 1 only) → `mode="ner"` (+ NER) → `mode="auto"` (all three).
 
 ## 7 Languages
 
@@ -71,7 +71,7 @@ We evaluate ourselves on six core capabilities. This scorecard evolves with each
 
 | Dimension | What it measures | Current (v0.1.7) | Target |
 |-----------|-----------------|:-----------------:|:------:|
-| **Detection** | Find PII without miss or false alarm | P=96% R=98% F1=97%; person names via candidate+scoring | P>95% R>95% |
+| **Detection** | Find PII without miss or false alarm | P=96% R=98% F1=97%; person names via candidate+scoring | — (achieved) |
 | **Semantic Preservation** | Redacted text stays meaningful for LLM | Pseudonym replacement keeps context readable | — (achieved) |
 | **Reversibility** | Restore original from key, per-message isolation | Per-message random key, full restore | — (achieved) |
 | **Security** | PII never leaves device, resist correlation attacks | Fully local, fresh key per call | Add key rotation & TTL |
