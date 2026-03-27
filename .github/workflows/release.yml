@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write       # GitHub Release
+  id-token: write       # PyPI trusted publishing
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Run tests
+        run: |
+          pip install -e ".[dev]"
+          pytest -p no:recording -q -m "not ner and not semantic and not slow"
+
+      - name: Build package
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # Uses trusted publishing — configure at https://pypi.org/manage/project/argus-redact/settings/publishing/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/* \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
+
+      - name: Deploy HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install huggingface_hub
+          python -c "
+          from huggingface_hub import HfApi
+          HfApi().upload_folder(folder_path='demo', repo_id='wan9yu/argus-redact', repo_type='space')
+          print('HF Space deployed')
+          "
