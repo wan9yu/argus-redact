@@ -69,7 +69,7 @@ Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张�
 
 We evaluate ourselves on six core capabilities. This scorecard evolves with each release.
 
-| Dimension | What it measures | Current (v0.1.8) | Target |
+| Dimension | What it measures | Current (v0.1.9) | Target |
 |-----------|-----------------|:-----------------:|:------:|
 | **Detection** | Find PII without miss or false alarm | P=96% R=98% F1=97%; person names via candidate+scoring | — (achieved) |
 | **Semantic Preservation** | Redacted text stays meaningful for LLM | Pseudonym replacement keeps context readable | — (achieved) |
