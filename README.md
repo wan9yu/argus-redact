@@ -74,11 +74,12 @@ We track what still needs work:
 | Dimension | Current (v0.1.9) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Detection** | P=96% R=98% F1=97% | P>98% (reduce false positives) |
+| **Compliance** | `default` profile ~70% | Date of birth, IP, social accounts → `default` 100%; then `pipl`/`gdpr`/`hipaa` profiles |
 | **Security** | Fully local, fresh key per call | Key TTL & rotation |
 | **Performance** | 600 docs/s (regex + name scoring) | Rust core (10x) |
 | **Coverage** | 7 langs, 8 PII types (zh), 6 frameworks | 10+ langs, address++, Dify/CrewAI |
 
-[Full benchmark report →](docs/benchmark-report.md)
+[Full benchmark report →](docs/benchmark-report.md) | [Sensitive info taxonomy →](docs/sensitive-info.md)
 
 ## Integrations
 

@@ -98,12 +98,12 @@ Layer 3  (semantic LLM)   Meaning-dependent. No surface pattern.
 
 Different regulations care about different types. Profiles are pre-configured type sets:
 
-| Profile | Focus | Types enabled |
-|---------|-------|---------------|
-| `pipl` | China PIPL | All Level 1 + biometric + financial + medical + religious + political |
-| `gdpr` | EU GDPR | All Level 1 + Level 2 quasi-identifiers + Level 3 special categories |
-| `hipaa` | US HIPAA | Direct identifiers + medical + 18 PHI types |
-| `default` | Common PII | All Level 1 direct identifiers (current behavior) |
+| Profile | Focus | Types enabled | Completion |
+|---------|-------|---------------|:----------:|
+| `default` | Common PII | All Level 1 direct identifiers (current behavior) | ~70% — missing: date, IP, social |
+| `pipl` | China PIPL | All Level 1 + biometric + financial + medical + religious + political | ~20% — Level 1 partial, Level 2-3 not started |
+| `gdpr` | EU GDPR | All Level 1 + Level 2 quasi-identifiers + Level 3 special categories | ~15% — Level 1 partial, no quasi-identifiers |
+| `hipaa` | US HIPAA | Direct identifiers + medical + 18 PHI types | ~10% — no medical/PHI types |
 
 ```python
 # Future API
