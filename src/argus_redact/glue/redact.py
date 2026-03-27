@@ -132,6 +132,8 @@ def redact(
     # Resolve config from file path
     if isinstance(config, str):
         config_path = Path(config)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found: {config}")
         if config_path.suffix in (".yaml", ".yml"):
             import yaml
 

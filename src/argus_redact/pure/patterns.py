@@ -62,13 +62,17 @@ def match_patterns(text: str, patterns: list[dict]) -> list[PatternMatch]:
                 continue
             # Optional: extract a named group as the actual match
             group = pat.get("group")
-            if group and m.group(group):
-                matched = m.group(group)
-                start = m.start(group)
-                end = m.end(group)
-            else:
-                start = m.start()
-                end = m.end()
+            start = m.start()
+            end = m.end()
+            if group:
+                try:
+                    grp = m.group(group)
+                    if grp:
+                        matched = grp
+                        start = m.start(group)
+                        end = m.end(group)
+                except IndexError:
+                    pass
             results.append(
                 PatternMatch(
                     text=matched,

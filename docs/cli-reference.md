@@ -168,6 +168,40 @@ argus-redact serve --port 9000        # custom port
 
 ---
 
+## MCP Server
+
+Run argus-redact as an [MCP](https://modelcontextprotocol.io) tool server for Claude Desktop, Cursor, or any MCP-compatible client.
+
+```bash
+pip install argus-redact[mcp]
+python -m argus_redact.integrations.mcp_server
+```
+
+### Claude Desktop Configuration
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "argus-redact": {
+      "command": "python",
+      "args": ["-m", "argus_redact.integrations.mcp_server"]
+    }
+  }
+}
+```
+
+### Tools
+
+| Tool | Description |
+|------|-------------|
+| `redact` | Redact PII from text. Returns JSON with redacted text and key. |
+| `restore` | Restore redacted text using a key from a previous redact call. |
+| `info` | Show version and installed capabilities. |
+
+---
+
 ## Exit Codes
 
 All commands use the same exit codes:

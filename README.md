@@ -88,7 +88,7 @@ We evaluate ourselves on six core capabilities. This scorecard evolves with each
 |-|---------|
 | [LangChain / LlamaIndex / FastAPI](docs/integration-frameworks.md) | core |
 | [Presidio bridge](docs/integration-frameworks.md) | `pip install argus-redact[presidio]` |
-| [MCP Server](docs/cli-reference.md) (Claude Desktop / Cursor) | `pip install argus-redact[mcp]` |
+| [MCP Server](docs/cli-reference.md#mcp-server) (Claude Desktop / Cursor) | `pip install argus-redact[mcp]` |
 | [HTTP API Server](docs/cli-reference.md) | `pip install argus-redact[serve]` |
 | [Structured data](docs/api-reference.md) (JSON / CSV) | core |
 | [Streaming restore](docs/api-reference.md) | core |

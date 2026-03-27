@@ -230,10 +230,6 @@ def test_invalid_mode():
     with pytest.raises(ValueError):
         redact("text", mode="invalid")
 
-def test_invalid_mode():
-    with pytest.raises(ValueError):
-        redact("text", mode="invalid")
-
 def test_restore_bad_key_type():
     with pytest.raises(TypeError):
         restore("text", 123)

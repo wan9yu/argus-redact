@@ -90,7 +90,8 @@ def restore_body(
 
     if isinstance(response, dict) and field and field in response:
         result = dict(response)
-        result[field] = restore(str(response[field]), key)
+        if isinstance(response[field], str):
+            result[field] = restore(response[field], key)
         return result
 
     return response

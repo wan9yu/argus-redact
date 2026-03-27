@@ -16,9 +16,9 @@ You can contribute any one of these independently. A pack with only regex patter
 | English (en) | Phone, SSN, credit card, email | spaCy | Ollama |
 | Japanese (ja) | Phone, My Number | spaCy | Ollama |
 | Korean (ko) | Phone, RRN | spaCy | Ollama |
-| German (de) | Tax ID, IBAN, phone | — | Ollama |
-| UK (uk) | Postcode, NINO, NHS number, phone | — | Ollama |
-| Indian (in) | Aadhaar, PAN, phone | — | Ollama |
+| German (de) | Tax ID, IBAN, phone | spaCy | Ollama |
+| UK (uk) | Postcode, NINO, NHS number, phone | spaCy | Ollama |
+| Indian (in) | Aadhaar, PAN, phone | spaCy | Ollama |
 
 ---
 
@@ -59,7 +59,7 @@ Installed with `pip install argus-redact[zh]`.
 
 | Backend | Entity types | Model |
 |---------|-------------|-------|
-| HanLP 2.x | PERSON, LOCATION, ORGANIZATION, DATE | hanlp.pretrained.ner.MSRA_NER_ELECTRA |
+| HanLP 2.x | PERSON, LOCATION, ORGANIZATION, DATE | hanlp.pretrained.mtl.CLOSE_TOK_POS_NER_SRL_DEP_SDP_CON_ELECTRA_BASE_ZH |
 
 **Layer 3 — Semantic prompts:**
 
@@ -97,10 +97,9 @@ A language pack is a Python package under `argus_redact/lang/<code>/`. Minimum s
 
 ```
 argus_redact/lang/ja/
-├── __init__.py          # Pack metadata
+├── __init__.py          # Pack metadata (LANG_CODE, LANG_NAME)
 ├── patterns.py          # Layer 1 regex patterns
-├── ner_adapter.py       # Layer 2 NER adapter (optional)
-└── semantic_prompts.py  # Layer 3 prompts (optional)
+└── ner_adapter.py       # Layer 2 NER adapter (optional)
 ```
 
 ### Step 1: patterns.py (Layer 1)
@@ -163,42 +162,55 @@ Connect a NER model. Implement the `NERAdapter` interface:
 ```python
 # argus_redact/lang/ja/ner_adapter.py
 
-from argus_redact.layers.ner import NERAdapter, NEREntity
+from argus_redact._types import NEREntity
+from argus_redact.impure.ner import NERAdapter
 
-class JapaneseNER(NERAdapter):
-    """Japanese NER using GiNZA (spaCy-based)."""
+_TYPE_MAP = {
+    "PERSON": "person",
+    "GPE": "location",
+    "LOC": "location",
+    "ORG": "organization",
+    "FAC": "location",
+}
+
+_DEFAULT_CONFIDENCE = 0.80
+
+class JapaneseNERAdapter(NERAdapter):
+    """Japanese NER using spaCy (ja_core_news_sm)."""
 
     def __init__(self):
         self._nlp = None
 
-    def load(self):
+    def load(self) -> None:
+        if self._nlp is not None:
+            return
         import spacy
-        self._nlp = spacy.load("ja_ginza")
+        self._nlp = spacy.load("ja_core_news_sm")
 
     def detect(self, text: str) -> list[NEREntity]:
+        if not text:
+            return []
         if self._nlp is None:
             self.load()
 
         doc = self._nlp(text)
         entities = []
         for ent in doc.ents:
-            if ent.label_ in ("Person", "City", "Country", "Company"):
-                entities.append(NEREntity(
-                    text=ent.text,
-                    type=self._map_type(ent.label_),
-                    start=ent.start_char,
-                    end=ent.end_char,
-                    confidence=0.85,  # spaCy doesn't provide per-entity confidence
-                ))
+            mapped_type = _TYPE_MAP.get(ent.label_)
+            if mapped_type is None:
+                continue
+            entities.append(NEREntity(
+                text=ent.text,
+                type=mapped_type,
+                start=ent.start_char,
+                end=ent.end_char,
+                confidence=_DEFAULT_CONFIDENCE,
+            ))
         return entities
 
-    def _map_type(self, label: str) -> str:
-        return {
-            "Person": "person",
-            "City": "location",
-            "Country": "location",
-            "Company": "organization",
-        }.get(label, "other")
+
+def create_adapter() -> JapaneseNERAdapter:
+    return JapaneseNERAdapter()
 ```
 
 **NEREntity schema:**
@@ -211,45 +223,20 @@ class JapaneseNER(NERAdapter):
 | `end` | `int` | Character offset end |
 | `confidence` | `float` | 0.0-1.0. Entities below `min_confidence` (config) are dropped. |
 
-### Step 3: semantic_prompts.py (Layer 3)
+### Step 3: __init__.py
 
-Provide prompts for the local LLM to detect implicit PII:
-
-```python
-# argus_redact/lang/ja/semantic_prompts.py
-
-SYSTEM_PROMPT = """
-あなたは日本語テキストのプライバシー分析者です。
-テキスト中の暗黙的な個人情報を検出してください：
-- 愛称やニックネーム（たろちゃん、先輩）
-- 暗示的な場所（「あそこ」「いつもの場所」）
-- 文脈から特定可能な情報
-- 職業 + 名前の組み合わせ
-
-JSON形式で回答してください：
-[{"text": "検出テキスト", "type": "person|location|organization", "reason": "理由"}]
-
-個人情報が検出されない場合は空配列[]を返してください。
-"""
-```
-
-### Step 4: __init__.py
-
-Register the pack:
+Register the pack with metadata:
 
 ```python
 # argus_redact/lang/ja/__init__.py
 
 LANG_CODE = "ja"
 LANG_NAME = "Japanese"
-INSTALL_REQUIRES = ["ginza>=5.0", "ja_ginza>=5.0"]  # pip extras
-
-from .patterns import PATTERNS
-from .ner_adapter import JapaneseNER
-from .semantic_prompts import SYSTEM_PROMPT
 ```
 
-### Step 5: Register in setup
+Layer 3 (semantic detection) is handled by the shared Ollama adapter — no per-language module needed.
+
+### Step 4: Register in setup
 
 Add to `pyproject.toml`:
 
