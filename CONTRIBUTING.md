@@ -67,6 +67,39 @@ We have LangChain, LlamaIndex, FastAPI, Presidio, MCP. Missing:
 3. **Run `./build.sh`** before committing — it formats, lints, tests, and builds
 4. **Small commits** — one logical change per commit
 
+## Releasing
+
+Pushing a version tag triggers GitHub Actions to publish everywhere automatically.
+
+### Steps
+
+```bash
+# 1. Bump version in two files
+#    - pyproject.toml:   version = "0.x.x"
+#    - src/argus_redact/__init__.py:  __version__ = "0.x.x"
+#    - Update version references in: README.md, docs/benchmark-report.md,
+#      docs/cli-reference.md, docs/known-issues.md, tests/cli/test_cli.py
+
+# 2. Commit
+git commit -am "release: v0.x.x — summary"
+
+# 3. Tag and push (or: make release)
+make release
+```
+
+`make release` reads the version from `__init__.py`, creates a git tag, and pushes. GitHub Actions (`.github/workflows/release.yml`) then:
+
+1. Runs tests
+2. Builds the package
+3. Publishes to **PyPI** (trusted publishing)
+4. Creates a **GitHub Release** with auto-generated notes
+5. Deploys the **HF Space** (`demo/` folder)
+
+### One-time setup (already done)
+
+- **PyPI:** Trusted publisher configured at pypi.org → project settings → publishing
+- **HF Token:** `HF_TOKEN` secret in GitHub repo settings → Secrets → Actions
+
 ## Code Structure
 
 ```
