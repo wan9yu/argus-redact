@@ -153,9 +153,29 @@ def redact(
 
     timing = {}
     entities: list[PatternMatch] = []
+    langs = [lang] if isinstance(lang, str) else list(lang)
 
-    # Layer 0: user-provided names whitelist
-    if names:
+    # Layer 1a: regex (structural PII — phone, ID, bank card, etc.)
+    t0 = time.perf_counter()
+    layer1 = match_patterns(text, _load_patterns(lang))
+    timing["layer_1_ms"] = (time.perf_counter() - t0) * 1000
+    entities.extend(_tag_layer(layer1, 1))
+    layer1_count = len(layer1)
+
+    # Layer 1b: person name detection
+    # Chinese: candidate generation + evidence scoring (handles known_names internally)
+    # Other languages: exact match on known_names only
+    if "zh" in langs:
+        from argus_redact.lang.zh.person import detect_person_names
+
+        t0 = time.perf_counter()
+        person_names = detect_person_names(
+            text, pii_entities=layer1, known_names=names,
+        )
+        timing["layer_1b_person_ms"] = (time.perf_counter() - t0) * 1000
+        entities.extend(_tag_layer(person_names, 1))
+        layer1_count += len(person_names)
+    elif names:
         import re as _re
 
         for name in names:
@@ -164,21 +184,12 @@ def redact(
             for m in _re.finditer(_re.escape(name), text):
                 entities.append(
                     PatternMatch(
-                        text=name,
-                        type="person",
-                        start=m.start(),
-                        end=m.end(),
-                        confidence=1.0,
-                        layer=0,
+                        text=name, type="person",
+                        start=m.start(), end=m.end(),
+                        confidence=1.0, layer=1,
                     )
                 )
-
-    # Layer 1: regex
-    t0 = time.perf_counter()
-    layer1 = match_patterns(text, _load_patterns(lang))
-    timing["layer_1_ms"] = (time.perf_counter() - t0) * 1000
-    entities.extend(_tag_layer(layer1, 1))
-    layer1_count = len(layer1)
+                layer1_count += 1
 
     # Layer 2: NER (auto or ner mode)
     layer2_count = 0

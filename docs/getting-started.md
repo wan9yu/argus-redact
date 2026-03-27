@@ -55,34 +55,18 @@ from argus_redact import redact, restore
 redacted, key = redact("张三的手机号是13812345678，身份证号是110101199003071234")
 
 print(redacted)
-# "张三的手机号是[手机号已脱敏]，身份证号是[身份证号已脱敏]"
-# Note: 张三 is NOT redacted — person names require NER (Layer 2)
-
-print(key)
-# {
-#     "[手机号已脱敏]": "13812345678",
-#     "[身份证号已脱敏]": "110101199003071234",
-# }
-```
-
-With Chinese NER installed (`pip install argus-redact[zh]`):
-
-```python
-redacted, key = redact("张三的手机号是13812345678，身份证号是110101199003071234")
-
-print(redacted)
-# "P-042的手机号是[手机号已脱敏]，身份证号是[身份证号已脱敏]"
-# Now 张三 IS redacted — NER identified it as a person name
+# "P-042的手机号是138****5678，身份证号是[身份证号已脱敏]"
+# 张三 IS detected — nearby phone/ID signals boost name confidence
 
 print(key)
 # {
 #     "P-042": "张三",
-#     "[手机号已脱敏]": "13812345678",
+#     "138****5678": "13812345678",
 #     "[身份证号已脱敏]": "110101199003071234",
 # }
 ```
 
-**Rule of thumb:** Core install catches structured PII (phone, ID, email, cards). NER install adds person/location/organization names. Layer 3 adds implicit PII.
+**Rule of thumb:** Core install catches structured PII (phone, ID, email, cards) and person names near them. NER install adds standalone person/location/organization names. Layer 3 adds implicit PII.
 
 ## Redact → LLM → Restore
 
@@ -168,8 +152,8 @@ Skip NER and LLM layers — regex patterns only:
 
 ```python
 redacted, key = redact("张三的手机号是13812345678", mode="fast")
-# "张三的手机号是[手机号已脱敏]"
-# Note: 张三 NOT redacted — regex doesn't catch person names
+# "P-042的手机号是138****5678"
+# 张三 IS detected — "的手机号" suffix is a strong name signal
 ```
 
 Useful when you only need deterministic PII (phone, ID card, email) or want minimal latency.

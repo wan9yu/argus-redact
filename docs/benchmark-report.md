@@ -22,7 +22,7 @@ argus-redact is the only tool that combines PII detection with **reversible encr
 
 **No other open-source tool benchmarks against Chinese PII.** This dataset was created by us to fill this gap.
 
-### argus-redact (regex only, `mode="fast"`)
+### argus-redact (regex + name scoring, `mode="fast"`)
 
 | Entity type | Precision | Recall | F1 | Notes |
 |-------------|-----------|--------|-----|-------|
@@ -30,15 +30,15 @@ argus-redact is the only tool that combines PII detection with **reversible encr
 | id_number | 100.0% | 100.0% | 100.0% | MOD 11-2 checksum validation |
 | license_plate | 100.0% | 100.0% | 100.0% | |
 | passport | 100.0% | 100.0% | 100.0% | |
-| phone | 98.1% | 100.0% | 99.1% | |
-| address | 91.7% | 88.5% | 90.0% | Complex multi-part matching |
-| person | 100.0% | 48.9% | 65.7% | Surname + context heuristic (Layer 1) |
-| bank_card | 100.0% | 8.4% | 15.6% | Low recall: Luhn validation strict |
-| **Overall** | **98.4%** | **76.8%** | **86.3%** | |
+| phone | 100.0% | 100.0% | 100.0% | |
+| bank_card | 100.0% | 100.0% | 100.0% | Luhn + BIN prefix |
+| address | 88.8% | 88.8% | 88.8% | Complex multi-part matching |
+| person | 92.9% | 98.5% | 95.6% | Candidate generation + evidence scoring |
+| **Overall** | **96.5%** | **98.5%** | **97.4%** | |
 
 **Presidio:** Not applicable — no Chinese language support.
 
-**Key takeaway:** On structured Chinese PII (phone, ID, email, passport, license plate), argus-redact achieves **100% precision and 100% recall**. Person names are detected via surname-prefix heuristic at 100% precision / 49% recall — the remaining 51% are names without context clues (NER adds further coverage). Bank card recall is low due to strict Luhn checksum filtering.
+**Key takeaway:** Person name detection uses a candidate generation + evidence scoring approach: surname + CJK sequences are scored against PII proximity, context words, and honorific suffixes. This achieves 98.5% recall without any NER model — a leap from the prior 49% recall with simple context-prefix heuristics.
 
 ---
 
@@ -146,14 +146,14 @@ argus-redact in `fast` mode is **~1000x faster** than Presidio for regex-detecta
 ## 7. Limitations & Roadmap
 
 **Current limitations:**
-- Chinese person name detection (Layer 1 surname heuristic) covers ~49% of names — the rest lack context clues and need NER
-- Bank card recall is low due to strict Luhn validation
+- Chinese address detection (~89% F1) — complex multi-part matching has room to improve
 - English address detection needs improvement
 - HanLP (Chinese NER) requires upgrade for current environment
+- Person name false positives (~7%) — negative dictionary coverage can be expanded
 
 **Planned improvements:**
-- Expand surname heuristic context words to cover more scenarios
-- Add bank card BIN-prefix matching to boost card recall
+- Expand negative dictionary and scoring signals for person name precision
+- Improve Chinese address patterns for informal formats
 - Improve English/European address patterns
 - Fine-tune name detection for Kaggle-style educational text
 - Expand pii-bench-zh to 10K+ samples with more diverse templates

@@ -46,8 +46,11 @@ TEST_INPUTS = [
 
 class TestToPatterns:
     def test_spec_patterns_should_exist(self):
-        """Every zh spec should produce at least one pattern."""
+        """Every zh spec (except person) should produce at least one pattern."""
         for typedef in list_types("zh"):
+            if typedef.name == "person":
+                # Person names are detected by person.py, not by regex patterns
+                continue
             patterns = typedef.to_patterns()
             assert len(patterns) >= 1, (
                 f"{typedef.name} produced no patterns"

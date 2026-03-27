@@ -78,8 +78,13 @@ class TestAddress:
 class TestChinesePerson:
     @parametrize_examples("zh_person.json")
     def test_should_match_or_reject_when_person_input(self, zh_patterns, example):
-        results = match_patterns(example["input"], zh_patterns)
-        person_results = [r for r in results if r.type == "person"]
+        from argus_redact.lang.zh.person import detect_person_names
+        from argus_redact.pure.patterns import match_patterns as mp
+
+        text = example["input"]
+        # Run structural PII first (for context signals)
+        structural = mp(text, zh_patterns)
+        person_results = detect_person_names(text, pii_entities=structural)
 
         if example["should_match"]:
             assert len(person_results) >= 1, f"Expected match: {example['description']}"

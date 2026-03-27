@@ -77,8 +77,9 @@ class TestSpecExamples:
         from argus_redact.lang.shared.patterns import PATTERNS as SHARED
 
         for typedef in list_types("zh"):
-            if typedef.name in ("phone_landline",):
+            if typedef.name in ("phone_landline", "person"):
                 # phone_landline has separate examples tested elsewhere
+                # person names are detected by person.py, not by PATTERNS regex
                 continue
             for example in typedef.examples:
                 results = match_patterns(example, ZH_PATTERNS + SHARED)

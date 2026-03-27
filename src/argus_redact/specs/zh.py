@@ -367,41 +367,10 @@ register(PIITypeDef(
         "华为公司发布",
         "唐朝是中国历史",
     ),
-    _patterns=(
-        {
-            "type": "person",
-            "label": "[姓名已脱敏]",
-            "group": "name",
-            "pattern": (
-                r"(?:客户|患者|用户|旅客|车主|联系人|收件人|寄件人|"
-                r"登记人|开户人|申请人|报案人|委托人|当事人|嫌疑人|"
-                r"负责人|经办人|签收人|担保人|受益人|借款人|"
-                r"持卡人|被保险人|投保人|参会人员|"
-                r"主治医生|医生|护士|教授|老板|同事|朋友|同学|"
-                r"姓名|乘客|住户|业主|租户|房东)"
-                r"[：:\s]?"
-                r"(?P<name>[" + _SURNAMES + r"][\u4e00-\u9fff]{1,2}"
-                r"(?<!的)(?<!了)(?<!在)(?<!是)(?<!有)(?<!和)(?<!与)"
-                r"(?<!把)(?<!被)(?<!让)(?<!从)(?<!到)(?<!给)(?<!向)"
-                r"(?<!因)(?<!为)(?<!而)(?<!又)(?<!也)(?<!都)(?<!就)"
-                r"(?<!才)(?<!会)(?<!能)(?<!要)(?<!可)(?<!将)(?<!已)"
-                r"(?<!完)(?<!开)(?<!做))"
-            ),
-            "description": "Chinese person name after context prefix",
-        },
-        {
-            "type": "person",
-            "label": "[姓名已脱敏]",
-            "pattern": (
-                r"[" + _SURNAMES + r"][\u4e00-\u9fff]{1,2}"
-                r"(?=(?:先生|女士|老师|教授|医生|同学|师傅|经理|总监|主任|院长|局长|部长|校长|董事长))"
-            ),
-            "description": "Chinese person name before honorific suffix",
-        },
-    ),
+    _patterns=(),  # Person names are detected by lang/zh/person.py, not by regex PATTERNS
     faker=fake_person,
     source="公安部全国姓名统计, 百家姓",
-    description="Chinese person name (surname + context heuristic)",
+    description="Chinese person name (candidate generation + evidence scoring, see person.py)",
 ))
 
 

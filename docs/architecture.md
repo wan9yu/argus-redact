@@ -51,15 +51,18 @@ Runs a set of regex patterns against the full text. Each pattern belongs to a la
 ```
 text = "张三的手机号是13812345678，身份证号是110101199003071234"
        │                │                      │
-       │                ├─ match: phone         ├─ match: id_number
-       │                │  start=8, end=19      │  start=25, end=43
-       │                │                      │
-       (not matched by regex — needs NER)
+       ├─ person (1b)   ├─ match: phone         ├─ match: id_number
+       │  score=0.8+     │  start=8, end=19      │  start=25, end=43
+       │  (PII proximity)│                      │
 ```
 
+Layer 1 has two sub-phases:
+- **1a: Structural PII** — regex patterns for phone, ID, bank card, email, etc.
+- **1b: Person names (zh)** — candidate generation (surname + CJK chars, filtered by negative dictionary) + evidence scoring (PII proximity, context words, honorific suffixes). Uses 1a results as context signals.
+
 **Characteristics:**
-- Runs on the full text in one pass (compiled regex union)
-- Always returns confidence = 1.0
+- 1a runs on the full text in one pass (compiled regex union), always confidence = 1.0
+- 1b generates candidates, scores them against evidence signals, confirms above threshold (0.8)
 - Optional `validate` function per pattern reduces false positives (e.g., Luhn checksum for cards, MOD 11-2 for Chinese ID)
 - Language-independent patterns (email, URL) are shared across all packs
 - O(n) time complexity, < 1ms for typical texts
@@ -76,11 +79,11 @@ text = "张三的手机号是13812345678，身份证号是110101199003071234"
 Runs a Named Entity Recognition model to detect person names, locations, and organizations.
 
 ```
-text = "张三的手机号是13812345678"
+text = "他的同事在星巴克开会"
+       │         │
+       │         ├─ NER: "星巴克" → ORG, confidence=0.90
        │
-       ├─ NER: "张三" → PERSON, confidence=0.95
-       │
-       (phone already caught by Layer 1 — skipped)
+       (no structural PII — Layer 1b person scoring has no signals)
 ```
 
 **Processing steps:**

@@ -62,6 +62,9 @@ class TestFaker:
         for typedef in list_types("zh"):
             if typedef.faker is None:
                 continue
+            # Person names are detected by person.py, not by PATTERNS regex
+            if typedef.name == "person":
+                continue
             expected_type = TYPE_ALIASES.get(typedef.name, typedef.name)
             # Generate 10 values, check they all match
             for _ in range(10):
