@@ -46,13 +46,17 @@ def run_redact(text, lang, mode, seed_str, names_str):
 
 
 EXAMPLES = [
-    ["你好王一，你的手机号是18630303030", "zh", "fast", "42", "王一"],
-    ["张三的手机号是13812345678，邮箱zhang@test.com", "zh", "fast", "42", "张三"],
+    # Chinese: person names auto-detected near PII (no names param needed)
+    ["张三的手机号是13812345678，邮箱zhang@test.com", "zh", "fast", "42", ""],
+    ["何秀珍，身份证110101199003071234，电话13912345678", "zh", "fast", "42", ""],
+    ["客户刘伟的银行卡6222021234567890123", "zh", "fast", "42", ""],
+    # Chinese: names param for names without nearby PII
+    ["下午和高明开会讨论方案", "zh", "fast", "42", "高明"],
+    # Multi-language
+    ["张三给John发了邮件zhang@test.com，电话13812345678", "zh,en", "fast", "42", "John"],
+    # Other languages
     ["John Smith called (555) 123-4567, SSN 123-45-6789", "en", "fast", "42", "John Smith"],
     ["田中太郎の携帯は090-1234-5678", "ja", "fast", "42", "田中太郎"],
-    ["김철수 전화번호 010-1234-5678", "ko", "fast", "42", "김철수"],
-    ["Hans Müller, Steuer-ID: 12 345 678 901", "de", "fast", "42", "Hans Müller"],
-    ["张三给John发了邮件zhang@test.com，电话13812345678", "zh,en", "fast", "42", "张三,John"],
 ]
 
 with gr.Blocks(title=f"argus-redact v{__version__}") as demo:
