@@ -43,5 +43,6 @@ Everything else is optional.
 | Document | Description |
 |----------|-------------|
 | [Language Packs](language-packs.md) | Adding new languages (regex, NER adapter, semantic prompts) |
+| [Sensitive Info Taxonomy](sensitive-info.md) | Four levels of sensitivity, compliance profiles, roadmap |
 | [Architecture](architecture.md) | Three-layer engine internals, data flow, PII type registry |
 | [Known Issues](known-issues.md) | Current limitations and recently fixed issues |

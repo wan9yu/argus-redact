@@ -106,6 +106,7 @@ PII never leaves your device. Per-message keys prevent cross-request profiling. 
 | [API Reference](docs/api-reference.md) | All parameters, return types, streaming, structured data |
 | [CLI Reference](docs/cli-reference.md) | Commands, flags, serve, MCP server |
 | [Configuration](docs/configuration.md) | Per-type strategies, enterprise mask rules, false positive reduction |
+| [Sensitive Info](docs/sensitive-info.md) | Taxonomy, compliance profiles, roadmap |
 | [Architecture](docs/architecture.md) | Three-layer engine, pure/impure separation |
 | [Language Packs](docs/language-packs.md) | Adding new languages |
 | [Security Model](docs/security-model.md) | Threat model, compliance, per-message keys |
