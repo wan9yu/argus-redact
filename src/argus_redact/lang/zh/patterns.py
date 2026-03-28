@@ -85,6 +85,23 @@ def _validate_bank_card(value: str) -> bool:
     return digits[:6] in _BANK_BINS
 
 
+# 56 ethnic groups — full list for use with 民族 keyword prefix
+_ETHNIC_GROUPS_ALL = (
+    r"(?:汉|蒙古|回|藏|维吾尔|苗|彝|壮|布依|朝鲜|满|侗|瑶|白|土家|"
+    r"哈尼|哈萨克|傣|黎|傈僳|佤|畲|高山|拉祜|水|东乡|纳西|景颇|"
+    r"柯尔克孜|土|达斡尔|仫佬|羌|布朗|撒拉|毛南|仡佬|锡伯|阿昌|"
+    r"普米|塔吉克|怒|乌孜别克|俄罗斯|鄂温克|德昂|保安|裕固|京|"
+    r"塔塔尔|独龙|鄂伦春|赫哲|门巴|珞巴|基诺)"
+)
+# Safe subset for standalone XX族 — excludes 高山 (common word) and 土 (ambiguous)
+_ETHNIC_GROUPS_SAFE = (
+    r"(?:汉|蒙古|回|藏|维吾尔|苗|彝|壮|布依|朝鲜|满|侗|瑶|白|土家|"
+    r"哈尼|哈萨克|傣|黎|傈僳|佤|畲|拉祜|水|东乡|纳西|景颇|"
+    r"柯尔克孜|达斡尔|仫佬|羌|布朗|撒拉|毛南|仡佬|锡伯|阿昌|"
+    r"普米|塔吉克|怒|乌孜别克|俄罗斯|鄂温克|德昂|保安|裕固|京|"
+    r"塔塔尔|独龙|鄂伦春|赫哲|门巴|珞巴|基诺)"
+)
+
 PATTERNS = [
     {
         "type": "phone",
@@ -280,7 +297,7 @@ PATTERNS = [
         "type": "school",
         "label": "[学校已脱敏]",
         "pattern": (
-            r"[\u4e00-\u9fff]{2,10}"
+            r"(?<!\d)[\u4e00-\u9fff]{2,10}"
             r"(?:大学|学院|中学|小学|高中|初中|附中|附小|"
             r"实验学校|外国语学校|师范学校|职业学校|技术学校|"
             r"幼儿园|书院|学堂|党校)"
@@ -291,19 +308,10 @@ PATTERNS = [
         "type": "ethnicity",
         "label": "[民族已脱敏]",
         "pattern": (
-            r"(?:民族\s*[:：]?\s*)"
-            r"(?:汉|蒙古|回|藏|维吾尔|苗|彝|壮|布依|朝鲜|满|侗|瑶|白|土家|"
-            r"哈尼|哈萨克|傣|黎|傈僳|佤|畲|高山|拉祜|水|东乡|纳西|景颇|"
-            r"柯尔克孜|土|达斡尔|仫佬|羌|布朗|撒拉|毛南|仡佬|锡伯|阿昌|"
-            r"普米|塔吉克|怒|乌孜别克|俄罗斯|鄂温克|德昂|保安|裕固|京|"
-            r"塔塔尔|独龙|鄂伦春|赫哲|门巴|珞巴|基诺)族"
+            r"(?:民族\s*[:：]?\s*)" + _ETHNIC_GROUPS_ALL + r"族"
             r"|"
-            # XX族 pattern (without 民族 keyword, but must be a known ethnicity)
-            r"(?:汉|蒙古|回|藏|维吾尔|苗|彝|壮|布依|朝鲜|满|侗|瑶|白|土家|"
-            r"哈尼|哈萨克|傣|黎|傈僳|佤|畲|拉祜|水|东乡|纳西|景颇|"
-            r"柯尔克孜|达斡尔|羌|布朗|撒拉|毛南|仡佬|锡伯|阿昌|"
-            r"普米|塔吉克|怒|乌孜别克|俄罗斯|鄂温克|德昂|保安|裕固|京|"
-            r"塔塔尔|独龙|鄂伦春|赫哲|门巴|珞巴|基诺)族"
+            # Standalone XX族 without 民族 keyword — excludes 高山/土 (ambiguous as common words)
+            + _ETHNIC_GROUPS_SAFE + r"族"
         ),
         "description": "Chinese ethnicity (56 ethnic groups, keyword-triggered or standalone XX族)",
     },
