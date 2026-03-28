@@ -1,0 +1,39 @@
+[
+    {
+        "id": "imei_standard",
+        "input": "IMEI: 353456789012345",
+        "should_match": true,
+        "type": "imei",
+        "expected_text": "353456789012345",
+        "description": "标准15位IMEI"
+    },
+    {
+        "id": "imei_keyword_cn",
+        "input": "设备IMEI号490154203237518",
+        "should_match": true,
+        "type": "imei",
+        "expected_text": "490154203237518",
+        "description": "中文上下文IMEI"
+    },
+    {
+        "id": "imei_no_keyword",
+        "input": "353456789012345",
+        "should_match": false,
+        "type": "imei",
+        "description": "无IMEI关键词不匹配"
+    },
+    {
+        "id": "imei_too_short",
+        "input": "IMEI: 35345678901234",
+        "should_match": false,
+        "type": "imei",
+        "description": "只有14位不匹配"
+    },
+    {
+        "id": "plain_text",
+        "input": "nothing here",
+        "should_match": false,
+        "type": "imei",
+        "description": "无PII"
+    }
+]

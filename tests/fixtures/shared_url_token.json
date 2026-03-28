@@ -1,0 +1,40 @@
+[
+    {
+        "id": "url_token_param",
+        "input": "链接 https://example.com/verify?token=abc123def456",
+        "should_match": true,
+        "type": "url_token",
+        "expected_text": "https://example.com/verify?token=abc123def456",
+        "description": "URL with token parameter"
+    },
+    {
+        "id": "url_api_key",
+        "input": "https://api.service.com/v1?api_key=sk_live_1234567890abcdef",
+        "should_match": true,
+        "type": "url_token",
+        "expected_text": "https://api.service.com/v1?api_key=sk_live_1234567890abcdef",
+        "description": "URL with api_key parameter"
+    },
+    {
+        "id": "url_access_token",
+        "input": "callback https://example.com/oauth?access_token=eyJhbGciOiJI",
+        "should_match": true,
+        "type": "url_token",
+        "expected_text": "https://example.com/oauth?access_token=eyJhbGciOiJI",
+        "description": "URL with access_token"
+    },
+    {
+        "id": "url_no_token",
+        "input": "visit https://example.com/page",
+        "should_match": false,
+        "type": "url_token",
+        "description": "普通URL无token参数"
+    },
+    {
+        "id": "plain_text",
+        "input": "nothing here",
+        "should_match": false,
+        "type": "url_token",
+        "description": "无PII"
+    }
+]

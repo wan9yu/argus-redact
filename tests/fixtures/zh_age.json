@@ -1,0 +1,64 @@
+[
+    {
+        "id": "age_sui",
+        "input": "他今年35岁",
+        "should_match": true,
+        "type": "age",
+        "expected_text": "35岁",
+        "description": "今年X岁"
+    },
+    {
+        "id": "age_nianji",
+        "input": "年龄：28",
+        "should_match": true,
+        "type": "age",
+        "expected_text": "年龄：28",
+        "description": "年龄+数字"
+    },
+    {
+        "id": "age_zhou_sui",
+        "input": "患者周岁52",
+        "should_match": true,
+        "type": "age",
+        "expected_text": "周岁52",
+        "description": "周岁+数字"
+    },
+    {
+        "id": "age_years_old_en",
+        "input": "he is 35 years old",
+        "should_match": true,
+        "type": "age",
+        "expected_text": "35 years old",
+        "description": "English years old"
+    },
+    {
+        "id": "age_year_old_en",
+        "input": "a 5-year-old child",
+        "should_match": true,
+        "type": "age",
+        "expected_text": "5-year-old",
+        "description": "English X-year-old"
+    },
+    {
+        "id": "age_aged_en",
+        "input": "aged 72",
+        "should_match": true,
+        "type": "age",
+        "expected_text": "aged 72",
+        "description": "English aged X"
+    },
+    {
+        "id": "no_keyword_number",
+        "input": "共35人参加",
+        "should_match": false,
+        "type": "age",
+        "description": "普通数字无年龄关键词"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "age",
+        "description": "无PII"
+    }
+]

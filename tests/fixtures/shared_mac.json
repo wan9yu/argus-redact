@@ -1,0 +1,40 @@
+[
+    {
+        "id": "mac_colon",
+        "input": "MAC地址AA:BB:CC:DD:EE:FF",
+        "should_match": true,
+        "type": "mac_address",
+        "expected_text": "AA:BB:CC:DD:EE:FF",
+        "description": "冒号分隔MAC地址"
+    },
+    {
+        "id": "mac_dash",
+        "input": "device mac: AA-BB-CC-DD-EE-FF",
+        "should_match": true,
+        "type": "mac_address",
+        "expected_text": "AA-BB-CC-DD-EE-FF",
+        "description": "短横线分隔"
+    },
+    {
+        "id": "mac_lowercase",
+        "input": "mac aa:bb:cc:dd:ee:ff",
+        "should_match": true,
+        "type": "mac_address",
+        "expected_text": "aa:bb:cc:dd:ee:ff",
+        "description": "小写MAC"
+    },
+    {
+        "id": "mac_too_short",
+        "input": "AA:BB:CC:DD:EE",
+        "should_match": false,
+        "type": "mac_address",
+        "description": "只有5组不匹配"
+    },
+    {
+        "id": "plain_text",
+        "input": "nothing here",
+        "should_match": false,
+        "type": "mac_address",
+        "description": "无PII"
+    }
+]

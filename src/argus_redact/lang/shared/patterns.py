@@ -32,4 +32,41 @@ PATTERNS = [
         ),
         "description": "IPv6 address (full, collapsed, loopback)",
     },
+    {
+        "type": "mac_address",
+        "label": "[MAC已脱敏]",
+        "pattern": r"(?<![0-9A-Fa-f:.-])[0-9A-Fa-f]{2}(?:[:.-])[0-9A-Fa-f]{2}(?:[:.-])[0-9A-Fa-f]{2}(?:[:.-])[0-9A-Fa-f]{2}(?:[:.-])[0-9A-Fa-f]{2}(?:[:.-])[0-9A-Fa-f]{2}(?![0-9A-Fa-f:.-])",
+        "description": "MAC address (colon/dash/dot separated)",
+    },
+    {
+        "type": "imei",
+        "label": "[IMEI已脱敏]",
+        "pattern": r"(?i:IMEI)\s*(?:号|[:：])?\s*(?P<imei>\d{15})(?!\d)",
+        "group": "imei",
+        "description": "IMEI device identifier (15 digits, keyword-triggered)",
+    },
+    {
+        "type": "url_token",
+        "label": "[URL已脱敏]",
+        "pattern": (
+            r"https?://[^\s]+[?&]"
+            r"(?:token|api_key|access_token|secret|key|auth|session_id|password)"
+            r"=[^\s&]+"
+        ),
+        "description": "URL with sensitive token/key parameter",
+    },
+    {
+        "type": "age",
+        "label": "[年龄已脱敏]",
+        "pattern": (
+            # Chinese: X岁, 年龄:X, 周岁X
+            r"\d{1,3}岁"
+            r"|(?:年龄|周岁)\s*[:：]?\s*\d{1,3}"
+            r"|"
+            # English: X years old, X-year-old, aged X
+            r"\d{1,3}\s*[-‐]?\s*years?\s*[-‐]?\s*old"
+            r"|aged\s+\d{1,3}"
+        ),
+        "description": "Age (Chinese 岁/年龄/周岁 + English years old/aged)",
+    },
 ]

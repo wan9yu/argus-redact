@@ -39,8 +39,8 @@ Cannot identify someone alone, but combinations can. Research shows birth date +
 
 | Type | Status | Layer | Notes |
 |------|:------:|:-----:|-------|
-| Date of birth | planned | 1 | Many formats: `90年3月`, `三月七号`, `March 7th`, `07/03/1990` |
-| Age | planned | 1/3 | `今年35岁`, `35-year-old` |
+| Date of birth | ✓ zh/en (Level 1) | 1 | Many formats: `90年3月`, `三月七号`, `March 7th`, `07/03/1990` |
+| Age | ✓ shared | 1 | `今年35岁`, `35-year-old`, `aged 72` |
 | Gender | planned | 3 | Contextual |
 | Workplace | planned | 1b/2 | Similar ambiguity to person names |
 | Job title | planned | 3 | `他是骨科主任` |
@@ -68,9 +68,9 @@ Machine-readable identifiers that can be traced to individuals or devices.
 | Type | Status | Layer | Format examples |
 |------|:------:|:-----:|-----------------|
 | IP address | ✓ shared | 1 | `192.168.1.1`, `::ffff:127.0.0.1` |
-| MAC address | planned | 1 | `AA:BB:CC:DD:EE:FF` |
-| IMEI | planned | 1 | 15-digit device identifier |
-| URL with token | planned | 1 | `example.com/verify?token=abc123` |
+| MAC address | ✓ shared | 1 | `AA:BB:CC:DD:EE:FF` |
+| IMEI | ✓ shared | 1 | 15-digit device identifier (keyword-triggered) |
+| URL with token | ✓ shared | 1 | `example.com/verify?token=abc123` |
 | Social media handle | ✓ zh | 1 | `@username`, WeChat ID (partial: QQ, WeChat) |
 
 ---
