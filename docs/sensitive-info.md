@@ -53,13 +53,13 @@ Not identifiers, but high-harm if leaked. Protected by PIPL, GDPR, HIPAA.
 
 | Type | Status | Layer | Notes |
 |------|:------:|:-----:|-------|
-| Medical / health | planned | 3 | Diagnosis, medication, symptoms, test results |
-| Financial | planned | 3 | Salary, debt, credit score, transaction details |
-| Religious belief | planned | 3 | Requires semantic understanding |
-| Political opinion | planned | 3 | Requires semantic understanding |
-| Sexual orientation | planned | 3 | Requires semantic understanding |
-| Criminal record | planned | 3 | Requires semantic understanding |
-| Biometric description | planned | 3 | Fingerprint, DNA references in text |
+| Medical / health | ✓ zh (explicit) | 1 | Keyword/regex detection; implicit → Layer 3 LLM |
+| Financial | ✓ zh (explicit) | 1 | Keyword/regex detection; implicit → Layer 3 LLM |
+| Religious belief | ✓ zh (explicit) | 1 | Keyword/regex detection; implicit → Layer 3 LLM |
+| Political opinion | ✓ zh (explicit) | 1 | Keyword/regex detection; implicit → Layer 3 LLM |
+| Sexual orientation | ✓ zh (explicit) | 1 | Keyword/regex detection; implicit → Layer 3 LLM |
+| Criminal record | ✓ zh (explicit) | 1 | Keyword/regex detection; implicit → Layer 3 LLM |
+| Biometric description | ✓ zh (explicit) | 1 | Keyword/regex detection; implicit → Layer 3 LLM |
 
 ### Level 4 — Digital Identifiers
 
@@ -102,7 +102,7 @@ Different regulations care about different types. Profiles are pre-configured ty
 | Profile | Focus | Types enabled | Completion |
 |---------|-------|---------------|:----------:|
 | `default` | Common PII | All Level 1 direct identifiers (current behavior) | ~100% — Level 1 complete |
-| `pipl` | China PIPL | All Level 1 + biometric + financial + medical + religious + political | ~60% — Level 1 + Level 2 complete, Level 3 not started |
+| `pipl` | China PIPL | All Level 1 + biometric + financial + medical + religious + political | ~75% — Level 1 + Level 2 + Level 3 explicit complete; implicit needs Layer 3 LLM |
 | `gdpr` | EU GDPR | All Level 1 + Level 2 quasi-identifiers + Level 3 special categories | ~40% — Level 1 + Level 2 complete, Level 3 not started |
 | `hipaa` | US HIPAA | Direct identifiers + medical + 18 PHI types | ~20% — Level 1 + Level 2 improved |
 
@@ -167,8 +167,9 @@ report.risk.pipl_articles  # ["PIPL Art.28", "PIPL Art.51"]
 
 Unlocks Level 3 sensitive attributes. Largest investment, highest compliance impact.
 
-- Layer 3 LLM prompts for Chinese medical, financial, political, religious content
+- ✓ Explicit keyword/regex detection for all 7 Level 3 types (criminal_record, financial, biometric, medical, religion, political, sexual_orientation)
+- Layer 3 LLM prompts for implicit/contextual detection (medical context, financial inference, political sentiment)
 - Industry-specific terminology (medical diagnosis, legal documents, financial products)
 - Configurable sensitivity levels per domain
 - Multi-language semantic prompts
-- Target: PIPL profile from ~60% → 90%+
+- Target: PIPL profile from ~75% → 90%+ (implicit detection via LLM)

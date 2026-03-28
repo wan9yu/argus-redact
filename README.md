@@ -74,10 +74,10 @@ We track what still needs work:
 | Dimension | Current (v0.1.10) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Detection** | P=96% R=98% F1=97% | P>98% (reduce false positives) |
-| **Compliance** | `default` ~100%; `pipl` ~60%; risk assessment + audit report + profiles API | Level 3 types for `pipl`/`gdpr`/`hipaa` full coverage |
+| **Compliance** | `default` ~100%; `pipl` ~75%; risk assessment + audit report + profiles API; Level 3 explicit keyword detection | Level 3 implicit detection via LLM for `pipl`/`gdpr`/`hipaa` full coverage |
 | **Security** | Fully local, fresh key per call | Key TTL & rotation |
 | **Performance** | 600 docs/s (regex + name scoring) | Rust core (10x) |
-| **Coverage** | 8 langs, ~20 PII types (zh) / ~7 (en) + 8 shared, 6 frameworks | 10+ langs, address++, Dify/CrewAI |
+| **Coverage** | 8 langs, ~27 PII types (zh incl. 7 Level 3) / ~7 (en) + 8 shared, 6 frameworks | 10+ langs, address++, Dify/CrewAI |
 
 [Full benchmark report →](docs/benchmark-report.md) | [Sensitive info taxonomy →](docs/sensitive-info.md)
 

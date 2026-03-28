@@ -13,7 +13,7 @@ You can contribute any one of these independently. A pack with only regex patter
 | Language | Regex (Layer 1) | NER (Layer 2) | Semantic (Layer 3) |
 |----------|----------------|--------------|-------------------|
 | **Shared** (all langs) | Email, IP address, age, gender, MAC address, IMEI, URL with token | — | — |
-| Chinese (zh) | Phone, ID, bank card, license plate, address, passport, date of birth, QQ, WeChat, military ID, social security, credit code + Level 2: job title, organization, school, ethnicity, workplace + shared | HanLP | Ollama |
+| Chinese (zh) | Phone, ID, bank card, license plate, address, passport, date of birth, QQ, WeChat, military ID, social security, credit code + Level 2: job title, organization, school, ethnicity, workplace + Level 3 (explicit): criminal_record, financial, biometric, medical, religion, political, sexual_orientation + shared | HanLP | Ollama |
 | English (en) | Phone, SSN, credit card, date of birth, US passport + shared | spaCy | Ollama |
 | Japanese (ja) | Phone, My Number + shared | spaCy | Ollama |
 | Korean (ko) | Phone, RRN + shared | spaCy | Ollama |
