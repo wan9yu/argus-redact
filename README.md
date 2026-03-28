@@ -77,7 +77,7 @@ We track what still needs work:
 | **Compliance** | `default` ~100%; risk assessment + audit report + profiles API | Level 2-3 types for `pipl`/`gdpr`/`hipaa` full coverage |
 | **Security** | Fully local, fresh key per call | Key TTL & rotation |
 | **Performance** | 600 docs/s (regex + name scoring) | Rust core (10x) |
-| **Coverage** | 8 langs, 14 PII types (zh) / 7 (en), 6 frameworks | 10+ langs, address++, Dify/CrewAI |
+| **Coverage** | 8 langs, 18 PII types (zh) / 11 (en) + 6 shared, 6 frameworks | 10+ langs, address++, Dify/CrewAI |
 
 [Full benchmark report →](docs/benchmark-report.md) | [Sensitive info taxonomy →](docs/sensitive-info.md)
 

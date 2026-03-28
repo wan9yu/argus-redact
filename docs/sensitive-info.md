@@ -157,7 +157,7 @@ report.risk.pipl_articles  # ["PIPL Art.28", "PIPL Art.51"]
 
 Extend candidate+scoring architecture (proven on person names) to new entity types.
 
-- Age detection: `今年35岁`, `35-year-old` (regex, low effort)
+- ✓ Age detection: `今年35岁`, `35-year-old` (shared regex)
 - Organization names: candidate+scoring, similar to person name approach
 - School names: `北大`, `清华附中` (candidate+scoring)
 - Workplace / job title: contextual detection
