@@ -102,6 +102,11 @@ _ETHNIC_GROUPS_SAFE = (
     r"塔塔尔|独龙|鄂伦春|赫哲|门巴|珞巴|基诺)"
 )
 
+_DISEASE_KEYWORDS = (
+    r"(?:乙肝|丙肝|艾滋病|癌症|肿瘤|白血病|糖尿病|高血压|"
+    r"冠心病|抑郁症|精神分裂|癫痫|肺结核|梅毒|淋病|尿毒症)"
+)
+
 PATTERNS = [
     {
         "type": "phone",
@@ -324,5 +329,90 @@ PATTERNS = [
         ),
         "group": "workplace",
         "description": "Chinese workplace (keyword-triggered, CJK text after keyword)",
+    },
+    # ── Level 3 sensitive attributes (explicit keyword detection) ──
+    {
+        "type": "criminal_record",
+        "label": "[犯罪记录已脱敏]",
+        "pattern": (
+            r"(?:有前科|犯罪记录|案底|刑事拘留|行政拘留|"
+            r"判刑[\u4e00-\u9fff\d]+[年月天]|"
+            r"拘留[\u4e00-\u9fff\d]+[天日]|"
+            r"被判处|缓刑|假释|取保候审|逮捕|起诉|定罪|"
+            r"服刑|入狱|坐牢|监禁)"
+        ),
+        "description": "Criminal record (explicit keywords: 前科/判刑/拘留/犯罪记录)",
+    },
+    {
+        "type": "financial",
+        "label": "[财务信息已脱敏]",
+        "pattern": (
+            r"(?:月薪|年薪|年收入|月收入|工资|底薪|税后收入|税前收入)"
+            r"[\d.]+[万元千百]+"
+            r"|(?:欠债|负债|欠款|贷款余额|房贷余额|车贷余额|信用卡欠款)"
+            r"[\d.]+[万元千百]+"
+            r"|信用评分\d+分?"
+            r"|(?:房贷|车贷|消费贷|网贷|借款)[\d.]+[万元千百]+"
+        ),
+        "description": "Financial info (salary/debt/credit score/loan with amounts)",
+    },
+    {
+        "type": "biometric",
+        "label": "[生物特征已脱敏]",
+        "pattern": (
+            r"(?:指纹(?:信息|采集|录入|比对|识别)|"
+            r"DNA(?:检测|鉴定|样本|比对|信息)|"
+            r"人脸(?:识别|采集|比对|信息|图像)|"
+            r"虹膜(?:扫描|识别|采集|信息)|"
+            r"声纹(?:录入|识别|采集|信息)|"
+            r"掌纹(?:采集|识别|信息)|"
+            r"基因(?:检测|信息|序列|样本))"
+        ),
+        "description": "Biometric data (fingerprint/DNA/face/iris/voiceprint)",
+    },
+    {
+        "type": "medical",
+        "label": "[医疗信息已脱敏]",
+        "pattern": (
+            r"(?:确诊|诊断为|患有|患了|罹患|检出)[\u4e00-\u9fff]{2,8}"
+            r"|(?:服用|注射|口服)[\u4e00-\u9fff\w]{2,10}"
+            r"|HIV[阳阴]性"
+            r"|" + _DISEASE_KEYWORDS +
+            r"|[\u4e00-\u9fff]{2,6}手术"
+        ),
+        "description": "Medical/health info (diagnosis/medication/disease/surgery)",
+    },
+    {
+        "type": "religion",
+        "label": "[宗教信仰已脱敏]",
+        "pattern": (
+            r"(?:基督徒|天主教徒|穆斯林|佛教徒|道教徒|印度教徒|犹太教徒|"
+            r"新教徒|东正教徒|摩门教徒)"
+            r"|(?:做礼拜|做弥撒|诵经|念佛|斋月|受洗入教|受洗|皈依|"
+            r"朝圣|祷告|礼拜日|安息日)"
+            r"|(?:信仰|信奉)[\u4e00-\u9fff]{2,6}"
+        ),
+        "description": "Religious belief (believer types/practices/declarations)",
+    },
+    {
+        "type": "political",
+        "label": "[政治观点已脱敏]",
+        "pattern": (
+            r"(?:政治面貌\s*[:：]?\s*[\u4e00-\u9fff]{2,6})"
+            r"|(?:党员|团员|共青团员|民主党派|无党派|群众)"
+            r"|(?:投票(?:给了?|支持)[\u4e00-\u9fff\w]{2,10})"
+            r"|(?:抗议游行|示威游行|集会抗议|政治集会|罢工)"
+        ),
+        "description": "Political opinion (party membership/voting/protest)",
+    },
+    {
+        "type": "sexual_orientation",
+        "label": "[性取向已脱敏]",
+        "pattern": (
+            r"(?:同性恋|双性恋|异性恋|无性恋|泛性恋)"
+            # 同志 excluded: too ambiguous (also means "comrade" in political context)
+            r"|(?:出柜|LGBTQ?|酷儿|GAY|gay|彩虹旗)"
+        ),
+        "description": "Sexual orientation (explicit terms)",
     },
 ]

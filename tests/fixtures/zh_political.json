@@ -1,0 +1,49 @@
+[
+    {
+        "id": "pol_dangyuan",
+        "input": "他是党员",
+        "should_match": true,
+        "type": "political",
+        "expected_text": "党员",
+        "description": "党员"
+    },
+    {
+        "id": "pol_zhengzhi",
+        "input": "政治面貌：群众",
+        "should_match": true,
+        "type": "political",
+        "expected_text": "政治面貌：群众",
+        "description": "政治面貌"
+    },
+    {
+        "id": "pol_toupiao",
+        "input": "投票给了民主党",
+        "should_match": true,
+        "type": "political",
+        "expected_text": "投票给了民主党",
+        "description": "投票+党派"
+    },
+    {
+        "id": "pol_youxing",
+        "input": "参加了抗议游行",
+        "should_match": true,
+        "type": "political",
+        "expected_text": "抗议游行",
+        "description": "抗议游行"
+    },
+    {
+        "id": "pol_tuandangyuan",
+        "input": "他是共青团员",
+        "should_match": true,
+        "type": "political",
+        "expected_text": "共青团员",
+        "description": "共青团员"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "political",
+        "description": "无PII"
+    }
+]

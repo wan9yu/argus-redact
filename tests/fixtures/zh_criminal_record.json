@@ -1,0 +1,49 @@
+[
+    {
+        "id": "cr_qianke",
+        "input": "此人有前科",
+        "should_match": true,
+        "type": "criminal_record",
+        "expected_text": "有前科",
+        "description": "有前科"
+    },
+    {
+        "id": "cr_panxing",
+        "input": "被判刑三年",
+        "should_match": true,
+        "type": "criminal_record",
+        "expected_text": "判刑三年",
+        "description": "判刑X年"
+    },
+    {
+        "id": "cr_juliu",
+        "input": "行政拘留十五天",
+        "should_match": true,
+        "type": "criminal_record",
+        "expected_text": "行政拘留",
+        "description": "拘留"
+    },
+    {
+        "id": "cr_andi",
+        "input": "他有犯罪记录",
+        "should_match": true,
+        "type": "criminal_record",
+        "expected_text": "犯罪记录",
+        "description": "犯罪记录"
+    },
+    {
+        "id": "cr_xingju",
+        "input": "被刑事拘留",
+        "should_match": true,
+        "type": "criminal_record",
+        "expected_text": "刑事拘留",
+        "description": "刑事拘留"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "criminal_record",
+        "description": "无PII"
+    }
+]

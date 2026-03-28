@@ -131,6 +131,55 @@ class TestWorkplace:
         assert_pattern_match(results, example, "workplace")
 
 
+class TestCriminalRecord:
+    @parametrize_examples("zh_criminal_record.json")
+    def test_should_match_or_reject_when_criminal_record_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "criminal_record")
+
+
+class TestFinancial:
+    @parametrize_examples("zh_financial.json")
+    def test_should_match_or_reject_when_financial_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "financial")
+
+
+class TestBiometric:
+    @parametrize_examples("zh_biometric.json")
+    def test_should_match_or_reject_when_biometric_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "biometric")
+
+
+class TestMedical:
+    @parametrize_examples("zh_medical.json")
+    def test_should_match_or_reject_when_medical_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "medical")
+
+
+class TestReligion:
+    @parametrize_examples("zh_religion.json")
+    def test_should_match_or_reject_when_religion_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "religion")
+
+
+class TestPolitical:
+    @parametrize_examples("zh_political.json")
+    def test_should_match_or_reject_when_political_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "political")
+
+
+class TestSexualOrientation:
+    @parametrize_examples("zh_sexual_orientation.json")
+    def test_should_match_or_reject_when_sexual_orientation_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "sexual_orientation")
+
+
 class TestMultiplePII:
     def test_should_detect_both_types_when_phone_and_id_in_text(self, zh_patterns):
         text = "手机13812345678，身份证110101199003074610"

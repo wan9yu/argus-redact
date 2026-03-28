@@ -44,7 +44,12 @@ class TestConsistencyWithPatterns:
         # phone_landline is separate in specs but uses "phone" type in patterns
         spec_types.add("phone")
         # Level 2 quasi-identifiers use patterns but don't have full PIITypeDef specs yet
-        level2_types = {"job_title", "organization", "school", "ethnicity", "workplace"}
+        # Level 2/3 types use patterns but don't have full PIITypeDef specs yet
+        level2_types = {
+            "job_title", "organization", "school", "ethnicity", "workplace",
+            "criminal_record", "financial", "biometric", "medical",
+            "religion", "political", "sexual_orientation",
+        }
         for ptype in pattern_types:
             if ptype in level2_types:
                 continue

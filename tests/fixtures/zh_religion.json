@@ -1,0 +1,49 @@
+[
+    {
+        "id": "rel_jidtu",
+        "input": "他是基督徒",
+        "should_match": true,
+        "type": "religion",
+        "expected_text": "基督徒",
+        "description": "基督徒"
+    },
+    {
+        "id": "rel_musilin",
+        "input": "她是穆斯林",
+        "should_match": true,
+        "type": "religion",
+        "expected_text": "穆斯林",
+        "description": "穆斯林"
+    },
+    {
+        "id": "rel_libai",
+        "input": "每周做礼拜",
+        "should_match": true,
+        "type": "religion",
+        "expected_text": "做礼拜",
+        "description": "做礼拜"
+    },
+    {
+        "id": "rel_fojiato",
+        "input": "虔诚的佛教徒",
+        "should_match": true,
+        "type": "religion",
+        "expected_text": "佛教徒",
+        "description": "佛教徒"
+    },
+    {
+        "id": "rel_shoushi",
+        "input": "已经受洗入教",
+        "should_match": true,
+        "type": "religion",
+        "expected_text": "受洗入教",
+        "description": "受洗入教"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "religion",
+        "description": "无PII"
+    }
+]

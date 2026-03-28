@@ -1,0 +1,56 @@
+[
+    {
+        "id": "fin_yuexin",
+        "input": "月薪2万元",
+        "should_match": true,
+        "type": "financial",
+        "expected_text": "月薪2万元",
+        "description": "月薪"
+    },
+    {
+        "id": "fin_nianshouru",
+        "input": "年收入50万",
+        "should_match": true,
+        "type": "financial",
+        "expected_text": "年收入50万",
+        "description": "年收入"
+    },
+    {
+        "id": "fin_qianzhai",
+        "input": "欠债30万",
+        "should_match": true,
+        "type": "financial",
+        "expected_text": "欠债30万",
+        "description": "欠债"
+    },
+    {
+        "id": "fin_xinyong",
+        "input": "信用评分680分",
+        "should_match": true,
+        "type": "financial",
+        "expected_text": "信用评分680分",
+        "description": "信用评分"
+    },
+    {
+        "id": "fin_daikuan",
+        "input": "房贷余额120万",
+        "should_match": true,
+        "type": "financial",
+        "expected_text": "房贷余额120万",
+        "description": "房贷余额"
+    },
+    {
+        "id": "fin_generic_money",
+        "input": "这个项目投资500万",
+        "should_match": false,
+        "type": "financial",
+        "description": "非个人财务信息"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "financial",
+        "description": "无PII"
+    }
+]

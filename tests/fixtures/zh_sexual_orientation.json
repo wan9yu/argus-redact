@@ -1,0 +1,48 @@
+[
+    {
+        "id": "so_tongxinglian",
+        "input": "他是同性恋",
+        "should_match": true,
+        "type": "sexual_orientation",
+        "expected_text": "同性恋",
+        "description": "同性恋"
+    },
+    {
+        "id": "so_shuangxing",
+        "input": "她是双性恋",
+        "should_match": true,
+        "type": "sexual_orientation",
+        "expected_text": "双性恋",
+        "description": "双性恋"
+    },
+    {
+        "id": "so_chugui",
+        "input": "他已经出柜",
+        "should_match": true,
+        "type": "sexual_orientation",
+        "expected_text": "出柜",
+        "description": "出柜"
+    },
+    {
+        "id": "so_lgbt",
+        "input": "LGBT群体",
+        "should_match": true,
+        "type": "sexual_orientation",
+        "expected_text": "LGBT",
+        "description": "LGBT"
+    },
+    {
+        "id": "so_tongzhi_fp",
+        "input": "各位同志们好",
+        "should_match": false,
+        "type": "sexual_orientation",
+        "description": "同志=comrade 不应匹配"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "sexual_orientation",
+        "description": "无PII"
+    }
+]

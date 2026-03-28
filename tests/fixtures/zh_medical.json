@@ -1,0 +1,57 @@
+[
+    {
+        "id": "med_quezhen",
+        "input": "确诊糖尿病",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "确诊糖尿病",
+        "description": "确诊+疾病"
+    },
+    {
+        "id": "med_gaoxueya",
+        "input": "患有高血压",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "患有高血压",
+        "description": "患有+疾病"
+    },
+    {
+        "id": "med_fuyong",
+        "input": "服用阿莫西林",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "服用阿莫西林",
+        "description": "服用+药物"
+    },
+    {
+        "id": "med_aizi",
+        "input": "HIV阳性",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "HIV阳性",
+        "description": "HIV阳性"
+    },
+    {
+        "id": "med_shoushu",
+        "input": "做了心脏搭桥手术",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "做了心脏搭桥手术",
+        "description": "手术"
+    },
+    {
+        "id": "med_zhenduan",
+        "input": "诊断为抑郁症",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "诊断为抑郁症",
+        "description": "诊断+疾病"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "medical",
+        "description": "无PII"
+    }
+]

@@ -1,0 +1,49 @@
+[
+    {
+        "id": "bio_zhiwen",
+        "input": "已采集指纹信息",
+        "should_match": true,
+        "type": "biometric",
+        "expected_text": "指纹信息",
+        "description": "指纹信息"
+    },
+    {
+        "id": "bio_dna",
+        "input": "DNA检测结果",
+        "should_match": true,
+        "type": "biometric",
+        "expected_text": "DNA检测",
+        "description": "DNA检测"
+    },
+    {
+        "id": "bio_renlian",
+        "input": "人脸识别通过",
+        "should_match": true,
+        "type": "biometric",
+        "expected_text": "人脸识别",
+        "description": "人脸识别"
+    },
+    {
+        "id": "bio_hongmo",
+        "input": "虹膜扫描完成",
+        "should_match": true,
+        "type": "biometric",
+        "expected_text": "虹膜扫描",
+        "description": "虹膜扫描"
+    },
+    {
+        "id": "bio_shengwen",
+        "input": "声纹录入成功",
+        "should_match": true,
+        "type": "biometric",
+        "expected_text": "声纹录入",
+        "description": "声纹录入"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "biometric",
+        "description": "无PII"
+    }
+]
