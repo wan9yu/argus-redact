@@ -52,14 +52,27 @@ class TestAssessRisk:
     def test_should_include_pipl_articles_when_sensitive(self):
         entities = [{"type": "id_number", "sensitivity": 4}]
         result = assess_risk(entities)
+        assert "PIPL Art.13" in result.pipl_articles
         assert "PIPL Art.28" in result.pipl_articles
         assert "PIPL Art.51" in result.pipl_articles
+        assert "PIPL Art.29" in result.pipl_articles
 
     def test_should_include_art28_only_when_low_sensitivity(self):
         entities = [{"type": "ip_address", "sensitivity": 1}]
         result = assess_risk(entities)
+        assert "PIPL Art.13" in result.pipl_articles
         assert "PIPL Art.28" in result.pipl_articles
         assert "PIPL Art.51" not in result.pipl_articles
+
+    def test_should_include_impact_assessment_for_sensitive_types(self):
+        entities = [{"type": "medical", "sensitivity": 3}]
+        result = assess_risk(entities)
+        assert "PIPL Art.55" in result.pipl_articles
+
+    def test_should_include_record_keeping(self):
+        entities = [{"type": "phone", "sensitivity": 3}]
+        result = assess_risk(entities)
+        assert "PIPL Art.56" in result.pipl_articles
 
     def test_should_generate_reasons(self):
         entities = [

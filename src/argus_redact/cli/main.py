@@ -123,6 +123,39 @@ def cmd_info(args):
     print(f"  3 Semantic (Ollama)     {'✓' if ollama_ok else '✗'}")
 
 
+def cmd_assess(args):
+    from argus_redact import redact
+
+    text = _read_input(args.input)
+    lang = args.lang.split(",") if "," in args.lang else args.lang
+
+    report = redact(
+        text,
+        mode=args.mode,
+        lang=lang,
+        report=True,
+    )
+
+    result = {
+        "risk": {
+            "score": report.risk.score,
+            "level": report.risk.level,
+            "reasons": list(report.risk.reasons),
+            "pipl_articles": list(report.risk.pipl_articles),
+        },
+        "entities": list(report.entities),
+        "stats": report.stats,
+    }
+
+    output = json.dumps(result, ensure_ascii=False, indent=2)
+
+    if args.output:
+        Path(args.output).write_text(output, encoding="utf-8")
+        print(f"Report saved to {args.output}", file=sys.stderr)
+    else:
+        print(output)
+
+
 def cmd_setup(args):
     """Pre-download NER models for offline use."""
     langs = args.lang.split(",") if "," in args.lang else [args.lang]
@@ -194,6 +227,14 @@ def main():
     p_restore.add_argument("-k", "--key", required=True, help="Key file path")
     p_restore.add_argument("-o", "--output", default=None, help="Output file (default: stdout)")
     p_restore.set_defaults(func=cmd_restore)
+
+    # assess
+    p_assess = subparsers.add_parser("assess", help="Assess privacy risk of text")
+    p_assess.add_argument("input", nargs="?", default=None, help="Input file (default: stdin)")
+    p_assess.add_argument("-o", "--output", default=None, help="Save report to file (JSON)")
+    p_assess.add_argument("-l", "--lang", default="zh", help="Language (default: zh)")
+    p_assess.add_argument("-m", "--mode", default="fast", help="Detection mode: auto, fast, ner")
+    p_assess.set_defaults(func=cmd_assess)
 
     # info
     p_info = subparsers.add_parser("info", help="Show installed capabilities")

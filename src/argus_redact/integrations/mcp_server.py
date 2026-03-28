@@ -20,7 +20,7 @@ import json
 
 from mcp.server.fastmcp import FastMCP
 
-from argus_redact import __version__, redact, restore
+from argus_redact import RedactReport, __version__, assess_risk, redact, restore
 
 mcp = FastMCP("argus-redact")
 
@@ -75,6 +75,46 @@ async def restore_text(text: str, key: str) -> str:
     )
 
 
+@mcp.tool(name="assess")
+async def assess_text(
+    text: str,
+    lang: str = "zh",
+    mode: str = "fast",
+) -> str:
+    """Assess privacy risk of text. Returns risk score, level, reasons, and PIPL articles.
+
+    Args:
+        text: Input text to assess for privacy risk.
+        lang: Language code(s). Use comma-separated for multiple: "zh,en".
+        mode: Detection mode — "fast" (regex), "ner" (regex+NER), "auto" (all).
+    """
+    lang_param: str | list[str] = lang
+    if "," in lang:
+        lang_param = [code.strip() for code in lang.split(",")]
+
+    report: RedactReport = redact(
+        text,
+        lang=lang_param,
+        mode=mode,
+        report=True,
+    )
+
+    return json.dumps(
+        {
+            "risk": {
+                "score": report.risk.score,
+                "level": report.risk.level,
+                "reasons": list(report.risk.reasons),
+                "pipl_articles": list(report.risk.pipl_articles),
+            },
+            "entities_found": report.stats.get("total", 0),
+            "redacted": report.redacted_text,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
 @mcp.tool(name="info")
 async def redact_info() -> str:
     """Show argus-redact version and installed capabilities."""
@@ -91,6 +131,7 @@ async def redact_info() -> str:
         "de": "German",
         "uk": "British English",
         "in": "Indian",
+        "br": "Brazilian Portuguese",
     }
     lang_info = {}
 

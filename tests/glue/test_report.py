@@ -36,6 +36,7 @@ class TestRedactReport:
         report = redact("身份证110101199003074610", lang="zh", mode="fast", report=True)
         assert report.risk.level == "critical"
         assert "PIPL Art.51" in report.risk.pipl_articles
+        assert "PIPL Art.29" in report.risk.pipl_articles
 
     def test_report_should_have_stats(self):
         report = redact("手机13812345678", lang="zh", mode="fast", report=True)

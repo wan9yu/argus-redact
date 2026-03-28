@@ -15,8 +15,21 @@ _QUASI_ID_COMBOS = [
 ]
 
 # PIPL article mapping
-_PIPL_ART_28 = "PIPL Art.28"  # De-identification requirement (any PII)
-_PIPL_ART_51 = "PIPL Art.51"  # Sensitive personal information (sensitivity >= 3)
+_PIPL_ART_13 = "PIPL Art.13"   # Lawful basis for processing personal information
+_PIPL_ART_28 = "PIPL Art.28"   # De-identification requirement (any PII)
+_PIPL_ART_29 = "PIPL Art.29"   # Separate consent for sensitive PI
+_PIPL_ART_51 = "PIPL Art.51"   # Sensitive personal information definition
+_PIPL_ART_55 = "PIPL Art.55"   # Personal information protection impact assessment
+_PIPL_ART_56 = "PIPL Art.56"   # Record-keeping obligation for PI processors
+
+# Types that trigger specific PIPL articles beyond the baseline
+_SENSITIVE_PI_TYPES = {
+    "medical", "financial", "religion", "political",
+    "sexual_orientation", "criminal_record", "biometric",
+}
+_BIOMETRIC_TYPES = {"biometric"}
+_FINANCIAL_TYPES = {"financial"}
+_MINOR_RELATED_TYPES = {"age"}  # age detection may involve minors (Art.31)
 
 
 @dataclass(frozen=True)
@@ -77,9 +90,14 @@ def assess_risk(entities: list[dict], lang: str = "zh") -> RiskResult:
         level = "critical"
 
     # PIPL articles
-    pipl = [_PIPL_ART_28]  # any PII triggers Art.28
+    pipl = [_PIPL_ART_13, _PIPL_ART_28]  # any PII triggers lawful basis + de-identification
     if max_sens >= 3:
-        pipl.append(_PIPL_ART_51)
+        pipl.append(_PIPL_ART_51)  # sensitive PI definition
+        pipl.append(_PIPL_ART_29)  # separate consent required
+    if len(entities) >= 3 or any(e["type"] in _SENSITIVE_PI_TYPES for e in entities):
+        pipl.append(_PIPL_ART_55)  # impact assessment required
+    if len(entities) >= 1:
+        pipl.append(_PIPL_ART_56)  # record-keeping obligation
 
     return RiskResult(
         score=round(score, 2),

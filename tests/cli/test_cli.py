@@ -241,6 +241,49 @@ class TestInfoCommand:
         assert "in" in stdout
 
 
+class TestAssessCommand:
+    def test_should_assess_stdin_and_print_json(self):
+        code, stdout, _ = run_cli(
+            "assess",
+            "-m", "fast",
+            stdin="身份证110101199003074610",
+        )
+
+        assert code == 0
+        data = json.loads(stdout)
+        assert "risk" in data
+        assert data["risk"]["level"] == "critical"
+        assert "PIPL Art.51" in data["risk"]["pipl_articles"]
+
+    def test_should_save_report_to_file(self, tmp_path):
+        output_file = tmp_path / "report.json"
+
+        code, _, stderr = run_cli(
+            "assess",
+            "-m", "fast",
+            "-o", str(output_file),
+            stdin="手机13812345678",
+        )
+
+        assert code == 0
+        assert output_file.exists()
+        data = json.loads(output_file.read_text())
+        assert "risk" in data
+        assert data["stats"]["total"] >= 1
+
+    def test_should_return_zero_risk_when_no_pii(self):
+        code, stdout, _ = run_cli(
+            "assess",
+            "-m", "fast",
+            stdin="今天天气不错",
+        )
+
+        assert code == 0
+        data = json.loads(stdout)
+        assert data["risk"]["score"] == 0.0
+        assert data["risk"]["level"] == "none"
+
+
 class TestCliErrors:
     def test_should_show_help_when_no_subcommand(self):
         code, _, stderr = run_cli()

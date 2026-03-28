@@ -78,6 +78,7 @@ class TestServerRedact:
         assert "risk" in data
         assert data["risk"]["level"] == "critical"
         assert "PIPL Art.51" in data["risk"]["pipl_articles"]
+        assert "PIPL Art.29" in data["risk"]["pipl_articles"]
         assert data["stats"]["total"] >= 1
 
     def test_should_filter_by_profile(self, client):
