@@ -20,7 +20,7 @@ import json
 
 from mcp.server.fastmcp import FastMCP
 
-from argus_redact import RedactReport, __version__, assess_risk, redact, restore
+from argus_redact import RedactReport, __version__, redact, restore
 
 mcp = FastMCP("argus-redact")
 

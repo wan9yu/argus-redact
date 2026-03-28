@@ -233,7 +233,7 @@ def main():
     p_assess.add_argument("input", nargs="?", default=None, help="Input file (default: stdin)")
     p_assess.add_argument("-o", "--output", default=None, help="Save report to file (JSON)")
     p_assess.add_argument("-l", "--lang", default="zh", help="Language (default: zh)")
-    p_assess.add_argument("-m", "--mode", default="fast", help="Detection mode: auto, fast, ner")
+    p_assess.add_argument("-m", "--mode", default="auto", help="Detection mode: auto, fast, ner")
     p_assess.set_defaults(func=cmd_assess)
 
     # info

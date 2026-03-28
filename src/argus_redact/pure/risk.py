@@ -27,9 +27,6 @@ _SENSITIVE_PI_TYPES = {
     "medical", "financial", "religion", "political",
     "sexual_orientation", "criminal_record", "biometric",
 }
-_BIOMETRIC_TYPES = {"biometric"}
-_FINANCIAL_TYPES = {"financial"}
-_MINOR_RELATED_TYPES = {"age"}  # age detection may involve minors (Art.31)
 
 
 @dataclass(frozen=True)
@@ -96,8 +93,7 @@ def assess_risk(entities: list[dict], lang: str = "zh") -> RiskResult:
         pipl.append(_PIPL_ART_29)  # separate consent required
     if len(entities) >= 3 or any(e["type"] in _SENSITIVE_PI_TYPES for e in entities):
         pipl.append(_PIPL_ART_55)  # impact assessment required
-    if len(entities) >= 1:
-        pipl.append(_PIPL_ART_56)  # record-keeping obligation
+    pipl.append(_PIPL_ART_56)  # record-keeping obligation (always applies when PII found)
 
     return RiskResult(
         score=round(score, 2),
