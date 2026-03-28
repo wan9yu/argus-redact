@@ -139,15 +139,38 @@ redact(text, types_exclude=["address"])
 - ✓ Chinese-specific: social security, military ID, business license (credit_code)
 - ✓ US Passport
 
-**Phase 2 — Expand Level 1**
-- Spec registry: add `sensitivity` and `compliance` fields
+**Phase 2 — Risk Assessment & Compliance Infrastructure**
 
-**Phase 3 — Generalize scoring**
-- Extend candidate + scoring to organization names, school names
-- Compliance profiles (`profile="pipl"`)
+Low-cost, high-differentiation features that leverage existing detection capabilities.
+
+- PIITypeDef: add `sensitivity` field (1-4, mapping to four sensitivity levels)
+- Risk assessment API: `assess_risk(text)` → score + level + reasons
+  - Per-entity sensitivity weighting
+  - Combination amplification (multiple quasi-identifiers co-occurring)
+  - PIPL article mapping (Art.28 de-identification, Art.51 sensitive PI)
+- Audit report API: `redact_with_report(text)` → structured report
+  - Which entities were detected and redacted
+  - Which compliance articles are satisfied
+  - Machine-readable format for 等保 / PIPL备案
+- Compliance profiles: `redact(text, profile="pipl")`
 - Per-type enable/disable API
 
-**Phase 4 — Semantic detection**
-- Layer 3 prompts for medical, financial, political, religious content
-- Configurable sensitivity levels
+**Phase 3 — Level 2 Quasi-Identifiers & Scoring Extension**
+
+Extend candidate+scoring architecture (proven on person names) to new entity types.
+
+- Age detection: `今年35岁`, `35-year-old` (regex, low effort)
+- Organization names: candidate+scoring, similar to person name approach
+- School names: `北大`, `清华附中` (candidate+scoring)
+- Workplace / job title: contextual detection
+- National LLM framework adapters: Dify plugin, FastGPT plugin (community-driven)
+
+**Phase 4 — Semantic Detection (Layer 3)**
+
+Unlocks Level 3 sensitive attributes. Largest investment, highest compliance impact.
+
+- Layer 3 LLM prompts for Chinese medical, financial, political, religious content
+- Industry-specific terminology (medical diagnosis, legal documents, financial products)
+- Configurable sensitivity levels per domain
 - Multi-language semantic prompts
+- Target: PIPL profile from ~40% → 90%+
