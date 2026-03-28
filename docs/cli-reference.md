@@ -122,16 +122,17 @@ argus-redact info
 ### Output
 
 ```
-argus-redact v0.1.9
+argus-redact v0.1.10
 
 Languages:
-  zh  Chinese    regex (8 patterns) + NER
+  zh  Chinese    regex (14+ patterns) + NER
   en  English    regex (5 patterns) + NER
   ja  Japanese   regex (4 patterns) + NER
   ko  Korean     regex (4 patterns) + NER
   de  German     regex (4 patterns) + NER
   uk  British    regex (5 patterns) + NER
   in  Indian     regex (4 patterns) + NER
+  br  Brazilian  regex (3 patterns) + NER
 
 Layers:
   1 Pattern (regex)       ✓
@@ -165,6 +166,18 @@ argus-redact serve --port 9000        # custom port
 | POST | `/restore` | Restore redacted text with key |
 | GET | `/info` | Version and capabilities |
 | GET | `/health` | Health check |
+
+#### POST `/redact` parameters
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `text` | `string` | *(required)* | Text to redact |
+| `lang` | `string` | `"zh"` | Language code(s), comma-separated |
+| `mode` | `string` | `"auto"` | Detection mode: `auto`, `fast`, `ner` |
+| `report` | `bool` | `false` | Return a full `RedactReport` with risk assessment |
+| `profile` | `string` | `null` | Compliance profile: `"default"`, `"pipl"`, `"gdpr"`, `"hipaa"` |
+| `types` | `list[string]` | `null` | Only detect these PII types (e.g. `["phone", "email"]`) |
+| `types_exclude` | `list[string]` | `null` | Exclude these PII types from detection |
 
 ---
 

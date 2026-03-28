@@ -41,11 +41,11 @@ Cannot identify someone alone, but combinations can. Research shows birth date +
 |------|:------:|:-----:|-------|
 | Date of birth | ✓ zh/en (Level 1) | 1 | Many formats: `90年3月`, `三月七号`, `March 7th`, `07/03/1990` |
 | Age | ✓ shared | 1 | `今年35岁`, `35-year-old`, `aged 72` |
-| Gender | planned | 3 | Contextual |
-| Workplace | planned | 1b/2 | Similar ambiguity to person names |
-| Job title | planned | 3 | `他是骨科主任` |
-| School name | planned | 1b/2 | `北大`, `清华附中` |
-| Ethnicity | planned | 3 | Contextual |
+| Gender | ✓ shared | 1 | `男`, `female`, contextual patterns |
+| Workplace | ✓ zh | 1b/2 | Similar ambiguity to person names |
+| Job title | ✓ zh | 1b/2 | `他是骨科主任` |
+| School name | ✓ zh | 1b/2 | `北大`, `清华附中` |
+| Ethnicity | ✓ zh | 1b/2 | Contextual |
 
 ### Level 3 — Sensitive Attributes
 
@@ -102,9 +102,9 @@ Different regulations care about different types. Profiles are pre-configured ty
 | Profile | Focus | Types enabled | Completion |
 |---------|-------|---------------|:----------:|
 | `default` | Common PII | All Level 1 direct identifiers (current behavior) | ~100% — Level 1 complete |
-| `pipl` | China PIPL | All Level 1 + biometric + financial + medical + religious + political | ~40% — Level 1 complete, Level 2-3 not started |
-| `gdpr` | EU GDPR | All Level 1 + Level 2 quasi-identifiers + Level 3 special categories | ~25% — Level 1 improved |
-| `hipaa` | US HIPAA | Direct identifiers + medical + 18 PHI types | ~15% — Level 1 improved |
+| `pipl` | China PIPL | All Level 1 + biometric + financial + medical + religious + political | ~60% — Level 1 + Level 2 complete, Level 3 not started |
+| `gdpr` | EU GDPR | All Level 1 + Level 2 quasi-identifiers + Level 3 special categories | ~40% — Level 1 + Level 2 complete, Level 3 not started |
+| `hipaa` | US HIPAA | Direct identifiers + medical + 18 PHI types | ~20% — Level 1 + Level 2 improved |
 
 ```python
 # Available now
@@ -153,14 +153,14 @@ report.risk.pipl_articles  # ["PIPL Art.28", "PIPL Art.51"]
 - ✓ Compliance profiles: `redact(text, profile="pipl")`
 - ✓ Per-type filtering: `types=["phone"]` / `types_exclude=["address"]`
 
-**Phase 3 — Level 2 Quasi-Identifiers & Scoring Extension**
-
-Extend candidate+scoring architecture (proven on person names) to new entity types.
-
+**Phase 3 — Level 2 Quasi-Identifiers & Scoring Extension (complete)**
 - ✓ Age detection: `今年35岁`, `35-year-old` (shared regex)
-- Organization names: candidate+scoring, similar to person name approach
-- School names: `北大`, `清华附中` (candidate+scoring)
-- Workplace / job title: contextual detection
+- ✓ Gender detection: `男`, `female` (shared regex)
+- ✓ Job title detection (zh): `骨科主任`, `总经理`
+- ✓ Organization names (zh): candidate+scoring
+- ✓ School names (zh): `北大`, `清华附中` (candidate+scoring)
+- ✓ Workplace detection (zh): contextual
+- ✓ Ethnicity detection (zh): contextual
 - National LLM framework adapters: Dify plugin, FastGPT plugin (community-driven)
 
 **Phase 4 — Semantic Detection (Layer 3)**
@@ -171,4 +171,4 @@ Unlocks Level 3 sensitive attributes. Largest investment, highest compliance imp
 - Industry-specific terminology (medical diagnosis, legal documents, financial products)
 - Configurable sensitivity levels per domain
 - Multi-language semantic prompts
-- Target: PIPL profile from ~40% → 90%+
+- Target: PIPL profile from ~60% → 90%+
