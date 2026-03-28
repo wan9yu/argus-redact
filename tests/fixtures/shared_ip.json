@@ -1,0 +1,79 @@
+[
+    {
+        "id": "ipv4_standard",
+        "input": "服务器IP是192.168.1.100",
+        "should_match": true,
+        "type": "ip_address",
+        "expected_text": "192.168.1.100",
+        "description": "标准私有IPv4地址"
+    },
+    {
+        "id": "ipv4_public",
+        "input": "访问来源: 8.8.8.8",
+        "should_match": true,
+        "type": "ip_address",
+        "expected_text": "8.8.8.8",
+        "description": "公网IPv4（Google DNS）"
+    },
+    {
+        "id": "ipv4_max_octets",
+        "input": "地址255.255.255.255",
+        "should_match": true,
+        "type": "ip_address",
+        "expected_text": "255.255.255.255",
+        "description": "IPv4最大值"
+    },
+    {
+        "id": "ipv4_single_digits",
+        "input": "IP: 1.2.3.4",
+        "should_match": true,
+        "type": "ip_address",
+        "expected_text": "1.2.3.4",
+        "description": "单数字各段"
+    },
+    {
+        "id": "ipv6_full",
+        "input": "IPv6: 2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+        "should_match": true,
+        "type": "ip_address",
+        "expected_text": "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+        "description": "完整IPv6地址"
+    },
+    {
+        "id": "ipv6_collapsed",
+        "input": "地址 ::1 是本机",
+        "should_match": true,
+        "type": "ip_address",
+        "expected_text": "::1",
+        "description": "IPv6 loopback缩写"
+    },
+    {
+        "id": "ipv6_prefix_collapse",
+        "input": "服务器 2001:db8::1 上线",
+        "should_match": true,
+        "type": "ip_address",
+        "expected_text": "2001:db8::1",
+        "description": "IPv6中间省略"
+    },
+    {
+        "id": "ipv4_octet_too_large",
+        "input": "无效地址256.1.2.3",
+        "should_match": false,
+        "type": "ip_address",
+        "description": "IPv4段超过255"
+    },
+    {
+        "id": "version_number_not_ip",
+        "input": "version 1.2.3.4 released",
+        "should_match": false,
+        "type": "ip_address",
+        "description": "版本号不应匹配（check_context过滤）"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "ip_address",
+        "description": "无PII"
+    }
+]

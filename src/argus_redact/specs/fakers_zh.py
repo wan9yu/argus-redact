@@ -171,6 +171,35 @@ def fake_address(rng: random.Random) -> str:
     return f"{province}{city}{district}{street}{num}号"
 
 
+def fake_credit_code(rng: random.Random) -> str:
+    """Generate a valid Unified Social Credit Code (GB 32100-2015)."""
+    charset = "0123456789ABCDEFGHJKLMNPQRTUWXY"
+    char_to_val = {c: i for i, c in enumerate(charset)}
+    weights = [1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28]
+    # Registration authority (9=enterprise) + category (1=corporate)
+    prefix = rng.choice(["91", "92", "52", "51", "11", "12"])
+    area = rng.choice(ID_AREA_CODES)
+    body = "".join(rng.choice(charset) for _ in range(9))
+    code17 = prefix + area + body
+    total = sum(char_to_val[code17[i]] * weights[i] for i in range(17))
+    check = (31 - total % 31) % 31
+    return code17 + charset[check]
+
+
+def fake_qq(rng: random.Random) -> str:
+    length = rng.randint(5, 11)
+    first = str(rng.randint(1, 9))
+    rest = "".join(str(rng.randint(0, 9)) for _ in range(length - 1))
+    return "QQ" + first + rest
+
+
+def fake_wechat(rng: random.Random) -> str:
+    first = rng.choice(string.ascii_lowercase)
+    length = rng.randint(5, 15)
+    rest = "".join(rng.choice(string.ascii_lowercase + string.digits + "_") for _ in range(length))
+    return "微信号" + first + rest
+
+
 def fake_email(rng: random.Random) -> str:
     local = rng.choice(PINYIN_PARTS) + rng.choice(PINYIN_PARTS) + str(rng.randint(1, 999))
     domain = rng.choice(EMAIL_DOMAINS)

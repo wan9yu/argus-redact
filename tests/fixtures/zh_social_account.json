@@ -1,0 +1,108 @@
+[
+    {
+        "id": "qq_standard",
+        "input": "我的QQ是12345678",
+        "should_match": true,
+        "type": "qq",
+        "expected_text": "12345678",
+        "description": "标准QQ号（8位）"
+    },
+    {
+        "id": "qq_with_colon",
+        "input": "QQ：987654321",
+        "should_match": true,
+        "type": "qq",
+        "expected_text": "987654321",
+        "description": "QQ号带中文冒号"
+    },
+    {
+        "id": "qq_lowercase",
+        "input": "加我qq 2345678901",
+        "should_match": true,
+        "type": "qq",
+        "expected_text": "2345678901",
+        "description": "小写qq前缀（10位）"
+    },
+    {
+        "id": "qq_min_length",
+        "input": "QQ:10001",
+        "should_match": true,
+        "type": "qq",
+        "expected_text": "10001",
+        "description": "QQ号最短5位"
+    },
+    {
+        "id": "qq_no_keyword",
+        "input": "数字是12345678",
+        "should_match": false,
+        "type": "qq",
+        "description": "无QQ关键词不应匹配"
+    },
+    {
+        "id": "qq_too_short",
+        "input": "QQ:1234",
+        "should_match": false,
+        "type": "qq",
+        "description": "少于5位不匹配"
+    },
+    {
+        "id": "wechat_standard",
+        "input": "微信号wxid_abc123",
+        "should_match": true,
+        "type": "wechat",
+        "expected_text": "wxid_abc123",
+        "description": "标准微信号（wxid前缀）"
+    },
+    {
+        "id": "wechat_custom",
+        "input": "我的微信：zhangsan_2024",
+        "should_match": true,
+        "type": "wechat",
+        "expected_text": "zhangsan_2024",
+        "description": "自定义微信号"
+    },
+    {
+        "id": "wechat_with_wx_prefix",
+        "input": "加我wx: test_user88",
+        "should_match": true,
+        "type": "wechat",
+        "expected_text": "test_user88",
+        "description": "wx前缀上下文"
+    },
+    {
+        "id": "wechat_with_hyphen",
+        "input": "WeChat: my-name-123",
+        "should_match": true,
+        "type": "wechat",
+        "expected_text": "my-name-123",
+        "description": "含连字符的微信号"
+    },
+    {
+        "id": "wechat_no_keyword",
+        "input": "用户名abc_xyz123",
+        "should_match": false,
+        "type": "wechat",
+        "description": "无微信关键词不应匹配"
+    },
+    {
+        "id": "wechat_starts_with_digit",
+        "input": "微信号123abc",
+        "should_match": false,
+        "type": "wechat",
+        "description": "数字开头不是有效微信号"
+    },
+    {
+        "id": "wechat_too_short",
+        "input": "微信号abcde",
+        "should_match": false,
+        "type": "wechat",
+        "description": "微信号最短6位，5位不匹配"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "qq",
+        "description": "无PII"
+    }
+]

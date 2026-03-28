@@ -55,6 +55,22 @@ def _validate_luhn(value: str) -> bool:
     return total % 10 == 0
 
 
+def _validate_credit_code(value: str) -> bool:
+    """MOD 31 checksum for 18-char Unified Social Credit Code (GB 32100-2015)."""
+    value = value.upper()
+    if len(value) != 18:
+        return False
+    # Character set: 0-9 A-H J-N P-R T-U W-Y (excludes I, O, S, V, Z)
+    charset = "0123456789ABCDEFGHJKLMNPQRTUWXY"
+    char_to_val = {c: i for i, c in enumerate(charset)}
+    if any(c not in char_to_val for c in value):
+        return False
+    weights = [1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28]
+    total = sum(char_to_val[value[i]] * weights[i] for i in range(17))
+    check = (31 - total % 31) % 31
+    return char_to_val[value[17]] == check
+
+
 def _validate_bank_card(value: str) -> bool:
     """Validate bank card: Luhn OR known BIN prefix."""
     digits = "".join(d for d in value if d.isdigit())
@@ -161,5 +177,29 @@ PATTERNS = [
             r"(?:\d{1,4}(?:室|房))?"
         ),
         "description": "Informal Chinese address (district+street, no city prefix)",
+    },
+    {
+        "type": "qq",
+        "label": "[QQ号已脱敏]",
+        "pattern": r"[Qq]{2}\s*(?:[:：是]?\s*)(?P<qq>[1-9]\d{4,11})(?!\d)",
+        "group": "qq",
+        "description": "QQ number (5-12 digits, requires QQ keyword context)",
+    },
+    {
+        "type": "wechat",
+        "label": "[微信号已脱敏]",
+        "pattern": (
+            r"(?:微信|wx|WeChat|wechat)\s*(?:号)?\s*[:：]?\s*"
+            r"(?P<wechat>[a-zA-Z][a-zA-Z0-9_\-]{5,19})"
+        ),
+        "group": "wechat",
+        "description": "WeChat ID (letter-start, 6-20 chars, requires keyword context)",
+    },
+    {
+        "type": "credit_code",
+        "label": "[信用代码已脱敏]",
+        "pattern": r"(?<![A-Za-z0-9])[0-9A-HJ-NP-RTUW-Ya-hj-np-rtuw-y]{2}\d{6}[0-9A-HJ-NP-RTUW-Ya-hj-np-rtuw-y]{10}(?![A-Za-z0-9])",
+        "validate": _validate_credit_code,
+        "description": "Unified Social Credit Code (GB 32100-2015, MOD 31)",
     },
 ]

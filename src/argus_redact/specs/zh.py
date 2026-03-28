@@ -8,11 +8,13 @@ list that can replace the hand-written PATTERNS in lang/zh/patterns.py.
 from argus_redact.lang.zh.patterns import (
     _SURNAMES,
     _validate_bank_card,
+    _validate_credit_code,
     _validate_id_number,
 )
 from .fakers_zh import (
     fake_address,
     fake_bank_card,
+    fake_credit_code,
     fake_email,
     fake_id_number,
     fake_license_plate,
@@ -20,6 +22,8 @@ from .fakers_zh import (
     fake_person,
     fake_phone,
     fake_phone_landline,
+    fake_qq,
+    fake_wechat,
 )
 from .registry import PIITypeDef, register, list_types
 
@@ -328,6 +332,118 @@ register(PIITypeDef(
     faker=fake_address,
     source="GB/T 2260《中华人民共和国行政区划代码》",
     description="Chinese structured address",
+))
+
+# ── Unified Social Credit Code ──
+
+register(PIITypeDef(
+    name="credit_code",
+    lang="zh",
+    format="AABBBBBBCCCCCCCCCV",
+    length=18,
+    charset="alnum",
+    structure={
+        "authority": "2 chars — registration authority + category",
+        "area_code": "6 digits — administrative division code",
+        "identifier": "9 chars — organization identifier (0-9, A-H, J-N, P-R, T-U, W-Y)",
+        "check": "1 char — MOD 31 checksum",
+    },
+    checksum="MOD 31",
+    validate=_validate_credit_code,
+    prefixes=("统一社会信用代码", "信用代码", "营业执照", "企业代码", "组织机构代码"),
+    strategy="remove",
+    label="[信用代码已脱敏]",
+    examples=(
+        "91110108MA01YBNX62",
+        "52100000500000784G",
+    ),
+    counterexamples=(
+        "91110108MA01YBNX6A",
+    ),
+    _patterns=({
+        "type": "credit_code",
+        "label": "[信用代码已脱敏]",
+        "pattern": r"(?<![A-Za-z0-9])[0-9A-HJ-NP-RTUW-Ya-hj-np-rtuw-y]{2}\d{6}[0-9A-HJ-NP-RTUW-Ya-hj-np-rtuw-y]{10}(?![A-Za-z0-9])",
+        "validate": _validate_credit_code,
+        "description": "Unified Social Credit Code (GB 32100-2015, MOD 31)",
+    },),
+    faker=fake_credit_code,
+    source="GB 32100-2015《法人和其他组织统一社会信用代码编码规则》",
+    description="Unified Social Credit Code for enterprises and organizations",
+))
+
+# ── QQ ──
+
+register(PIITypeDef(
+    name="qq",
+    lang="zh",
+    format="NNNNN-NNNNNNNNNNNN",
+    length=(5, 12),
+    charset="digits",
+    structure={
+        "number": "5-12 digits, first digit non-zero",
+    },
+    checksum=None,
+    prefixes=("QQ", "qq", "企鹅号"),
+    strategy="remove",
+    label="[QQ号已脱敏]",
+    examples=(
+        "QQ12345678",
+        "QQ 987654321",
+        "qq:10001",
+    ),
+    counterexamples=(
+        "1234",
+        "0123456",
+    ),
+    _patterns=({
+        "type": "qq",
+        "label": "[QQ号已脱敏]",
+        "pattern": r"[Qq]{2}\s*(?:[:：是]?\s*)(?P<qq>[1-9]\d{4,11})(?!\d)",
+        "group": "qq",
+        "description": "QQ number (5-12 digits, requires QQ keyword context)",
+    },),
+    faker=fake_qq,
+    source="腾讯QQ号码规则",
+    description="Tencent QQ number",
+))
+
+# ── WeChat ──
+
+register(PIITypeDef(
+    name="wechat",
+    lang="zh",
+    format="a[a-z0-9_-]{5,19}",
+    length=(6, 20),
+    charset="alnum",
+    structure={
+        "id": "6-20 chars, starts with letter, may contain letters/digits/underscore/hyphen",
+    },
+    checksum=None,
+    prefixes=("微信", "微信号", "wx", "WeChat", "wechat"),
+    strategy="remove",
+    label="[微信号已脱敏]",
+    examples=(
+        "微信wxid_abc123",
+        "微信号zhangsan_2024",
+    ),
+    counterexamples=(
+        "123abc",
+        "abcde",
+    ),
+    _patterns=({
+        "type": "wechat",
+        "label": "[微信号已脱敏]",
+        "pattern": (
+            r"(?:微信|wx|WeChat|wechat)\s*(?:号)?\s*[:：]?\s*"
+            r"(?P<wechat>[a-zA-Z][a-zA-Z0-9_\-]{5,19})"
+        ),
+        "group": "wechat",
+        "description": "WeChat ID (letter-start, 6-20 chars, requires keyword context)",
+    },),
+    faker=fake_wechat,
+    source="微信号命名规则",
+    description="WeChat ID",
 ))
 
 # ── Person Name ──

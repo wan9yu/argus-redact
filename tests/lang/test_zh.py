@@ -97,6 +97,34 @@ class TestChinesePerson:
             assert len(person_results) == 0, f"Should NOT match: {example['description']}"
 
 
+class TestSocialAccount:
+    @parametrize_examples("zh_social_account.json")
+    def test_should_match_or_reject_when_social_account_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        typed = [r for r in results if r.type == example["type"]]
+
+        if example["should_match"]:
+            assert len(typed) >= 1, f"Expected match: {example['description']}"
+            if "expected_text" in example:
+                assert any(r.text == example["expected_text"] for r in typed)
+        else:
+            assert len(typed) == 0, f"Should NOT match: {example['description']}"
+
+
+class TestCreditCode:
+    @parametrize_examples("zh_credit_code.json")
+    def test_should_match_or_reject_when_credit_code_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        cc_results = [r for r in results if r.type == "credit_code"]
+
+        if example["should_match"]:
+            assert len(cc_results) >= 1, f"Expected match: {example['description']}"
+            if "expected_text" in example:
+                assert any(r.text == example["expected_text"] for r in cc_results)
+        else:
+            assert len(cc_results) == 0, f"Should NOT match: {example['description']}"
+
+
 class TestMultiplePII:
     def test_should_detect_both_types_when_phone_and_id_in_text(self, zh_patterns):
         text = "手机13812345678，身份证110101199003074610"

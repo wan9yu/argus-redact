@@ -1,0 +1,77 @@
+[
+    {
+        "id": "standard_enterprise",
+        "input": "企业信用代码：91110108MA01YBNX62",
+        "should_match": true,
+        "type": "credit_code",
+        "expected_text": "91110108MA01YBNX62",
+        "description": "标准18位统一社会信用代码（企业91开头）"
+    },
+    {
+        "id": "with_context_prefix",
+        "input": "统一社会信用代码91320507MA1WLGBX0B",
+        "should_match": true,
+        "type": "credit_code",
+        "expected_text": "91320507MA1WLGBX0B",
+        "description": "前有上下文关键词"
+    },
+    {
+        "id": "nonprofit_org",
+        "input": "社会组织代码52100000500000784G",
+        "should_match": true,
+        "type": "credit_code",
+        "expected_text": "52100000500000784G",
+        "description": "民办非企业（52开头）"
+    },
+    {
+        "id": "government_agency",
+        "input": "机关代码111000000000123600",
+        "should_match": true,
+        "type": "credit_code",
+        "expected_text": "111000000000123600",
+        "description": "机关单位（11开头，校验码为0）"
+    },
+    {
+        "id": "lowercase_should_match",
+        "input": "代码：91110108ma01ybnx62",
+        "should_match": true,
+        "type": "credit_code",
+        "expected_text": "91110108ma01ybnx62",
+        "description": "小写字母也应匹配（校验时转大写）"
+    },
+    {
+        "id": "invalid_checksum",
+        "input": "信用代码91110108MA01YBNX6A",
+        "should_match": false,
+        "type": "credit_code",
+        "description": "校验码错误（末位改为A）"
+    },
+    {
+        "id": "too_short",
+        "input": "代码9111010MA01YBN",
+        "should_match": false,
+        "type": "credit_code",
+        "description": "不足18位"
+    },
+    {
+        "id": "contains_forbidden_letter_I",
+        "input": "信用代码9I110108MA01YBNX62",
+        "should_match": false,
+        "type": "credit_code",
+        "description": "含禁止字母I"
+    },
+    {
+        "id": "plain_text",
+        "input": "天气不错",
+        "should_match": false,
+        "type": "credit_code",
+        "description": "无PII"
+    },
+    {
+        "id": "all_same_digits",
+        "input": "信用代码111111111111111111",
+        "should_match": false,
+        "type": "credit_code",
+        "description": "全相同数字应被校验拒绝"
+    }
+]
