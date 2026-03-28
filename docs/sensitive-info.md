@@ -95,7 +95,7 @@ Layer 3  (semantic LLM)   Meaning-dependent. No surface pattern.
 
 ---
 
-## Compliance Profiles (Planned)
+## Compliance Profiles
 
 Different regulations care about different types. Profiles are pre-configured type sets:
 
@@ -107,10 +107,17 @@ Different regulations care about different types. Profiles are pre-configured ty
 | `hipaa` | US HIPAA | Direct identifiers + medical + 18 PHI types | ~15% — Level 1 improved |
 
 ```python
-# Future API
+# Available now
 redact(text, profile="hipaa")
 redact(text, types=["phone", "id_number", "date_of_birth"])
 redact(text, types_exclude=["address"])
+
+# Risk assessment
+from argus_redact import assess_risk, RedactReport
+report = redact(text, report=True)  # returns RedactReport
+report.risk.score    # 0.0-1.0
+report.risk.level    # "low" / "medium" / "high" / "critical"
+report.risk.pipl_articles  # ["PIPL Art.28", "PIPL Art.51"]
 ```
 
 ---
@@ -139,21 +146,12 @@ redact(text, types_exclude=["address"])
 - ✓ Chinese-specific: social security, military ID, business license (credit_code)
 - ✓ US Passport
 
-**Phase 2 — Risk Assessment & Compliance Infrastructure**
-
-Low-cost, high-differentiation features that leverage existing detection capabilities.
-
-- PIITypeDef: add `sensitivity` field (1-4, mapping to four sensitivity levels)
-- Risk assessment API: `assess_risk(text)` → score + level + reasons
-  - Per-entity sensitivity weighting
-  - Combination amplification (multiple quasi-identifiers co-occurring)
-  - PIPL article mapping (Art.28 de-identification, Art.51 sensitive PI)
-- Audit report API: `redact_with_report(text)` → structured report
-  - Which entities were detected and redacted
-  - Which compliance articles are satisfied
-  - Machine-readable format for 等保 / PIPL备案
-- Compliance profiles: `redact(text, profile="pipl")`
-- Per-type enable/disable API
+**Phase 2 — Risk Assessment & Compliance Infrastructure (complete)**
+- ✓ PIITypeDef: `sensitivity` field (1=low, 2=medium, 3=high, 4=critical)
+- ✓ Risk assessment: `assess_risk(entities)` → RiskResult (score + level + reasons + PIPL articles)
+- ✓ Audit report: `redact(text, report=True)` → RedactReport
+- ✓ Compliance profiles: `redact(text, profile="pipl")`
+- ✓ Per-type filtering: `types=["phone"]` / `types_exclude=["address"]`
 
 **Phase 3 — Level 2 Quasi-Identifiers & Scoring Extension**
 

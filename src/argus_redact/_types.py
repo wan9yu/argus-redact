@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from argus_redact.pure.risk import RiskResult
 
 
 @dataclass(frozen=True)
@@ -36,3 +40,14 @@ class NEREntity:
             confidence=self.confidence,
             layer=layer,
         )
+
+
+@dataclass(frozen=True)
+class RedactReport:
+    """Structured audit report from redact(report=True)."""
+
+    redacted_text: str
+    key: dict[str, str]
+    entities: tuple[dict, ...] = ()
+    stats: dict = field(default_factory=dict)
+    risk: RiskResult | None = None

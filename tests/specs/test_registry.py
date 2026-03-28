@@ -129,3 +129,20 @@ class TestSpecCompleteness:
             assert typedef.label, (
                 f"{typedef.lang}/{typedef.name} has no label"
             )
+
+    def test_every_spec_has_sensitivity(self):
+        for typedef in list_types("zh"):
+            assert hasattr(typedef, "sensitivity"), (
+                f"{typedef.lang}/{typedef.name} has no sensitivity field"
+            )
+            assert typedef.sensitivity in (1, 2, 3, 4), (
+                f"{typedef.lang}/{typedef.name} sensitivity={typedef.sensitivity} not in 1-4"
+            )
+
+    def test_critical_types_have_high_sensitivity(self):
+        critical_types = {"id_number", "bank_card", "social_security"}
+        for typedef in list_types("zh"):
+            if typedef.name in critical_types:
+                assert typedef.sensitivity == 4, (
+                    f"{typedef.name} should be sensitivity=4 (critical), got {typedef.sensitivity}"
+                )

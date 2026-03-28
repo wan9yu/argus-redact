@@ -116,19 +116,40 @@ def redact(
     config: dict | str | None = None,
     names: list[str] | None = None,
     detailed: bool = False,
-) -> tuple[str, dict] | tuple[str, dict, dict]:
+    report: bool = False,
+    profile: str | None = None,
+    types: list[str] | None = None,
+    types_exclude: list[str] | None = None,
+):
     """Detect and replace PII in text.
 
     Args:
         names: List of known names/entities to always redact (no NER needed).
+        report: Return a RedactReport with risk assessment and audit info.
+        profile: Compliance profile name ("default", "pipl", "gdpr", "hipaa").
+        types: Whitelist of PII type names to detect.
+        types_exclude: Blacklist of PII type names to skip.
 
-    Returns (redacted_text, key), or (redacted_text, key, details) when detailed=True.
+    Returns:
+        (redacted_text, key) by default.
+        (redacted_text, key, details) when detailed=True.
+        RedactReport when report=True.
     """
     if not isinstance(text, str):
         raise TypeError(f"text must be a string, got {type(text).__name__}")
 
     if mode not in VALID_MODES:
         raise ValueError(f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}")
+
+    if types is not None and types_exclude is not None:
+        raise ValueError("types and types_exclude are mutually exclusive")
+
+    # Resolve profile → types filter
+    if profile is not None:
+        from argus_redact.specs.profiles import get_profile
+        prof = get_profile(profile)
+        if types is None and "types" in prof:
+            types = prof["types"]
 
     # Resolve config from file path
     if isinstance(config, str):
@@ -224,6 +245,14 @@ def redact(
 
     entities = merge_entities(entities)
 
+    # Apply type filtering
+    if types is not None:
+        type_set = set(types)
+        entities = [e for e in entities if e.type in type_set]
+    elif types_exclude is not None:
+        exclude_set = set(types_exclude)
+        entities = [e for e in entities if e.type not in exclude_set]
+
     redacted, result_key = replace(
         text,
         entities,
@@ -241,7 +270,7 @@ def redact(
         )
         tmp.replace(target)
 
-    if detailed:
+    if detailed or report:
         reverse_key = {v: k for k, v in result_key.items()}
         entity_details = [
             {
@@ -256,17 +285,39 @@ def redact(
             for e in entities
         ]
         total_ms = sum(timing.values())
-        details = {
-            "entities": entity_details,
-            "stats": {
-                "total": len(entity_details),
-                "layer_1": layer1_count,
-                "layer_2": layer2_count,
-                "layer_3": layer3_count,
-                "duration_ms": round(total_ms, 2),
-                **{k: round(v, 2) for k, v in timing.items()},
-            },
+        stats = {
+            "total": len(entity_details),
+            "layer_1": layer1_count,
+            "layer_2": layer2_count,
+            "layer_3": layer3_count,
+            "duration_ms": round(total_ms, 2),
+            **{k: round(v, 2) for k, v in timing.items()},
         }
-        return redacted, result_key, details
+
+        if report:
+            from argus_redact._types import RedactReport
+            from argus_redact.pure.risk import assess_risk
+            from argus_redact.specs import lookup
+
+            # Build risk input with cached sensitivity lookup
+            sens_cache: dict[str, int] = {}
+            risk_entities = []
+            for e in entity_details:
+                t = e["type"]
+                if t not in sens_cache:
+                    typedefs = lookup(t)
+                    sens_cache[t] = typedefs[0].sensitivity if typedefs else 2
+                risk_entities.append({"type": t, "sensitivity": sens_cache[t]})
+            risk = assess_risk(risk_entities, lang=lang if isinstance(lang, str) else lang[0])
+
+            return RedactReport(
+                redacted_text=redacted,
+                key=result_key,
+                entities=tuple(entity_details),
+                stats=stats,
+                risk=risk,
+            )
+
+        return redacted, result_key, {"entities": entity_details, "stats": stats}
 
     return redacted, result_key

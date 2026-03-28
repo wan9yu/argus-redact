@@ -15,6 +15,10 @@ redact(
     config: dict | None = None,
     names: list[str] | None = None,
     detailed: bool = False,
+    report: bool = False,
+    profile: str | None = None,
+    types: list[str] | None = None,
+    types_exclude: list[str] | None = None,
 ) -> tuple[str, dict] | tuple[str, dict, dict]
 ```
 
@@ -32,6 +36,10 @@ Detect and replace PII in the input text. Returns `(redacted_text, key)`, or `(r
 | `config` | `dict \| str \| None` | `None` | Per-entity-type config. Dict, JSON file, or YAML file path. See [Configuration](configuration.md). |
 | `names` | `list[str] \| None` | `None` | Known names to always redact (no NER needed). Combined with NER for best results. |
 | `detailed` | `bool` | `False` | If `True`, return a 3-tuple with detection details (entities, stats). |
+| `report` | `bool` | `False` | Return a `RedactReport` with risk assessment and compliance info. |
+| `profile` | `str \| None` | `None` | Compliance profile: `"default"`, `"pipl"`, `"gdpr"`, `"hipaa"`. |
+| `types` | `list[str] \| None` | `None` | Whitelist — only detect these PII types. |
+| `types_exclude` | `list[str] \| None` | `None` | Blacklist — skip these PII types. Mutually exclusive with `types`. |
 
 ### Returns
 
@@ -243,6 +251,8 @@ def test_restore_bad_key_type():
 | `ValueError` | `mode` is not one of `"auto"`, `"fast"`, `"ner"` | `pytest.raises(ValueError)` |
 | `FileNotFoundError` | `key` file path doesn't exist when used in `restore()` | `pytest.raises(FileNotFoundError)` |
 | `TypeError` | `text` is not a string (e.g., `redact(123)`) | `pytest.raises(TypeError)` |
+| `ValueError` | `types` and `types_exclude` both specified | `pytest.raises(ValueError)` |
+| `ValueError` | Unknown `profile` name | `pytest.raises(ValueError)` |
 
 ---
 
@@ -403,6 +413,52 @@ assert len(result) == 2
 # Detailed mode
 result = redact("test", detailed=True)
 assert len(result) == 3
+```
+
+---
+
+## Risk Assessment & Audit Report
+
+### assess_risk()
+
+```python
+from argus_redact import assess_risk
+
+result = assess_risk([
+    {"type": "id_number", "sensitivity": 4},
+    {"type": "phone", "sensitivity": 3},
+])
+result.score          # 0.85
+result.level          # "critical"
+result.reasons        # ("id_number (critical)", "phone (high)", "multiple high/critical entities detected")
+result.pipl_articles  # ("PIPL Art.28", "PIPL Art.51")
+```
+
+### Report mode
+
+```python
+from argus_redact import redact
+
+report = redact("身份证110101199003074610，手机13812345678", report=True, mode="fast")
+report.redacted_text   # redacted text
+report.key             # {replacement: original}
+report.entities        # tuple of entity dicts
+report.stats           # {"total": 2, "layer_1": 2, ...}
+report.risk.score      # 0.85
+report.risk.level      # "critical"
+report.risk.pipl_articles  # ("PIPL Art.28", "PIPL Art.51")
+```
+
+### Compliance profiles
+
+```python
+# Use a preset profile
+redact(text, profile="pipl")    # all types enabled
+redact(text, profile="hipaa")   # HIPAA-relevant types only
+
+# Fine-grained control
+redact(text, types=["phone", "id_number"])          # only these types
+redact(text, types_exclude=["address", "email"])     # everything except these
 ```
 
 ---

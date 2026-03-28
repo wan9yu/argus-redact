@@ -45,6 +45,9 @@ class PIITypeDef:
     # ── Faker ──
     faker: Callable | None = None  # (rng: random.Random) -> str
 
+    # ── Risk / Compliance ──
+    sensitivity: int = 2  # 1=low, 2=medium, 3=high, 4=critical
+
     # ── Description ──
     description: str = ""
 

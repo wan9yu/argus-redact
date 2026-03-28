@@ -9,4 +9,13 @@ from __future__ import annotations
 
 from .registry import PIITypeDef, get, list_types, lookup
 
+# Auto-register all language specs on import
+import importlib as _importlib
+
+for _mod in ("zh",):
+    try:
+        _importlib.import_module(f"argus_redact.specs.{_mod}")
+    except ImportError:
+        pass
+
 __all__ = ["PIITypeDef", "get", "list_types", "lookup"]

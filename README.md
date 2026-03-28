@@ -74,7 +74,7 @@ We track what still needs work:
 | Dimension | Current (v0.1.9) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Detection** | P=96% R=98% F1=97% | P>98% (reduce false positives) |
-| **Compliance** | `default` profile ~100% (Level 1 complete) | `pipl`/`gdpr`/`hipaa` profiles (Level 2-3 types) |
+| **Compliance** | `default` ~100%; risk assessment + audit report + profiles API | Level 2-3 types for `pipl`/`gdpr`/`hipaa` full coverage |
 | **Security** | Fully local, fresh key per call | Key TTL & rotation |
 | **Performance** | 600 docs/s (regex + name scoring) | Rust core (10x) |
 | **Coverage** | 8 langs, 14 PII types (zh) / 7 (en), 6 frameworks | 10+ langs, address++, Dify/CrewAI |
