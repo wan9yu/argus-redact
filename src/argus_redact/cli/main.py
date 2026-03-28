@@ -136,18 +136,12 @@ def cmd_assess(args):
         report=True,
     )
 
-    result = {
-        "risk": {
-            "score": report.risk.score,
-            "level": report.risk.level,
-            "reasons": list(report.risk.reasons),
-            "pipl_articles": list(report.risk.pipl_articles),
-        },
-        "entities": list(report.entities),
-        "stats": report.stats,
-    }
-
-    output = json.dumps(result, ensure_ascii=False, indent=2)
+    if args.format == "markdown":
+        from argus_redact.report import generate_report_markdown
+        output = generate_report_markdown(report)
+    else:
+        from argus_redact.report import generate_report_json
+        output = generate_report_json(report)
 
     if args.output:
         Path(args.output).write_text(output, encoding="utf-8")
@@ -231,9 +225,11 @@ def main():
     # assess
     p_assess = subparsers.add_parser("assess", help="Assess privacy risk of text")
     p_assess.add_argument("input", nargs="?", default=None, help="Input file (default: stdin)")
-    p_assess.add_argument("-o", "--output", default=None, help="Save report to file (JSON)")
+    p_assess.add_argument("-o", "--output", default=None, help="Save report to file")
     p_assess.add_argument("-l", "--lang", default="zh", help="Language (default: zh)")
     p_assess.add_argument("-m", "--mode", default="auto", help="Detection mode: auto, fast, ner")
+    p_assess.add_argument("-f", "--format", default="json", choices=["json", "markdown"],
+                          help="Output format (default: json)")
     p_assess.set_defaults(func=cmd_assess)
 
     # info

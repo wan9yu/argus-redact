@@ -251,9 +251,8 @@ class TestAssessCommand:
 
         assert code == 0
         data = json.loads(stdout)
-        assert "risk" in data
-        assert data["risk"]["level"] == "critical"
-        assert "PIPL Art.51" in data["risk"]["pipl_articles"]
+        assert data["summary"]["risk_level"] == "critical"
+        assert "PIPL Art.51" in data["compliance"]["pipl_articles"]
 
     def test_should_save_report_to_file(self, tmp_path):
         output_file = tmp_path / "report.json"
@@ -268,8 +267,7 @@ class TestAssessCommand:
         assert code == 0
         assert output_file.exists()
         data = json.loads(output_file.read_text())
-        assert "risk" in data
-        assert data["stats"]["total"] >= 1
+        assert data["summary"]["entities_detected"] >= 1
 
     def test_should_return_zero_risk_when_no_pii(self):
         code, stdout, _ = run_cli(
@@ -280,8 +278,8 @@ class TestAssessCommand:
 
         assert code == 0
         data = json.loads(stdout)
-        assert data["risk"]["score"] == 0.0
-        assert data["risk"]["level"] == "none"
+        assert data["summary"]["risk_score"] == 0.0
+        assert data["summary"]["risk_level"] == "none"
 
 
 class TestCliErrors:
