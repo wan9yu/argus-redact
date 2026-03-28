@@ -71,3 +71,4 @@ filterwarnings = [
     "ignore::FutureWarning:torch.*",
     "ignore::UserWarning:thinc.*",
 ]
+addopts = "-p no:recording"

@@ -118,6 +118,12 @@ PII never leaves your device. Per-message keys prevent cross-request profiling. 
 
 [CONTRIBUTING.md](CONTRIBUTING.md) — language packs, test scenarios, framework integrations welcome.
 
+## Contributors
+
+| Who | Contribution |
+|-----|-------------|
+| [@aiedwardyi](https://github.com/aiedwardyi) | Brazilian Portuguese language pack (CPF, CNPJ, phone) |
+
 ## License
 
 [MIT](LICENSE)
