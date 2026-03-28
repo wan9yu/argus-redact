@@ -121,29 +121,49 @@ Layer 3 uses a local LLM (via Ollama) to detect **implicit** sensitive informati
 
 ## Multi-Model Comparison
 
-All models tested on same 17 cases, same prompt, temperature=0.0.
+All models tested on same 17 cases, same prompt, temperature=0.0. Hardware: M1 Max, 32GB RAM.
 
 | Model | Size | Score | Avg Latency | Notes |
 |-------|------|:-----:|:-----------:|-------|
 | qwen2.5:3b | 1.9 GB | 6/17 (35%) | 435ms | 只抓显式医疗/金融 |
-| **qwen2.5:7b** | 4.7 GB | **11/17 (65%)** | **902ms** | **性价比最佳** |
-| deepseek-r1:7b | 4.7 GB | 7/17 (41%) | 11,733ms | 链式推理太慢，JSON 输出不稳定 |
+| marco-o1:7b | 4.7 GB | 6/17 (35%) | 938ms | MCTS 推理无优势 |
+| deepseek-r1:7b | 4.7 GB | 7/17 (41%) | 11,733ms | 慢且弱 |
 | glm4:9b | 5.5 GB | 8/17 (47%) | 1,025ms | 中规中矩 |
-| qwen2.5:32b | 19 GB | 12/17 (71%) | 5,648ms | 最准但资源需求高 |
+| qwen2.5:7b | 4.7 GB | 11/17 (65%) | 902ms | 速度最优 |
+| deepseek-r1:8b | 5.2 GB | 12/17 (71%) | 41,537ms | 准但极慢 |
+| qwen2.5:32b | 19 GB | 12/17 (71%) | 5,648ms | 资源需求高 |
+| **qwen3:8b (no_think)** | **5.2 GB** | **15/17 (88%)** | **19,902ms** | **高精度，推荐** |
+| **qwen3:8b (think)** | **5.2 GB** | **16/17 (94%)** | **31,101ms** | **最准** |
 
 ### Key Findings
 
-- **qwen2.5:7b 是推荐默认模型**：65% 准确率 + <1s 延迟，实用性最强
-- deepseek-r1 的 chain-of-thought 在结构化输出任务上反而是劣势（thinking tokens 干扰 JSON）
-- glm4 中文能力不错但隐式推理弱于 qwen2.5 同尺寸
-- 32b 仅在需要最高精度且延迟可接受时使用
+- **qwen3:8b 碾压所有其他模型**：94%（think）/ 88%（no_think），是唯一能检测犯罪记录隐式场景的模型
+- qwen2.5:7b 仍是低延迟场景的最佳选择（65%，<1s）
+- deepseek-r1 的 chain-of-thought 在 JSON 输出任务上表现不佳（thinking tokens 干扰格式）
+- marco-o1 的 MCTS 推理对隐式 PII 检测没有帮助
+- 同代模型差距巨大：qwen3:8b >> qwen2.5:7b >> glm4:9b
+
+### Accuracy vs Latency Tradeoff
+
+```
+Score%  100|                              * qwen3:8b(think) 94%
+         90|                         * qwen3:8b(no_think) 88%
+         80|
+         70|         * qwen2.5:32b           * deepseek-r1:8b
+         60|  * qwen2.5:7b
+         50|       * glm4:9b
+         40|                    * deepseek-r1:7b
+         30|* qwen2.5:3b  * marco-o1
+            +-----+-----+-----+-----+-----+-----+
+            0     1s    5s    10s   20s   30s   40s  Latency
+```
 
 ---
 
 ## Recommendations
 
-1. **默认模型推荐 qwen2.5:7b**：65% 检测率 + <1s 延迟，适合生产部署
-2. **高精度场景用 32b**：71% 检测率，5.6s 延迟在异步/批处理可接受
-3. **3b 仅适合快速预筛**：35% 太低，不建议做主力
-4. **Prompt 优化空间大**：通过领域知识注入（宗教日历、性别推断规则）可提升 7b 到 75%+
-5. **极端隐含场景**（"出来后"→犯罪）可能需要多轮推理或更大模型
+1. **默认模型推荐 qwen3:8b**：88-94% 检测率，20-31s 延迟在异步场景可接受
+2. **低延迟场景用 qwen2.5:7b**：65% 检测率 + <1s 延迟，适合实时脱敏
+3. **分层策略**：Layer 1-2 用正则/NER（<100ms），Layer 3 用 qwen3:8b（异步/批处理）
+4. **Prompt 优化**：qwen3:8b 唯一漏掉的是"每周五请假"→宗教，可通过 prompt 注入宗教日历知识解决
+5. **不推荐**：deepseek-r1（太慢且不稳定）、marco-o1（推理无优势）、3b（太弱）

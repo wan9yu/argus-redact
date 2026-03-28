@@ -135,7 +135,11 @@ def ollama_available():
 class TestLayer3ModelBenchmark:
     """Benchmark implicit PII detection across models. Run with -s to see output."""
 
-    @pytest.mark.parametrize("model", ["qwen2.5:3b", "qwen2.5:7b", "qwen2.5:32b", "deepseek-r1:7b", "glm4:9b"])
+    @pytest.mark.parametrize("model", [
+        "qwen2.5:3b", "qwen2.5:7b", "qwen2.5:32b",
+        "qwen3:8b", "deepseek-r1:7b", "deepseek-r1:8b",
+        "glm4:9b", "marco-o1:7b",
+    ])
     def test_model_benchmark(self, ollama_available, model, capsys):
         # Check model is installed
         try:
