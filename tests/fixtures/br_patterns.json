@@ -57,6 +57,7 @@
       "input": "Ligar: (21) 3456-7890",
       "should_match": true,
       "type": "phone",
+      "expected_text": "(21) 3456-7890",
       "description": "Brazilian landline without country code"
     },
     {
@@ -66,4 +67,4 @@
       "type": "cpf",
       "description": "No PII"
     }
-  ]
+]

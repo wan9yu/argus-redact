@@ -64,6 +64,7 @@ PATTERNS = [
         "type": "phone",
         "label": "[Telefone]",
         "pattern": r"(?:\+55\s?)?\(?\d{2}\)?\s?\d{4,5}-?\d{4}(?!\d)",
+        "check_context": True,
         "description": "Brazilian phone number",
     },
 ]
