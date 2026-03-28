@@ -25,12 +25,13 @@ One piece of data directly identifies a specific person. This is the current foc
 | Address | ✓ zh | 1 | `北京市朝阳区建国路100号` |
 | Person name | ✓ zh | 1b | `张三`, `何秀珍` (candidate + scoring) |
 | Person name | ✓ en/ja/ko/de/uk/in | 2 | NER-based |
-| Date of birth | planned | 1 | `1990年3月7日`, `03/07/1990`, `1990-03-07` |
-| IP address | planned | 1 | `192.168.1.1`, `2001:db8::1` |
-| Social account | planned | 1 | WeChat ID, QQ number |
-| Military ID | planned | 1 | 军官证号 |
-| Social security | planned | 1 | 社保号 |
-| Business license | planned | 1 | 统一社会信用代码 |
+| Date of birth | ✓ zh/en | 1 | `1990年3月7日`, `03/07/1990`, `1990-03-07` |
+| IP address | ✓ shared | 1 | `192.168.1.1`, `2001:db8::1` |
+| Social account | ✓ zh | 1 | WeChat ID, QQ number |
+| Military ID | ✓ zh | 1 | 军官证号 |
+| Social security | ✓ zh | 1 | 社保号 |
+| Business license | ✓ zh | 1 | 统一社会信用代码 (credit_code) |
+| US Passport | ✓ en | 1 | `123456789` |
 
 ### Level 2 — Quasi-Identifiers
 
@@ -66,11 +67,11 @@ Machine-readable identifiers that can be traced to individuals or devices.
 
 | Type | Status | Layer | Format examples |
 |------|:------:|:-----:|-----------------|
-| IP address | planned | 1 | `192.168.1.1`, `::ffff:127.0.0.1` |
+| IP address | ✓ shared | 1 | `192.168.1.1`, `::ffff:127.0.0.1` |
 | MAC address | planned | 1 | `AA:BB:CC:DD:EE:FF` |
 | IMEI | planned | 1 | 15-digit device identifier |
 | URL with token | planned | 1 | `example.com/verify?token=abc123` |
-| Social media handle | planned | 1 | `@username`, WeChat ID |
+| Social media handle | ✓ zh | 1 | `@username`, WeChat ID (partial: QQ, WeChat) |
 
 ---
 
@@ -100,10 +101,10 @@ Different regulations care about different types. Profiles are pre-configured ty
 
 | Profile | Focus | Types enabled | Completion |
 |---------|-------|---------------|:----------:|
-| `default` | Common PII | All Level 1 direct identifiers (current behavior) | ~70% — missing: date, IP, social |
-| `pipl` | China PIPL | All Level 1 + biometric + financial + medical + religious + political | ~20% — Level 1 partial, Level 2-3 not started |
-| `gdpr` | EU GDPR | All Level 1 + Level 2 quasi-identifiers + Level 3 special categories | ~15% — Level 1 partial, no quasi-identifiers |
-| `hipaa` | US HIPAA | Direct identifiers + medical + 18 PHI types | ~10% — no medical/PHI types |
+| `default` | Common PII | All Level 1 direct identifiers (current behavior) | ~100% — Level 1 complete |
+| `pipl` | China PIPL | All Level 1 + biometric + financial + medical + religious + political | ~40% — Level 1 complete, Level 2-3 not started |
+| `gdpr` | EU GDPR | All Level 1 + Level 2 quasi-identifiers + Level 3 special categories | ~25% — Level 1 improved |
+| `hipaa` | US HIPAA | Direct identifiers + medical + 18 PHI types | ~15% — Level 1 improved |
 
 ```python
 # Future API
@@ -128,16 +129,17 @@ redact(text, types_exclude=["address"])
 ## Roadmap
 
 **Phase 1 — Foundation (current)**
-- ✓ 8 PII types for Chinese
+- ✓ 14 PII types for Chinese
 - ✓ Person name scoring (candidate + evidence)
-- ✓ 7 language packs
+- ✓ 8 language packs
 - ✓ Spec registry with examples and fakers
+- ✓ Date of birth (multi-format, zh/en)
+- ✓ IP address (v4, v6)
+- ✓ Social accounts (WeChat ID, QQ)
+- ✓ Chinese-specific: social security, military ID, business license (credit_code)
+- ✓ US Passport
 
 **Phase 2 — Expand Level 1**
-- Date of birth (multi-format, multi-language)
-- IP address (v4, v6)
-- Social accounts (WeChat ID, QQ)
-- Chinese-specific: social security, military ID, business license
 - Spec registry: add `sensitivity` and `compliance` fields
 
 **Phase 3 — Generalize scoring**

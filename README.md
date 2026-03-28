@@ -43,15 +43,15 @@ Layer 3  Local LLM    "那个地方", nicknames, implicit PII                   
 
 Use what you need: `mode="fast"` (Layer 1 only) → `mode="ner"` (+ NER) → `mode="auto"` (all three).
 
-## 7 Languages
+## 8 Languages
 
-| | zh | en | ja | ko | de | uk | in |
-|-|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| Phone | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| National ID | MOD11-2 | SSN | My Number | RRN | Tax ID | NINO | Aadhaar |
-| Bank/Card | Luhn | Luhn | — | — | IBAN | — | PAN |
-| Person names | HanLP | spaCy | spaCy | spaCy | spaCy | spaCy | spaCy |
-| Email | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| | zh | en | ja | ko | de | uk | in | br |
+|-|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Phone | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| National ID | MOD11-2 | SSN | My Number | RRN | Tax ID | NINO | Aadhaar | CPF/CNPJ |
+| Bank/Card | Luhn | Luhn | — | — | IBAN | — | PAN | — |
+| Person names | HanLP | spaCy | spaCy | spaCy | spaCy | spaCy | spaCy | spaCy |
+| Email | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张三"]`.
 
@@ -74,10 +74,10 @@ We track what still needs work:
 | Dimension | Current (v0.1.9) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Detection** | P=96% R=98% F1=97% | P>98% (reduce false positives) |
-| **Compliance** | `default` profile ~70% | Date of birth, IP, social accounts → `default` 100%; then `pipl`/`gdpr`/`hipaa` profiles |
+| **Compliance** | `default` profile ~100% (Level 1 complete) | `pipl`/`gdpr`/`hipaa` profiles (Level 2-3 types) |
 | **Security** | Fully local, fresh key per call | Key TTL & rotation |
 | **Performance** | 600 docs/s (regex + name scoring) | Rust core (10x) |
-| **Coverage** | 7 langs, 8 PII types (zh), 6 frameworks | 10+ langs, address++, Dify/CrewAI |
+| **Coverage** | 8 langs, 14 PII types (zh) / 7 (en), 6 frameworks | 10+ langs, address++, Dify/CrewAI |
 
 [Full benchmark report →](docs/benchmark-report.md) | [Sensitive info taxonomy →](docs/sensitive-info.md)
 

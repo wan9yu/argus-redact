@@ -65,7 +65,7 @@ with gr.Blocks(title=f"argus-redact v{__version__}") as demo:
         # argus-redact v{__version__}
         **Encrypt PII, not meaning. Locally.**
 
-        Three layers: Regex → NER → Semantic LLM. 7 languages. Reversible with per-message keys.
+        Three layers: Regex → NER → Semantic LLM. 8 languages. Reversible with per-message keys.
 
         [GitHub](https://github.com/wan9yu/argus-redact) |
         [PyPI](https://pypi.org/project/argus-redact/) |
@@ -86,7 +86,7 @@ with gr.Blocks(title=f"argus-redact v{__version__}") as demo:
             )
             with gr.Row():
                 lang = gr.Dropdown(
-                    choices=["zh", "en", "ja", "ko", "de", "uk", "in", "zh,en", "zh,en,ja,ko"],
+                    choices=["zh", "en", "ja", "ko", "de", "uk", "in", "br", "zh,en", "zh,en,ja,ko"],
                     value="zh",
                     label="Language",
                 )

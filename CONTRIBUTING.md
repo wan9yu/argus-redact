@@ -117,7 +117,7 @@ src/argus_redact/
 ├── glue/           # Composes pure + impure
 │   └── redact.py        # redact() public API
 ├── lang/           # Language packs
-│   ├── zh/ en/ ja/ ko/ de/ uk/ in_/
+│   ├── zh/ en/ ja/ ko/ de/ uk/ in_/ br/
 │   └── shared/
 ├── specs/          # PII type registry (single source of truth)
 │   ├── registry.py     # PIITypeDef + global registry

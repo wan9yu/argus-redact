@@ -12,13 +12,14 @@ You can contribute any one of these independently. A pack with only regex patter
 
 | Language | Regex (Layer 1) | NER (Layer 2) | Semantic (Layer 3) |
 |----------|----------------|--------------|-------------------|
-| Chinese (zh) | Phone, ID, bank card, email, license plate, address, passport | HanLP | Ollama |
-| English (en) | Phone, SSN, credit card, email | spaCy | Ollama |
+| Chinese (zh) | Phone, ID, bank card, email, license plate, address, passport, date of birth, IP, QQ, WeChat, military ID, social security, credit code | HanLP | Ollama |
+| English (en) | Phone, SSN, credit card, email, date of birth, US passport, IP (shared) | spaCy | Ollama |
 | Japanese (ja) | Phone, My Number | spaCy | Ollama |
 | Korean (ko) | Phone, RRN | spaCy | Ollama |
 | German (de) | Tax ID, IBAN, phone | spaCy | Ollama |
 | UK (uk) | Postcode, NINO, NHS number, phone | spaCy | Ollama |
 | Indian (in) | Aadhaar, PAN, phone | spaCy | Ollama |
+| Brazilian Portuguese (br) | CPF, CNPJ, phone | spaCy | Ollama |
 
 ---
 
