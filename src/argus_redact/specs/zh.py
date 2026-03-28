@@ -15,14 +15,17 @@ from .fakers_zh import (
     fake_address,
     fake_bank_card,
     fake_credit_code,
+    fake_date_of_birth,
     fake_email,
     fake_id_number,
     fake_license_plate,
+    fake_military_id,
     fake_passport,
     fake_person,
     fake_phone,
     fake_phone_landline,
     fake_qq,
+    fake_social_security,
     fake_wechat,
 )
 from .registry import PIITypeDef, register, list_types
@@ -444,6 +447,137 @@ register(PIITypeDef(
     faker=fake_wechat,
     source="微信号命名规则",
     description="WeChat ID",
+))
+
+# ── Date of Birth ──
+
+register(PIITypeDef(
+    name="date_of_birth",
+    lang="zh",
+    format="YYYY年M月D日",
+    length=None,
+    charset="cjk+digits",
+    structure={
+        "year": "4 or 2 digit year, or Chinese numeral implied",
+        "month": "1-12, Arabic or Chinese numeral",
+        "day": "1-31, Arabic or Chinese numeral, followed by 日/号",
+    },
+    checksum=None,
+    prefixes=("出生日期", "出生", "生日", "生于", "born"),
+    strategy="remove",
+    label="[出生日期已脱敏]",
+    examples=(
+        "出生日期1990年3月7日",
+        "生日是90年3月",
+        "出生三月七号",
+        "出生日期：1990-03-07",
+    ),
+    counterexamples=(
+        "2024年3月7日开会",
+        "会议时间2024-03-07",
+    ),
+    _patterns=({
+        "type": "date_of_birth",
+        "label": "[出生日期已脱敏]",
+        "pattern": (
+            r"(?:出生日期|出生|生日|生于|born)\s*(?:[:：是]?\s*)"
+            r"(?P<date_of_birth>"
+            r"(?:(?:19|20)\d{2}|[0-9]{2})年(?:0?[1-9]|1[0-2])月(?:(?:0?[1-9]|[12]\d|3[01])(?:日|号))?"
+            r"|"
+            r"(?:十[一二]|[一二三四五六七八九十])月(?:(?:二?十)?[一二三四五六七八九](?:日|号))?"
+            r"|"
+            r"(?:19|20)\d{2}[-/.](?:0[1-9]|1[0-2])[-/.](?:0[1-9]|[12]\d|3[01])"
+            r"|"
+            r"(?:0[1-9]|1[0-2])/(?:0[1-9]|[12]\d|3[01])/(?:19|20)\d{2}"
+            r")"
+        ),
+        "group": "date_of_birth",
+        "description": "Chinese date of birth (keyword-triggered, multiple formats)",
+    },),
+    faker=fake_date_of_birth,
+    source="GB/T 2261.1《个人基本信息分类与代码》",
+    description="Chinese date of birth (keyword-triggered, multiple formats)",
+))
+
+# ── Military ID ──
+
+register(PIITypeDef(
+    name="military_id",
+    lang="zh",
+    format="军字第XXXXXXXX号",
+    length=8,
+    charset="digits",
+    structure={
+        "keyword": "军字第/武字第/士兵证/义务兵证",
+        "number": "8 digits",
+    },
+    checksum=None,
+    prefixes=("军字第", "武字第", "士兵证", "义务兵证", "军官证"),
+    strategy="remove",
+    label="[军官证号已脱敏]",
+    examples=(
+        "军字第12345678号",
+        "武字第87654321号",
+        "士兵证号12345678",
+    ),
+    counterexamples=(
+        "军字第1234567号",
+    ),
+    _patterns=({
+        "type": "military_id",
+        "label": "[军官证号已脱敏]",
+        "pattern": (
+            r"(?:军字第|武字第|士兵证号?|义务兵证号?)\s*"
+            r"(?P<military_id>\d{8})"
+            r"(?:号)?"
+        ),
+        "group": "military_id",
+        "description": "Chinese military ID number (keyword-triggered, 8 digits)",
+    },),
+    faker=fake_military_id,
+    source="中国人民解放军军官证管理规定",
+    description="Chinese military ID number",
+))
+
+# ── Social Security ──
+
+register(PIITypeDef(
+    name="social_security",
+    lang="zh",
+    format="社保号+18位身份证号",
+    length=(9, 18),
+    charset="alnum",
+    structure={
+        "keyword": "社保号/社保卡号/社会保障号",
+        "number": "18-digit ID format or city-specific shorter format",
+    },
+    checksum=None,
+    prefixes=("社保号", "社保卡号", "社会保障号"),
+    strategy="remove",
+    label="[社保号已脱敏]",
+    examples=(
+        "社保号110101199003074610",
+        "社保卡号：A12345678",
+    ),
+    counterexamples=(
+        "110101199003074610",
+    ),
+    _patterns=({
+        "type": "social_security",
+        "label": "[社保号已脱敏]",
+        "pattern": (
+            r"(?:社保号|社保卡号|社会保障号)\s*(?:[:：]?\s*)"
+            r"(?P<social_security>"
+            r"[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]"
+            r"|[A-Z]\d{8,12}"
+            r")"
+        ),
+        "group": "social_security",
+        "description": "Chinese social security number (18-digit ID or city-specific format, keyword-triggered)",
+    },),
+    faker=fake_social_security,
+    source="人力资源和社会保障部社保卡管理规定",
+    description="Chinese social security number (keyword-triggered)",
 ))
 
 # ── Person Name ──

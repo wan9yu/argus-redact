@@ -201,6 +201,32 @@ def fake_wechat(rng: random.Random) -> str:
     return "微信号" + first + rest
 
 
+def fake_date_of_birth(rng: random.Random) -> str:
+    year = rng.randint(1950, 2005)
+    month = rng.randint(1, 12)
+    day = rng.randint(1, 28)
+    keyword = rng.choice(["出生日期", "生日", "出生", "生于"])
+    fmt = rng.choice(["nian", "dash", "slash"])
+    if fmt == "nian":
+        return f"{keyword}{year}年{month}月{day}日"
+    elif fmt == "dash":
+        return f"{keyword}{year}-{month:02d}-{day:02d}"
+    else:
+        return f"{keyword}{year}/{month:02d}/{day:02d}"
+
+
+def fake_military_id(rng: random.Random) -> str:
+    keyword = rng.choice(["军字第", "武字第"])
+    digits = "".join(str(rng.randint(0, 9)) for _ in range(8))
+    return f"{keyword}{digits}号"
+
+
+def fake_social_security(rng: random.Random) -> str:
+    keyword = rng.choice(["社保号", "社保卡号", "社会保障号"])
+    id_num = fake_id_number(rng)
+    return f"{keyword}{id_num}"
+
+
 def fake_email(rng: random.Random) -> str:
     local = rng.choice(PINYIN_PARTS) + rng.choice(PINYIN_PARTS) + str(rng.randint(1, 999))
     domain = rng.choice(EMAIL_DOMAINS)

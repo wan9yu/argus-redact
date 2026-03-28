@@ -1,0 +1,103 @@
+[
+    {
+        "id": "dob_nian_yue_ri_padded",
+        "input": "出生日期1990年03月07日",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "1990年03月07日",
+        "description": "零填充年月日"
+    },
+    {
+        "id": "dob_nian_yue_ri_unpadded",
+        "input": "他生于1990年3月7日",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "1990年3月7日",
+        "description": "无零填充年月日"
+    },
+    {
+        "id": "dob_short_year",
+        "input": "生日是90年3月",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "90年3月",
+        "description": "两位年份+月"
+    },
+    {
+        "id": "dob_chinese_numeral_hao",
+        "input": "出生三月七号",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "三月七号",
+        "description": "中文数字月日（号）"
+    },
+    {
+        "id": "dob_chinese_numeral_ri",
+        "input": "生日是三月七日",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "三月七日",
+        "description": "中文数字月日（日）"
+    },
+    {
+        "id": "dob_chinese_numeral_december",
+        "input": "出生日期十二月二十五日",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "十二月二十五日",
+        "description": "中文数字十二月二十五日"
+    },
+    {
+        "id": "dob_dash_format",
+        "input": "出生日期：1990-03-07",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "1990-03-07",
+        "description": "ISO dash格式"
+    },
+    {
+        "id": "dob_slash_format",
+        "input": "出生日期1990/03/07",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "1990/03/07",
+        "description": "斜杠格式"
+    },
+    {
+        "id": "dob_dot_format",
+        "input": "生于1990.03.07",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "1990.03.07",
+        "description": "点号格式"
+    },
+    {
+        "id": "dob_mdy_slash",
+        "input": "born: 03/07/1990",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "03/07/1990",
+        "description": "MDY斜杠格式+born关键词"
+    },
+    {
+        "id": "no_keyword_plain_date",
+        "input": "2024年3月7日开会",
+        "should_match": false,
+        "type": "date_of_birth",
+        "description": "普通日期无关键词不匹配"
+    },
+    {
+        "id": "no_keyword_iso",
+        "input": "会议时间2024-03-07",
+        "should_match": false,
+        "type": "date_of_birth",
+        "description": "ISO日期无关键词不匹配"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "date_of_birth",
+        "description": "无PII"
+    }
+]

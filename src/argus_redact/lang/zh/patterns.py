@@ -204,4 +204,50 @@ PATTERNS = [
         "validate": _validate_credit_code,
         "description": "Unified Social Credit Code (GB 32100-2015, MOD 31)",
     },
+    {
+        "type": "date_of_birth",
+        "label": "[出生日期已脱敏]",
+        "pattern": (
+            r"(?:出生日期|出生|生日|生于|born)\s*(?:[:：是]?\s*)"
+            r"(?P<date_of_birth>"
+            # YYYY年M月D日/号（Arabic numerals）
+            r"(?:(?:19|20)\d{2}|[0-9]{2})年(?:0?[1-9]|1[0-2])月(?:(?:0?[1-9]|[12]\d|3[01])(?:日|号))?"
+            r"|"
+            # Chinese numeral month + day
+            r"(?:十[一二]|[一二三四五六七八九十])月(?:(?:二?十)?[一二三四五六七八九](?:日|号))?"
+            r"|"
+            # YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD
+            r"(?:19|20)\d{2}[-/.](?:0[1-9]|1[0-2])[-/.](?:0[1-9]|[12]\d|3[01])"
+            r"|"
+            # MM/DD/YYYY
+            r"(?:0[1-9]|1[0-2])/(?:0[1-9]|[12]\d|3[01])/(?:19|20)\d{2}"
+            r")"
+        ),
+        "group": "date_of_birth",
+        "description": "Chinese date of birth (keyword-triggered, multiple formats)",
+    },
+    {
+        "type": "military_id",
+        "label": "[军官证号已脱敏]",
+        "pattern": (
+            r"(?:军字第|武字第|士兵证号?|义务兵证号?)\s*"
+            r"(?P<military_id>\d{8})"
+            r"(?:号)?"
+        ),
+        "group": "military_id",
+        "description": "Chinese military ID number (keyword-triggered, 8 digits)",
+    },
+    {
+        "type": "social_security",
+        "label": "[社保号已脱敏]",
+        "pattern": (
+            r"(?:社保号|社保卡号|社会保障号)\s*(?:[:：]?\s*)"
+            r"(?P<social_security>"
+            r"[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]"
+            r"|[A-Z]\d{8,12}"
+            r")"
+        ),
+        "group": "social_security",
+        "description": "Chinese social security number (18-digit ID or city-specific format, keyword-triggered)",
+    },
 ]

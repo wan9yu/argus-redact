@@ -22,6 +22,12 @@ def _validate_credit_card_luhn(value: str) -> bool:
     return _validate_luhn(digits_only)
 
 
+_MONTHS = (
+    r"(?:January|February|March|April|May|June"
+    r"|July|August|September|October|November|December"
+    r"|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
+)
+
 PATTERNS = [
     {
         "type": "ssn",
@@ -56,5 +62,40 @@ PATTERNS = [
             r"(?:\s*,\s*(?:Apt|Suite|Unit|#)\s*\w+)?"
         ),
         "description": "US street address (number + street name + type)",
+    },
+    {
+        "type": "date_of_birth",
+        "label": "[DOB REDACTED]",
+        "pattern": (
+            r"(?:date\s+of\s+birth|DOB|birthdate|birthday|born(?:\s+on)?)"
+            r"\s*[:.]?\s*"
+            r"(?P<date_of_birth>"
+            # M/D/YYYY or MM/DD/YYYY
+            r"(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12]\d|3[01])/(?:19|20)\d{2}"
+            r"|"
+            # YYYY-MM-DD
+            r"(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])"
+            r"|"
+            # Month D, YYYY or Month D YYYY
+            rf"{_MONTHS}\s+\d{{1,2}},?\s+(?:19|20)\d{{2}}"
+            r"|"
+            # D(st/nd/rd/th) Month YYYY
+            r"\d{1,2}(?:st|nd|rd|th)?\s+"
+            rf"{_MONTHS}\s+(?:19|20)\d{{2}}"
+            r")"
+        ),
+        "group": "date_of_birth",
+        "description": "English date of birth (keyword-triggered, multiple formats)",
+    },
+    {
+        "type": "us_passport",
+        "label": "[PASSPORT REDACTED]",
+        "pattern": (
+            r"(?i:passport\s*(?:number|no\.?|#)?)\s*[:.]?\s*"
+            r"(?P<us_passport>[A-Za-z]\d{8})"
+            r"(?!\d)"
+        ),
+        "group": "us_passport",
+        "description": "US passport number (keyword-triggered, letter + 8 digits)",
     },
 ]

@@ -75,6 +75,27 @@ class TestCreditCode:
         assert_pattern_match(results, example, "credit_code")
 
 
+class TestChineseDateOfBirth:
+    @parametrize_examples("zh_date_of_birth.json")
+    def test_should_match_or_reject_when_dob_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "date_of_birth")
+
+
+class TestChineseMilitaryId:
+    @parametrize_examples("zh_military_id.json")
+    def test_should_match_or_reject_when_military_id_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "military_id")
+
+
+class TestChineseSocialSecurity:
+    @parametrize_examples("zh_social_security.json")
+    def test_should_match_or_reject_when_social_security_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "social_security")
+
+
 class TestMultiplePII:
     def test_should_detect_both_types_when_phone_and_id_in_text(self, zh_patterns):
         text = "手机13812345678，身份证110101199003074610"

@@ -1,0 +1,48 @@
+[
+    {
+        "id": "shebao_18digit",
+        "input": "社保号110101199003074610",
+        "should_match": true,
+        "type": "social_security",
+        "expected_text": "110101199003074610",
+        "description": "社保号18位身份证格式"
+    },
+    {
+        "id": "shebao_card_with_colon",
+        "input": "社保卡号：110101199003074610",
+        "should_match": true,
+        "type": "social_security",
+        "expected_text": "110101199003074610",
+        "description": "社保卡号带冒号"
+    },
+    {
+        "id": "shehui_baozhang",
+        "input": "社会保障号110101199003074610",
+        "should_match": true,
+        "type": "social_security",
+        "expected_text": "110101199003074610",
+        "description": "社会保障号关键词"
+    },
+    {
+        "id": "shebao_city_format",
+        "input": "社保卡号：A12345678",
+        "should_match": true,
+        "type": "social_security",
+        "expected_text": "A12345678",
+        "description": "城市社保卡号（字母+数字）"
+    },
+    {
+        "id": "no_keyword_bare_id",
+        "input": "110101199003074610",
+        "should_match": false,
+        "type": "social_security",
+        "description": "无社保关键词不匹配为social_security"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "social_security",
+        "description": "无PII"
+    }
+]

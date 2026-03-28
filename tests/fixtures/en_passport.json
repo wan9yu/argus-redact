@@ -1,0 +1,55 @@
+[
+    {
+        "id": "passport_standard",
+        "input": "passport number C12345678",
+        "should_match": true,
+        "type": "us_passport",
+        "expected_text": "C12345678",
+        "description": "Standard US passport: letter + 8 digits"
+    },
+    {
+        "id": "passport_with_colon",
+        "input": "Passport No: B87654321",
+        "should_match": true,
+        "type": "us_passport",
+        "expected_text": "B87654321",
+        "description": "Passport with colon separator"
+    },
+    {
+        "id": "passport_hash",
+        "input": "passport # A11223344",
+        "should_match": true,
+        "type": "us_passport",
+        "expected_text": "A11223344",
+        "description": "Passport with # separator"
+    },
+    {
+        "id": "passport_lowercase",
+        "input": "passport c12345678",
+        "should_match": true,
+        "type": "us_passport",
+        "expected_text": "c12345678",
+        "description": "Lowercase letter"
+    },
+    {
+        "id": "no_keyword",
+        "input": "C12345678",
+        "should_match": false,
+        "type": "us_passport",
+        "description": "No passport keyword"
+    },
+    {
+        "id": "too_few_digits",
+        "input": "passport C1234567",
+        "should_match": false,
+        "type": "us_passport",
+        "description": "Only 7 digits"
+    },
+    {
+        "id": "plain_text",
+        "input": "nothing here",
+        "should_match": false,
+        "type": "us_passport",
+        "description": "No passport"
+    }
+]

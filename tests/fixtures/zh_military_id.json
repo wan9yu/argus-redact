@@ -1,0 +1,63 @@
+[
+    {
+        "id": "officer_standard",
+        "input": "军字第12345678号",
+        "should_match": true,
+        "type": "military_id",
+        "expected_text": "12345678",
+        "description": "标准军官证号"
+    },
+    {
+        "id": "armed_police",
+        "input": "武字第87654321号",
+        "should_match": true,
+        "type": "military_id",
+        "expected_text": "87654321",
+        "description": "武警证号（武字）"
+    },
+    {
+        "id": "soldier_cert",
+        "input": "士兵证号12345678",
+        "should_match": true,
+        "type": "military_id",
+        "expected_text": "12345678",
+        "description": "士兵证"
+    },
+    {
+        "id": "conscript_cert",
+        "input": "义务兵证12345678",
+        "should_match": true,
+        "type": "military_id",
+        "expected_text": "12345678",
+        "description": "义务兵证"
+    },
+    {
+        "id": "officer_with_context",
+        "input": "他的军官证号是军字第11223344号",
+        "should_match": true,
+        "type": "military_id",
+        "expected_text": "11223344",
+        "description": "带上下文"
+    },
+    {
+        "id": "too_few_digits",
+        "input": "军字第1234567号",
+        "should_match": false,
+        "type": "military_id",
+        "description": "只有7位不匹配"
+    },
+    {
+        "id": "no_keyword",
+        "input": "号码是12345678",
+        "should_match": false,
+        "type": "military_id",
+        "description": "无军事关键词不匹配"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "military_id",
+        "description": "无PII"
+    }
+]

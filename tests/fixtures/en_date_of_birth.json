@@ -1,0 +1,79 @@
+[
+    {
+        "id": "dob_mdy_slash",
+        "input": "DOB: 03/07/1990",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "03/07/1990",
+        "description": "MDY slash with DOB keyword"
+    },
+    {
+        "id": "dob_mdy_unpadded",
+        "input": "date of birth 3/7/1990",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "3/7/1990",
+        "description": "Unpadded MDY"
+    },
+    {
+        "id": "dob_iso",
+        "input": "born 1990-03-07",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "1990-03-07",
+        "description": "ISO format with born keyword"
+    },
+    {
+        "id": "dob_long_month",
+        "input": "birthday: March 7, 1990",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "March 7, 1990",
+        "description": "Long month name format"
+    },
+    {
+        "id": "dob_abbreviated_month",
+        "input": "DOB Mar 7, 1990",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "Mar 7, 1990",
+        "description": "Abbreviated month name"
+    },
+    {
+        "id": "dob_ordinal_day",
+        "input": "born on 7th March 1990",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "7th March 1990",
+        "description": "Day-first with ordinal"
+    },
+    {
+        "id": "dob_day_month_year",
+        "input": "birthdate: 7 March 1990",
+        "should_match": true,
+        "type": "date_of_birth",
+        "expected_text": "7 March 1990",
+        "description": "Day Month Year format"
+    },
+    {
+        "id": "no_keyword_random_date",
+        "input": "meeting on 03/07/2024",
+        "should_match": false,
+        "type": "date_of_birth",
+        "description": "Random date without DOB keyword"
+    },
+    {
+        "id": "no_keyword_iso",
+        "input": "deadline 2024-03-07",
+        "should_match": false,
+        "type": "date_of_birth",
+        "description": "ISO date without DOB keyword"
+    },
+    {
+        "id": "plain_text",
+        "input": "nothing here",
+        "should_match": false,
+        "type": "date_of_birth",
+        "description": "No date"
+    }
+]
