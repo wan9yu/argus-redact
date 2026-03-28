@@ -173,17 +173,18 @@ def fake_address(rng: random.Random) -> str:
 
 def fake_credit_code(rng: random.Random) -> str:
     """Generate a valid Unified Social Credit Code (GB 32100-2015)."""
-    charset = "0123456789ABCDEFGHJKLMNPQRTUWXY"
-    char_to_val = {c: i for i, c in enumerate(charset)}
-    weights = [1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28]
-    # Registration authority (9=enterprise) + category (1=corporate)
+    from argus_redact.lang.zh.patterns import (
+        _CREDIT_CODE_CHARSET,
+        _CREDIT_CODE_CHAR_TO_VAL,
+        _CREDIT_CODE_WEIGHTS,
+    )
     prefix = rng.choice(["91", "92", "52", "51", "11", "12"])
     area = rng.choice(ID_AREA_CODES)
-    body = "".join(rng.choice(charset) for _ in range(9))
+    body = "".join(rng.choice(_CREDIT_CODE_CHARSET) for _ in range(9))
     code17 = prefix + area + body
-    total = sum(char_to_val[code17[i]] * weights[i] for i in range(17))
+    total = sum(_CREDIT_CODE_CHAR_TO_VAL[code17[i]] * _CREDIT_CODE_WEIGHTS[i] for i in range(17))
     check = (31 - total % 31) % 31
-    return code17 + charset[check]
+    return code17 + _CREDIT_CODE_CHARSET[check]
 
 
 def fake_qq(rng: random.Random) -> str:

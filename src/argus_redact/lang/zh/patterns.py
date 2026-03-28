@@ -55,20 +55,22 @@ def _validate_luhn(value: str) -> bool:
     return total % 10 == 0
 
 
+# GB 32100-2015 Unified Social Credit Code constants
+_CREDIT_CODE_CHARSET = "0123456789ABCDEFGHJKLMNPQRTUWXY"
+_CREDIT_CODE_CHAR_TO_VAL = {c: i for i, c in enumerate(_CREDIT_CODE_CHARSET)}
+_CREDIT_CODE_WEIGHTS = (1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28)
+
+
 def _validate_credit_code(value: str) -> bool:
     """MOD 31 checksum for 18-char Unified Social Credit Code (GB 32100-2015)."""
     value = value.upper()
     if len(value) != 18:
         return False
-    # Character set: 0-9 A-H J-N P-R T-U W-Y (excludes I, O, S, V, Z)
-    charset = "0123456789ABCDEFGHJKLMNPQRTUWXY"
-    char_to_val = {c: i for i, c in enumerate(charset)}
-    if any(c not in char_to_val for c in value):
+    if any(c not in _CREDIT_CODE_CHAR_TO_VAL for c in value):
         return False
-    weights = [1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28]
-    total = sum(char_to_val[value[i]] * weights[i] for i in range(17))
+    total = sum(_CREDIT_CODE_CHAR_TO_VAL[value[i]] * _CREDIT_CODE_WEIGHTS[i] for i in range(17))
     check = (31 - total % 31) % 31
-    return char_to_val[value[17]] == check
+    return _CREDIT_CODE_CHAR_TO_VAL[value[17]] == check
 
 
 def _validate_bank_card(value: str) -> bool:

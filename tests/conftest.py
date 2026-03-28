@@ -66,6 +66,22 @@ def sample_key():
 # ── Helpers ──
 
 
+def assert_pattern_match(results: list[PatternMatch], example: dict, pii_type: str | None = None):
+    """Shared assertion logic for pattern-matching test classes.
+
+    If pii_type is None, reads from example["type"].
+    """
+    t = pii_type or example["type"]
+    typed = [r for r in results if r.type == t]
+
+    if example["should_match"]:
+        assert len(typed) >= 1, f"Expected match: {example['description']}"
+        if "expected_text" in example:
+            assert any(r.text == example["expected_text"] for r in typed)
+    else:
+        assert len(typed) == 0, f"Should NOT match: {example['description']}"
+
+
 def make_match(text, entity_type, start, end=None):
     """Helper to create a PatternMatch with less boilerplate."""
     if end is None:
