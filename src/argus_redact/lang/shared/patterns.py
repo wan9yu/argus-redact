@@ -35,7 +35,7 @@ PATTERNS = [
     {
         "type": "mac_address",
         "label": "[MAC已脱敏]",
-        "pattern": r"(?<![0-9A-Fa-f:.-])[0-9A-Fa-f]{2}(?:[:.-])[0-9A-Fa-f]{2}(?:[:.-])[0-9A-Fa-f]{2}(?:[:.-])[0-9A-Fa-f]{2}(?:[:.-])[0-9A-Fa-f]{2}(?:[:.-])[0-9A-Fa-f]{2}(?![0-9A-Fa-f:.-])",
+        "pattern": r"(?<![0-9A-Fa-f:.-])[0-9A-Fa-f]{2}(?:[:.-][0-9A-Fa-f]{2}){5}(?![0-9A-Fa-f:.-])",
         "description": "MAC address (colon/dash/dot separated)",
     },
     {
@@ -43,6 +43,7 @@ PATTERNS = [
         "label": "[IMEI已脱敏]",
         "pattern": r"(?i:IMEI)\s*(?:号|[:：])?\s*(?P<imei>\d{15})(?!\d)",
         "group": "imei",
+        # Luhn check deferred — keyword anchor sufficient for redaction
         "description": "IMEI device identifier (15 digits, keyword-triggered)",
     },
     {
