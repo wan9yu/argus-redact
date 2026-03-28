@@ -1,0 +1,48 @@
+[
+    {
+        "id": "wp_gongzuo_danwei",
+        "input": "工作单位：中国电信",
+        "should_match": true,
+        "type": "workplace",
+        "expected_text": "中国电信",
+        "description": "工作单位+名称"
+    },
+    {
+        "id": "wp_jiuzhi",
+        "input": "就职于华为技术",
+        "should_match": true,
+        "type": "workplace",
+        "expected_text": "华为技术",
+        "description": "就职于+名称"
+    },
+    {
+        "id": "wp_gongzhi",
+        "input": "供职于百度公司",
+        "should_match": true,
+        "type": "workplace",
+        "expected_text": "百度公司",
+        "description": "供职于+名称"
+    },
+    {
+        "id": "wp_danwei",
+        "input": "单位：北京市第一医院",
+        "should_match": true,
+        "type": "workplace",
+        "expected_text": "北京市第一医院",
+        "description": "单位+名称"
+    },
+    {
+        "id": "no_keyword",
+        "input": "在华为工作",
+        "should_match": false,
+        "type": "workplace",
+        "description": "无工作单位关键词"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "workplace",
+        "description": "无PII"
+    }
+]

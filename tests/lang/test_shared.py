@@ -33,6 +33,13 @@ class TestURLToken:
         assert_pattern_match(results, example, "url_token")
 
 
+class TestGender:
+    @parametrize_examples("shared_gender.json")
+    def test_should_match_or_reject_when_gender_input(self, shared_patterns, example):
+        results = match_patterns(example["input"], shared_patterns)
+        assert_pattern_match(results, example, "gender")
+
+
 class TestAge:
     @parametrize_examples("zh_age.json")
     def test_should_match_or_reject_when_age_input(self, shared_patterns, example):

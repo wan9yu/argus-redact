@@ -250,4 +250,71 @@ PATTERNS = [
         "group": "social_security",
         "description": "Chinese social security number (18-digit ID or city-specific format, keyword-triggered)",
     },
+    {
+        "type": "job_title",
+        "label": "[职务已脱敏]",
+        "pattern": (
+            r"[\u4e00-\u9fff]{0,4}"
+            r"(?:董事长|副董事长|总裁|副总裁|总经理|副总经理|总监|副总监|"
+            r"经理|副经理|主任|副主任|院长|副院长|局长|副局长|处长|科长|"
+            r"部长|厅长|司长|校长|园长|所长|站长|队长|组长|班长|排长|连长|"
+            r"教授|副教授|讲师|助教|研究员|工程师|高级工程师|"
+            r"医生|主治医生|主任医师|副主任医师|护士长|药剂师|"
+            r"会计师|审计师|律师|法官|检察官|"
+            r"CEO|CTO|CFO|COO|CIO|CMO|VP)"
+        ),
+        "description": "Job title (Chinese suffix + English abbreviations)",
+    },
+    {
+        "type": "organization",
+        "label": "[机构已脱敏]",
+        "pattern": (
+            r"(?<!\d)[\u4e00-\u9fff]{2,12}"
+            r"(?:股份有限公司|有限责任公司|有限公司|责任公司|"
+            r"集团公司|集团|公司|企业|工厂|银行|保险|证券|基金|"
+            r"医院|诊所|药房|事务所|研究院|研究所|实验室)"
+        ),
+        "description": "Chinese organization name (CJK prefix + legal/industry suffix)",
+    },
+    {
+        "type": "school",
+        "label": "[学校已脱敏]",
+        "pattern": (
+            r"[\u4e00-\u9fff]{2,10}"
+            r"(?:大学|学院|中学|小学|高中|初中|附中|附小|"
+            r"实验学校|外国语学校|师范学校|职业学校|技术学校|"
+            r"幼儿园|书院|学堂|党校)"
+        ),
+        "description": "Chinese school name (CJK prefix + educational suffix)",
+    },
+    {
+        "type": "ethnicity",
+        "label": "[民族已脱敏]",
+        "pattern": (
+            r"(?:民族\s*[:：]?\s*)"
+            r"(?:汉|蒙古|回|藏|维吾尔|苗|彝|壮|布依|朝鲜|满|侗|瑶|白|土家|"
+            r"哈尼|哈萨克|傣|黎|傈僳|佤|畲|高山|拉祜|水|东乡|纳西|景颇|"
+            r"柯尔克孜|土|达斡尔|仫佬|羌|布朗|撒拉|毛南|仡佬|锡伯|阿昌|"
+            r"普米|塔吉克|怒|乌孜别克|俄罗斯|鄂温克|德昂|保安|裕固|京|"
+            r"塔塔尔|独龙|鄂伦春|赫哲|门巴|珞巴|基诺)族"
+            r"|"
+            # XX族 pattern (without 民族 keyword, but must be a known ethnicity)
+            r"(?:汉|蒙古|回|藏|维吾尔|苗|彝|壮|布依|朝鲜|满|侗|瑶|白|土家|"
+            r"哈尼|哈萨克|傣|黎|傈僳|佤|畲|拉祜|水|东乡|纳西|景颇|"
+            r"柯尔克孜|达斡尔|羌|布朗|撒拉|毛南|仡佬|锡伯|阿昌|"
+            r"普米|塔吉克|怒|乌孜别克|俄罗斯|鄂温克|德昂|保安|裕固|京|"
+            r"塔塔尔|独龙|鄂伦春|赫哲|门巴|珞巴|基诺)族"
+        ),
+        "description": "Chinese ethnicity (56 ethnic groups, keyword-triggered or standalone XX族)",
+    },
+    {
+        "type": "workplace",
+        "label": "[工作单位已脱敏]",
+        "pattern": (
+            r"(?:工作单位|单位|就职于|供职于|任职于)\s*[:：]?\s*"
+            r"(?P<workplace>[\u4e00-\u9fff]{2,20})"
+        ),
+        "group": "workplace",
+        "description": "Chinese workplace (keyword-triggered, CJK text after keyword)",
+    },
 ]

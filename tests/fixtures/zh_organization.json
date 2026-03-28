@@ -1,0 +1,56 @@
+[
+    {
+        "id": "org_youxian_gongsi",
+        "input": "腾讯计算机系统有限公司",
+        "should_match": true,
+        "type": "organization",
+        "expected_text": "腾讯计算机系统有限公司",
+        "description": "有限公司"
+    },
+    {
+        "id": "org_jituan",
+        "input": "阿里巴巴集团宣布",
+        "should_match": true,
+        "type": "organization",
+        "expected_text": "阿里巴巴集团",
+        "description": "集团"
+    },
+    {
+        "id": "org_yinhang",
+        "input": "中国工商银行办理",
+        "should_match": true,
+        "type": "organization",
+        "expected_text": "中国工商银行",
+        "description": "银行"
+    },
+    {
+        "id": "org_yiyuan",
+        "input": "北京协和医院检查",
+        "should_match": true,
+        "type": "organization",
+        "expected_text": "北京协和医院",
+        "description": "医院"
+    },
+    {
+        "id": "org_gufen",
+        "input": "华为技术股份有限公司",
+        "should_match": true,
+        "type": "organization",
+        "expected_text": "华为技术股份有限公司",
+        "description": "股份有限公司"
+    },
+    {
+        "id": "org_bare_gongsi",
+        "input": "去公司上班",
+        "should_match": false,
+        "type": "organization",
+        "description": "单独公司不匹配"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "organization",
+        "description": "无PII"
+    }
+]

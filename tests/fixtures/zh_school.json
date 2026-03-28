@@ -1,0 +1,55 @@
+[
+    {
+        "id": "school_daxue",
+        "input": "考入北京大学",
+        "should_match": true,
+        "type": "school",
+        "description": "大学"
+    },
+    {
+        "id": "school_xueyuan",
+        "input": "计算机学院很好",
+        "should_match": true,
+        "type": "school",
+        "expected_text": "计算机学院",
+        "description": "学院"
+    },
+    {
+        "id": "school_fuzhong",
+        "input": "人大附中的学生",
+        "should_match": true,
+        "type": "school",
+        "expected_text": "人大附中",
+        "description": "附中"
+    },
+    {
+        "id": "school_xiaoxue",
+        "input": "实验小学报名",
+        "should_match": true,
+        "type": "school",
+        "expected_text": "实验小学",
+        "description": "小学"
+    },
+    {
+        "id": "school_youeryuan",
+        "input": "蓝天幼儿园招生",
+        "should_match": true,
+        "type": "school",
+        "expected_text": "蓝天幼儿园",
+        "description": "幼儿园"
+    },
+    {
+        "id": "school_bare",
+        "input": "上大学很重要",
+        "should_match": false,
+        "type": "school",
+        "description": "单独大学不匹配（需2+CJK前缀）"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "school",
+        "description": "无PII"
+    }
+]

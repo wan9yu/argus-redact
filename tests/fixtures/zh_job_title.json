@@ -1,0 +1,56 @@
+[
+    {
+        "id": "job_zhuren",
+        "input": "问一下李主任",
+        "should_match": true,
+        "type": "job_title",
+        "description": "X主任"
+    },
+    {
+        "id": "job_jingli",
+        "input": "项目经理说",
+        "should_match": true,
+        "type": "job_title",
+        "expected_text": "项目经理",
+        "description": "项目经理"
+    },
+    {
+        "id": "job_zongjian",
+        "input": "技术总监负责",
+        "should_match": true,
+        "type": "job_title",
+        "expected_text": "技术总监",
+        "description": "技术总监"
+    },
+    {
+        "id": "job_yisheng",
+        "input": "骨科医生建议",
+        "should_match": true,
+        "type": "job_title",
+        "expected_text": "骨科医生",
+        "description": "骨科医生"
+    },
+    {
+        "id": "job_dongshizhang",
+        "input": "张董事长出席",
+        "should_match": true,
+        "type": "job_title",
+        "expected_text": "张董事长",
+        "description": "董事长"
+    },
+    {
+        "id": "job_ceo_en",
+        "input": "the CEO announced",
+        "should_match": true,
+        "type": "job_title",
+        "expected_text": "CEO",
+        "description": "English CEO"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "job_title",
+        "description": "无PII"
+    }
+]

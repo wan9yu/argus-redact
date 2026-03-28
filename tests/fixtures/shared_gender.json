@@ -1,0 +1,49 @@
+[
+    {
+        "id": "gender_zh_male",
+        "input": "性别：男",
+        "should_match": true,
+        "type": "gender",
+        "expected_text": "性别：男",
+        "description": "中文性别男"
+    },
+    {
+        "id": "gender_zh_female",
+        "input": "性别女",
+        "should_match": true,
+        "type": "gender",
+        "expected_text": "性别女",
+        "description": "中文性别女"
+    },
+    {
+        "id": "gender_zh_nanxing",
+        "input": "他是男性",
+        "should_match": true,
+        "type": "gender",
+        "expected_text": "男性",
+        "description": "男性"
+    },
+    {
+        "id": "gender_en_male",
+        "input": "gender: male",
+        "should_match": true,
+        "type": "gender",
+        "expected_text": "gender: male",
+        "description": "English gender male"
+    },
+    {
+        "id": "gender_en_female",
+        "input": "Sex: F",
+        "should_match": true,
+        "type": "gender",
+        "expected_text": "Sex: F",
+        "description": "English sex F"
+    },
+    {
+        "id": "plain_text",
+        "input": "nothing here",
+        "should_match": false,
+        "type": "gender",
+        "description": "无PII"
+    }
+]

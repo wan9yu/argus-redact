@@ -1,0 +1,56 @@
+[
+    {
+        "id": "eth_hanzu",
+        "input": "民族：汉族",
+        "should_match": true,
+        "type": "ethnicity",
+        "expected_text": "民族：汉族",
+        "description": "汉族"
+    },
+    {
+        "id": "eth_huizu",
+        "input": "民族回族",
+        "should_match": true,
+        "type": "ethnicity",
+        "expected_text": "民族回族",
+        "description": "回族"
+    },
+    {
+        "id": "eth_zangzu",
+        "input": "他是藏族",
+        "should_match": true,
+        "type": "ethnicity",
+        "expected_text": "藏族",
+        "description": "藏族（XX族模式）"
+    },
+    {
+        "id": "eth_mengguzu",
+        "input": "民族：蒙古族",
+        "should_match": true,
+        "type": "ethnicity",
+        "expected_text": "民族：蒙古族",
+        "description": "蒙古族"
+    },
+    {
+        "id": "eth_weiwuerzu",
+        "input": "民族维吾尔族",
+        "should_match": true,
+        "type": "ethnicity",
+        "expected_text": "民族维吾尔族",
+        "description": "维吾尔族"
+    },
+    {
+        "id": "no_keyword_zu",
+        "input": "家族企业",
+        "should_match": false,
+        "type": "ethnicity",
+        "description": "家族不是民族"
+    },
+    {
+        "id": "plain_text",
+        "input": "今天天气不错",
+        "should_match": false,
+        "type": "ethnicity",
+        "description": "无PII"
+    }
+]

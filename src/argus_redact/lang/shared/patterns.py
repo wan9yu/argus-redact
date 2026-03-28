@@ -57,6 +57,19 @@ PATTERNS = [
         "description": "URL with sensitive token/key parameter",
     },
     {
+        "type": "gender",
+        "label": "[性别已脱敏]",
+        "pattern": (
+            # Chinese: 性别+男/女, 男性/女性
+            r"性别\s*[:：]?\s*[男女]"
+            r"|[男女]性"
+            r"|"
+            # English: gender/sex + value
+            r"(?i:gender|sex)\s*[:.]?\s*(?:male|female|man|woman|M|F)"
+        ),
+        "description": "Gender (Chinese 性别/男性/女性 + English gender/sex)",
+    },
+    {
         "type": "age",
         "label": "[年龄已脱敏]",
         "pattern": (

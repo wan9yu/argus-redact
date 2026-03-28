@@ -96,6 +96,41 @@ class TestChineseSocialSecurity:
         assert_pattern_match(results, example, "social_security")
 
 
+class TestJobTitle:
+    @parametrize_examples("zh_job_title.json")
+    def test_should_match_or_reject_when_job_title_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "job_title")
+
+
+class TestOrganization:
+    @parametrize_examples("zh_organization.json")
+    def test_should_match_or_reject_when_org_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "organization")
+
+
+class TestSchool:
+    @parametrize_examples("zh_school.json")
+    def test_should_match_or_reject_when_school_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "school")
+
+
+class TestEthnicity:
+    @parametrize_examples("zh_ethnicity.json")
+    def test_should_match_or_reject_when_ethnicity_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "ethnicity")
+
+
+class TestWorkplace:
+    @parametrize_examples("zh_workplace.json")
+    def test_should_match_or_reject_when_workplace_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "workplace")
+
+
 class TestMultiplePII:
     def test_should_detect_both_types_when_phone_and_id_in_text(self, zh_patterns):
         text = "手机13812345678，身份证110101199003074610"
