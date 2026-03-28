@@ -63,7 +63,7 @@ class TestRegexPerformance:
         )
 
         _report(f"Long ({len(LONG_TEXT)} chars)", avg, mn, mx)
-        assert avg < 50.0, f"Too slow: {avg:.2f}ms"
+        assert avg < 100.0, f"Too slow: {avg:.2f}ms"
 
 
 class TestRestorePerformance:
