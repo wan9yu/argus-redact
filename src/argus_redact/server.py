@@ -38,6 +38,10 @@ async def handle_redact(request: Request) -> JSONResponse:
     config = body.get("config")
     key = body.get("key")
     detailed = body.get("detailed", False)
+    report = body.get("report", False)
+    profile = body.get("profile")
+    types = body.get("types")
+    types_exclude = body.get("types_exclude")
 
     try:
         result = redact(
@@ -48,9 +52,29 @@ async def handle_redact(request: Request) -> JSONResponse:
             config=config,
             key=key,
             detailed=detailed,
+            report=report,
+            profile=profile,
+            types=types,
+            types_exclude=types_exclude,
         )
     except (ValueError, TypeError) as e:
         return JSONResponse({"error": str(e)}, status_code=400)
+
+    if report:
+        return JSONResponse(
+            {
+                "redacted": result.redacted_text,
+                "key": result.key,
+                "entities": list(result.entities),
+                "stats": result.stats,
+                "risk": {
+                    "score": result.risk.score,
+                    "level": result.risk.level,
+                    "reasons": list(result.risk.reasons),
+                    "pipl_articles": list(result.risk.pipl_articles),
+                },
+            }
+        )
 
     if detailed:
         redacted, result_key, details = result
@@ -90,6 +114,7 @@ async def handle_info(request: Request) -> JSONResponse:
         "de": "German",
         "uk": "British English",
         "in": "Indian",
+        "br": "Brazilian Portuguese",
     }
     lang_info: dict[str, Any] = {}
 

@@ -63,6 +63,71 @@ class TestServerRedact:
         assert "details" in data
         assert data["details"]["stats"]["total"] >= 1
 
+    def test_should_return_report_when_requested(self, client):
+        resp = client.post(
+            "/redact",
+            json={
+                "text": "身份证110101199003074610",
+                "mode": "fast",
+                "seed": 42,
+                "report": True,
+            },
+        )
+
+        data = resp.json()
+        assert "risk" in data
+        assert data["risk"]["level"] == "critical"
+        assert "PIPL Art.51" in data["risk"]["pipl_articles"]
+        assert data["stats"]["total"] >= 1
+
+    def test_should_filter_by_profile(self, client):
+        resp = client.post(
+            "/redact",
+            json={"text": "电话13812345678", "mode": "fast", "seed": 42, "profile": "pipl"},
+        )
+
+        assert resp.status_code == 200
+        assert "key" in resp.json()
+
+    def test_should_filter_by_types(self, client):
+        resp = client.post(
+            "/redact",
+            json={
+                "text": "电话13812345678，身份证110101199003074610",
+                "mode": "fast",
+                "seed": 42,
+                "types": ["phone"],
+            },
+        )
+
+        data = resp.json()
+        # phone should be redacted, id_number should NOT
+        assert "110101199003074610" in data["redacted"]
+
+    def test_should_filter_by_types_exclude(self, client):
+        resp = client.post(
+            "/redact",
+            json={
+                "text": "电话13812345678，身份证110101199003074610",
+                "mode": "fast",
+                "seed": 42,
+                "types_exclude": ["phone"],
+            },
+        )
+
+        data = resp.json()
+        # id_number should be redacted, phone should NOT
+        assert "13812345678" in data["redacted"]
+        assert "110101199003074610" not in data["redacted"]
+
+    def test_should_return_400_on_unknown_profile(self, client):
+        resp = client.post(
+            "/redact",
+            json={"text": "test", "mode": "fast", "profile": "nonexistent"},
+        )
+
+        assert resp.status_code == 400
+
     def test_should_return_400_on_invalid_mode(self, client):
         resp = client.post(
             "/redact",
