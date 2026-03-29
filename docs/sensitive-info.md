@@ -2,9 +2,26 @@
 
 ## Vision
 
-argus-redact aims to detect **all sensitive information**, not just direct PII identifiers. The three-layer architecture (regex → NER → semantic LLM) naturally maps to different sensitivity levels — from phone numbers with fixed formats to medical diagnoses that require language understanding.
+argus-redact is the **privacy layer between you and AI**. Our goal is not just regulatory compliance — it's ensuring every person can use AI without exposing their identity.
 
-Detection is configurable per type. Users enable what their compliance scenario requires.
+We evaluate privacy from **your perspective**, not a regulator's:
+
+```
+🟢 Safe      — nothing about you is exposed
+🟡 Caution   — contains personal info, not dangerous alone
+🟠 Danger    — can narrow down to you specifically
+🔴 Exposed   — directly identifies you
+```
+
+Three promises guide everything we build:
+
+| Promise | Question | Measure |
+|---------|----------|---------|
+| **Protected** | Is your PII detected and encrypted? | Detection coverage, false negatives |
+| **Usable** | Can AI still understand and help you? | LLM output quality after redaction |
+| **Reversible** | Can you get everything back? | Pseudonym survival rate, restore completeness |
+
+Compliance with PIPL, GDPR, and HIPAA is a **byproduct** of this design, not the goal.
 
 ---
 

@@ -7,7 +7,7 @@
 
 **Encrypt PII, not meaning. Locally.**
 
-Other tools shred your PII — it's gone forever. argus-redact encrypts it — with a different key every time.
+The privacy layer between you and AI. Your identity stays on your device — AI gets the meaning, not you.
 
 ```python
 from argus_redact import redact, restore
@@ -23,25 +23,47 @@ restored = restore(llm_output, key)  # one line to get everything back
 pip install argus-redact
 ```
 
-## Why
+## Three Promises
 
-| | Traditional encryption | argus-redact |
-|-|----------------------|--------------|
-| LLM can process? | No | **Yes** |
-| Reversible? | Yes | **Yes**, with per-message key |
-| Key leaked? | Plaintext exposed | Identities exposed (that session only) |
+| | Promise | How |
+|-|---------|-----|
+| 🛡️ | **Protected** — your PII never leaves your device | 3-layer local detection: regex → NER → local LLM |
+| 🧠 | **Usable** — AI can still understand and help you | Pseudonym replacement preserves meaning and context |
+| 🔄 | **Reversible** — you get everything back, intact | Per-message key, one-line restore |
 
-[ETH Zurich research](https://arxiv.org/abs/2602.16800) shows LLMs can deanonymize users for $1-4/person when pseudonyms are fixed. argus-redact generates a **fresh random key per call** — the cloud sees unrelated pseudonyms every time.
+Other tools shred your PII — it's gone forever. argus-redact encrypts it with a different key every time. [ETH Zurich research](https://arxiv.org/abs/2602.16800) shows LLMs can deanonymize users for $1-4/person when pseudonyms are fixed. We generate **fresh random keys per call** — the cloud sees unrelated pseudonyms every time.
+
+## Privacy Levels
+
+argus-redact evaluates your text from **your perspective**, not a regulator's:
+
+```
+🟢 Safe      — nothing about you is exposed
+🟡 Caution   — contains personal info, not dangerous alone
+🟠 Danger    — can narrow down to you specifically
+🔴 Exposed   — directly identifies you
+```
+
+```python
+from argus_redact import redact
+
+report = redact("身份证110101199003074610，手机13812345678，确诊糖尿病", report=True)
+report.risk.level    # "critical"
+report.risk.score    # 1.0
+report.risk.reasons  # ("id_number (critical)", "phone (high)", "medical (critical)", ...)
+```
+
+This is what compliance frameworks don't tell you: **how dangerous is it to share this specific text with AI?**
 
 ## Three Layers
 
 ```
 Layer 1  Regex+Score  phone, ID, bank card, email, address, person names   <1ms
 Layer 2  NER          locations, organizations, standalone names           10-100ms
-Layer 3  Local LLM    "那个地方", nicknames, implicit PII                   ~1s
+Layer 3  Local LLM    implicit PII — symptoms→disease, behavior→belief     ~20s
 ```
 
-Use what you need: `mode="fast"` (Layer 1 only) → `mode="ner"` (+ NER) → `mode="auto"` (all three).
+~47 PII types across 4 levels — from phone numbers to medical diagnoses, religious beliefs, political opinions. Use what you need: `mode="fast"` (Layer 1 only) → `mode="ner"` (+ NER) → `mode="auto"` (all three).
 
 ## 8 Languages
 
@@ -67,19 +89,35 @@ Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张�
 
 ## North Star
 
-Semantic preservation and reversibility are solved by design — pseudonym replacement keeps LLM context, per-message keys ensure full restore. Other tools delete PII permanently; we encrypt it and give it back.
-
-We track what still needs work:
-
 | Dimension | Current (v0.1.11) | Next milestone |
 |-----------|:----------------:|:---:|
-| **Detection** | P=96% R=98% F1=97%; Layer 3 LLM 100% (qwen3:8b) | Org/school candidate+scoring precision |
-| **Compliance** | `default` ~100%; `pipl` ~85%; risk + audit + profiles + PDF report | `pipl`/`gdpr`/`hipaa` full coverage |
-| **Security** | Fully local, fresh key per call | Key TTL & rotation |
-| **Performance** | 600 docs/s (L1+L2); Layer 3 ~20s/query | Layer 3 prompt compression → <10s |
-| **Coverage** | 8 langs, ~40 PII types, L1-L4 complete, 6 frameworks | English L3, Dify/CrewAI |
+| **Protected** | ~47 PII types, L1-L4, Layer 3 LLM 100% | PRvL benchmark (privacy vs language quality) |
+| **Usable** | Pseudonym + mask + category strategies | Quantify LLM output quality after redaction |
+| **Reversible** | Per-message key, one-line restore | Measure pseudonym survival rate across LLMs |
+| **Compliance** | PIPL ~85%, risk assessment + audit PDF | PIPL/GDPR/HIPAA (byproduct, not goal) |
+| **Coverage** | 8 langs, 6 frameworks | Browser extension, input-layer integration |
 
-[Full benchmark report →](docs/benchmark-report.md) | [Sensitive info taxonomy →](docs/sensitive-info.md)
+## Risk Assessment & Audit
+
+```python
+# Assess risk before sending to AI
+report = redact(text, report=True)
+report.risk.level         # "critical"
+report.risk.pipl_articles # ("PIPL Art.28", "PIPL Art.51", ...)
+
+# Generate compliance audit report
+from argus_redact import generate_report_pdf
+generate_report_pdf(report, "audit-report.pdf")
+```
+
+```bash
+# CLI
+argus-redact assess -f json  <<< "身份证110101199003074610"
+argus-redact assess -f pdf -o report.pdf <<< "身份证110101199003074610"
+```
+
+Compliance profiles: `redact(text, profile="pipl")` / `"gdpr"` / `"hipaa"`.
+Type filtering: `redact(text, types=["phone", "id_number"])` / `types_exclude=["address"]`.
 
 ## Integrations
 
@@ -93,11 +131,11 @@ We track what still needs work:
 | [Streaming restore](docs/api-reference.md) | core |
 | [Docker](Dockerfile) | slim 157MB / full 5GB |
 
-## Security & Compliance
+## Security
 
 PII never leaves your device. Per-message keys prevent cross-request profiling. [Full security model →](docs/security-model.md)
 
-**PIPL** · **GDPR** · **HIPAA** — technical control layer for cross-border LLM usage. [Details →](docs/security-model.md#regulatory-context)
+Meets **PIPL** · **GDPR** · **HIPAA** technical requirements as a byproduct of its privacy-first design. [Details →](docs/security-model.md#regulatory-context)
 
 ## Documentation
 
@@ -107,10 +145,11 @@ PII never leaves your device. Per-message keys prevent cross-request profiling. 
 | [API Reference](docs/api-reference.md) | All parameters, return types, streaming, structured data |
 | [CLI Reference](docs/cli-reference.md) | Commands, flags, serve, MCP server |
 | [Configuration](docs/configuration.md) | Per-type strategies, enterprise mask rules, false positive reduction |
-| [Sensitive Info](docs/sensitive-info.md) | Taxonomy, compliance profiles, roadmap |
+| [Sensitive Info](docs/sensitive-info.md) | Taxonomy, privacy levels, roadmap |
 | [Architecture](docs/architecture.md) | Three-layer engine, pure/impure separation |
 | [Language Packs](docs/language-packs.md) | Adding new languages |
 | [Security Model](docs/security-model.md) | Threat model, compliance, per-message keys |
+| [Layer 3 Benchmark](docs/layer3-benchmark.md) | LLM model comparison, prompt design, regulatory analysis |
 | [Benchmarks](tests/benchmark/README.md) | Evaluation against 9 public PII datasets |
 | [Performance](docs/performance.md) | Latency, throughput, benchmark results |
 
