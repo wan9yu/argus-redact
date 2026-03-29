@@ -1,0 +1,94 @@
+[
+    {
+        "id": "mix_med_cn_en",
+        "input": "患者diagnosed with 糖尿病，需要长期服药",
+        "should_match": true,
+        "type": "medical",
+        "description": "中英混合医疗诊断"
+    },
+    {
+        "id": "mix_hiv_report",
+        "input": "检测报告显示HIV positive，建议复查",
+        "should_match": true,
+        "type": "medical",
+        "description": "HIV结果中英混合"
+    },
+    {
+        "id": "mix_fin_salary",
+        "input": "他的annual salary $120,000，在北京算高收入",
+        "should_match": true,
+        "type": "financial",
+        "description": "英文薪资+中文语境"
+    },
+    {
+        "id": "mix_fin_cn_amount",
+        "input": "月薪2万元，credit score 720",
+        "should_match": true,
+        "type": "financial",
+        "description": "中文薪资+英文信用评分同现"
+    },
+    {
+        "id": "mix_crim_cn_en",
+        "input": "他有criminal record，曾被判刑三年",
+        "should_match": true,
+        "type": "criminal_record",
+        "description": "英文犯罪记录+中文判刑"
+    },
+    {
+        "id": "mix_bio_face",
+        "input": "入口处facial recognition已开启，需要刷脸验证",
+        "should_match": true,
+        "type": "biometric",
+        "description": "英文人脸识别+中文刷脸"
+    },
+    {
+        "id": "mix_rel_muslim",
+        "input": "她是Muslim，斋月期间白天不进食",
+        "should_match": true,
+        "type": "religion",
+        "description": "英文穆斯林+中文斋月"
+    },
+    {
+        "id": "mix_pol_party",
+        "input": "他是registered Democrat，经常在网上发表对政策的不满",
+        "should_match": true,
+        "type": "political",
+        "description": "英文党派+中文政治观点"
+    },
+    {
+        "id": "mix_so_lgbt",
+        "input": "他参加了LGBTQ活动，已经出柜",
+        "should_match": true,
+        "type": "sexual_orientation",
+        "description": "英文LGBTQ+中文出柜"
+    },
+    {
+        "id": "mix_multi_pii",
+        "input": "张三，身份证110101199003074610，diagnosed with hypertension，月薪3万元",
+        "should_match": true,
+        "type": "medical",
+        "description": "多种PII中英混合（身份证+英文诊断+中文薪资）"
+    },
+    {
+        "id": "mix_org_school",
+        "input": "就职于Google中国，毕业于北京大学Computer Science学院",
+        "should_match": true,
+        "type": "school",
+        "description": "英文公司+中文大学混合"
+    },
+    {
+        "id": "mix_contact_pii",
+        "input": "Contact: 13812345678, email test@qq.com, SSN 123-45-6789",
+        "should_match": true,
+        "type": "email",
+        "expected_text": "test@qq.com",
+        "description": "多种英文PII类型同现"
+    },
+    {
+        "id": "mix_none",
+        "input": "Today天气不错，project进度正常",
+        "should_match": false,
+        "type": "medical",
+        "description": "中英混合无PII"
+    }
+]
