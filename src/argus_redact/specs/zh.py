@@ -593,6 +593,214 @@ register(PIITypeDef(
     description="Chinese social security number (keyword-triggered)",
 ))
 
+# ── Level 2: Quasi-Identifiers ──
+
+register(PIITypeDef(
+    name="job_title",
+    lang="zh",
+    format="CJK + 职务后缀",
+    charset="cjk",
+    structure={"prefix": "0-4 CJK chars", "suffix": "职务名称（主任/经理/医生等）"},
+    prefixes=("职务", "职位", "头衔"),
+    strategy="remove",
+    label="[职务已脱敏]",
+    examples=("项目经理说", "骨科医生建议", "张董事长出席"),
+    counterexamples=("今天天气不错",),
+    _patterns=(),
+    sensitivity=2,
+    source="常用中文职务名称",
+    description="Chinese job title (suffix-based detection)",
+))
+
+register(PIITypeDef(
+    name="organization",
+    lang="zh",
+    format="CJK + 法人后缀",
+    charset="cjk",
+    structure={"name": "2-12 CJK chars", "suffix": "法人后缀（公司/集团/银行/医院等）"},
+    prefixes=("单位", "机构", "公司"),
+    strategy="pseudonym",
+    label="[机构已脱敏]",
+    examples=("腾讯计算机系统有限公司", "阿里巴巴集团", "北京协和医院"),
+    counterexamples=("去公司上班",),
+    _patterns=(),
+    sensitivity=2,
+    source="中国法人组织命名规则",
+    description="Chinese organization name (CJK prefix + legal/industry suffix)",
+))
+
+register(PIITypeDef(
+    name="school",
+    lang="zh",
+    format="CJK + 教育后缀",
+    charset="cjk",
+    structure={"name": "2-10 CJK chars", "suffix": "教育后缀（大学/学院/中学/小学等）"},
+    prefixes=("学校", "母校", "就读"),
+    strategy="pseudonym",
+    label="[学校已脱敏]",
+    examples=("计算机学院很好", "人大附中的学生", "实验小学报名"),
+    counterexamples=("上大学很重要",),
+    _patterns=(),
+    sensitivity=2,
+    source="中国教育机构命名规则",
+    description="Chinese school name (CJK prefix + educational suffix)",
+))
+
+register(PIITypeDef(
+    name="ethnicity",
+    lang="zh",
+    format="民族 + 56民族名",
+    charset="cjk",
+    structure={"keyword": "民族", "value": "56个民族名称之一 + 族"},
+    prefixes=("民族",),
+    strategy="remove",
+    label="[民族已脱敏]",
+    examples=("民族：汉族", "他是藏族"),
+    counterexamples=("家族企业",),
+    _patterns=(),
+    sensitivity=3,
+    source="中华人民共和国民族区域自治法",
+    description="Chinese ethnicity (56 ethnic groups)",
+))
+
+register(PIITypeDef(
+    name="workplace",
+    lang="zh",
+    format="关键词 + CJK名称",
+    charset="cjk",
+    structure={"keyword": "工作单位/就职于/供职于", "value": "2-20 CJK chars"},
+    prefixes=("工作单位", "单位", "就职于", "供职于"),
+    strategy="remove",
+    label="[工作单位已脱敏]",
+    examples=("工作单位：中国电信", "就职于华为技术"),
+    counterexamples=("在华为工作",),
+    _patterns=(),
+    sensitivity=2,
+    source="个人信息登记表常见字段",
+    description="Chinese workplace (keyword-triggered)",
+))
+
+# ── Level 3: Sensitive Attributes ──
+
+register(PIITypeDef(
+    name="criminal_record",
+    lang="zh",
+    format="犯罪相关关键词",
+    charset="cjk",
+    structure={"keywords": "前科/判刑/拘留/犯罪记录/逮捕/服刑等"},
+    prefixes=("犯罪记录", "前科", "案底"),
+    strategy="remove",
+    label="[犯罪记录已脱敏]",
+    examples=("此人有前科", "被判刑三年", "他有犯罪记录"),
+    counterexamples=("今天天气不错",),
+    _patterns=(),
+    sensitivity=4,
+    source="PIPL Art.28/51 敏感个人信息",
+    description="Criminal record (explicit keywords)",
+))
+
+register(PIITypeDef(
+    name="financial",
+    lang="zh",
+    format="财务关键词 + 金额",
+    charset="cjk+digits",
+    structure={"keyword": "月薪/年收入/欠债/信用评分等", "amount": "数字+单位"},
+    prefixes=("月薪", "年收入", "年薪", "欠债"),
+    strategy="remove",
+    label="[财务信息已脱敏]",
+    examples=("月薪2万元", "年收入50万", "信用评分680分"),
+    counterexamples=("这个项目投资500万",),
+    _patterns=(),
+    sensitivity=3,
+    source="PIPL Art.28/51 敏感个人信息",
+    description="Financial info (salary/debt/credit score with amounts)",
+))
+
+register(PIITypeDef(
+    name="biometric",
+    lang="zh",
+    format="生物特征关键词 + 动作",
+    charset="cjk",
+    structure={"keyword": "指纹/DNA/人脸/虹膜/声纹等", "action": "采集/识别/录入等"},
+    prefixes=("指纹", "DNA", "人脸", "虹膜", "声纹"),
+    strategy="remove",
+    label="[生物特征已脱敏]",
+    examples=("已采集指纹信息", "DNA检测结果", "人脸识别通过"),
+    counterexamples=("今天天气不错",),
+    _patterns=(),
+    sensitivity=4,
+    source="PIPL Art.28/51, GB/T 45574-2025",
+    description="Biometric data (fingerprint/DNA/face/iris/voiceprint)",
+))
+
+register(PIITypeDef(
+    name="medical",
+    lang="zh",
+    format="诊断/药物/疾病关键词",
+    charset="cjk",
+    structure={"trigger": "确诊/患有/服用等", "content": "疾病名/药物名"},
+    prefixes=("确诊", "诊断", "患有", "服用"),
+    strategy="remove",
+    label="[医疗信息已脱敏]",
+    examples=("确诊糖尿病", "患有高血压", "服用阿莫西林"),
+    counterexamples=("今天天气不错",),
+    _patterns=(),
+    sensitivity=4,
+    source="PIPL Art.28/51, HIPAA PHI",
+    description="Medical/health info (diagnosis/medication/disease/surgery)",
+))
+
+register(PIITypeDef(
+    name="religion",
+    lang="zh",
+    format="宗教信徒/活动关键词",
+    charset="cjk",
+    structure={"keywords": "信徒称呼/宗教活动/信仰声明"},
+    prefixes=("信仰", "信奉"),
+    strategy="remove",
+    label="[宗教信仰已脱敏]",
+    examples=("他是基督徒", "她是穆斯林", "每周做礼拜"),
+    counterexamples=("今天天气不错",),
+    _patterns=(),
+    sensitivity=4,
+    source="PIPL Art.28/51 敏感个人信息",
+    description="Religious belief (believer types/practices/declarations)",
+))
+
+register(PIITypeDef(
+    name="political",
+    lang="zh",
+    format="政治立场/党派关键词",
+    charset="cjk",
+    structure={"keywords": "党员/政治面貌/投票/抗议游行等"},
+    prefixes=("政治面貌", "党派"),
+    strategy="remove",
+    label="[政治观点已脱敏]",
+    examples=("他是党员", "政治面貌：群众", "参加了抗议游行"),
+    counterexamples=("今天天气不错",),
+    _patterns=(),
+    sensitivity=4,
+    source="PIPL Art.28/51 敏感个人信息",
+    description="Political opinion (party membership/voting/protest)",
+))
+
+register(PIITypeDef(
+    name="sexual_orientation",
+    lang="zh",
+    format="性取向关键词",
+    charset="alnum",
+    structure={"keywords": "同性恋/双性恋/出柜/LGBT等"},
+    prefixes=(),
+    strategy="remove",
+    label="[性取向已脱敏]",
+    examples=("他是同性恋", "她是双性恋", "他已经出柜"),
+    counterexamples=("各位同志们好",),
+    _patterns=(),
+    sensitivity=4,
+    source="PIPL Art.28/51 敏感个人信息",
+    description="Sexual orientation (explicit terms)",
+))
+
 # ── Person Name ──
 
 register(PIITypeDef(

@@ -45,11 +45,16 @@ TEST_INPUTS = [
 
 
 class TestToPatterns:
+    # Types whose patterns are managed directly in zh/patterns.py, not via _patterns
+    _PATTERNS_IN_SOURCE = {"person", "job_title", "organization", "school",
+                           "ethnicity", "workplace", "criminal_record", "financial",
+                           "biometric", "medical", "religion", "political",
+                           "sexual_orientation"}
+
     def test_spec_patterns_should_exist(self):
-        """Every zh spec (except person) should produce at least one pattern."""
+        """Every zh spec with _patterns should produce at least one pattern."""
         for typedef in list_types("zh"):
-            if typedef.name == "person":
-                # Person names are detected by person.py, not by regex patterns
+            if typedef.name in self._PATTERNS_IN_SOURCE:
                 continue
             patterns = typedef.to_patterns()
             assert len(patterns) >= 1, (
