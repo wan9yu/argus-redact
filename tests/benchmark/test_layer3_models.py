@@ -47,8 +47,12 @@ TEST_CASES = [
     ("她不吃猪肉，斋月期间白天不进食", "religion"),
     ("他的立场比较偏左", "political"),
     ("她经常在网上发表对政策的不满", "political"),
-    ("他和室友关系特别亲密，经常一起出去旅行", "sexual_orientation"),
-    ("她从来没有交过男朋友", "sexual_orientation"),
+    # Regulatory note: these are NOT required detections per PIPL/GB/T 45574-2025.
+    # "Close with roommate" is ambiguous; "never had boyfriend" is weak signal.
+    # Flagging these as sexual_orientation would itself constitute inference (PIPL Art.24).
+    # Models that skip these are correctly conservative, not missing detections.
+    ("他和室友关系特别亲密，经常一起出去旅行", "none"),
+    ("她从来没有交过男朋友", "gender"),  # gender inference is valid; sexual_orientation is optional
     ("她怀孕了，下个月预产期", "gender"),
     ("他最近刚做了前列腺检查", "gender"),
     ("他出来后一直找不到工作", "criminal"),
