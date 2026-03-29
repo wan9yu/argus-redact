@@ -43,6 +43,13 @@ class TestEnglishDateOfBirth:
         assert_pattern_match(results, example, "date_of_birth")
 
 
+class TestEnglishSensitive:
+    @parametrize_examples("en_sensitive.json")
+    def test_should_match_or_reject_when_sensitive_input(self, en_patterns, example):
+        results = match_patterns(example["input"], en_patterns)
+        assert_pattern_match(results, example)
+
+
 class TestUSPassport:
     @parametrize_examples("en_passport.json")
     def test_should_match_or_reject_when_passport_input(self, en_patterns, example):

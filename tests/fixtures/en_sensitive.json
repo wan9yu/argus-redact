@@ -1,0 +1,176 @@
+[
+    {
+        "id": "med_diagnosed",
+        "input": "diagnosed with diabetes",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "diagnosed with diabetes",
+        "description": "Diagnosed with disease"
+    },
+    {
+        "id": "med_prescribed",
+        "input": "prescribed amoxicillin",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "prescribed amoxicillin",
+        "description": "Prescribed medication"
+    },
+    {
+        "id": "med_hiv",
+        "input": "tested HIV positive",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "HIV positive",
+        "description": "HIV status"
+    },
+    {
+        "id": "med_surgery",
+        "input": "underwent heart surgery",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "heart surgery",
+        "description": "Surgery"
+    },
+    {
+        "id": "fin_salary",
+        "input": "annual salary $120,000",
+        "should_match": true,
+        "type": "financial",
+        "expected_text": "salary $120,000",
+        "description": "Salary with amount"
+    },
+    {
+        "id": "fin_debt",
+        "input": "owes $50,000 in debt",
+        "should_match": true,
+        "type": "financial",
+        "expected_text": "owes $50,000 in debt",
+        "description": "Debt"
+    },
+    {
+        "id": "fin_credit",
+        "input": "credit score 680",
+        "should_match": true,
+        "type": "financial",
+        "expected_text": "credit score 680",
+        "description": "Credit score"
+    },
+    {
+        "id": "crim_convicted",
+        "input": "convicted of fraud",
+        "should_match": true,
+        "type": "criminal_record",
+        "expected_text": "convicted of fraud",
+        "description": "Convicted"
+    },
+    {
+        "id": "crim_sentenced",
+        "input": "sentenced to 5 years",
+        "should_match": true,
+        "type": "criminal_record",
+        "expected_text": "sentenced to 5 years",
+        "description": "Sentenced"
+    },
+    {
+        "id": "crim_felony",
+        "input": "has a felony record",
+        "should_match": true,
+        "type": "criminal_record",
+        "expected_text": "felony record",
+        "description": "Felony record"
+    },
+    {
+        "id": "bio_fingerprint",
+        "input": "fingerprint collected",
+        "should_match": true,
+        "type": "biometric",
+        "expected_text": "fingerprint collected",
+        "description": "Fingerprint"
+    },
+    {
+        "id": "bio_facial",
+        "input": "facial recognition enabled",
+        "should_match": true,
+        "type": "biometric",
+        "expected_text": "facial recognition",
+        "description": "Facial recognition"
+    },
+    {
+        "id": "rel_christian",
+        "input": "he is a devout Christian",
+        "should_match": true,
+        "type": "religion",
+        "expected_text": "Christian",
+        "description": "Christian"
+    },
+    {
+        "id": "rel_muslim",
+        "input": "she is Muslim",
+        "should_match": true,
+        "type": "religion",
+        "expected_text": "Muslim",
+        "description": "Muslim"
+    },
+    {
+        "id": "rel_worship",
+        "input": "attends Sunday worship",
+        "should_match": true,
+        "type": "religion",
+        "expected_text": "Sunday worship",
+        "description": "Worship"
+    },
+    {
+        "id": "pol_democrat",
+        "input": "registered Democrat",
+        "should_match": true,
+        "type": "political",
+        "expected_text": "registered Democrat",
+        "description": "Party affiliation"
+    },
+    {
+        "id": "pol_voted",
+        "input": "voted Republican",
+        "should_match": true,
+        "type": "political",
+        "expected_text": "voted Republican",
+        "description": "Voting"
+    },
+    {
+        "id": "pol_protest",
+        "input": "participated in protest rally",
+        "should_match": true,
+        "type": "political",
+        "description": "Protest"
+    },
+    {
+        "id": "so_gay",
+        "input": "identifies as gay",
+        "should_match": true,
+        "type": "sexual_orientation",
+        "expected_text": "gay",
+        "description": "Gay"
+    },
+    {
+        "id": "so_bisexual",
+        "input": "she is bisexual",
+        "should_match": true,
+        "type": "sexual_orientation",
+        "expected_text": "bisexual",
+        "description": "Bisexual"
+    },
+    {
+        "id": "so_lgbt",
+        "input": "LGBTQ community member",
+        "should_match": true,
+        "type": "sexual_orientation",
+        "expected_text": "LGBTQ",
+        "description": "LGBTQ"
+    },
+    {
+        "id": "none_plain",
+        "input": "the weather is nice today",
+        "should_match": false,
+        "type": "medical",
+        "description": "No PII"
+    }
+]

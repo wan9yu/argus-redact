@@ -98,4 +98,92 @@ PATTERNS = [
         "group": "us_passport",
         "description": "US passport number (keyword-triggered, letter + 8 digits)",
     },
+    # ── Level 3 sensitive attributes (explicit keyword detection) ──
+    {
+        "type": "medical",
+        "label": "[MEDICAL REDACTED]",
+        "pattern": (
+            r"(?i:(?:diagnosed with|suffering from|treated for|prescribed|"
+            r"patient has|history of)\s+\w[\w\s]{2,30}"
+            r"|HIV\s*(?:positive|negative)"
+            r"|(?:\w+\s+)?(?:surgery|transplant|chemotherapy|radiation therapy)"
+            r"|(?:diabetes|cancer|tumor|leukemia|hypertension|"
+            r"depression|schizophrenia|epilepsy|tuberculosis|hepatitis|"
+            r"alzheimer|parkinson|asthma|arthritis))"
+        ),
+        "description": "Medical/health info (diagnosis/medication/disease/surgery)",
+    },
+    {
+        "type": "financial",
+        "label": "[FINANCIAL REDACTED]",
+        "pattern": (
+            r"(?i:(?:salary|income|wage|earnings|pay)\s*(?:of\s*)?\$[\d,.]+"
+            r"|(?:owes?|debt|owed|loan|mortgage)\s+\$[\d,.]+"
+            r"(?:\s+(?:in\s+)?(?:debt|loan|mortgage))?"
+            r"|credit\s+score\s+\d{3}"
+            r"|(?:net\s+worth|annual\s+income|monthly\s+salary)\s*(?:of\s*)?\$[\d,.]+"
+            r"|(?:bankrupt|bankruptcy|foreclosure|repossession))"
+        ),
+        "description": "Financial info (salary/debt/credit score/bankruptcy)",
+    },
+    {
+        "type": "criminal_record",
+        "label": "[CRIMINAL REDACTED]",
+        "pattern": (
+            r"(?i:(?:convicted|convicted of|found guilty|pleaded guilty)\s+\w[\w\s]{2,20}"
+            r"|sentenced\s+to\s+\d+\s+\w+"
+            r"|(?:felony|misdemeanor)\s+(?:record|charge|conviction)"
+            r"|(?:criminal record|arrest record|police record)"
+            r"|(?:on\s+parole|on\s+probation|incarcerated|imprisoned))"
+        ),
+        "description": "Criminal record (conviction/sentence/felony/arrest)",
+    },
+    {
+        "type": "biometric",
+        "label": "[BIOMETRIC REDACTED]",
+        "pattern": (
+            r"(?i:(?:fingerprint|fingerprints)\s+(?:collected|scanned|recorded|stored|data)"
+            r"|facial\s+recognition"
+            r"|(?:iris|retina)\s+scan"
+            r"|(?:voice(?:print)?|palm\s+print)\s+(?:recorded|collected|data)"
+            r"|(?:DNA|genetic)\s+(?:test|sample|data|profile|analysis)"
+            r"|biometric\s+(?:data|information|identifier))"
+        ),
+        "description": "Biometric data (fingerprint/facial/iris/DNA/voiceprint)",
+    },
+    {
+        "type": "religion",
+        "label": "[RELIGION REDACTED]",
+        "pattern": (
+            r"(?i:(?:Christian|Catholic|Protestant|Muslim|Jewish|Hindu|Buddhist|"
+            r"Sikh|Mormon|Atheist|Agnostic|Orthodox)"
+            r"|(?:Sunday|Friday|Saturday)\s+(?:worship|prayer|service|mass)"
+            r"|(?:baptized|baptism|communion|confession|pilgrimage|Ramadan|"
+            r"Sabbath|kosher|halal))"
+        ),
+        "description": "Religious belief (faith/worship/practices)",
+    },
+    {
+        "type": "political",
+        "label": "[POLITICAL REDACTED]",
+        "pattern": (
+            r"(?i:(?:registered|affiliated)\s+(?:Democrat|Republican|"
+            r"Labour|Conservative|Liberal|Independent)"
+            r"|voted\s+(?:for\s+)?(?:Democrat|Republican|Labour|Conservative|"
+            r"Liberal|Independent|\w+)"
+            r"|(?:protest|demonstration|rally|march)\s*(?:against|for)?"
+            r"|(?:political\s+(?:affiliation|party|opinion|belief|activist)))"
+        ),
+        "description": "Political opinion (party/voting/protest/affiliation)",
+    },
+    {
+        "type": "sexual_orientation",
+        "label": "[ORIENTATION REDACTED]",
+        "pattern": (
+            r"(?i:(?:homosexual|heterosexual|bisexual|asexual|pansexual)"
+            r"|\b(?:gay|lesbian|queer|LGBTQ?)\b"
+            r"|(?:came\s+out|coming\s+out))"
+        ),
+        "description": "Sexual orientation (explicit terms)",
+    },
 ]
