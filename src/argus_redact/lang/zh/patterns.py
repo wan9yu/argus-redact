@@ -276,37 +276,43 @@ PATTERNS = [
         "type": "job_title",
         "label": "[职务已脱敏]",
         "pattern": (
-            r"[\u4e00-\u9fff]{0,4}"
+            r"(?:[\u4e00-\u9fff]{1,4}[的了]|的|了|是|找|问|请|让|给|跟|和|与)?"
+            r"(?P<job_title>[\u4e00-\u9fff]{0,4}"
             r"(?:董事长|副董事长|总裁|副总裁|总经理|副总经理|总监|副总监|"
             r"经理|副经理|主任|副主任|院长|副院长|局长|副局长|处长|科长|"
             r"部长|厅长|司长|校长|园长|所长|站长|队长|组长|班长|排长|连长|"
             r"教授|副教授|讲师|助教|研究员|工程师|高级工程师|"
             r"医生|主治医生|主任医师|副主任医师|护士长|药剂师|"
             r"会计师|审计师|律师|法官|检察官|"
-            r"CEO|CTO|CFO|COO|CIO|CMO|VP)"
+            r"CEO|CTO|CFO|COO|CIO|CMO|VP))"
         ),
+        "group": "job_title",
         "description": "Job title (Chinese suffix + English abbreviations)",
     },
     {
         "type": "organization",
         "label": "[机构已脱敏]",
         "pattern": (
-            r"(?<!\d)[\u4e00-\u9fff]{2,12}"
+            r"(?:就职于|供职于|任职于|在|去|从|到|被|给|让)?"
+            r"(?P<organization>(?<!\d)[\u4e00-\u9fff]{2,12}"
             r"(?:股份有限公司|有限责任公司|有限公司|责任公司|"
             r"集团公司|集团|公司|企业|工厂|银行|保险|证券|基金|"
-            r"医院|诊所|药房|事务所|研究院|研究所|实验室)"
+            r"医院|诊所|药房|事务所|研究院|研究所|实验室))"
         ),
+        "group": "organization",
         "description": "Chinese organization name (CJK prefix + legal/industry suffix)",
     },
     {
         "type": "school",
         "label": "[学校已脱敏]",
         "pattern": (
-            r"(?<!\d)[\u4e00-\u9fff]{2,10}"
+            r"(?:毕业于|就读于?|考入|考上|在|去|从|到)?"
+            r"(?P<school>(?<!\d)[\u4e00-\u9fff]{2,10}"
             r"(?:大学|学院|中学|小学|高中|初中|附中|附小|"
             r"实验学校|外国语学校|师范学校|职业学校|技术学校|"
-            r"幼儿园|书院|学堂|党校)"
+            r"幼儿园|书院|学堂|党校))"
         ),
+        "group": "school",
         "description": "Chinese school name (CJK prefix + educational suffix)",
     },
     {
