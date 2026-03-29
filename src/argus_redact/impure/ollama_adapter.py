@@ -60,7 +60,7 @@ class OllamaAdapter(SemanticAdapter):
         """Call Ollama with retry."""
         payload = {
             "model": self._model,
-            "prompt": f"文本：{text}",
+            "prompt": f"/no_think\n文本：{text}",
             "system": SYSTEM_PROMPT,
             "stream": False,
             "options": {"temperature": 0.0},
