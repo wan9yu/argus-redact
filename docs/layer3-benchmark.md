@@ -167,8 +167,8 @@ Score%  100|                                    * qwen3:8b(think) 94%
 
 ## Recommendations
 
-1. **默认模型推荐 qwen3:8b**：88-94% 检测率，20-31s 延迟在异步场景可接受
-2. **低延迟场景用 qwen2.5:7b**：65% 检测率 + <1s 延迟，适合实时脱敏
-3. **分层策略**：Layer 1-2 用正则/NER（<100ms），Layer 3 用 qwen3:8b（异步/批处理）
-4. **Prompt 优化**：qwen3:8b 唯一漏掉的是"每周五请假"→宗教，可通过 prompt 注入宗教日历知识解决
-5. **不推荐**：deepseek-r1（太慢且不稳定）、marco-o1（推理无优势）、3b（太弱）
+1. **默认模型 qwen3:8b + 优化 prompt v3**：94% 检测率（think 模式），88%（no_think）
+2. **Prompt v3 关键改进**：加入宗教日历知识（周五→主麻日）、性别推断规则（怀孕→female）、多类型同时返回，解决了之前所有模型都失败的"每周五请假"和"怀孕→性别"两个 case
+3. **分层策略**：Layer 1-2 正则/NER（<100ms）+ Layer 3 qwen3:8b（异步/批处理，~20s/query）
+4. **Thinking 模式权衡**：think 更准但偶尔超时（个别 case >180s），no_think 稳定且仍达 88%
+5. **不推荐**：deepseek-r1（慢且不稳定）、marco-o1（无优势）、qwen2.5:3b（太弱）
