@@ -136,18 +136,27 @@ def cmd_assess(args):
         report=True,
     )
 
-    if args.format == "markdown":
+    if args.format == "pdf":
+        from argus_redact.report import generate_report_pdf
+        out = args.output or "audit-report.pdf"
+        generate_report_pdf(report, out)
+        print(f"PDF report saved to {out}", file=sys.stderr)
+    elif args.format == "markdown":
         from argus_redact.report import generate_report_markdown
         output = generate_report_markdown(report)
+        if args.output:
+            Path(args.output).write_text(output, encoding="utf-8")
+            print(f"Report saved to {args.output}", file=sys.stderr)
+        else:
+            print(output)
     else:
         from argus_redact.report import generate_report_json
         output = generate_report_json(report)
-
-    if args.output:
-        Path(args.output).write_text(output, encoding="utf-8")
-        print(f"Report saved to {args.output}", file=sys.stderr)
-    else:
-        print(output)
+        if args.output:
+            Path(args.output).write_text(output, encoding="utf-8")
+            print(f"Report saved to {args.output}", file=sys.stderr)
+        else:
+            print(output)
 
 
 def cmd_setup(args):
@@ -228,7 +237,7 @@ def main():
     p_assess.add_argument("-o", "--output", default=None, help="Save report to file")
     p_assess.add_argument("-l", "--lang", default="zh", help="Language (default: zh)")
     p_assess.add_argument("-m", "--mode", default="auto", help="Detection mode: auto, fast, ner")
-    p_assess.add_argument("-f", "--format", default="json", choices=["json", "markdown"],
+    p_assess.add_argument("-f", "--format", default="json", choices=["json", "markdown", "pdf"],
                           help="Output format (default: json)")
     p_assess.set_defaults(func=cmd_assess)
 

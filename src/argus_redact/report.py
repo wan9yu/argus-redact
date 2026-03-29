@@ -1,13 +1,14 @@
 """Audit report generator — produce compliance-ready reports from RedactReport.
 
-Generates Markdown or JSON reports suitable for 等保 / PIPL备案 audits.
-Can be converted to PDF via docs/generate_pdf.py's weasyprint approach.
+Generates Markdown, JSON, or PDF reports suitable for 等保 / PIPL备案 audits.
+PDF generation requires: pip install markdown weasyprint
 """
 
 from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from argus_redact._types import RedactReport
 
@@ -117,3 +118,80 @@ def generate_report_markdown(report: RedactReport) -> str:
     ])
 
     return "\n".join(lines)
+
+
+# ── PDF CSS (adapted from docs/generate_pdf.py) ──
+
+_PDF_CSS = """
+@page {
+    size: A4;
+    margin: 25mm 20mm 22mm 20mm;
+    @bottom-left {
+        content: "argus-redact · 个人信息脱敏审计报告";
+        font-size: 7.5pt; color: #999;
+        font-family: "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    }
+    @bottom-right {
+        content: counter(page);
+        font-size: 7.5pt; color: #999;
+    }
+}
+body {
+    font-family: "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei",
+                 "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt; line-height: 1.75; color: #1F2937;
+}
+h1 { font-size: 20pt; font-weight: 700; color: #0F2A4A;
+     border-bottom: 2.5pt solid #1A5276; padding-bottom: 8px; }
+h2 { font-size: 14pt; font-weight: 600; color: #1A5276;
+     border-bottom: 1pt solid #E5E7EB; padding-bottom: 5px; margin-top: 24px; }
+blockquote { border-left: 3.5pt solid #1A8A7D; padding: 8px 16px;
+             background: #F0FDFA; color: #4B5563; font-size: 9.5pt; }
+blockquote strong { color: #0F2A4A; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0;
+        font-size: 9.5pt; page-break-inside: avoid; }
+th { font-weight: 600; text-align: left; padding: 8px 10px;
+     border-bottom: 2pt solid #0F2A4A; color: #0F2A4A; }
+td { padding: 6px 10px; border-bottom: 0.5pt solid #E5E7EB; color: #374151; }
+th, td { border-left: none; border-right: none; }
+code { font-family: "SF Mono", "Menlo", monospace; font-size: 9pt;
+       background: #F3F4F6; padding: 1px 4px; border-radius: 3px; color: #1A5276; }
+hr { border: none; border-top: 1pt solid #E5E7EB; margin: 20px 0; }
+strong { color: #0F2A4A; }
+em { color: #6B7280; font-size: 9pt; }
+"""
+
+
+def generate_report_pdf(report: RedactReport, output_path: str | Path) -> Path:
+    """Generate a professional PDF audit report.
+
+    Requires: pip install markdown weasyprint
+    Returns the output path.
+    """
+    try:
+        import markdown
+        from weasyprint import HTML
+    except ImportError:
+        raise ImportError(
+            "PDF generation requires 'markdown' and 'weasyprint'. "
+            "Install with: pip install markdown weasyprint"
+        )
+
+    md_text = generate_report_markdown(report)
+    html_body = markdown.markdown(md_text, extensions=["tables"])
+
+    full_html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <title>个人信息脱敏审计报告 | argus-redact</title>
+    <style>{_PDF_CSS}</style>
+</head>
+<body>
+{html_body}
+</body>
+</html>"""
+
+    output = Path(output_path)
+    HTML(string=full_html).write_pdf(str(output))
+    return output
