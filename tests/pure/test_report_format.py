@@ -80,9 +80,18 @@ class TestReportPDF:
         # PDF magic bytes
         assert output.read_bytes()[:4] == b"%PDF"
 
-    def test_should_raise_without_weasyprint(self):
-        """Verify the import error message is clear."""
-        # This test only makes sense if weasyprint IS installed
-        # Just verify the function is importable
+    def test_should_raise_clear_error_without_weasyprint(self, tmp_path, monkeypatch):
+        """Verify ImportError message when weasyprint is missing."""
+        import builtins
+        real_import = builtins.__import__
+
+        def mock_import(name, *args, **kwargs):
+            if name in ("weasyprint", "markdown"):
+                raise ImportError(f"No module named '{name}'")
+            return real_import(name, *args, **kwargs)
+
         from argus_redact.report import generate_report_pdf
-        assert callable(generate_report_pdf)
+        report = redact("手机13812345678", lang="zh", mode="fast", report=True)
+        monkeypatch.setattr(builtins, "__import__", mock_import)
+        with pytest.raises(ImportError, match="weasyprint"):
+            generate_report_pdf(report, tmp_path / "out.pdf")
