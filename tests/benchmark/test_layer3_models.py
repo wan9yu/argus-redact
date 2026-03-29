@@ -137,8 +137,9 @@ class TestLayer3ModelBenchmark:
 
     @pytest.mark.parametrize("model", [
         "qwen2.5:3b", "qwen2.5:7b", "qwen2.5:32b",
-        "qwen3:8b", "deepseek-r1:7b", "deepseek-r1:8b",
+        "qwen3:8b", "deepseek-r1:7b", "deepseek-r1:8b", "deepseek-r1:14b",
         "glm4:9b", "marco-o1:7b",
+        "internlm2:7b", "yi:9b",
     ])
     def test_model_benchmark(self, ollama_available, model, capsys):
         # Check model is installed

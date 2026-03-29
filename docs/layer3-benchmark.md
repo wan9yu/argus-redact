@@ -130,8 +130,11 @@ All models tested on same 17 cases, same prompt, temperature=0.0. Hardware: M1 M
 | deepseek-r1:7b | 4.7 GB | 7/17 (41%) | 11,733ms | 慢且弱 |
 | glm4:9b | 5.5 GB | 8/17 (47%) | 1,025ms | 中规中矩 |
 | qwen2.5:7b | 4.7 GB | 11/17 (65%) | 902ms | 速度最优 |
+| yi:9b | 5.0 GB | 11/17 (65%) | 949ms | 犯罪记录能抓到 |
+| internlm2:7b | 4.5 GB | 12/17 (71%) | 1,161ms | 不错，和 32b 同分但快 5x |
 | deepseek-r1:8b | 5.2 GB | 12/17 (71%) | 41,537ms | 准但极慢 |
 | qwen2.5:32b | 19 GB | 12/17 (71%) | 5,648ms | 资源需求高 |
+| deepseek-r1:14b | 9.0 GB | 12/17 (71%) | 18,498ms | 慢，性价比低 |
 | **qwen3:8b (no_think)** | **5.2 GB** | **15/17 (88%)** | **19,902ms** | **高精度，推荐** |
 | **qwen3:8b (think)** | **5.2 GB** | **16/17 (94%)** | **31,101ms** | **最准** |
 
@@ -146,17 +149,19 @@ All models tested on same 17 cases, same prompt, temperature=0.0. Hardware: M1 M
 ### Accuracy vs Latency Tradeoff
 
 ```
-Score%  100|                              * qwen3:8b(think) 94%
-         90|                         * qwen3:8b(no_think) 88%
+Score%  100|                                    * qwen3:8b(think) 94%
+         90|                               * qwen3:8b(no_think) 88%
          80|
-         70|         * qwen2.5:32b           * deepseek-r1:8b
-         60|  * qwen2.5:7b
+         70|  * internlm2  * qwen2.5:32b        * ds-r1:14b  * ds-r1:8b
+         60|  * qwen2.5:7b * yi:9b
          50|       * glm4:9b
-         40|                    * deepseek-r1:7b
+         40|                      * deepseek-r1:7b
          30|* qwen2.5:3b  * marco-o1
-            +-----+-----+-----+-----+-----+-----+
+            +-----+-----+-----+-----+-----+-----+-----+
             0     1s    5s    10s   20s   30s   40s  Latency
 ```
+
+**11 models tested, clear winner: qwen3:8b.**
 
 ---
 
