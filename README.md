@@ -71,7 +71,7 @@ Semantic preservation and reversibility are solved by design — pseudonym repla
 
 We track what still needs work:
 
-| Dimension | Current (v0.1.10) | Next milestone |
+| Dimension | Current (v0.1.11) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Detection** | P=96% R=98% F1=97%; Layer 3 LLM 100% (qwen3:8b) | Org/school candidate+scoring precision |
 | **Compliance** | `default` ~100%; `pipl` ~85%; risk + audit + profiles + PDF report | `pipl`/`gdpr`/`hipaa` full coverage |

@@ -1,4 +1,4 @@
-argus-redact>=0.1.10
+argus-redact>=0.1.11
 spacy>=3.0
 huggingface-hub<1.0
 starlette<1.0
