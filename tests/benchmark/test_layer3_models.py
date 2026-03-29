@@ -79,13 +79,15 @@ def _normalize_type(t):
 
 
 def _query(text, model):
+    from argus_redact.impure.model_profiles import get_model_profile
+    profile = get_model_profile(model)
     resp = requests.post(OLLAMA_URL, json={
         "model": model,
-        "prompt": f"文本：{text}",
+        "prompt": f"{profile.prompt_prefix}文本：{text}",
         "system": SYSTEM_PROMPT,
         "stream": False,
         "options": {"temperature": 0.0},
-    }, timeout=120)
+    }, timeout=profile.timeout)
     return resp.json().get("response", "[]")
 
 
