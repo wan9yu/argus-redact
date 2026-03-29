@@ -8,6 +8,7 @@ import logging
 import requests
 
 from argus_redact._types import NEREntity
+from argus_redact.impure.model_profiles import get_model_profile
 from argus_redact.impure.semantic import SemanticAdapter
 
 logger = logging.getLogger(__name__)
@@ -40,11 +41,13 @@ SYSTEM_PROMPT = """你是隐私分析专家。分析文本中所有隐含的敏�
 
 没有发现则返回 []。只返回JSON，不要其他文字。"""
 
-DEFAULT_CONFIDENCE = 0.7
-
 
 class OllamaAdapter(SemanticAdapter):
-    """Semantic PII detection via Ollama local LLM."""
+    """Semantic PII detection via Ollama local LLM.
+
+    Model-specific behavior (prompt prefix, timeout, confidence) is loaded
+    from model_profiles.py. To add a new model, add a profile there.
+    """
 
     def __init__(
         self,
@@ -55,12 +58,13 @@ class OllamaAdapter(SemanticAdapter):
 
         self._model = model or os.environ.get("OLLAMA_MODEL", "qwen3:8b")
         self._base_url = base_url or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        self._profile = get_model_profile(self._model)
 
     def _call_ollama(self, text: str) -> requests.Response | None:
-        """Call Ollama with retry."""
+        """Call Ollama with retry. Timeout and prompt prefix from model profile."""
         payload = {
             "model": self._model,
-            "prompt": f"/no_think\n文本：{text}",
+            "prompt": f"{self._profile.prompt_prefix}文本：{text}",
             "system": SYSTEM_PROMPT,
             "stream": False,
             "options": {"temperature": 0.0},
@@ -70,7 +74,7 @@ class OllamaAdapter(SemanticAdapter):
                 resp = requests.post(
                     f"{self._base_url}/api/generate",
                     json=payload,
-                    timeout=30,
+                    timeout=self._profile.timeout,
                 )
                 if resp.status_code == 200:
                     return resp
@@ -122,7 +126,6 @@ class OllamaAdapter(SemanticAdapter):
                 if end > len(text) or start < 0:
                     continue
                 if text[start:end] != entity_text:
-                    # LLM gave wrong offsets, try to find it
                     idx = text.find(entity_text)
                     if idx == -1:
                         continue
@@ -139,7 +142,7 @@ class OllamaAdapter(SemanticAdapter):
                     type=entity_type,
                     start=start,
                     end=end,
-                    confidence=DEFAULT_CONFIDENCE,
+                    confidence=self._profile.confidence,
                 )
             )
 
