@@ -89,7 +89,7 @@ Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张�
 
 ## North Star
 
-| Dimension | Current (v0.1.11) | Next milestone |
+| Dimension | Current (v0.1.12) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Protected** | ~47 PII types, L1-L4, Layer 3 LLM 100% | PRvL benchmark (privacy vs language quality) |
 | **Usable** | Pseudonym + mask + category strategies | Quantify LLM output quality after redaction |
@@ -165,4 +165,4 @@ Meets **PIPL** · **GDPR** · **HIPAA** technical requirements as a byproduct of
 
 ## License
 
-[MIT](LICENSE)
+[Apache 2.0](LICENSE)
