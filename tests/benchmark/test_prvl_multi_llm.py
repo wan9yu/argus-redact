@@ -25,7 +25,7 @@ POE_API_URL = "https://api.poe.com/v1/chat/completions"
 # Models to test via Poe
 MODELS = [
     "GPT-4o",
-    "Claude-3.5-Sonnet",
+    "Claude-3.7-Sonnet",
     "Gemini-2.0-Flash",
 ]
 
