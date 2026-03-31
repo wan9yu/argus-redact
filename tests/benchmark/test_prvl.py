@@ -308,10 +308,9 @@ class TestReversibilityThroughLLM:
                 status = "✓" if not lost else f"✗ lost: {lost}"
                 print(f"  {d['id']}: {status}")
 
-        # Baseline: 64%. Pseudonym-style tokens (P-XXXXX, 138****5678) survive 100%.
-        # Bracket-style labels ([XXX REDACTED]) are often paraphrased by LLMs.
-        # Target: ≥80% via pseudonym-style labels for all entity types.
-        assert survival_rate >= 0.5, (
+        # Baseline: 86%. All entities now use pseudonym-style codes (MED-XXXXX).
+        # Remaining losses are LLM omissions in summaries, not format issues.
+        assert survival_rate >= 0.7, (
             f"Pseudonym survival rate {survival_rate:.0%} below 70% — "
             f"details: {details}"
         )

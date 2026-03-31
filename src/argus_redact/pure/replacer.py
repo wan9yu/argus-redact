@@ -60,6 +60,34 @@ DEFAULT_STRATEGIES = {
 DEFAULT_PREFIXES = {
     "person": "P",
     "organization": "O",
+    # Pseudonym prefixes for remove-as-pseudonym strategy (improves LLM survival rate)
+    "id_number": "ID",
+    "passport": "PASS",
+    "license_plate": "PLATE",
+    "address": "ADDR",
+    "ssn": "SSN",
+    "military_id": "MIL",
+    "social_security": "SOC",
+    "credit_code": "BIZ",
+    "date_of_birth": "DOB",
+    "us_passport": "PASS",
+    "job_title": "TITLE",
+    "school": "SCH",
+    "ethnicity": "ETH",
+    "workplace": "WORK",
+    "criminal_record": "CRIM",
+    "financial": "FIN",
+    "biometric": "BIO",
+    "medical": "MED",
+    "religion": "REL",
+    "political": "POL",
+    "sexual_orientation": "ORI",
+    "ip_address": "IP",
+    "mac_address": "MAC",
+    "imei": "IMEI",
+    "url_token": "URL",
+    "age": "AGE",
+    "gender": "GEN",
 }
 
 # Default labels for remove strategy — per language
@@ -319,6 +347,18 @@ def replace(
         seed=(seed + 1) if seed is not None else None,
         existing_key=result_key if result_key else None,
     )
+    # Per-type pseudonym generators for remove strategy (improves LLM survival)
+    _type_gens: dict[str, PseudonymGenerator] = {}
+
+    def _get_type_gen(entity_type: str) -> PseudonymGenerator:
+        if entity_type not in _type_gens:
+            prefix = DEFAULT_PREFIXES.get(entity_type, entity_type.upper()[:4])
+            _type_gens[entity_type] = PseudonymGenerator(
+                prefix=prefix,
+                seed=(seed + hash(entity_type) % 10000) if seed is not None else None,
+                existing_key=result_key if result_key else None,
+            )
+        return _type_gens[entity_type]
 
     entity_replacements: dict[str, str] = {}
 
@@ -365,11 +405,12 @@ def replace(
             replacement = _mask_landline(entity.text)
             replacement = _resolve_collision(replacement, used_labels)
         elif strategy == "remove":
-            label = ec.get(
-                "replacement",
-                DEFAULT_REMOVE_LABELS.get(entity.type, "[REDACTED]"),
-            )
-            replacement = _resolve_collision(label, used_labels)
+            if "replacement" in ec:
+                # User explicitly configured a label — respect it
+                replacement = _resolve_collision(ec["replacement"], used_labels)
+            else:
+                # Use pseudonym-style codes (MED-00123) for LLM survival
+                replacement = _get_type_gen(entity.type).get(entity.text)
         elif strategy == "category":
             label = ec.get(
                 "label",

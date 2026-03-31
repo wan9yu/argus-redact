@@ -77,7 +77,7 @@ class TestReplaceStrategies:
         _, key = replace("110101199003074610", entities, seed=42)
 
         replacement = list(key.keys())[0]
-        assert "脱敏" in replacement or "REDACTED" in replacement
+        assert replacement.startswith("ID-")  # pseudonym-style for LLM survival
 
     def test_should_mask_with_domain_when_email(self):
         entities = [make_match("zhang@example.com", "email", 0)]
