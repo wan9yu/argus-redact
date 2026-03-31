@@ -149,6 +149,7 @@ Meets **PIPL** · **GDPR** · **HIPAA** technical requirements as a byproduct of
 | [Architecture](docs/architecture.md) | Three-layer engine, pure/impure separation |
 | [Language Packs](docs/language-packs.md) | Adding new languages |
 | [Security Model](docs/security-model.md) | Threat model, compliance, per-message keys |
+| [**PRvL Standard**](docs/prvl-standard.md) | **Open evaluation standard: Privacy × Reversibility × Language** |
 | [Layer 3 Benchmark](docs/layer3-benchmark.md) | LLM model comparison, prompt design, regulatory analysis |
 | [Benchmarks](tests/benchmark/README.md) | Evaluation against 9 public PII datasets |
 | [Performance](docs/performance.md) | Latency, throughput, benchmark results |
