@@ -4,15 +4,15 @@
         "input": "确诊糖尿病",
         "should_match": true,
         "type": "medical",
-        "expected_text": "确诊糖尿病",
-        "description": "确诊+疾病"
+        "expected_text": "糖尿病",
+        "description": "确诊+疾病（触发词保留，只脱敏疾病名）"
     },
     {
         "id": "med_gaoxueya",
         "input": "患有高血压",
         "should_match": true,
         "type": "medical",
-        "expected_text": "患有高血压",
+        "expected_text": "高血压",
         "description": "患有+疾病"
     },
     {
@@ -20,7 +20,7 @@
         "input": "服用阿莫西林",
         "should_match": true,
         "type": "medical",
-        "expected_text": "服用阿莫西林",
+        "expected_text": "阿莫西林",
         "description": "服用+药物"
     },
     {
@@ -29,7 +29,7 @@
         "should_match": true,
         "type": "medical",
         "expected_text": "HIV阳性",
-        "description": "HIV阳性"
+        "description": "HIV阳性（standalone）"
     },
     {
         "id": "med_shoushu",
@@ -37,14 +37,14 @@
         "should_match": true,
         "type": "medical",
         "expected_text": "做了心脏搭桥手术",
-        "description": "手术"
+        "description": "手术（standalone）"
     },
     {
         "id": "med_zhenduan",
         "input": "诊断为抑郁症",
         "should_match": true,
         "type": "medical",
-        "expected_text": "诊断为抑郁症",
+        "expected_text": "抑郁症",
         "description": "诊断+疾病"
     },
     {

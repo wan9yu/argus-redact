@@ -4,7 +4,7 @@
         "input": "diagnosed with diabetes",
         "should_match": true,
         "type": "medical",
-        "expected_text": "diagnosed with diabetes",
+        "expected_text": "diabetes",
         "description": "Diagnosed with disease"
     },
     {
@@ -12,7 +12,7 @@
         "input": "prescribed amoxicillin",
         "should_match": true,
         "type": "medical",
-        "expected_text": "prescribed amoxicillin",
+        "expected_text": "amoxicillin",
         "description": "Prescribed medication"
     },
     {
@@ -36,7 +36,7 @@
         "input": "annual salary $120,000",
         "should_match": true,
         "type": "financial",
-        "expected_text": "salary $120,000",
+        "expected_text": "$120,000",
         "description": "Salary with amount"
     },
     {

@@ -104,27 +104,45 @@ PATTERNS = [
         "label": "[MEDICAL REDACTED]",
         "pattern": (
             r"(?i:(?:diagnosed with|suffering from|treated for|prescribed|"
-            r"patient has|history of)\s+\w[\w\s]{2,30}"
-            r"|HIV\s*(?:positive|negative)"
+            r"patient has|history of))\s+"
+            r"(?P<medical>(?i:\w[\w\s]{2,30}))"
+        ),
+        "group": "medical",
+        "description": "Medical diagnosis (keyword-triggered, preserves trigger phrase)",
+    },
+    {
+        "type": "medical",
+        "label": "[MEDICAL REDACTED]",
+        "pattern": (
+            r"(?i:HIV\s*(?:positive|negative)"
             r"|(?:\w+\s+)?(?:surgery|transplant|chemotherapy|radiation therapy)"
             r"|(?:diabetes|cancer|tumor|leukemia|hypertension|"
             r"depression|schizophrenia|epilepsy|tuberculosis|hepatitis|"
             r"alzheimer|parkinson|asthma|arthritis))"
         ),
-        "description": "Medical/health info (diagnosis/medication/disease/surgery)",
+        "description": "Medical standalone (HIV/disease/surgery)",
     },
     {
         "type": "financial",
         "label": "[FINANCIAL REDACTED]",
         "pattern": (
-            r"(?i:(?:salary|income|wage|earnings|pay)\s*(?:of\s*)?\$[\d,.]+"
-            r"|(?:owes?|debt|owed|loan|mortgage)\s+\$[\d,.]+"
+            r"(?i:(?:salary|income|wage|earnings|pay))\s*(?:of\s*)?"
+            r"(?P<financial>\$[\d,.]+)"
+        ),
+        "group": "financial",
+        "description": "Financial amount (keyword-triggered, preserves keyword)",
+    },
+    {
+        "type": "financial",
+        "label": "[FINANCIAL REDACTED]",
+        "pattern": (
+            r"(?i:(?:owes?|debt|owed|loan|mortgage)\s+\$[\d,.]+"
             r"(?:\s+(?:in\s+)?(?:debt|loan|mortgage))?"
             r"|credit\s+score\s+\d{3}"
             r"|(?:net\s+worth|annual\s+income|monthly\s+salary)\s*(?:of\s*)?\$[\d,.]+"
             r"|(?:bankrupt|bankruptcy|foreclosure|repossession))"
         ),
-        "description": "Financial info (salary/debt/credit score/bankruptcy)",
+        "description": "Financial standalone (debt/credit score/bankruptcy)",
     },
     {
         "type": "criminal_record",

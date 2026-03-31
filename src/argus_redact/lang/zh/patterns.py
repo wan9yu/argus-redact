@@ -380,13 +380,31 @@ PATTERNS = [
         "type": "medical",
         "label": "[医疗信息已脱敏]",
         "pattern": (
-            r"(?:确诊|诊断为|患有|患了|罹患|检出)[\u4e00-\u9fff]{2,8}"
-            r"|(?:服用|注射|口服)[\u4e00-\u9fff\w]{2,10}"
-            r"|HIV[阳阴]性"
+            r"(?:确诊|诊断为|患有|患了|罹患|检出)"
+            r"(?P<medical>[\u4e00-\u9fff]{2,8})"
+        ),
+        "group": "medical",
+        "description": "Medical diagnosis (keyword-triggered, preserves trigger verb)",
+    },
+    {
+        "type": "medical",
+        "label": "[医疗信息已脱敏]",
+        "pattern": (
+            r"(?:服用|注射|口服)"
+            r"(?P<medical>[\u4e00-\u9fff\w]{2,10})"
+        ),
+        "group": "medical",
+        "description": "Medical medication (keyword-triggered, preserves trigger verb)",
+    },
+    {
+        "type": "medical",
+        "label": "[医疗信息已脱敏]",
+        "pattern": (
+            r"HIV[阳阴]性"
             r"|" + _DISEASE_KEYWORDS +
             r"|[\u4e00-\u9fff]{2,6}手术"
         ),
-        "description": "Medical/health info (diagnosis/medication/disease/surgery)",
+        "description": "Medical standalone (HIV/disease names/surgery)",
     },
     {
         "type": "religion",

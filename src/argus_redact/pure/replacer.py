@@ -30,6 +30,31 @@ DEFAULT_STRATEGIES = {
     "nhs_number": "remove",
     "aadhaar": "remove",
     "pan": "remove",
+    # Level 2
+    "job_title": "remove",
+    "school": "pseudonym",
+    "ethnicity": "remove",
+    "workplace": "remove",
+    # Level 3
+    "criminal_record": "remove",
+    "financial": "remove",
+    "biometric": "remove",
+    "medical": "remove",
+    "religion": "remove",
+    "political": "remove",
+    "sexual_orientation": "remove",
+    # Level 4
+    "ip_address": "remove",
+    "mac_address": "remove",
+    "imei": "remove",
+    "url_token": "remove",
+    "age": "remove",
+    "gender": "remove",
+    "date_of_birth": "remove",
+    "military_id": "remove",
+    "social_security": "remove",
+    "credit_code": "remove",
+    "us_passport": "remove",
 }
 
 DEFAULT_PREFIXES = {
@@ -44,11 +69,35 @@ _REMOVE_LABELS_BY_LANG = {
         "passport": "[护照号已脱敏]",
         "license_plate": "[车牌号已脱敏]",
         "address": "[地址已脱敏]",
+        "military_id": "[军官证号已脱敏]",
+        "social_security": "[社保号已脱敏]",
+        "credit_code": "[信用代码已脱敏]",
+        "date_of_birth": "[出生日期已脱敏]",
+        "job_title": "[职务已脱敏]",
+        "school": "[学校已脱敏]",
+        "ethnicity": "[民族已脱敏]",
+        "workplace": "[工作单位已脱敏]",
+        "criminal_record": "[犯罪记录已脱敏]",
+        "financial": "[财务信息已脱敏]",
+        "biometric": "[生物特征已脱敏]",
+        "medical": "[医疗信息已脱敏]",
+        "religion": "[宗教信仰已脱敏]",
+        "political": "[政治观点已脱敏]",
+        "sexual_orientation": "[性取向已脱敏]",
     },
     "en": {
         "ssn": "[SSN REDACTED]",
         "credit_card": "[CARD REDACTED]",
         "address": "[ADDRESS REDACTED]",
+        "us_passport": "[PASSPORT REDACTED]",
+        "date_of_birth": "[DOB REDACTED]",
+        "criminal_record": "[CRIMINAL REDACTED]",
+        "financial": "[FINANCIAL REDACTED]",
+        "biometric": "[BIOMETRIC REDACTED]",
+        "medical": "[MEDICAL REDACTED]",
+        "religion": "[RELIGION REDACTED]",
+        "political": "[POLITICAL REDACTED]",
+        "sexual_orientation": "[ORIENTATION REDACTED]",
     },
     "de": {
         "tax_id": "[Steuer-ID]",
@@ -68,6 +117,15 @@ _REMOVE_LABELS_BY_LANG = {
     },
     "ko": {
         "rrn": "[주민등록번호]",
+    },
+    # Shared patterns (all languages)
+    "shared": {
+        "ip_address": "[IP REDACTED]",
+        "mac_address": "[MAC REDACTED]",
+        "imei": "[IMEI REDACTED]",
+        "url_token": "[URL REDACTED]",
+        "age": "[AGE REDACTED]",
+        "gender": "[GENDER REDACTED]",
     },
 }
 
