@@ -18,7 +18,7 @@ Three promises guide everything we build:
 | Promise | Question | Measure |
 |---------|----------|---------|
 | **Protected** | Is your PII detected and encrypted? | PRvL P=100%. PII leak 0% across GPT-4o, Claude, Gemini |
-| **Usable** | Can AI still understand and help you? | PRvL U=95%. Trigger words preserved, only PII content redacted |
+| **Usable** | Can AI still understand and help you? | PRvL U=100%. Trigger words preserved, only PII content redacted |
 | **Reversible** | Can you get everything back? | PRvL R by task type: reference 100%, extract 50%, creative 0% (by design) |
 
 Reversibility depends on **how you use AI**, not just our technology. When you ask AI to summarize or translate, pseudonyms survive and restore works perfectly. When you ask for advice, AI generates new content — restore is not the goal, privacy protection is.

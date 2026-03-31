@@ -161,6 +161,8 @@ PATTERNS = [
         "type": "address",
         "label": "[地址已脱敏]",
         "pattern": (
+            r"(?:[\u4e00-\u9fff]?(?:住在|位于|在|去|从|到))?"
+            r"(?P<address>"
             r"(?:"
             # Branch 1: Province + city
             r"(?:(?:河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|"
@@ -168,8 +170,8 @@ PATTERNS = [
             r"(?:内蒙古|广西|西藏|宁夏|新疆)(?:自治区)?)"
             r"[\u4e00-\u9fff]{2,6}(?:市|州)"
             r"|"
-            # Branch 2: Municipality or standalone city (not preceded by CJK)
-            r"(?:(?<![一-龥])(?:北京市|天津市|上海市|重庆市|[\u4e00-\u9fff]{2,5}(?:市|州)))"
+            # Branch 2: Municipality or standalone city
+            r"(?:北京市|天津市|上海市|重庆市|[\u4e00-\u9fff]{2,5}(?:市|州))"
             r")"
             # District
             r"[\u4e00-\u9fff]{1,8}(?:区|县|市|旗|新区)"
@@ -179,7 +181,9 @@ PATTERNS = [
             r"(?:\d{1,5}(?:号|弄))?"
             r"(?:\d{1,3}(?:栋|幢|楼|座))?"
             r"(?:\d{1,4}(?:室|房))?"
+            r")"
         ),
+        "group": "address",
         "description": "Chinese structured address (city+district+street+number)",
     },
     # Informal address: known district/area name + street (no province/city prefix)
