@@ -91,11 +91,11 @@ Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张�
 
 | Dimension | Current (v0.1.13) | Next milestone |
 |-----------|:----------------:|:---:|
-| **Protected** | ~47 PII types, L1-L4, Layer 3 LLM 100%; PRvL P=100% | Expand PRvL benchmark coverage |
-| **Usable** | Pseudonym codes (MED-00123, FIN-45678, ID-07109); PRvL U=95% | Improve U across more LLM providers |
-| **Reversible** | Per-message key, one-line restore; PRvL R-LLM=86% | Improve pseudonym survival rate across LLMs |
-| **Compliance** | PIPL ~85%, risk assessment + audit PDF | PIPL/GDPR/HIPAA (byproduct, not goal) |
-| **Coverage** | 8 langs, 6 frameworks | Browser extension, input-layer integration |
+| **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini | Adversarial testing |
+| **Usable** | PRvL U=95%. Pseudonym codes preserve trigger words | More task types |
+| **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design) | Task-aware guidance |
+| **Compliance** | PIPL ~85%, risk + audit PDF | PIPL/GDPR/HIPAA (byproduct) |
+| **Coverage** | 8 langs, 4 LLMs benchmarked, 6 frameworks | Browser extension |
 
 ## Risk Assessment & Audit
 

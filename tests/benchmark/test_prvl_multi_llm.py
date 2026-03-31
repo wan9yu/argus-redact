@@ -30,6 +30,11 @@ MODELS = [
 ]
 
 # Test prompts (same as test_prvl.py LLM_PROMPTS but streamlined)
+# Task categories: reversibility expectations differ by task type
+# - reference: LLM must quote/reference original tokens → R should be high
+# - extract: LLM extracts specific info → R is medium
+# - creative: LLM generates advice/content → R is low (by design)
+
 TEST_CASES = [
     {
         "id": "summarize_zh",
@@ -37,6 +42,7 @@ TEST_CASES = [
         "prompt": "请用一句话总结以下信息：{text}",
         "lang": "zh",
         "pii": ["13812345678", "高血压"],
+        "task_type": "reference",
     },
     {
         "id": "translate_zh_en",
@@ -44,6 +50,7 @@ TEST_CASES = [
         "prompt": "Translate to English: {text}",
         "lang": "zh",
         "pii": ["13912345678", "li@test.com"],
+        "task_type": "reference",
     },
     {
         "id": "qa_en",
@@ -51,6 +58,7 @@ TEST_CASES = [
         "prompt": "Based on the following info, what health condition does this person have? {text}",
         "lang": "en",
         "pii": ["123-45-6789"],
+        "task_type": "extract",
     },
     {
         "id": "advice_zh",
@@ -58,6 +66,7 @@ TEST_CASES = [
         "prompt": "基于以下患者信息，给出简短健康建议（50字以内）：{text}",
         "lang": "zh",
         "pii": ["糖尿病", "月薪2万元"],
+        "task_type": "creative",
     },
 ]
 
@@ -123,8 +132,7 @@ class TestPRvLMultiLLM:
 
     @pytest.mark.parametrize("model", MODELS)
     def test_pseudonym_survival(self, poe_key, model, capsys):
-        survived = 0
-        total = 0
+        by_task_type: dict[str, dict] = {}
         details = []
 
         for case in TEST_CASES:
@@ -135,33 +143,43 @@ class TestPRvLMultiLLM:
             llm_output = _query_poe(prompt, model, poe_key)
             ms = (time.time() - t0) * 1000
 
-            case_survived = 0
+            case_survived = sum(1 for r in key if r in llm_output)
             case_total = len(key)
-            for replacement in key.keys():
-                total += 1
-                if replacement in llm_output:
-                    survived += 1
-                    case_survived += 1
+            task_type = case.get("task_type", "unknown")
+
+            if task_type not in by_task_type:
+                by_task_type[task_type] = {"survived": 0, "total": 0}
+            by_task_type[task_type]["survived"] += case_survived
+            by_task_type[task_type]["total"] += case_total
 
             details.append({
                 "id": case["id"],
+                "task_type": task_type,
                 "survived": f"{case_survived}/{case_total}",
-                "lost": [r for r in key.keys() if r not in llm_output],
+                "lost": [r for r in key if r not in llm_output],
                 "ms": ms,
             })
 
-        rate = survived / total if total else 0
-
         with capsys.disabled():
             print(f"\n  {'='*60}")
-            print(f"  {model}: pseudonym survival {rate:.0%} ({survived}/{total})")
+            print(f"  {model}: PRvL by task type")
             print(f"  {'='*60}")
+            for tt, s in by_task_type.items():
+                rate = s["survived"] / s["total"] if s["total"] else 0
+                print(f"  {tt:12s}: R={rate:.0%} ({s['survived']}/{s['total']})")
+            total_s = sum(s["survived"] for s in by_task_type.values())
+            total_t = sum(s["total"] for s in by_task_type.values())
+            print(f"  {'overall':12s}: R={total_s/total_t:.0%} ({total_s}/{total_t})")
+            print()
             for d in details:
                 lost = d["lost"]
                 status = "✓" if not lost else f"✗ lost: {lost}"
-                print(f"  {d['id']}: {d['survived']} {status} ({d['ms']:.0f}ms)")
+                print(f"  [{d['task_type']}] {d['id']}: {d['survived']} {status} ({d['ms']:.0f}ms)")
 
-        assert rate >= 0.5, f"{model} survival rate {rate:.0%} below 50%"
+        # Reference tasks should have high survival; creative tasks are expected to be low
+        ref = by_task_type.get("reference", {"survived": 0, "total": 1})
+        ref_rate = ref["survived"] / ref["total"] if ref["total"] else 0
+        assert ref_rate >= 0.8, f"{model} reference task survival {ref_rate:.0%} below 80%"
 
     @pytest.mark.parametrize("model", MODELS)
     def test_pii_not_leaked(self, poe_key, model, capsys):

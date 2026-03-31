@@ -209,6 +209,7 @@ LLM_PROMPTS = [
         "prompt_template": "请用一句话总结以下信息：{text}",
         "lang": "zh",
         "pii": ["13812345678", "高血压"],
+        "task_type": "reference",
     },
     {
         "id": "translate_zh_en",
@@ -216,6 +217,7 @@ LLM_PROMPTS = [
         "prompt_template": "Translate to English: {text}",
         "lang": "zh",
         "pii": ["13912345678", "li@test.com"],
+        "task_type": "reference",
     },
     {
         "id": "qa_en",
@@ -223,11 +225,13 @@ LLM_PROMPTS = [
         "prompt_template": "Based on the following info, what health condition does this person have? {text}",
         "lang": "en",
         "pii": ["123-45-6789"],
+        "task_type": "extract",
     },
     {
         "id": "advice_zh",
         "text": "患者王五，35岁，确诊糖尿病，月薪2万元，住在朝阳区",
-        "prompt_template": "基于以下患者信息，给出健康建议：{text}",
+        "prompt_template": "基于以下患者信息，给出简短健康建议（50字以内）：{text}",
+        "task_type": "creative",
         "lang": "zh",
         "pii": ["糖尿病", "月薪2万元"],
     },
