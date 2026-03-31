@@ -89,11 +89,11 @@ Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张�
 
 ## North Star
 
-| Dimension | Current (v0.1.12) | Next milestone |
+| Dimension | Current (v0.1.13) | Next milestone |
 |-----------|:----------------:|:---:|
-| **Protected** | ~47 PII types, L1-L4, Layer 3 LLM 100% | PRvL benchmark (privacy vs language quality) |
-| **Usable** | Pseudonym + mask + category strategies | Quantify LLM output quality after redaction |
-| **Reversible** | Per-message key, one-line restore | Measure pseudonym survival rate across LLMs |
+| **Protected** | ~47 PII types, L1-L4, Layer 3 LLM 100%; PRvL P=100% | Expand PRvL benchmark coverage |
+| **Usable** | Pseudonym codes (MED-00123, FIN-45678, ID-07109); PRvL U=95% | Improve U across more LLM providers |
+| **Reversible** | Per-message key, one-line restore; PRvL R-LLM=86% | Improve pseudonym survival rate across LLMs |
 | **Compliance** | PIPL ~85%, risk assessment + audit PDF | PIPL/GDPR/HIPAA (byproduct, not goal) |
 | **Coverage** | 8 langs, 6 frameworks | Browser extension, input-layer integration |
 

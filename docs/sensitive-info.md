@@ -17,9 +17,9 @@ Three promises guide everything we build:
 
 | Promise | Question | Measure |
 |---------|----------|---------|
-| **Protected** | Is your PII detected and encrypted? | Detection coverage, false negatives |
-| **Usable** | Can AI still understand and help you? | LLM output quality after redaction |
-| **Reversible** | Can you get everything back? | Pseudonym survival rate, restore completeness |
+| **Protected** | Is your PII detected and encrypted? | Detection coverage, false negatives (PRvL P=100%) |
+| **Usable** | Can AI still understand and help you? | LLM output quality after redaction (PRvL U=95%) |
+| **Reversible** | Can you get everything back? | Pseudonym survival rate, restore completeness (PRvL R-LLM=86%) |
 
 Compliance with PIPL, GDPR, and HIPAA is a **byproduct** of this design, not the goal.
 
@@ -70,8 +70,8 @@ Not identifiers, but high-harm if leaked. Protected by PIPL, GDPR, HIPAA.
 
 | Type | Status | Layer | Notes |
 |------|:------:|:-----:|-------|
-| Medical / health | ✓ zh (explicit) | 1 | Keyword/regex detection; implicit → Layer 3 LLM |
-| Financial | ✓ zh (explicit) | 1 | Keyword/regex detection; implicit → Layer 3 LLM |
+| Medical / health | ✓ zh (explicit) | 1 | Keyword/regex; trigger words preserved (e.g. 确诊 stays, 糖尿病 → MED-code); implicit → Layer 3 LLM |
+| Financial | ✓ zh (explicit) | 1 | Keyword/regex; trigger words preserved (e.g. 贷款 stays, amount → FIN-code); implicit → Layer 3 LLM |
 | Religious belief | ✓ zh (explicit) | 1 | Keyword/regex detection; implicit → Layer 3 LLM |
 | Political opinion | ✓ zh (explicit) | 1 | Keyword/regex detection; implicit → Layer 3 LLM |
 | Sexual orientation | ✓ zh (explicit) | 1 | Keyword/regex detection; implicit → Layer 3 LLM |
