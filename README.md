@@ -4,6 +4,10 @@
 [![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact)
 [![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/)
 [![Downloads](https://img.shields.io/pypi/dm/argus-redact)](https://pypi.org/project/argus-redact/)
+[![Python](https://img.shields.io/pypi/pyversions/argus-redact)](https://pypi.org/project/argus-redact/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![PRvL](https://img.shields.io/badge/PRvL-Gold%20(P100%25%20U100%25%20R100%25)-brightgreen)](docs/prvl-standard.md)
+[![PII Leak](https://img.shields.io/badge/PII%20Leak-0%25%20(GPT--4o%2FClaude%2FGemini)-brightgreen)](docs/prvl-standard.md)
 [![Demo](https://img.shields.io/badge/🤗-Live_Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
 
 **Encrypt PII, not meaning. Locally.**
