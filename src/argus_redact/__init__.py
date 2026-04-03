@@ -10,7 +10,7 @@ from argus_redact.report import (
     generate_report_pdf,
 )
 
-__version__ = "0.3.8"
+__version__ = "0.3.9"
 __all__ = [
     "redact", "restore", "assess_risk",
     "RedactReport",
