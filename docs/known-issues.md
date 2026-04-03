@@ -1,4 +1,4 @@
-# Known Issues — v0.3.1
+# Known Issues — v0.3.2
 
 ## Unresolved
 
