@@ -56,10 +56,12 @@ This is what compliance frameworks don't tell you: **how dangerous is it to shar
 ## Three Layers
 
 ```
-Layer 1  Regex+Score  phone, ID, bank card, email, address, person names   <1ms
+Layer 1  Rust+Regex   phone, ID, bank card, email, address, person names   <0.2ms
 Layer 2  NER          locations, organizations, standalone names           10-100ms
 Layer 3  Local LLM    implicit PII — symptoms→disease, behavior→belief     ~20s
 ```
+
+Core engine (regex matching, entity merging, restore, pseudonym generation) is written in **Rust via PyO3** for maximum performance. Python handles orchestration, NER models, and LLM integration.
 
 ~47 PII types across 4 levels — from phone numbers to medical diagnoses, religious beliefs, political opinions. Use what you need: `mode="fast"` (Layer 1 only) → `mode="ner"` (+ NER) → `mode="auto"` (all three).
 

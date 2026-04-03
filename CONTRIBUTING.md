@@ -7,9 +7,19 @@ Thank you for your interest! argus-redact is an open-source PII encryption tool 
 ```bash
 git clone https://github.com/wan9yu/argus-redact.git
 cd argus-redact
+
+# Install Rust toolchain (required for core engine)
+brew install rust        # macOS
+# or: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Build Rust core + install Python package
+pip install maturin
+maturin build --release
+pip install target/wheels/*.whl --force-reinstall
 pip install -e ".[dev]"
-./build.sh                    # lint + test + build
-./build.sh integration        # includes NER tests (needs hanlp/spacy)
+
+# Run tests
+pytest -m "not ner and not semantic and not slow"
 ```
 
 ## Good First Issues
@@ -103,10 +113,18 @@ make release
 ## Code Structure
 
 ```
+rust/src/           # Rust core (PyO3) — hot-path functions
+├── lib.rs              # Module entry point
+├── types.rs            # PatternMatch struct
+├── patterns.rs         # match_patterns() — regex engine
+├── merger.rs           # merge_entities()
+├── restore.rs          # restore()
+└── pseudonym.rs        # PseudonymGenerator
+
 src/argus_redact/
-├── pure/           # Deterministic, no side effects (Rust-ready)
+├── pure/           # Python wrappers (delegate to Rust, fallback to Python)
 │   ├── patterns.py     # match_patterns()
-│   ├── replacer.py     # replace()
+│   ├── replacer.py     # replace() — stays in Python (config dispatch)
 │   ├── restore.py      # restore()
 │   ├── merger.py        # merge_entities()
 │   └── pseudonym.py     # PseudonymGenerator
