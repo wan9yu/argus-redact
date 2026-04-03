@@ -13,7 +13,7 @@ license: apache-2.0
 
 # argus-redact — The privacy layer between you and AI.
 
-~47 PII types, 8 languages, PRvL Gold, PII leak 0% across GPT-4o/Claude/Gemini.
+Rust core · ~47 PII types · 8 languages · PRvL Gold · PII leak 0% (GPT-4o/Claude/Gemini)
 
 - **GitHub**: https://github.com/wan9yu/argus-redact
 - **PyPI**: `pip install argus-redact`
