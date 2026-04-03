@@ -91,7 +91,7 @@ Rust core (PyO3) — M1 Max, `mode="fast"`:
 
 ## North Star
 
-| Dimension | Current (v0.3.3) | Next milestone |
+| Dimension | Current (v0.3.4) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes preserve trigger words | More task types |
