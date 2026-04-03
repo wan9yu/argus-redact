@@ -87,6 +87,16 @@ Rust core (PyO3) — M1 Max, `mode="fast"`:
 | Medium (96 chars) | 0.22ms | 0.05ms | 4,654 docs/sec |
 | Long (960 chars) | 1.45ms | 0.05ms | 691 docs/sec |
 
+Pre-built wheels for all major platforms — no Rust toolchain needed to install:
+
+```
+✓ Linux x86_64 (glibc + musl/Alpine)
+✓ Linux aarch64 (Raspberry Pi + Alpine ARM)
+✓ macOS (Apple Silicon + Intel)
+✓ Windows x64
+× Python 3.10 / 3.11 / 3.12 / 3.13
+```
+
 [ai4privacy benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-400k): Email P=95% R=94%. Chinese PII F1=97%. [Benchmarks →](tests/benchmark/README.md) | [Performance →](docs/performance.md)
 
 ## North Star

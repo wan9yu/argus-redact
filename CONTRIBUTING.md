@@ -4,18 +4,20 @@ Thank you for your interest! argus-redact is an open-source PII encryption tool 
 
 ## Quick Start
 
+**Users:** Pre-built wheels available — just `pip install argus-redact`. No Rust needed.
+
+**Developers:** Need Rust toolchain to build from source:
+
 ```bash
 git clone https://github.com/wan9yu/argus-redact.git
 cd argus-redact
 
-# Install Rust toolchain (required for core engine)
+# Install Rust toolchain (required for development)
 brew install rust        # macOS
 # or: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Build Rust core + install Python package
+# Install in development mode (maturin builds Rust automatically)
 pip install maturin
-maturin build --release
-pip install target/wheels/*.whl --force-reinstall
 pip install -e ".[dev]"
 
 # Run tests
