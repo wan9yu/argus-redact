@@ -1,6 +1,6 @@
 # argus-redact
 
-[![PRvL](https://img.shields.io/badge/PRvL-Gold-brightgreen)](docs/prvl-standard.md) [![PII Leak](https://img.shields.io/badge/PII%20Leak-0%25-brightgreen)](docs/prvl-standard.md) [![Demo](https://img.shields.io/badge/🤗-Live_Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
+[![PRvL](https://img.shields.io/badge/PRvL-Gold-brightgreen)](docs/prvl-standard.md) [![PII Leak](https://img.shields.io/badge/PII%20Leak-0%25-brightgreen)](docs/prvl-standard.md) [![Rust](https://img.shields.io/badge/core-Rust%20%2B%20PyO3-orange)](Cargo.toml) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
 [![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![Downloads](https://img.shields.io/pypi/dm/argus-redact)](https://pypi.org/project/argus-redact/) [![Tests](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml/badge.svg)](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact)
 
 **Encrypt PII, not meaning. Locally.**
