@@ -111,14 +111,14 @@ PATTERNS = [
     {
         "type": "phone",
         "label": "[手机号已脱敏]",
-        "pattern": r"(?:\+86)?1[3-9]\d(?:[\s-]?\d){8}(?!\d)",
+        "pattern": r"(?<!\d)(?:\+86)?1[3-9]\d(?:[\s-]?\d){8}(?!\d)",
         "check_context": True,
         "description": "Chinese mobile phone number (with optional spaces/dashes)",
     },
     {
         "type": "phone",
         "label": "[电话号已脱敏]",
-        "pattern": r"0[1-9]\d{1,2}-?\d{7,8}(?!\d)",
+        "pattern": r"(?<!\d)0[1-9]\d{1,2}-?\d{7,8}(?!\d)",
         "description": "Chinese landline phone number",
     },
     {

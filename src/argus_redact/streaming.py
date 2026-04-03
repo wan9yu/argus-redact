@@ -1,4 +1,4 @@
-"""Streaming restore — buffer chunks and restore at sentence boundaries."""
+"""Streaming restore — buffer chunks and restore at configurable boundaries."""
 
 from __future__ import annotations
 
@@ -6,7 +6,11 @@ from argus_redact.pure.restore import restore
 
 
 class StreamingRestorer:
-    """Buffer streaming LLM output and restore PII at sentence boundaries.
+    """Buffer streaming LLM output and restore PII at boundaries.
+
+    Strategies:
+        "sentence" (default) — flush at sentence boundaries (。.！!？?；;\\n)
+        "none" — restore every chunk immediately (no buffering)
 
     Usage:
         restorer = StreamingRestorer(key)
@@ -21,12 +25,18 @@ class StreamingRestorer:
 
     BOUNDARIES = ("\n", "。", ".", "！", "!", "？", "?", "；", ";")
 
-    def __init__(self, key: dict):
+    def __init__(self, key: dict, strategy: str = "sentence"):
         self._key = key
         self._buffer = ""
+        if strategy not in ("sentence", "none"):
+            raise ValueError(f"Unknown strategy '{strategy}'. Use 'sentence' or 'none'.")
+        self._strategy = strategy
 
     def feed(self, chunk: str) -> str:
-        """Feed a chunk. Returns restored text up to last sentence boundary."""
+        """Feed a chunk. Returns restored text based on strategy."""
+        if self._strategy == "none":
+            return restore(chunk, self._key)
+
         self._buffer += chunk
 
         # Find last sentence boundary

@@ -40,7 +40,7 @@ PATTERNS = [
     {
         "type": "phone",
         "label": "[PHONE REDACTED]",
-        "pattern": (r"(?:\+1[-.\s]?)?" r"\(?\d{3}\)?[-.\s]?" r"\d{3}[-.\s]?" r"\d{4}" r"(?!\d)"),
+        "pattern": (r"(?<!\d)(?:\+1[-.\s]?)?" r"\(?\d{3}\)?[-.\s]?" r"\d{3}[-.\s]?" r"\d{4}" r"(?!\d)"),
         "description": "North American phone number",
     },
     {

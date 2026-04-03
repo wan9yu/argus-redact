@@ -60,3 +60,17 @@ class TestStreamingRestorer:
         result = restorer.feed("hello world。")
 
         assert result == "hello world。"
+
+    def test_should_restore_immediately_with_none_strategy(self):
+        _, key = redact("电话13812345678", seed=42, mode="fast")
+        redacted, _ = redact("电话13812345678", seed=42, mode="fast")
+
+        restorer = StreamingRestorer(key, strategy="none")
+        result = restorer.feed(f"结果是{redacted}")
+
+        assert "13812345678" in result  # no buffering, restored immediately
+
+    def test_should_raise_on_unknown_strategy(self):
+        import pytest
+        with pytest.raises(ValueError, match="Unknown strategy"):
+            StreamingRestorer({}, strategy="invalid")
