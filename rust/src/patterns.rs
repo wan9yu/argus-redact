@@ -100,7 +100,7 @@ pub fn match_patterns(text: &str, patterns: Vec<Bound<'_, PyDict>>) -> PyResult<
             .ok()
             .flatten()
             .and_then(|v| v.extract().ok());
-        let has_validate: bool = pat
+        let _has_validate: bool = pat
             .get_item("validate")
             .ok()
             .flatten()

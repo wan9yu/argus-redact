@@ -10,7 +10,7 @@ pub struct PseudonymGenerator {
     entity_to_code: HashMap<String, String>,
     used_codes: HashSet<String>,
     /// Python random.Random instance (for seed compatibility) or None (use secrets)
-    rng: Option<PyObject>,
+    rng: Option<Py<PyAny>>,
     use_secrets: bool,
 }
 

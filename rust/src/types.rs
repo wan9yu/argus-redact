@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 
 /// A PII match detected by regex pattern.
-#[pyclass(frozen, get_all)]
+#[pyclass(frozen, get_all, from_py_object)]
 #[derive(Clone, Debug)]
 pub struct PatternMatch {
     pub text: String,
