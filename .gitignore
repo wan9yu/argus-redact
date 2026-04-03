@@ -12,3 +12,5 @@ htmlcov/
 marketing/
 tests/benchmark/data/
 .claude/
+_core*.so
+target/
