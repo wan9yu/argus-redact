@@ -227,7 +227,7 @@ class TestInfoCommand:
 
         assert code == 0
         assert "argus-redact" in stdout
-        assert "0.3.4" in stdout
+        assert "0.3.5" in stdout
 
     def test_should_show_all_languages_when_info(self):
         code, stdout, _ = run_cli("info")
