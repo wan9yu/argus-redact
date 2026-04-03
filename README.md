@@ -87,7 +87,7 @@ Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张�
 
 ## North Star
 
-| Dimension | Current (v0.2.1) | Next milestone |
+| Dimension | Current (v0.2.2) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes preserve trigger words | More task types |

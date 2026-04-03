@@ -9,6 +9,34 @@ from typing import Any
 from argus_redact import redact, restore
 
 
+def _parse_paths(paths: list[str]) -> list[list[str]]:
+    """Parse dot-notation paths into segments. 'messages[*].content' → ['messages', '*', 'content']."""
+    parsed = []
+    for path in paths:
+        segments = []
+        for part in path.replace("[*]", ".*").split("."):
+            segments.append(part)
+        parsed.append(segments)
+    return parsed
+
+
+def _path_matches(current_path: list[str], target_paths: list[list[str]]) -> bool:
+    """Check if current_path matches any of the target paths."""
+    for target in target_paths:
+        if len(current_path) != len(target):
+            continue
+        match = True
+        for c, t in zip(current_path, target):
+            if t == "*":
+                continue
+            if c != t:
+                match = False
+                break
+        if match:
+            return True
+    return False
+
+
 def redact_json(
     data: dict | list,
     *,
@@ -17,17 +45,29 @@ def redact_json(
     seed: int | None = None,
     config: dict | None = None,
     key: dict | None = None,
+    paths: list[str] | None = None,
 ) -> tuple[dict | list, dict]:
-    """Redact PII in all string values of a JSON-like structure.
+    """Redact PII in string values of a JSON-like structure.
 
-    Recursively walks dicts and lists, redacting string values.
-    Non-string values (int, float, bool, None) are left unchanged.
+    Args:
+        paths: If specified, only redact strings at these paths.
+               Supports dot notation and [*] wildcards:
+               - "messages[*].content" — all content fields in messages array
+               - "user.phone" — nested field
+               - "sender" — top-level field
+               If None, all string values are redacted (original behavior).
     """
     combined_key = dict(key) if key else {}
+    parsed_paths = _parse_paths(paths) if paths else None
 
-    def _walk(obj: Any) -> Any:
+    def _walk(obj: Any, current_path: list[str] | None = None) -> Any:
         nonlocal combined_key
+        if current_path is None:
+            current_path = []
+
         if isinstance(obj, str):
+            if parsed_paths is not None and not _path_matches(current_path, parsed_paths):
+                return obj  # path not in whitelist, skip
             redacted_text, combined_key = redact(
                 obj,
                 mode=mode,
@@ -38,9 +78,9 @@ def redact_json(
             )
             return redacted_text
         if isinstance(obj, dict):
-            return {k: _walk(v) for k, v in obj.items()}
+            return {k: _walk(v, current_path + [k]) for k, v in obj.items()}
         if isinstance(obj, list):
-            return [_walk(item) for item in obj]
+            return [_walk(item, current_path + ["*"]) for item in obj]
         return obj
 
     result = _walk(data)

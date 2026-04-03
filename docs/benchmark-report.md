@@ -1,6 +1,6 @@
 # Benchmark Report
 
-> **Environment:** Apple M1 Max, Python 3.11, argus-redact v0.2.1, Presidio 2.2.362, spaCy 3.8 (en_core_web_sm)
+> **Environment:** Apple M1 Max, Python 3.11, argus-redact v0.2.2, Presidio 2.2.362, spaCy 3.8 (en_core_web_sm)
 >
 > **Date:** 2026-03-26
 
