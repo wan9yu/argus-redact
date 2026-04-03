@@ -24,11 +24,9 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build Rust core + install
+      - name: Install dependencies
         run: |
           pip install maturin
-          maturin build --release -q
-          pip install target/wheels/*.whl --force-reinstall
           pip install -e ".[dev]"
 
       - name: Run tests
