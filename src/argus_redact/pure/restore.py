@@ -2,20 +2,11 @@
 
 from __future__ import annotations
 
-import re
-
 
 def restore(text: str, key: dict | str) -> str:
-    """Replace pseudonyms with originals using the key.
-
-    Uses regex-based single-pass replacement to avoid injection:
-    - All markers are matched simultaneously in one pass
-    - Replaced text is never re-scanned for further matches
-    - Longest markers are preferred when overlapping
-    """
+    """Replace pseudonyms with originals using the key."""
     if isinstance(key, str):
         import json
-
         with open(key, encoding="utf-8") as f:
             key = json.load(f)
 
@@ -25,9 +16,15 @@ def restore(text: str, key: dict | str) -> str:
     if not key:
         return text
 
-    # Build regex: longest markers first, all escaped
+    try:
+        from argus_redact._core import restore as _rust_restore
+        return _rust_restore(text, key)
+    except ImportError:
+        pass
+
+    # Python fallback
+    import re
     sorted_keys = sorted(key.keys(), key=len, reverse=True)
     pattern = "|".join(re.escape(k) for k in sorted_keys)
     regex = re.compile(pattern)
-
     return regex.sub(lambda m: key[m.group()], text)
