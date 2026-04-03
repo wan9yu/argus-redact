@@ -79,11 +79,13 @@ Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张�
 
 ## Performance
 
-| | M1 Max | Raspberry Pi Zero 2W |
-|-|--------|---------------------|
-| Throughput | 42,789 docs/sec | 3,433 docs/sec |
-| Medium text (770 chars) | 0.28ms | 4.29ms |
-| restore() | <0.01ms | 0.04ms |
+Rust core (PyO3) — M1 Max, `mode="fast"`:
+
+| Text | redact() | restore() | Throughput |
+|------|:--------:|:---------:|:----------:|
+| Short (13 chars) | 0.06ms | 0.005ms | 17,879 docs/sec |
+| Medium (96 chars) | 0.22ms | 0.05ms | 4,654 docs/sec |
+| Long (960 chars) | 1.45ms | 0.05ms | 691 docs/sec |
 
 [ai4privacy benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-400k): Email P=95% R=94%. Chinese PII F1=97%. [Benchmarks →](tests/benchmark/README.md) | [Performance →](docs/performance.md)
 
