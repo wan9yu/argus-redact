@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import secrets
 
 
 def max_pseudonym_length(config: dict | None = None) -> int:
@@ -21,7 +22,6 @@ def max_pseudonym_length(config: dict | None = None) -> int:
         return 7  # "P-00000"
     longest_prefix = max(len(p) for p in prefixes)
     return longest_prefix + 1 + 5  # prefix + "-" + 5 digits
-import secrets
 
 
 def generate_pseudonym(
