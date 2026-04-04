@@ -117,6 +117,7 @@ def redact(
     names: list[str] | None = None,
     detailed: bool = False,
     report: bool = False,
+    with_types: bool = False,
     profile: str | None = None,
     types: list[str] | None = None,
     types_exclude: list[str] | None = None,
@@ -126,6 +127,7 @@ def redact(
     Args:
         names: List of known names/entities to always redact (no NER needed).
         report: Return a RedactReport with risk assessment and audit info.
+        with_types: Return a 3-tuple (redacted, key, types) where types maps replacement→PII type.
         profile: Compliance profile name ("default", "pipl", "gdpr", "hipaa").
         types: Whitelist of PII type names to detect.
         types_exclude: Blacklist of PII type names to skip.
@@ -269,6 +271,16 @@ def redact(
             encoding="utf-8",
         )
         tmp.replace(target)
+
+    if with_types and not detailed and not report:
+        # Build replacement → PII type mapping
+        reverse_key = {v: k for k, v in result_key.items()}
+        type_map = {}
+        for e in entities:
+            replacement = reverse_key.get(e.text, "")
+            if replacement:
+                type_map[replacement] = e.type
+        return redacted, result_key, type_map
 
     if detailed or report:
         reverse_key = {v: k for k, v in result_key.items()}
