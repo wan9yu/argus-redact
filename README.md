@@ -101,7 +101,7 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 
 ## North Star
 
-| Dimension | Current (v0.4.0) | Next milestone |
+| Dimension | Current (v0.4.1) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes preserve trigger words | More task types |
