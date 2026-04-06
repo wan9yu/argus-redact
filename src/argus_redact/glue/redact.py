@@ -147,6 +147,13 @@ def redact(
     if not isinstance(text, str):
         raise TypeError(f"text must be a string, got {type(text).__name__}")
 
+    from argus_redact.pure.normalize import MAX_INPUT_SIZE
+    if len(text) > MAX_INPUT_SIZE:
+        raise ValueError(
+            f"Input text ({len(text)} bytes) exceeds maximum allowed size "
+            f"({MAX_INPUT_SIZE} bytes). Split into smaller chunks."
+        )
+
     if mode not in VALID_MODES:
         raise ValueError(f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}")
 
@@ -192,9 +199,31 @@ def redact(
     entities: list[PatternMatch] = []
     langs = [lang] if isinstance(lang, str) else list(lang)
 
+    # Unicode normalization: detect on normalized text, replace on original
+    from argus_redact.pure.normalize import normalize_text, map_spans_to_original
+    normalized, offset_map = normalize_text(text)
+    use_normalized = (normalized != text)
+
     # Layer 1a: regex (structural PII — phone, ID, bank card, etc.)
     t0 = time.perf_counter()
-    layer1 = match_patterns(text, _load_patterns(lang))
+    detect_text = normalized if use_normalized else text
+    layer1_raw = match_patterns(detect_text, _load_patterns(lang))
+
+    # Map normalized offsets back to original text
+    if use_normalized and layer1_raw:
+        mapped_spans = map_spans_to_original(
+            [(e.start, e.end) for e in layer1_raw], offset_map, len(text),
+        )
+        layer1 = [
+            PatternMatch(
+                text=text[s:e], type=e_orig.type, start=s, end=e,
+                confidence=e_orig.confidence, layer=e_orig.layer,
+            )
+            for e_orig, (s, e) in zip(layer1_raw, mapped_spans)
+        ]
+    else:
+        layer1 = layer1_raw
+
     timing["layer_1_ms"] = (time.perf_counter() - t0) * 1000
     entities.extend(_tag_layer(layer1, 1))
     layer1_count = len(layer1)

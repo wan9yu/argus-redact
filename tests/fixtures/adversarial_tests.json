@@ -174,9 +174,9 @@
     "id": "edge_fullwidth_numbers",
     "input": "电话：１３８１２３４５６７８",
     "lang": "zh",
-    "should_find_pii": false,
-    "expected_pii_count": 0,
-    "description": "Chinese phone number written with fullwidth Unicode digits; naive regex with [0-9] or \\d may not match",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "Chinese phone number written with fullwidth Unicode digits; NFKC normalization converts to halfwidth before matching",
     "category": "edge_case"
   },
   {
@@ -210,9 +210,9 @@
     "id": "edge_zero_width_space_in_phone",
     "input": "Call me at 138​1234​5678",
     "lang": "zh",
-    "should_find_pii": false,
-    "expected_pii_count": 0,
-    "description": "Phone number with zero-width spaces (U+200B) inserted; regex should not match through invisible characters",
+    "should_find_pii": true,
+    "expected_pii_count": 1,
+    "description": "Phone number with zero-width spaces (U+200B) inserted; normalization strips invisible chars before matching",
     "category": "edge_case"
   },
   {
