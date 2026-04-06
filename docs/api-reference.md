@@ -331,6 +331,55 @@ restore("[某公司总部]开会", {"[某公司]": "阿里", "[某公司总部]"
 
 ---
 
+## check_restore_safety()
+
+```python
+from argus_redact import check_restore_safety
+
+check_restore_safety(
+    redacted: str,
+    llm_output: str,
+    key: dict[str, str],
+) -> list[str]
+```
+
+Check if LLM output shows signs of prompt injection by detecting pseudonym amplification. Returns a list of warning strings (empty = safe).
+
+```python
+redacted, key = redact("张三在医院看病", names=["张三"])
+llm_output = call_llm(redacted)
+
+warnings = check_restore_safety(redacted, llm_output, key)
+if warnings:
+    print("Possible injection detected:", warnings)
+else:
+    restored = restore(llm_output, key)
+```
+
+Warns when a pseudonym code appears more times in the LLM output than in the original redacted text.
+
+---
+
+## wipe_key()
+
+```python
+from argus_redact import wipe_key
+
+wipe_key(key: dict) -> None
+```
+
+Clear a key dict to minimize PII exposure in memory. Removes all entries so references can be garbage collected sooner.
+
+```python
+redacted, key = redact(text)
+restored = restore(llm_output, key)
+wipe_key(key)  # done with key, clear it
+```
+
+**Limitation:** Python strings are immutable and cannot be securely erased from memory. `wipe_key` removes dict references but string content may persist until GC. For high-security scenarios, run argus-redact in a short-lived process.
+
+---
+
 ## Key Format
 
 The key is a `dict[str, str]` mapping replacements to originals:

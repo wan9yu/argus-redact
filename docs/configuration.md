@@ -13,7 +13,24 @@ redacted, key = redact(text, config={
     "phone": {"strategy": "remove", "replacement": "[TEL]"},
     "person": {"strategy": "pseudonym", "prefix": "PERSON"},
 })
+
+# Compliance profiles override strategies for stricter privacy
+redacted, key = redact(text, profile="pipl")   # phone → remove (no mask leakage)
+redacted, key = redact(text, profile="hipaa")  # phone → remove
 ```
+
+### Profile Strategy Overrides
+
+Compliance profiles (`pipl`, `gdpr`, `hipaa`) automatically override `mask` strategies to `remove` for types where partial information leakage is a risk:
+
+| Type | Default strategy | Profile override | Why |
+|------|:---:|:---:|-----|
+| phone | mask (`138****5678`) | remove (`PHON-XXXXX`) | 3+4 visible digits narrow to ~10K numbers |
+| email | mask (`z***@example.com`) | remove | Domain + partial local part reveals identity |
+| bank_card | mask | remove | BIN prefix + last 4 digits identify issuer + card |
+| credit_card | mask | remove | Same as bank_card |
+
+User config overrides profile config: `redact(text, profile="pipl", config={"phone": {"strategy": "mask"}})` uses mask despite PIPL profile.
 
 ---
 

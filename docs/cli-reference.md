@@ -122,7 +122,7 @@ argus-redact info
 ### Output
 
 ```
-argus-redact v0.4.2
+argus-redact v0.4.3
 
 Languages:
   zh  Chinese    regex (14+ patterns) + NER
@@ -155,7 +155,7 @@ argus-redact serve --port 9000        # custom port
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--host` | `0.0.0.0` | Bind address |
+| `--host` | `127.0.0.1` | Bind address (localhost only; use `--host 0.0.0.0` to expose) |
 | `--port` | `8000` | Port number |
 
 ### Endpoints
