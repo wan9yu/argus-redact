@@ -14,6 +14,7 @@ from argus_redact._types import PatternMatch
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.grammar import normalize_grammar_en
 from argus_redact.pure.normalize import MAX_INPUT_SIZE, map_spans_to_original, normalize_text
+from argus_redact.telemetry import PerfRecord, emit, get_perf_hook
 from argus_redact.pure.hints import (
     boost_cross_layer, filter_self_reference, get_ner_min_confidence,
     get_person_threshold, produce_hints, should_skip_ner,
@@ -23,6 +24,42 @@ from argus_redact.pure.patterns import match_patterns
 from argus_redact.pure.replacer import replace
 
 logger = logging.getLogger(__name__)
+
+# Cached telemetry constants (resolved once at import, not per-call)
+try:
+    from argus_redact._core import merge_entities as _unused  # noqa: F401
+    _RUST_CORE = True
+except ImportError:
+    _RUST_CORE = False
+
+
+def _telemetry_hook_active() -> bool:
+    return get_perf_hook() is not None
+
+
+def _emit_telemetry(
+    text: str, timing: dict, entities: list, langs: list[str], mode: str,
+) -> None:
+    ascii_count = sum(1 for c in text if c.isascii()) if text else 0
+    emit(PerfRecord(
+        version=importlib.import_module("argus_redact").__version__,
+        timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
+        text_len=len(text),
+        text_ascii_ratio=round(ascii_count / len(text), 2) if text else 0.0,
+        lang=langs,
+        mode=mode,
+        normalize_ms=round(timing.get("normalize_ms", 0), 2),
+        layer_1_ms=round(timing.get("layer_1_ms", 0), 2),
+        layer_1b_person_ms=round(timing.get("layer_1b_person_ms", 0), 2),
+        layer_2_ms=round(timing.get("layer_2_ms", 0), 2),
+        layer_3_ms=round(timing.get("layer_3_ms", 0), 2),
+        merge_ms=round(timing.get("merge_ms", 0), 2),
+        replace_ms=round(timing.get("replace_ms", 0), 2),
+        total_ms=round(sum(timing.values()), 2),
+        entities_found=len(entities),
+        entity_types=sorted(set(e.type for e in entities)),
+        rust_core=_RUST_CORE,
+    ))
 
 _LANG_PATTERNS = {
     "zh": "argus_redact.lang.zh.patterns",
@@ -332,33 +369,9 @@ def redact(
         redacted = normalize_grammar_en(redacted, result_key)
     timing["replace_ms"] = (time.perf_counter() - t0) * 1000
 
-    # Emit telemetry (no-op if no hook set)
-    from argus_redact.telemetry import emit, PerfRecord
-    _ascii_count = sum(1 for c in text if c.isascii()) if text else 0
-    try:
-        _rust = True
-        from argus_redact._core import merge_entities as _  # noqa: F401
-    except ImportError:
-        _rust = False
-    emit(PerfRecord(
-        version=importlib.import_module("argus_redact").__version__,
-        timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
-        text_len=len(text),
-        text_ascii_ratio=round(_ascii_count / len(text), 2) if text else 0.0,
-        lang=langs,
-        mode=mode,
-        normalize_ms=round(timing.get("normalize_ms", 0), 2),
-        layer_1_ms=round(timing.get("layer_1_ms", 0), 2),
-        layer_1b_person_ms=round(timing.get("layer_1b_person_ms", 0), 2),
-        layer_2_ms=round(timing.get("layer_2_ms", 0), 2),
-        layer_3_ms=round(timing.get("layer_3_ms", 0), 2),
-        merge_ms=round(timing.get("merge_ms", 0), 2),
-        replace_ms=round(timing.get("replace_ms", 0), 2),
-        total_ms=round(sum(timing.values()), 2),
-        entities_found=len(entities),
-        entity_types=sorted(set(e.type for e in entities)),
-        rust_core=_rust,
-    ))
+    # Emit telemetry — zero overhead when no hook set
+    if _telemetry_hook_active():
+        _emit_telemetry(text, timing, entities, langs, mode)
 
     if key_file is not None and result_key:
         target = Path(key_file)
