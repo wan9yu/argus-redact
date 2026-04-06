@@ -6,98 +6,6 @@ import re
 
 from argus_redact._types import Hint, PatternMatch
 
-# ── Digit-equivalent characters (for suspicious sequence detection) ──
-
-_DIGIT_EQUIV: dict[str, str] = {
-    # Chinese lowercase
-    "一": "1", "二": "2", "三": "3", "四": "4", "五": "5",
-    "六": "6", "七": "7", "八": "8", "九": "9", "零": "0",
-    # Chinese formal (大写)
-    "壹": "1", "贰": "2", "叁": "3", "肆": "4", "伍": "5",
-    "陆": "6", "柒": "7", "捌": "8", "玖": "9",
-}
-# Separators allowed inside a digit sequence (stripped during normalization)
-_DIGIT_SEPARATORS = frozenset(" \t.-/，、·;；:：")
-_MIN_SUSPICIOUS_LENGTH = 7
-
-
-def _scan_suspicious_digits(
-    text: str, entities: list[PatternMatch],
-) -> list[Hint]:
-    """Scan for sequences of digit-equivalent characters not caught by regex.
-
-    Treats ASCII digits + Chinese digits (大小写) as equivalent.
-    Emits hints for sequences of 7+ digit-equivalents (with optional separators).
-    Skips regions already covered by L1 entities.
-    """
-    covered = set()
-    for e in entities:
-        for i in range(e.start, e.end):
-            covered.add(i)
-
-    hints: list[Hint] = []
-    i = 0
-    n = len(text)
-
-    while i < n:
-        if i in covered:
-            i += 1
-            continue
-
-        ch = text[i]
-        digit = _DIGIT_EQUIV.get(ch) or (ch if ch.isdigit() else None)
-        if digit is None:
-            i += 1
-            continue
-
-        # Found a digit-equiv char — scan the full sequence
-        seq_start = i
-        last_digit_pos = i
-        normalized = [digit]
-        i += 1
-
-        while i < n:
-            ch = text[i]
-            if ch in _DIGIT_SEPARATORS:
-                i += 1
-                continue
-            d = _DIGIT_EQUIV.get(ch) or (ch if ch.isdigit() else None)
-            if d is None:
-                break
-            if i in covered:
-                break
-            normalized.append(d)
-            last_digit_pos = i
-            i += 1
-
-        # Trim trailing separators: end at last digit, not last separator
-        i = last_digit_pos + 1
-
-        norm_str = "".join(normalized)
-        # Only emit if sequence is long enough AND contains non-ASCII digit-equiv
-        # (pure ASCII digit sequences are already handled by regex)
-        has_non_ascii = any(text[j] in _DIGIT_EQUIV for j in range(seq_start, i) if j < n)
-        if len(norm_str) >= _MIN_SUSPICIOUS_LENGTH and has_non_ascii:
-            hints.append(Hint(
-                type="suspicious_digit_sequence",
-                region=(seq_start, i),
-                data={"normalized": norm_str, "reason": "digit_equivalent_sequence"},
-            ))
-        # Also emit for pure ASCII digits with frequent separators (not just 1 dot in a sentence)
-        elif len(norm_str) >= _MIN_SUSPICIOUS_LENGTH and not has_non_ascii:
-            original = text[seq_start:i]
-            sep_count = len(original) - len(norm_str)
-            # Require separators to be at least 30% of the span (e.g., 1.3.8.0.0 = 50%)
-            if sep_count >= 3 and sep_count / len(original) > 0.25:
-                hints.append(Hint(
-                    type="suspicious_digit_sequence",
-                    region=(seq_start, i),
-                    data={"normalized": norm_str, "reason": "unusual_separator"},
-                ))
-
-    return hints
-
-
 # ── Kinship terms (always Tier 1) ──
 
 _KINSHIP_ZH = {
@@ -168,9 +76,6 @@ def produce_hints(
     else:
         density_level = "none"
     hints.append(Hint(type="pii_density", data={"level": density_level, "count": pii_count}))
-
-    # Suspicious digit sequences (Chinese digits, unusual separators, mixed)
-    hints.extend(_scan_suspicious_digits(text, entities))
 
     if not self_refs:
         intent = "narrative" if others else "neutral"

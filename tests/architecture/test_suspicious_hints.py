@@ -1,114 +1,70 @@
-"""Tests for suspicious digit sequence hint — L1 detects, L2 verifies."""
+"""Tests for Chinese digit normalization — integrated into normalize pipeline.
 
-from argus_redact._types import Hint, PatternMatch
+Chinese/formal digit sequences are normalized to ASCII digits in normalize_text(),
+so existing regex patterns match them directly. No separate hint/scanner needed.
+"""
+
+from argus_redact.pure.normalize import normalize_text
 
 
-class TestSuspiciousDigitProducer:
-    """L1 should detect sequences of digit-equivalent characters."""
+class TestChineseDigitNormalization:
+    """normalize_text should convert 7+ Chinese digit sequences to ASCII."""
+
+    def test_should_normalize_chinese_digit_phone(self):
+        text = "手机号一三八零零一三八零零零"
+        norm, omap = normalize_text(text)
+
+        assert "13800138000" in norm
+        assert omap is not None
+
+    def test_should_normalize_mixed_chinese_ascii(self):
+        text = "电话一38零零1三8零零0"
+        norm, omap = normalize_text(text)
+
+        assert "13800138000" in norm
+
+    def test_should_normalize_formal_chinese_digits(self):
+        text = "号码壹叁捌零零壹叁捌零零零"
+        norm, omap = normalize_text(text)
+
+        assert "13800138000" in norm
+
+    def test_should_not_normalize_short_sequences(self):
+        text = "三月份去了五层楼"
+        norm, omap = normalize_text(text)
+
+        assert "三" in norm  # not converted
+        assert "五" in norm  # not converted
+
+    def test_should_not_normalize_isolated_digits(self):
+        text = "第一名和第二名"
+        norm, omap = normalize_text(text)
+
+        assert "一" in norm
+        assert "二" in norm
+
+    def test_should_preserve_offset_mapping(self):
+        text = "他的手机一三八零零一三八零零零好记"
+        norm, omap = normalize_text(text)
+
+        assert "13800138000" in norm
+        # Offset map should point back to original positions
+        idx = norm.index("1")
+        assert omap[idx] == 4  # "一" is at position 4 in original
+
+
+class TestChineseDigitEndToEnd:
+    """Full pipeline: redact() should detect and roundtrip Chinese digit PII."""
 
     def test_should_detect_chinese_digit_phone(self):
-        from argus_redact.pure.hints import produce_hints
-
-        # Pre-condition: L1 regex found nothing (Chinese digits don't match \d)
-        entities = []
-        text = "手机号一三八零零一三八零零零"
-
-        hints = produce_hints(entities, text)
-
-        suspicious = [h for h in hints if h.type == "suspicious_digit_sequence"]
-        assert len(suspicious) >= 1
-        assert suspicious[0].data["normalized"] == "13800138000"
-
-    def test_should_detect_mixed_chinese_ascii_digits(self):
-        from argus_redact.pure.hints import produce_hints
-
-        entities = []
-        text = "电话一38零零1三8零零0"
-
-        hints = produce_hints(entities, text)
-
-        suspicious = [h for h in hints if h.type == "suspicious_digit_sequence"]
-        assert len(suspicious) >= 1
-        assert suspicious[0].data["normalized"] == "13800138000"
-
-    def test_should_detect_formal_chinese_digits(self):
-        from argus_redact.pure.hints import produce_hints
-
-        entities = []
-        text = "号码壹叁捌零零壹叁捌零零零"
-
-        hints = produce_hints(entities, text)
-
-        suspicious = [h for h in hints if h.type == "suspicious_digit_sequence"]
-        assert len(suspicious) >= 1
-        assert "13800138000" in suspicious[0].data["normalized"]
-
-    def test_should_detect_digits_with_dot_separators(self):
-        from argus_redact.pure.hints import produce_hints
-
-        entities = []
-        text = "号码1.3.8.0.0.1.3.8.0.0.0"
-
-        hints = produce_hints(entities, text)
-
-        suspicious = [h for h in hints if h.type == "suspicious_digit_sequence"]
-        assert len(suspicious) >= 1
-        assert suspicious[0].data["normalized"] == "13800138000"
-
-    def test_should_not_detect_short_sequences(self):
-        from argus_redact.pure.hints import produce_hints
-
-        entities = []
-        text = "三月份去了五层楼"
-
-        hints = produce_hints(entities, text)
-
-        suspicious = [h for h in hints if h.type == "suspicious_digit_sequence"]
-        assert len(suspicious) == 0
-
-    def test_should_not_detect_when_regex_already_matched(self):
-        """If L1 regex already found the PII, no need for suspicious hint."""
-        from argus_redact.pure.hints import produce_hints
-
-        entities = [
-            PatternMatch(text="13800138000", type="phone", start=3, end=14),
-        ]
-        text = "电话13800138000"
-
-        hints = produce_hints(entities, text)
-
-        suspicious = [h for h in hints if h.type == "suspicious_digit_sequence"]
-        assert len(suspicious) == 0
-
-    def test_should_include_region_in_hint(self):
-        from argus_redact.pure.hints import produce_hints
-
-        entities = []
-        text = "他的手机一三八零零一三八零零零好记"
-
-        hints = produce_hints(entities, text)
-
-        suspicious = [h for h in hints if h.type == "suspicious_digit_sequence"]
-        assert len(suspicious) >= 1
-        start, end = suspicious[0].region
-        assert start >= 4  # after "他的手机"
-        assert end <= len(text) - 2  # before "好记"
-
-
-class TestSuspiciousDigitConsumer:
-    """L2-level consumer: verify suspicious sequences against PII patterns."""
-
-    def test_should_detect_chinese_digit_phone_via_hint(self):
-        """End-to-end: redact() should detect phone written in Chinese digits."""
         from argus_redact import redact
 
         text = "手机号一三八零零一三八零零零"
         redacted, key = redact(text, seed=42, mode="fast")
 
-        # The phone should be detected via suspicious hint → pattern match
         assert len(key) >= 1
 
-    def test_should_detect_mixed_digit_phone_via_hint(self):
+    def test_should_detect_mixed_digit_phone(self):
         from argus_redact import redact
 
         text = "电话一38零零1三8零零0"
@@ -123,5 +79,12 @@ class TestSuspiciousDigitConsumer:
         redacted, key = redact(text, seed=42, mode="fast")
         restored = restore(redacted, key)
 
-        # Original Chinese digits should be recoverable
         assert "一三八" in restored
+
+    def test_should_not_false_positive_on_natural_text(self):
+        from argus_redact import redact
+
+        text = "三月份去了五层楼，买了一个苹果"
+        redacted, key = redact(text, seed=42, mode="fast")
+
+        assert key == {}
