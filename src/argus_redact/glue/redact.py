@@ -13,7 +13,10 @@ import re as _re
 from argus_redact._types import PatternMatch
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.grammar import normalize_grammar_en
-from argus_redact.pure.hints import filter_self_reference, get_person_threshold, produce_hints
+from argus_redact.pure.hints import (
+    filter_self_reference, get_ner_min_confidence, get_person_threshold,
+    produce_hints, should_skip_ner,
+)
 from argus_redact.pure.merger import merge_entities
 from argus_redact.pure.patterns import match_patterns
 from argus_redact.pure.replacer import replace
@@ -222,14 +225,15 @@ def redact(
                 )
                 layer1_count += 1
 
-    # Layer 2: NER (auto or ner mode)
+    # Layer 2: NER (auto or ner mode), hint-gated
     layer2_count = 0
-    if mode in ("auto", "ner"):
+    if mode in ("auto", "ner") and not should_skip_ner(hints):
         from argus_redact.impure.ner import detect_ner
 
+        ner_confidence = get_ner_min_confidence(hints)
         t0 = time.perf_counter()
         for adapter in _get_ner_adapters(lang):
-            ner_entities = detect_ner(text, adapter=adapter)
+            ner_entities = detect_ner(text, adapter=adapter, min_confidence=ner_confidence)
             layer2_matches = [e.to_pattern_match(layer=2) for e in ner_entities]
             entities.extend(layer2_matches)
             layer2_count += len(layer2_matches)

@@ -185,3 +185,116 @@ class TestConsumeHints:
         result = filter_self_reference(entities, hints)
 
         assert not any(e.type == "self_reference" for e in result), "Tier 3: drop"
+
+
+class TestPiiDensityHint:
+    """L1a should emit pii_density hint based on entity count."""
+
+    def test_should_produce_high_density_when_multiple_pii(self):
+        from argus_redact.pure.hints import produce_hints
+
+        entities = [
+            PatternMatch(text="13812345678", type="phone", start=2, end=13),
+            PatternMatch(text="110101199003074610", type="id_number", start=18, end=36),
+            PatternMatch(text="test@example.com", type="email", start=40, end=56),
+        ]
+
+        hints = produce_hints(entities, text="电话13812345678，身份证110101199003074610，邮箱test@example.com")
+
+        density = [h for h in hints if h.type == "pii_density"]
+        assert len(density) == 1
+        assert density[0].data["level"] == "high"
+        assert density[0].data["count"] == 3
+
+    def test_should_produce_low_density_when_no_pii(self):
+        from argus_redact.pure.hints import produce_hints
+
+        hints = produce_hints([], text="今天天气不错")
+
+        density = [h for h in hints if h.type == "pii_density"]
+        assert len(density) == 1
+        assert density[0].data["level"] == "none"
+        assert density[0].data["count"] == 0
+
+    def test_should_produce_medium_density_when_one_pii(self):
+        from argus_redact.pure.hints import produce_hints
+
+        entities = [
+            PatternMatch(text="13812345678", type="phone", start=2, end=13),
+        ]
+
+        hints = produce_hints(entities, text="电话13812345678")
+
+        density = [h for h in hints if h.type == "pii_density"]
+        assert density[0].data["level"] == "medium"
+
+    def test_should_not_count_self_reference_as_pii(self):
+        from argus_redact.pure.hints import produce_hints
+
+        entities = [
+            PatternMatch(text="我", type="self_reference", start=0, end=1),
+        ]
+
+        hints = produce_hints(entities, text="我觉得天气很好")
+
+        density = [h for h in hints if h.type == "pii_density"]
+        assert density[0].data["count"] == 0
+
+
+class TestNerHintConsumers:
+    """L2 NER should consume hints to adjust behavior."""
+
+    def test_should_skip_ner_when_instruction(self):
+        from argus_redact.pure.hints import should_skip_ner
+
+        hints = [Hint(type="text_intent", data={"intent": "instruction"})]
+
+        assert should_skip_ner(hints) is True
+
+    def test_should_not_skip_ner_when_narrative(self):
+        from argus_redact.pure.hints import should_skip_ner
+
+        hints = [Hint(type="text_intent", data={"intent": "narrative"})]
+
+        assert should_skip_ner(hints) is False
+
+    def test_should_not_skip_ner_when_no_hints(self):
+        from argus_redact.pure.hints import should_skip_ner
+
+        assert should_skip_ner([]) is False
+
+    def test_should_lower_confidence_when_high_density(self):
+        from argus_redact.pure.hints import get_ner_min_confidence
+
+        hints = [Hint(type="pii_density", data={"level": "high", "count": 3})]
+
+        conf = get_ner_min_confidence(hints)
+
+        assert conf < 0.5, "High PII density should lower NER threshold"
+
+    def test_should_raise_confidence_when_no_density(self):
+        from argus_redact.pure.hints import get_ner_min_confidence
+
+        hints = [Hint(type="pii_density", data={"level": "none", "count": 0})]
+
+        conf = get_ner_min_confidence(hints)
+
+        assert conf >= 0.5
+
+    def test_should_default_confidence_when_no_hints(self):
+        from argus_redact.pure.hints import get_ner_min_confidence
+
+        conf = get_ner_min_confidence([])
+
+        assert conf == 0.5
+
+    def test_should_not_skip_ner_when_instruction_but_has_pii(self):
+        """Even instruction text should run NER if L1 found PII."""
+        from argus_redact.pure.hints import should_skip_ner
+
+        hints = [
+            Hint(type="text_intent", data={"intent": "instruction"}),
+            Hint(type="pii_density", data={"level": "medium", "count": 1}),
+        ]
+
+        assert should_skip_ner(hints) is False

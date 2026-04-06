@@ -67,8 +67,17 @@ def produce_hints(
     for e in entities:
         (self_refs if e.type == "self_reference" else others).append(e)
 
+    # PII density (always emitted, excludes self_reference)
+    pii_count = len(others)
+    if pii_count >= 3:
+        density_level = "high"
+    elif pii_count >= 1:
+        density_level = "medium"
+    else:
+        density_level = "none"
+    hints.append(Hint(type="pii_density", data={"level": density_level, "count": pii_count}))
+
     if not self_refs:
-        # text_intent: no self-reference
         intent = "narrative" if others else "neutral"
         hints.append(Hint(type="text_intent", data={"intent": intent}))
         return hints
@@ -141,8 +150,44 @@ def filter_self_reference(
 
 
 def _get_self_reference_tier(hints: list[Hint]) -> int | None:
-    """Extract self_reference tier from hints."""
     for h in hints:
         if h.type == "self_reference_tier":
             return h.data.get("tier")
     return None
+
+
+# ── L2 NER consumers ──
+
+_DEFAULT_NER_CONFIDENCE = 0.5
+
+
+def should_skip_ner(hints: list[Hint]) -> bool:
+    """Decide whether to skip NER entirely based on hints.
+
+    Skip when text is an instruction AND has no PII detected by L1.
+    """
+    intent = None
+    pii_count = 0
+    for h in hints:
+        if h.type == "text_intent":
+            intent = h.data.get("intent")
+        elif h.type == "pii_density":
+            pii_count = h.data.get("count", 0)
+
+    return intent == "instruction" and pii_count == 0
+
+
+def get_ner_min_confidence(hints: list[Hint]) -> float:
+    """Adjust NER min_confidence based on PII density hints.
+
+    High PII density → lower threshold (more aggressive NER, find more names)
+    No PII → default threshold
+    """
+    for h in hints:
+        if h.type == "pii_density":
+            level = h.data.get("level")
+            if level == "high":
+                return 0.3
+            elif level == "medium":
+                return 0.4
+    return _DEFAULT_NER_CONFIDENCE
