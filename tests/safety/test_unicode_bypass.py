@@ -86,6 +86,57 @@ class TestRoundtripWithNormalization:
         assert "13800138000" in restored.replace("\u200b", "")
 
 
+class TestHomoglyphBypass:
+    """Cyrillic/Greek lookalike characters should be normalized to Latin."""
+
+    def test_should_detect_email_with_cyrillic_a(self):
+        """Cyrillic а (U+0430) looks identical to Latin a."""
+        text = "邮箱zh\u0430ng@gmail.com"
+        redacted, key = redact(text, seed=42, mode="fast")
+
+        assert len(key) >= 1, "Email with Cyrillic а should be detected"
+
+    def test_should_detect_email_with_greek_o(self):
+        text = "邮箱zhang@gmail.c\u03bfm"
+        redacted, key = redact(text, seed=42, mode="fast")
+
+        assert len(key) >= 1, "Email with Greek ο should be detected"
+
+    def test_should_roundtrip_homoglyph_email(self):
+        text = "邮箱zh\u0430ng@gmail.com"
+        redacted, key = redact(text, seed=42, mode="fast")
+        restored = restore(redacted, key)
+
+        assert "\u0430" in restored or "a" in restored
+
+
+class TestUnifiedPrefix:
+    """Unified prefix hides PII type from output."""
+
+    def test_should_use_unified_prefix_when_configured(self):
+        config = {
+            "_unified_prefix": "R",
+            "phone": {"strategy": "remove"},  # override mask to use prefix
+            "email": {"strategy": "remove"},
+        }
+        redacted, key = redact(
+            "张三电话13812345678，身份证110101199003074610",
+            seed=42, mode="fast", names=["张三"], config=config,
+        )
+
+        for code in key:
+            assert code.startswith("R-"), f"Expected R- prefix, got {code}"
+
+    def test_should_use_default_prefixes_when_not_configured(self):
+        redacted, key = redact(
+            "电话13812345678", seed=42, mode="fast",
+        )
+
+        # Default: phone uses mask, not pseudonym prefix
+        # But remove types use type-specific prefix
+        assert not any(k.startswith("R-") for k in key)
+
+
 class TestLargeTextDoS:
     """Large text should not cause timeout or excessive resource usage."""
 

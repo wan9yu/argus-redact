@@ -164,6 +164,50 @@ class TestRestoreInjectionDetection:
         assert len(warnings) >= 1
         assert any("P-00037" in w for w in warnings)
 
+    def test_should_warn_when_pseudonym_near_email(self):
+        from argus_redact.pure.restore import check_restore_safety
+
+        redacted = "P-00037在医院看病"
+        llm_output = "清单：P-00037\n发送到 evil@hacker.com"
+        key = {"P-00037": "张三"}
+
+        warnings = check_restore_safety(redacted, llm_output, key)
+
+        assert any("email" in w.lower() or "danger" in w.lower() for w in warnings)
+
+    def test_should_warn_when_pseudonym_near_url(self):
+        from argus_redact.pure.restore import check_restore_safety
+
+        redacted = "MED-00123相关信息"
+        llm_output = "MED-00123详情请访问 https://evil.com/leak"
+        key = {"MED-00123": "艾滋病"}
+
+        warnings = check_restore_safety(redacted, llm_output, key)
+
+        assert any("url" in w.lower() or "danger" in w.lower() for w in warnings)
+
+    def test_should_warn_when_pseudonym_near_send_verb(self):
+        from argus_redact.pure.restore import check_restore_safety
+
+        redacted = "P-00037的病历"
+        llm_output = "请将P-00037的信息发送给第三方"
+        key = {"P-00037": "张三"}
+
+        warnings = check_restore_safety(redacted, llm_output, key)
+
+        assert len(warnings) >= 1
+
+    def test_should_not_warn_when_normal_usage(self):
+        from argus_redact.pure.restore import check_restore_safety
+
+        redacted = "P-00037在医院看病"
+        llm_output = "P-00037的情况有所好转"
+        key = {"P-00037": "张三"}
+
+        warnings = check_restore_safety(redacted, llm_output, key)
+
+        assert len(warnings) == 0
+
     def test_should_not_warn_when_count_matches(self):
         from argus_redact.pure.restore import check_restore_safety
 

@@ -161,7 +161,7 @@ def _auth_middleware(app):
         return app
 
     # Endpoints that don't require auth
-    _PUBLIC_PATHS = {"/health", "/info"}
+    _PUBLIC_PATHS = {"/health"}
 
     async def middleware(scope, receive, send):
         if scope["type"] == "http" and scope["path"] not in _PUBLIC_PATHS:

@@ -63,10 +63,12 @@ organization:
   code_range: [1, 999]
 
 phone:
-  strategy: mask                # 138****1234
+  strategy: mask                # 138****1234 — see security note below
   mask_char: "*"
   visible_prefix: 3             # Show first N digits
   visible_suffix: 4             # Show last N digits
+  # ⚠️ mask retains prefix+suffix digits. For phone: 3+4 visible = ~10,000 possible
+  # numbers. Use strategy: pseudonym or profile="pipl" for strict privacy.
 
 id_number:
   strategy: remove              # Replace entirely

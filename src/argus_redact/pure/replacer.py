@@ -340,13 +340,16 @@ def replace(
         person_prefix = config.get("person", {}).get("prefix", person_prefix)
         org_prefix = config.get("organization", {}).get("prefix", org_prefix)
 
+    # Unified prefix mode: all types use same prefix (hides PII type from output)
+    unified_prefix = config.get("_unified_prefix") if config else None
+
     pseudo_gen = PseudonymGenerator(
-        prefix=person_prefix,
+        prefix=unified_prefix or person_prefix,
         seed=seed,
         existing_key=result_key if result_key else None,
     )
     org_gen = PseudonymGenerator(
-        prefix=org_prefix,
+        prefix=unified_prefix or org_prefix,
         seed=(seed + 1) if seed is not None else None,
         existing_key=result_key if result_key else None,
     )
@@ -355,7 +358,7 @@ def replace(
 
     def _get_type_gen(entity_type: str) -> PseudonymGenerator:
         if entity_type not in _type_gens:
-            prefix = DEFAULT_PREFIXES.get(entity_type, entity_type.upper()[:4])
+            prefix = unified_prefix or DEFAULT_PREFIXES.get(entity_type, entity_type.upper()[:4])
             _type_gens[entity_type] = PseudonymGenerator(
                 prefix=prefix,
                 seed=(seed + hash(entity_type) % 10000) if seed is not None else None,
