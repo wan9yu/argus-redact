@@ -122,7 +122,7 @@ argus-redact info
 ### Output
 
 ```
-argus-redact v0.4.4
+argus-redact v0.4.5
 
 Languages:
   zh  Chinese    regex (14+ patterns) + NER

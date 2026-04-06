@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "argus-redact"
-version = "0.4.4"
+version = "0.4.5"
 description = "Encrypt PII, not meaning. Locally."
 readme = "README.md"
 license = "Apache-2.0"
