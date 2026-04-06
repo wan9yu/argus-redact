@@ -229,6 +229,23 @@ def redact(
     # Produce hints from L1a results — consumed by L1b, L2, L3, and tier filter
     hints = produce_hints(layer1, text)
 
+    # Consume suspicious_digit_sequence hints: verify against PII patterns
+    suspicious = [h for h in hints if h.type == "suspicious_digit_sequence"]
+    if suspicious:
+        patterns = _load_patterns(lang)
+        for hint in suspicious:
+            norm = hint.data["normalized"]
+            matches = match_patterns(norm, patterns)
+            if matches:
+                start, end = hint.region
+                for m in matches:
+                    entities.append(PatternMatch(
+                        text=text[start:end], type=m.type,
+                        start=start, end=end,
+                        confidence=0.9, layer=1,
+                    ))
+                    layer1_count += 1
+
     # Layer 1b: person name detection
     # Hint-driven: threshold adjusts based on text_intent
     person_threshold = get_person_threshold(hints)
