@@ -37,6 +37,12 @@ async def handle_redact(request: Request) -> JSONResponse:
     mode = body.get("mode", "fast")
     seed = body.get("seed")
     config = body.get("config")
+    # Security: reject config as file path string (only dicts allowed via HTTP)
+    if isinstance(config, str):
+        return JSONResponse(
+            {"error": "config must be a JSON object, not a file path"},
+            status_code=400,
+        )
     key = body.get("key")
     detailed = body.get("detailed", False)
     report = body.get("report", False)

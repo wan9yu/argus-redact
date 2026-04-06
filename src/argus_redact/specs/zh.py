@@ -132,9 +132,8 @@ register(PIITypeDef(
         "110101 19900307 4610",
     ),
     counterexamples=(
-        "110101199003071235",
-        "110101199013074610",
-        "000000199003074610",
+        "110101199013074610",  # month 13 invalid
+        "000000199003074610",  # region 000000 invalid
     ),
     _patterns=({
         "type": "id_number",

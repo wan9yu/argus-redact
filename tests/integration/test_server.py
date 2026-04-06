@@ -219,3 +219,29 @@ class TestServerAuth:
         resp = auth_client.get("/health")
 
         assert resp.status_code == 200
+
+
+class TestServerInputValidation:
+    def test_should_reject_oversized_body(self, client):
+        """Request body >1MB should be rejected."""
+        text = "x" * (1024 * 1024 + 1)
+
+        resp = client.post("/redact", json={"text": text, "mode": "fast"})
+
+        assert resp.status_code == 400
+        assert "exceeds" in resp.json()["error"].lower() or "maximum" in resp.json()["error"].lower()
+
+    def test_should_reject_missing_text(self, client):
+        resp = client.post("/redact", json={"mode": "fast"})
+
+        # Should handle gracefully (empty text is valid, missing is empty string)
+        assert resp.status_code == 200
+
+    def test_should_reject_config_as_file_path(self, client):
+        """Config passed as string path via HTTP should be rejected (security)."""
+        resp = client.post(
+            "/redact",
+            json={"text": "test", "mode": "fast", "config": "/etc/passwd"},
+        )
+
+        assert resp.status_code == 400

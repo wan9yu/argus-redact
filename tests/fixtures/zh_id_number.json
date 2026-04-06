@@ -33,9 +33,9 @@
   {
     "id": "invalid_checksum",
     "input": "110101199003071235",
-    "should_match": false,
+    "should_match": true,
     "type": "id_number",
-    "description": "末位校验错误"
+    "description": "末位校验错误但格式正确 — 宽松匹配防止用户输错导致PII泄漏"
   },
   {
     "id": "invalid_month_13",
@@ -96,5 +96,12 @@
     "type": "id_number",
     "expected_text": "110101 1990 0307 4610",
     "description": "多处空格分隔（手动输入常见）"
+  },
+  {
+    "id": "invalid_checksum_still_detected",
+    "input": "身份证号110101199003071234",
+    "should_match": true,
+    "type": "id_number",
+    "description": "校验位错误但格式正确 — 应宽松匹配（用户输入错误不应泄漏PII）"
   }
 ]
