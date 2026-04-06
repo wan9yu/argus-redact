@@ -77,13 +77,15 @@ except ImportError:
 
         def _generate_unique(self) -> str:
             lo, hi = self._code_range
-            for _ in range(1000):
-                if self._rng is not None:
-                    num = self._rng.randint(lo, hi)
-                else:
-                    num = secrets.randbelow(hi - lo + 1) + lo
-                code = f"{self._prefix}-{num:05d}"
-                if code not in self._used_codes:
-                    return code
-            self._code_range = (lo, hi * 10)
-            return self._generate_unique()
+            while True:
+                for _ in range(1000):
+                    if self._rng is not None:
+                        num = self._rng.randint(lo, hi)
+                    else:
+                        num = secrets.randbelow(hi - lo + 1) + lo
+                    code = f"{self._prefix}-{num:05d}"
+                    if code not in self._used_codes:
+                        return code
+                # Expand range and retry
+                hi *= 10
+                self._code_range = (lo, hi)

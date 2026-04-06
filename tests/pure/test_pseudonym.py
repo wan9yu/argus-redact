@@ -97,3 +97,14 @@ class TestPseudonymGenerator:
         code = gen.get("阿里巴巴")
 
         assert code.startswith("O-")
+
+    def test_should_expand_range_without_stack_overflow(self):
+        """When range is exhausted, should expand and continue (no recursion)."""
+        # Fill up a tiny range completely
+        gen = PseudonymGenerator(seed=42, code_range=(1, 3))
+        codes = set()
+        for i in range(10):
+            code = gen.get(f"person_{i}")
+            codes.add(code)
+        # Should have generated 10 unique codes by expanding range
+        assert len(codes) == 10
