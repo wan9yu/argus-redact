@@ -31,17 +31,21 @@ _INVISIBLE = frozenset({
 MAX_INPUT_SIZE = 1024 * 1024  # 1MB
 
 
-def normalize_text(text: str) -> tuple[str, list[int]]:
+def normalize_text(text: str) -> tuple[str, list[int] | None]:
     """Normalize text for PII detection, returning offset map.
 
     Steps:
-    1. Strip invisible/direction-control characters
-    2. Apply NFKC normalization (fullwidth→halfwidth, superscript→normal, etc.)
+    1. Fast-path: ASCII-only text is returned as-is (no allocation)
+    2. Strip invisible/direction-control characters
+    3. Apply NFKC normalization (fullwidth→halfwidth, superscript→normal, etc.)
 
     Returns:
-        (normalized_text, offset_map) where offset_map[i] = original char index
-        for each char in normalized_text. Used to map detected spans back.
+        (normalized_text, offset_map) where offset_map[i] = original char index.
+        offset_map is None when text is unchanged (identity mapping).
     """
+    if text.isascii():
+        return text, None
+
     # Step 1: strip invisible chars, build offset map
     stripped = []
     offset_map: list[int] = []
@@ -52,42 +56,35 @@ def normalize_text(text: str) -> tuple[str, list[int]]:
 
     stripped_text = "".join(stripped)
 
-    # Step 2: NFKC normalization
-    # NFKC can change string length (e.g., ﬁ→fi, ½→1⁄2)
-    # We need to track offset mapping through NFKC
-    normalized = unicodedata.normalize("NFKC", stripped_text)
+    # Step 2: NFKC normalization with per-character offset tracking
+    if unicodedata.is_normalized("NFKC", stripped_text):
+        if len(stripped_text) == len(text):
+            return stripped_text, None
+        return stripped_text, offset_map
 
-    if len(normalized) == len(stripped_text):
-        # Common case: NFKC didn't change length, offset_map still valid
-        return normalized, offset_map
-
-    # NFKC changed length — rebuild offset map
-    # Map each normalized char back to the nearest original position
+    # NFKC may expand/contract chars — normalize per-char for accurate mapping
+    normalized_chars: list[str] = []
     new_map: list[int] = []
-    si = 0  # index into stripped_text
-    for ni in range(len(normalized)):
-        if si < len(offset_map):
+    for si, ch in enumerate(stripped_text):
+        nfkc = unicodedata.normalize("NFKC", ch)
+        for c in nfkc:
+            normalized_chars.append(c)
             new_map.append(offset_map[si])
-        else:
-            # NFKC expanded: map to last known original position
-            new_map.append(offset_map[-1] if offset_map else 0)
-        # Advance stripped index when NFKC consumed a character
-        # Heuristic: advance proportionally
-        if si < len(stripped_text):
-            si += 1
-    return normalized, new_map
+
+    return "".join(normalized_chars), new_map
 
 
 def map_spans_to_original(
     spans: list[tuple[int, int]],
-    offset_map: list[int],
+    offset_map: list[int] | None,
     original_len: int,
 ) -> list[tuple[int, int]]:
     """Map (start, end) spans from normalized text back to original text positions."""
+    if offset_map is None:
+        return spans
     result = []
     for start, end in spans:
         orig_start = offset_map[start] if start < len(offset_map) else original_len
-        # end is exclusive, so map end-1 then +1
         if end > 0 and end - 1 < len(offset_map):
             orig_end = offset_map[end - 1] + 1
         else:

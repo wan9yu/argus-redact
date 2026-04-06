@@ -13,6 +13,7 @@ import re as _re
 from argus_redact._types import PatternMatch
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.grammar import normalize_grammar_en
+from argus_redact.pure.normalize import MAX_INPUT_SIZE, map_spans_to_original, normalize_text
 from argus_redact.pure.hints import (
     boost_cross_layer, filter_self_reference, get_ner_min_confidence,
     get_person_threshold, produce_hints, should_skip_ner,
@@ -147,11 +148,10 @@ def redact(
     if not isinstance(text, str):
         raise TypeError(f"text must be a string, got {type(text).__name__}")
 
-    from argus_redact.pure.normalize import MAX_INPUT_SIZE
     if len(text) > MAX_INPUT_SIZE:
         raise ValueError(
-            f"Input text ({len(text)} bytes) exceeds maximum allowed size "
-            f"({MAX_INPUT_SIZE} bytes). Split into smaller chunks."
+            f"Input text ({len(text)} chars) exceeds maximum allowed size "
+            f"({MAX_INPUT_SIZE} chars). Split into smaller chunks."
         )
 
     if mode not in VALID_MODES:
@@ -199,10 +199,8 @@ def redact(
     entities: list[PatternMatch] = []
     langs = [lang] if isinstance(lang, str) else list(lang)
 
-    # Unicode normalization: detect on normalized text, replace on original
-    from argus_redact.pure.normalize import normalize_text, map_spans_to_original
     normalized, offset_map = normalize_text(text)
-    use_normalized = (normalized != text)
+    use_normalized = offset_map is not None
 
     # Layer 1a: regex (structural PII — phone, ID, bank card, etc.)
     t0 = time.perf_counter()

@@ -8,10 +8,10 @@ from argus_redact.lang.zh.surnames import SURNAMES as _SURNAMES
 
 
 def _validate_id_number(value: str) -> bool:
-    """MOD 11-2 checksum for 18-digit Chinese national ID.
+    """Validate Chinese national ID format (relaxed checksum).
 
-    Relaxed: accepts IDs with incorrect checksum if the format (region + date)
-    is otherwise valid. User typos should not cause PII leakage.
+    Accepts IDs with incorrect checksum — user typos should not cause PII leakage.
+    Rejects structurally invalid formats (wrong length, non-digit, region 0xxxxx).
     """
     value = value.replace(" ", "").replace("-", "").upper()
     if len(value) != 18:
@@ -20,17 +20,8 @@ def _validate_id_number(value: str) -> bool:
         return False
     if value[17] not in "0123456789X":
         return False
-    # Region code: first digit must be 1-9
     if value[0] == "0":
         return False
-    # Checksum verification (informational, not required for match)
-    weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
-    check_chars = "10X98765432"
-    try:
-        total = sum(int(value[i]) * weights[i] for i in range(17))
-    except ValueError:
-        return False
-    # Accept even if checksum fails — format is valid enough to be PII
     return True
 
 
