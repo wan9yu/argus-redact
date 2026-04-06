@@ -9,34 +9,62 @@ redact(text) → (redacted_text, key)
 restore(text, key) → plaintext
 ```
 
-Internally, `redact()` runs a three-layer detection pipeline, deduplicates results, and applies replacement strategies. `restore()` is pure string replacement using the key.
+Internally, `redact()` runs a three-layer detection pipeline where each layer passes **hints** to the next, enabling collaborative detection. `restore()` is pure string replacement using the key.
 
 ```
                           redact()
                             │
-        ┌───────────────────┼───────────────────┐
-        ▼                   ▼                   ▼
-   ┌─────────┐        ┌─────────┐        ┌──────────┐
-   │ Layer 1  │        │ Layer 2  │        │ Layer 3   │
-   │ Regex    │        │ NER      │        │ Semantic  │
-   │ <1ms     │        │ 10-100ms │        │ 200-2000ms│
-   └────┬─────┘        └────┬─────┘        └────┬──────┘
-        │                   │                    │
-        └───────────┬───────┘────────────────────┘
-                    ▼
-           ┌──────────────┐
-           │ Entity Merger │  ← dedup overlapping spans
-           └──────┬───────┘
-                  ▼
-           ┌──────────────┐
-           │ Key Generator │  ← random pseudonyms / category labels / masks
-           └──────┬───────┘
-                  ▼
-           ┌──────────────┐
-           │ Replacer      │  ← apply substitutions to text
-           └──────┬───────┘
-                  ▼
-           (redacted_text, key)
+                            ▼
+                     ┌─────────────┐
+                     │ Layer 1a     │  Regex patterns (<1ms)
+                     │ Structural   │  phone, ID, bank card, email, self_reference, ...
+                     └──────┬──────┘
+                            │
+                     produce_hints()
+                            │
+                     ┌──────┴──────┐
+                     │   Hints:     │  self_reference_tier, text_intent, pii_density
+                     └──┬───┬───┬──┘
+                        │   │   │
+                        ▼   │   │
+                 ┌──────────┐   │
+                 │ Layer 1b  │   │  Person name detection (zh)
+                 │ Names     │   │  ← consumes text_intent (threshold adjustment)
+                 └─────┬────┘   │
+                       │        │
+                       │        ▼
+                       │  ┌───────────┐
+                       │  │ Layer 2    │  NER models (10-100ms)
+                       │  │ NER        │  ← consumes text_intent (skip/run)
+                       │  │            │  ← consumes pii_density (confidence tuning)
+                       │  └─────┬─────┘
+                       │        │
+                       │        ▼
+                       │  ┌───────────┐
+                       │  │ Layer 3    │  Local LLM (~20s, optional)
+                       │  │ Semantic   │
+                       │  └─────┬─────┘
+                       │        │
+                       └───┬────┘
+                           ▼
+                    ┌──────────────┐
+                    │ Entity Merger │  dedup + priority splitting
+                    └──────┬───────┘
+                           ▼
+                    ┌──────────────┐
+                    │ Cross-Layer   │  L1+L2 agreement → confidence boost
+                    │ Validation    │
+                    └──────┬───────┘
+                           ▼
+                    ┌──────────────┐
+                    │ Tier Filter   │  ← consumes self_reference_tier
+                    └──────┬───────┘
+                           ▼
+                    ┌──────────────┐
+                    │ Replacer      │  pseudonyms / masks / category labels
+                    └──────┬───────┘
+                           ▼
+                    (redacted_text, key)
 ```
 
 ---
@@ -57,12 +85,20 @@ text = "张三的手机号是13812345678，身份证号是110101199003071234"
 ```
 
 Layer 1 has two sub-phases:
-- **1a: Structural PII** — regex patterns for phone, ID, bank card, email, etc.
-- **1b: Person names (zh)** — candidate generation (surname + CJK chars, filtered by negative dictionary) + evidence scoring (PII proximity, context words, honorific suffixes). Uses 1a results as context signals.
+- **1a: Structural PII** — regex patterns for phone, ID, bank card, email, self-reference pronouns, medical, etc.
+- **1b: Person names (zh)** — candidate generation (surname + CJK chars, filtered by negative dictionary) + evidence scoring. **Requires at least one structural evidence signal** (context prefix, honorific suffix, PII proximity) — bare names without evidence are left to Layer 2 NER.
+
+After 1a runs, `produce_hints()` generates **cross-layer hints** that downstream layers consume:
+
+| Hint | Producer | Consumers | Effect |
+|------|----------|-----------|--------|
+| `self_reference_tier` | L1a | Tier Filter | Tier 1 (replace), 2 (skip), 3 (ignore) |
+| `text_intent` | L1a | L1b, L2 | instruction → raise threshold / skip NER |
+| `pii_density` | L1a | L2 | high → lower NER confidence threshold |
 
 **Characteristics:**
 - 1a runs on the full text in one pass (compiled regex union), always confidence = 1.0
-- 1b generates candidates, scores them against evidence signals, confirms above threshold (0.8)
+- 1b generates candidates, scores them against evidence signals, confirms above threshold (0.8). Threshold is hint-adjusted: instruction text → 1.2 (effectively suppressed)
 - Optional `validate` function per pattern reduces false positives (e.g., Luhn checksum for cards, MOD 11-2 for Chinese ID)
 - Language-independent patterns (email, URL) are shared across all packs
 - O(n) time complexity, < 1ms for typical texts
@@ -171,13 +207,42 @@ Merged:  [(0, 2, "person", "张三", 0.95, layer=2),
 
 **Rules:**
 
-1. **Exact overlap:** Higher-confidence entity wins. Ties: lower layer number wins (regex > NER > LLM).
-2. **Partial overlap:** Both kept if non-overlapping portions are meaningful. Otherwise, longer span wins.
-3. **Containment:** If entity A contains entity B, keep A only (e.g., "三里屯的星巴克" contains "星巴克").
-4. **Confidence filter:** Entities below `min_confidence` (config, default 0.5) are dropped.
+1. **Priority types (self_reference):** Always win overlaps. When self_reference overlaps with a longer entity (e.g., "我" inside "我在协和医院"), the merger **splits** the longer entity instead of swallowing the priority type.
+2. **Exact overlap:** Higher-confidence entity wins. Ties: lower layer number wins (regex > NER > LLM).
+3. **Partial overlap:** Longer span wins.
+4. **Containment:** If entity A contains entity B, keep A only (e.g., "三里屯的星巴克" contains "星巴克").
 5. **Dedup:** Same text at same position from multiple layers → keep one.
 
+**Cross-layer agreement:** After merging, if the same span (or compatible types like address/location) was detected by both L1 and L2, confidence is boosted by 0.1. This rewards entities that multiple independent detectors agree on.
+
 **Output:** sorted list of non-overlapping entities, ordered by position in text.
+
+---
+
+## Cross-Layer Hints
+
+The three detection layers are not independent — earlier layers pass **hints** to later layers via `produce_hints()`. This enables collaborative detection without coupling the layers.
+
+```
+L1a (regex) → produce_hints() → hints
+                                  │
+                    ┌─────────────┼─────────────┐
+                    ▼             ▼              ▼
+              L1b (person)    L2 (NER)     Tier Filter
+              threshold↑      skip/conf↓    keep/drop
+```
+
+**Hint types:**
+
+| Hint | Data | Effect |
+|------|------|--------|
+| `self_reference_tier` | `{tier: 1\|2\|3}` | Tier 1: replace "我" with PII. Tier 2: skip (no PII). Tier 3: ignore (command text) |
+| `text_intent` | `{intent: instruction\|narrative\|casual\|neutral}` | instruction → suppress person name detection, skip NER |
+| `pii_density` | `{level: none\|medium\|high, count: N}` | high → lower NER confidence threshold (find more names near PII) |
+
+**Design principle:** hints are **suggestions, not commands**. Each consumer decides how to use them. A new hint type can be added without modifying existing consumers.
+
+See [design-self-reference.md](design-self-reference.md) for the self-reference three-tier model and future roadmap.
 
 ---
 
@@ -270,15 +335,21 @@ output:  "王五 should talk to 张三 about 阿里"
 User code                    argus-redact internals
 ─────────                    ──────────────────────
 
-text ──────────────────────→ Layer 1 (regex)
-                             Layer 2 (NER)         ← optional
-                             Layer 3 (semantic LLM) ← optional
+text ──────────────────────→ Layer 1a (regex)
                                     │
-                             Entity Merger
+                             produce_hints() → [tier, intent, density]
                                     │
-                             Key Generator ←── config (strategies)
+                             Layer 1b (person names) ← hint: text_intent
+                             Layer 2 (NER)           ← hint: intent + density
+                             Layer 3 (semantic LLM)  ← optional
                                     │
-                             Replacer
+                             Entity Merger (priority splitting)
+                                    │
+                             Cross-Layer Agreement (L1∩L2 → boost)
+                                    │
+                             Tier Filter ← hint: self_reference_tier
+                                    │
+                             Replacer + Grammar Normalization (en)
                                     │
 (redacted_text, key) ←──────────────┘
 
@@ -290,6 +361,7 @@ text ──────────────────────→ Layer
 llm_output ─────────────────→ restore(text, key)
                                     │
                               String replacement
+                              + Grammar Restoration (en)
                                     │
 restored_text ←─────────────────────┘
 ```
@@ -309,11 +381,14 @@ Not all parts of argus-redact are equal. The codebase is structured into three l
 │  → Rust rewrite candidates                                  │
 │                                                             │
 │  match_patterns(text, patterns) → [(start, end, type)]      │
+│  produce_hints(entities, text) → [Hint, ...]                │
+│  filter_self_reference(entities, hints) → entities          │
+│  boost_cross_layer(merged, pre_merge) → entities            │
 │  replace(text, entities, strategy, seed) → (redacted, key)  │
 │  restore(text, key) → plaintext                             │
 │  merge_entities(layer_results) → deduplicated_entities      │
+│  normalize_grammar_en / restore_grammar_en                  │
 │  generate_pseudonym(prefix, range, seed) → code             │
-│  resolve_collisions(key, label) → unique_label              │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -334,9 +409,13 @@ Not all parts of argus-redact are equal. The codebase is structured into three l
 │  redact(text, *, key, lang, mode, seed, ...)                │
 │    1. seed = seed or generate_random_seed()    [impure]     │
 │    2. entities = match_patterns(text)          [pure]       │
-│    3. entities += detect_ner(text, lang)       [impure]     │
-│    4. entities += detect_semantic(text)         [impure]     │
-│    5. entities = merge_entities(entities)       [pure]       │
+│    3. hints = produce_hints(entities, text)    [pure]       │
+│    4. entities += detect_person_names(hints)   [pure]       │
+│    5. entities += detect_ner(text, hints)      [impure]     │
+│    6. entities += detect_semantic(text)        [impure]     │
+│    7. entities = merge_entities(entities)      [pure]       │
+│    8. entities = boost_cross_layer(entities)   [pure]       │
+│    9. entities = filter_self_reference(hints)  [pure]       │
 │    6. redacted, key = replace(text, ..., seed)  [pure]       │
 │    7. write_key_file(path, key) if needed       [impure]     │
 │    8. return (redacted, key)                                 │
