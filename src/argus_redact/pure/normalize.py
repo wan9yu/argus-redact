@@ -68,7 +68,7 @@ _DIGIT_SEPS = frozenset(" \t.-/，、·;；:：")
 _MIN_DIGIT_SEQ = 7  # shortest PII (phone fragments)
 
 
-def _normalize_digit_sequences(chars: list[str], offset_map: list[int]) -> None:
+def _normalize_digit_sequences(chars: list[str]) -> None:
     """In-place: replace Chinese digit sequences (7+) with ASCII digits.
 
     Only converts when a long enough sequence of digit-equivalent characters
@@ -104,7 +104,6 @@ def _normalize_digit_sequences(chars: list[str], offset_map: list[int]) -> None:
             for idx, ascii_d in digits:
                 chars[idx] = ascii_d
 
-        # If not long enough, leave as-is and continue scanning
 
 
 def normalize_text(text: str) -> tuple[str, list[int] | None]:
@@ -126,15 +125,10 @@ def normalize_text(text: str) -> tuple[str, list[int] | None]:
             offset_map.append(i)
 
     # Step 2: confusables (Cyrillic/Greek → Latin)
-    for i, ch in enumerate(chars):
-        mapped = _CONFUSABLES.get(ord(ch))
-        if mapped:
-            chars[i] = mapped
+    joined = "".join(chars).translate(_CONFUSABLES)
 
     # Step 3: NFKC normalization
-    joined = "".join(chars)
     if not unicodedata.is_normalized("NFKC", joined):
-        # Per-char NFKC for accurate offset mapping
         new_chars: list[str] = []
         new_map: list[int] = []
         for si, ch in enumerate(joined):
@@ -144,9 +138,11 @@ def normalize_text(text: str) -> tuple[str, list[int] | None]:
                 new_map.append(offset_map[si])
         chars = new_chars
         offset_map = new_map
+    else:
+        chars = list(joined)
 
     # Step 4: contextual digit normalization (Chinese digits in 7+ sequences)
-    _normalize_digit_sequences(chars, offset_map)
+    _normalize_digit_sequences(chars)
 
     result = "".join(chars)
     if result == text:
