@@ -158,6 +158,8 @@ _COMPATIBLE_TYPES = {
     ("location", "address"),
     ("organization", "workplace"),
     ("workplace", "organization"),
+    ("school", "organization"),
+    ("organization", "school"),
 }
 
 
@@ -173,13 +175,9 @@ def boost_cross_layer(
     if not merged or not pre_merge:
         return merged
 
-    # Index pre-merge entities by layer
-    by_layer: dict[int, list[PatternMatch]] = {}
-    for e in pre_merge:
-        by_layer.setdefault(e.layer, []).append(e)
-
-    if len(by_layer) < 2:
-        return merged  # only one layer produced results, no cross-validation
+    layers_present = {e.layer for e in pre_merge}
+    if len(layers_present) < 2:
+        return merged
 
     result = []
     for entity in merged:

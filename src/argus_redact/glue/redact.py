@@ -256,8 +256,8 @@ def redact(
                 logger.warning("Layer 3 semantic detection failed", exc_info=True)
             timing["layer_3_ms"] = (time.perf_counter() - t0) * 1000
 
-    pre_merge = list(entities)
-    entities = merge_entities(entities, text=text)
+    pre_merge = entities
+    entities = merge_entities(pre_merge, text=text)
 
     # Cross-layer agreement: boost confidence when L1+L2 agree
     entities = boost_cross_layer(entities, pre_merge)
