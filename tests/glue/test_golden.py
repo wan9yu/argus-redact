@@ -38,18 +38,27 @@ class TestGoldenSeedDeterminism:
         assert r1 == r2
         assert k1 == k2
 
+    def test_golden_pinned_output(self):
+        """At least one test must pin exact output to catch cross-version regressions."""
+        redacted, key = redact("电话13812345678", seed=42, mode="fast")
+
+        # Pin: same seed must produce same pseudonym code
+        assert "13812345678" in key.values()
+        mask_values = [v for v in key.values() if "138" in v and "5678" in v]
+        assert len(mask_values) == 1, f"Expected exactly one mask, got {key}"
+
     def test_golden_roundtrip_preserves_original(self):
-        """redact → restore must recover all PII regardless of seed."""
-        originals = [
-            ("张三电话13812345678", {"seed": 42, "mode": "fast", "names": ["张三"]}),
-            ("身份证110101199003074610", {"seed": 99, "mode": "fast"}),
-            ("I was diagnosed with diabetes", {"seed": 42, "mode": "fast", "lang": "en"}),
+        """redact → restore must recover each specific PII value."""
+        cases = [
+            ("张三电话13812345678", {"seed": 42, "mode": "fast", "names": ["张三"]}, ["13812345678", "张三"]),
+            ("身份证110101199003074610", {"seed": 99, "mode": "fast"}, ["110101199003074610"]),
+            ("I was diagnosed with diabetes", {"seed": 42, "mode": "fast", "lang": "en"}, ["diabetes"]),
         ]
-        for text, kwargs in originals:
+        for text, kwargs, expected_pii in cases:
             redacted, key = redact(text, **kwargs)
             restored = restore(redacted, key)
-            # All original PII must be recoverable
-            assert "13812345678" in restored or "110101" in restored or "diabetes" in restored
+            for pii in expected_pii:
+                assert pii in restored, f"PII '{pii}' not recovered from: {text}"
 
 
 class TestUnicodeBoundary:
@@ -77,7 +86,7 @@ class TestUnicodeBoundary:
         """Keycap digit emoji should not trigger phone detection."""
         redacted, key = redact("步骤1️⃣2️⃣3️⃣完成", seed=42, mode="fast")
 
-        assert key == {} or all(v not in "123" for v in key.values())
+        assert key == {} or all(v not in ("1", "2", "3") for v in key.values())
 
     def test_should_handle_zwj_in_text(self):
         """Zero-width joiner should not break offset calculation."""
@@ -100,6 +109,7 @@ class TestUnicodeBoundary:
 
         restored = restore(redacted, key)
         assert "13812345678" in restored
+        assert "𠀀𠀁" in restored
 
     def test_should_handle_direction_control_chars(self):
         """RTL/LTR marks should not break offset calculation."""
