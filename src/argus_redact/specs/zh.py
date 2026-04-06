@@ -801,6 +801,25 @@ register(PIITypeDef(
     description="Sexual orientation (explicit terms)",
 ))
 
+# ── Self-reference ──
+
+register(PIITypeDef(
+    name="self_reference",
+    lang="zh",
+    format="第一人称代词/亲属关系",
+    charset="cjk",
+    structure={"pronoun": "我/我们/我的", "kinship": "我妈/我爸/我老公等"},
+    prefixes=(),
+    strategy="pseudonym",
+    label="[自称已脱敏]",
+    examples=("我确诊了糖尿病", "我妈住院了", "我们公司裁员了"),
+    counterexamples=("他确诊了糖尿病", "你住院了"),
+    _patterns=(),
+    sensitivity=2,
+    source="Privacy-by-design: first-person binds all PII to user identity",
+    description="Self-reference (first-person pronouns and kinship, links PII to user)",
+))
+
 # ── Person Name ──
 
 register(PIITypeDef(

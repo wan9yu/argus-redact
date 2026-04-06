@@ -8,8 +8,12 @@ import logging
 import time
 from pathlib import Path
 
+import re as _re
+
 from argus_redact._types import PatternMatch
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
+from argus_redact.pure.grammar import normalize_grammar_en
+from argus_redact.pure.hints import filter_self_reference, get_person_threshold, produce_hints
 from argus_redact.pure.merger import merge_entities
 from argus_redact.pure.patterns import match_patterns
 from argus_redact.pure.replacer import replace
@@ -186,22 +190,25 @@ def redact(
     entities.extend(_tag_layer(layer1, 1))
     layer1_count = len(layer1)
 
+    # Produce hints from L1a results — consumed by L1b, L2, L3, and tier filter
+    hints = produce_hints(layer1, text)
+
     # Layer 1b: person name detection
-    # Chinese: candidate generation + evidence scoring (handles known_names internally)
-    # Other languages: exact match on known_names only
+    # Hint-driven: threshold adjusts based on text_intent
+    person_threshold = get_person_threshold(hints)
+
     if "zh" in langs:
         from argus_redact.lang.zh.person import detect_person_names
 
         t0 = time.perf_counter()
         person_names = detect_person_names(
             text, pii_entities=layer1, known_names=names,
+            threshold=person_threshold,
         )
         timing["layer_1b_person_ms"] = (time.perf_counter() - t0) * 1000
         entities.extend(_tag_layer(person_names, 1))
         layer1_count += len(person_names)
     elif names:
-        import re as _re
-
         for name in names:
             if not name:
                 continue
@@ -245,7 +252,10 @@ def redact(
                 logger.warning("Layer 3 semantic detection failed", exc_info=True)
             timing["layer_3_ms"] = (time.perf_counter() - t0) * 1000
 
-    entities = merge_entities(entities)
+    entities = merge_entities(entities, text=text)
+
+    # Self-reference tier filter: driven by hints, replaces old if-else logic
+    entities = filter_self_reference(entities, hints)
 
     # Apply type filtering
     if types is not None:
@@ -262,6 +272,11 @@ def redact(
         key=existing_key,
         config=config,
     )
+
+    # Normalize grammar after first-person replacement (English only)
+    effective_lang = lang if isinstance(lang, str) else (lang[0] if lang else "zh")
+    if effective_lang == "en":
+        redacted = normalize_grammar_en(redacted, result_key)
 
     if key_file is not None and result_key:
         target = Path(key_file)

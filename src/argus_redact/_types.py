@@ -22,6 +22,20 @@ class PatternMatch:
 
 
 @dataclass(frozen=True)
+class Hint:
+    """Cross-layer hint passed between detection layers.
+
+    Produced by earlier layers, consumed by later layers to improve
+    detection accuracy and enable context-aware decisions.
+    """
+
+    type: str                        # hint category (e.g. "self_reference_tier")
+    data: dict = field(default_factory=dict)   # hint-specific payload
+    region: tuple[int, int] = (0, 0)  # (start, end) in original text, (0,0) = global
+    source_layer: int = 1             # which layer produced this hint
+
+
+@dataclass(frozen=True)
 class NEREntity:
     """An entity detected by NER model."""
 

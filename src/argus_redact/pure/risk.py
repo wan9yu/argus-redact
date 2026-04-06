@@ -67,6 +67,13 @@ def assess_risk(entities: list[dict], lang: str = "zh") -> RiskResult:
         score += 0.1
         reasons.append("multiple high/critical entities detected")
 
+    # Self-reference amplification: "我" + any sensitive type = directly about user
+    if "self_reference" in types_found:
+        sensitive_with_self = types_found & (_SENSITIVE_PI_TYPES | {"phone", "id_number", "bank_card"})
+        if sensitive_with_self:
+            score += 0.15
+            reasons.append("self-reference amplification: PII directly linked to user")
+
     # Quasi-identifier combination amplification
     for combo in _QUASI_ID_COMBOS:
         if combo.issubset(types_found):

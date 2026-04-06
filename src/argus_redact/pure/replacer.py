@@ -43,6 +43,8 @@ DEFAULT_STRATEGIES = {
     "religion": "remove",
     "political": "remove",
     "sexual_orientation": "remove",
+    # Self-reference
+    "self_reference": "pseudonym",
     # Level 4
     "ip_address": "remove",
     "mac_address": "remove",
@@ -88,6 +90,7 @@ DEFAULT_PREFIXES = {
     "url_token": "URL",
     "age": "AGE",
     "gender": "GEN",
+    "self_reference": "S",
 }
 
 # Default labels for remove strategy — per language

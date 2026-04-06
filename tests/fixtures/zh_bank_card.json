@@ -44,5 +44,37 @@
     "should_match": false,
     "type": "bank_card",
     "description": "随机16位数字，无BIN前缀且Luhn不通过，不应匹配"
+  },
+  {
+    "id": "visa_with_spaces",
+    "input": "银行卡4111 1111 1111 1111",
+    "should_match": true,
+    "type": "bank_card",
+    "expected_text": "4111 1111 1111 1111",
+    "description": "Visa卡号空格分隔（复制粘贴常见格式）"
+  },
+  {
+    "id": "visa_with_dashes",
+    "input": "卡号4111-1111-1111-1111",
+    "should_match": true,
+    "type": "bank_card",
+    "expected_text": "4111-1111-1111-1111",
+    "description": "Visa卡号短横线分隔"
+  },
+  {
+    "id": "unionpay_with_spaces",
+    "input": "卡号6212 2622 0000 0000 004",
+    "should_match": true,
+    "type": "bank_card",
+    "expected_text": "6212 2622 0000 0000 004",
+    "description": "银联19位卡号空格分隔"
+  },
+  {
+    "id": "ccb_bin_with_spaces",
+    "input": "建行卡 6217 0012 3456 7890",
+    "should_match": true,
+    "type": "bank_card",
+    "expected_text": "6217 0012 3456 7890",
+    "description": "建设银行BIN前缀空格分隔"
   }
 ]

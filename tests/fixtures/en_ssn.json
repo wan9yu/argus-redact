@@ -43,5 +43,21 @@
     "should_match": false,
     "type": "ssn",
     "description": "No SSN"
+  },
+  {
+    "id": "ssn_with_spaces",
+    "input": "SSN is 123 45 6789",
+    "should_match": true,
+    "type": "ssn",
+    "expected_text": "123 45 6789",
+    "description": "SSN with spaces instead of dashes (common in forms)"
+  },
+  {
+    "id": "ssn_no_separator",
+    "input": "SSN 123456789",
+    "should_match": true,
+    "type": "ssn",
+    "expected_text": "123456789",
+    "description": "SSN without any separators (continuous digits)"
   }
 ]

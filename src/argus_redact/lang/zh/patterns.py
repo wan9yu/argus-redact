@@ -9,8 +9,8 @@ from argus_redact.lang.zh.surnames import SURNAMES as _SURNAMES
 
 def _validate_id_number(value: str) -> bool:
     """MOD 11-2 checksum for 18-digit Chinese national ID."""
-    # Strip spaces (chat-style formatting)
-    value = value.replace(" ", "").upper()
+    # Strip spaces/dashes (chat-style or form formatting)
+    value = value.replace(" ", "").replace("-", "").upper()
     if len(value) != 18:
         return False
     weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
@@ -125,20 +125,20 @@ PATTERNS = [
         "type": "id_number",
         "label": "[身份证号已脱敏]",
         "pattern": (
-            r"(?<!\d)[1-9]\d{5}\s?(?:19|20)\d{2}"
+            r"(?<!\d)[1-9]\d{5}[\s-]?(?:19|20)\d{2}[\s-]?"
             r"(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])"
-            r"\s?\d{3}[\dXx](?!\d)"
+            r"[\s-]?\d{3}[\dXx](?!\d)"
         ),
         "validate": _validate_id_number,
-        "description": "Chinese 18-digit national ID (MOD 11-2, optional spaces)",
+        "description": "Chinese 18-digit national ID (MOD 11-2, optional spaces/dashes)",
     },
     {
         "type": "bank_card",
         "label": "[银行卡号已脱敏]",
-        "pattern": r"(?<!\d)[3-6]\d{15,18}(?!\d)",
+        "pattern": r"(?<!\d)[3-6]\d{3}(?:[\s-]?\d{4}){2,3}[\s-]?\d{1,4}(?!\d)",
         "validate": _validate_bank_card,
         "check_context": True,
-        "description": "Bank card number (16-19 digits, Luhn or BIN prefix)",
+        "description": "Bank card number (16-19 digits, optional spaces/dashes, Luhn or BIN prefix)",
     },
     {
         "type": "passport",
@@ -442,5 +442,23 @@ PATTERNS = [
             r"|(?:出柜|LGBTQ?|酷儿|GAY|gay|彩虹旗)"
         ),
         "description": "Sexual orientation (explicit terms)",
+    },
+    # ── Self-reference (first-person pronouns + kinship) ──
+    {
+        "type": "self_reference",
+        "label": "[自称已脱敏]",
+        "pattern": (
+            r"我(?:妈妈|爸爸|母亲|父亲|老公|老婆|丈夫|妻子|先生|太太"
+            r"|儿子|女儿|哥哥|姐姐|弟弟|妹妹|哥|姐|弟|妹|妈|爸"
+            r"|爷爷|奶奶|外公|外婆|叔叔|阿姨|舅舅|姑姑"
+            r"|家人|家里人|孩子)"
+        ),
+        "description": "Self-reference with kinship (我妈/我爸/我老公/...)",
+    },
+    {
+        "type": "self_reference",
+        "label": "[自称已脱敏]",
+        "pattern": r"我们的|我们|我的|我",
+        "description": "Self-reference pronoun (我/我的/我们/我们的)",
     },
 ]

@@ -217,3 +217,71 @@ class TestMergeComplexScenarios:
 
         assert len(result) == 1
         assert result[0].type == "organization"
+
+
+class TestMergeSelfReferencePriority:
+    """self_reference should split overlapping entities, not be swallowed."""
+
+    def test_should_preserve_wo_when_overlaps_with_longer_entity(self):
+        # "我在协和医院" — "我" is self_reference, "我在协和医院" is org/address
+        text = "我在协和医院做了体检"
+        entities = [
+            _m("我", "self_reference", 0, 1),
+            _m("我在协和医院", "organization", 0, 6),
+        ]
+
+        result = merge_entities(entities, text=text)
+        types = {r.type for r in result}
+
+        assert "self_reference" in types, "我 should not be swallowed by org"
+
+    def test_should_trim_other_entity_when_wo_splits_it(self):
+        text = "我在协和医院做了体检"
+        entities = [
+            _m("我", "self_reference", 0, 1),
+            _m("我在协和医院", "organization", 0, 6),
+        ]
+
+        result = merge_entities(entities, text=text)
+
+        # Should have self_reference "我" + trimmed org
+        assert any(r.type == "self_reference" and r.text == "我" for r in result)
+        trimmed = [r for r in result if r.type == "organization"]
+        if trimmed:
+            assert trimmed[0].start >= 1, "org should be trimmed to after 我"
+
+    def test_should_keep_both_when_wo_at_start_of_address(self):
+        text = "我家在北京市朝阳区"
+        entities = [
+            _m("我", "self_reference", 0, 1),
+            _m("我家在北京", "address", 0, 5),
+        ]
+
+        result = merge_entities(entities, text=text)
+        types = {r.type for r in result}
+
+        assert "self_reference" in types
+
+    def test_should_keep_both_when_wo_mama_overlaps_with_person(self):
+        text = "我妈张三去了医院"
+        entities = [
+            _m("我妈", "self_reference", 0, 2),
+            _m("我妈张三", "person", 0, 4),
+        ]
+
+        result = merge_entities(entities, text=text)
+        types = {r.type for r in result}
+
+        assert "self_reference" in types
+
+    def test_should_not_affect_non_self_reference_overlap(self):
+        # Normal overlap behavior unchanged
+        entities = [
+            _m("北京", "location", 0, 2),
+            _m("北京市朝阳区", "address", 0, 6),
+        ]
+
+        result = merge_entities(entities)
+
+        assert len(result) == 1
+        assert result[0].text == "北京市朝阳区"

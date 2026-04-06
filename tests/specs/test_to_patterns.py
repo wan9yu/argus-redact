@@ -49,7 +49,7 @@ class TestToPatterns:
     _PATTERNS_IN_SOURCE = {"person", "job_title", "organization", "school",
                            "ethnicity", "workplace", "criminal_record", "financial",
                            "biometric", "medical", "religion", "political",
-                           "sexual_orientation"}
+                           "sexual_orientation", "self_reference"}
 
     def test_spec_patterns_should_exist(self):
         """Every zh spec with _patterns should produce at least one pattern."""

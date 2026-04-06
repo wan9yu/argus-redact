@@ -80,5 +80,21 @@
     "type": "id_number",
     "expected_text": "11010119900307002x",
     "description": "校验位小写x（聊天常见）"
+  },
+  {
+    "id": "valid_id_with_dashes",
+    "input": "身份证110101-19900307-4610",
+    "should_match": true,
+    "type": "id_number",
+    "expected_text": "110101-19900307-4610",
+    "description": "短横线分隔的身份证号（表格常见）"
+  },
+  {
+    "id": "valid_id_mixed_separators",
+    "input": "身份证110101 1990 0307 4610",
+    "should_match": true,
+    "type": "id_number",
+    "expected_text": "110101 1990 0307 4610",
+    "description": "多处空格分隔（手动输入常见）"
   }
 ]

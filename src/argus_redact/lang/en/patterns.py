@@ -5,10 +5,10 @@ from argus_redact.lang.zh.patterns import _validate_luhn
 
 def _validate_ssn(value: str) -> bool:
     """Basic SSN validation: area != 000, group != 00, serial != 0000."""
-    parts = value.split("-")
-    if len(parts) != 3:
+    digits = value.replace("-", "").replace(" ", "")
+    if len(digits) != 9 or not digits.isdigit():
         return False
-    area, group, serial = parts
+    area, group, serial = digits[:3], digits[3:5], digits[5:]
     if area == "000" or group == "00" or serial == "0000":
         return False
     return True
@@ -32,10 +32,10 @@ PATTERNS = [
     {
         "type": "ssn",
         "label": "[SSN REDACTED]",
-        "pattern": r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)",
+        "pattern": r"(?<!\d)\d{3}[-\s]?\d{2}[-\s]?\d{4}(?!\d)",
         "validate": _validate_ssn,
         "check_context": True,
-        "description": "US Social Security Number",
+        "description": "US Social Security Number (with optional spaces/dashes)",
     },
     {
         "type": "phone",
@@ -203,5 +203,23 @@ PATTERNS = [
             r"|(?:came\s+out|coming\s+out))"
         ),
         "description": "Sexual orientation (explicit terms)",
+    },
+    # ── Self-reference (first-person pronouns + kinship) ──
+    {
+        "type": "self_reference",
+        "label": "[SELF REDACTED]",
+        "pattern": (
+            r"\b[Mm]y\s+(?:mother|father|mom|dad|husband|wife|spouse"
+            r"|son|daughter|brother|sister|grandfather|grandmother"
+            r"|grandma|grandpa|uncle|aunt|nephew|niece"
+            r"|partner|fiancée?|child|children|kid|kids|family)\b"
+        ),
+        "description": "Self-reference with kinship (my mom/my husband/...)",
+    },
+    {
+        "type": "self_reference",
+        "label": "[SELF REDACTED]",
+        "pattern": r"\b(?:myself|ourselves|mine|ours|our|my|me|us|we|I)\b",
+        "description": "Self-reference pronoun (I/me/my/we/our/...)",
     },
 ]

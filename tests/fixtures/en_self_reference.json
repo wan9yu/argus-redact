@@ -1,0 +1,110 @@
+[
+  {
+    "id": "I_simple",
+    "input": "I was diagnosed with diabetes",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "I",
+    "description": "Basic first person I"
+  },
+  {
+    "id": "me_object",
+    "input": "The doctor told me I have high blood pressure",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_count": 2,
+    "description": "me and I in same sentence"
+  },
+  {
+    "id": "my_possessive",
+    "input": "my phone number is 555-1234",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "my",
+    "description": "Possessive my"
+  },
+  {
+    "id": "mine_pronoun",
+    "input": "that account is mine",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "mine",
+    "description": "Possessive pronoun mine"
+  },
+  {
+    "id": "myself",
+    "input": "I diagnosed myself with anxiety",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_count": 2,
+    "description": "myself is self-reference"
+  },
+  {
+    "id": "we_group",
+    "input": "we are laying off 200 people",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "we",
+    "description": "Group first person"
+  },
+  {
+    "id": "our_possessive",
+    "input": "our company is bankrupt",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "our",
+    "description": "Group possessive"
+  },
+  {
+    "id": "my_mom",
+    "input": "my mom was hospitalized",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "my mom",
+    "description": "Kinship through my"
+  },
+  {
+    "id": "my_husband",
+    "input": "my husband works at Google",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "my husband",
+    "description": "Spouse kinship"
+  },
+  {
+    "id": "my_daughter",
+    "input": "my daughter is in college",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "my daughter",
+    "description": "Child kinship"
+  },
+  {
+    "id": "he_not_self",
+    "input": "he was diagnosed with diabetes",
+    "should_match": false,
+    "type": "self_reference",
+    "description": "Third person should not match"
+  },
+  {
+    "id": "you_not_self",
+    "input": "you have high blood pressure",
+    "should_match": false,
+    "type": "self_reference",
+    "description": "Second person should not match"
+  },
+  {
+    "id": "no_pronoun",
+    "input": "the weather is nice today",
+    "should_match": false,
+    "type": "self_reference",
+    "description": "No pronoun"
+  },
+  {
+    "id": "I_in_word",
+    "input": "the AI is amazing",
+    "should_match": false,
+    "type": "self_reference",
+    "description": "I inside a word should not match"
+  }
+]

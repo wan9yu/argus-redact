@@ -1,0 +1,127 @@
+[
+  {
+    "id": "wo_simple",
+    "input": "我确诊了糖尿病",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "我",
+    "description": "最基本的第一人称"
+  },
+  {
+    "id": "wo_possessive",
+    "input": "我的手机号是138",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "我的",
+    "description": "我的（所有格）"
+  },
+  {
+    "id": "women",
+    "input": "我们公司裁员了",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "我们",
+    "description": "我们（群体第一人称）"
+  },
+  {
+    "id": "women_possessive",
+    "input": "我们的产品很好",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "我们的",
+    "description": "我们的（群体所有格）"
+  },
+  {
+    "id": "wo_mama",
+    "input": "我妈在301医院住院",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "我妈",
+    "description": "我妈（亲属关系暴露用户身份）"
+  },
+  {
+    "id": "wo_baba",
+    "input": "我爸确诊了高血压",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "我爸",
+    "description": "我爸"
+  },
+  {
+    "id": "wo_laogong",
+    "input": "我老公在华为上班",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "我老公",
+    "description": "我老公（配偶关系）"
+  },
+  {
+    "id": "wo_laopo",
+    "input": "我老婆怀孕了",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "我老婆",
+    "description": "我老婆"
+  },
+  {
+    "id": "wo_erzi",
+    "input": "我儿子在北大附小上学",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "我儿子",
+    "description": "我儿子（子女关系）"
+  },
+  {
+    "id": "wo_nver",
+    "input": "我女儿今年高考",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "我女儿",
+    "description": "我女儿"
+  },
+  {
+    "id": "wo_muqin",
+    "input": "我母亲住院了",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "我母亲",
+    "description": "我母亲（正式称谓）"
+  },
+  {
+    "id": "wo_fuqin",
+    "input": "我父亲退休了",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_text": "我父亲",
+    "description": "我父亲"
+  },
+  {
+    "id": "multiple_wo",
+    "input": "我在协和医院做了体检，医生说我血糖偏高",
+    "should_match": true,
+    "type": "self_reference",
+    "expected_count": 2,
+    "description": "同一文本中多个「我」都应匹配"
+  },
+  {
+    "id": "ta_not_self",
+    "input": "他确诊了糖尿病",
+    "should_match": false,
+    "type": "self_reference",
+    "description": "第三人称不应匹配"
+  },
+  {
+    "id": "ni_not_self",
+    "input": "你确诊了糖尿病",
+    "should_match": false,
+    "type": "self_reference",
+    "description": "第二人称不应匹配"
+  },
+  {
+    "id": "no_pronoun",
+    "input": "今天天气不错",
+    "should_match": false,
+    "type": "self_reference",
+    "description": "无代词"
+  }
+]
