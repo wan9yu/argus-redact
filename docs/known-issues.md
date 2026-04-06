@@ -15,6 +15,11 @@
 
 | Issue | Version | Fix |
 |-------|---------|-----|
+| Unicode bypass (fullwidth, ZWSP, ZWJ, RTL) | v0.4.4 | NFKC normalization + invisible char stripping before regex |
+| Input >1MB DoS | v0.4.4 | Input size limit (1MB), rejects with clear error |
+| ID number false negative on typos | v0.4.4 | Relaxed checksum: format-valid IDs accepted even with wrong check digit |
+| HTTP config path injection | v0.4.4 | Reject config as file path string via HTTP (dict only) |
+| NFKC offset mapping bug | v0.4.4 | Per-char normalize instead of broken heuristic |
 | HTTP server default 0.0.0.0 | v0.4.3 | Changed to 127.0.0.1 |
 | mask strategy leaks partial PII | v0.4.3 | Compliance profiles (pipl/gdpr/hipaa) force remove strategy |
 | restore() injection risk | v0.4.3 | `check_restore_safety()` detects pseudonym amplification |
