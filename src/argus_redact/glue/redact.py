@@ -199,7 +199,9 @@ def redact(
     entities: list[PatternMatch] = []
     langs = [lang] if isinstance(lang, str) else list(lang)
 
+    t0 = time.perf_counter()
     normalized, offset_map = normalize_text(text)
+    timing["normalize_ms"] = (time.perf_counter() - t0) * 1000
     use_normalized = offset_map is not None
 
     # Layer 1a: regex (structural PII — phone, ID, bank card, etc.)
@@ -302,14 +304,12 @@ def redact(
                 layer3_status = "error"
             timing["layer_3_ms"] = (time.perf_counter() - t0) * 1000
 
+    t0 = time.perf_counter()
     pre_merge = entities
     entities = merge_entities(pre_merge, text=text)
-
-    # Cross-layer agreement: boost confidence when L1+L2 agree
     entities = boost_cross_layer(entities, pre_merge)
-
-    # Self-reference tier filter: driven by hints
     entities = filter_self_reference(entities, hints)
+    timing["merge_ms"] = (time.perf_counter() - t0) * 1000
 
     # Apply type filtering
     if types is not None:
@@ -319,6 +319,7 @@ def redact(
         exclude_set = set(types_exclude)
         entities = [e for e in entities if e.type not in exclude_set]
 
+    t0 = time.perf_counter()
     redacted, result_key = replace(
         text,
         entities,
@@ -326,11 +327,38 @@ def redact(
         key=existing_key,
         config=config,
     )
-
-    # Normalize grammar after first-person replacement (English only)
     effective_lang = lang if isinstance(lang, str) else (lang[0] if lang else "zh")
     if effective_lang == "en":
         redacted = normalize_grammar_en(redacted, result_key)
+    timing["replace_ms"] = (time.perf_counter() - t0) * 1000
+
+    # Emit telemetry (no-op if no hook set)
+    from argus_redact.telemetry import emit, PerfRecord
+    _ascii_count = sum(1 for c in text if c.isascii()) if text else 0
+    try:
+        _rust = True
+        from argus_redact._core import merge_entities as _  # noqa: F401
+    except ImportError:
+        _rust = False
+    emit(PerfRecord(
+        version=importlib.import_module("argus_redact").__version__,
+        timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
+        text_len=len(text),
+        text_ascii_ratio=round(_ascii_count / len(text), 2) if text else 0.0,
+        lang=langs,
+        mode=mode,
+        normalize_ms=round(timing.get("normalize_ms", 0), 2),
+        layer_1_ms=round(timing.get("layer_1_ms", 0), 2),
+        layer_1b_person_ms=round(timing.get("layer_1b_person_ms", 0), 2),
+        layer_2_ms=round(timing.get("layer_2_ms", 0), 2),
+        layer_3_ms=round(timing.get("layer_3_ms", 0), 2),
+        merge_ms=round(timing.get("merge_ms", 0), 2),
+        replace_ms=round(timing.get("replace_ms", 0), 2),
+        total_ms=round(sum(timing.values()), 2),
+        entities_found=len(entities),
+        entity_types=sorted(set(e.type for e in entities)),
+        rust_core=_rust,
+    ))
 
     if key_file is not None and result_key:
         target = Path(key_file)
