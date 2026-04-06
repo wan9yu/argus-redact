@@ -172,3 +172,50 @@ class TestServerHealth:
 
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
+
+
+@pytest.fixture(scope="module")
+def auth_client():
+    """Client for a server with API key auth enabled."""
+    import os
+    os.environ["ARGUS_API_KEY"] = "test-secret-key"
+    from argus_redact.server import create_app
+    from starlette.testclient import TestClient
+
+    app = create_app()
+    yield TestClient(app)
+    del os.environ["ARGUS_API_KEY"]
+
+
+class TestServerAuth:
+    def test_should_reject_when_no_auth_header(self, auth_client):
+        resp = auth_client.post(
+            "/redact",
+            json={"text": "电话13812345678", "mode": "fast"},
+        )
+
+        assert resp.status_code == 401
+
+    def test_should_reject_when_wrong_key(self, auth_client):
+        resp = auth_client.post(
+            "/redact",
+            json={"text": "电话13812345678", "mode": "fast"},
+            headers={"Authorization": "Bearer wrong-key"},
+        )
+
+        assert resp.status_code == 401
+
+    def test_should_accept_when_correct_key(self, auth_client):
+        resp = auth_client.post(
+            "/redact",
+            json={"text": "电话13812345678", "mode": "fast", "seed": 42},
+            headers={"Authorization": "Bearer test-secret-key"},
+        )
+
+        assert resp.status_code == 200
+        assert "13812345678" not in resp.json()["redacted"]
+
+    def test_health_should_not_require_auth(self, auth_client):
+        resp = auth_client.get("/health")
+
+        assert resp.status_code == 200

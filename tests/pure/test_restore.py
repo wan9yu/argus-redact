@@ -204,6 +204,35 @@ class TestWipeKey:
         assert len(key) == 0
 
 
+class TestRestoreSubstringSafety:
+    """Different-prefix pseudonyms must not interfere with each other."""
+
+    def test_should_not_confuse_different_prefix_pseudonyms(self):
+        key = {"P-00037": "张三", "MED-00037": "糖尿病", "O-00037": "协和医院"}
+        text = "P-00037确诊MED-00037，在O-00037"
+
+        result = restore(text, key)
+
+        assert result == "张三确诊糖尿病，在协和医院"
+
+    def test_should_handle_pseudonym_as_substring_of_text(self):
+        """IP-00003 contains "P-00003" as substring — must not partial-match."""
+        key = {"P-00003": "张三", "IP-00003": "192.168.1.1"}
+        text = "用户P-00003的IP是IP-00003"
+
+        result = restore(text, key)
+
+        assert result == "用户张三的IP是192.168.1.1"
+
+    def test_should_handle_adjacent_pseudonyms(self):
+        key = {"P-00001": "张", "P-00002": "三"}
+        text = "P-00001P-00002是好人"
+
+        result = restore(text, key)
+
+        assert result == "张三是好人"
+
+
 class TestRestoreErrors:
     """Type errors and invalid inputs."""
 

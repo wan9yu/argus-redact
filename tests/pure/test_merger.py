@@ -218,6 +218,24 @@ class TestMergeComplexScenarios:
         assert len(result) == 1
         assert result[0].type == "organization"
 
+    def test_should_produce_valid_offsets_when_l1_l2_partial_overlap(self):
+        """L1 [3,10) overlaps L2 [5,12) → merged span must be valid."""
+        text = "住在三里屯的星巴克咖啡厅"
+        entities = [
+            _m("三里屯的星巴克", "address", 2, 9),  # L1
+            _m("星巴克咖啡厅", "organization", 6, 12),  # L2 overlaps
+        ]
+
+        result = merge_entities(entities, text=text)
+
+        # Merged: should pick one or both, but offsets must be valid
+        for e in result:
+            assert e.start >= 0
+            assert e.end <= len(text)
+            assert text[e.start:e.end] == e.text, (
+                f"Offset mismatch: text[{e.start}:{e.end}]='{text[e.start:e.end]}' != '{e.text}'"
+            )
+
 
 class TestMergeSelfReferencePriority:
     """self_reference should split overlapping entities, not be swallowed."""

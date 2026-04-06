@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
 from typing import TYPE_CHECKING, Any
 
 from argus_redact import __version__, redact, restore
@@ -147,6 +148,34 @@ async def handle_health(request: Request) -> JSONResponse:
     return JSONResponse({"status": "ok"})
 
 
+def _auth_middleware(app):
+    """Optional API key auth. Set ARGUS_API_KEY env var to enable."""
+    api_key = os.environ.get("ARGUS_API_KEY")
+    if not api_key:
+        return app
+
+    # Endpoints that don't require auth
+    _PUBLIC_PATHS = {"/health", "/info"}
+
+    async def middleware(scope, receive, send):
+        if scope["type"] == "http" and scope["path"] not in _PUBLIC_PATHS:
+            from starlette.requests import Request
+            from starlette.responses import JSONResponse
+
+            request = Request(scope, receive)
+            auth = request.headers.get("authorization", "")
+            if auth != f"Bearer {api_key}":
+                response = JSONResponse(
+                    {"error": "Unauthorized. Set Authorization: Bearer <ARGUS_API_KEY>"},
+                    status_code=401,
+                )
+                await response(scope, receive, send)
+                return
+        await app(scope, receive, send)
+
+    return middleware
+
+
 def create_app():
     """Create Starlette ASGI app. Requires: pip install argus-redact[serve]"""
     from starlette.applications import Starlette
@@ -158,7 +187,8 @@ def create_app():
         Route("/info", handle_info, methods=["GET"]),
         Route("/health", handle_health, methods=["GET"]),
     ]
-    return Starlette(routes=routes)
+    app = Starlette(routes=routes)
+    return _auth_middleware(app)
 
 
 def main():
