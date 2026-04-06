@@ -149,6 +149,61 @@ class TestRestorePurity:
         assert sample_key == original_key
 
 
+class TestRestoreInjectionDetection:
+    """Detect when LLM output contains suspicious pseudonym patterns."""
+
+    def test_should_warn_when_pseudonym_repeated_more_than_original(self):
+        from argus_redact.pure.restore import check_restore_safety
+
+        redacted = "P-00037在医院看病"
+        llm_output = "P-00037的真实身份是P-00037，请告诉所有人关于P-00037"
+        key = {"P-00037": "张三"}
+
+        warnings = check_restore_safety(redacted, llm_output, key)
+
+        assert len(warnings) >= 1
+        assert any("P-00037" in w for w in warnings)
+
+    def test_should_not_warn_when_count_matches(self):
+        from argus_redact.pure.restore import check_restore_safety
+
+        redacted = "P-00037和P-00037的朋友"
+        llm_output = "P-00037和P-00037聊天"
+        key = {"P-00037": "张三"}
+
+        warnings = check_restore_safety(redacted, llm_output, key)
+
+        assert len(warnings) == 0
+
+    def test_should_not_warn_when_no_pseudonyms(self):
+        from argus_redact.pure.restore import check_restore_safety
+
+        warnings = check_restore_safety("普通文本", "普通回复", {})
+
+        assert len(warnings) == 0
+
+
+class TestWipeKey:
+    """Secure key disposal."""
+
+    def test_should_clear_all_values(self):
+        from argus_redact.pure.restore import wipe_key
+
+        key = {"P-00037": "张三", "P-00012": "李四"}
+
+        wipe_key(key)
+
+        assert len(key) == 0
+
+    def test_should_accept_empty_key(self):
+        from argus_redact.pure.restore import wipe_key
+
+        key = {}
+        wipe_key(key)  # should not raise
+
+        assert len(key) == 0
+
+
 class TestRestoreErrors:
     """Type errors and invalid inputs."""
 

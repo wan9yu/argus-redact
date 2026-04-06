@@ -153,12 +153,18 @@ def redact(
     if types is not None and types_exclude is not None:
         raise ValueError("types and types_exclude are mutually exclusive")
 
-    # Resolve profile → types filter
+    # Resolve profile → types filter + strategy overrides
     if profile is not None:
         from argus_redact.specs.profiles import get_profile
         prof = get_profile(profile)
         if types is None and "types" in prof:
             types = prof["types"]
+        if "config" in prof:
+            # Profile config is base; user config overrides
+            profile_config = dict(prof["config"])
+            if config:
+                profile_config.update(config)
+            config = profile_config
 
     # Resolve config from file path
     if isinstance(config, str):

@@ -7,6 +7,37 @@ import re as _re
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS, restore_grammar_en
 
 
+def check_restore_safety(
+    redacted: str, llm_output: str, key: dict[str, str],
+) -> list[str]:
+    """Check if LLM output has suspicious pseudonym usage (possible injection).
+
+    Returns a list of warning strings. Empty list = safe.
+    Warns when a pseudonym appears more times in LLM output than in the
+    original redacted text — a sign the LLM is echoing/amplifying pseudonyms.
+    """
+    warnings = []
+    for code in key:
+        count_original = redacted.count(code)
+        count_llm = llm_output.count(code)
+        if count_llm > count_original:
+            warnings.append(
+                f"Pseudonym '{code}' appears {count_llm}x in LLM output "
+                f"but only {count_original}x in redacted input — possible injection"
+            )
+    return warnings
+
+
+def wipe_key(key: dict) -> None:
+    """Clear a key dict to minimize PII exposure in memory.
+
+    Python strings are immutable and cannot be securely erased from memory,
+    but clearing the dict removes references, allowing garbage collection sooner.
+    For high-security scenarios, run argus-redact in a short-lived process.
+    """
+    key.clear()
+
+
 def restore(text: str, key: dict | str) -> str:
     """Replace pseudonyms with originals using the key."""
     if isinstance(key, str):

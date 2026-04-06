@@ -52,3 +52,37 @@ class TestTypeFiltering:
         text = "手机13812345678"
         _, key = redact(text, lang="zh", mode="fast", types=["id_number"])
         assert len(key) == 0
+
+
+class TestProfileStrategy:
+    """Compliance profiles should override strategies for stricter privacy."""
+
+    def test_pipl_should_not_use_mask_for_phone(self):
+        """PIPL profile: phone should use pseudonym, not mask (mask leaks prefix+suffix)."""
+        text = "手机13812345678"
+        redacted, key = redact(text, lang="zh", mode="fast", profile="pipl")
+
+        # Should NOT contain partial digits like 138****5678
+        assert "138" not in redacted
+        assert "5678" not in redacted
+
+    def test_pipl_should_not_use_mask_for_email(self):
+        text = "邮箱zhang@example.com"
+        redacted, key = redact(text, lang="zh", mode="fast", profile="pipl")
+
+        assert "zhang" not in redacted
+        assert "example.com" not in redacted
+
+    def test_default_profile_still_uses_mask(self):
+        """Default profile keeps mask for usability."""
+        text = "手机13812345678"
+        redacted, key = redact(text, lang="zh", mode="fast")
+
+        # Default mask: 138****5678
+        assert "138" in redacted
+
+    def test_hipaa_should_not_use_mask_for_phone(self):
+        text = "phone 123-456-7890"
+        redacted, key = redact(text, lang="en", mode="fast", profile="hipaa")
+
+        assert "123" not in redacted
