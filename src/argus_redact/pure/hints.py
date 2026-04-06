@@ -17,7 +17,7 @@ _DIGIT_EQUIV: dict[str, str] = {
     "陆": "6", "柒": "7", "捌": "8", "玖": "9",
 }
 # Separators allowed inside a digit sequence (stripped during normalization)
-_DIGIT_SEPARATORS = frozenset(" \t.-/")
+_DIGIT_SEPARATORS = frozenset(" \t.-/，、·;；:：")
 _MIN_SUSPICIOUS_LENGTH = 7
 
 
@@ -52,6 +52,7 @@ def _scan_suspicious_digits(
 
         # Found a digit-equiv char — scan the full sequence
         seq_start = i
+        last_digit_pos = i
         normalized = [digit]
         i += 1
 
@@ -66,7 +67,11 @@ def _scan_suspicious_digits(
             if i in covered:
                 break
             normalized.append(d)
+            last_digit_pos = i
             i += 1
+
+        # Trim trailing separators: end at last digit, not last separator
+        i = last_digit_pos + 1
 
         norm_str = "".join(normalized)
         # Only emit if sequence is long enough AND contains non-ASCII digit-equiv
@@ -78,10 +83,12 @@ def _scan_suspicious_digits(
                 region=(seq_start, i),
                 data={"normalized": norm_str, "reason": "digit_equivalent_sequence"},
             ))
-        # Also emit for pure ASCII with unusual separators (dots)
+        # Also emit for pure ASCII digits with frequent separators (not just 1 dot in a sentence)
         elif len(norm_str) >= _MIN_SUSPICIOUS_LENGTH and not has_non_ascii:
             original = text[seq_start:i]
-            if "." in original and original.count(".") >= 3:
+            sep_count = len(original) - len(norm_str)
+            # Require separators to be at least 30% of the span (e.g., 1.3.8.0.0 = 50%)
+            if sep_count >= 3 and sep_count / len(original) > 0.25:
                 hints.append(Hint(
                     type="suspicious_digit_sequence",
                     region=(seq_start, i),
