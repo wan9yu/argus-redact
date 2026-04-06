@@ -32,6 +32,17 @@ Compliance profiles (`pipl`, `gdpr`, `hipaa`) automatically override `mask` stra
 
 User config overrides profile config: `redact(text, profile="pipl", config={"phone": {"strategy": "mask"}})` uses mask despite PIPL profile.
 
+### Unified Prefix (hide PII type)
+
+By default, pseudonym codes reveal the PII type: `P-00037` (person), `MED-00123` (medical), `ADDR-05432` (address). To hide type information:
+
+```python
+redact(text, config={"_unified_prefix": "R", "phone": {"strategy": "remove"}})
+# All types use R-XXXXX: R-00037, R-00123, R-05432
+```
+
+Note: `mask` strategy doesn't use prefixes. Override to `remove` for types you want unified.
+
 ---
 
 ## Full Configuration Schema

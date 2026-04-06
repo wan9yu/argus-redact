@@ -69,9 +69,28 @@ Internally, `redact()` runs a three-layer detection pipeline where each layer pa
 
 ---
 
+## Normalize (pre-processing)
+
+Before any detection, `normalize_text()` prepares the text for matching while maintaining an offset map for reversible replacement.
+
+```
+Step 1  Strip invisible chars    ZWJ, ZWSP, soft hyphen, BOM, direction controls (16 types)
+Step 2  Confusables              Cyrillic/Greek → Latin (~45 pairs, C-level str.translate)
+Step 3  NFKC                     Fullwidth → halfwidth, superscript → normal
+Step 4  Chinese digit sequences  7+ consecutive digit-equivalent chars → ASCII digits
+```
+
+Step 4 is contextual: `一三八零零一三八零零零` (11 Chinese digits) → `13800138000`, but `三月` (1 digit) is left unchanged.
+
+All steps produce an `offset_map` so detected spans map back to original text positions. Replacement and key storage use original text — restore is lossless.
+
+ASCII text skips all steps (`text.isascii()` fast-path).
+
+---
+
 ## Layer 1: Pattern (Regex)
 
-**Input:** raw text (str)
+**Input:** normalized text (str)
 **Output:** list of `(start, end, type, matched_text)`
 
 Runs a set of regex patterns against the full text. Each pattern belongs to a language pack (see [Language Packs](language-packs.md)).

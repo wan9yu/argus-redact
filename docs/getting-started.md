@@ -209,6 +209,38 @@ cat input.txt | argus-redact redact -k key.json -l zh,en > redacted.txt
 cat input.txt | argus-redact redact -k key.json -m fast > redacted.txt
 ```
 
+## Safety Tips
+
+```python
+from argus_redact import check_restore_safety, wipe_key
+
+# Before restoring LLM output, check for prompt injection
+warnings = check_restore_safety(redacted, llm_output, key)
+if warnings:
+    print("Suspicious LLM output:", warnings)
+else:
+    restored = restore(llm_output, key)
+
+# Clear key from memory when done
+wipe_key(key)
+```
+
+For compliance (PIPL/GDPR/HIPAA), use profiles — they enforce stricter strategies:
+
+```python
+redacted, key = redact(text, profile="pipl")  # no partial masking
+```
+
+## Performance Monitoring
+
+```bash
+# Enable per-call timing logs
+ARGUS_PERF_LOG=perf.jsonl python my_app.py
+
+# Slow calls (>50ms) always logged, fast calls 1% sampled
+# Analyze: jq 'select(.slow)' perf.jsonl
+```
+
 ## Next Steps
 
 - [Python API Reference](api-reference.md) — all parameters, return types, edge cases

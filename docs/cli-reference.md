@@ -233,8 +233,12 @@ All commands use the same exit codes:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ARGUS_REDACT_LANG` | `zh` | Default language. |
-| `ARGUS_REDACT_LOG_LEVEL` | `WARNING` | `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
+| `ARGUS_REDACT_LANG` | `zh` | Default language |
+| `ARGUS_REDACT_LOG_LEVEL` | `WARNING` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `ARGUS_API_KEY` | *(unset)* | Bearer token for HTTP server auth |
+| `ARGUS_PERF_LOG` | *(unset)* | Path to JSONL file for performance telemetry |
+| `ARGUS_PERF_SLOW_MS` | `50` | Slow call threshold (ms), always logged |
+| `ARGUS_PERF_SAMPLE` | `0.01` | Sampling rate for fast calls (0.0-1.0) |
 
 ---
 

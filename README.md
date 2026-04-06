@@ -66,9 +66,13 @@ Layer 3  Local LLM      implicit PII — symptoms→disease, behavior→belief  
 
 Layers are not independent — L1 passes **hints** to L2, enabling collaborative detection. Instruction text ("帮我看看这段代码") skips NER entirely. High PII density lowers NER thresholds. Cross-layer agreement boosts confidence.
 
+Unicode-hardened: NFKC normalization, zero-width stripping, Cyrillic/Greek confusable defense, Chinese digit detection (一三八零零一三八零零零 → detected as phone).
+
 Core engine (regex matching, entity merging, restore, pseudonym generation) is written in **Rust via PyO3** for maximum performance. Python handles orchestration, NER models, and LLM integration.
 
 ~47 PII types across 4 levels — from phone numbers to medical diagnoses, religious beliefs, political opinions. Use what you need: `mode="fast"` (Layer 1 only) → `mode="ner"` (+ NER) → `mode="auto"` (all three).
+
+**Telemetry:** `ARGUS_PERF_LOG=perf.jsonl` for per-call timing breakdown. [Details →](docs/api-reference.md#performance-telemetry)
 
 ## 8 Languages
 

@@ -380,6 +380,56 @@ wipe_key(key)  # done with key, clear it
 
 ---
 
+## Performance Telemetry
+
+Opt-in timing logs for diagnosing performance.
+
+### Environment Variables
+
+```bash
+ARGUS_PERF_LOG=perf.jsonl          # Enable file logging (JSONL)
+ARGUS_PERF_SLOW_MS=50              # Slow call threshold in ms (default: 50)
+ARGUS_PERF_SAMPLE=0.01             # Fast call sampling rate (default: 1%)
+```
+
+Slow calls (above threshold) are always logged. Fast calls are sampled at the configured rate.
+
+### Custom Hook
+
+```python
+from argus_redact.telemetry import set_perf_hook, PerfRecord
+
+def my_hook(record: PerfRecord):
+    print(f"{record.text_len} chars, {record.total_ms}ms, {record.entities_found} entities")
+
+set_perf_hook(my_hook)   # receives ALL calls (no sampling)
+set_perf_hook(None)      # disable
+```
+
+### PerfRecord Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text_len` | int | Input character count |
+| `text_ascii_ratio` | float | 0.0-1.0, indicates normalize cost |
+| `lang` | list[str] | Languages used |
+| `mode` | str | fast / ner / auto |
+| `normalize_ms` | float | Unicode normalization time |
+| `layer_1_ms` | float | Regex matching time |
+| `layer_1b_person_ms` | float | Person name scoring time |
+| `layer_2_ms` | float | NER time |
+| `layer_3_ms` | float | Semantic LLM time |
+| `merge_ms` | float | Merge + cross-layer + tier filter |
+| `replace_ms` | float | Replacement + grammar normalization |
+| `total_ms` | float | Sum of all above |
+| `entities_found` | int | Entity count |
+| `entity_types` | list[str] | Distinct types detected |
+| `rust_core` | bool | Rust acceleration active |
+| `slow` | bool | Above slow threshold |
+| `sampled` | bool | Random sample (fast call) |
+
+---
+
 ## Key Format
 
 The key is a `dict[str, str]` mapping replacements to originals:
