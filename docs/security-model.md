@@ -202,3 +202,26 @@ The EU AI Act (effective August 2026) imposes data minimization requirements on 
 ### HIPAA
 
 For healthcare applications in the US, argus-redact can serve as a de-identification step before sending clinical notes to LLM APIs. The key file should be treated as PHI and stored on encrypted, access-controlled volumes. Delete key files after restoration.
+
+---
+
+## Known Security Limitations
+
+### Not real encryption
+
+argus-redact is **semantic pseudonymization**, not cryptographic encryption. There is no mathematical proof of security. Detection is best-effort NLP. Always review redacted output before sending to external services.
+
+### In-memory key residue
+
+Python strings are immutable and cannot be securely erased. After `del key`, the key content may remain in process memory until garbage collected. This does not defend against memory forensics (core dumps, `/proc/pid/mem`, cold boot attacks). For HIPAA/high-security scenarios, run argus-redact in a short-lived process and rely on OS-level memory protections.
+
+### restore() and LLM prompt injection
+
+If an attacker controls the LLM output (via prompt injection), they can include pseudonym codes (e.g., `P-00037`) in the response. `restore()` will replace these with real PII. This is by design — restore is a mechanical string replacement. Mitigations:
+- Validate LLM output structure before restoring
+- Use `report=True` to review what was redacted before sending
+- Consider the LLM's output trustworthiness in your threat model
+
+### mask strategy partial leakage
+
+The `mask` strategy (e.g., `138****5678`) reveals prefix and suffix digits. For phone numbers, 3 prefix + 4 suffix digits may narrow the search space to ~10,000 numbers. For strict privacy, use `pseudonym` or `remove` strategy instead. PIPL/GDPR compliance profiles should prefer non-mask strategies.

@@ -227,20 +227,31 @@ def redact(
 
     # Layer 2: NER (auto or ner mode), hint-gated
     layer2_count = 0
+    layer2_status = "skipped"
     if mode in ("auto", "ner") and not should_skip_ner(hints):
         from argus_redact.impure.ner import detect_ner
 
         ner_confidence = get_ner_min_confidence(hints)
         t0 = time.perf_counter()
-        for adapter in _get_ner_adapters(lang):
+        adapters = _get_ner_adapters(lang)
+        if not adapters and mode == "ner":
+            logger.warning(
+                "mode='ner' but no NER models available. "
+                "Install language extras: pip install argus-redact[zh] or [en]"
+            )
+            layer2_status = "no_model"
+        for adapter in adapters:
             ner_entities = detect_ner(text, adapter=adapter, min_confidence=ner_confidence)
             layer2_matches = [e.to_pattern_match(layer=2) for e in ner_entities]
             entities.extend(layer2_matches)
             layer2_count += len(layer2_matches)
+        if adapters:
+            layer2_status = "ok"
         timing["layer_2_ms"] = (time.perf_counter() - t0) * 1000
 
     # Layer 3: Semantic LLM (auto mode only)
     layer3_count = 0
+    layer3_status = "skipped"
     if mode == "auto":
         semantic_adapter = _get_semantic_adapter()
         if semantic_adapter is not None:
@@ -252,8 +263,10 @@ def redact(
                 layer3_matches = [e.to_pattern_match(layer=3) for e in sem_entities]
                 entities.extend(layer3_matches)
                 layer3_count += len(layer3_matches)
+                layer3_status = "ok"
             except Exception:
                 logger.warning("Layer 3 semantic detection failed", exc_info=True)
+                layer3_status = "error"
             timing["layer_3_ms"] = (time.perf_counter() - t0) * 1000
 
     pre_merge = entities
@@ -324,7 +337,9 @@ def redact(
             "total": len(entity_details),
             "layer_1": layer1_count,
             "layer_2": layer2_count,
+            "layer_2_status": layer2_status,
             "layer_3": layer3_count,
+            "layer_3_status": layer3_status,
             "duration_ms": round(total_ms, 2),
             **{k: round(v, 2) for k, v in timing.items()},
         }

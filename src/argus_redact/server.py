@@ -167,7 +167,7 @@ def main():
     import uvicorn
 
     parser = argparse.ArgumentParser(description="argus-redact HTTP API server")
-    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
