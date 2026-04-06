@@ -53,13 +53,18 @@ report.risk.reasons  # ("id_number (critical)", "phone (high)", "medical (critic
 
 This is what compliance frameworks don't tell you: **how dangerous is it to share this specific text with AI?**
 
-## Three Layers
+## Three Layers, Collaborative
 
 ```
-Layer 1  Rust+Regex   phone, ID, bank card, email, address, person names   <0.2ms
-Layer 2  NER          locations, organizations, standalone names           10-100ms
-Layer 3  Local LLM    implicit PII — symptoms→disease, behavior→belief     ~20s
+Layer 1  Rust+Regex   phone, ID, bank card, email, self-reference, ...    <0.2ms
+             │
+         produce_hints() → text_intent, pii_density, self_reference_tier
+             │
+Layer 2  NER ← hints   locations, organizations, standalone names         10-100ms
+Layer 3  Local LLM      implicit PII — symptoms→disease, behavior→belief  ~20s
 ```
+
+Layers are not independent — L1 passes **hints** to L2, enabling collaborative detection. Instruction text ("帮我看看这段代码") skips NER entirely. High PII density lowers NER thresholds. Cross-layer agreement boosts confidence.
 
 Core engine (regex matching, entity merging, restore, pseudonym generation) is written in **Rust via PyO3** for maximum performance. Python handles orchestration, NER models, and LLM integration.
 
@@ -83,9 +88,9 @@ Rust core (PyO3) — M1 Max, `mode="fast"`:
 
 | Text | redact() | restore() | Throughput |
 |------|:--------:|:---------:|:----------:|
-| Short (13 chars) | 0.06ms | 0.005ms | 17,879 docs/sec |
-| Medium (96 chars) | 0.22ms | 0.05ms | 4,654 docs/sec |
-| Long (960 chars) | 1.45ms | 0.05ms | 691 docs/sec |
+| Short (17 chars) | 0.07ms | 0.04ms | 13,036 docs/sec |
+| Medium (770 chars) | 1.00ms | 0.05ms | 1,031 docs/sec |
+| Long (10K chars) | 22.2ms | 0.05ms | 45 docs/sec |
 
 Pre-built wheels for all major platforms — no Rust toolchain needed to install:
 
@@ -101,9 +106,9 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 
 ## North Star
 
-| Dimension | Current (v0.4.2) | Next milestone |
+| Dimension | Current (v0.4.3) | Next milestone |
 |-----------|:----------------:|:---:|
-| **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini | Adversarial testing |
+| **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini. Cross-layer hints | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes preserve trigger words | More task types |
 | **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design) | Task-aware guidance |
 | **Compliance** | PIPL ~85%, risk + audit PDF | PIPL/GDPR/HIPAA (byproduct) |
@@ -158,7 +163,7 @@ Meets **PIPL** · **GDPR** · **HIPAA** technical requirements as a byproduct of
 | [CLI Reference](docs/cli-reference.md) | Commands, flags, serve, MCP server |
 | [Configuration](docs/configuration.md) | Per-type strategies, enterprise mask rules, false positive reduction |
 | [Sensitive Info](docs/sensitive-info.md) | Taxonomy, privacy levels, roadmap |
-| [Architecture](docs/architecture.md) | Three-layer engine, pure/impure separation |
+| [Architecture](docs/architecture.md) | Three-layer engine, cross-layer hints, pure/impure separation |
 | [Language Packs](docs/language-packs.md) | Adding new languages |
 | [Security Model](docs/security-model.md) | Threat model, compliance, per-message keys |
 | [**PRvL Standard**](docs/prvl-standard.md) | **Open evaluation standard: Privacy × Reversibility × Language** |
