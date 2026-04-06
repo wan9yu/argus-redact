@@ -138,7 +138,7 @@ def fake_bank_card(rng: random.Random) -> str:
 def fake_passport(rng: random.Random) -> str:
     prefix = rng.choice(["E", "G"])
     digits = "".join(str(rng.randint(0, 9)) for _ in range(8))
-    return prefix + digits
+    return "护照号" + prefix + digits
 
 
 def fake_license_plate(rng: random.Random) -> str:

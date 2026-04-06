@@ -143,8 +143,13 @@ PATTERNS = [
     {
         "type": "passport",
         "label": "[护照号已脱敏]",
-        "pattern": r"(?<![A-Za-z0-9])[A-Z]\d{8}(?!\d)",
-        "description": "Chinese passport number",
+        "pattern": (
+            r"(?:护照\s*(?:号[码]?\s*)?[:：]?\s*)"
+            r"(?P<passport>[A-Z]\d{8})"
+            r"(?!\d)"
+        ),
+        "group": "passport",
+        "description": "Chinese passport number (keyword-triggered, reduces false positives)",
     },
     {
         "type": "license_plate",
@@ -384,7 +389,7 @@ PATTERNS = [
         "type": "medical",
         "label": "[医疗信息已脱敏]",
         "pattern": (
-            r"(?:确诊|诊断为|患有|患了|罹患|检出)"
+            r"(?:确诊|诊断为|患有|患了|罹患|检出|得了|查出来是|查出)"
             r"(?P<medical>[\u4e00-\u9fff]{2,8})"
         ),
         "group": "medical",
@@ -394,7 +399,7 @@ PATTERNS = [
         "type": "medical",
         "label": "[医疗信息已脱敏]",
         "pattern": (
-            r"(?:服用|注射|口服)"
+            r"(?:服用|注射|口服|吃的|吃了|开了)"
             r"(?P<medical>[\u4e00-\u9fff\w]{2,10})"
         ),
         "group": "medical",

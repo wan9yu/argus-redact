@@ -1,0 +1,32 @@
+[
+  {
+    "id": "passport_valid",
+    "input": "护照号G12345678",
+    "should_match": true,
+    "type": "passport",
+    "expected_text": "G12345678",
+    "description": "Standard Chinese passport with keyword"
+  },
+  {
+    "id": "passport_embedded",
+    "input": "旅客徐明的护照号码E12345678已过期",
+    "should_match": true,
+    "type": "passport",
+    "expected_text": "E12345678",
+    "description": "Passport embedded in sentence with keyword"
+  },
+  {
+    "id": "no_passport_bare_code",
+    "input": "编号G12345678的订单",
+    "should_match": false,
+    "type": "passport",
+    "description": "Bare letter+8digits without passport context — could be any code"
+  },
+  {
+    "id": "no_passport_version",
+    "input": "版本V20250101已发布",
+    "should_match": false,
+    "type": "passport",
+    "description": "Version number matches letter+8digits format"
+  }
+]

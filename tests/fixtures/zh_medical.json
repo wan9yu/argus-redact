@@ -53,5 +53,37 @@
         "should_match": false,
         "type": "medical",
         "description": "无PII"
+    },
+    {
+        "id": "med_dele",
+        "input": "得了高血压",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "高血压",
+        "description": "得了+疾病（常见口语表达）"
+    },
+    {
+        "id": "med_chachulai",
+        "input": "查出来是糖尿病",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "糖尿病",
+        "description": "查出来+疾病"
+    },
+    {
+        "id": "med_chide",
+        "input": "吃的降压药",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "降压药",
+        "description": "吃的+药物（口语用法）"
+    },
+    {
+        "id": "med_kaile",
+        "input": "开了阿司匹林",
+        "should_match": true,
+        "type": "medical",
+        "expected_text": "阿司匹林",
+        "description": "开了+药物（医生开药）"
     }
 ]

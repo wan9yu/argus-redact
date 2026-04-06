@@ -131,16 +131,19 @@ class TestEvidenceScoring:
         assert score >= 0.8
 
     def test_three_char_name_baseline_higher_than_two_char(self):
+        from argus_redact._types import PatternMatch
         from argus_redact.lang.zh.person import score_candidate, generate_candidates
 
-        text = "何秀珍和张明都来了"
+        # With equal evidence (same PII proximity), 3-char should score higher than 2-char
+        text = "客户何秀珍和张明来了，电话13812345678"
         candidates = generate_candidates(text)
         he = [c for c in candidates if c.text == "何秀珍"][0]
         zhang = [c for c in candidates if c.text == "张明"][0]
+        pii = [PatternMatch(text="13812345678", type="phone", start=22, end=33)]
 
-        score_he = score_candidate(he, text, pii_entities=[])
-        score_zhang = score_candidate(zhang, text, pii_entities=[])
-        assert score_he > score_zhang
+        score_he = score_candidate(he, text, pii_entities=pii)
+        score_zhang = score_candidate(zhang, text, pii_entities=pii)
+        assert score_he > score_zhang, f"3-char {score_he} should > 2-char {score_zhang}"
 
     def test_isolated_two_char_without_signals_scores_low(self):
         from argus_redact.lang.zh.person import score_candidate, generate_candidates

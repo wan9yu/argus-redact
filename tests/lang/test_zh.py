@@ -26,6 +26,13 @@ class TestBankCard:
         assert_pattern_match(results, example, "bank_card")
 
 
+class TestPassport:
+    @parametrize_examples("zh_passport.json")
+    def test_should_match_or_reject_when_passport_input(self, zh_patterns, example):
+        results = match_patterns(example["input"], zh_patterns)
+        assert_pattern_match(results, example, "passport")
+
+
 class TestLicensePlate:
     @parametrize_examples("zh_license_plate.json")
     def test_should_match_or_reject_when_license_plate_input(self, zh_patterns, example):

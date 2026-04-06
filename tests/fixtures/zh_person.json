@@ -146,5 +146,41 @@
     "should_match": false,
     "type": "person",
     "description": "No name in text"
+  },
+  {
+    "id": "no_person_code",
+    "input": "帮我看看这段代码",
+    "should_match": false,
+    "type": "person",
+    "description": "段代码 should not match — no evidence signal, common phrase"
+  },
+  {
+    "id": "no_person_plan",
+    "input": "这个方案不错",
+    "should_match": false,
+    "type": "person",
+    "description": "方案不 should not match — no evidence signal"
+  },
+  {
+    "id": "no_person_standalone",
+    "input": "张三说了话",
+    "should_match": false,
+    "type": "person",
+    "description": "Name without any structural evidence — L1b should not match, leave to L2 NER"
+  },
+  {
+    "id": "no_person_bare_name_in_sentence",
+    "input": "李明去了超市买东西",
+    "should_match": false,
+    "type": "person",
+    "description": "Bare name in narrative without PII context — L2 NER's job"
+  },
+  {
+    "id": "person_near_phone",
+    "input": "张三13812345678",
+    "should_match": true,
+    "type": "person",
+    "expected_text": "张三",
+    "description": "Name next to phone number — PII proximity signal"
   }
 ]

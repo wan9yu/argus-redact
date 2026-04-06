@@ -212,16 +212,13 @@ register(PIITypeDef(
     strategy="remove",
     label="[护照号已脱敏]",
     examples=(
-        "E12345678",
-        "G87654321",
+        "护照号E12345678",
+        "护照G87654321",
     ),
-    counterexamples=(),
-    _patterns=({
-        "type": "passport",
-        "label": "[护照号已脱敏]",
-        "pattern": r"(?<![A-Za-z0-9])[A-Z]\d{8}(?!\d)",
-        "description": "Chinese passport number",
-    },),
+    counterexamples=(
+        "编号G12345678的订单",
+    ),
+    _patterns=(),
     sensitivity=3,
     faker=fake_passport,
     source="中华人民共和国护照法",

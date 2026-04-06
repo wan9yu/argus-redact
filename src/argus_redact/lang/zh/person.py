@@ -201,41 +201,45 @@ def score_candidate(
       - Paren phone:     +0.5  ("（13812345678）")
       - PII proximity:   +0.5 (≤50 chars) or +0.3 (≤150 chars)
     """
-    score = 0.0
-
-    # Base score by name length
-    if len(candidate.text) >= 4:
-        score += 0.5
-    elif len(candidate.text) == 3:
-        score += 0.4
-    else:
-        score += 0.3
-
     before = text[max(0, candidate.start - _CONTEXT_WINDOW) : candidate.start]
     after = text[candidate.end : candidate.end + _CONTEXT_WINDOW]
 
-    # Context signals
+    # Collect evidence signals
+    evidence = 0.0
     if _CONTEXT_PREFIX.search(before):
-        score += 0.6
+        evidence += 0.6
     if _HONORIFIC_SUFFIX.match(after):
-        score += 0.5
+        evidence += 0.5
     if _PII_SUFFIX.match(after):
-        score += 0.5
+        evidence += 0.5
     if _PAREN_PHONE.match(after):
-        score += 0.5
+        evidence += 0.5
 
-    # PII proximity
+    # PII proximity (exclude self_reference — it's not structural PII)
     if pii_entities:
-        for pii in pii_entities:
+        structural_pii = [p for p in pii_entities if p.type != "self_reference"]
+        for pii in structural_pii:
             distance = min(abs(candidate.start - pii.end), abs(pii.start - candidate.end))
             if distance <= 50:
-                score += 0.5
+                evidence += 0.5
                 break
             elif distance <= 150:
-                score += 0.3
+                evidence += 0.3
                 break
 
-    return min(score, 1.0)
+    # No evidence signal → don't match at L1b (leave to L2 NER)
+    if evidence == 0.0:
+        return 0.0
+
+    # Base score by name length + evidence
+    if len(candidate.text) >= 4:
+        score = 0.5
+    elif len(candidate.text) == 3:
+        score = 0.4
+    else:
+        score = 0.3
+
+    return min(score + evidence, 1.0)
 
 
 # ── Variant resolution ──
