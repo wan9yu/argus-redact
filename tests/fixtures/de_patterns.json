@@ -26,5 +26,61 @@
     "should_match": false,
     "type": "tax_id",
     "description": "No PII"
+  },
+  {
+    "id": "phone_mobile",
+    "input": "Handy: 0171 1234567",
+    "should_match": true,
+    "type": "phone",
+    "description": "German mobile (4-digit prefix + 7 digits)"
+  },
+  {
+    "id": "phone_berlin",
+    "input": "Tel: 030 12345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "Berlin landline (030 + 8 digits)"
+  },
+  {
+    "id": "phone_munich",
+    "input": "Telefon 089/12345678",
+    "should_match": true,
+    "type": "phone",
+    "description": "Munich landline with slash separator"
+  },
+  {
+    "id": "phone_intl",
+    "input": "Call +49 171 1234567",
+    "should_match": true,
+    "type": "phone",
+    "description": "International format with +49"
+  },
+  {
+    "id": "no_phone_short",
+    "input": "Seite 0 12 345",
+    "should_match": false,
+    "type": "phone",
+    "description": "Short number sequence should not match as phone"
+  },
+  {
+    "id": "no_phone_random_digits",
+    "input": "Version 0.12.345678901",
+    "should_match": false,
+    "type": "phone",
+    "description": "Version number should not match as phone"
+  },
+  {
+    "id": "tax_id_no_spaces",
+    "input": "IdNr 12345678901",
+    "should_match": true,
+    "type": "tax_id",
+    "description": "Tax ID without spaces"
+  },
+  {
+    "id": "iban_no_spaces",
+    "input": "IBAN DE89370400440532013000",
+    "should_match": true,
+    "type": "iban",
+    "description": "IBAN without spaces"
   }
 ]

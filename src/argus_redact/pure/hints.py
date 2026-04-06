@@ -149,6 +149,62 @@ def filter_self_reference(
     return [e for e in entities if e.type != "self_reference"]
 
 
+# ── Cross-layer agreement ──
+
+_CROSS_LAYER_BOOST = 0.1
+# Types that are considered "same concept" across layers
+_COMPATIBLE_TYPES = {
+    ("address", "location"),
+    ("location", "address"),
+    ("organization", "workplace"),
+    ("workplace", "organization"),
+}
+
+
+def boost_cross_layer(
+    merged: list[PatternMatch],
+    pre_merge: list[PatternMatch],
+) -> list[PatternMatch]:
+    """Boost confidence of entities detected by multiple layers.
+
+    If the same span (or overlapping span of compatible type) was detected
+    by both L1 and L2, boost the merged entity's confidence.
+    """
+    if not merged or not pre_merge:
+        return merged
+
+    # Index pre-merge entities by layer
+    by_layer: dict[int, list[PatternMatch]] = {}
+    for e in pre_merge:
+        by_layer.setdefault(e.layer, []).append(e)
+
+    if len(by_layer) < 2:
+        return merged  # only one layer produced results, no cross-validation
+
+    result = []
+    for entity in merged:
+        layers_agreeing = set()
+        for e in pre_merge:
+            # Check span overlap
+            if e.start < entity.end and entity.start < e.end:
+                # Same type or compatible types
+                if e.type == entity.type or (e.type, entity.type) in _COMPATIBLE_TYPES:
+                    layers_agreeing.add(e.layer)
+
+        if len(layers_agreeing) >= 2:
+            boosted = PatternMatch(
+                text=entity.text, type=entity.type,
+                start=entity.start, end=entity.end,
+                confidence=min(entity.confidence + _CROSS_LAYER_BOOST, 1.0),
+                layer=entity.layer,
+            )
+            result.append(boosted)
+        else:
+            result.append(entity)
+
+    return result
+
+
 def _get_self_reference_tier(hints: list[Hint]) -> int | None:
     for h in hints:
         if h.type == "self_reference_tier":

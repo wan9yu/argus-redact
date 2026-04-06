@@ -14,8 +14,8 @@ from argus_redact._types import PatternMatch
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.grammar import normalize_grammar_en
 from argus_redact.pure.hints import (
-    filter_self_reference, get_ner_min_confidence, get_person_threshold,
-    produce_hints, should_skip_ner,
+    boost_cross_layer, filter_self_reference, get_ner_min_confidence,
+    get_person_threshold, produce_hints, should_skip_ner,
 )
 from argus_redact.pure.merger import merge_entities
 from argus_redact.pure.patterns import match_patterns
@@ -256,9 +256,13 @@ def redact(
                 logger.warning("Layer 3 semantic detection failed", exc_info=True)
             timing["layer_3_ms"] = (time.perf_counter() - t0) * 1000
 
+    pre_merge = list(entities)
     entities = merge_entities(entities, text=text)
 
-    # Self-reference tier filter: driven by hints, replaces old if-else logic
+    # Cross-layer agreement: boost confidence when L1+L2 agree
+    entities = boost_cross_layer(entities, pre_merge)
+
+    # Self-reference tier filter: driven by hints
     entities = filter_self_reference(entities, hints)
 
     # Apply type filtering

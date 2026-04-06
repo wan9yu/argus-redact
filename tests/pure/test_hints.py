@@ -241,6 +241,69 @@ class TestPiiDensityHint:
         assert density[0].data["count"] == 0
 
 
+class TestCrossLayerAgreement:
+    """When L1 and L2 detect overlapping entities, confidence should boost."""
+
+    def test_should_boost_when_l1_and_l2_agree_on_person(self):
+        from argus_redact.pure.hints import boost_cross_layer
+
+        merged = [
+            PatternMatch(text="张三", type="person", start=0, end=2, confidence=0.85, layer=2),
+        ]
+        pre_merge = [
+            PatternMatch(text="张三", type="person", start=0, end=2, confidence=0.9, layer=1),
+            PatternMatch(text="张三", type="person", start=0, end=2, confidence=0.85, layer=2),
+        ]
+
+        boosted = boost_cross_layer(merged, pre_merge)
+
+        assert boosted[0].confidence > 0.85, "Cross-layer agreement should boost"
+
+    def test_should_not_boost_when_only_one_layer(self):
+        from argus_redact.pure.hints import boost_cross_layer
+
+        merged = [
+            PatternMatch(text="张三", type="person", start=0, end=2, confidence=0.85, layer=2),
+        ]
+        pre_merge = [
+            PatternMatch(text="张三", type="person", start=0, end=2, confidence=0.85, layer=2),
+        ]
+
+        boosted = boost_cross_layer(merged, pre_merge)
+
+        assert boosted[0].confidence == 0.85, "Single-layer should not boost"
+
+    def test_should_boost_when_l1_address_overlaps_l2_location(self):
+        from argus_redact.pure.hints import boost_cross_layer
+
+        merged = [
+            PatternMatch(text="北京市朝阳区", type="location", start=0, end=6, confidence=0.80, layer=2),
+        ]
+        pre_merge = [
+            PatternMatch(text="北京市朝阳区建国路100号", type="address", start=0, end=12, confidence=1.0, layer=1),
+            PatternMatch(text="北京市朝阳区", type="location", start=0, end=6, confidence=0.80, layer=2),
+        ]
+
+        boosted = boost_cross_layer(merged, pre_merge)
+
+        assert boosted[0].confidence > 0.80
+
+    def test_should_preserve_non_overlapping(self):
+        from argus_redact.pure.hints import boost_cross_layer
+
+        merged = [
+            PatternMatch(text="13812345678", type="phone", start=0, end=11, confidence=1.0, layer=1),
+            PatternMatch(text="张三", type="person", start=15, end=17, confidence=0.85, layer=2),
+        ]
+        pre_merge = merged[:]
+
+        boosted = boost_cross_layer(merged, pre_merge)
+
+        assert len(boosted) == 2
+        assert boosted[0].confidence == 1.0  # phone unchanged
+        assert boosted[1].confidence == 0.85  # person unchanged (no agreement)
+
+
 class TestNerHintConsumers:
     """L2 NER should consume hints to adjust behavior."""
 

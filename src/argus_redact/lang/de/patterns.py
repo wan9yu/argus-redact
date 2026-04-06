@@ -9,6 +9,12 @@ def _validate_tax_id(value: str) -> bool:
     return digits.isdigit()
 
 
+def _validate_de_phone(value: str) -> bool:
+    """German phone number: 10-15 digits total (including country code)."""
+    digits = "".join(d for d in value if d.isdigit())
+    return 10 <= len(digits) <= 15
+
+
 PATTERNS = [
     {
         "type": "tax_id",
@@ -20,8 +26,12 @@ PATTERNS = [
     {
         "type": "phone",
         "label": "[Telefonnummer]",
-        "pattern": r"(?:\+49|0049|0)[-\s]?\d{2,5}[-/\s]?\d{3,10}(?!\d)",
-        "description": "German phone number",
+        "pattern": (
+            r"(?:\+49|0049)[-\s]?\d{2,4}[-/\s]?\d{3,4}[-/\s]?\d{3,5}(?!\d)"
+            r"|(?<!\d)0[1-9]\d{1,4}[-/\s]?\d{3,4}[-/\s]?\d{3,5}(?!\d)"
+        ),
+        "validate": _validate_de_phone,
+        "description": "German phone number (mobile/landline, 10-15 digits)",
     },
     {
         "type": "iban",
