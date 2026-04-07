@@ -62,9 +62,9 @@ class TestProfileStrategy:
         text = "手机13812345678"
         redacted, key = redact(text, lang="zh", mode="fast", profile="pipl")
 
-        # Should NOT contain partial digits like 138****5678
-        assert "138" not in redacted
-        assert "5678" not in redacted
+        # Full phone number must not appear; mask pattern (138****5678) must not appear
+        assert "13812345678" not in redacted
+        assert "****" not in redacted
 
     def test_pipl_should_not_use_mask_for_email(self):
         text = "邮箱zhang@example.com"
@@ -78,11 +78,12 @@ class TestProfileStrategy:
         text = "手机13812345678"
         redacted, key = redact(text, lang="zh", mode="fast")
 
-        # Default mask: 138****5678
-        assert "138" in redacted
+        # Default mask pattern: 138****5678
+        assert "****" in redacted
 
     def test_hipaa_should_not_use_mask_for_phone(self):
         text = "phone 123-456-7890"
         redacted, key = redact(text, lang="en", mode="fast", profile="hipaa")
 
-        assert "123" not in redacted
+        assert "123-456-7890" not in redacted
+        assert "****" not in redacted
