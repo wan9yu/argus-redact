@@ -33,9 +33,9 @@
   {
     "id": "invalid_checksum",
     "input": "110101199003071235",
-    "should_match": true,
+    "should_match": false,
     "type": "id_number",
-    "description": "末位校验错误但格式正确 — 宽松匹配防止用户输错导致PII泄漏"
+    "description": "末位校验错误 — 拒绝（防止 18 位订单号等误脱敏）"
   },
   {
     "id": "invalid_month_13",
@@ -98,10 +98,17 @@
     "description": "多处空格分隔（手动输入常见）"
   },
   {
-    "id": "invalid_checksum_still_detected",
+    "id": "invalid_checksum_not_detected",
     "input": "身份证号110101199003071234",
-    "should_match": true,
+    "should_match": false,
     "type": "id_number",
-    "description": "校验位错误但格式正确 — 应宽松匹配（用户输入错误不应泄漏PII）"
+    "description": "校验位错误 — 拒绝（MOD 11-2 区分身份证与普通 18 位数字）"
+  },
+  {
+    "id": "order_number_not_detected",
+    "input": "订单号123456789012345678",
+    "should_match": false,
+    "type": "id_number",
+    "description": "18位订单号不应被当作身份证号"
   }
 ]
