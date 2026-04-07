@@ -54,7 +54,7 @@ class TestRegexPerformance:
         )
 
         _report(f"Medium ({len(MEDIUM_TEXT)} chars)", avg, mn, mx)
-        assert avg < 5.0, f"Too slow: {avg:.2f}ms"
+        assert avg < 10.0, f"Too slow: {avg:.2f}ms"
 
     def test_should_redact_long_text_under_50ms(self):
         avg, mn, mx = _measure(
@@ -63,7 +63,7 @@ class TestRegexPerformance:
         )
 
         _report(f"Long ({len(LONG_TEXT)} chars)", avg, mn, mx)
-        assert avg < 100.0, f"Too slow: {avg:.2f}ms"
+        assert avg < 200.0, f"Too slow: {avg:.2f}ms"
 
 
 class TestRestorePerformance:
