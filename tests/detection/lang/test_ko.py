@@ -18,7 +18,7 @@ def ko_patterns():
 class TestKoreanPhone:
     @parametrize_examples("ko_phone.json")
     def test_should_match_or_reject_when_phone_input(self, ko_patterns, example):
-        results = match_patterns(example["input"], ko_patterns)
+        results, _ = match_patterns(example["input"], ko_patterns)
         phone_results = [r for r in results if r.type == "phone"]
 
         if example["should_match"]:
@@ -32,7 +32,7 @@ class TestKoreanPhone:
 class TestRRN:
     @parametrize_examples("ko_rrn.json")
     def test_should_match_or_reject_when_rrn_input(self, ko_patterns, example):
-        results = match_patterns(example["input"], ko_patterns)
+        results, _ = match_patterns(example["input"], ko_patterns)
         rrn_results = [r for r in results if r.type == "rrn"]
 
         if example["should_match"]:

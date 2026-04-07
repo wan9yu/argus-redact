@@ -111,7 +111,7 @@ class TestHanLPRealRedactIntegration:
         from argus_redact.lang.shared.patterns import PATTERNS as SHARED
         from argus_redact.lang.zh.patterns import PATTERNS as ZH
 
-        regex_entities = match_patterns(text, ZH + SHARED)
+        regex_entities, _ = match_patterns(text, ZH + SHARED)
 
         # Layer 2: NER
         ner_entities = detect_ner(text, adapter=adapter)

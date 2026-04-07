@@ -82,7 +82,7 @@ class TestSpecExamples:
                 # person names are detected by person.py, not by PATTERNS regex
                 continue
             for example in typedef.examples:
-                results = match_patterns(example, ZH_PATTERNS + SHARED)
+                results, _ = match_patterns(example, ZH_PATTERNS + SHARED)
                 matched_types = {r.type for r in results}
                 assert typedef.name in matched_types, (
                     f"Spec example '{example}' for {typedef.lang}/{typedef.name} "
@@ -95,7 +95,7 @@ class TestSpecExamples:
 
         for typedef in list_types("zh"):
             for counter in typedef.counterexamples:
-                results = match_patterns(counter, ZH_PATTERNS + SHARED)
+                results, _ = match_patterns(counter, ZH_PATTERNS + SHARED)
                 matched_types = {r.type for r in results}
                 assert typedef.name not in matched_types, (
                     f"Spec counterexample '{counter}' for {typedef.lang}/{typedef.name} "

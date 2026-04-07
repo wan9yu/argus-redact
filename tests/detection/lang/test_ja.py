@@ -18,7 +18,7 @@ def ja_patterns():
 class TestJapanesePhone:
     @parametrize_examples("ja_phone.json")
     def test_should_match_or_reject_when_phone_input(self, ja_patterns, example):
-        results = match_patterns(example["input"], ja_patterns)
+        results, _ = match_patterns(example["input"], ja_patterns)
         phone_results = [r for r in results if r.type == "phone"]
 
         if example["should_match"]:
@@ -32,7 +32,7 @@ class TestJapanesePhone:
 class TestMyNumber:
     @parametrize_examples("ja_my_number.json")
     def test_should_match_or_reject_when_my_number_input(self, ja_patterns, example):
-        results = match_patterns(example["input"], ja_patterns)
+        results, _ = match_patterns(example["input"], ja_patterns)
         mn_results = [r for r in results if r.type == "my_number"]
 
         if example["should_match"]:

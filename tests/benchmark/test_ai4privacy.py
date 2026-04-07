@@ -67,7 +67,7 @@ def benchmark_results():
                 expected.add((span["value"], LABEL_MAP[span["label"]]))
 
         detected = set()
-        for r in match_patterns(text, patterns):
+        for r in match_patterns(text, patterns)[0]:
             detected.add((r.text, r.type))
 
         # Only evaluate on types we claim to detect

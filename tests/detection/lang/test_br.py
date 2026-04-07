@@ -18,5 +18,5 @@ def br_patterns():
 class TestBrazilianPatterns:
     @parametrize_examples("br_patterns.json")
     def test_should_match_or_reject_when_input(self, br_patterns, example):
-        results = match_patterns(example["input"], br_patterns)
+        results, _ = match_patterns(example["input"], br_patterns)
         assert_pattern_match(results, example)

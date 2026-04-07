@@ -24,7 +24,7 @@ def _run_benchmark(examples, patterns):
 
     for ex in examples:
         expected = {(e["text"], e["type"]) for e in ex["entities"]}
-        detected = {(r.text, r.type) for r in match_patterns(ex["input"], patterns)}
+        detected = {(r.text, r.type) for r in match_patterns(ex["input"], patterns)[0]}
 
         hits = expected & detected
         misses = expected - detected

@@ -244,7 +244,7 @@ def redact(
     # Layer 1a: regex (structural PII — phone, ID, bank card, etc.)
     t0 = time.perf_counter()
     detect_text = normalized if use_normalized else text
-    layer1_raw = match_patterns(detect_text, _load_patterns(lang))
+    layer1_raw, near_misses = match_patterns(detect_text, _load_patterns(lang))
 
     # Map normalized offsets back to original text
     if use_normalized and layer1_raw:
@@ -266,7 +266,7 @@ def redact(
     layer1_count = len(layer1)
 
     # Produce hints from L1a results — consumed by L1b, L2, L3, and tier filter
-    hints = produce_hints(layer1, text)
+    hints = produce_hints(layer1, text, near_misses=near_misses)
 
     # Layer 1b: person name detection
     # Hint-driven: threshold adjusts based on text_intent

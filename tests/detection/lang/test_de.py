@@ -18,7 +18,7 @@ def de_patterns():
 class TestGermanPatterns:
     @parametrize_examples("de_patterns.json")
     def test_should_match_or_reject_when_input(self, de_patterns, example):
-        results = match_patterns(example["input"], de_patterns)
+        results, _ = match_patterns(example["input"], de_patterns)
         typed = [r for r in results if r.type == example["type"]]
 
         if example["should_match"]:

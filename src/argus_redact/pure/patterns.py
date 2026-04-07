@@ -8,13 +8,16 @@ from __future__ import annotations
 
 from argus_redact._types import PatternMatch
 
+# Type alias for match_patterns return
+MatchResult = tuple[list[PatternMatch], list[PatternMatch]]  # (entities, near_misses)
+
 try:
     from argus_redact._core import match_patterns as _rust_match_patterns
 
-    def match_patterns(text: str, patterns: list[dict]) -> list[PatternMatch]:
+    def match_patterns(text: str, patterns: list[dict]) -> tuple[list[PatternMatch], list[PatternMatch]]:
         """Run all regex patterns against text, return sorted matches."""
         if not text or not patterns:
-            return []
+            return [], []
 
         # Split patterns: those with validate stay in Python, rest go to Rust
         rust_patterns = []
@@ -26,6 +29,7 @@ try:
                 rust_patterns.append(pat)
 
         results = []
+        near_misses = []
 
         # Rust handles patterns without validate
         if rust_patterns:
@@ -50,8 +54,6 @@ try:
 
                 for m in regex.finditer(text):
                     matched = m.group()
-                    if not validate(matched):
-                        continue
                     group = pat.get("group")
                     start, end = m.start(), m.end()
                     if group:
@@ -61,12 +63,17 @@ try:
                                 matched, start, end = grp, m.start(group), m.end(group)
                         except IndexError:
                             pass
+                    if not validate(matched):
+                        near_misses.append(
+                            PatternMatch(text=matched, type=pat["type"], start=start, end=end, confidence=0.3)
+                        )
+                        continue
                     results.append(
                         PatternMatch(text=matched, type=pat["type"], start=start, end=end)
                     )
 
         results.sort(key=lambda r: r.start)
-        return results
+        return results, near_misses
 
 except ImportError:
     # Fallback: pure Python implementation (no Rust core available)
@@ -96,12 +103,13 @@ except ImportError:
             return True
         return False
 
-    def match_patterns(text: str, patterns: list[dict]) -> list[PatternMatch]:
+    def match_patterns(text: str, patterns: list[dict]) -> tuple[list[PatternMatch], list[PatternMatch]]:
         """Run all regex patterns against text, return sorted matches (Python fallback)."""
         if not text or not patterns:
-            return []
+            return [], []
 
         results: list[PatternMatch] = []
+        near_misses: list[PatternMatch] = []
 
         for pat in patterns:
             regex = _compile(pat["pattern"])
@@ -110,10 +118,6 @@ except ImportError:
 
             for m in regex.finditer(text):
                 matched = m.group()
-                if validate and not validate(matched):
-                    continue
-                if check_context and _looks_like_false_positive(text, m.start(), m.end()):
-                    continue
                 group = pat.get("group")
                 start = m.start()
                 end = m.end()
@@ -126,14 +130,16 @@ except ImportError:
                             end = m.end(group)
                     except IndexError:
                         pass
-                results.append(
-                    PatternMatch(
-                        text=matched,
-                        type=pat["type"],
-                        start=start,
-                        end=end,
+                if validate and not validate(matched):
+                    near_misses.append(
+                        PatternMatch(text=matched, type=pat["type"], start=start, end=end, confidence=0.3)
                     )
+                    continue
+                if check_context and _looks_like_false_positive(text, m.start(), m.end()):
+                    continue
+                results.append(
+                    PatternMatch(text=matched, type=pat["type"], start=start, end=end)
                 )
 
         results.sort(key=lambda r: r.start)
-        return results
+        return results, near_misses

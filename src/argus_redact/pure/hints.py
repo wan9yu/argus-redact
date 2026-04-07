@@ -53,7 +53,10 @@ def _is_interaction_command(text: str) -> bool:
 
 
 def produce_hints(
-    entities: list[PatternMatch], text: str,
+    entities: list[PatternMatch],
+    text: str,
+    *,
+    near_misses: list[PatternMatch] | None = None,
 ) -> list[Hint]:
     """Produce hints from L1 detection results.
 
@@ -76,6 +79,15 @@ def produce_hints(
     else:
         density_level = "none"
     hints.append(Hint(type="pii_density", data={"level": density_level, "count": pii_count}))
+
+    # Near-miss hints: format matched but validation failed
+    if near_misses:
+        for nm in near_misses:
+            hints.append(Hint(
+                type="near_miss_format",
+                region=(nm.start, nm.end),
+                data={"original_type": nm.type, "text": nm.text},
+            ))
 
     if not self_refs:
         intent = "narrative" if others else "neutral"

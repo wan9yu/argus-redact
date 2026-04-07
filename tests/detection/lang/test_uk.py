@@ -18,7 +18,7 @@ def uk_patterns():
 class TestUKPatterns:
     @parametrize_examples("uk_patterns.json")
     def test_should_match_or_reject_when_input(self, uk_patterns, example):
-        results = match_patterns(example["input"], uk_patterns)
+        results, _ = match_patterns(example["input"], uk_patterns)
         typed = [r for r in results if r.type == example["type"]]
 
         if example["should_match"]:

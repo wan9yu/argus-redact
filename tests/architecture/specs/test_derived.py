@@ -69,7 +69,7 @@ class TestFaker:
             # Generate 10 values, check they all match
             for _ in range(10):
                 value = typedef.faker(rng)
-                results = match_patterns(value, all_patterns)
+                results, _ = match_patterns(value, all_patterns)
                 matched_types = {r.type for r in results}
                 assert expected_type in matched_types, (
                     f"Faker output '{value}' for {typedef.name} "

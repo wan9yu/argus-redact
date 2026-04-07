@@ -18,42 +18,42 @@ def en_patterns():
 class TestEnglishPhone:
     @parametrize_examples("en_phone.json")
     def test_should_match_or_reject_when_phone_input(self, en_patterns, example):
-        results = match_patterns(example["input"], en_patterns)
+        results, _ = match_patterns(example["input"], en_patterns)
         assert_pattern_match(results, example, "phone")
 
 
 class TestSSN:
     @parametrize_examples("en_ssn.json")
     def test_should_match_or_reject_when_ssn_input(self, en_patterns, example):
-        results = match_patterns(example["input"], en_patterns)
+        results, _ = match_patterns(example["input"], en_patterns)
         assert_pattern_match(results, example, "ssn")
 
 
 class TestEnglishCreditCard:
     @parametrize_examples("en_credit_card.json")
     def test_should_match_or_reject_when_credit_card_input(self, en_patterns, example):
-        results = match_patterns(example["input"], en_patterns)
+        results, _ = match_patterns(example["input"], en_patterns)
         assert_pattern_match(results, example, "credit_card")
 
 
 class TestEnglishDateOfBirth:
     @parametrize_examples("en_date_of_birth.json")
     def test_should_match_or_reject_when_dob_input(self, en_patterns, example):
-        results = match_patterns(example["input"], en_patterns)
+        results, _ = match_patterns(example["input"], en_patterns)
         assert_pattern_match(results, example, "date_of_birth")
 
 
 class TestEnglishSensitive:
     @parametrize_examples("en_sensitive.json")
     def test_should_match_or_reject_when_sensitive_input(self, en_patterns, example):
-        results = match_patterns(example["input"], en_patterns)
+        results, _ = match_patterns(example["input"], en_patterns)
         assert_pattern_match(results, example)
 
 
 class TestEnglishSelfReference:
     @parametrize_examples("en_self_reference.json")
     def test_should_match_or_reject_when_self_reference_input(self, en_patterns, example):
-        results = match_patterns(example["input"], en_patterns)
+        results, _ = match_patterns(example["input"], en_patterns)
         typed = [r for r in results if r.type == "self_reference"]
 
         if example["should_match"]:
@@ -75,5 +75,5 @@ class TestEnglishSelfReference:
 class TestUSPassport:
     @parametrize_examples("en_passport.json")
     def test_should_match_or_reject_when_passport_input(self, en_patterns, example):
-        results = match_patterns(example["input"], en_patterns)
+        results, _ = match_patterns(example["input"], en_patterns)
         assert_pattern_match(results, example, "us_passport")

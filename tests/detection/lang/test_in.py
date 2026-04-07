@@ -18,7 +18,7 @@ def in_patterns():
 class TestIndianPatterns:
     @parametrize_examples("in_patterns.json")
     def test_should_match_or_reject_when_input(self, in_patterns, example):
-        results = match_patterns(example["input"], in_patterns)
+        results, _ = match_patterns(example["input"], in_patterns)
         typed = [r for r in results if r.type == example["type"]]
 
         if example["should_match"]:
