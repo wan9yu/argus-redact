@@ -15,19 +15,18 @@ from argus_redact import __version__, redact, restore
 
 def check_safety(text, lang):
     if not text.strip():
-        return "", "", ""
+        return "", ""
 
     lang_param = [c.strip() for c in lang.split(",")] if "," in lang else lang
 
     try:
         report = redact(text, lang=lang_param, mode="fast", report=True)
     except Exception as e:
-        return f"Error: {e}", "", ""
+        return f"Error: {e}", ""
 
     risk = report.risk
     total = report.stats.get("total", 0)
 
-    # Privacy level badge
     level_display = {
         "none":     ("🟢", "Safe",     "Nothing about you is exposed. Safe to share with AI."),
         "low":      ("🟡", "Caution",  "Contains personal info, but not dangerous alone."),
@@ -37,7 +36,6 @@ def check_safety(text, lang):
     }
     emoji, label, advice = level_display.get(risk.level, ("⚪", "Unknown", ""))
 
-    # Visual gauge
     bar_len = int(risk.score * 20)
     bar = "█" * bar_len + "░" * (20 - bar_len)
 
@@ -51,16 +49,12 @@ def check_safety(text, lang):
 
 """
 
-    # What's exposed
     if total > 0:
         gauge += f"### Found {total} piece(s) of personal information:\n\n"
         for e in report.entities:
-            etype = e.get("type", "?")
-            sens_map = {"1": "low", "2": "medium", "3": "high", "4": "critical"}
-            gauge += f"- **{etype}** — `{e.get('replacement', '?')}`\n"
+            gauge += f"- **{e.get('type', '?')}** — `{e.get('replacement', '?')}`\n"
         gauge += "\n"
 
-    # PIPL articles (collapsed)
     article_desc = {
         "PIPL Art.13": "Lawful basis required",
         "PIPL Art.28": "De-identification required",
@@ -74,10 +68,9 @@ def check_safety(text, lang):
         for art in risk.pipl_articles:
             gauge += f"- {art}: {article_desc.get(art, '')}\n"
 
-    # Show what AI would see
     preview = report.redacted_text if total > 0 else "*No changes needed — your text is safe.*"
 
-    return gauge, preview, ""
+    return gauge, preview
 
 
 # ── Tab 2: Protect & Use ──
@@ -102,7 +95,6 @@ def protect_and_use(text, lang, mode, seed_str, names_str, profile):
     restored_text = restore(report.redacted_text, report.key)
     key_json = json.dumps(report.key, ensure_ascii=False, indent=2)
 
-    # Summary
     risk = report.risk
     emoji = {"none": "🟢", "low": "🟡", "medium": "🟡", "high": "🟠", "critical": "🔴"}
 
@@ -119,53 +111,6 @@ def protect_and_use(text, lang, mode, seed_str, names_str, profile):
     )
 
     return report.redacted_text, key_json, restored_text, summary, ""
-
-
-# ── Tab 3: Full Report ──
-
-def full_report(text, lang):
-    if not text.strip():
-        return "", ""
-
-    lang_param = [c.strip() for c in lang.split(",")] if "," in lang else lang
-
-    try:
-        report = redact(text, lang=lang_param, mode="fast", report=True)
-    except Exception as e:
-        return f"Error: {e}", ""
-
-    # Simple markdown summary (report generation removed from core)
-    lines = [
-        "# PII Risk Assessment",
-        f"**Risk Level:** {report.risk.level} ({report.risk.score})",
-        f"**Entities Detected:** {report.stats.get('total', 0)}",
-        "",
-        "## PIPL Articles",
-        ", ".join(report.risk.pipl_articles) if report.risk.pipl_articles else "None",
-        "",
-        "## Entities",
-    ]
-    for e in report.entities:
-        lines.append(f"- **{e.get('type', '?')}**: {e.get('original', '?')} → {e.get('replacement', '?')}")
-    md = "\n".join(lines)
-
-    json_str = json.dumps(
-        {
-            "report_type": "pii_redaction_audit",
-            "summary": {
-                "entities_detected": report.stats.get("total", 0),
-                "risk_score": report.risk.score,
-                "risk_level": report.risk.level,
-            },
-            "compliance": {
-                "pipl_articles": list(report.risk.pipl_articles),
-            },
-            "entities": list(report.entities),
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-    return md, json_str
 
 
 # ── Examples ──
@@ -231,18 +176,17 @@ with gr.Blocks(title=f"argus-redact v{__version__}") as demo:
                 with gr.Column(scale=1):
                     check_result = gr.Markdown(label="Privacy Assessment")
                     check_preview = gr.Textbox(label="What AI would see (after protection)", lines=4)
-                    check_err = gr.Textbox(visible=False)
 
             check_btn.click(
                 fn=check_safety,
                 inputs=[check_input, check_lang],
-                outputs=[check_result, check_preview, check_err],
+                outputs=[check_result, check_preview],
             )
 
             gr.Examples(
                 examples=CHECK_EXAMPLES,
                 inputs=[check_input, check_lang],
-                outputs=[check_result, check_preview, check_err],
+                outputs=[check_result, check_preview],
                 fn=check_safety, cache_examples=False,
             )
 
@@ -285,40 +229,6 @@ with gr.Blocks(title=f"argus-redact v{__version__}") as demo:
                 inputs=[protect_input, protect_lang, protect_mode, protect_seed, names_input, protect_profile],
                 outputs=[protect_redacted, protect_key, protect_restored, protect_summary, protect_err],
                 fn=protect_and_use, cache_examples=False,
-            )
-
-        # ── Tab 3: Full Report ──
-        with gr.TabItem("📋 Full Report"):
-            gr.Markdown("*Compliance audit report for PIPL / GDPR / HIPAA.*")
-
-            with gr.Row():
-                with gr.Column(scale=1):
-                    report_input = gr.Textbox(
-                        label="Input text", lines=6,
-                        placeholder="Enter text for compliance audit...",
-                    )
-                    report_lang = gr.Dropdown(choices=["zh", "en", "zh,en"], value="zh", label="Language")
-                    report_btn = gr.Button("📋 Generate Report", variant="primary", size="lg")
-
-                with gr.Column(scale=1):
-                    report_md = gr.Markdown(label="Audit Report")
-
-            report_json = gr.Code(label="Machine-readable (JSON)", language="json")
-
-            report_btn.click(
-                fn=full_report,
-                inputs=[report_input, report_lang],
-                outputs=[report_md, report_json],
-            )
-
-            gr.Examples(
-                examples=[
-                    ["张三，身份证110101199003074610，手机13812345678，确诊糖尿病，月薪2万元，是穆斯林", "zh"],
-                    ["John Smith, SSN 123-45-6789, diagnosed with cancer, credit score 580, registered Democrat", "en"],
-                ],
-                inputs=[report_input, report_lang],
-                outputs=[report_md, report_json],
-                fn=full_report, cache_examples=False,
             )
 
     gr.Markdown(
