@@ -32,7 +32,7 @@ PATTERNS = [
     {
         "type": "email",
         "label": "[邮箱已脱敏]",
-        "pattern": r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
+        "pattern": r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]{1,10}@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
         "validate": _validate_email,
         "description": "Email address (CJK-only local-part, RFC 6531 internationalized)",
     },
