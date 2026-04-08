@@ -86,5 +86,21 @@
     "should_match": false,
     "type": "email",
     "description": "点号开头不是有效邮箱"
+  },
+  {
+    "id": "unicode_local_part_zh",
+    "input": "张三@example.com",
+    "should_match": true,
+    "type": "email",
+    "expected_text": "张三@example.com",
+    "description": "中文 local part (RFC 6531 internationalized email)"
+  },
+  {
+    "id": "unicode_local_part_mixed",
+    "input": "用户test@example.com",
+    "should_match": true,
+    "type": "email",
+    "expected_text": "test@example.com",
+    "description": "中英混合 — ASCII pattern matches the ASCII portion"
   }
 ]

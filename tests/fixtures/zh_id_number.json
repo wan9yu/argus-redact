@@ -110,5 +110,26 @@
     "should_match": false,
     "type": "id_number",
     "description": "18位订单号不应被当作身份证号"
+  },
+  {
+    "id": "old_15_digit_id",
+    "input": "身份证110101900307123",
+    "should_match": true,
+    "type": "id_number",
+    "description": "15位旧身份证号（1999年前使用，无校验位）"
+  },
+  {
+    "id": "old_15_digit_embedded",
+    "input": "证件号码110101900307456请核实",
+    "should_match": true,
+    "type": "id_number",
+    "description": "15位旧身份证号嵌入文本"
+  },
+  {
+    "id": "old_15_digit_invalid_month",
+    "input": "110101901307123",
+    "should_match": false,
+    "type": "id_number",
+    "description": "15位旧身份证月份13无效"
   }
 ]

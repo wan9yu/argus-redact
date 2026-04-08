@@ -7,6 +7,16 @@ This module only contains structural PII patterns (phone, ID, bank card, etc.).
 from argus_redact.lang.zh.surnames import SURNAMES as _SURNAMES
 
 
+def _validate_id_number_15(value: str) -> bool:
+    """Format check for 15-digit Chinese national ID (pre-1999, no checksum)."""
+    digits = value.replace(" ", "").replace("-", "")
+    if len(digits) != 15 or not digits.isdigit():
+        return False
+    if digits[0] == "0":
+        return False
+    return True
+
+
 def _validate_id_number(value: str) -> bool:
     """MOD 11-2 checksum for 18-digit Chinese national ID.
 
@@ -137,7 +147,18 @@ PATTERNS = [
             r"[\s-]?\d{3}[\dXx](?!\d)"
         ),
         "validate": _validate_id_number,
-        "description": "Chinese 18-digit national ID (MOD 11-2, optional spaces/dashes)",
+        "description": "Chinese 18-digit national ID (MOD 11-2)",
+    },
+    {
+        "type": "id_number",
+        "label": "[身份证号已脱敏]",
+        "pattern": (
+            r"(?<!\d)[1-9]\d{5}"
+            r"(?:\d{2})(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])"
+            r"\d{3}(?!\d)"
+        ),
+        "validate": _validate_id_number_15,
+        "description": "Chinese 15-digit national ID (pre-1999, no checksum)",
     },
     {
         "type": "bank_card",

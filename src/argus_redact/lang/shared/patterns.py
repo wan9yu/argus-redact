@@ -27,7 +27,14 @@ PATTERNS = [
         "label": "[邮箱已脱敏]",
         "pattern": r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
         "validate": _validate_email,
-        "description": "Email address (RFC 5322 simplified, no consecutive dots)",
+        "description": "Email address (ASCII local-part, no consecutive dots)",
+    },
+    {
+        "type": "email",
+        "label": "[邮箱已脱敏]",
+        "pattern": r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
+        "validate": _validate_email,
+        "description": "Email address (CJK-only local-part, RFC 6531 internationalized)",
     },
     {
         "type": "ip_address",
