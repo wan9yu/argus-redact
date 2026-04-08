@@ -5,7 +5,7 @@ from argus_redact.glue.redact import redact
 from argus_redact.pure.restore import check_restore_safety, restore, wipe_key
 from argus_redact.pure.risk import assess_risk
 
-__version__ = "0.4.8"
+__version__ = "0.4.9"
 __all__ = [
     "redact", "restore", "check_restore_safety", "wipe_key", "assess_risk",
     "RedactReport",
