@@ -125,16 +125,13 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 report = redact(text, report=True)
 report.risk.level         # "critical"
 report.risk.pipl_articles # ("PIPL Art.28", "PIPL Art.51", ...)
-
-# Generate compliance audit report
-from argus_redact import generate_report_pdf
-generate_report_pdf(report, "audit-report.pdf")
+report.entities           # detected PII details
+report.stats              # per-layer timing
 ```
 
 ```bash
 # CLI
-argus-redact assess -f json  <<< "身份证110101199003074610"
-argus-redact assess -f pdf -o report.pdf <<< "身份证110101199003074610"
+argus-redact assess <<< "身份证110101199003074610"
 ```
 
 Compliance profiles: `redact(text, profile="pipl")` / `"gdpr"` / `"hipaa"`.
