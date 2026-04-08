@@ -9,7 +9,6 @@ import json
 import gradio as gr
 
 from argus_redact import __version__, redact, restore
-from argus_redact.report import generate_report_markdown
 
 
 # ── Tab 1: Is it safe? ──
@@ -135,7 +134,21 @@ def full_report(text, lang):
     except Exception as e:
         return f"Error: {e}", ""
 
-    md = generate_report_markdown(report)
+    # Simple markdown summary (report generation removed from core)
+    lines = [
+        "# PII Risk Assessment",
+        f"**Risk Level:** {report.risk.level} ({report.risk.score})",
+        f"**Entities Detected:** {report.stats.get('total', 0)}",
+        "",
+        "## PIPL Articles",
+        ", ".join(report.risk.pipl_articles) if report.risk.pipl_articles else "None",
+        "",
+        "## Entities",
+    ]
+    for e in report.entities:
+        lines.append(f"- **{e.get('type', '?')}**: {e.get('original', '?')} → {e.get('replacement', '?')}")
+    md = "\n".join(lines)
+
     json_str = json.dumps(
         {
             "report_type": "pii_redaction_audit",

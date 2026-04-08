@@ -516,7 +516,7 @@ assert len(result) == 3
 
 ---
 
-## Risk Assessment & Audit Report
+## Risk Assessment
 
 ### assess_risk()
 
