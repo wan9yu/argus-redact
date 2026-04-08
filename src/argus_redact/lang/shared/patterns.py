@@ -1,11 +1,33 @@
 """Cross-language regex patterns (email, etc.)."""
 
+
+import re as _re
+
+
+def _validate_age(value: str) -> bool:
+    """Reject unrealistic ages (>149)."""
+    digits = _re.findall(r"\d+", value)
+    if not digits:
+        return False
+    age = int(digits[0])
+    return age <= 149
+
+
+def _validate_email(value: str) -> bool:
+    """Reject emails with consecutive dots or leading/trailing dots in local part."""
+    local = value.split("@")[0] if "@" in value else ""
+    if ".." in local or local.startswith(".") or local.endswith("."):
+        return False
+    return True
+
+
 PATTERNS = [
     {
         "type": "email",
         "label": "[邮箱已脱敏]",
         "pattern": r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
-        "description": "Email address (RFC 5322 simplified)",
+        "validate": _validate_email,
+        "description": "Email address (RFC 5322 simplified, no consecutive dots)",
     },
     {
         "type": "ip_address",
@@ -72,6 +94,7 @@ PATTERNS = [
     {
         "type": "age",
         "label": "[年龄已脱敏]",
+        "validate": _validate_age,
         "pattern": (
             # Chinese: X岁, 年龄:X, 周岁X
             r"\d{1,3}岁"

@@ -72,5 +72,19 @@
     "should_match": true,
     "type": "email",
     "description": "一段文字中两个邮箱"
+  },
+  {
+    "id": "consecutive_dots_invalid",
+    "input": "user..name@example.com",
+    "should_match": false,
+    "type": "email",
+    "description": "连续点号不是有效邮箱 (RFC 5322)"
+  },
+  {
+    "id": "leading_dot_invalid",
+    "input": ".user@example.com",
+    "should_match": false,
+    "type": "email",
+    "description": "点号开头不是有效邮箱"
   }
 ]

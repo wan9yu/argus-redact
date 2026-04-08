@@ -187,11 +187,11 @@
   },
   {
     "id": "en_customer_service_01",
-    "input": "Case #48291: Customer John Whitfield called regarding unauthorized charges on his Visa ending in 1111. Full card number provided for verification: 4111111111111111. Customer SSN on file: 923-71-8834. Callback number: (415) 555-0198. Issue escalated to fraud department.",
+    "input": "Case #48291: Customer John Whitfield called regarding unauthorized charges on his Visa ending in 1111. Full card number provided for verification: 4111111111111111. Customer SSN on file: 423-71-8834. Callback number: (415) 555-0198. Issue escalated to fraud department.",
     "lang": "en",
     "pii_values": [
       "4111111111111111",
-      "923-71-8834",
+      "423-71-8834",
       "(415) 555-0198"
     ],
     "pii_types": [
@@ -203,12 +203,12 @@
   },
   {
     "id": "en_customer_service_02",
-    "input": "Hi, my name is Sarah Mitchell and I'd like to update my account. My current address is 742 Evergreen Terrace, Springfield, IL 62704. My email is s.mitchell92@example.com and you can reach me at 312-555-0147. My SSN is 951-38-2764 for identity verification.",
+    "input": "Hi, my name is Sarah Mitchell and I'd like to update my account. My current address is 742 Evergreen Terrace, Springfield, IL 62704. My email is s.mitchell92@example.com and you can reach me at 312-555-0147. My SSN is 451-38-2764 for identity verification.",
     "lang": "en",
     "pii_values": [
       "s.mitchell92@example.com",
       "312-555-0147",
-      "951-38-2764"
+      "451-38-2764"
     ],
     "pii_types": [
       "address",
@@ -220,10 +220,10 @@
   },
   {
     "id": "en_medical_record_01",
-    "input": "PATIENT: Robert A. Hernandez\nDOB: 04/17/1985\nSSN: 909-62-4513\nMRN: 00847291\n\nHPI: 39 y/o male presents with chest pain x 2 hours. Pain is substernal, pressure-like, 7/10, radiating to left arm. Hx of HTN, DM2. Contact: wife Maria at 214-555-0823. Insurance: Blue Cross ID# XYZ123456789.",
+    "input": "PATIENT: Robert A. Hernandez\nDOB: 04/17/1985\nSSN: 409-62-4513\nMRN: 00847291\n\nHPI: 39 y/o male presents with chest pain x 2 hours. Pain is substernal, pressure-like, 7/10, radiating to left arm. Hx of HTN, DM2. Contact: wife Maria at 214-555-0823. Insurance: Blue Cross ID# XYZ123456789.",
     "lang": "en",
     "pii_values": [
-      "909-62-4513",
+      "409-62-4513",
       "214-555-0823"
     ],
     "pii_types": [
@@ -234,11 +234,11 @@
   },
   {
     "id": "en_email_thread_01",
-    "input": "From: jennifer.oconnor@example.com\nTo: hr@acmecorp.example.com\nSubject: Direct deposit setup\n\nHi HR team,\n\nPlease set up my direct deposit with the following details:\nBank: Chase\nRouting: 021000021\nAccount: 123456789012\nMy SSN for tax purposes: 934-55-1278\n\nThanks,\nJennifer O'Connor\nCell: +1 (646) 555-0312",
+    "input": "From: jennifer.oconnor@example.com\nTo: hr@acmecorp.example.com\nSubject: Direct deposit setup\n\nHi HR team,\n\nPlease set up my direct deposit with the following details:\nBank: Chase\nRouting: 021000021\nAccount: 123456789012\nMy SSN for tax purposes: 434-55-1278\n\nThanks,\nJennifer O'Connor\nCell: +1 (646) 555-0312",
     "lang": "en",
     "pii_values": [
       "jennifer.oconnor@example.com",
-      "934-55-1278",
+      "434-55-1278",
       "+1 (646) 555-0312"
     ],
     "pii_types": [
@@ -287,10 +287,10 @@
   },
   {
     "id": "en_legal_document_01",
-    "input": "AFFIDAVIT OF IDENTITY\n\nI, Margaret Louise Thompson, residing at 1847 Oak Valley Drive, Apt 4B, Austin, TX 78704, do hereby swear under penalty of perjury that the information provided is true. My Social Security Number is 912-44-6738 and my date of birth is November 3, 1978. Contact: margaret.thompson@example.com, phone 512-555-0294.",
+    "input": "AFFIDAVIT OF IDENTITY\n\nI, Margaret Louise Thompson, residing at 1847 Oak Valley Drive, Apt 4B, Austin, TX 78704, do hereby swear under penalty of perjury that the information provided is true. My Social Security Number is 412-44-6738 and my date of birth is November 3, 1978. Contact: margaret.thompson@example.com, phone 512-555-0294.",
     "lang": "en",
     "pii_values": [
-      "912-44-6738",
+      "412-44-6738",
       "margaret.thompson@example.com",
       "512-555-0294"
     ],
@@ -649,10 +649,10 @@
   },
   {
     "id": "edge_pii_in_url_01",
-    "input": "The user's profile can be viewed at https://example.com/user?ssn=923-71-8834&email=john@example.com and their phone is in the callback param: https://example.com/api?callback=4155550198",
+    "input": "The user's profile can be viewed at https://example.com/user?ssn=423-71-8834&email=john@example.com and their phone is in the callback param: https://example.com/api?callback=4155550198",
     "lang": "en",
     "pii_values": [
-      "923-71-8834",
+      "423-71-8834",
       "john@example.com"
     ],
     "pii_types": [
@@ -705,10 +705,10 @@
   },
   {
     "id": "edge_json_payload_01",
-    "input": "{\"customer\":{\"name\":\"Emily Watson\",\"ssn\":\"967-23-4891\",\"phone\":\"+1-415-555-0237\",\"email\":\"ewatson@example.com\",\"address\":\"328 Pine St, San Francisco, CA 94104\"}}",
+    "input": "{\"customer\":{\"name\":\"Emily Watson\",\"ssn\":\"467-23-4891\",\"phone\":\"+1-415-555-0237\",\"email\":\"ewatson@example.com\",\"address\":\"328 Pine St, San Francisco, CA 94104\"}}",
     "lang": "en",
     "pii_values": [
-      "967-23-4891",
+      "467-23-4891",
       "+1-415-555-0237",
       "ewatson@example.com"
     ],
@@ -801,10 +801,10 @@
   },
   {
     "id": "en_insurance_claim_01",
-    "input": "CLAIM FORM — Auto Insurance\n\nPolicyholder: Christopher J. Anderson\nPolicy #: AUT-2024-887312\nSSN: 918-55-3042\nDOB: 07/22/1982\nPhone: (713) 555-0892\nEmail: c.anderson82@example.com\n\nIncident Date: 03/10/2024\nLocation: Intersection of Main St and 5th Ave, Houston, TX 77002\nDescription: Rear-ended at red light by uninsured driver. Damage to rear bumper and trunk. Police report #HPD-2024-04521 filed.",
+    "input": "CLAIM FORM — Auto Insurance\n\nPolicyholder: Christopher J. Anderson\nPolicy #: AUT-2024-887312\nSSN: 418-55-3042\nDOB: 07/22/1982\nPhone: (713) 555-0892\nEmail: c.anderson82@example.com\n\nIncident Date: 03/10/2024\nLocation: Intersection of Main St and 5th Ave, Houston, TX 77002\nDescription: Rear-ended at red light by uninsured driver. Damage to rear bumper and trunk. Police report #HPD-2024-04521 filed.",
     "lang": "en",
     "pii_values": [
-      "918-55-3042",
+      "418-55-3042",
       "(713) 555-0892",
       "c.anderson82@example.com"
     ],
@@ -840,12 +840,12 @@
   },
   {
     "id": "edge_log_file_01",
-    "input": "2024-03-15 14:32:01 INFO  [UserService] User login: email=mary.johnson@example.com, ip=192.168.1.105\n2024-03-15 14:32:03 INFO  [PaymentService] Processing payment for card=4111111111111111, amount=299.99\n2024-03-15 14:32:05 WARN  [AuthService] Failed SSN verification for ssn=941-23-5678, user_id=USR-8891\n2024-03-15 14:32:07 INFO  [SMSService] Sending OTP to phone=+14155550198",
+    "input": "2024-03-15 14:32:01 INFO  [UserService] User login: email=mary.johnson@example.com, ip=192.168.1.105\n2024-03-15 14:32:03 INFO  [PaymentService] Processing payment for card=4111111111111111, amount=299.99\n2024-03-15 14:32:05 WARN  [AuthService] Failed SSN verification for ssn=441-23-5678, user_id=USR-8891\n2024-03-15 14:32:07 INFO  [SMSService] Sending OTP to phone=+14155550198",
     "lang": "en",
     "pii_values": [
       "mary.johnson@example.com",
       "4111111111111111",
-      "941-23-5678",
+      "441-23-5678",
       "+14155550198"
     ],
     "pii_types": [
@@ -858,14 +858,14 @@
   },
   {
     "id": "edge_markdown_table_01",
-    "input": "| Name | Phone | SSN | Email |\n|------|-------|-----|-------|\n| Alice Brown | 555-0101 | 903-12-4567 | alice@example.com |\n| Bob Davis | 555-0102 | 912-34-5678 | bob@example.com |\n| Carol Evans | 555-0103 | 921-45-6789 | carol@example.com |",
+    "input": "| Name | Phone | SSN | Email |\n|------|-------|-----|-------|\n| Alice Brown | 555-0101 | 403-12-4567 | alice@example.com |\n| Bob Davis | 555-0102 | 412-34-5678 | bob@example.com |\n| Carol Evans | 555-0103 | 421-45-6789 | carol@example.com |",
     "lang": "en",
     "pii_values": [
-      "903-12-4567",
+      "403-12-4567",
       "alice@example.com",
-      "912-34-5678",
+      "412-34-5678",
       "bob@example.com",
-      "921-45-6789",
+      "421-45-6789",
       "carol@example.com"
     ],
     "pii_types": [

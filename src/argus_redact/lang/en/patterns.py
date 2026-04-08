@@ -4,12 +4,14 @@ from argus_redact.lang.zh.patterns import _validate_luhn
 
 
 def _validate_ssn(value: str) -> bool:
-    """Basic SSN validation: area != 000, group != 00, serial != 0000."""
+    """SSN validation per SSA rules: reject invalid area codes."""
     digits = value.replace("-", "").replace(" ", "")
     if len(digits) != 9 or not digits.isdigit():
         return False
     area, group, serial = digits[:3], digits[3:5], digits[5:]
     if area == "000" or group == "00" or serial == "0000":
+        return False
+    if area == "666" or int(area) >= 900:
         return False
     return True
 

@@ -60,5 +60,27 @@
         "should_match": false,
         "type": "age",
         "description": "无PII"
+    },
+    {
+        "id": "age_unrealistic_999",
+        "input": "他999岁",
+        "should_match": false,
+        "type": "age",
+        "description": "999岁不是合理年龄"
+    },
+    {
+        "id": "age_150_invalid",
+        "input": "她150岁了",
+        "should_match": false,
+        "type": "age",
+        "description": "150岁超出合理范围"
+    },
+    {
+        "id": "age_0_valid",
+        "input": "宝宝0岁",
+        "should_match": true,
+        "type": "age",
+        "expected_text": "0岁",
+        "description": "0岁是合理年龄"
     }
 ]

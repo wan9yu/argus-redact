@@ -59,5 +59,26 @@
     "type": "ssn",
     "expected_text": "123456789",
     "description": "SSN without any separators (continuous digits)"
+  },
+  {
+    "id": "ssn_area_666",
+    "input": "SSN 666-45-6789",
+    "should_match": false,
+    "type": "ssn",
+    "description": "Area 666 is invalid (reserved)"
+  },
+  {
+    "id": "ssn_area_900",
+    "input": "SSN 900-45-6789",
+    "should_match": false,
+    "type": "ssn",
+    "description": "Area 900-999 is invalid (not assigned)"
+  },
+  {
+    "id": "ssn_area_987",
+    "input": "987-65-4321",
+    "should_match": false,
+    "type": "ssn",
+    "description": "Area 987 is invalid"
   }
 ]
