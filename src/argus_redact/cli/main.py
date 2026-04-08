@@ -136,7 +136,6 @@ def cmd_assess(args):
         report=True,
     )
 
-    import json as _json
     data = {
         "summary": {
             "risk_score": report.risk.score,
@@ -149,7 +148,7 @@ def cmd_assess(args):
         "entities": list(report.entities),
         "stats": report.stats,
     }
-    output = _json.dumps(data, ensure_ascii=False, indent=2)
+    output = json.dumps(data, ensure_ascii=False, indent=2)
     if args.output:
         Path(args.output).write_text(output, encoding="utf-8")
         print(f"Report saved to {args.output}", file=sys.stderr)
