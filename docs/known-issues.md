@@ -15,6 +15,14 @@
 
 | Issue | Version | Fix |
 |-------|---------|-----|
+| SSN validation incomplete (666/900-999) | v0.4.10 | Reject invalid area codes per SSA rules |
+| Email allows consecutive dots | v0.4.10 | Validate function rejects `..` and leading/trailing dots |
+| Age matches 999 | v0.4.10 | Validate function limits to 0-149 |
+| 15-digit old ID not detected | v0.4.10 | Separate pattern for pre-1999 format (6+6+3 digits) |
+| Unicode email not detected | v0.4.10 | CJK-only local-part pattern (RFC 6531) |
+| ID number false positive on 18-digit orders | v0.4.8 | Restore MOD 11-2 checksum validation |
+| Near-miss info lost | v0.4.8 | match_patterns returns (entities, near_misses) tuple |
+| Report generation removed | v0.4.9 | Use redact(report=True) for raw data, downstream generates reports |
 | Unicode bypass (fullwidth, ZWSP, ZWJ, RTL) | v0.4.4 | NFKC normalization + invisible char stripping before regex |
 | Input >1MB DoS | v0.4.4 | Input size limit (1MB), rejects with clear error |
 | ID number false negative on typos | v0.4.4 | Relaxed checksum: format-valid IDs accepted even with wrong check digit |

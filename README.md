@@ -79,7 +79,7 @@ Core engine (regex matching, entity merging, restore, pseudonym generation) is w
 | | zh | en | ja | ko | de | uk | in | br |
 |-|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | Phone | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| National ID | MOD11-2 | SSN | My Number | RRN | Tax ID | NINO | Aadhaar | CPF/CNPJ |
+| National ID | MOD11-2 + 15位旧版 | SSN | My Number | RRN | Tax ID | NINO | Aadhaar | CPF/CNPJ |
 | Bank/Card | Luhn | Luhn | — | — | IBAN | — | PAN | — |
 | Person names | HanLP | spaCy | spaCy | spaCy | spaCy | spaCy | spaCy | spaCy |
 | Email | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -110,7 +110,7 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 
 ## North Star
 
-| Dimension | Current (v0.4.9) | Next milestone |
+| Dimension | Current (v0.4.10) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini. Cross-layer hints | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes preserve trigger words | More task types |
