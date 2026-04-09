@@ -46,36 +46,50 @@ def redact_json(
     config: dict | None = None,
     key: dict | None = None,
     paths: list[str] | None = None,
-) -> tuple[dict | list, dict]:
+    with_types: bool = False,
+) -> tuple[dict | list, dict] | tuple[dict | list, dict, dict]:
     """Redact PII in string values of a JSON-like structure.
 
     Args:
         paths: If specified, only redact strings at these paths.
-               Supports dot notation and [*] wildcards:
-               - "messages[*].content" — all content fields in messages array
-               - "user.phone" — nested field
-               - "sender" — top-level field
-               If None, all string values are redacted (original behavior).
+        with_types: If True, return 3-tuple (data, key, types) where
+                    types maps replacement → PII type across all fields.
+
+    Returns:
+        (redacted_data, key) or (redacted_data, key, type_map) if with_types=True.
     """
     combined_key = dict(key) if key else {}
+    combined_types: dict[str, str] = {}
     parsed_paths = _parse_paths(paths) if paths else None
 
     def _walk(obj: Any, current_path: list[str] | None = None) -> Any:
-        nonlocal combined_key
+        nonlocal combined_key, combined_types
         if current_path is None:
             current_path = []
 
         if isinstance(obj, str):
             if parsed_paths is not None and not _path_matches(current_path, parsed_paths):
-                return obj  # path not in whitelist, skip
-            redacted_text, combined_key = redact(
-                obj,
-                mode=mode,
-                lang=lang,
-                seed=seed,
-                config=config,
-                key=combined_key if combined_key else None,
-            )
+                return obj
+            if with_types:
+                redacted_text, combined_key, type_map = redact(
+                    obj,
+                    mode=mode,
+                    lang=lang,
+                    seed=seed,
+                    config=config,
+                    key=combined_key if combined_key else None,
+                    with_types=True,
+                )
+                combined_types.update(type_map)
+            else:
+                redacted_text, combined_key = redact(
+                    obj,
+                    mode=mode,
+                    lang=lang,
+                    seed=seed,
+                    config=config,
+                    key=combined_key if combined_key else None,
+                )
             return redacted_text
         if isinstance(obj, dict):
             return {k: _walk(v, current_path + [k]) for k, v in obj.items()}
@@ -84,6 +98,8 @@ def redact_json(
         return obj
 
     result = _walk(data)
+    if with_types:
+        return result, combined_key, combined_types
     return result, combined_key
 
 

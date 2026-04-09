@@ -43,6 +43,50 @@ class TestRedactJSON:
 
 
 # ════════════════════════════════════════════════════════════���═
+# JSON — with_types
+# ══════════════════════════════════════════════════════════════
+
+
+class TestRedactJsonWithTypes:
+    def test_should_return_type_map_when_with_types(self):
+        data = {"phone": "手机13812345678"}
+        redacted, key, types = redact_json(data, mode="fast", seed=42, with_types=True)
+
+        assert "13812345678" not in str(redacted)
+        assert isinstance(types, dict)
+        assert any(v == "phone" for v in types.values())
+
+    def test_should_return_2_tuple_when_no_with_types(self):
+        data = {"phone": "13812345678"}
+        result = redact_json(data, mode="fast", seed=42)
+
+        assert len(result) == 2
+
+    def test_should_aggregate_types_across_fields(self):
+        data = {
+            "phone": "手机13812345678",
+            "id": "身份证110101199003074610",
+        }
+        redacted, key, types = redact_json(data, mode="fast", seed=42, with_types=True)
+
+        type_values = set(types.values())
+        assert "phone" in type_values
+        assert "id_number" in type_values
+
+    def test_should_work_with_paths_and_with_types(self):
+        data = {
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "手机13812345678"}],
+        }
+        redacted, key, types = redact_json(
+            data, paths=["messages[*].content"], mode="fast", seed=42, with_types=True,
+        )
+
+        assert redacted["model"] == "gpt-4o"
+        assert any(v == "phone" for v in types.values())
+
+
+# ══════════════════════════════════════════════════════════════
 # JSON — selective paths
 # ══════════════════════════════════════════════════════════════
 
