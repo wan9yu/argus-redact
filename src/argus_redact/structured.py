@@ -70,26 +70,20 @@ def redact_json(
         if isinstance(obj, str):
             if parsed_paths is not None and not _path_matches(current_path, parsed_paths):
                 return obj
+            result = redact(
+                obj,
+                mode=mode,
+                lang=lang,
+                seed=seed,
+                config=config,
+                key=combined_key if combined_key else None,
+                with_types=with_types,
+            )
             if with_types:
-                redacted_text, combined_key, type_map = redact(
-                    obj,
-                    mode=mode,
-                    lang=lang,
-                    seed=seed,
-                    config=config,
-                    key=combined_key if combined_key else None,
-                    with_types=True,
-                )
+                redacted_text, combined_key, type_map = result
                 combined_types.update(type_map)
             else:
-                redacted_text, combined_key = redact(
-                    obj,
-                    mode=mode,
-                    lang=lang,
-                    seed=seed,
-                    config=config,
-                    key=combined_key if combined_key else None,
-                )
+                redacted_text, combined_key = result
             return redacted_text
         if isinstance(obj, dict):
             return {k: _walk(v, current_path + [k]) for k, v in obj.items()}
