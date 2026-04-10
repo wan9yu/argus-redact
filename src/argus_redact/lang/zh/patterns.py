@@ -47,19 +47,7 @@ _BANK_BINS = {
 }
 
 
-def _validate_luhn(value: str) -> bool:
-    """Luhn checksum for bank card numbers."""
-    digits = [int(d) for d in value if d.isdigit()]
-    if len(digits) < 16:
-        return False
-    total = 0
-    for i, d in enumerate(reversed(digits)):
-        if i % 2 == 1:
-            d *= 2
-            if d > 9:
-                d -= 9
-        total += d
-    return total % 10 == 0
+from argus_redact.lang.shared.patterns import validate_luhn as _validate_luhn
 
 
 # GB 32100-2015 Unified Social Credit Code constants

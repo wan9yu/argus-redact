@@ -1,6 +1,6 @@
 """English regex patterns for Layer 1 PII detection."""
 
-from argus_redact.lang.zh.patterns import _validate_luhn
+from argus_redact.lang.shared.patterns import validate_luhn as _validate_luhn
 
 
 def _validate_ssn(value: str) -> bool:

@@ -1,7 +1,21 @@
 """Cross-language regex patterns (email, etc.)."""
 
-
 import re as _re
+
+
+def validate_luhn(value: str) -> bool:
+    """Luhn checksum — shared by all languages' bank/credit card validation."""
+    digits = [int(d) for d in value if d.isdigit()]
+    if len(digits) < 16:
+        return False
+    total = 0
+    for i, d in enumerate(reversed(digits)):
+        if i % 2 == 1:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+    return total % 10 == 0
 
 
 def _validate_age(value: str) -> bool:

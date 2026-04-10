@@ -85,11 +85,16 @@ _LANG_NER_ADAPTERS = {
 VALID_MODES = ("auto", "fast", "ner")
 
 
-def _load_patterns(lang: str | list[str]) -> list[dict]:
-    """Load regex patterns for the given language(s)."""
-    langs = [lang] if isinstance(lang, str) else list(lang)
-    all_patterns = list(SHARED_PATTERNS)
+_pattern_cache: dict[tuple[str, ...], list[dict]] = {}
 
+
+def _load_patterns(lang: str | list[str]) -> list[dict]:
+    """Load regex patterns for the given language(s). Cached per language combo."""
+    langs = tuple(lang) if isinstance(lang, list) else (lang,)
+    if langs in _pattern_cache:
+        return _pattern_cache[langs]
+
+    all_patterns = list(SHARED_PATTERNS)
     for code in langs:
         if code not in _LANG_PATTERNS:
             raise ValueError(
@@ -104,6 +109,7 @@ def _load_patterns(lang: str | list[str]) -> list[dict]:
                 f"Install with: pip install argus-redact[{code}]"
             )
 
+    _pattern_cache[langs] = all_patterns
     return all_patterns
 
 

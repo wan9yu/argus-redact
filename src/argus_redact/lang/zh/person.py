@@ -215,10 +215,8 @@ def score_candidate(
     if _PAREN_PHONE.match(after):
         evidence += 0.5
 
-    # PII proximity (exclude self_reference — it's not structural PII)
     if pii_entities:
-        structural_pii = [p for p in pii_entities if p.type != "self_reference"]
-        for pii in structural_pii:
+        for pii in pii_entities:
             distance = min(abs(candidate.start - pii.end), abs(pii.start - candidate.end))
             if distance <= 50:
                 evidence += 0.5
@@ -334,11 +332,14 @@ def detect_person_names(
     # Candidate generation → scoring → variant resolution
     candidates = generate_candidates(text)
 
+    # Filter self_reference from PII entities (not structural PII for proximity scoring)
+    structural_pii = [p for p in pii_entities if p.type != "self_reference"] if pii_entities else None
+
     grouped: dict[int, list[tuple[NameCandidate, float]]] = {}
     for c in candidates:
         if any(c.start >= s and c.end <= e for s, e in occupied):
             continue
-        s = score_candidate(c, text, pii_entities=pii_entities)
+        s = score_candidate(c, text, pii_entities=structural_pii)
         grouped.setdefault(c.start, []).append((c, s))
 
     for best, best_score in _resolve_variants(grouped, text, threshold):
