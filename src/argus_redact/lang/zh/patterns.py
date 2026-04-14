@@ -6,6 +6,53 @@ This module only contains structural PII patterns (phone, ID, bank card, etc.).
 
 from argus_redact.lang.zh.surnames import SURNAMES as _SURNAMES
 
+# Leading verbs/particles/questions stripped from org/school candidates before validation.
+# Matched via one-pass longest-prefix scan, so order within the tuple is irrelevant.
+_LEADING_NOISE = (
+    "请查一下", "请查下", "请查", "查一下", "查下",
+    "就职于", "供职于", "任职于", "毕业于", "就读于", "就读",
+    "考入", "考上", "去过", "到过",
+    "这是", "那是", "这个", "那个", "那里", "这里",
+    "在", "去", "从", "到", "被", "给", "让", "有", "是",
+    "的", "了", "和", "与", "把", "将", "已", "问", "看", "找",
+    "一下",
+)
+_ORG_SUFFIXES = (
+    "股份有限公司", "有限责任公司", "有限公司", "责任公司",
+    "集团公司", "集团", "公司", "企业", "工厂", "银行", "保险",
+    "证券", "基金", "医院", "诊所", "药房", "事务所",
+    "研究院", "研究所", "实验室",
+)
+_SCHOOL_SUFFIXES = (
+    "大学", "学院", "中学", "小学", "高中", "初中", "附中", "附小",
+    "实验学校", "外国语学校", "师范学校", "职业学校", "技术学校",
+    "幼儿园", "书院", "学堂", "党校",
+)
+
+
+def _has_name_before_suffix(value: str, suffixes: tuple[str, ...]) -> bool:
+    """After stripping leading verb/particle noise, verify a name char remains before suffix."""
+    stripped = value
+    while True:
+        for noise in _LEADING_NOISE:
+            if stripped.startswith(noise) and len(stripped) > len(noise):
+                stripped = stripped[len(noise):]
+                break
+        else:
+            break
+    return any(
+        stripped.endswith(suffix) and len(stripped) > len(suffix)
+        for suffix in suffixes
+    )
+
+
+def _validate_organization(value: str) -> bool:
+    return _has_name_before_suffix(value, _ORG_SUFFIXES)
+
+
+def _validate_school(value: str) -> bool:
+    return _has_name_before_suffix(value, _SCHOOL_SUFFIXES)
+
 
 def _validate_id_number(value: str) -> bool:
     """MOD 11-2 checksum for 18-digit Chinese national ID.
@@ -307,26 +354,25 @@ PATTERNS = [
         "type": "organization",
         "label": "[机构已脱敏]",
         "pattern": (
-            r"(?:就职于|供职于|任职于|在|去|从|到|被|给|让)?"
+            r"(?:请查一下|请查下|查一下|一下|就职于|供职于|任职于|"
+            r"这是|那是|在|去|从|到|被|给|让|有|是|的|了)?"
             r"(?P<organization>(?<!\d)[\u4e00-\u9fff]{2,12}"
-            r"(?:股份有限公司|有限责任公司|有限公司|责任公司|"
-            r"集团公司|集团|公司|企业|工厂|银行|保险|证券|基金|"
-            r"医院|诊所|药房|事务所|研究院|研究所|实验室))"
+            r"(?:" + "|".join(_ORG_SUFFIXES) + r"))"
         ),
         "group": "organization",
+        "validate": _validate_organization,
         "description": "Chinese organization name (CJK prefix + legal/industry suffix)",
     },
     {
         "type": "school",
         "label": "[学校已脱敏]",
         "pattern": (
-            r"(?:毕业于|就读于?|考入|考上|在|去|从|到)?"
+            r"(?:毕业于|就读于?|考入|考上|在|去|从|到|有|是)?"
             r"(?P<school>(?<!\d)[\u4e00-\u9fff]{2,10}"
-            r"(?:大学|学院|中学|小学|高中|初中|附中|附小|"
-            r"实验学校|外国语学校|师范学校|职业学校|技术学校|"
-            r"幼儿园|书院|学堂|党校))"
+            r"(?:" + "|".join(_SCHOOL_SUFFIXES) + r"))"
         ),
         "group": "school",
+        "validate": _validate_school,
         "description": "Chinese school name (CJK prefix + educational suffix)",
     },
     {

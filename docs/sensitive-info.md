@@ -41,6 +41,36 @@ For the complete list of supported PII types, formats, and validation rules:
 
 ---
 
+## Trigger Conditions (common gotchas)
+
+Some PII types require specific context to match. "Supported" ≠ "any format works". For debugging, use `detailed=True`:
+
+```python
+redacted, key, details = redact(text, detailed=True)
+for e in details["entities"]:
+    print(f"{e['type']} via layer {e['layer']}: {e['original']}")
+```
+
+Key triggers to know:
+
+| Type | Trigger required | Example that works | Example that fails |
+|------|------------------|-------------------|-------------------|
+| `qq` (zh) | "QQ" keyword prefix | `QQ:123456789`, `qq号123456789` | `我的号是 123456789` |
+| `wechat` (zh) | "微信/wechat" keyword | `微信:zhang123` | bare `zhang123` |
+| `credit_code` (zh) | **Real MOD 31 checksum** | `91350100M000100Y43` | `91330100MA27X3Y06M` (fake) |
+| `id_number` (zh) | 18-digit MOD 11-2 or 15-digit (1920s-1999) | `110101199003074610` | `110101199003071235` (bad checksum) |
+| `bank_card` | Luhn checksum OR known Chinese BIN | `4111111111111111` | `1234567890123456` (random digits) |
+| `person` (zh) | Evidence signal required (prefix/suffix/PII proximity) | `客户张三`, `张三的电话13812345678` | bare `张三说了话` (→ L2 NER) |
+| `organization` (zh) | CJK prefix + legal/industry suffix, non-verb start | `腾讯公司`, `就职于华为` | `请查一下公司` (verb prefix rejected) |
+| `passport` (zh) | "护照" keyword prefix | `护照号G12345678` | bare `G12345678` |
+| `iban` | ISO 13616 country code + mod 97 checksum | `DE89370400440532013000` | random `XX` prefix |
+| `email` | No consecutive/leading dots in local part | `user@example.com` | `.user@example.com` |
+| `self_reference` | With other PII (Tier 1), no other PII = skip (Tier 2), commands = ignore (Tier 3) | `我确诊了糖尿病` | `我觉得不错` |
+
+For English names in `mode="fast"`, there is no regex detection (no structural signal). Use `names=["John Smith"]` parameter or `mode="ner"`.
+
+---
+
 ## Layer Mapping
 
 ```

@@ -52,5 +52,35 @@
         "should_match": false,
         "type": "organization",
         "description": "无PII"
+    },
+    {
+        "id": "no_org_verb_prefix_swallow",
+        "input": "请查一下公司税号",
+        "should_match": false,
+        "type": "organization",
+        "description": "请查一下公司 不应被当作组织名（只有裸后缀）"
+    },
+    {
+        "id": "no_org_bare_suffix_question",
+        "input": "有公司来招聘",
+        "should_match": false,
+        "type": "organization",
+        "description": "有公司 不应匹配（suffix-only）"
+    },
+    {
+        "id": "org_with_verb_prefix_trim",
+        "input": "请查一下腾讯公司的信息",
+        "should_match": true,
+        "type": "organization",
+        "expected_text": "腾讯公司",
+        "description": "请查一下前缀应被剥离，只保留腾讯公司"
+    },
+    {
+        "id": "org_embedded_verb",
+        "input": "就职于华为技术有限公司",
+        "should_match": true,
+        "type": "organization",
+        "expected_text": "华为技术有限公司",
+        "description": "就职于前缀应被剥离"
     }
 ]
