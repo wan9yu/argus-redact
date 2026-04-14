@@ -323,11 +323,11 @@
   },
   {
     "id": "de_employment_contract_01",
-    "input": "Arbeitsvertrag\n\nZwischen der Firma TechSoft GmbH und Frau Anna Schneider, geb. am 15.06.1990, wohnhaft in Leopoldstraße 48, 80802 München.\n\nSteueridentifikationsnummer: 86 123 456 782\nSozialversicherungsnummer: 12 150690 S 423\nBankverbindung: IBAN DE71 1001 0010 0987 6543 21\nTelefon: 0176 34567890\nE-Mail: a.schneider@example.de\n\nBeginn des Arbeitsverhältnisses: 01.04.2024",
+    "input": "Arbeitsvertrag\n\nZwischen der Firma TechSoft GmbH und Frau Anna Schneider, geb. am 15.06.1990, wohnhaft in Leopoldstraße 48, 80802 München.\n\nSteueridentifikationsnummer: 86 123 456 782\nSozialversicherungsnummer: 12 150690 S 423\nBankverbindung: IBAN DE89 3704 0044 0532 0130 00\nTelefon: 0176 34567890\nE-Mail: a.schneider@example.de\n\nBeginn des Arbeitsverhältnisses: 01.04.2024",
     "lang": "de",
     "pii_values": [
       "86 123 456 782",
-      "DE71 1001 0010 0987 6543 21",
+      "DE89 3704 0044 0532 0130 00",
       "0176 34567890",
       "a.schneider@example.de"
     ],

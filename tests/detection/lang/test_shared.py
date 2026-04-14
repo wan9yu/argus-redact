@@ -52,3 +52,10 @@ class TestEmailPattern:
     def test_should_match_or_reject_when_email_input(self, shared_patterns, example):
         results, _ = match_patterns(example["input"], shared_patterns)
         assert_pattern_match(results, example, "email")
+
+
+class TestIBAN:
+    @parametrize_examples("iban.json")
+    def test_should_match_or_reject_when_iban_input(self, shared_patterns, example):
+        results, _ = match_patterns(example["input"], shared_patterns)
+        assert_pattern_match(results, example, "iban")

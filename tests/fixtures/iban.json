@@ -1,0 +1,63 @@
+[
+  {
+    "id": "iban_de",
+    "input": "IBAN DE89370400440532013000",
+    "should_match": true,
+    "type": "iban",
+    "expected_text": "DE89370400440532013000",
+    "description": "German IBAN (22 chars)"
+  },
+  {
+    "id": "iban_fr",
+    "input": "IBAN FR1420041010050500013M02606",
+    "should_match": true,
+    "type": "iban",
+    "expected_text": "FR1420041010050500013M02606",
+    "description": "French IBAN (27 chars, alphanumeric BBAN)"
+  },
+  {
+    "id": "iban_gb",
+    "input": "UK account GB29NWBK60161331926819",
+    "should_match": true,
+    "type": "iban",
+    "expected_text": "GB29NWBK60161331926819",
+    "description": "UK IBAN (22 chars)"
+  },
+  {
+    "id": "iban_nl",
+    "input": "NL91ABNA0417164300",
+    "should_match": true,
+    "type": "iban",
+    "expected_text": "NL91ABNA0417164300",
+    "description": "Dutch IBAN (18 chars)"
+  },
+  {
+    "id": "iban_with_spaces",
+    "input": "IBAN DE89 3704 0044 0532 0130 00",
+    "should_match": true,
+    "type": "iban",
+    "expected_text": "DE89 3704 0044 0532 0130 00",
+    "description": "IBAN with grouping spaces"
+  },
+  {
+    "id": "iban_invalid_checksum",
+    "input": "DE00370400440532013000",
+    "should_match": false,
+    "type": "iban",
+    "description": "Invalid checksum (mod 97 fails)"
+  },
+  {
+    "id": "iban_not_country_prefix",
+    "input": "ZZ89370400440532013000",
+    "should_match": false,
+    "type": "iban",
+    "description": "ZZ is not a valid country code"
+  },
+  {
+    "id": "iban_too_short",
+    "input": "DE8937",
+    "should_match": false,
+    "type": "iban",
+    "description": "Too short to be an IBAN"
+  }
+]

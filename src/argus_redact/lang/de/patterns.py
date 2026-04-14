@@ -33,10 +33,4 @@ PATTERNS = [
         "validate": _validate_de_phone,
         "description": "German phone number (mobile/landline, 10-15 digits)",
     },
-    {
-        "type": "iban",
-        "label": "[IBAN]",
-        "pattern": r"DE\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}",
-        "description": "German IBAN",
-    },
 ]
