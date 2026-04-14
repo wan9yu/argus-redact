@@ -53,22 +53,11 @@ _IBAN_LENGTHS = {
 
 
 def _validate_iban(value: str) -> bool:
-    """ISO 13616 IBAN validation: length check + mod 97 checksum.
-
-    Algorithm:
-    1. Move first 4 chars (country + check digits) to end
-    2. Replace letters with digits (A=10, B=11, ..., Z=35)
-    3. Interpret as integer, check % 97 == 1
-    """
+    """ISO 13616 IBAN validation: country length table + mod 97 checksum."""
     iban = value.replace(" ", "").upper()
-    if len(iban) < 15 or len(iban) > 34:
+    expected_len = _IBAN_LENGTHS.get(iban[:2]) if len(iban) >= 2 else None
+    if expected_len is None or len(iban) != expected_len:
         return False
-    country = iban[:2]
-    if country not in _IBAN_LENGTHS:
-        return False
-    if len(iban) != _IBAN_LENGTHS[country]:
-        return False
-    # Rearrange and convert to digits
     rearranged = iban[4:] + iban[:4]
     numeric = "".join(
         str(ord(c) - 55) if c.isalpha() else c
