@@ -23,7 +23,7 @@ class RedactTransform:
     def __init__(
         self,
         *,
-        mode: str = "auto",
+        mode: str = "fast",
         lang: str | list[str] = "zh",
         seed: int | None = None,
     ):

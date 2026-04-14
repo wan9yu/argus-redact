@@ -70,7 +70,7 @@ Unicode-hardened: NFKC normalization, zero-width stripping, Cyrillic/Greek confu
 
 Core engine (regex matching, entity merging, restore, pseudonym generation) is written in **Rust via PyO3** for maximum performance. Python handles orchestration, NER models, and LLM integration.
 
-~47 PII types across 4 levels — from phone numbers to medical diagnoses, religious beliefs, political opinions. Use what you need: `mode="fast"` (Layer 1 only) → `mode="ner"` (+ NER) → `mode="auto"` (all three).
+~47 PII types across 4 levels — from phone numbers to medical diagnoses, religious beliefs, political opinions. Default is `mode="fast"` (Layer 1 only, zero deps, sub-ms). Opt in: `mode="ner"` (+ NER models) → `mode="auto"` (all three layers).
 
 **Telemetry:** `ARGUS_PERF_LOG=perf.jsonl` for per-call timing breakdown. [Details →](docs/api-reference.md#performance-telemetry)
 
@@ -110,7 +110,7 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 
 ## North Star
 
-| Dimension | Current (v0.4.13) | Next milestone |
+| Dimension | Current (v0.4.14) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini. Cross-layer hints | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes preserve trigger words | More task types |

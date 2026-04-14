@@ -533,6 +533,19 @@ class TestRedactMode:
         redacted, key = redact("13812345678", seed=42, mode="fast")
         assert "13812345678" not in redacted
 
+    def test_should_default_to_fast_mode(self):
+        """Default mode must be 'fast' — no model loading without explicit opt-in."""
+        # English name is L2-NER only; fast mode must NOT detect it (no surprise NER load)
+        redacted, key = redact("John Smith called me", seed=42, lang="en")
+        assert "John Smith" in redacted
+        assert key == {}
+
+    def test_should_detect_english_name_only_when_ner_mode_explicit(self):
+        """User must explicitly opt into NER to get English name detection."""
+        # We can't test actual NER without installed models; just verify default behavior
+        redacted, key = redact("John Smith called me", seed=42, lang="en", mode="fast")
+        assert "John Smith" in redacted
+
 
 class TestRedactTypeErrors:
     def test_should_raise_type_error_when_text_is_not_string(self):

@@ -162,7 +162,7 @@ def redact(
     *,
     key: dict | str | None = None,
     lang: str | list[str] = "zh",
-    mode: str = "auto",
+    mode: str = "fast",
     seed: int | None = None,
     config: dict | str | None = None,
     names: list[str] | None = None,
@@ -176,7 +176,13 @@ def redact(
     """Detect and replace PII in text.
 
     Args:
-        names: List of known names/entities to always redact (no NER needed).
+        mode: Detection mode.
+            - "fast" (default): regex only. Zero deps, sub-ms, deterministic.
+              English names / standalone Chinese names are NOT detected at this level
+              — pass them via `names=[...]` or use "ner" / "auto".
+            - "ner": regex + NER model (requires spacy/hanlp). Detects bare names.
+            - "auto": regex + NER + semantic LLM (requires Ollama). Maximum coverage.
+        names: List of known names/entities to always redact (works in fast mode).
         report: Return a RedactReport with risk assessment and audit info.
         with_types: Return a 3-tuple (redacted, key, types) where types maps replacement→PII type.
         profile: Compliance profile name ("default", "pipl", "gdpr", "hipaa").
