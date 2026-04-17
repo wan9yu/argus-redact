@@ -81,7 +81,7 @@ For bulk workloads (thousands of documents), throughput matters more than latenc
 
 | Scenario | Recommended mode | Why |
 |----------|-----------------|-----|
-| Single text → cloud LLM | `auto` (default) | LLM API latency dwarfs everything. Use best detection. |
+| Single text → cloud LLM | `auto` (opt-in) | LLM API latency dwarfs everything. Use best detection. |
 | CLI pipe, one-shot | `fast` | No model loading overhead. Catches phone/ID/email/cards. |
 | Batch 1K+ documents | `ner` (Layer 1+2) | Good balance. Layer 3 too slow for bulk. |
 | Real-time stream | `fast` | Sub-millisecond. |

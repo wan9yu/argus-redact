@@ -40,7 +40,7 @@ argus-redact redact [input] [options]
 | `-k, --key` | | *(required)* | Path to write the key file. If file exists, key is loaded and reused (batch mode). |
 | `-o, --output` | | stdout | Output file for redacted text. |
 | `-l, --lang` | | `zh` | Language(s), comma-separated. `zh`, `en`, `zh,en`. |
-| `-m, --mode` | | `auto` | Detection mode: `auto`, `fast` (regex only), `ner` (regex + NER). |
+| `-m, --mode` | | `fast` | Detection mode: `fast` (regex only), `ner` (regex + NER), `auto` (all layers). |
 | `-s, --seed` | | *(random)* | Fixed seed for deterministic pseudonyms. For testing and reproducibility. |
 
 ### Examples
@@ -173,7 +173,7 @@ argus-redact serve --port 9000        # custom port
 |-------|------|---------|-------------|
 | `text` | `string` | *(required)* | Text to redact |
 | `lang` | `string` | `"zh"` | Language code(s), comma-separated |
-| `mode` | `string` | `"auto"` | Detection mode: `auto`, `fast`, `ner` |
+| `mode` | `string` | `"fast"` | Detection mode: `fast`, `ner`, `auto` |
 | `report` | `bool` | `false` | Return a full `RedactReport` with risk assessment |
 | `profile` | `string` | `null` | Compliance profile: `"default"`, `"pipl"`, `"gdpr"`, `"hipaa"` |
 | `types` | `list[string]` | `null` | Only detect these PII types (e.g. `["phone", "email"]`) |

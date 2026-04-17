@@ -140,23 +140,31 @@ Real text mixes languages:
 redacted, key = redact(
     "王五给John发了邮件，讨论了Apple的offer，电话13812345678",
     lang=["zh", "en"],
+    mode="ner",
 )
 # "P-037给P-012发了邮件，讨论了[某公司]的offer，电话[手机号已脱敏]"
 ```
 
-Chinese names → Chinese NER. English names → English NER. Phone patterns → regex. Merged automatically.
+Chinese names → Chinese NER. English names → English NER. Phone patterns → regex. Merged automatically. Default `mode="fast"` would catch the phone via regex and `王五` via L1b proximity scoring, but not `John` or `Apple` — standalone English entities need `mode="ner"` or a `names=[...]` hint.
 
-## Fast Mode (Regex Only)
+## Detection Modes
 
-Skip NER and LLM layers — regex patterns only:
+`mode="fast"` is the **default** — regex + L1b person scoring only, zero model loading, sub-ms:
 
 ```python
-redacted, key = redact("张三的手机号是13812345678", mode="fast")
+redacted, key = redact("张三的手机号是13812345678")    # mode="fast" implicit
 # "P-042的手机号是138****5678"
-# 张三 IS detected — "的手机号" suffix is a strong name signal
+# 张三 detected via L1b — "的手机号" suffix + phone proximity are strong signals
 ```
 
-Useful when you only need deterministic PII (phone, ID card, email) or want minimal latency.
+Opt into heavier layers when you need them:
+
+```python
+redacted, key = redact(text, mode="ner")    # + NER for standalone names/locations/orgs
+redacted, key = redact(text, mode="auto")   # + semantic LLM for implicit PII (requires Ollama)
+```
+
+`mode="ner"` and `mode="auto"` require installed language packs (`pip install argus-redact[zh]`, `[en]`, ...) and, for `auto`, a local Ollama server. Fast mode has zero heavy deps.
 
 ## Key Management
 

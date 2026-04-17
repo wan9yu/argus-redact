@@ -10,7 +10,7 @@ redact(
     *,
     key: dict | str | None = None,
     lang: str | list[str] = "zh",
-    mode: str = "auto",
+    mode: str = "fast",
     seed: int | None = None,
     config: dict | None = None,
     names: list[str] | None = None,
@@ -31,7 +31,7 @@ Detect and replace PII in the input text. Returns `(redacted_text, key)`, or `(r
 | `text` | `str` | *(required)* | Input text to redact. |
 | `key` | `dict \| str \| None` | `None` | `None` = generate fresh key. `dict` = reuse this mapping (new entities are added, existing preserved). `str` = **file path** — if file exists, load and reuse; after redaction, file is updated with new entries. Behaves like CLI `-k`. |
 | `lang` | `str \| list[str]` | `"zh"` | Language(s). `"zh"`, `"en"`, `"ja"`, `"ko"`, or list like `["zh", "en"]`. |
-| `mode` | `str` | `"auto"` | `"auto"` = all installed layers. `"fast"` = regex only. `"ner"` = regex + NER. |
+| `mode` | `str` | `"fast"` | `"fast"` = regex only (zero deps, sub-ms). `"ner"` = regex + NER. `"auto"` = all installed layers (regex + NER + semantic LLM). |
 | `seed` | `int \| None` | `None` | Random seed for pseudonym generation.
 | `config` | `dict \| str \| None` | `None` | Per-entity-type config. Dict, JSON file, or YAML file path. See [Configuration](configuration.md). |
 | `names` | `list[str] \| None` | `None` | Known names to always redact (no NER needed). Combined with NER for best results. |
@@ -71,9 +71,9 @@ redacted, key = redact("王五给John发邮件", lang=["zh", "en"])
 text1, key = redact("张三说了A")
 text2, key = redact("张三说了B", key=key)  # same pseudonyms
 
-# Fast mode
-redacted, key = redact("张三 13812345678", mode="fast")
-# Only phone is redacted; 张三 requires NER (skipped in fast mode)
+# Fast mode (default): regex + L1b person scoring
+redacted, key = redact("张三说了话", mode="fast")
+# No PII detected — bare name with no structural evidence; use mode="ner" for standalone names
 
 # Save key to file (auto-read/write)
 redacted, key = redact("张三在星巴克", key="key.json")
