@@ -2,6 +2,19 @@
 
 Thank you for your interest! argus-redact is an open-source PII encryption tool and we welcome contributions of all kinds.
 
+Please read our [Code of Conduct](CODE_OF_CONDUCT.md). For security issues, see [SECURITY.md](SECURITY.md) — **do not open public issues for vulnerabilities**.
+
+## Scope
+
+argus-redact is a PII detection and pseudonymization **library**. It does not include:
+
+- HTTP routing, proxy middleware, or API gateway features
+- Admin UIs, audit logs, or compliance evidence chains
+- LLM upstream adapters (OpenAI / Anthropic / Ollama / etc.) beyond the basic integration examples in `src/argus_redact/integrations/`
+- License or subscription management
+
+Wrap argus-redact in your own service, or use a downstream product built on top of it. PRs outside this scope will be redirected.
+
 ## Quick Start
 
 **Users:** Pre-built wheels available — just `pip install argus-redact`. No Rust needed.
@@ -166,3 +179,7 @@ Test data format:
 ## Questions?
 
 Open an issue at https://github.com/wan9yu/argus-redact/issues
+
+## License
+
+By contributing, you agree that your code will be licensed under Apache License 2.0, the same as the rest of the project. No separate CLA is required.
