@@ -74,6 +74,21 @@ Core engine (regex matching, entity merging, restore, pseudonym generation) is w
 
 **Telemetry:** `ARGUS_PERF_LOG=perf.jsonl` for per-call timing breakdown. [Details →](docs/api-reference.md#performance-telemetry)
 
+## Limitations & When NOT to Rely on This
+
+argus-redact is a PII **data minimization aid**, not an anonymization or compliance certification:
+
+- **L1 fast (regex)** matches well-defined formats. Novel or obfuscated variants, cross-field inference attacks pass through.
+- **L2 NER** is statistical inference; out-of-distribution text (informal, typo-heavy, minority names) has higher miss rate. See [benchmark results](docs/benchmark-report.md) for measured numbers.
+- **No guarantee against adversarial inputs** — attackers can craft text that evades detection.
+- **Not a GDPR / PIPL anonymization framework** — anonymization is a compliance process decision, not a single-library output.
+
+**When to use argus-redact**: reversible pseudonymization for LLM pipelines where you need `redact() → LLM → restore()` with zero PII crossing the network boundary.
+
+**When to consider alternatives**: if you need one-way English PII masking with a single model call, [OpenAI Privacy Filter](https://huggingface.co/openai/privacy-filter) and similar model-based maskers may fit better. argus-redact's niche is Chinese-optimized multi-layer detection + reversibility.
+
+Combine argus-redact with audit logging, rate limiting, and upstream policy — no single layer is sufficient.
+
 ## 8 Languages
 
 | | zh | en | ja | ko | de | uk | in | br |
