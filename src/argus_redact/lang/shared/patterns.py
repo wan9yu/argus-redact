@@ -81,7 +81,7 @@ def _validate_jwt(value: str) -> bool:
         padded = header_b64 + "=" * (-len(header_b64) % 4)
         header = json.loads(base64.urlsafe_b64decode(padded))
         return isinstance(header, dict) and "alg" in header
-    except (ValueError, json.JSONDecodeError, UnicodeDecodeError, base64.binascii.Error):
+    except (ValueError, UnicodeDecodeError):
         return False
 
 

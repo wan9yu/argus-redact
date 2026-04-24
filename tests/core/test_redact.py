@@ -576,6 +576,21 @@ class TestRedactLangAuto:
         assert "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij" not in redacted
 
 
+class TestRedactCredentialOverlap:
+    """Regression: credentials embedded in URLs must not leak, regardless of
+    which overlapping pattern wins the merger (url_token vs openai_api_key)."""
+
+    def test_should_not_leak_openai_key_inside_url(self):
+        text = "curl https://api.example.com/v1/data?api_key=sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ"
+        redacted, key = redact(text, seed=42, mode="fast")
+        assert "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ" not in redacted
+
+    def test_should_not_leak_bare_openai_key(self):
+        text = "export OPENAI_API_KEY=sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ"
+        redacted, key = redact(text, seed=42, mode="fast")
+        assert "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ" not in redacted
+
+
 class TestRedactTypeErrors:
     def test_should_raise_type_error_when_text_is_not_string(self):
         with pytest.raises(TypeError):

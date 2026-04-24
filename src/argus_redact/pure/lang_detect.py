@@ -20,12 +20,6 @@ from __future__ import annotations
 _LATIN_LETTER_THRESHOLD = 3
 
 
-def _in_range(ch: str, lo: int, hi: int) -> bool:
-    """Check if a character's codepoint falls within [lo, hi] inclusive."""
-    cp = ord(ch)
-    return lo <= cp <= hi
-
-
 def detect_languages(text: str) -> list[str]:
     """Detect which language packs should process the text.
 
@@ -34,7 +28,19 @@ def detect_languages(text: str) -> list[str]:
     if not text:
         return ["zh"]
 
-    has_ja_script = False   # hiragana or katakana
+    # Fast path: ASCII-only input can't contain CJK/Hiragana/Katakana/Hangul.
+    # Short-circuit as soon as 3 Latin letters are seen; avoid full codepoint scan.
+    # (Matches normalize_text's text.isascii() fast-path convention.)
+    if text.isascii():
+        letter_count = 0
+        for ch in text:
+            if ("a" <= ch <= "z") or ("A" <= ch <= "Z"):
+                letter_count += 1
+                if letter_count >= _LATIN_LETTER_THRESHOLD:
+                    return ["en"]
+        return ["zh"]
+
+    has_ja_script = False
     has_hangul = False
     has_cjk = False
     latin_count = 0

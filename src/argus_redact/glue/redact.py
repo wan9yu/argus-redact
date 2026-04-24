@@ -245,7 +245,6 @@ def redact(
     elif isinstance(key, dict):
         existing_key = dict(key)
 
-    # Resolve lang="auto" via script detection before pattern/NER routing
     if lang == "auto":
         lang = detect_languages(text)
 
