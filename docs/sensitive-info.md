@@ -25,7 +25,7 @@ Compliance with PIPL, GDPR, and HIPAA is a **byproduct** of this design, not the
 
 ---
 
-## Four Levels of Sensitivity
+## Five Levels of Sensitivity
 
 | Level | What | Examples | Layer |
 |-------|------|---------|-------|
@@ -33,10 +33,17 @@ Compliance with PIPL, GDPR, and HIPAA is a **byproduct** of this design, not the
 | **2. Quasi-Identifiers** | Combinations narrow identity | age, gender, date of birth, workplace, school, ethnicity | L1 regex + L2 NER |
 | **3. Sensitive Attributes** | High-harm if leaked | medical, financial, religion, political, sexual orientation, criminal record, biometric | L1 keyword + L3 LLM |
 | **4. Digital Identifiers** | Machine-traceable | IP address, MAC address, IMEI, URL with token | L1 regex |
+| **5. Credentials / Secrets** | Immediate account / infra compromise if leaked | OpenAI/Anthropic API keys, AWS access key, GitHub tokens, JWT, SSH private keys | L1 regex (+ validate for JWT) |
+
+Level 5 differs from other categories: credentials are **not personal information**
+under PIPL/GDPR, but leaking them causes direct harm (account takeover, resource
+abuse, supply-chain attack). They carry `sensitivity=4` in `assess_risk()` but are
+deliberately **not** in `_SENSITIVE_PI_TYPES`, which is reserved for personal-data
+categories that trigger PIPL Art.29/51.
 
 For the complete list of supported PII types, formats, and validation rules:
-- **Spec registry:** `src/argus_redact/specs/zh.py` (single source of truth)
-- **Test fixtures:** `tests/fixtures/zh_*.json`, `en_*.json`, etc. (executable examples)
+- **Spec registry:** `src/argus_redact/specs/zh.py` + `src/argus_redact/specs/shared.py` (single source of truth)
+- **Test fixtures:** `tests/fixtures/zh_*.json`, `en_*.json`, `shared_*.json` (executable examples)
 - **Run `argus-redact info`** to see all supported types and languages
 
 ---
