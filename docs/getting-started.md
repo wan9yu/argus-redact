@@ -139,13 +139,15 @@ Real text mixes languages:
 ```python
 redacted, key = redact(
     "王五给John发了邮件，讨论了Apple的offer，电话13812345678",
-    lang=["zh", "en"],
+    lang="auto",
     mode="ner",
 )
 # "P-037给P-012发了邮件，讨论了[某公司]的offer，电话[手机号已脱敏]"
 ```
 
 Chinese names → Chinese NER. English names → English NER. Phone patterns → regex. Merged automatically. Default `mode="fast"` would catch the phone via regex and `王五` via L1b proximity scoring, but not `John` or `Apple` — standalone English entities need `mode="ner"` or a `names=[...]` hint.
+
+`lang="auto"` routes based on script detection (Hiragana/Katakana → `ja`, Hangul → `ko`, CJK ideographs → `zh`, Latin letters → `en`). If you know the language set in advance, passing an explicit list like `lang=["zh", "en"]` is equivalent and avoids the detection pass.
 
 ## Detection Modes
 

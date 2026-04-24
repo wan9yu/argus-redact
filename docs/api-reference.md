@@ -30,7 +30,7 @@ Detect and replace PII in the input text. Returns `(redacted_text, key)`, or `(r
 |-----------|------|---------|-------------|
 | `text` | `str` | *(required)* | Input text to redact. |
 | `key` | `dict \| str \| None` | `None` | `None` = generate fresh key. `dict` = reuse this mapping (new entities are added, existing preserved). `str` = **file path** — if file exists, load and reuse; after redaction, file is updated with new entries. Behaves like CLI `-k`. |
-| `lang` | `str \| list[str]` | `"zh"` | Language(s). `"zh"`, `"en"`, `"ja"`, `"ko"`, or list like `["zh", "en"]`. |
+| `lang` | `str \| list[str]` | `"zh"` | Language(s). `"zh"`, `"en"`, `"ja"`, `"ko"`, or list like `["zh", "en"]`. Pass `"auto"` to let argus-redact pick language(s) from the text (script-based detection: Hiragana/Katakana → ja, Hangul → ko, CJK → zh, Latin letters → en; fallback `["zh"]`). |
 | `mode` | `str` | `"fast"` | `"fast"` = regex only (zero deps, sub-ms). `"ner"` = regex + NER. `"auto"` = all installed layers (regex + NER + semantic LLM). |
 | `seed` | `int \| None` | `None` | Random seed for pseudonym generation.
 | `config` | `dict \| str \| None` | `None` | Per-entity-type config. Dict, JSON file, or YAML file path. See [Configuration](configuration.md). |
