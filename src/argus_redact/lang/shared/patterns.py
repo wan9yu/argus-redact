@@ -227,9 +227,9 @@ PATTERNS = [
         "label": "[SSH-PRIVATE-KEY]",
         "pattern": (
             r"-----BEGIN (?:RSA |OPENSSH |DSA |EC )?PRIVATE KEY-----"
-            r"[\s\S]+?"
+            r"[\s\S]{1,10000}?"
             r"-----END (?:RSA |OPENSSH |DSA |EC )?PRIVATE KEY-----"
         ),
-        "description": "SSH private key PEM block (RSA/OPENSSH/DSA/EC variants)",
+        "description": "SSH private key PEM block (RSA/OPENSSH/DSA/EC variants; body bounded at 10KB — real keys are <4KB — to avoid pathological backtracking on Python re fallback)",
     },
 ]
