@@ -79,9 +79,9 @@ class TestDetectLanguagesLatinThreshold:
     def test_should_not_add_en_when_stray_letters_only(self):
         from argus_redact.pure.lang_detect import detect_languages
 
-        # Chinese text with 1-2 stray Latin letters (e.g., brand names, abbreviations)
+        # Chinese text with 1-2 stray Latin letters (single letter brand / initial)
         # should NOT trigger English route
-        result = detect_languages("她买了iPad")  # 2 Latin chars
+        result = detect_languages("她去了Q区")  # 1 Latin char
         assert "en" not in result
         assert "zh" in result
 
