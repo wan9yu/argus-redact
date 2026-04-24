@@ -57,6 +57,13 @@ DEFAULT_STRATEGIES = {
     "social_security": "remove",
     "credit_code": "remove",
     "us_passport": "remove",
+    # Credentials / secrets (cross-language)
+    "openai_api_key": "remove",
+    "anthropic_api_key": "remove",
+    "aws_access_key": "remove",
+    "github_token": "remove",
+    "jwt": "remove",
+    "ssh_private_key": "remove",
 }
 
 DEFAULT_PREFIXES = {
@@ -91,6 +98,13 @@ DEFAULT_PREFIXES = {
     "age": "AGE",
     "gender": "GEN",
     "self_reference": "S",
+    # Credentials / secrets
+    "openai_api_key": "OAI-KEY",
+    "anthropic_api_key": "ANT-KEY",
+    "aws_access_key": "AWS-KEY",
+    "github_token": "GH-TOKEN",
+    "jwt": "JWT",
+    "ssh_private_key": "SSH-KEY",
 }
 
 # Default label for category strategy

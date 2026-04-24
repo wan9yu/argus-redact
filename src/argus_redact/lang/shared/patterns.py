@@ -1,5 +1,7 @@
 """Cross-language regex patterns (email, etc.)."""
 
+import base64
+import json
 import re as _re
 
 
@@ -66,6 +68,20 @@ def _validate_iban(value: str) -> bool:
     try:
         return int(numeric) % 97 == 1
     except ValueError:
+        return False
+
+
+def _validate_jwt(value: str) -> bool:
+    """JWT format validation: 3 base64url segments; header decodes to JSON with 'alg' field."""
+    parts = value.split(".")
+    if len(parts) != 3:
+        return False
+    try:
+        header_b64 = parts[0]
+        padded = header_b64 + "=" * (-len(header_b64) % 4)
+        header = json.loads(base64.urlsafe_b64decode(padded))
+        return isinstance(header, dict) and "alg" in header
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError, base64.binascii.Error):
         return False
 
 
@@ -173,5 +189,47 @@ PATTERNS = [
             r"|aged\s+\d{1,3}"
         ),
         "description": "Age (Chinese 岁/年龄/周岁 + English years old/aged)",
+    },
+    # ── Credentials / Secrets (cross-language) ──
+    {
+        "type": "openai_api_key",
+        "label": "[OPENAI-API-KEY]",
+        "pattern": r"sk-(?!ant-)(?:proj-)?[A-Za-z0-9_-]{32,}",
+        "description": "OpenAI API key (sk- or sk-proj- prefix; negative lookahead excludes sk-ant- anthropic keys)",
+    },
+    {
+        "type": "anthropic_api_key",
+        "label": "[ANTHROPIC-API-KEY]",
+        "pattern": r"sk-ant-[A-Za-z0-9_-]{32,}",
+        "description": "Anthropic API key (sk-ant- prefix)",
+    },
+    {
+        "type": "aws_access_key",
+        "label": "[AWS-ACCESS-KEY]",
+        "pattern": r"(?<![A-Z0-9])AKIA[0-9A-Z]{16}(?![A-Z0-9])",
+        "description": "AWS Access Key ID (AKIA + 16 uppercase alphanumeric)",
+    },
+    {
+        "type": "github_token",
+        "label": "[GITHUB-TOKEN]",
+        "pattern": r"(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}",
+        "description": "GitHub token (ghp/gho/ghu/ghs/ghr classic or github_pat_ fine-grained)",
+    },
+    {
+        "type": "jwt",
+        "label": "[JWT]",
+        "pattern": r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+",
+        "validate": _validate_jwt,
+        "description": "JWT (3 base64url segments; header must decode to JSON with 'alg' field)",
+    },
+    {
+        "type": "ssh_private_key",
+        "label": "[SSH-PRIVATE-KEY]",
+        "pattern": (
+            r"-----BEGIN (?:RSA |OPENSSH |DSA |EC )?PRIVATE KEY-----"
+            r"[\s\S]+?"
+            r"-----END (?:RSA |OPENSSH |DSA |EC )?PRIVATE KEY-----"
+        ),
+        "description": "SSH private key PEM block (RSA/OPENSSH/DSA/EC variants)",
     },
 ]

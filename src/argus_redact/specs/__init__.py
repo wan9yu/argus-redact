@@ -12,7 +12,7 @@ from .registry import PIITypeDef, get, list_types, lookup
 # Auto-register all language specs on import
 import importlib as _importlib
 
-for _mod in ("zh",):
+for _mod in ("zh", "shared"):
     try:
         _importlib.import_module(f"argus_redact.specs.{_mod}")
     except ImportError:
