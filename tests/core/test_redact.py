@@ -540,6 +540,42 @@ class TestRedactMode:
         assert key == {}
 
 
+class TestRedactLangAuto:
+    """End-to-end `redact(text, lang='auto')` routing via script detection."""
+
+    def test_should_redact_chinese_when_auto_on_zh_text(self):
+        # Pure zh text: auto detects zh, regex matches Chinese phone
+        redacted, key = redact("客户的手机号是13812345678", seed=42, mode="fast", lang="auto")
+        assert "13812345678" not in redacted
+
+    def test_should_redact_shared_types_regardless_of_lang(self):
+        # IBAN is a shared pattern, must be caught under lang="auto" (routes to en)
+        text = "Transfer from DE89370400440532013000 received"
+        redacted, key = redact(text, seed=42, mode="fast", lang="auto")
+        assert "DE89370400440532013000" not in redacted
+
+    def test_should_redact_both_when_mixed_zh_en(self):
+        # Mixed text: phone (shared regex) + US passport-style would need specific langs
+        text = "客户Apple公司的电话13812345678"
+        redacted, key = redact(text, seed=42, mode="fast", lang="auto")
+        assert "13812345678" not in redacted
+
+    def test_should_not_crash_on_empty_text(self):
+        redacted, key = redact("", seed=42, mode="fast", lang="auto")
+        assert redacted == ""
+        assert key == {}
+
+    def test_should_not_crash_on_symbols_only(self):
+        redacted, key = redact("!@#$%^&*()", seed=42, mode="fast", lang="auto")
+        assert key == {}
+
+    def test_should_detect_credentials_under_auto(self):
+        # Credentials are shared types, auto must route properly regardless of lang
+        text = "API_KEY=sk-ant-api03-FAKE0000000000000000000000000000abcdefghij"
+        redacted, key = redact(text, seed=42, mode="fast", lang="auto")
+        assert "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij" not in redacted
+
+
 class TestRedactTypeErrors:
     def test_should_raise_type_error_when_text_is_not_string(self):
         with pytest.raises(TypeError):
