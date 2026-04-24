@@ -107,26 +107,12 @@ class TestToPatterns:
             )
 
 
-# Synthetic credential inputs — mirror fixtures in tests/fixtures/shared_secrets.json.
-# All values are fake but format-valid so both hand-written and spec patterns match.
+from tests.conftest import load_examples
+
+# Inputs for the shared parity test: positive fixtures + one negative sanity check.
 CREDENTIAL_INPUTS = [
-    # openai_api_key
-    "OPENAI_API_KEY=sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ",
-    "export key: sk-proj-FAKE00000000000000000000000000000000000001test",
-    # anthropic_api_key
-    "ANTHROPIC_API_KEY=sk-ant-api03-FAKE0000000000000000000000000000abcdefghij",
-    # aws_access_key
-    "AWS credentials: AKIAIOSFODNN7EXAMPLE",
-    # github_token
-    "TOKEN=ghp_0000000000000000000000000000000000FAKE",
-    "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde",
-    # jwt
-    "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef",
-    # ssh_private_key
-    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEY\n-----END OPENSSH PRIVATE KEY-----",
-    # negative
-    "just a plain sentence with no credentials",
-]
+    fx["input"] for fx in load_examples("shared_secrets.json") if fx["should_match"]
+] + ["just a plain sentence with no credentials"]
 
 
 class TestToPatternsShared:
@@ -150,8 +136,6 @@ class TestToPatternsShared:
 
     def test_spec_patterns_should_match_same_as_hand_written(self):
         """Spec-derived shared patterns must detect the same types as hand-written."""
-        import argus_redact.specs.shared as _shared  # noqa: F401  — ensure registration
-
         spec_patterns = []
         for typedef in list_types("shared"):
             spec_patterns.extend(typedef.to_patterns())
