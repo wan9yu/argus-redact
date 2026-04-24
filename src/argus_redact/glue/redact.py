@@ -13,6 +13,7 @@ import re as _re
 from argus_redact._types import PatternMatch
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.grammar import normalize_grammar_en
+from argus_redact.pure.lang_detect import detect_languages
 from argus_redact.pure.normalize import MAX_INPUT_SIZE, map_spans_to_original, normalize_text
 from argus_redact.telemetry import PerfRecord, emit, get_perf_hook
 from argus_redact.pure.hints import (
@@ -243,6 +244,10 @@ def redact(
         existing_key = json.loads(path.read_text()) if path.exists() else {}
     elif isinstance(key, dict):
         existing_key = dict(key)
+
+    # Resolve lang="auto" via script detection before pattern/NER routing
+    if lang == "auto":
+        lang = detect_languages(text)
 
     timing = {}
     entities: list[PatternMatch] = []
