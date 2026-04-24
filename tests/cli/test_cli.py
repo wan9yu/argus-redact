@@ -4,6 +4,8 @@ import json
 import subprocess
 import sys
 
+from argus_redact import __version__
+
 
 def run_cli(*args, stdin=None):
     """Run argus-redact CLI and return (returncode, stdout, stderr)."""
@@ -227,7 +229,7 @@ class TestInfoCommand:
 
         assert code == 0
         assert "argus-redact" in stdout
-        assert "0.4.15" in stdout
+        assert __version__ in stdout
 
     def test_should_show_all_languages_when_info(self):
         code, stdout, _ = run_cli("info")
