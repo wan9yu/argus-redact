@@ -59,3 +59,13 @@ class TestIBAN:
     def test_should_match_or_reject_when_iban_input(self, shared_patterns, example):
         results, _ = match_patterns(example["input"], shared_patterns)
         assert_pattern_match(results, example, "iban")
+
+
+class TestSecrets:
+    """Credentials detection — 6 types: openai/anthropic API keys, AWS access
+    key, GitHub tokens, JWT, SSH private keys. Dispatches on example['type']."""
+
+    @parametrize_examples("shared_secrets.json")
+    def test_should_match_or_reject_when_secret_input(self, shared_patterns, example):
+        results, _ = match_patterns(example["input"], shared_patterns)
+        assert_pattern_match(results, example)
