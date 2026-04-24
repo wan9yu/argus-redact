@@ -12,6 +12,8 @@ tokens. High risk, but distinct compliance category from medical/financial/etc.
 
 from __future__ import annotations
 
+from argus_redact.lang.shared.patterns import _validate_jwt
+
 from .registry import PIITypeDef, register
 
 
@@ -31,6 +33,12 @@ register(PIITypeDef(
         "sk-short123",
         "sk-ant-TEST0000000000000000000000000000000000fakekey",
     ),
+    _patterns=({
+        "type": "openai_api_key",
+        "label": "[OPENAI-API-KEY]",
+        "pattern": r"sk-(?!ant-)(?:proj-)?[A-Za-z0-9_-]{32,}",
+        "description": "OpenAI API key (sk- or sk-proj- prefix; negative lookahead excludes sk-ant- anthropic keys)",
+    },),
     sensitivity=4,
     source="OpenAI platform key format",
     description="OpenAI API key (legacy sk- and project sk-proj- prefixes)",
@@ -53,6 +61,12 @@ register(PIITypeDef(
         "sk-ant-shortone",
         "sk-anthropic-TEST000000000000000000000000000",
     ),
+    _patterns=({
+        "type": "anthropic_api_key",
+        "label": "[ANTHROPIC-API-KEY]",
+        "pattern": r"sk-ant-[A-Za-z0-9_-]{32,}",
+        "description": "Anthropic API key (sk-ant- prefix)",
+    },),
     sensitivity=4,
     source="Anthropic platform key format",
     description="Anthropic API key (sk-ant- prefix)",
@@ -76,6 +90,12 @@ register(PIITypeDef(
         "akiaIOSFODNN7EXAMPLE",
         "AKIA0000TEST1234",
     ),
+    _patterns=({
+        "type": "aws_access_key",
+        "label": "[AWS-ACCESS-KEY]",
+        "pattern": r"(?<![A-Z0-9])AKIA[0-9A-Z]{16}(?![A-Z0-9])",
+        "description": "AWS Access Key ID (AKIA + 16 uppercase alphanumeric)",
+    },),
     sensitivity=4,
     source="AWS IAM access key ID format",
     description="AWS IAM access key ID (does not cover the secret access key — that needs keyword context)",
@@ -99,6 +119,12 @@ register(PIITypeDef(
         "ghx_0000000000000000000000000000000000FAKE",
         "ghp_tooshort",
     ),
+    _patterns=({
+        "type": "github_token",
+        "label": "[GITHUB-TOKEN]",
+        "pattern": r"(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}",
+        "description": "GitHub token (ghp/gho/ghu/ghs/ghr classic or github_pat_ fine-grained)",
+    },),
     sensitivity=4,
     source="GitHub personal/OAuth/app token formats",
     description="GitHub tokens: classic PAT (ghp_), OAuth (gho_), user (ghu_), server (ghs_), refresh (ghr_), fine-grained (github_pat_)",
@@ -121,6 +147,13 @@ register(PIITypeDef(
         "eyJABC.eyJDEF.GHIJKL",
         "abc.def.ghi",
     ),
+    _patterns=({
+        "type": "jwt",
+        "label": "[JWT]",
+        "pattern": r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+",
+        "validate": _validate_jwt,
+        "description": "JWT (3 base64url segments; header must decode to JSON with 'alg' field)",
+    },),
     sensitivity=4,
     source="RFC 7519 (JSON Web Token)",
     description="JWT token (validated: 3 base64url segments, header decodes to JSON with 'alg' field)",
@@ -142,6 +175,16 @@ register(PIITypeDef(
     counterexamples=(
         "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEDATA without closing marker",
     ),
+    _patterns=({
+        "type": "ssh_private_key",
+        "label": "[SSH-PRIVATE-KEY]",
+        "pattern": (
+            r"-----BEGIN (?:RSA |OPENSSH |DSA |EC )?PRIVATE KEY-----"
+            r"[\s\S]{1,10000}?"
+            r"-----END (?:RSA |OPENSSH |DSA |EC )?PRIVATE KEY-----"
+        ),
+        "description": "SSH private key PEM block (RSA/OPENSSH/DSA/EC variants; body bounded at 10KB — real keys are <4KB — to avoid pathological backtracking on Python re fallback)",
+    },),
     sensitivity=4,
     source="PEM format (RFC 7468) for SSH / TLS private keys",
     description="SSH private key PEM block (RSA, OPENSSH, DSA, EC variants)",

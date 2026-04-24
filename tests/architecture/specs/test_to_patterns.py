@@ -105,3 +105,60 @@ class TestToPatterns:
                 f"Mismatch on '{text[:40]}...': "
                 f"hand-only={hand - spec} spec-only={spec - hand}"
             )
+
+
+# Synthetic credential inputs — mirror fixtures in tests/fixtures/shared_secrets.json.
+# All values are fake but format-valid so both hand-written and spec patterns match.
+CREDENTIAL_INPUTS = [
+    # openai_api_key
+    "OPENAI_API_KEY=sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ",
+    "export key: sk-proj-FAKE00000000000000000000000000000000000001test",
+    # anthropic_api_key
+    "ANTHROPIC_API_KEY=sk-ant-api03-FAKE0000000000000000000000000000abcdefghij",
+    # aws_access_key
+    "AWS credentials: AKIAIOSFODNN7EXAMPLE",
+    # github_token
+    "TOKEN=ghp_0000000000000000000000000000000000FAKE",
+    "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde",
+    # jwt
+    "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef",
+    # ssh_private_key
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEY\n-----END OPENSSH PRIVATE KEY-----",
+    # negative
+    "just a plain sentence with no credentials",
+]
+
+
+class TestToPatternsShared:
+    """Parity test for specs/shared.py — spec-derived _patterns must match the
+    hand-written PATTERNS in lang/shared/patterns.py on credential inputs."""
+
+    def test_spec_patterns_should_exist(self):
+        """Every shared spec should produce at least one pattern."""
+        for typedef in list_types("shared"):
+            patterns = typedef.to_patterns()
+            assert len(patterns) >= 1, f"{typedef.name} produced no patterns"
+
+    def test_spec_patterns_should_have_required_keys(self):
+        """Each generated pattern dict must have type, label, pattern; type matches spec name."""
+        for typedef in list_types("shared"):
+            for pat in typedef.to_patterns():
+                assert "type" in pat
+                assert "label" in pat
+                assert "pattern" in pat
+                assert pat["type"] == typedef.name
+
+    def test_spec_patterns_should_match_same_as_hand_written(self):
+        """Spec-derived shared patterns must detect the same types as hand-written."""
+        import argus_redact.specs.shared as _shared  # noqa: F401  — ensure registration
+
+        spec_patterns = []
+        for typedef in list_types("shared"):
+            spec_patterns.extend(typedef.to_patterns())
+
+        for text in CREDENTIAL_INPUTS:
+            hand = {r.type for r in match_patterns(text, SHARED)[0]}
+            spec = {r.type for r in match_patterns(text, spec_patterns)[0]}
+            assert hand == spec, (
+                f"Mismatch on '{text[:50]}...': hand={hand} spec={spec}"
+            )
