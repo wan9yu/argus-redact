@@ -730,6 +730,10 @@ if final:
     print(final, end="")
 ```
 
+`StreamingRestorer` works with **any** replacement strategy (placeholder, pseudonym, mask, realistic). For `pseudonym-llm` profile output it correctly handles all three text forms — pass `audit_text`, `downstream_text`, or `display_text` as input. Pseudonym values that span chunk boundaries are buffered until a sentence boundary, then restored atomically.
+
+> ℹ️ For `display_text` containing visible markers (`ⓕ`), the markers stay in the streamed output (the underlying `key` doesn't include them). To strip markers, call `strip_display_markers(text, marker="ⓕ")` from `argus_redact.pure.display_marker` on the streamed output, or feed `downstream_text` instead.
+
 ---
 
 ## Structured Data

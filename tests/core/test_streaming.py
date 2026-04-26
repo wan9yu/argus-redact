@@ -1,6 +1,6 @@
 """Tests for streaming restore."""
 
-from argus_redact import redact
+from argus_redact import redact, redact_pseudonym_llm
 from argus_redact.streaming import StreamingRestorer
 
 
@@ -75,3 +75,75 @@ class TestStreamingRestorer:
 
         with pytest.raises(ValueError, match="Unknown strategy"):
             StreamingRestorer({}, strategy="invalid")
+
+
+class TestStreamingRestorerRealisticMode:
+    """StreamingRestorer must round-trip realistic-mode output (pseudonym-llm profile).
+
+    Realistic fakes have very different shapes than placeholder pseudonyms:
+    - zh: 19999... mobile, 999... ID, 滨海市 address, 张三 names
+    - en: (555) 555-01XX, 999-XX-XXXX SSN, John Doe, Mockingbird Lane
+    - shared: @example.com, 192.0.2.x, 2001:db8::, 00:00:5E:00:53:xx
+    Each must restore correctly via the unified key.
+    """
+
+    def test_should_restore_zh_realistic_mobile(self):
+        text = "请拨打 13912345678 联系王建国。"
+        result = redact_pseudonym_llm(text, salt=b"test-salt", lang="zh")
+
+        restorer = StreamingRestorer(result.key)
+        restored = restorer.feed(result.downstream_text) + restorer.flush()
+        assert restored == text
+
+    def test_should_restore_en_realistic_phone_ssn(self):
+        text = "Call (415) 555-1234, SSN 123-45-6789 today."
+        result = redact_pseudonym_llm(text, salt=b"test-salt", lang="en")
+
+        restorer = StreamingRestorer(result.key)
+        restored = restorer.feed(result.downstream_text) + restorer.flush()
+        assert restored == text
+
+    def test_should_restore_email_ip_mac(self):
+        text = "Server IP 10.0.0.5 contacts user@company.com via aa:bb:cc:dd:ee:ff."
+        result = redact_pseudonym_llm(text, salt=b"test-salt", lang="en")
+
+        restorer = StreamingRestorer(result.key)
+        restored = restorer.feed(result.downstream_text) + restorer.flush()
+        assert restored == text
+
+    def test_should_restore_display_text_with_markers(self):
+        text = "请拨打 13912345678 联系王建国。"
+        result = redact_pseudonym_llm(text, salt=b"test-salt", lang="zh")
+
+        # display_text has ⓕ markers — restore() with display_marker= strips them.
+        # StreamingRestorer doesn't accept display_marker today; caller can pre-strip
+        # or use restore() directly. Verify the contract: passing display_text through
+        # the restorer (which does plain restore) leaves markers in place.
+        restorer = StreamingRestorer(result.key)
+        restored_with_markers = restorer.feed(result.display_text) + restorer.flush()
+        # Original key entries don't include the marker, so it stays attached
+        assert "ⓕ" in restored_with_markers
+        # Stripping markers manually then re-restoring yields original
+        from argus_redact.pure.display_marker import strip_display_markers
+
+        clean = strip_display_markers(result.display_text, marker="ⓕ")
+        restorer2 = StreamingRestorer(result.key)
+        assert restorer2.feed(clean) + restorer2.flush() == text
+
+    def test_should_handle_realistic_value_split_across_chunks(self):
+        """Reserved-range fakes can be long (11-digit phone, 18-digit ID).
+        If a chunk boundary splits one, sentence buffering must aggregate
+        before restore."""
+        text = "电话 13912345678 联系。"
+        result = redact_pseudonym_llm(text, salt=b"test-salt", lang="zh")
+
+        # Split downstream_text at an arbitrary mid-fake byte
+        ds = result.downstream_text
+        mid = len(ds) // 2
+        chunk1, chunk2 = ds[:mid], ds[mid:]
+
+        restorer = StreamingRestorer(result.key)
+        out = restorer.feed(chunk1)  # likely "" (no boundary yet)
+        out += restorer.feed(chunk2)
+        out += restorer.flush()
+        assert out == text
