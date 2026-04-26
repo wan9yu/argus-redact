@@ -10,7 +10,7 @@ from argus_redact.pure.pseudonym import max_pseudonym_length
 from argus_redact.pure.restore import check_restore_safety, restore, wipe_key
 from argus_redact.pure.risk import assess_risk
 
-__version__ = "0.4.16"
+__version__ = "0.5.0"
 __all__ = [
     "redact",
     "redact_pseudonym_llm",
