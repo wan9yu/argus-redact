@@ -12,7 +12,7 @@ import importlib as _importlib
 
 from .registry import PIITypeDef, get, list_types, lookup
 
-for _mod in ("zh", "shared"):
+for _mod in ("zh", "en", "shared"):
     try:
         _importlib.import_module(f"argus_redact.specs.{_mod}")
     except ImportError:

@@ -66,6 +66,11 @@ class TestToPatterns:
         "email",
         "ip_address",
         "mac_address",
+        # en types — registered via specs/en.py with _patterns=() (regex in lang/en/patterns.py)
+        "ssn",
+        "credit_card",
+        "address",
+        "phone",
     }
 
     def test_spec_patterns_should_exist(self):
