@@ -1,12 +1,12 @@
-"""v0.5.4: MCP server returns key_token alongside deprecated raw key.
+"""v0.5.5: MCP server returns ONLY key_token (raw key field removed).
 
-Tests cover the deprecation path: v0.5.4 dual-return + DeprecationWarning,
-v0.5.5 will remove the raw `key` field entirely.
+The deprecation period started in v0.5.4 and ends here — the raw `key`
+field is gone from the redact response, and the `key` parameter is gone
+from the restore tool.
 """
 
 import importlib.util
 import json
-import warnings
 
 import pytest
 
@@ -28,11 +28,9 @@ def mcp_app():
     return mcp
 
 
-class TestRedactToolReturnsTokenAndDeprecatedKey:
+class TestRedactToolReturnsOnlyToken:
     @pytest.mark.asyncio
-    async def test_should_return_both_key_and_key_token(self, mcp_app):
-        # No DeprecationWarning on redact: the caller chooses whether to consume
-        # `key` or `key_token`. Warning fires on restore() if `key` is used.
+    async def test_should_return_key_token(self, mcp_app):
         result = await mcp_app._tool_manager.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "seed": 42},
@@ -40,9 +38,22 @@ class TestRedactToolReturnsTokenAndDeprecatedKey:
         content = result if isinstance(result, str) else result[0].text
         data = json.loads(content)
         assert "redacted" in data
-        assert "key" in data, "raw key still present in v0.5.4 (deprecation period)"
-        assert "key_token" in data, "key_token added in v0.5.4"
+        assert "key_token" in data, "key_token is the v0.5.4+ secure path"
         assert isinstance(data["key_token"], str) and len(data["key_token"]) > 10
+
+    @pytest.mark.asyncio
+    async def test_redact_response_no_longer_has_key_field(self, mcp_app):
+        # Regression guard: the deprecated raw `key` field was removed in v0.5.5.
+        result = await mcp_app._tool_manager.call_tool(
+            "redact",
+            {"text": "电话13812345678", "mode": "fast", "seed": 42},
+        )
+        content = result if isinstance(result, str) else result[0].text
+        data = json.loads(content)
+        assert "key" not in data, (
+            "raw `key` was removed in v0.5.5 (deprecated v0.5.4); "
+            "callers must use key_token"
+        )
 
 
 class TestRestoreToolViaToken:
@@ -62,26 +73,6 @@ class TestRestoreToolViaToken:
         assert "13812345678" in restored["restored"]
 
     @pytest.mark.asyncio
-    async def test_should_warn_when_using_legacy_key(self, mcp_app):
-        result = await mcp_app._tool_manager.call_tool(
-            "redact",
-            {"text": "电话13812345678", "mode": "fast", "seed": 42},
-        )
-        data = json.loads(result if isinstance(result, str) else result[0].text)
-
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            result2 = await mcp_app._tool_manager.call_tool(
-                "restore",
-                {"text": data["redacted"], "key": json.dumps(data["key"])},
-            )
-        restored = json.loads(result2 if isinstance(result2, str) else result2[0].text)
-        assert "13812345678" in restored["restored"]
-        assert any(
-            issubclass(w.category, DeprecationWarning) for w in caught
-        ), "legacy key path should warn"
-
-    @pytest.mark.asyncio
     async def test_should_raise_when_token_unknown(self, mcp_app):
         with pytest.raises(Exception) as exc:
             await mcp_app._tool_manager.call_tool(
@@ -91,30 +82,10 @@ class TestRestoreToolViaToken:
         assert "token" in str(exc.value).lower()
 
     @pytest.mark.asyncio
-    async def test_should_raise_when_neither_key_nor_token(self, mcp_app):
+    async def test_should_raise_when_no_token(self, mcp_app):
         with pytest.raises(Exception) as exc:
             await mcp_app._tool_manager.call_tool("restore", {"text": "x"})
-        # Either ValueError or FastMCP wraps it; either way the message mentions both
-        assert "key" in str(exc.value).lower() or "key_token" in str(exc.value).lower()
-
-    @pytest.mark.asyncio
-    async def test_should_raise_when_both_key_and_token_given(self, mcp_app):
-        result = await mcp_app._tool_manager.call_tool(
-            "redact",
-            {"text": "电话13812345678", "mode": "fast", "seed": 42},
-        )
-        data = json.loads(result if isinstance(result, str) else result[0].text)
-
-        with pytest.raises(Exception) as exc:
-            await mcp_app._tool_manager.call_tool(
-                "restore",
-                {
-                    "text": data["redacted"],
-                    "key": json.dumps(data["key"]),
-                    "key_token": data["key_token"],
-                },
-            )
-        assert "mutually exclusive" in str(exc.value).lower()
+        assert "key_token" in str(exc.value).lower() or "token" in str(exc.value).lower()
 
 
 class TestTokenStoreLifecycle:

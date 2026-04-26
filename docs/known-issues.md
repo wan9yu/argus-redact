@@ -26,7 +26,7 @@ These are inherent properties of the realistic-redaction design, not bugs to fix
 
 | Issue | Version | Fix |
 |-------|---------|-----|
-| MCP key exposure in tool response | v0.5.4 | `redact` tool now mints `key_token` (process-scoped UUID); raw `key` deprecated this release, removed in v0.5.5 |
+| MCP key exposure in tool response | v0.5.4 | `redact` tool now mints `key_token` (process-scoped UUID). Raw `key` was removed in v0.5.5; restore tool accepts `key_token` only. |
 | restore() rebuilt alternation regex per call | v0.5.4 | `lru_cache(maxsize=128)` on `frozenset(key.keys())` — streaming hot path no longer pays compile cost |
 | en/person realistic required NER | v0.5.3 | `lang/en/person.py` adds Census surname + SSA given-name list for fast-mode detection |
 | Pollution scanner false-positive on canonical names | v0.5.3 | `reserved_names` parameter on `redact_pseudonym_llm` / `StreamingRedactor` lets caller override canonical fake-name tables |

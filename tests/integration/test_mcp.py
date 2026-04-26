@@ -45,7 +45,7 @@ class TestMCPToolExecution:
         return mcp
 
     @pytest.mark.asyncio
-    async def test_should_redact_and_return_key(self, mcp_app):
+    async def test_should_redact_and_return_key_token(self, mcp_app):
         result = await mcp_app._tool_manager.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "seed": 42},
@@ -54,11 +54,11 @@ class TestMCPToolExecution:
         content = result if isinstance(result, str) else result[0].text
         data = json.loads(content)
         assert "redacted" in data
-        assert "key" in data
+        assert "key_token" in data
         assert "13812345678" not in data["redacted"]
 
     @pytest.mark.asyncio
-    async def test_should_restore_with_key(self, mcp_app):
+    async def test_should_restore_with_key_token(self, mcp_app):
         result = await mcp_app._tool_manager.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "seed": 42},
@@ -68,7 +68,7 @@ class TestMCPToolExecution:
 
         result2 = await mcp_app._tool_manager.call_tool(
             "restore",
-            {"text": data["redacted"], "key": json.dumps(data["key"])},
+            {"text": data["redacted"], "key_token": data["key_token"]},
         )
         content2 = result2 if isinstance(result2, str) else result2[0].text
         restored = json.loads(content2)

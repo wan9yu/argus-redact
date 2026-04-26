@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import secrets
-import warnings
 
 from mcp.server.fastmcp import FastMCP
 
@@ -27,7 +26,7 @@ from argus_redact import RedactReport, __version__, redact, restore
 mcp = FastMCP("argus-redact")
 
 
-# Process-scoped token store for v0.5.4 secure key handling.
+# Process-scoped token store for secure key handling (v0.5.4+).
 # Tokens map to key dicts; lifetime = MCP server process. Claude Desktop
 # sessions are short-lived, so the dict naturally clears on disconnect.
 # Long-running deployments should restart the server periodically.
@@ -53,7 +52,7 @@ async def redact_text(
     mode: str = "fast",
     seed: int | None = None,
 ) -> str:
-    """Redact PII from text. Returns JSON with redacted text and a key token.
+    """Redact PII from text. Returns JSON with redacted text and a key_token.
 
     Args:
         text: Input text containing PII to redact.
@@ -61,12 +60,10 @@ async def redact_text(
         mode: Detection mode — "fast" (regex), "ner" (regex+NER), "auto" (all).
         seed: Random seed for deterministic output (testing only).
 
-    Returns JSON with three fields:
+    Returns JSON with two fields:
     - ``redacted``: redacted text
-    - ``key_token``: short-lived token; pass to restore tool to recover original
-    - ``key`` (DEPRECATED in v0.5.4, removed in v0.5.5): raw key dict — emits
-      a DeprecationWarning. Prefer ``key_token`` to keep the key out of the
-      LLM context window.
+    - ``key_token``: short-lived token (process-scoped); pass to restore tool
+      to recover the original. The raw key never enters the LLM's context.
     """
     lang_param: str | list[str] = lang
     if "," in lang:
@@ -79,55 +76,34 @@ async def redact_text(
         seed=seed,
     )
     token = _create_key_token(key)
-    # No warning here — the caller controls whether to consume `key` or `key_token`.
-    # Warning fires in restore_text only if the deprecated `key` parameter is used.
     return json.dumps(
-        {"redacted": redacted_text, "key_token": token, "key": key},
+        {"redacted": redacted_text, "key_token": token},
         ensure_ascii=False,
         indent=2,
     )
 
 
-# Empty-string defaults (rather than `str | None`) avoid a FastMCP/Pydantic
-# schema-generation issue where `Optional[str]` triggered JSON auto-parse on
-# string inputs that look like JSON. See v0.5.4 commit history for context.
 @mcp.tool(name="restore")
 async def restore_text(
     text: str,
-    key: str = "",
     key_token: str = "",
 ) -> str:
-    """Restore redacted text using either a key_token (preferred) or a raw key.
+    """Restore redacted text using a key_token returned by the redact tool.
 
     Args:
         text: Redacted text (e.g. LLM output containing pseudonyms).
-        key: JSON string of the key dict (DEPRECATED v0.5.4 → removed v0.5.5).
-        key_token: Token returned by the redact tool. Preferred — keeps the
-            raw key out of the LLM context.
-
-    Exactly one of ``key`` or ``key_token`` must be provided (non-empty).
-    Tokens are scoped to the MCP server process; restart invalidates them.
+        key_token: Token returned by the redact tool. Tokens are scoped to
+            the MCP server process; restart invalidates them.
     """
-    if not key and not key_token:
-        raise ValueError("Must provide either key or key_token")
-    if key and key_token:
-        raise ValueError("key and key_token are mutually exclusive")
+    if not key_token:
+        raise ValueError("Must provide key_token (returned by the redact tool)")
 
-    if key_token:
-        key_dict = _resolve_key_token(key_token)
-        if key_dict is None:
-            raise ValueError(
-                "Token not found or expired (process restarted?). "
-                "Pass key directly or re-run redact."
-            )
-    else:
-        warnings.warn(
-            "MCP restore tool's `key` parameter is deprecated since v0.5.4 and "
-            "will be removed in v0.5.5. Use `key_token` (returned by redact) instead.",
-            DeprecationWarning,
-            stacklevel=2,
+    key_dict = _resolve_key_token(key_token)
+    if key_dict is None:
+        raise ValueError(
+            "Token not found or expired (process restarted?). "
+            "Re-run redact to obtain a fresh key_token."
         )
-        key_dict = json.loads(key)
 
     restored = restore(text, key_dict)
     return json.dumps(
