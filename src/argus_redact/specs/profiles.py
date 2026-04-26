@@ -11,6 +11,7 @@ _STRICT_STRATEGIES = {
 }
 
 _PSEUDONYM_LLM_STRATEGIES = {
+    # zh + en (lang-aware faker_reserved lookup picks the right one)
     "person": {"strategy": "realistic"},
     "phone": {"strategy": "realistic"},
     "phone_landline": {"strategy": "realistic"},
@@ -21,6 +22,13 @@ _PSEUDONYM_LLM_STRATEGIES = {
     "passport": {"strategy": "realistic"},
     "age": {"strategy": "realistic"},
     "date_of_birth": {"strategy": "realistic"},
+    # en-specific
+    "ssn": {"strategy": "realistic"},
+    "credit_card": {"strategy": "realistic"},
+    # shared (RFC reserved)
+    "email": {"strategy": "realistic"},
+    "ip_address": {"strategy": "realistic"},
+    "mac_address": {"strategy": "realistic"},
 }
 
 PROFILES = {

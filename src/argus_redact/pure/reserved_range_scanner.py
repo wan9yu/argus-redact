@@ -14,6 +14,10 @@ from __future__ import annotations
 
 import re
 
+from argus_redact.specs.fakers_en_reserved import (
+    RESERVED_ADDRESSES_EN,
+    RESERVED_PERSON_NAMES_EN,
+)
 from argus_redact.specs.fakers_zh_reserved import RESERVED_CITIES, RESERVED_PERSON_NAMES
 
 # Districts used by ``fake_address_reserved`` — every reserved address starts
@@ -23,6 +27,7 @@ _RESERVED_ADDRESS_DISTRICTS = sorted({district for _, district, _ in RESERVED_CI
 # Patterns for each reserved-range value type. Names are used as group labels
 # and exposed via ``scan_for_pollution()`` return values.
 _RESERVED_RANGE_PATTERNS = {
+    # zh
     "phone_zh": r"(?<!\d)19999\d{6}(?!\d)",
     "phone_landline_zh": r"(?<!\d)099-?\d{8}(?!\d)",
     "id_number_zh": r"(?<!\d)999\d{14}[\dX](?!\d)",
@@ -31,6 +36,17 @@ _RESERVED_RANGE_PATTERNS = {
     "license_plate_zh": r"[测领][A-Z]99999",
     "person_zh": "|".join(re.escape(name) for name in RESERVED_PERSON_NAMES),
     "address_zh": r"滨海市(?:" + "|".join(re.escape(d) for d in _RESERVED_ADDRESS_DISTRICTS) + r")",
+    # en
+    "phone_en": r"\(555\)\s*555-01\d{2}",
+    "ssn_en": r"(?<!\d)999-\d{2}-\d{4}(?!\d)",
+    "credit_card_en": r"(?<!\d)999999\d{10}(?!\d)",
+    "person_en": "|".join(re.escape(name) for name in RESERVED_PERSON_NAMES_EN),
+    "address_en": "|".join(re.escape(addr) for addr in RESERVED_ADDRESSES_EN),
+    # shared (RFC documentation ranges)
+    "email_shared": r"@example\.(?:com|org|net)\b",
+    "ipv4_shared": r"(?<!\d)(?:192\.0\.2|198\.51\.100|203\.0\.113)\.\d{1,3}(?!\d)",
+    "ipv6_shared": r"\b2001:db8::[0-9a-fA-F]{1,4}\b",
+    "mac_shared": r"(?<![0-9A-Fa-f:])00:00:5E:00:53:[0-9A-Fa-f]{2}(?![0-9A-Fa-f:])",
 }
 
 _COMBINED = re.compile("|".join(f"(?P<{k}>{v})" for k, v in _RESERVED_RANGE_PATTERNS.items()))

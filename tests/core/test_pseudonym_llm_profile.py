@@ -1,6 +1,11 @@
 """End-to-end tests for redact_pseudonym_llm()."""
 
-from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
+import pytest
+
+from argus_redact.glue.redact_pseudonym_llm import (
+    PseudonymPollutionError,
+    redact_pseudonym_llm,
+)
 from argus_redact.pure.restore import restore
 
 
@@ -54,3 +59,58 @@ class TestDisplayMarkerConfig:
         text = "联系 王建国"
         result = redact_pseudonym_llm(text, display_marker="chinese")
         assert "(假)" in result.display_text
+
+
+class TestEnglishProfile:
+    def test_should_round_trip_en_phone_ssn_email(self):
+        text = "Call (415) 555-1234, SSN 123-45-6789, email john@company.com"
+        result = redact_pseudonym_llm(text, lang="en")
+        # Realistic-faked en values present
+        assert "(555) 555-01" in result.downstream_text
+        assert "999-" in result.downstream_text  # SSN 999 area
+        assert "@example." in result.downstream_text  # RFC 2606 email
+        # Round-trip restores exact original
+        assert restore(result.downstream_text, result.key) == text
+        assert restore(result.audit_text, result.key) == text
+        assert restore(result.display_text, result.key, display_marker="ⓕ") == text
+
+    def test_should_round_trip_credit_card(self):
+        text = "Card: 4111-1111-1111-1111"
+        result = redact_pseudonym_llm(text, lang="en")
+        assert "999999" in result.downstream_text
+        assert restore(result.downstream_text, result.key) == text
+
+    def test_should_round_trip_ip_and_mac(self):
+        # IPv4 detection requires keyword context (e.g. "IP:") per lang/shared/patterns.py.
+        # MAC has no such requirement — bare format match.
+        text = "Server IP 10.0.0.5 with MAC aa:bb:cc:dd:ee:ff"
+        result = redact_pseudonym_llm(text, lang="en")
+        assert (
+            "192.0.2." in result.downstream_text
+            or "198.51.100." in result.downstream_text
+            or "203.0.113." in result.downstream_text
+        )
+        assert "00:00:5E:00:53" in result.downstream_text
+        assert restore(result.downstream_text, result.key) == text
+
+
+class TestMixedZhEn:
+    def test_should_round_trip_mixed_text(self):
+        text = "客户Wang at (415) 555-1234, 邮箱 wang@company.com"
+        result = redact_pseudonym_llm(text, lang="auto")
+        assert restore(result.downstream_text, result.key) == text
+
+
+class TestPollutionDetectionEnShared:
+    def test_should_reject_polluted_en_phone(self):
+        """Re-redacting realistic-output en text must raise."""
+        with pytest.raises(PseudonymPollutionError):
+            redact_pseudonym_llm("Call (555) 555-0142 today", lang="en")
+
+    def test_should_reject_polluted_email(self):
+        with pytest.raises(PseudonymPollutionError):
+            redact_pseudonym_llm("Send to user42@example.com", lang="en")
+
+    def test_should_reject_polluted_ipv4(self):
+        with pytest.raises(PseudonymPollutionError):
+            redact_pseudonym_llm("Server 192.0.2.10", lang="en")
