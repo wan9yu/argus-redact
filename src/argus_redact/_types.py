@@ -65,3 +65,13 @@ class RedactReport:
     entities: tuple[dict, ...] = ()
     stats: dict = field(default_factory=dict)
     risk: RiskResult | None = None
+
+
+@dataclass(frozen=True)
+class PseudonymLLMResult:
+    """Result of redact_pseudonym_llm() — three text forms sharing one key dict."""
+
+    audit_text: str
+    downstream_text: str
+    display_text: str
+    key: dict[str, str]

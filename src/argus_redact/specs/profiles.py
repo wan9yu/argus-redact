@@ -10,6 +10,19 @@ _STRICT_STRATEGIES = {
     "credit_card": {"strategy": "remove"},
 }
 
+_PSEUDONYM_LLM_STRATEGIES = {
+    "person": {"strategy": "realistic"},
+    "phone": {"strategy": "realistic"},
+    "phone_landline": {"strategy": "realistic"},
+    "address": {"strategy": "realistic"},
+    "id_number": {"strategy": "realistic"},
+    "bank_card": {"strategy": "realistic"},
+    "license_plate": {"strategy": "realistic"},
+    "passport": {"strategy": "realistic"},
+    "age": {"strategy": "realistic"},
+    "date_of_birth": {"strategy": "realistic"},
+}
+
 PROFILES = {
     "default": {
         "description": "All Level 1 direct identifiers",
@@ -35,6 +48,10 @@ PROFILES = {
             "ip_address",
         ],
         "config": _STRICT_STRATEGIES,
+    },
+    "pseudonym-llm": {
+        "description": "Realistic reserved-range fake data for LLM-friendly redaction",
+        "config": _PSEUDONYM_LLM_STRATEGIES,
     },
 }
 
