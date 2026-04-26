@@ -125,13 +125,13 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 
 ## North Star
 
-| Dimension | Current (v0.5.1) | Next milestone |
+| Dimension | Current (v0.5.2) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini. Cross-layer hints | Adversarial testing |
-| **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (`pseudonym-llm` zh + en + shared RFC) | Streaming realistic (v0.5.2) |
+| **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (`pseudonym-llm` zh + en + shared RFC) + streaming chunked redact | Incremental detection across chunk boundaries |
 | **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design) | Task-aware guidance |
 | **Compliance** | PIPL ~85%, risk assessment + profiles | PIPL/GDPR/HIPAA (byproduct) |
-| **Coverage** | 8 langs, 4 LLMs benchmarked, 6 frameworks | Streaming realistic (v0.5.2) |
+| **Coverage** | 8 langs, 4 LLMs benchmarked, 6 frameworks | Browser extension |
 
 ## Risk Assessment
 
