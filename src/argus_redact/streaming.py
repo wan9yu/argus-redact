@@ -16,6 +16,10 @@ from argus_redact._types import PseudonymLLMResult
 from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
 from argus_redact.pure.restore import restore
 
+# Schema version stamped into export_state() output. Bumping this in a future
+# release means from_state() rejects older payloads (or grows a migration).
+_STATE_VERSION = "0.5.5"
+
 
 class StreamingRestorer:
     """Buffer streaming LLM output and restore PII at boundaries.
@@ -155,3 +159,65 @@ class StreamingRedactor:
     def aggregate_key(self) -> dict[str, str]:
         """Return a copy of the unified key across all fed chunks."""
         return dict(self._accumulated_key)
+
+    def export_state(self) -> dict:
+        """Serialize this redactor's state to a JSON-friendly dict.
+
+        Round-tripping the result through JSON and back into ``from_state``
+        produces an instance whose subsequent ``feed()`` calls reuse the same
+        fake values for already-seen originals — supports cross-process
+        resume of a long-running session.
+
+        ``salt`` is hex-encoded; everything else is plain str / list / dict.
+        """
+        return {
+            "version": _STATE_VERSION,
+            "salt": self._salt.hex(),
+            "accumulated_key": dict(self._accumulated_key),
+            "lang": self._lang,
+            "mode": self._mode,
+            "display_marker": self._display_marker,
+            "names": list(self._names) if self._names is not None else None,
+            "types": list(self._types) if self._types is not None else None,
+            "types_exclude": (
+                list(self._types_exclude) if self._types_exclude is not None else None
+            ),
+            "strict_input": self._strict_input,
+            "reserved_names": (
+                {k: list(v) for k, v in self._reserved_names.items()}
+                if self._reserved_names is not None
+                else None
+            ),
+        }
+
+    @classmethod
+    def from_state(cls, state: dict) -> "StreamingRedactor":
+        """Rebuild a StreamingRedactor from a previously exported state dict.
+
+        Pure replay — no kwargs override. Modify ``state`` yourself before
+        passing if you need to change configuration.
+        """
+        version = state.get("version")
+        if version != _STATE_VERSION:
+            raise ValueError(
+                f"Unsupported state version {version!r}; this release "
+                f"({_STATE_VERSION}) only loads its own format."
+            )
+        reserved = state.get("reserved_names")
+        instance = cls(
+            salt=bytes.fromhex(state["salt"]),
+            display_marker=state.get("display_marker"),
+            lang=state.get("lang", "zh"),
+            mode=state.get("mode", "fast"),
+            names=state.get("names"),
+            types=state.get("types"),
+            types_exclude=state.get("types_exclude"),
+            strict_input=state.get("strict_input", True),
+            reserved_names=(
+                {k: tuple(v) for k, v in reserved.items()}
+                if reserved is not None
+                else None
+            ),
+        )
+        instance._accumulated_key = dict(state.get("accumulated_key", {}))
+        return instance

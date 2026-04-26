@@ -761,6 +761,28 @@ full_key = redactor.aggregate_key()
 
 - `feed(chunk: str) -> PseudonymLLMResult` — redact one chunk. Cross-chunk consistency preserved via internal accumulated key.
 - `aggregate_key() -> dict[str, str]` — copy of the unified key across all fed chunks (for batched restore).
+- `export_state() -> dict` *(v0.5.5+)* — serialize redactor state (salt, accumulated key, all constructor options) to a JSON-friendly dict. Persist to Redis / disk to survive process restarts.
+- `from_state(state: dict) -> StreamingRedactor` *(classmethod, v0.5.5+)* — rebuild an instance from a previously exported state. Subsequent `feed()` calls reuse the same fake values for already-seen originals.
+
+### Cross-process resume (v0.5.5+)
+
+```python
+import json, redis
+from argus_redact.streaming import StreamingRedactor
+
+# Process A — start a session
+r = StreamingRedactor(salt=b"session-secret", lang="zh")
+r.feed("张明今天打了13912345678。")
+redis_client.set("session:42", json.dumps(r.export_state()))
+
+# Process B (later, different host) — resume
+state = json.loads(redis_client.get("session:42"))
+r = StreamingRedactor.from_state(state)
+result = r.feed("张明又来电话了13912345678确认。")
+# Same original phone reuses the same fake from process A
+```
+
+State is a plain dict: `version`, `salt` (hex), `accumulated_key`, plus all constructor options. The `version` field gates compatibility — `from_state()` raises `ValueError` for payloads from a release that uses a different schema.
 
 ### Constraints
 
