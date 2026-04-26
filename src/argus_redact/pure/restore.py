@@ -2,11 +2,25 @@
 
 from __future__ import annotations
 
+import functools
 import re as _re
 
 from argus_redact.pure.display_marker import strip_display_markers
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS, restore_grammar_en
 from argus_redact.pure.reserved_range_scanner import scan_for_pollution
+
+
+@functools.lru_cache(maxsize=128)
+def _compile_alternation(keys_frozen: frozenset[str]) -> _re.Pattern:
+    """Cache compiled alternation regex; key by frozenset of replacement strings.
+
+    Streaming hot path: ``StreamingRestorer.feed`` calls ``restore`` once per
+    sentence boundary on the same key dict — caching avoids re-sorting and
+    re-compiling the alternation each call. Keyed by frozenset because dict
+    insertion order doesn't change matching behavior.
+    """
+    sorted_keys = sorted(keys_frozen, key=len, reverse=True)
+    return _re.compile("|".join(_re.escape(k) for k in sorted_keys))
 
 # Danger patterns: pseudonyms appearing near these suggest exfiltration attempts
 _DANGER_PATTERNS = _re.compile(
@@ -107,9 +121,7 @@ def restore(text: str, key: dict | str, *, display_marker: str | None = None) ->
 
         result = _rust_restore(text, key)
     except ImportError:
-        sorted_keys = sorted(key.keys(), key=len, reverse=True)
-        pattern = "|".join(_re.escape(k) for k in sorted_keys)
-        regex = _re.compile(pattern)
+        regex = _compile_alternation(frozenset(key.keys()))
         result = regex.sub(lambda m: key[m.group()], text)
 
     if has_self_ref:

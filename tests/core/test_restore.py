@@ -288,3 +288,45 @@ class TestRestoreErrors:
     def test_should_raise_type_error_when_key_is_none(self):
         with pytest.raises(TypeError):
             restore("text", None)
+
+
+class TestRestoreCacheCompiledRegex:
+    """v0.5.4: alternation regex is cached on frozenset(keys); streaming hot path
+    that calls restore() repeatedly with the same key dict avoids re-compilation."""
+
+    def setup_method(self):
+        from argus_redact.pure.restore import _compile_alternation
+
+        _compile_alternation.cache_clear()
+
+    def test_should_cache_hit_on_repeated_call_with_same_key(self):
+        from argus_redact.pure.restore import _compile_alternation
+
+        key = {"P-001": "alpha", "P-002": "beta"}
+        # Force Python fallback path (Rust may not exercise the cache).
+        # Direct probe: call _compile_alternation twice with the same frozenset.
+        _compile_alternation(frozenset(key.keys()))
+        _compile_alternation(frozenset(key.keys()))
+        info = _compile_alternation.cache_info()
+        assert info.hits == 1, info
+        assert info.misses == 1, info
+
+    def test_should_cache_miss_when_keys_change(self):
+        from argus_redact.pure.restore import _compile_alternation
+
+        _compile_alternation(frozenset(["P-001", "P-002"]))
+        _compile_alternation(frozenset(["P-001", "P-003"]))  # different set
+        info = _compile_alternation.cache_info()
+        assert info.misses == 2, info
+
+    def test_should_cache_hit_regardless_of_dict_order(self):
+        """Cache key is frozenset, so dict insertion order doesn't change identity."""
+        from argus_redact.pure.restore import _compile_alternation
+
+        # Build the same set in two different insertion orders
+        a = frozenset({"P-001": "x", "P-002": "y"}.keys())
+        b = frozenset({"P-002": "y", "P-001": "x"}.keys())
+        _compile_alternation(a)
+        _compile_alternation(b)
+        info = _compile_alternation.cache_info()
+        assert info.hits == 1, info  # second call hits the cache
