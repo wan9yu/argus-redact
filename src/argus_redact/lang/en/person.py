@@ -27,9 +27,7 @@ _TOKEN_PAT = re.compile(r"\b[A-Z][a-z]+\b|\b[A-Z]\.")
 def detect_person_names(
     text: str,
     *,
-    pii_entities: list[PatternMatch] | None = None,  # unused, signature parity with zh
     known_names: list[str] | None = None,
-    threshold: float = 0.8,  # unused, signature parity with zh
 ) -> list[PatternMatch]:
     """Detect English person names via surname-list match + optional given-name boost.
 
@@ -46,15 +44,19 @@ def detect_person_names(
     results: list[PatternMatch] = []
     seen_spans: set[tuple[int, int]] = set()
 
-    # Phase 1: known_names exact match wins (confidence 1.0)
+    # Phase 1: known_names exact match wins (confidence 1.0). Build one
+    # alternation regex (longest-first to avoid prefix overlap) so cost is
+    # O(|text|) rather than O(|names| · |text|).
     if known_names:
-        for name in known_names:
-            for m in re.finditer(re.escape(name), text):
+        sorted_names = sorted((n for n in known_names if n), key=len, reverse=True)
+        if sorted_names:
+            known_pat = re.compile("|".join(re.escape(n) for n in sorted_names))
+            for m in known_pat.finditer(text):
                 span = (m.start(), m.end())
                 if span not in seen_spans:
                     results.append(
                         PatternMatch(
-                            text=name,
+                            text=m.group(0),
                             type="person",
                             start=m.start(),
                             end=m.end(),

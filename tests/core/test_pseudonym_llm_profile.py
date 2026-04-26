@@ -131,6 +131,20 @@ class TestCustomReservedNames:
                 reserved_names={"person_zh": ()},  # zh disabled, en still strict
             )
 
+    def test_should_redact_real_user_named_john_doe_when_en_canonical_disabled(self):
+        # Symmetric to the zh case: real user named "John Doe" can be redacted
+        # by passing reserved_names={"person_en": ()}.
+        result = redact_pseudonym_llm(
+            "Customer John Doe phoned today.",
+            salt=b"test",
+            lang=["en"],
+            mode="fast",
+            names=["John Doe"],
+            reserved_names={"person_en": ()},  # en disabled, real user passes through
+        )
+        # John Doe is now treated as real PII — replaced in downstream_text
+        assert "John Doe" not in result.downstream_text
+
     def test_should_accept_custom_canonical_list(self):
         # Treat custom names as canonical: '杨过' becomes a canonical fake.
         with pytest.raises(PseudonymPollutionError):

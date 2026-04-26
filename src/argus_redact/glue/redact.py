@@ -252,6 +252,8 @@ def _detect(
         timing["layer_1b_person_en_ms"] = (time.perf_counter() - t0) * 1000
         entities.extend(_tag_layer(en_person_names, 1))
         layer1_count += len(en_person_names)
+        # Note: en detector ignores L1 hints / threshold today (uses surname
+        # list-match exclusively); kwargs simplified to known_names.
 
     if "zh" not in langs and "en" not in langs and names:
         for name in names:

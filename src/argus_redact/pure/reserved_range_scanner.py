@@ -12,6 +12,7 @@ encode the documented reserved sub-ranges directly.
 
 from __future__ import annotations
 
+import functools
 import re
 
 from argus_redact.specs.fakers_en_reserved import (
@@ -52,6 +53,25 @@ _RESERVED_RANGE_PATTERNS = {
 _COMBINED = re.compile("|".join(f"(?P<{k}>{v})" for k, v in _RESERVED_RANGE_PATTERNS.items()))
 
 
+@functools.lru_cache(maxsize=32)
+def _build_combined_with_overrides(overrides: tuple[tuple[str, tuple[str, ...]], ...]) -> re.Pattern:
+    """Build the combined regex with per-type overrides; cached on hashable input.
+
+    Empty tuple for a type means "drop that type entirely from the alternation".
+    """
+    overrides_dict = dict(overrides)
+    patterns = {}
+    for type_name, default_pattern in _RESERVED_RANGE_PATTERNS.items():
+        if type_name in overrides_dict:
+            names = overrides_dict[type_name]
+            if not names:
+                continue  # disabled — drop from alternation
+            patterns[type_name] = "|".join(re.escape(n) for n in names)
+        else:
+            patterns[type_name] = default_pattern
+    return re.compile("|".join(f"(?P<{k}>{v})" for k, v in patterns.items()))
+
+
 def scan_for_pollution(
     text: str,
     *,
@@ -66,15 +86,7 @@ def scan_for_pollution(
     """
     if reserved_names is None:
         return [(m.start(), m.end(), m.lastgroup) for m in _COMBINED.finditer(text)]
-
-    patterns = dict(_RESERVED_RANGE_PATTERNS)
-    for type_name, names in reserved_names.items():
-        if type_name not in patterns:
-            continue
-        if names:
-            patterns[type_name] = "|".join(re.escape(n) for n in names)
-        else:
-            # Empty tuple → effectively disable that type (use never-match pattern).
-            patterns[type_name] = r"(?!)"
-    combined = re.compile("|".join(f"(?P<{k}>{v})" for k, v in patterns.items()))
+    # Convert to hashable form; cache per unique override shape.
+    overrides = tuple(sorted((k, tuple(v)) for k, v in reserved_names.items()))
+    combined = _build_combined_with_overrides(overrides)
     return [(m.start(), m.end(), m.lastgroup) for m in combined.finditer(text)]
