@@ -11,6 +11,17 @@
 | hints 语言覆盖 | self_reference/command detection only covers zh+en; other langs fall back to defaults | Low |
 | MCP key exposure | MCP server returns key in tool response; key visible in Claude Desktop context | Medium |
 
+## pseudonym-llm Limitations
+
+These are inherent properties of the realistic-redaction design, not bugs to fix:
+
+| Limitation | Detail | Mitigation |
+|------------|--------|------------|
+| **199-99 mobile sub-segment requires annual review** | The `199-99-XXXXXX` reserved range relies on this sub-segment remaining unassigned by 工信部. Numbering plans are revised periodically. | Re-verify against MIIT public allocations annually; if assigned, switch to a different unassigned sub-segment via configuration. |
+| **Realistic-mode output must not be re-redacted** | Re-redacting realistic output would silently corrupt the key dict (the same fake value mapping to two different originals). | `redact_pseudonym_llm` raises `PseudonymPollutionError` by default. Call `restore()` first, then re-redact if needed. |
+| **Cross-language LLM rewrites not auto-restored** | If an LLM rewrites a fake value across languages (e.g., `张明` → `Zhang Ming`), `restore()` won't match it back. Word-boundary matching covers `张明先生` but not transliteration. | Document the LLM contract: ask the model to preserve fake values verbatim. Out-of-scope: add `aliases` to the key for cross-language equivalents. |
+| **Realistic data must not be stored as business truth** | `downstream_text` looks like real PII but is synthetic by design. Storing it in customer/business records causes data pollution that's hard to detect post-hoc. | Always pair `downstream_text` with the key dict; never persist `downstream_text` in business databases. Use `audit_text` for compliance archives. |
+
 ## Recently Fixed
 
 | Issue | Version | Fix |
