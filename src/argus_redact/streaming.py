@@ -13,6 +13,7 @@ and is roadmapped for a later release.
 from __future__ import annotations
 
 from argus_redact._types import PseudonymLLMResult
+from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
 from argus_redact.pure.restore import restore
 
 
@@ -85,6 +86,11 @@ class StreamingRedactor:
     Entity boundaries that cross chunk boundaries are NOT handled — split
     such inputs at logical boundaries first.
 
+    Key retention: ``_accumulated_key`` grows monotonically over the session.
+    Construct one ``StreamingRedactor`` per logical session and discard it when
+    the session ends; long-running services that share one redactor across
+    unrelated conversations will accumulate unbounded entries.
+
     Usage:
         redactor = StreamingRedactor(salt=b"my-secret-salt", lang="zh")
         for chunk in input_stream:                  # one sentence/paragraph/turn each
@@ -125,8 +131,6 @@ class StreamingRedactor:
         contains only entries used in this chunk, but each entry is consistent
         with prior chunks (same original → same fake).
         """
-        from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
-
         result = redact_pseudonym_llm(
             chunk,
             salt=self._salt,
@@ -139,9 +143,8 @@ class StreamingRedactor:
             strict_input=self._strict_input,
             existing_key=self._accumulated_key,
         )
-        # Merge new entries into the accumulated key. Existing entries already
-        # consistent (replace() honored existing_key); collisions can't happen
-        # because realistic and audit pseudonym spaces are disjoint by construction.
+        # setdefault preserves first-seen mapping; realistic and audit spaces
+        # are disjoint by construction, so collisions are impossible.
         for fake, original in result.key.items():
             self._accumulated_key.setdefault(fake, original)
         return result

@@ -164,4 +164,6 @@ def _seed_from_salt(salt: bytes | None) -> int | None:
     """
     if salt is None:
         return None
+    if not isinstance(salt, (bytes, bytearray)):
+        raise TypeError(f"salt must be bytes, got {type(salt).__name__}")
     return int.from_bytes(salt[:_SALT_SEED_BYTES].ljust(_SALT_SEED_BYTES, b"\x00"), "big") & _SALT_SEED_MASK

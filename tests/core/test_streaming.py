@@ -2,8 +2,7 @@
 
 import pytest
 
-from argus_redact import redact, redact_pseudonym_llm
-from argus_redact.glue.redact_pseudonym_llm import PseudonymPollutionError
+from argus_redact import PseudonymPollutionError, redact, redact_pseudonym_llm
 from argus_redact.pure.restore import restore
 from argus_redact.streaming import StreamingRedactor, StreamingRestorer
 
@@ -140,14 +139,21 @@ class TestStreamingRestorerRealisticMode:
         before restore."""
         text = "电话 13912345678 联系。"
         result = redact_pseudonym_llm(text, salt=b"test-salt", lang="zh")
-
-        # Split downstream_text at an arbitrary mid-fake byte
         ds = result.downstream_text
-        mid = len(ds) // 2
-        chunk1, chunk2 = ds[:mid], ds[mid:]
+
+        # Find the realistic phone fake and split deliberately mid-fake.
+        fake = next(k for k in result.key if k.startswith("19999"))
+        fake_start = ds.index(fake)
+        split = fake_start + len(fake) // 2
+        chunk1, chunk2 = ds[:split], ds[split:]
+
+        # Pin the precondition: chunk1 must NOT contain a sentence boundary
+        # (otherwise the test wouldn't actually exercise mid-fake buffering).
+        assert not any(b in chunk1 for b in StreamingRestorer.BOUNDARIES)
 
         restorer = StreamingRestorer(result.key)
-        out = restorer.feed(chunk1)  # likely "" (no boundary yet)
+        out = restorer.feed(chunk1)
+        assert out == "", "chunk1 alone should buffer (no sentence boundary)"
         out += restorer.feed(chunk2)
         out += restorer.flush()
         assert out == text
