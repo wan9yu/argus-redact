@@ -1,7 +1,11 @@
-"""Tests for streaming restore."""
+"""Tests for streaming restore + streaming redact."""
+
+import pytest
 
 from argus_redact import redact, redact_pseudonym_llm
-from argus_redact.streaming import StreamingRestorer
+from argus_redact.glue.redact_pseudonym_llm import PseudonymPollutionError
+from argus_redact.pure.restore import restore
+from argus_redact.streaming import StreamingRedactor, StreamingRestorer
 
 
 class TestStreamingRestorer:
@@ -147,3 +151,83 @@ class TestStreamingRestorerRealisticMode:
         out += restorer.feed(chunk2)
         out += restorer.flush()
         assert out == text
+
+
+class TestStreamingRedactor:
+    """Per-chunk realistic redaction with cross-chunk key continuity.
+
+    Caller MUST feed complete logical units (sentence / paragraph / turn);
+    entity boundaries that cross chunk boundaries are not handled in v0.5.2.
+    """
+
+    def test_should_redact_single_chunk(self):
+        r = StreamingRedactor(salt=b"test-salt", lang="zh")
+        result = r.feed("请拨打 13912345678 联系王建国。")
+        assert "19999" in result.downstream_text
+        assert restore(result.downstream_text, result.key) == "请拨打 13912345678 联系王建国。"
+
+    def test_should_keep_same_fake_for_repeated_value_across_chunks(self):
+        r = StreamingRedactor(salt=b"test-salt", lang="zh")
+        # Same phone in two different chunks → same fake in both.
+        # Test inputs avoid canonical fake-name table (张三/李四/...) which
+        # the pollution scanner would flag as already-redacted output.
+        r1 = r.feed("电话 13912345678 是第一段提到的。")
+        r2 = r.feed("再次出现 13912345678 在第二段。")
+
+        phone_fakes_1 = [k for k in r1.key if k.startswith("19999")]
+        phone_fakes_2 = [k for k in r2.key if k.startswith("19999")]
+        assert len(phone_fakes_1) >= 1
+        assert len(phone_fakes_2) >= 1
+        # Cross-chunk fake for the same original phone must be identical
+        assert phone_fakes_1[0] == phone_fakes_2[0]
+
+    def test_should_round_trip_via_aggregate_key(self):
+        r = StreamingRedactor(salt=b"test-salt", lang="zh")
+        chunks = [
+            "请拨打 13912345678 联系老王。",
+            "或拨 13987654321 找老陈。",
+            "身份证 110101199003077651 已核对。",
+        ]
+        outs = [r.feed(c) for c in chunks]
+        joined_in = "".join(chunks)
+        joined_out = "".join(o.downstream_text for o in outs)
+        assert restore(joined_out, r.aggregate_key()) == joined_in
+
+    def test_should_avoid_collision_across_chunks(self):
+        """Two distinct originals must map to distinct fakes in aggregate_key."""
+        r = StreamingRedactor(salt=b"test-salt", lang="zh")
+        r.feed("电话13912345678。")
+        r.feed("电话13987654321。")
+
+        # aggregate_key inverts to {original → fake}; distinct originals must
+        # appear under distinct fakes (no two phones share a single fake).
+        agg = r.aggregate_key()
+        phone_pairs = [(k, v) for k, v in agg.items() if k.startswith("19999")]
+        originals = {v for _, v in phone_pairs}
+        fakes = {k for k, _ in phone_pairs}
+        assert len(originals) == 2
+        assert len(fakes) == 2  # one fake per distinct original
+
+    def test_should_reject_polluted_chunk(self):
+        r = StreamingRedactor(salt=b"test-salt", lang="zh")
+        r.feed("正常输入13912345678。")  # produces 19999... in output
+        # Feeding text containing a 19999... value should raise (it's a reserved-range fake)
+        with pytest.raises(PseudonymPollutionError):
+            r.feed("再次出现 19999111222。")
+
+    def test_should_allow_polluted_when_strict_input_false(self):
+        r = StreamingRedactor(salt=b"test-salt", lang="zh", strict_input=False)
+        r.feed("正常输入13912345678。")
+        # Should not raise
+        r.feed("再次出现 19999111222。")
+
+    def test_should_route_en_chunk_correctly(self):
+        r = StreamingRedactor(salt=b"test-salt", lang="en")
+        result = r.feed("Call (415) 555-1234, SSN 123-45-6789 today.")
+        assert "(555) 555-01" in result.downstream_text
+        assert "999-" in result.downstream_text
+        assert restore(result.downstream_text, result.key) == "Call (415) 555-1234, SSN 123-45-6789 today."
+
+    def test_should_require_salt(self):
+        with pytest.raises(TypeError):
+            StreamingRedactor()  # type: ignore[call-arg]

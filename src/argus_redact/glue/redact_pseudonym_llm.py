@@ -51,6 +51,7 @@ def redact_pseudonym_llm(
     types_exclude: list[str] | None = None,
     strict_input: bool = True,
     _polluted_input_ok: bool = False,
+    existing_key: dict[str, str] | None = None,
 ) -> PseudonymLLMResult:
     """Redact `text` with the pseudonym-llm profile, returning three text forms.
 
@@ -69,6 +70,10 @@ def redact_pseudonym_llm(
       (pollution check today; future strictness checks may be added).
     - ``_polluted_input_ok=True`` — narrow "I accept the collision risk for THIS
       call's pollution check"; underscore-prefix marks it as advanced usage.
+
+    `existing_key` (advanced) — pre-existing fake→original mappings to honor.
+    Same original value present in both `text` and `existing_key.values()` reuses
+    the same fake. Used by ``StreamingRedactor`` for cross-chunk consistency.
     """
     if not isinstance(text, str):
         raise TypeError(f"text must be a string, got {type(text).__name__}")
@@ -114,7 +119,7 @@ def redact_pseudonym_llm(
         text,
         entities,
         seed=seed,
-        existing_key=None,
+        existing_key=existing_key,
         key_file=None,
         config=realistic_config,
         lang=resolved_lang,
