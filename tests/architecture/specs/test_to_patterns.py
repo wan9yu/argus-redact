@@ -63,6 +63,9 @@ class TestToPatterns:
         "sexual_orientation",
         "self_reference",
         "age",
+        "email",
+        "ip_address",
+        "mac_address",
     }
 
     def test_spec_patterns_should_exist(self):
@@ -133,9 +136,15 @@ class TestToPatternsShared:
     """Parity test for specs/shared.py — spec-derived _patterns must match the
     hand-written PATTERNS in lang/shared/patterns.py on credential inputs."""
 
+    # Shared types whose detection regex lives in lang/shared/patterns.py rather
+    # than the spec _patterns (mirrors zh's _PATTERNS_IN_SOURCE convention).
+    _PATTERNS_IN_SOURCE = {"email", "ip_address", "mac_address"}
+
     def test_spec_patterns_should_exist(self):
         """Every shared spec should produce at least one pattern."""
         for typedef in list_types("shared"):
+            if typedef.name in self._PATTERNS_IN_SOURCE:
+                continue
             patterns = typedef.to_patterns()
             assert len(patterns) >= 1, f"{typedef.name} produced no patterns"
 
@@ -157,4 +166,7 @@ class TestToPatternsShared:
         for text in CREDENTIAL_INPUTS:
             hand = {r.type for r in match_patterns(text, SHARED)[0]}
             spec = {r.type for r in match_patterns(text, spec_patterns)[0]}
+            # Exclude PATTERNS_IN_SOURCE types that don't have spec-derived patterns
+            hand -= self._PATTERNS_IN_SOURCE
+            spec -= self._PATTERNS_IN_SOURCE
             assert hand == spec, f"Mismatch on '{text[:50]}...': hand={hand} spec={spec}"

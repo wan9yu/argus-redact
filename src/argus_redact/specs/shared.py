@@ -14,6 +14,11 @@ from __future__ import annotations
 
 from argus_redact.lang.shared.patterns import _validate_jwt
 
+from .fakers_shared_reserved import (
+    fake_email_reserved,
+    fake_ip_reserved,
+    fake_mac_reserved,
+)
 from .registry import PIITypeDef, register
 
 # ── OpenAI API key ──
@@ -206,5 +211,62 @@ register(
         sensitivity=4,
         source="PEM format (RFC 7468) for SSH / TLS private keys",
         description="SSH private key PEM block (RSA, OPENSSH, DSA, EC variants)",
+    )
+)
+
+
+# ── Cross-language identifiers (detection regex stays in lang/shared/patterns.py) ──
+
+register(
+    PIITypeDef(
+        name="email",
+        lang="shared",
+        format="local@domain",
+        charset="ASCII / RFC 6531 internationalized",
+        strategy="mask",
+        label="[邮箱已脱敏]",
+        examples=("alice@example.com", "用户@example.org"),
+        counterexamples=("not-an-email",),
+        _patterns=(),
+        faker_reserved=fake_email_reserved,
+        sensitivity=2,
+        source="RFC 5321 + RFC 6531 (faker uses RFC 2606 reserved domains)",
+        description="Email address — detection in lang/shared/patterns.py; realistic faker uses example.{com,org,net}",
+    )
+)
+
+register(
+    PIITypeDef(
+        name="ip_address",
+        lang="shared",
+        format="IPv4 dotted-quad or IPv6 hex-colon",
+        charset="digits + : (v6) + . (v4)",
+        strategy="remove",
+        label="[IP已脱敏]",
+        examples=("192.168.1.1", "2001:db8::1"),
+        counterexamples=("999.999.999.999",),
+        _patterns=(),
+        faker_reserved=fake_ip_reserved,
+        sensitivity=2,
+        source="RFC 791 (v4) / RFC 4291 (v6); faker uses RFC 5737 / RFC 3849 documentation ranges",
+        description="IPv4 or IPv6 address — detection in lang/shared/patterns.py; realistic faker uses doc ranges",
+    )
+)
+
+register(
+    PIITypeDef(
+        name="mac_address",
+        lang="shared",
+        format="XX:XX:XX:XX:XX:XX (or - / . separators)",
+        charset="hex + separator",
+        strategy="remove",
+        label="[MAC已脱敏]",
+        examples=("aa:bb:cc:dd:ee:ff",),
+        counterexamples=("not-a-mac",),
+        _patterns=(),
+        faker_reserved=fake_mac_reserved,
+        sensitivity=2,
+        source="IEEE 802 OUI; faker uses RFC 7042 documentation block 00:00:5E:00:53:xx",
+        description="MAC address — detection in lang/shared/patterns.py; realistic faker uses RFC 7042 doc block",
     )
 )
