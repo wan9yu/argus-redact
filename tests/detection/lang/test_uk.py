@@ -1,10 +1,10 @@
 """Tests for UK regex patterns."""
 
 import pytest
+
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.lang.uk.patterns import PATTERNS as UK_PATTERNS
 from argus_redact.pure.patterns import match_patterns
-
 from tests.conftest import parametrize_examples
 
 ALL_UK_PATTERNS = UK_PATTERNS + SHARED_PATTERNS

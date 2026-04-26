@@ -85,12 +85,14 @@ class NemotronAdapter(DatasetAdapter):
             for span in spans:
                 label = span.get("label", "")
                 if label in LABEL_MAP:
-                    entities.append(Entity(
-                        text=span.get("text", text[span["start"]:span["end"]]),
-                        type=LABEL_MAP[label],
-                        start=span.get("start"),
-                        end=span.get("end"),
-                    ))
+                    entities.append(
+                        Entity(
+                            text=span.get("text", text[span["start"] : span["end"]]),
+                            type=LABEL_MAP[label],
+                            start=span.get("start"),
+                            end=span.get("end"),
+                        )
+                    )
 
             if not entities:
                 continue

@@ -1,7 +1,6 @@
 """Tests for shared (cross-language) patterns — data-driven from JSON fixtures."""
 
 from argus_redact.pure.patterns import match_patterns
-
 from tests.conftest import assert_pattern_match, parametrize_examples
 
 

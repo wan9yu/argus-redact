@@ -25,7 +25,9 @@ def print_report(result: Result) -> None:
     print(f"{'-' * 60}")
 
     if result.per_type:
-        print(f"  {'Type':<15s} {'Prec':>7s} {'Recall':>7s} {'F1':>7s}  {'TP':>4s} {'FP':>4s} {'FN':>4s}")
+        print(
+            f"  {'Type':<15s} {'Prec':>7s} {'Recall':>7s} {'F1':>7s}  {'TP':>4s} {'FP':>4s} {'FN':>4s}"
+        )
         for etype, m in sorted(result.per_type.items()):
             print(
                 f"  {etype:<15s} {m.precision:>6.1%} {m.recall:>6.1%} {m.f1:>6.1%}"

@@ -34,13 +34,14 @@ def benchmark_results():
     if not HAS_DATASETS:
         pytest.skip("datasets not installed")
 
+    from datasets import load_dataset
+
     from argus_redact.lang.de.patterns import PATTERNS as DE
     from argus_redact.lang.en.patterns import PATTERNS as EN
     from argus_redact.lang.in_.patterns import PATTERNS as IN
     from argus_redact.lang.shared.patterns import PATTERNS as SHARED
     from argus_redact.lang.uk.patterns import PATTERNS as UK
     from argus_redact.pure.patterns import match_patterns
-    from datasets import load_dataset
 
     patterns = EN + DE + UK + IN + SHARED
 
@@ -121,9 +122,7 @@ class TestAi4PrivacyBenchmark:
             total_r = c["tp"] + c["fn"]
             p = c["tp"] / total_p if total_p > 0 else 1.0
             rec = c["tp"] / total_r if total_r > 0 else 1.0
-            print(
-                f"  {etype:15s} P={p:.0%} R={rec:.0%}" f" (TP={c['tp']} FP={c['fp']} FN={c['fn']})"
-            )
+            print(f"  {etype:15s} P={p:.0%} R={rec:.0%} (TP={c['tp']} FP={c['fp']} FN={c['fn']})")
 
     def test_should_achieve_reasonable_f1(self, benchmark_results):
         assert benchmark_results["f1"] >= 0.1, f"F1 too low: {benchmark_results['f1']:.2%}"

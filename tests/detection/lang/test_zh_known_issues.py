@@ -4,9 +4,9 @@ These tests verify that prefix trimming correctly separates verb prefixes
 (就职于, 毕业于, 去, 在, etc.) from entity names.
 """
 
-from argus_redact.pure.patterns import match_patterns
-from argus_redact.lang.zh.patterns import PATTERNS as ZH_PATTERNS
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
+from argus_redact.lang.zh.patterns import PATTERNS as ZH_PATTERNS
+from argus_redact.pure.patterns import match_patterns
 
 ALL = ZH_PATTERNS + SHARED_PATTERNS
 

@@ -5,30 +5,34 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import re as _re
 import time
 from pathlib import Path
-
-import re as _re
 
 from argus_redact._types import PatternMatch
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.grammar import normalize_grammar_en
-from argus_redact.pure.lang_detect import detect_languages
-from argus_redact.pure.normalize import MAX_INPUT_SIZE, map_spans_to_original, normalize_text
-from argus_redact.telemetry import PerfRecord, emit, get_perf_hook
 from argus_redact.pure.hints import (
-    boost_cross_layer, filter_self_reference, get_ner_min_confidence,
-    get_person_threshold, produce_hints, should_skip_ner,
+    boost_cross_layer,
+    filter_self_reference,
+    get_ner_min_confidence,
+    get_person_threshold,
+    produce_hints,
+    should_skip_ner,
 )
+from argus_redact.pure.lang_detect import detect_languages
 from argus_redact.pure.merger import merge_entities
+from argus_redact.pure.normalize import MAX_INPUT_SIZE, map_spans_to_original, normalize_text
 from argus_redact.pure.patterns import match_patterns
 from argus_redact.pure.replacer import replace
+from argus_redact.telemetry import PerfRecord, emit, get_perf_hook
 
 logger = logging.getLogger(__name__)
 
 # Cached telemetry constants (resolved once at import, not per-call)
 try:
     from argus_redact._core import merge_entities as _unused  # noqa: F401
+
     _RUST_CORE = True
 except ImportError:
     _RUST_CORE = False
@@ -39,28 +43,35 @@ def _telemetry_hook_active() -> bool:
 
 
 def _emit_telemetry(
-    text: str, timing: dict, entities: list, langs: list[str], mode: str,
+    text: str,
+    timing: dict,
+    entities: list,
+    langs: list[str],
+    mode: str,
 ) -> None:
     ascii_count = sum(1 for c in text if c.isascii()) if text else 0
-    emit(PerfRecord(
-        version=importlib.import_module("argus_redact").__version__,
-        timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
-        text_len=len(text),
-        text_ascii_ratio=round(ascii_count / len(text), 2) if text else 0.0,
-        lang=langs,
-        mode=mode,
-        normalize_ms=round(timing.get("normalize_ms", 0), 2),
-        layer_1_ms=round(timing.get("layer_1_ms", 0), 2),
-        layer_1b_person_ms=round(timing.get("layer_1b_person_ms", 0), 2),
-        layer_2_ms=round(timing.get("layer_2_ms", 0), 2),
-        layer_3_ms=round(timing.get("layer_3_ms", 0), 2),
-        merge_ms=round(timing.get("merge_ms", 0), 2),
-        replace_ms=round(timing.get("replace_ms", 0), 2),
-        total_ms=round(sum(timing.values()), 2),
-        entities_found=len(entities),
-        entity_types=sorted(set(e.type for e in entities)),
-        rust_core=_RUST_CORE,
-    ))
+    emit(
+        PerfRecord(
+            version=importlib.import_module("argus_redact").__version__,
+            timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
+            text_len=len(text),
+            text_ascii_ratio=round(ascii_count / len(text), 2) if text else 0.0,
+            lang=langs,
+            mode=mode,
+            normalize_ms=round(timing.get("normalize_ms", 0), 2),
+            layer_1_ms=round(timing.get("layer_1_ms", 0), 2),
+            layer_1b_person_ms=round(timing.get("layer_1b_person_ms", 0), 2),
+            layer_2_ms=round(timing.get("layer_2_ms", 0), 2),
+            layer_3_ms=round(timing.get("layer_3_ms", 0), 2),
+            merge_ms=round(timing.get("merge_ms", 0), 2),
+            replace_ms=round(timing.get("replace_ms", 0), 2),
+            total_ms=round(sum(timing.values()), 2),
+            entities_found=len(entities),
+            entity_types=sorted(set(e.type for e in entities)),
+            rust_core=_RUST_CORE,
+        )
+    )
+
 
 _LANG_PATTERNS = {
     "zh": "argus_redact.lang.zh.patterns",
@@ -98,9 +109,7 @@ def _load_patterns(lang: str | list[str]) -> list[dict]:
     all_patterns = list(SHARED_PATTERNS)
     for code in langs:
         if code not in _LANG_PATTERNS:
-            raise ValueError(
-                f"Unknown language '{code}'. " f"Available: {list(_LANG_PATTERNS.keys())}"
-            )
+            raise ValueError(f"Unknown language '{code}'. Available: {list(_LANG_PATTERNS.keys())}")
         try:
             mod = importlib.import_module(_LANG_PATTERNS[code])
             all_patterns.extend(mod.PATTERNS)
@@ -213,6 +222,7 @@ def redact(
     # Resolve profile → types filter + strategy overrides
     if profile is not None:
         from argus_redact.specs.profiles import get_profile
+
         prof = get_profile(profile)
         if types is None and "types" in prof:
             types = prof["types"]
@@ -265,12 +275,18 @@ def redact(
     # Map normalized offsets back to original text
     if use_normalized and layer1_raw:
         mapped_spans = map_spans_to_original(
-            [(e.start, e.end) for e in layer1_raw], offset_map, len(text),
+            [(e.start, e.end) for e in layer1_raw],
+            offset_map,
+            len(text),
         )
         layer1 = [
             PatternMatch(
-                text=text[s:e], type=e_orig.type, start=s, end=e,
-                confidence=e_orig.confidence, layer=e_orig.layer,
+                text=text[s:e],
+                type=e_orig.type,
+                start=s,
+                end=e,
+                confidence=e_orig.confidence,
+                layer=e_orig.layer,
             )
             for e_orig, (s, e) in zip(layer1_raw, mapped_spans)
         ]
@@ -293,7 +309,9 @@ def redact(
 
         t0 = time.perf_counter()
         person_names = detect_person_names(
-            text, pii_entities=layer1, known_names=names,
+            text,
+            pii_entities=layer1,
+            known_names=names,
             threshold=person_threshold,
         )
         timing["layer_1b_person_ms"] = (time.perf_counter() - t0) * 1000
@@ -306,9 +324,12 @@ def redact(
             for m in _re.finditer(_re.escape(name), text):
                 entities.append(
                     PatternMatch(
-                        text=name, type="person",
-                        start=m.start(), end=m.end(),
-                        confidence=1.0, layer=1,
+                        text=name,
+                        type="person",
+                        start=m.start(),
+                        end=m.end(),
+                        confidence=1.0,
+                        layer=1,
                     )
                 )
                 layer1_count += 1

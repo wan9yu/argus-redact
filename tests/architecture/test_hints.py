@@ -199,7 +199,9 @@ class TestPiiDensityHint:
             PatternMatch(text="test@example.com", type="email", start=40, end=56),
         ]
 
-        hints = produce_hints(entities, text="电话13812345678，身份证110101199003074610，邮箱test@example.com")
+        hints = produce_hints(
+            entities, text="电话13812345678，身份证110101199003074610，邮箱test@example.com"
+        )
 
         density = [h for h in hints if h.type == "pii_density"]
         assert len(density) == 1
@@ -277,11 +279,22 @@ class TestCrossLayerAgreement:
         from argus_redact.pure.hints import boost_cross_layer
 
         merged = [
-            PatternMatch(text="北京市朝阳区", type="location", start=0, end=6, confidence=0.80, layer=2),
+            PatternMatch(
+                text="北京市朝阳区", type="location", start=0, end=6, confidence=0.80, layer=2
+            ),
         ]
         pre_merge = [
-            PatternMatch(text="北京市朝阳区建国路100号", type="address", start=0, end=12, confidence=1.0, layer=1),
-            PatternMatch(text="北京市朝阳区", type="location", start=0, end=6, confidence=0.80, layer=2),
+            PatternMatch(
+                text="北京市朝阳区建国路100号",
+                type="address",
+                start=0,
+                end=12,
+                confidence=1.0,
+                layer=1,
+            ),
+            PatternMatch(
+                text="北京市朝阳区", type="location", start=0, end=6, confidence=0.80, layer=2
+            ),
         ]
 
         boosted = boost_cross_layer(merged, pre_merge)
@@ -292,7 +305,9 @@ class TestCrossLayerAgreement:
         from argus_redact.pure.hints import boost_cross_layer
 
         merged = [
-            PatternMatch(text="13812345678", type="phone", start=0, end=11, confidence=1.0, layer=1),
+            PatternMatch(
+                text="13812345678", type="phone", start=0, end=11, confidence=1.0, layer=1
+            ),
             PatternMatch(text="张三", type="person", start=15, end=17, confidence=0.85, layer=2),
         ]
         pre_merge = merged[:]

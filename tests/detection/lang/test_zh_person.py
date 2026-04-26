@@ -6,8 +6,6 @@ The new approach replaces hard-coded context patterns with:
   Step 3: evidence scoring (PII proximity, context words, position, name length)
 """
 
-import pytest
-
 
 # ── Candidate generation ──
 
@@ -92,8 +90,8 @@ class TestEvidenceScoring:
     """Candidates near PII or with context signals should score higher."""
 
     def test_name_near_phone_scores_high(self):
-        from argus_redact.lang.zh.person import score_candidate, generate_candidates
         from argus_redact._types import PatternMatch
+        from argus_redact.lang.zh.person import generate_candidates, score_candidate
 
         text = "张明的手机号是13812345678"
         candidates = generate_candidates(text)
@@ -104,7 +102,7 @@ class TestEvidenceScoring:
         assert score >= 0.8
 
     def test_name_with_context_prefix_scores_high(self):
-        from argus_redact.lang.zh.person import score_candidate, generate_candidates
+        from argus_redact.lang.zh.person import generate_candidates, score_candidate
 
         text = "客户张明已完成登记"
         candidates = generate_candidates(text)
@@ -113,7 +111,7 @@ class TestEvidenceScoring:
         assert score >= 0.8
 
     def test_name_with_intro_phrase_scores_high(self):
-        from argus_redact.lang.zh.person import score_candidate, generate_candidates
+        from argus_redact.lang.zh.person import generate_candidates, score_candidate
 
         text = "你好我是张明"
         candidates = generate_candidates(text)
@@ -122,7 +120,7 @@ class TestEvidenceScoring:
         assert score >= 0.8
 
     def test_name_with_honorific_suffix_scores_high(self):
-        from argus_redact.lang.zh.person import score_candidate, generate_candidates
+        from argus_redact.lang.zh.person import generate_candidates, score_candidate
 
         text = "请联系张明先生"
         candidates = generate_candidates(text)
@@ -132,7 +130,7 @@ class TestEvidenceScoring:
 
     def test_three_char_name_baseline_higher_than_two_char(self):
         from argus_redact._types import PatternMatch
-        from argus_redact.lang.zh.person import score_candidate, generate_candidates
+        from argus_redact.lang.zh.person import generate_candidates, score_candidate
 
         # With equal evidence (same PII proximity), 3-char should score higher than 2-char
         text = "客户何秀珍和张明来了，电话13812345678"
@@ -146,7 +144,7 @@ class TestEvidenceScoring:
         assert score_he > score_zhang, f"3-char {score_he} should > 2-char {score_zhang}"
 
     def test_isolated_two_char_without_signals_scores_low(self):
-        from argus_redact.lang.zh.person import score_candidate, generate_candidates
+        from argus_redact.lang.zh.person import generate_candidates, score_candidate
 
         # No PII, no context words, just a bare two-char candidate
         text = "张明来了"

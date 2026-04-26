@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 import pytest
+
 from argus_redact._types import NEREntity
 from argus_redact.impure.ner import NERAdapter, detect_ner
 

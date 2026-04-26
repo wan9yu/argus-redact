@@ -11,33 +11,33 @@ class PIITypeDef:
     """Complete definition of a PII type."""
 
     # ── Identity ──
-    name: str                                       # "phone", "id_number"
-    lang: str                                       # "zh", "en", "shared"
+    name: str  # "phone", "id_number"
+    lang: str  # "zh", "en", "shared"
 
     # ── Structure ──
-    format: str                                     # "1[3-9]XXXXXXXXX"
-    length: int | tuple[int, int] | None = None     # 11 or (16, 19)
-    charset: str = "digits"                         # "digits", "digits+X", "alnum"
+    format: str  # "1[3-9]XXXXXXXXX"
+    length: int | tuple[int, int] | None = None  # 11 or (16, 19)
+    charset: str = "digits"  # "digits", "digits+X", "alnum"
     structure: dict[str, str] = field(default_factory=dict)  # segment descriptions
 
     # ── Validation ──
-    checksum: str | None = None                     # "MOD11-2", "Luhn", None
-    validate: Callable[[str], bool] | None = None   # runtime validator
+    checksum: str | None = None  # "MOD11-2", "Luhn", None
+    validate: Callable[[str], bool] | None = None  # runtime validator
 
     # ── Context ──
-    prefixes: tuple[str, ...] = ()                  # context words before PII
-    suffixes: tuple[str, ...] = ()                  # context words after PII
-    separators: tuple[str, ...] = ("",)             # allowed in-value separators
+    prefixes: tuple[str, ...] = ()  # context words before PII
+    suffixes: tuple[str, ...] = ()  # context words after PII
+    separators: tuple[str, ...] = ("",)  # allowed in-value separators
 
     # ── Action ──
-    strategy: str = "remove"                        # "mask", "pseudonym", "remove", "category"
-    label: str = ""                                 # "[手机号已脱敏]"
-    mask_rule: dict[str, int] | None = None         # {"visible_prefix": 3, "visible_suffix": 4}
+    strategy: str = "remove"  # "mask", "pseudonym", "remove", "category"
+    label: str = ""  # "[手机号已脱敏]"
+    mask_rule: dict[str, int] | None = None  # {"visible_prefix": 3, "visible_suffix": 4}
 
     # ── Evidence ──
-    examples: tuple[str, ...] = ()                  # valid instances
-    counterexamples: tuple[str, ...] = ()           # should NOT match
-    source: str = ""                                # authoritative reference
+    examples: tuple[str, ...] = ()  # valid instances
+    counterexamples: tuple[str, ...] = ()  # should NOT match
+    source: str = ""  # authoritative reference
 
     # ── Pattern generation ──
     _patterns: tuple[dict, ...] = ()  # pre-built pattern dicts (override auto-generation)
@@ -65,21 +65,25 @@ class PIITypeDef:
         """Generate test fixture entries from examples and counterexamples."""
         fixtures = []
         for i, ex in enumerate(self.examples):
-            fixtures.append({
-                "id": f"{self.name}_spec_example_{i}",
-                "input": ex,
-                "should_match": True,
-                "type": self.name,
-                "description": f"Spec example for {self.lang}/{self.name}",
-            })
+            fixtures.append(
+                {
+                    "id": f"{self.name}_spec_example_{i}",
+                    "input": ex,
+                    "should_match": True,
+                    "type": self.name,
+                    "description": f"Spec example for {self.lang}/{self.name}",
+                }
+            )
         for i, cx in enumerate(self.counterexamples):
-            fixtures.append({
-                "id": f"{self.name}_spec_counter_{i}",
-                "input": cx,
-                "should_match": False,
-                "type": self.name,
-                "description": f"Spec counterexample for {self.lang}/{self.name}",
-            })
+            fixtures.append(
+                {
+                    "id": f"{self.name}_spec_counter_{i}",
+                    "input": cx,
+                    "should_match": False,
+                    "type": self.name,
+                    "description": f"Spec counterexample for {self.lang}/{self.name}",
+                }
+            )
         return fixtures
 
 

@@ -72,10 +72,12 @@ class Ai4PrivacyAdapter(DatasetAdapter):
             for span in ex.get("privacy_mask", []):
                 label = span.get("label", "")
                 if label in LABEL_MAP:
-                    entities.append(Entity(
-                        text=span["value"],
-                        type=LABEL_MAP[label],
-                    ))
+                    entities.append(
+                        Entity(
+                            text=span["value"],
+                            type=LABEL_MAP[label],
+                        )
+                    )
 
             if not entities:
                 continue

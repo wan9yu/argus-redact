@@ -1,10 +1,10 @@
 """Tests for Japanese regex patterns — data-driven from JSON fixtures."""
 
 import pytest
+
 from argus_redact.lang.ja.patterns import PATTERNS as JA_PATTERNS
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.patterns import match_patterns
-
 from tests.conftest import parametrize_examples
 
 ALL_JA_PATTERNS = JA_PATTERNS + SHARED_PATTERNS

@@ -90,7 +90,7 @@ class TestThroughput:
         elapsed = time.perf_counter() - start
 
         throughput = len(docs) / elapsed
-        print(f"\n  Throughput: {throughput:.0f} docs/sec" f" ({len(docs)} docs in {elapsed:.2f}s)")
+        print(f"\n  Throughput: {throughput:.0f} docs/sec ({len(docs)} docs in {elapsed:.2f}s)")
         assert elapsed < 1.0, f"Too slow: {elapsed:.2f}s"
 
     def test_should_process_100_medium_docs_under_2s(self):
@@ -102,7 +102,7 @@ class TestThroughput:
         elapsed = time.perf_counter() - start
 
         throughput = len(docs) / elapsed
-        print(f"\n  Throughput: {throughput:.0f} docs/sec" f" ({len(docs)} docs in {elapsed:.2f}s)")
+        print(f"\n  Throughput: {throughput:.0f} docs/sec ({len(docs)} docs in {elapsed:.2f}s)")
         assert elapsed < 2.0, f"Too slow: {elapsed:.2f}s"
 
 
@@ -110,7 +110,7 @@ class TestMixedLanguagePerformance:
     """Multi-language overhead."""
 
     def test_should_not_be_much_slower_with_four_languages(self):
-        text = "手机13812345678, SSN 123-45-6789, " "携帯090-1234-5678, 전화010-1234-5678"
+        text = "手机13812345678, SSN 123-45-6789, 携帯090-1234-5678, 전화010-1234-5678"
 
         avg_single, _, _ = _measure(
             lambda: redact(text, seed=42, mode="fast", lang="zh"),
@@ -125,5 +125,5 @@ class TestMixedLanguagePerformance:
         )
 
         ratio = avg_four / avg_single if avg_single > 0 else 0
-        print(f"\n  1 lang: {avg_single:.2f}ms, " f"4 lang: {avg_four:.2f}ms, ratio: {ratio:.1f}x")
+        print(f"\n  1 lang: {avg_single:.2f}ms, 4 lang: {avg_four:.2f}ms, ratio: {ratio:.1f}x")
         assert ratio < 5.0, f"Too much overhead: {ratio:.1f}x"

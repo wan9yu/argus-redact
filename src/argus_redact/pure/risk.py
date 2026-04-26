@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # Sensitivity level labels
 _LEVEL_LABELS = {1: "low", 2: "medium", 3: "high", 4: "critical"}
@@ -15,17 +15,22 @@ _QUASI_ID_COMBOS = [
 ]
 
 # PIPL article mapping
-_PIPL_ART_13 = "PIPL Art.13"   # Lawful basis for processing personal information
-_PIPL_ART_28 = "PIPL Art.28"   # De-identification requirement (any PII)
-_PIPL_ART_29 = "PIPL Art.29"   # Separate consent for sensitive PI
-_PIPL_ART_51 = "PIPL Art.51"   # Sensitive personal information definition
-_PIPL_ART_55 = "PIPL Art.55"   # Personal information protection impact assessment
-_PIPL_ART_56 = "PIPL Art.56"   # Record-keeping obligation for PI processors
+_PIPL_ART_13 = "PIPL Art.13"  # Lawful basis for processing personal information
+_PIPL_ART_28 = "PIPL Art.28"  # De-identification requirement (any PII)
+_PIPL_ART_29 = "PIPL Art.29"  # Separate consent for sensitive PI
+_PIPL_ART_51 = "PIPL Art.51"  # Sensitive personal information definition
+_PIPL_ART_55 = "PIPL Art.55"  # Personal information protection impact assessment
+_PIPL_ART_56 = "PIPL Art.56"  # Record-keeping obligation for PI processors
 
 # Types that trigger specific PIPL articles beyond the baseline
 _SENSITIVE_PI_TYPES = {
-    "medical", "financial", "religion", "political",
-    "sexual_orientation", "criminal_record", "biometric",
+    "medical",
+    "financial",
+    "religion",
+    "political",
+    "sexual_orientation",
+    "criminal_record",
+    "biometric",
 }
 
 
@@ -69,7 +74,9 @@ def assess_risk(entities: list[dict], lang: str = "zh") -> RiskResult:
 
     # Self-reference amplification: "我" + any sensitive type = directly about user
     if "self_reference" in types_found:
-        sensitive_with_self = types_found & (_SENSITIVE_PI_TYPES | {"phone", "id_number", "bank_card"})
+        sensitive_with_self = types_found & (
+            _SENSITIVE_PI_TYPES | {"phone", "id_number", "bank_card"}
+        )
         if sensitive_with_self:
             score += 0.15
             reasons.append("self-reference amplification: PII directly linked to user")

@@ -6,6 +6,7 @@ Run with: pytest tests/impure/test_integration_ner.py -m ner -v
 import importlib.util
 
 import pytest
+
 from argus_redact import redact, restore
 
 HAS_HANLP = importlib.util.find_spec("hanlp") is not None

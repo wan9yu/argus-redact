@@ -8,7 +8,11 @@ from argus_redact.pure.risk import assess_risk
 
 __version__ = "0.4.16"
 __all__ = [
-    "redact", "restore", "check_restore_safety", "wipe_key", "assess_risk",
+    "redact",
+    "restore",
+    "check_restore_safety",
+    "wipe_key",
+    "assess_risk",
     "max_pseudonym_length",
     "RedactReport",
     "__version__",

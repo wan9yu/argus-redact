@@ -122,12 +122,14 @@ class N2C22014Adapter(DatasetAdapter):
                 current_record = record_id
                 current_entities = []
 
-            current_entities.append(Entity(
-                text=f"[PHI@{begin}:{begin + length}]",
-                type=mapped_type,
-                start=begin,
-                end=begin + length,
-            ))
+            current_entities.append(
+                Entity(
+                    text=f"[PHI@{begin}:{begin + length}]",
+                    type=mapped_type,
+                    start=begin,
+                    end=begin + length,
+                )
+            )
 
         # Flush last record
         if current_record is not None and current_entities and count < limit:

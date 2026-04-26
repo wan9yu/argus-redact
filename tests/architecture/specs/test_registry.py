@@ -1,9 +1,9 @@
 """Tests for PII type registry — verify consistency with patterns and replacer."""
 
-from argus_redact.specs import PIITypeDef, get, list_types, lookup
-from argus_redact.specs import zh as _zh_import  # noqa: F401 — trigger registration
 from argus_redact.lang.zh.patterns import PATTERNS as ZH_PATTERNS
 from argus_redact.pure.replacer import DEFAULT_STRATEGIES
+from argus_redact.specs import get, list_types, lookup
+from argus_redact.specs import zh as _zh_import  # noqa: F401 — trigger registration
 
 
 class TestRegistryBasics:
@@ -31,6 +31,7 @@ class TestRegistryBasics:
 
     def test_should_raise_on_unknown_type(self):
         import pytest
+
         with pytest.raises(KeyError):
             get("zh", "nonexistent")
 
@@ -51,9 +52,7 @@ class TestConsistencyWithPatterns:
         for typedef in list_types("zh"):
             if typedef.name == "phone_landline":
                 continue
-            pattern_labels = {
-                p["label"] for p in ZH_PATTERNS if p["type"] == typedef.name
-            }
+            pattern_labels = {p["label"] for p in ZH_PATTERNS if p["type"] == typedef.name}
             if pattern_labels:
                 assert typedef.label in pattern_labels, (
                     f"Spec label '{typedef.label}' for {typedef.name} "
@@ -73,8 +72,8 @@ class TestSpecExamples:
     """Verify that spec examples actually match our patterns."""
 
     def test_examples_should_match_patterns(self):
-        from argus_redact.pure.patterns import match_patterns
         from argus_redact.lang.shared.patterns import PATTERNS as SHARED
+        from argus_redact.pure.patterns import match_patterns
 
         for typedef in list_types("zh"):
             if typedef.name in ("phone_landline", "person"):
@@ -90,8 +89,8 @@ class TestSpecExamples:
                 )
 
     def test_counterexamples_should_not_match(self):
-        from argus_redact.pure.patterns import match_patterns
         from argus_redact.lang.shared.patterns import PATTERNS as SHARED
+        from argus_redact.pure.patterns import match_patterns
 
         for typedef in list_types("zh"):
             for counter in typedef.counterexamples:
@@ -108,27 +107,19 @@ class TestSpecCompleteness:
 
     def test_every_spec_has_examples(self):
         for typedef in list_types("zh"):
-            assert len(typedef.examples) > 0, (
-                f"{typedef.lang}/{typedef.name} has no examples"
-            )
+            assert len(typedef.examples) > 0, f"{typedef.lang}/{typedef.name} has no examples"
 
     def test_every_spec_has_description(self):
         for typedef in list_types("zh"):
-            assert typedef.description, (
-                f"{typedef.lang}/{typedef.name} has no description"
-            )
+            assert typedef.description, f"{typedef.lang}/{typedef.name} has no description"
 
     def test_every_spec_has_source(self):
         for typedef in list_types("zh"):
-            assert typedef.source, (
-                f"{typedef.lang}/{typedef.name} has no source reference"
-            )
+            assert typedef.source, f"{typedef.lang}/{typedef.name} has no source reference"
 
     def test_every_spec_has_label(self):
         for typedef in list_types("zh"):
-            assert typedef.label, (
-                f"{typedef.lang}/{typedef.name} has no label"
-            )
+            assert typedef.label, f"{typedef.lang}/{typedef.name} has no label"
 
     def test_every_spec_has_sensitivity(self):
         for typedef in list_types("zh"):

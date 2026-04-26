@@ -1,9 +1,9 @@
 """Tests for model profiles — verify profile selection and defaults."""
 
 from argus_redact.impure.model_profiles import (
+    PROFILES,
     ModelProfile,
     get_model_profile,
-    PROFILES,
 )
 
 

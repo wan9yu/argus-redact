@@ -50,9 +50,17 @@ class TestGoldenSeedDeterminism:
     def test_golden_roundtrip_preserves_original(self):
         """redact → restore must recover each specific PII value."""
         cases = [
-            ("张三电话13812345678", {"seed": 42, "mode": "fast", "names": ["张三"]}, ["13812345678", "张三"]),
+            (
+                "张三电话13812345678",
+                {"seed": 42, "mode": "fast", "names": ["张三"]},
+                ["13812345678", "张三"],
+            ),
             ("身份证110101199003074610", {"seed": 99, "mode": "fast"}, ["110101199003074610"]),
-            ("I was diagnosed with diabetes", {"seed": 42, "mode": "fast", "lang": "en"}, ["diabetes"]),
+            (
+                "I was diagnosed with diabetes",
+                {"seed": 42, "mode": "fast", "lang": "en"},
+                ["diabetes"],
+            ),
         ]
         for text, kwargs, expected_pii in cases:
             redacted, key = redact(text, **kwargs)
@@ -90,14 +98,14 @@ class TestUnicodeBoundary:
 
     def test_should_handle_zwj_in_text(self):
         """Zero-width joiner should not break offset calculation."""
-        text = "电话\u200D13812345678"
+        text = "电话\u200d13812345678"
         redacted, key = redact(text, seed=42, mode="fast")
 
         assert "13812345678" not in redacted
 
     def test_should_handle_bom(self):
         """BOM at start should not break detection."""
-        text = "\uFEFF电话13812345678"
+        text = "\ufeff电话13812345678"
         redacted, key = redact(text, seed=42, mode="fast")
 
         assert "13812345678" not in redacted
@@ -113,7 +121,7 @@ class TestUnicodeBoundary:
 
     def test_should_handle_direction_control_chars(self):
         """RTL/LTR marks should not break offset calculation."""
-        text = "电话\u200E13812345678\u200F"
+        text = "电话\u200e13812345678\u200f"
         redacted, key = redact(text, seed=42, mode="fast")
 
         assert "13812345678" not in redacted

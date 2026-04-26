@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from argus_redact import redact, restore
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"

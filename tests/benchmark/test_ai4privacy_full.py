@@ -34,8 +34,9 @@ DETECTABLE_LABELS = set(LABEL_MAP.keys())
 
 
 def _run_benchmark(mode, n_examples=200):
-    from argus_redact import redact
     from datasets import load_dataset
+
+    from argus_redact import redact
 
     ds = load_dataset(
         "ai4privacy/pii-masking-400k",

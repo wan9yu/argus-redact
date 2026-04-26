@@ -6,18 +6,19 @@ import re as _re
 
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS, restore_grammar_en
 
-
 # Danger patterns: pseudonyms appearing near these suggest exfiltration attempts
 _DANGER_PATTERNS = _re.compile(
     r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}"  # email address
-    r"|https?://"                                       # URL
+    r"|https?://"  # URL
     r"|(?:send|share|forward|发送|转发|分享|泄露|传给|发给)"  # exfil verbs
 )
 _DANGER_WINDOW = 100  # chars before/after pseudonym to scan
 
 
 def check_restore_safety(
-    redacted: str, llm_output: str, key: dict[str, str],
+    redacted: str,
+    llm_output: str,
+    key: dict[str, str],
 ) -> list[str]:
     """Check if LLM output has suspicious pseudonym usage (possible injection).
 
@@ -69,6 +70,7 @@ def restore(text: str, key: dict | str) -> str:
     """Replace pseudonyms with originals using the key."""
     if isinstance(key, str):
         import json
+
         with open(key, encoding="utf-8") as f:
             key = json.load(f)
 
@@ -82,6 +84,7 @@ def restore(text: str, key: dict | str) -> str:
 
     try:
         from argus_redact._core import restore as _rust_restore
+
         result = _rust_restore(text, key)
     except ImportError:
         sorted_keys = sorted(key.keys(), key=len, reverse=True)

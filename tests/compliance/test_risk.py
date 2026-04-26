@@ -1,6 +1,6 @@
 """Tests for risk assessment — pure function, no side effects."""
 
-from argus_redact.pure.risk import assess_risk, RiskResult
+from argus_redact.pure.risk import RiskResult, assess_risk
 
 
 class TestAssessRisk:
@@ -24,18 +24,22 @@ class TestAssessRisk:
 
     def test_should_amplify_when_multiple_high_entities(self):
         single = assess_risk([{"type": "phone", "sensitivity": 3}])
-        multiple = assess_risk([
-            {"type": "phone", "sensitivity": 3},
-            {"type": "id_number", "sensitivity": 4},
-        ])
+        multiple = assess_risk(
+            [
+                {"type": "phone", "sensitivity": 3},
+                {"type": "id_number", "sensitivity": 4},
+            ]
+        )
         assert multiple.score > single.score
 
     def test_should_amplify_when_dob_plus_address(self):
         dob_only = assess_risk([{"type": "date_of_birth", "sensitivity": 2}])
-        dob_addr = assess_risk([
-            {"type": "date_of_birth", "sensitivity": 2},
-            {"type": "address", "sensitivity": 2},
-        ])
+        dob_addr = assess_risk(
+            [
+                {"type": "date_of_birth", "sensitivity": 2},
+                {"type": "address", "sensitivity": 2},
+            ]
+        )
         assert dob_addr.score > dob_only.score
 
     def test_should_cap_score_at_1(self):
@@ -85,20 +89,24 @@ class TestAssessRisk:
     def test_should_amplify_when_self_reference_with_medical(self):
         """self_reference + medical should score higher than medical alone."""
         medical_only = assess_risk([{"type": "medical", "sensitivity": 3}])
-        with_self = assess_risk([
-            {"type": "medical", "sensitivity": 3},
-            {"type": "self_reference", "sensitivity": 2},
-        ])
+        with_self = assess_risk(
+            [
+                {"type": "medical", "sensitivity": 3},
+                {"type": "self_reference", "sensitivity": 2},
+            ]
+        )
         assert with_self.score > medical_only.score
         assert "self-reference amplification" in " ".join(with_self.reasons)
 
     def test_should_amplify_when_self_reference_with_financial(self):
         """self_reference + financial should amplify."""
         financial_only = assess_risk([{"type": "financial", "sensitivity": 3}])
-        with_self = assess_risk([
-            {"type": "financial", "sensitivity": 3},
-            {"type": "self_reference", "sensitivity": 2},
-        ])
+        with_self = assess_risk(
+            [
+                {"type": "financial", "sensitivity": 3},
+                {"type": "self_reference", "sensitivity": 2},
+            ]
+        )
         assert with_self.score > financial_only.score
 
     def test_result_is_frozen_dataclass(self):

@@ -14,26 +14,32 @@ from __future__ import annotations
 import argparse
 import json
 import random
-import string
 import sys
 from dataclasses import dataclass
 
 # ── Import data pools and faker functions from canonical source ──
 from argus_redact.specs.fakers_zh import (
-    BANK_BINS,
     EMAIL_DOMAINS,
-    GIVEN_NAMES,
-    ID_AREA_CODES,
     PINYIN_PARTS,
-    PLATE_PREFIXES,
     PROVINCES,
     STREETS,
-    SURNAMES,
+)
+from argus_redact.specs.fakers_zh import (
     fake_bank_card as _gen_bank_card,
+)
+from argus_redact.specs.fakers_zh import (
     fake_id_number as _gen_id_number,
+)
+from argus_redact.specs.fakers_zh import (
     fake_license_plate as _gen_license_plate,
+)
+from argus_redact.specs.fakers_zh import (
     fake_passport as _gen_passport,
+)
+from argus_redact.specs.fakers_zh import (
     fake_person_name_only as _gen_name,
+)
+from argus_redact.specs.fakers_zh import (
     fake_phone as _gen_phone,
 )
 
@@ -88,13 +94,15 @@ def _build(template: str, pii_map: dict[str, PII]) -> tuple[str, list[dict]]:
         idx = result.find(ph)
         if idx == -1:
             continue
-        result = result[:idx] + pii.text + result[idx + len(ph):]
-        entities.append({
-            "text": pii.text,
-            "type": pii.type,
-            "start": idx,
-            "end": idx + len(pii.text),
-        })
+        result = result[:idx] + pii.text + result[idx + len(ph) :]
+        entities.append(
+            {
+                "text": pii.text,
+                "type": pii.type,
+                "start": idx,
+                "end": idx + len(pii.text),
+            }
+        )
 
     return result, entities
 
@@ -113,13 +121,19 @@ def _tpl_basic_contact(rng):
     phone = _gen_phone(rng)
     email = _gen_email(rng, name)
     return _build(
-        rng.choice([
-            "{name}的手机号是{phone}，邮箱{email}",
-            "联系人：{name}，电话{phone}，邮箱：{email}",
-            "请联系{name}，手机{phone}，或发邮件到{email}",
-            "{name}同学的联系方式：{phone}，{email}",
-        ]),
-        {"{name}": PII(name, "person"), "{phone}": PII(phone, "phone"), "{email}": PII(email, "email")},
+        rng.choice(
+            [
+                "{name}的手机号是{phone}，邮箱{email}",
+                "联系人：{name}，电话{phone}，邮箱：{email}",
+                "请联系{name}，手机{phone}，或发邮件到{email}",
+                "{name}同学的联系方式：{phone}，{email}",
+            ]
+        ),
+        {
+            "{name}": PII(name, "person"),
+            "{phone}": PII(phone, "phone"),
+            "{email}": PII(email, "email"),
+        },
     )
 
 
@@ -129,13 +143,19 @@ def _tpl_id_and_phone(rng):
     phone = _gen_phone(rng)
     id_num = _gen_id_number(rng)
     return _build(
-        rng.choice([
-            "客户{name}，身份证号{id}，联系电话{phone}",
-            "{name}的身份证：{id}，手机号：{phone}",
-            "姓名：{name}，证件号码：{id}，手机：{phone}",
-            "核实{name}身份，身份证{id}，电话{phone}",
-        ]),
-        {"{name}": PII(name, "person"), "{id}": PII(id_num, "id_number"), "{phone}": PII(phone, "phone")},
+        rng.choice(
+            [
+                "客户{name}，身份证号{id}，联系电话{phone}",
+                "{name}的身份证：{id}，手机号：{phone}",
+                "姓名：{name}，证件号码：{id}，手机：{phone}",
+                "核实{name}身份，身份证{id}，电话{phone}",
+            ]
+        ),
+        {
+            "{name}": PII(name, "person"),
+            "{id}": PII(id_num, "id_number"),
+            "{phone}": PII(phone, "phone"),
+        },
     )
 
 
@@ -145,13 +165,19 @@ def _tpl_bank_card(rng):
     card = _gen_bank_card(rng)
     phone = _gen_phone(rng)
     return _build(
-        rng.choice([
-            "{name}的银行卡号{card}，预留手机{phone}",
-            "持卡人{name}，卡号：{card}，手机：{phone}",
-            "转账至{name}账户，卡号{card}",
-            "请核对{name}银行卡{card}的预留号码{phone}",
-        ]),
-        {"{name}": PII(name, "person"), "{card}": PII(card, "bank_card"), "{phone}": PII(phone, "phone")},
+        rng.choice(
+            [
+                "{name}的银行卡号{card}，预留手机{phone}",
+                "持卡人{name}，卡号：{card}，手机：{phone}",
+                "转账至{name}账户，卡号{card}",
+                "请核对{name}银行卡{card}的预留号码{phone}",
+            ]
+        ),
+        {
+            "{name}": PII(name, "person"),
+            "{card}": PII(card, "bank_card"),
+            "{phone}": PII(phone, "phone"),
+        },
     )
 
 
@@ -161,13 +187,19 @@ def _tpl_address(rng):
     addr = _gen_address(rng)
     phone = _gen_phone(rng)
     return _build(
-        rng.choice([
-            "{name}住在{addr}，电话{phone}",
-            "收件人：{name}，地址：{addr}，电话：{phone}",
-            "配送地址：{addr}，联系人{name}（{phone}）",
-            "{name}的户籍地址为{addr}",
-        ]),
-        {"{name}": PII(name, "person"), "{addr}": PII(addr, "address"), "{phone}": PII(phone, "phone")},
+        rng.choice(
+            [
+                "{name}住在{addr}，电话{phone}",
+                "收件人：{name}，地址：{addr}，电话：{phone}",
+                "配送地址：{addr}，联系人{name}（{phone}）",
+                "{name}的户籍地址为{addr}",
+            ]
+        ),
+        {
+            "{name}": PII(name, "person"),
+            "{addr}": PII(addr, "address"),
+            "{phone}": PII(phone, "phone"),
+        },
     )
 
 
@@ -177,13 +209,19 @@ def _tpl_license_plate(rng):
     plate = _gen_license_plate(rng)
     phone = _gen_phone(rng)
     return _build(
-        rng.choice([
-            "车主{name}，车牌号{plate}，电话{phone}",
-            "{name}名下车辆{plate}",
-            "违章车辆{plate}，车主联系电话{phone}",
-            "登记人：{name}，车牌：{plate}，手机：{phone}",
-        ]),
-        {"{name}": PII(name, "person"), "{plate}": PII(plate, "license_plate"), "{phone}": PII(phone, "phone")},
+        rng.choice(
+            [
+                "车主{name}，车牌号{plate}，电话{phone}",
+                "{name}名下车辆{plate}",
+                "违章车辆{plate}，车主联系电话{phone}",
+                "登记人：{name}，车牌：{plate}，手机：{phone}",
+            ]
+        ),
+        {
+            "{name}": PII(name, "person"),
+            "{plate}": PII(plate, "license_plate"),
+            "{phone}": PII(phone, "phone"),
+        },
     )
 
 
@@ -193,13 +231,19 @@ def _tpl_passport(rng):
     passport = _gen_passport(rng)
     phone = _gen_phone(rng)
     return _build(
-        rng.choice([
-            "旅客{name}，护照号{passport}，联系电话{phone}",
-            "{name}的护照号码：{passport}",
-            "出入境旅客{name}，证件号{passport}，手机{phone}",
-            "签证申请人：{name}，护照{passport}",
-        ]),
-        {"{name}": PII(name, "person"), "{passport}": PII(passport, "passport"), "{phone}": PII(phone, "phone")},
+        rng.choice(
+            [
+                "旅客{name}，护照号{passport}，联系电话{phone}",
+                "{name}的护照号码：{passport}",
+                "出入境旅客{name}，证件号{passport}，手机{phone}",
+                "签证申请人：{name}，护照{passport}",
+            ]
+        ),
+        {
+            "{name}": PII(name, "person"),
+            "{passport}": PII(passport, "passport"),
+            "{phone}": PII(phone, "phone"),
+        },
     )
 
 
@@ -211,10 +255,12 @@ def _tpl_full_registration(rng):
     email = _gen_email(rng, name)
     addr = _gen_address(rng)
     return _build(
-        rng.choice([
-            "注册信息：{name}，身份证{id}，手机{phone}，邮箱{email}，地址{addr}",
-            "用户{name}完成实名认证，身份证号{id}，绑定手机{phone}，邮箱{email}，居住地{addr}",
-        ]),
+        rng.choice(
+            [
+                "注册信息：{name}，身份证{id}，手机{phone}，邮箱{email}，地址{addr}",
+                "用户{name}完成实名认证，身份证号{id}，绑定手机{phone}，邮箱{email}，居住地{addr}",
+            ]
+        ),
         {
             "{name}": PII(name, "person"),
             "{id}": PII(id_num, "id_number"),
@@ -232,11 +278,13 @@ def _tpl_multi_person(rng):
     phone1 = _gen_phone(rng)
     phone2 = _gen_phone(rng)
     return _build(
-        rng.choice([
-            "{name1}（{phone1}）和{name2}（{phone2}）是本次项目的负责人",
-            "参会人员：{name1}，电话{phone1}；{name2}，电话{phone2}",
-            "{name1}将工作交接给{name2}，联系方式分别是{phone1}和{phone2}",
-        ]),
+        rng.choice(
+            [
+                "{name1}（{phone1}）和{name2}（{phone2}）是本次项目的负责人",
+                "参会人员：{name1}，电话{phone1}；{name2}，电话{phone2}",
+                "{name1}将工作交接给{name2}，联系方式分别是{phone1}和{phone2}",
+            ]
+        ),
         {
             "{name1}": PII(name1, "person"),
             "{name2}": PII(name2, "person"),
@@ -252,12 +300,18 @@ def _tpl_medical(rng):
     id_num = _gen_id_number(rng)
     phone = _gen_phone(rng)
     return _build(
-        rng.choice([
-            "患者{name}，身份证{id}，联系电话{phone}，因头痛就诊",
-            "挂号信息：{name}，证件号{id}，手机{phone}",
-            "病历号XXX，患者{name}，身份证号{id}，家属电话{phone}",
-        ]),
-        {"{name}": PII(name, "person"), "{id}": PII(id_num, "id_number"), "{phone}": PII(phone, "phone")},
+        rng.choice(
+            [
+                "患者{name}，身份证{id}，联系电话{phone}，因头痛就诊",
+                "挂号信息：{name}，证件号{id}，手机{phone}",
+                "病历号XXX，患者{name}，身份证号{id}，家属电话{phone}",
+            ]
+        ),
+        {
+            "{name}": PII(name, "person"),
+            "{id}": PII(id_num, "id_number"),
+            "{phone}": PII(phone, "phone"),
+        },
     )
 
 
@@ -267,12 +321,18 @@ def _tpl_financial(rng):
     card = _gen_bank_card(rng)
     id_num = _gen_id_number(rng)
     return _build(
-        rng.choice([
-            "开户人{name}，身份证{id}，银行卡号{card}",
-            "{name}申请贷款，身份证号{id}，还款卡号{card}",
-            "理财客户{name}，证件号{id}，绑定银行卡{card}",
-        ]),
-        {"{name}": PII(name, "person"), "{id}": PII(id_num, "id_number"), "{card}": PII(card, "bank_card")},
+        rng.choice(
+            [
+                "开户人{name}，身份证{id}，银行卡号{card}",
+                "{name}申请贷款，身份证号{id}，还款卡号{card}",
+                "理财客户{name}，证件号{id}，绑定银行卡{card}",
+            ]
+        ),
+        {
+            "{name}": PII(name, "person"),
+            "{id}": PII(id_num, "id_number"),
+            "{card}": PII(card, "bank_card"),
+        },
     )
 
 
@@ -282,16 +342,23 @@ def _tpl_delivery(rng):
     phone = _gen_phone(rng)
     addr = _gen_address(rng)
     return _build(
-        rng.choice([
-            "快递单号SF1234567890，收件人{name}，{phone}，{addr}",
-            "外卖订单：{name}，电话{phone}，送达地址{addr}",
-            "寄件人：{name}，联系方式{phone}，取件地址：{addr}",
-        ]),
-        {"{name}": PII(name, "person"), "{phone}": PII(phone, "phone"), "{addr}": PII(addr, "address")},
+        rng.choice(
+            [
+                "快递单号SF1234567890，收件人{name}，{phone}，{addr}",
+                "外卖订单：{name}，电话{phone}，送达地址{addr}",
+                "寄件人：{name}，联系方式{phone}，取件地址：{addr}",
+            ]
+        ),
+        {
+            "{name}": PII(name, "person"),
+            "{phone}": PII(phone, "phone"),
+            "{addr}": PII(addr, "address"),
+        },
     )
 
 
 # ── Generator ──
+
 
 def generate(count: int = 5000, seed: int = 42) -> list[dict]:
     """Generate `count` labeled Chinese PII samples."""
@@ -304,18 +371,20 @@ def generate(count: int = 5000, seed: int = 42) -> list[dict]:
 
         # Verify offsets
         for ent in entities:
-            actual = text[ent["start"]:ent["end"]]
+            actual = text[ent["start"] : ent["end"]]
             assert actual == ent["text"], (
                 f"Offset mismatch: expected '{ent['text']}' at [{ent['start']}:{ent['end']}], "
                 f"got '{actual}'"
             )
 
-        samples.append({
-            "id": f"zh_{i:06d}",
-            "text": text,
-            "lang": "zh",
-            "entities": entities,
-        })
+        samples.append(
+            {
+                "id": f"zh_{i:06d}",
+                "text": text,
+                "lang": "zh",
+                "entities": entities,
+            }
+        )
 
     return samples
 

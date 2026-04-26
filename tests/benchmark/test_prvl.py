@@ -139,15 +139,17 @@ def _compute_prvl(texts: list[dict], mode: str = "fast"):
             language = 1.0
         language_scores.append(language)
 
-        details.append({
-            "id": item["id"],
-            "privacy": privacy,
-            "reversibility": reversibility,
-            "language": language,
-            "leaked": [p for p in item["pii"] if p in redacted],
-            "not_recovered": [p for p in item["pii"] if p not in restored],
-            "tokens_lost": [t for t in item["semantic_tokens"] if t not in redacted],
-        })
+        details.append(
+            {
+                "id": item["id"],
+                "privacy": privacy,
+                "reversibility": reversibility,
+                "language": language,
+                "leaked": [p for p in item["pii"] if p in redacted],
+                "not_recovered": [p for p in item["pii"] if p not in restored],
+                "tokens_lost": [t for t in item["semantic_tokens"] if t not in redacted],
+            }
+        )
 
     def avg(scores):
         return sum(scores) / len(scores) if scores else 0
@@ -243,6 +245,7 @@ def _check_ollama():
         return False
     try:
         import requests
+
         requests.get("http://localhost:11434/api/tags", timeout=3)
         return True
     except Exception:
@@ -251,14 +254,20 @@ def _check_ollama():
 
 def _query_llm(prompt, model="qwen3:8b"):
     import requests
+
     from argus_redact.impure.model_profiles import get_model_profile
+
     profile = get_model_profile(model)
-    resp = requests.post("http://localhost:11434/api/generate", json={
-        "model": model,
-        "prompt": f"{profile.prompt_prefix}{prompt}",
-        "stream": False,
-        "options": {"temperature": 0.0},
-    }, timeout=profile.timeout)
+    resp = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": model,
+            "prompt": f"{profile.prompt_prefix}{prompt}",
+            "stream": False,
+            "options": {"temperature": 0.0},
+        },
+        timeout=profile.timeout,
+    )
     return resp.json().get("response", "")
 
 
@@ -296,17 +305,21 @@ class TestReversibilityThroughLLM:
                 if replacement in llm_output:
                     survived += 1
 
-            details.append({
-                "id": item["id"],
-                "pseudonyms_in_key": list(key.keys()),
-                "survived_in_llm": [r for r in key.keys() if r in llm_output],
-                "lost_in_llm": [r for r in key.keys() if r not in llm_output],
-            })
+            details.append(
+                {
+                    "id": item["id"],
+                    "pseudonyms_in_key": list(key.keys()),
+                    "survived_in_llm": [r for r in key.keys() if r in llm_output],
+                    "lost_in_llm": [r for r in key.keys() if r not in llm_output],
+                }
+            )
 
         survival_rate = survived / total_pseudonyms if total_pseudonyms else 0
 
         with capsys.disabled():
-            print(f"\n  Pseudonym survival rate: {survival_rate:.0%} ({survived}/{total_pseudonyms})")
+            print(
+                f"\n  Pseudonym survival rate: {survival_rate:.0%} ({survived}/{total_pseudonyms})"
+            )
             for d in details:
                 lost = d["lost_in_llm"]
                 status = "✓" if not lost else f"✗ lost: {lost}"
@@ -315,8 +328,7 @@ class TestReversibilityThroughLLM:
         # Baseline: 86%. All entities now use pseudonym-style codes (MED-XXXXX).
         # Remaining losses are LLM omissions in summaries, not format issues.
         assert survival_rate >= 0.7, (
-            f"Pseudonym survival rate {survival_rate:.0%} below 70% — "
-            f"details: {details}"
+            f"Pseudonym survival rate {survival_rate:.0%} below 70% — details: {details}"
         )
 
     def test_pii_not_leaked_through_llm(self, capsys):
@@ -346,9 +358,7 @@ class TestReversibilityThroughLLM:
 
         # Baseline: 14% (1/7). LLM inferred 糖尿病 from context despite redaction.
         # This is a fundamental LLM capability — mitigating requires obscuring context too.
-        assert leak_rate <= 0.2, (
-            f"PII leaked through LLM: {leaked_count}/{total_pii} — {details}"
-        )
+        assert leak_rate <= 0.2, f"PII leaked through LLM: {leaked_count}/{total_pii} — {details}"
 
 
 @pytest.mark.semantic
@@ -374,14 +384,16 @@ class TestUsabilityThroughLLM:
             is_empty = len(llm_output.strip()) < 10
             if is_empty:
                 empty_responses += 1
-            details.append({
-                "id": item["id"],
-                "output_length": len(llm_output),
-                "empty": is_empty,
-            })
+            details.append(
+                {
+                    "id": item["id"],
+                    "output_length": len(llm_output),
+                    "empty": is_empty,
+                }
+            )
 
         with capsys.disabled():
-            print(f"\n  LLM response quality:")
+            print("\n  LLM response quality:")
             for d in details:
                 status = "✓" if not d["empty"] else "✗ empty"
                 print(f"  {d['id']}: {d['output_length']} chars {status}")

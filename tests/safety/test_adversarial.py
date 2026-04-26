@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from argus_redact import redact, restore
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
@@ -40,9 +41,9 @@ class TestAdversarial:
         restored = restore(redacted, key)
 
         for original in key.values():
-            assert (
-                original in restored
-            ), f"Lost PII '{original}' in roundtrip: {case['description']}"
+            assert original in restored, (
+                f"Lost PII '{original}' in roundtrip: {case['description']}"
+            )
 
     def test_should_detect_expected_count(self, case):
         """Check PII detection count matches expectation."""

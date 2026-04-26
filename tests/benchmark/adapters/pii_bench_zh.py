@@ -45,12 +45,14 @@ class PIIBenchZhAdapter(DatasetAdapter):
 
             entities = []
             for ent in ex.get("entities", []):
-                entities.append(Entity(
-                    text=ent["text"],
-                    type=ent["type"],
-                    start=ent.get("start"),
-                    end=ent.get("end"),
-                ))
+                entities.append(
+                    Entity(
+                        text=ent["text"],
+                        type=ent["type"],
+                        start=ent.get("start"),
+                        end=ent.get("end"),
+                    )
+                )
 
             if not entities:
                 continue

@@ -6,7 +6,6 @@ Requires: POE_API_KEY environment variable.
 Run: pytest tests/benchmark/test_prvl_multi_llm.py -v -s -m semantic
 """
 
-import json
 import os
 import time
 
@@ -18,7 +17,7 @@ try:
 except ImportError:
     HAS_HTTPX = False
 
-from argus_redact import redact, restore
+from argus_redact import redact
 
 POE_API_URL = "https://api.poe.com/v1/chat/completions"
 
@@ -117,7 +116,11 @@ def poe_key():
         resp = httpx.post(
             POE_API_URL,
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json={"model": "GPT-4o", "messages": [{"role": "user", "content": "hi"}], "temperature": 0},
+            json={
+                "model": "GPT-4o",
+                "messages": [{"role": "user", "content": "hi"}],
+                "temperature": 0,
+            },
             timeout=10,
         )
         if resp.status_code != 200:
@@ -152,24 +155,26 @@ class TestPRvLMultiLLM:
             by_task_type[task_type]["survived"] += case_survived
             by_task_type[task_type]["total"] += case_total
 
-            details.append({
-                "id": case["id"],
-                "task_type": task_type,
-                "survived": f"{case_survived}/{case_total}",
-                "lost": [r for r in key if r not in llm_output],
-                "ms": ms,
-            })
+            details.append(
+                {
+                    "id": case["id"],
+                    "task_type": task_type,
+                    "survived": f"{case_survived}/{case_total}",
+                    "lost": [r for r in key if r not in llm_output],
+                    "ms": ms,
+                }
+            )
 
         with capsys.disabled():
-            print(f"\n  {'='*60}")
+            print(f"\n  {'=' * 60}")
             print(f"  {model}: PRvL by task type")
-            print(f"  {'='*60}")
+            print(f"  {'=' * 60}")
             for tt, s in by_task_type.items():
                 rate = s["survived"] / s["total"] if s["total"] else 0
                 print(f"  {tt:12s}: R={rate:.0%} ({s['survived']}/{s['total']})")
             total_s = sum(s["survived"] for s in by_task_type.values())
             total_t = sum(s["total"] for s in by_task_type.values())
-            print(f"  {'overall':12s}: R={total_s/total_t:.0%} ({total_s}/{total_t})")
+            print(f"  {'overall':12s}: R={total_s / total_t:.0%} ({total_s}/{total_t})")
             print()
             for d in details:
                 lost = d["lost"]

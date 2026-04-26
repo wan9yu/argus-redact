@@ -7,7 +7,9 @@ class TestWithTypes:
     def test_should_return_types_dict_when_with_types(self):
         redacted, key, types = redact(
             "手机13812345678，身份证110101199003074610",
-            mode="fast", seed=42, with_types=True,
+            mode="fast",
+            seed=42,
+            with_types=True,
         )
         assert isinstance(types, dict)
         assert len(types) == len(key)
@@ -17,7 +19,9 @@ class TestWithTypes:
     def test_should_map_replacement_to_pii_type(self):
         _, key, types = redact(
             "手机13812345678，身份证110101199003074610",
-            mode="fast", seed=42, with_types=True,
+            mode="fast",
+            seed=42,
+            with_types=True,
         )
         type_values = set(types.values())
         assert "phone" in type_values
@@ -36,7 +40,9 @@ class TestWithTypes:
     def test_should_work_with_multiple_same_type(self):
         _, key, types = redact(
             "手机13812345678和13998765432",
-            mode="fast", seed=42, with_types=True,
+            mode="fast",
+            seed=42,
+            with_types=True,
         )
         phone_types = [t for t in types.values() if t == "phone"]
         assert len(phone_types) >= 1
@@ -45,17 +51,22 @@ class TestWithTypes:
 class TestMaxPseudonymLength:
     def test_should_return_positive_int(self):
         from argus_redact.pure.pseudonym import max_pseudonym_length
+
         length = max_pseudonym_length()
         assert isinstance(length, int)
         assert length > 0
 
     def test_should_cover_default_prefixes(self):
         from argus_redact.pure.pseudonym import max_pseudonym_length
+
         # Default format: PREFIX-NNNNN (e.g. "PLATE-00123" = 11 chars)
         length = max_pseudonym_length()
         assert length >= 11  # longest default prefix "PLATE" + "-" + 5 digits
 
     def test_should_respect_custom_config(self):
         from argus_redact.pure.pseudonym import max_pseudonym_length
-        length = max_pseudonym_length(config={"phone": {"strategy": "pseudonym", "prefix": "TELEPHONE"}})
+
+        length = max_pseudonym_length(
+            config={"phone": {"strategy": "pseudonym", "prefix": "TELEPHONE"}}
+        )
         assert length >= len("TELEPHONE-00000")

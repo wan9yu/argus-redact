@@ -63,8 +63,7 @@ class NameCandidate:
 
 # Particles / function words that cannot be the last char of a given name.
 _NOT_NAME_CHARS = frozenset(
-    "的了在是有和与把被让从到给向因为而又也都就才会能要可将已完开做"
-    "吗呢吧啊哦呀嘛啦哈嗯着过去来"
+    "的了在是有和与把被让从到给向因为而又也都就才会能要可将已完开做吗呢吧啊哦呀嘛啦哈嗯着过去来"
 )
 
 # Compiled regex patterns for candidate extraction
@@ -72,9 +71,7 @@ _COMPOUND_PAT = re.compile(
     r"(?:" + "|".join(re.escape(s) for s in COMPOUND_SURNAMES) + r")"
     r"[" + _CJK + r"]{1,2}"
 )
-_SINGLE_PAT = re.compile(
-    r"[" + SURNAMES + r"][" + _CJK + r"]{1,2}"
-)
+_SINGLE_PAT = re.compile(r"[" + SURNAMES + r"][" + _CJK + r"]{1,2}")
 
 # Honorific suffix — used both in scoring and in trimming
 _HONORIFIC_SUFFIX = re.compile(
@@ -323,17 +320,24 @@ def detect_person_names(
             if not name:
                 continue
             for m in re.finditer(re.escape(name), text):
-                results.append(PatternMatch(
-                    text=name, type="person",
-                    start=m.start(), end=m.end(), confidence=1.0,
-                ))
+                results.append(
+                    PatternMatch(
+                        text=name,
+                        type="person",
+                        start=m.start(),
+                        end=m.end(),
+                        confidence=1.0,
+                    )
+                )
                 occupied.add((m.start(), m.end()))
 
     # Candidate generation → scoring → variant resolution
     candidates = generate_candidates(text)
 
     # Filter self_reference from PII entities (not structural PII for proximity scoring)
-    structural_pii = [p for p in pii_entities if p.type != "self_reference"] if pii_entities else None
+    structural_pii = (
+        [p for p in pii_entities if p.type != "self_reference"] if pii_entities else None
+    )
 
     grouped: dict[int, list[tuple[NameCandidate, float]]] = {}
     for c in candidates:
@@ -343,10 +347,15 @@ def detect_person_names(
         grouped.setdefault(c.start, []).append((c, s))
 
     for best, best_score in _resolve_variants(grouped, text, threshold):
-        results.append(PatternMatch(
-            text=best.text, type="person",
-            start=best.start, end=best.end, confidence=best_score,
-        ))
+        results.append(
+            PatternMatch(
+                text=best.text,
+                type="person",
+                start=best.start,
+                end=best.end,
+                confidence=best_score,
+            )
+        )
 
     results.sort(key=lambda r: r.start)
     return results

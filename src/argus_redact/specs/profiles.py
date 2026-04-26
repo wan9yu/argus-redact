@@ -25,8 +25,14 @@ PROFILES = {
     "hipaa": {
         "description": "US HIPAA — 18 PHI identifiers",
         "types": [
-            "phone", "id_number", "ssn", "date_of_birth", "email",
-            "address", "person", "ip_address",
+            "phone",
+            "id_number",
+            "ssn",
+            "date_of_birth",
+            "email",
+            "address",
+            "person",
+            "ip_address",
         ],
         "config": _STRICT_STRATEGIES,
     },
@@ -36,7 +42,5 @@ PROFILES = {
 def get_profile(name: str) -> dict:
     """Get a compliance profile by name. Raises ValueError if unknown."""
     if name not in PROFILES:
-        raise ValueError(
-            f"Unknown profile '{name}'. Available: {', '.join(PROFILES)}"
-        )
+        raise ValueError(f"Unknown profile '{name}'. Available: {', '.join(PROFILES)}")
     return PROFILES[name]

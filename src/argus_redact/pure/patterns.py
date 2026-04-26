@@ -7,7 +7,6 @@ Python handles validate callbacks (cannot be passed to Rust).
 from __future__ import annotations
 
 import re as _re
-
 from functools import lru_cache
 
 from argus_redact._types import PatternMatch
@@ -43,14 +42,15 @@ def _match_python_patterns(
                     pass
             if validate and not validate(matched):
                 near_misses.append(
-                    PatternMatch(text=matched, type=pat["type"], start=start, end=end, confidence=0.3)
+                    PatternMatch(
+                        text=matched, type=pat["type"], start=start, end=end, confidence=0.3
+                    )
                 )
                 continue
             if check_context and _looks_like_false_positive(text, m.start(), m.end()):
                 continue
-            results.append(
-                PatternMatch(text=matched, type=pat["type"], start=start, end=end)
-            )
+            results.append(PatternMatch(text=matched, type=pat["type"], start=start, end=end))
+
 
 _FALSE_POSITIVE_PREFIX = _re.compile(
     r"(?:version|ver|v\.|order\s*#|product\s*code|serial\s*#|isbn|sku|"
@@ -72,7 +72,9 @@ def _looks_like_false_positive(text: str, start: int, end: int) -> bool:
 try:
     from argus_redact._core import match_patterns as _rust_match_patterns
 
-    def match_patterns(text: str, patterns: list[dict]) -> tuple[list[PatternMatch], list[PatternMatch]]:
+    def match_patterns(
+        text: str, patterns: list[dict]
+    ) -> tuple[list[PatternMatch], list[PatternMatch]]:
         """Run all regex patterns against text, return sorted matches."""
         if not text or not patterns:
             return [], []
@@ -92,9 +94,7 @@ try:
         # Rust handles patterns without validate
         if rust_patterns:
             for r in _rust_match_patterns(text, rust_patterns):
-                results.append(
-                    PatternMatch(text=r.text, type=r.type, start=r.start, end=r.end)
-                )
+                results.append(PatternMatch(text=r.text, type=r.type, start=r.start, end=r.end))
 
         if python_patterns:
             _match_python_patterns(text, python_patterns, results, near_misses)
@@ -104,7 +104,9 @@ try:
 
 except ImportError:
 
-    def match_patterns(text: str, patterns: list[dict]) -> tuple[list[PatternMatch], list[PatternMatch]]:
+    def match_patterns(
+        text: str, patterns: list[dict]
+    ) -> tuple[list[PatternMatch], list[PatternMatch]]:
         """Run all regex patterns against text, return sorted matches (Python fallback)."""
         if not text or not patterns:
             return [], []

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from argus_redact._types import PatternMatch
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.lang.zh.patterns import PATTERNS as ZH_PATTERNS

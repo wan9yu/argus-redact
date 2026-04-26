@@ -2,7 +2,6 @@
 
 from argus_redact.structured import redact_csv, redact_json, restore_csv, restore_json
 
-
 # ══════════════════════════════════════════════════════════════
 # JSON — basic
 # ══════════════════════════════════════════════════════════════
@@ -79,7 +78,11 @@ class TestRedactJsonWithTypes:
             "messages": [{"role": "user", "content": "手机13812345678"}],
         }
         redacted, key, types = redact_json(
-            data, paths=["messages[*].content"], mode="fast", seed=42, with_types=True,
+            data,
+            paths=["messages[*].content"],
+            mode="fast",
+            seed=42,
+            with_types=True,
         )
 
         assert redacted["model"] == "gpt-4o"
@@ -134,7 +137,12 @@ class TestRedactJsonPaths:
         assert "110101199003074610" not in result["items"][1]["text"]
 
     def test_should_handle_multiple_paths(self):
-        data = {"sender": "张三", "receiver": "李四", "content": "手机13812345678", "timestamp": "2026-01-01"}
+        data = {
+            "sender": "张三",
+            "receiver": "李四",
+            "content": "手机13812345678",
+            "timestamp": "2026-01-01",
+        }
         result, key = redact_json(data, paths=["sender", "content"], mode="fast")
 
         assert result["receiver"] == "李四"

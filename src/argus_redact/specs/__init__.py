@@ -7,10 +7,10 @@ generators, fixtures, docs) should derive from these definitions.
 
 from __future__ import annotations
 
-from .registry import PIITypeDef, get, list_types, lookup
-
 # Auto-register all language specs on import
 import importlib as _importlib
+
+from .registry import PIITypeDef, get, list_types, lookup
 
 for _mod in ("zh", "shared"):
     try:

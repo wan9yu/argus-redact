@@ -62,15 +62,31 @@ TEST_CASES = [
 ]
 
 TYPE_ALIASES = {
-    "医疗健康": "medical", "医疗": "medical", "健康": "medical", "health": "medical",
-    "金融信息": "financial", "金融": "financial", "经济": "financial", "finance": "financial",
-    "宗教信仰": "religion", "宗教": "religion", "faith": "religion",
-    "政治观点": "political", "政治": "political", "politics": "political",
-    "性取向": "sexual_orientation", "sexual": "sexual_orientation",
-    "犯罪记录": "criminal", "犯罪": "criminal", "crime": "criminal",
-    "生物特征": "biometric", "biometrics": "biometric",
-    "性别": "gender", "sex": "gender",
-    "民族": "ethnicity", "ethnic": "ethnicity",
+    "医疗健康": "medical",
+    "医疗": "medical",
+    "健康": "medical",
+    "health": "medical",
+    "金融信息": "financial",
+    "金融": "financial",
+    "经济": "financial",
+    "finance": "financial",
+    "宗教信仰": "religion",
+    "宗教": "religion",
+    "faith": "religion",
+    "政治观点": "political",
+    "政治": "political",
+    "politics": "political",
+    "性取向": "sexual_orientation",
+    "sexual": "sexual_orientation",
+    "犯罪记录": "criminal",
+    "犯罪": "criminal",
+    "crime": "criminal",
+    "生物特征": "biometric",
+    "biometrics": "biometric",
+    "性别": "gender",
+    "sex": "gender",
+    "民族": "ethnicity",
+    "ethnic": "ethnicity",
 }
 
 
@@ -80,14 +96,19 @@ def _normalize_type(t):
 
 def _query(text, model):
     from argus_redact.impure.model_profiles import get_model_profile
+
     profile = get_model_profile(model)
-    resp = requests.post(OLLAMA_URL, json={
-        "model": model,
-        "prompt": f"{profile.prompt_prefix}文本：{text}",
-        "system": SYSTEM_PROMPT,
-        "stream": False,
-        "options": {"temperature": 0.0},
-    }, timeout=profile.timeout)
+    resp = requests.post(
+        OLLAMA_URL,
+        json={
+            "model": model,
+            "prompt": f"{profile.prompt_prefix}文本：{text}",
+            "system": SYSTEM_PROMPT,
+            "stream": False,
+            "options": {"temperature": 0.0},
+        },
+        timeout=profile.timeout,
+    )
     return resp.json().get("response", "[]")
 
 
@@ -119,13 +140,15 @@ def _run_benchmark(model):
         else:
             ok = expected in detected
 
-        results.append({
-            "text": text,
-            "expected": expected,
-            "detected": detected,
-            "correct": ok,
-            "ms": ms,
-        })
+        results.append(
+            {
+                "text": text,
+                "expected": expected,
+                "detected": detected,
+                "correct": ok,
+                "ms": ms,
+            }
+        )
     return results
 
 
@@ -149,12 +172,22 @@ def ollama_available():
 class TestLayer3ModelBenchmark:
     """Benchmark implicit PII detection across models. Run with -s to see output."""
 
-    @pytest.mark.parametrize("model", [
-        "qwen2.5:3b", "qwen2.5:7b", "qwen2.5:32b",
-        "qwen3:8b", "deepseek-r1:7b", "deepseek-r1:8b", "deepseek-r1:14b",
-        "glm4:9b", "marco-o1:7b",
-        "internlm2:7b", "yi:9b",
-    ])
+    @pytest.mark.parametrize(
+        "model",
+        [
+            "qwen2.5:3b",
+            "qwen2.5:7b",
+            "qwen2.5:32b",
+            "qwen3:8b",
+            "deepseek-r1:7b",
+            "deepseek-r1:8b",
+            "deepseek-r1:14b",
+            "glm4:9b",
+            "marco-o1:7b",
+            "internlm2:7b",
+            "yi:9b",
+        ],
+    )
     def test_model_benchmark(self, ollama_available, model, capsys):
         # Check model is installed
         try:
@@ -171,9 +204,11 @@ class TestLayer3ModelBenchmark:
         avg_ms = sum(r["ms"] for r in results) / total
 
         with capsys.disabled():
-            print(f"\n{'='*60}")
-            print(f"  {model}: {correct}/{total} ({correct/total*100:.0f}%)  avg {avg_ms:.0f}ms")
-            print(f"{'='*60}")
+            print(f"\n{'=' * 60}")
+            print(
+                f"  {model}: {correct}/{total} ({correct / total * 100:.0f}%)  avg {avg_ms:.0f}ms"
+            )
+            print(f"{'=' * 60}")
             for r in results:
                 status = "✓" if r["correct"] else "✗"
                 det = ", ".join(r["detected"])[:20] if r["detected"] else "—"

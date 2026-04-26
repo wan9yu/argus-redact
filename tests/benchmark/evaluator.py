@@ -19,7 +19,9 @@ def _match_value(expected: set[tuple[str, str]], detected: set[tuple[str, str]])
 
 
 def _match_span(
-    expected: list[Entity], detected: list[Entity], tolerance: int = 3,
+    expected: list[Entity],
+    detected: list[Entity],
+    tolerance: int = 3,
 ):
     """Span-level matching: compare (start, end, type) with positional tolerance.
 
@@ -98,18 +100,20 @@ def evaluate(
         # Build detected entity set from details
         detected_entities: list[Entity] = []
         for ent in details.get("entities", []):
-            detected_entities.append(Entity(
-                text=ent["original"],
-                type=ent["type"],
-                start=ent.get("start"),
-                end=ent.get("end"),
-            ))
+            detected_entities.append(
+                Entity(
+                    text=ent["original"],
+                    type=ent["type"],
+                    start=ent.get("start"),
+                    end=ent.get("end"),
+                )
+            )
 
-        if match == "span" and all(
-            e.start is not None for e in sample.entities
-        ):
+        if match == "span" and all(e.start is not None for e in sample.entities):
             hits_list, misses_list, fa_list = _match_span(
-                sample.entities, detected_entities, tolerance,
+                sample.entities,
+                detected_entities,
+                tolerance,
             )
             hits_typed = [(e.text, e.type) for e in hits_list]
             misses_typed = [(e.text, e.type) for e in misses_list]
@@ -119,9 +123,7 @@ def evaluate(
             detected_set = {(e.text, e.type) for e in detected_entities}
             # Only evaluate types present in expected
             expected_types = {t for _, t in expected_set}
-            detected_filtered = {
-                (t, tp) for t, tp in detected_set if tp in expected_types
-            }
+            detected_filtered = {(t, tp) for t, tp in detected_set if tp in expected_types}
             hit_set, miss_set, fa_set = _match_value(expected_set, detected_filtered)
             hits_typed = list(hit_set)
             misses_typed = list(miss_set)

@@ -1,10 +1,10 @@
 """Tests for Indian regex patterns."""
 
 import pytest
+
 from argus_redact.lang.in_.patterns import PATTERNS as IN_PATTERNS
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.patterns import match_patterns
-
 from tests.conftest import parametrize_examples
 
 ALL_IN_PATTERNS = IN_PATTERNS + SHARED_PATTERNS

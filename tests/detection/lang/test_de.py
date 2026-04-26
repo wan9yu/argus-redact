@@ -1,10 +1,10 @@
 """Tests for German regex patterns."""
 
 import pytest
+
 from argus_redact.lang.de.patterns import PATTERNS as DE_PATTERNS
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.patterns import match_patterns
-
 from tests.conftest import parametrize_examples
 
 ALL_DE_PATTERNS = DE_PATTERNS + SHARED_PATTERNS

@@ -25,7 +25,9 @@ LABEL_MAP = {
 }
 
 
-def _bio_to_entities(tokens: list[str], labels: list[str], trailing_ws: list[bool]) -> tuple[str, list[Entity]]:
+def _bio_to_entities(
+    tokens: list[str], labels: list[str], trailing_ws: list[bool]
+) -> tuple[str, list[Entity]]:
     """Convert BIO-tagged tokens to text + entity list."""
     # Reconstruct full text with original whitespace
     parts: list[str] = []
@@ -51,13 +53,17 @@ def _bio_to_entities(tokens: list[str], labels: list[str], trailing_ws: list[boo
         if label.startswith("B-"):
             # Flush previous
             if current_tokens and current_type:
-                entity_text = _join_tokens(current_tokens, tokens, labels, i - len(current_tokens), trailing_ws)
-                entities.append(Entity(
-                    text=entity_text,
-                    type=current_type,
-                    start=current_start,
-                    end=offsets[i - 1] + len(tokens[i - 1]) if i > 0 else 0,
-                ))
+                entity_text = _join_tokens(
+                    current_tokens, tokens, labels, i - len(current_tokens), trailing_ws
+                )
+                entities.append(
+                    Entity(
+                        text=entity_text,
+                        type=current_type,
+                        start=current_start,
+                        end=offsets[i - 1] + len(tokens[i - 1]) if i > 0 else 0,
+                    )
+                )
             bio_type = label[2:]
             current_type = LABEL_MAP.get(bio_type)
             current_tokens = [token]
@@ -66,14 +72,18 @@ def _bio_to_entities(tokens: list[str], labels: list[str], trailing_ws: list[boo
             current_tokens.append(token)
         else:
             if current_tokens and current_type:
-                entity_text = _join_tokens(current_tokens, tokens, labels, i - len(current_tokens), trailing_ws)
+                entity_text = _join_tokens(
+                    current_tokens, tokens, labels, i - len(current_tokens), trailing_ws
+                )
                 end_idx = i - 1
-                entities.append(Entity(
-                    text=entity_text,
-                    type=current_type,
-                    start=current_start,
-                    end=offsets[end_idx] + len(tokens[end_idx]),
-                ))
+                entities.append(
+                    Entity(
+                        text=entity_text,
+                        type=current_type,
+                        start=current_start,
+                        end=offsets[end_idx] + len(tokens[end_idx]),
+                    )
+                )
             current_tokens = []
             current_type = None
             current_start = None
@@ -81,18 +91,28 @@ def _bio_to_entities(tokens: list[str], labels: list[str], trailing_ws: list[boo
     # Flush last entity
     if current_tokens and current_type:
         end_idx = len(tokens) - 1
-        entity_text = _join_tokens(current_tokens, tokens, labels, len(tokens) - len(current_tokens), trailing_ws)
-        entities.append(Entity(
-            text=entity_text,
-            type=current_type,
-            start=current_start,
-            end=offsets[end_idx] + len(tokens[end_idx]),
-        ))
+        entity_text = _join_tokens(
+            current_tokens, tokens, labels, len(tokens) - len(current_tokens), trailing_ws
+        )
+        entities.append(
+            Entity(
+                text=entity_text,
+                type=current_type,
+                start=current_start,
+                end=offsets[end_idx] + len(tokens[end_idx]),
+            )
+        )
 
     return text, entities
 
 
-def _join_tokens(entity_tokens: list[str], all_tokens: list[str], labels: list[str], start_idx: int, trailing_ws: list[bool]) -> str:
+def _join_tokens(
+    entity_tokens: list[str],
+    all_tokens: list[str],
+    labels: list[str],
+    start_idx: int,
+    trailing_ws: list[bool],
+) -> str:
     """Join entity tokens preserving original whitespace."""
     parts: list[str] = []
     for j, tok in enumerate(entity_tokens):

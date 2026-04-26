@@ -5,6 +5,7 @@ Run with: pytest tests/integration/test_langchain_ollama.py -m semantic -v
 
 import pytest
 import requests
+
 from argus_redact.integrations.langchain import RedactRunnable, RestoreRunnable
 
 pytestmark = pytest.mark.semantic

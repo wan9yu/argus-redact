@@ -92,10 +92,14 @@ class Result:
             "elapsed_s": round(self.elapsed_s, 2),
             "docs_per_sec": round(self.docs_per_sec, 1),
             "per_type": {
-                k: {"tp": v.tp, "fp": v.fp, "fn": v.fn,
-                     "precision": round(v.precision, 4),
-                     "recall": round(v.recall, 4),
-                     "f1": round(v.f1, 4)}
+                k: {
+                    "tp": v.tp,
+                    "fp": v.fp,
+                    "fn": v.fn,
+                    "precision": round(v.precision, 4),
+                    "recall": round(v.recall, 4),
+                    "f1": round(v.f1, 4),
+                }
                 for k, v in sorted(self.per_type.items())
             },
         }

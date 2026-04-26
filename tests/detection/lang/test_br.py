@@ -1,10 +1,10 @@
 """Tests for Brazilian regex patterns."""
 
+import pytest
+
 from argus_redact.lang.br.patterns import PATTERNS as BR_PATTERNS
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.patterns import match_patterns
-
-import pytest
 from tests.conftest import assert_pattern_match, parametrize_examples
 
 ALL_BR_PATTERNS = BR_PATTERNS + SHARED_PATTERNS

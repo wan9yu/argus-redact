@@ -247,7 +247,8 @@ class TestAssessCommand:
     def test_should_assess_stdin_and_print_json(self):
         code, stdout, _ = run_cli(
             "assess",
-            "-m", "fast",
+            "-m",
+            "fast",
             stdin="身份证110101199003074610",
         )
 
@@ -261,8 +262,10 @@ class TestAssessCommand:
 
         code, _, stderr = run_cli(
             "assess",
-            "-m", "fast",
-            "-o", str(output_file),
+            "-m",
+            "fast",
+            "-o",
+            str(output_file),
             stdin="手机13812345678",
         )
 
@@ -274,7 +277,8 @@ class TestAssessCommand:
     def test_should_return_zero_risk_when_no_pii(self):
         code, stdout, _ = run_cli(
             "assess",
-            "-m", "fast",
+            "-m",
+            "fast",
             stdin="今天天气不错",
         )
 

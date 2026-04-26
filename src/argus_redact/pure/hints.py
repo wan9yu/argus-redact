@@ -9,19 +9,58 @@ from argus_redact._types import Hint, PatternMatch
 # ── Kinship terms (always Tier 1) ──
 
 _KINSHIP_ZH = {
-    "我妈妈", "我爸爸", "我母亲", "我父亲", "我老公", "我老婆",
-    "我丈夫", "我妻子", "我先生", "我太太", "我儿子", "我女儿",
-    "我哥哥", "我姐姐", "我弟弟", "我妹妹", "我哥", "我姐", "我弟", "我妹",
-    "我妈", "我爸", "我爷爷", "我奶奶", "我外公", "我外婆",
-    "我叔叔", "我阿姨", "我舅舅", "我姑姑", "我家人", "我家里人", "我孩子",
+    "我妈妈",
+    "我爸爸",
+    "我母亲",
+    "我父亲",
+    "我老公",
+    "我老婆",
+    "我丈夫",
+    "我妻子",
+    "我先生",
+    "我太太",
+    "我儿子",
+    "我女儿",
+    "我哥哥",
+    "我姐姐",
+    "我弟弟",
+    "我妹妹",
+    "我哥",
+    "我姐",
+    "我弟",
+    "我妹",
+    "我妈",
+    "我爸",
+    "我爷爷",
+    "我奶奶",
+    "我外公",
+    "我外婆",
+    "我叔叔",
+    "我阿姨",
+    "我舅舅",
+    "我姑姑",
+    "我家人",
+    "我家里人",
+    "我孩子",
 }
 
 # ── Interaction command patterns (Tier 3) ──
 
 _COMMAND_PREFIXES_ZH = (
-    "我想问", "我想知道", "我需要", "我要问", "帮我", "请帮我",
-    "请告诉我", "告诉我", "我想让你", "我希望你", "我要你",
-    "麻烦帮我", "能帮我", "可以帮我",
+    "我想问",
+    "我想知道",
+    "我需要",
+    "我要问",
+    "帮我",
+    "请帮我",
+    "请告诉我",
+    "告诉我",
+    "我想让你",
+    "我希望你",
+    "我要你",
+    "麻烦帮我",
+    "能帮我",
+    "可以帮我",
 )
 _COMMAND_PATTERNS_EN = re.compile(
     r"^(?:can you |could you |please |would you )"
@@ -38,6 +77,7 @@ _DEFAULT_PERSON_THRESHOLD = 0.8
 # ══════════════════════════════════════════════════════════════
 # Producers: generate hints from detected entities
 # ══════════════════════════════════════════════════════════════
+
 
 def _is_kinship(entity: PatternMatch) -> bool:
     return entity.text in _KINSHIP_ZH or entity.text.startswith("my ")
@@ -83,11 +123,13 @@ def produce_hints(
     # Near-miss hints: format matched but validation failed
     if near_misses:
         for nm in near_misses:
-            hints.append(Hint(
-                type="near_miss_format",
-                region=(nm.start, nm.end),
-                data={"original_type": nm.type, "text": nm.text},
-            ))
+            hints.append(
+                Hint(
+                    type="near_miss_format",
+                    region=(nm.start, nm.end),
+                    data={"original_type": nm.type, "text": nm.text},
+                )
+            )
 
     if not self_refs:
         intent = "narrative" if others else "neutral"
@@ -106,10 +148,12 @@ def produce_hints(
     else:
         tier = 2
 
-    hints.append(Hint(
-        type="self_reference_tier",
-        data={"tier": tier, "has_kinship": has_kinship},
-    ))
+    hints.append(
+        Hint(
+            type="self_reference_tier",
+            data={"tier": tier, "has_kinship": has_kinship},
+        )
+    )
 
     # Text intent
     if is_command:
@@ -128,6 +172,7 @@ def produce_hints(
 # Consumers: read hints to adjust behavior
 # ══════════════════════════════════════════════════════════════
 
+
 def get_person_threshold(hints: list[Hint]) -> float:
     """Adjust person name detection threshold based on hints.
 
@@ -144,7 +189,8 @@ def get_person_threshold(hints: list[Hint]) -> float:
 
 
 def filter_self_reference(
-    entities: list[PatternMatch], hints: list[Hint],
+    entities: list[PatternMatch],
+    hints: list[Hint],
 ) -> list[PatternMatch]:
     """Filter self_reference entities based on tier hints.
 
@@ -203,8 +249,10 @@ def boost_cross_layer(
 
         if len(layers_agreeing) >= 2:
             boosted = PatternMatch(
-                text=entity.text, type=entity.type,
-                start=entity.start, end=entity.end,
+                text=entity.text,
+                type=entity.type,
+                start=entity.start,
+                end=entity.end,
                 confidence=min(entity.confidence + _CROSS_LAYER_BOOST, 1.0),
                 layer=entity.layer,
             )

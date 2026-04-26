@@ -47,9 +47,9 @@ class TestOllamaRealDetection:
         results = adapter.detect(text)
 
         for r in results:
-            assert (
-                0 <= r.start < r.end <= len(text)
-            ), f"Invalid offset: {r.text} start={r.start} end={r.end} text_len={len(text)}"
+            assert 0 <= r.start < r.end <= len(text), (
+                f"Invalid offset: {r.text} start={r.start} end={r.end} text_len={len(text)}"
+            )
 
     def test_should_return_empty_when_no_implicit_pii(self, adapter):
         results = adapter.detect("今天天气真不错，适合出去散步")

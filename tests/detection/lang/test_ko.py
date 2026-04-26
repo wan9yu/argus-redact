@@ -1,10 +1,10 @@
 """Tests for Korean regex patterns — data-driven from JSON fixtures."""
 
 import pytest
+
 from argus_redact.lang.ko.patterns import PATTERNS as KO_PATTERNS
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.patterns import match_patterns
-
 from tests.conftest import parametrize_examples
 
 ALL_KO_PATTERNS = KO_PATTERNS + SHARED_PATTERNS

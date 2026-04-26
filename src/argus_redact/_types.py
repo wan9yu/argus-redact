@@ -29,10 +29,10 @@ class Hint:
     detection accuracy and enable context-aware decisions.
     """
 
-    type: str                        # hint category (e.g. "self_reference_tier")
-    data: dict = field(default_factory=dict)   # hint-specific payload
+    type: str  # hint category (e.g. "self_reference_tier")
+    data: dict = field(default_factory=dict)  # hint-specific payload
     region: tuple[int, int] = (0, 0)  # (start, end) in original text, (0,0) = global
-    source_layer: int = 1             # which layer produced this hint
+    source_layer: int = 1  # which layer produced this hint
 
 
 @dataclass(frozen=True)

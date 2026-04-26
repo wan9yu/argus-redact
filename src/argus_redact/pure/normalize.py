@@ -16,52 +16,105 @@ from __future__ import annotations
 import unicodedata
 
 # Characters to strip before matching (invisible, zero-width, direction control)
-_INVISIBLE = frozenset({
-    "\u200b",  # zero-width space
-    "\u200c",  # zero-width non-joiner
-    "\u200d",  # zero-width joiner
-    "\u00ad",  # soft hyphen
-    "\ufeff",  # BOM / zero-width no-break space
-    "\u200e",  # LTR mark
-    "\u200f",  # RTL mark
-    "\u202a",  # LTR embedding
-    "\u202b",  # RTL embedding
-    "\u202c",  # pop directional formatting
-    "\u202d",  # LTR override
-    "\u202e",  # RTL override
-    "\u2066",  # LTR isolate
-    "\u2067",  # RTL isolate
-    "\u2068",  # first strong isolate
-    "\u2069",  # pop directional isolate
-})
+_INVISIBLE = frozenset(
+    {
+        "\u200b",  # zero-width space
+        "\u200c",  # zero-width non-joiner
+        "\u200d",  # zero-width joiner
+        "\u00ad",  # soft hyphen
+        "\ufeff",  # BOM / zero-width no-break space
+        "\u200e",  # LTR mark
+        "\u200f",  # RTL mark
+        "\u202a",  # LTR embedding
+        "\u202b",  # RTL embedding
+        "\u202c",  # pop directional formatting
+        "\u202d",  # LTR override
+        "\u202e",  # RTL override
+        "\u2066",  # LTR isolate
+        "\u2067",  # RTL isolate
+        "\u2068",  # first strong isolate
+        "\u2069",  # pop directional isolate
+    }
+)
 
 MAX_INPUT_SIZE = 1024 * 1024  # 1MB
 
 # High-frequency confusables: Latin ↔ Cyrillic ↔ Greek
-_CONFUSABLES = str.maketrans({
-    # Cyrillic → Latin
-    "\u0430": "a", "\u0435": "e", "\u043e": "o", "\u0440": "p",
-    "\u0441": "c", "\u0443": "y", "\u0445": "x", "\u0456": "i",
-    "\u04bb": "h", "\u0432": "b", "\u043a": "k", "\u043c": "m",
-    "\u0442": "t", "\u043d": "h", "\u0410": "A", "\u0412": "B",
-    "\u0415": "E", "\u041a": "K", "\u041c": "M", "\u041d": "H",
-    "\u041e": "O", "\u0420": "P", "\u0421": "C", "\u0422": "T",
-    "\u0425": "X", "\u0423": "Y",
-    # Greek → Latin
-    "\u03bf": "o", "\u03b1": "a", "\u03b5": "e", "\u03b9": "i",
-    "\u03ba": "k", "\u03bd": "v", "\u03c1": "p", "\u03c4": "t",
-    "\u039f": "O", "\u0391": "A", "\u0392": "B", "\u0395": "E",
-    "\u0397": "H", "\u0399": "I", "\u039a": "K", "\u039c": "M",
-    "\u039d": "N", "\u03a1": "P", "\u03a4": "T", "\u03a7": "X",
-    "\u0396": "Z",
-})
+_CONFUSABLES = str.maketrans(
+    {
+        # Cyrillic → Latin
+        "\u0430": "a",
+        "\u0435": "e",
+        "\u043e": "o",
+        "\u0440": "p",
+        "\u0441": "c",
+        "\u0443": "y",
+        "\u0445": "x",
+        "\u0456": "i",
+        "\u04bb": "h",
+        "\u0432": "b",
+        "\u043a": "k",
+        "\u043c": "m",
+        "\u0442": "t",
+        "\u043d": "h",
+        "\u0410": "A",
+        "\u0412": "B",
+        "\u0415": "E",
+        "\u041a": "K",
+        "\u041c": "M",
+        "\u041d": "H",
+        "\u041e": "O",
+        "\u0420": "P",
+        "\u0421": "C",
+        "\u0422": "T",
+        "\u0425": "X",
+        "\u0423": "Y",
+        # Greek → Latin
+        "\u03bf": "o",
+        "\u03b1": "a",
+        "\u03b5": "e",
+        "\u03b9": "i",
+        "\u03ba": "k",
+        "\u03bd": "v",
+        "\u03c1": "p",
+        "\u03c4": "t",
+        "\u039f": "O",
+        "\u0391": "A",
+        "\u0392": "B",
+        "\u0395": "E",
+        "\u0397": "H",
+        "\u0399": "I",
+        "\u039a": "K",
+        "\u039c": "M",
+        "\u039d": "N",
+        "\u03a1": "P",
+        "\u03a4": "T",
+        "\u03a7": "X",
+        "\u0396": "Z",
+    }
+)
 
 # Chinese digit equivalents (1:1 mapping, no length change)
 _CN_DIGIT_MAP = {
-    "一": "1", "二": "2", "三": "3", "四": "4", "五": "5",
-    "六": "6", "七": "7", "八": "8", "九": "9", "零": "0",
-    "壹": "1", "贰": "2", "叁": "3", "肆": "4", "伍": "5",
-    "陆": "6", "柒": "7", "捌": "8", "玖": "9",
+    "一": "1",
+    "二": "2",
+    "三": "3",
+    "四": "4",
+    "五": "5",
+    "六": "6",
+    "七": "7",
+    "八": "8",
+    "九": "9",
+    "零": "0",
+    "壹": "1",
+    "贰": "2",
+    "叁": "3",
+    "肆": "4",
+    "伍": "5",
+    "陆": "6",
+    "柒": "7",
+    "捌": "8",
+    "玖": "9",
 }
 # Separators tolerated inside digit sequences
 _DIGIT_SEPS = frozenset(" \t.-/，、·;；:：")
@@ -103,7 +156,6 @@ def _normalize_digit_sequences(chars: list[str]) -> None:
         if len(digits) >= _MIN_DIGIT_SEQ and has_cn:
             for idx, ascii_d in digits:
                 chars[idx] = ascii_d
-
 
 
 def normalize_text(text: str) -> tuple[str, list[int] | None]:

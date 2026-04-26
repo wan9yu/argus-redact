@@ -1,6 +1,7 @@
 """Tests for restore() — pure string replacement."""
 
 import pytest
+
 from argus_redact import restore
 
 

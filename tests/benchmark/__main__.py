@@ -32,7 +32,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--lang", default=None, help="Filter by language code")
     parser.add_argument("--mode", default="fast", help="Detection mode(s), comma-separated")
     parser.add_argument("--limit", type=int, default=1000, help="Max samples per dataset")
-    parser.add_argument("--match", choices=["value", "span"], default="value", help="Matching strategy")
+    parser.add_argument(
+        "--match", choices=["value", "span"], default="value", help="Matching strategy"
+    )
     parser.add_argument("--save", action="store_true", help="Save results to JSON")
 
     args = parser.parse_args(argv)

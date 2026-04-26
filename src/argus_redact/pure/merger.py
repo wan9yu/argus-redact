@@ -11,12 +11,16 @@ def _trim_entity(e: PatternMatch, new_start: int, text: str) -> PatternMatch | N
     """Trim entity to start after new_start, return None if nothing left."""
     if new_start >= e.end:
         return None
-    new_text = text[new_start:e.end]
+    new_text = text[new_start : e.end]
     if not new_text.strip():
         return None
     return PatternMatch(
-        text=new_text, type=e.type, start=new_start, end=e.end,
-        confidence=e.confidence, layer=e.layer,
+        text=new_text,
+        type=e.type,
+        start=new_start,
+        end=e.end,
+        confidence=e.confidence,
+        layer=e.layer,
     )
 
 
@@ -57,7 +61,8 @@ try:
     from argus_redact._core import merge_entities as _rust_merge
 
     def merge_entities(
-        entities: list[PatternMatch], text: str = "",
+        entities: list[PatternMatch],
+        text: str = "",
     ) -> list[PatternMatch]:
         """Deduplicate overlapping entity spans (Rust accelerated + priority split)."""
         if not entities:
@@ -67,31 +72,43 @@ try:
         has_priority = any(e.type in _PRIORITY_TYPES for e in entities)
         if not has_priority:
             from argus_redact._core import PatternMatch as RustPM
+
             rust_entities = [
-                RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer)
-                for e in entities
+                RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
             ]
             rust_results = _rust_merge(rust_entities)
             return [
-                PatternMatch(text=r.text, type=r.type, start=r.start, end=r.end,
-                             confidence=r.confidence, layer=r.layer)
+                PatternMatch(
+                    text=r.text,
+                    type=r.type,
+                    start=r.start,
+                    end=r.end,
+                    confidence=r.confidence,
+                    layer=r.layer,
+                )
                 for r in rust_results
             ]
 
         # Has priority entities: merge others with Rust, then priority-split in Python
         from argus_redact._core import PatternMatch as RustPM
+
         others = [e for e in entities if e.type not in _PRIORITY_TYPES]
         priority = [e for e in entities if e.type in _PRIORITY_TYPES]
 
         if others:
             rust_entities = [
-                RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer)
-                for e in others
+                RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in others
             ]
             rust_results = _rust_merge(rust_entities)
             merged_others = [
-                PatternMatch(text=r.text, type=r.type, start=r.start, end=r.end,
-                             confidence=r.confidence, layer=r.layer)
+                PatternMatch(
+                    text=r.text,
+                    type=r.type,
+                    start=r.start,
+                    end=r.end,
+                    confidence=r.confidence,
+                    layer=r.layer,
+                )
                 for r in rust_results
             ]
         else:
@@ -100,6 +117,7 @@ try:
         return _merge_priority(merged_others, priority, text)
 
 except ImportError:
+
     def _overlaps(a: PatternMatch, b: PatternMatch) -> bool:
         return a.start < b.end and b.start < a.end
 
@@ -114,7 +132,8 @@ except ImportError:
         return a if a.confidence >= b.confidence else b
 
     def merge_entities(
-        entities: list[PatternMatch], text: str = "",
+        entities: list[PatternMatch],
+        text: str = "",
     ) -> list[PatternMatch]:
         """Deduplicate overlapping entity spans (Python fallback)."""
         if not entities:

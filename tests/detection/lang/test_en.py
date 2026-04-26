@@ -1,10 +1,10 @@
 """Tests for English regex patterns — data-driven from JSON fixtures."""
 
 import pytest
+
 from argus_redact.lang.en.patterns import PATTERNS as EN_PATTERNS
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.patterns import match_patterns
-
 from tests.conftest import assert_pattern_match, parametrize_examples
 
 ALL_EN_PATTERNS = EN_PATTERNS + SHARED_PATTERNS

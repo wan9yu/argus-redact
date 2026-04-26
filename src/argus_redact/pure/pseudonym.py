@@ -13,6 +13,7 @@ def max_pseudonym_length(config: dict | None = None) -> int:
     Useful for streaming buffer sizing.
     """
     from argus_redact.pure.replacer import DEFAULT_PREFIXES
+
     prefixes = set(DEFAULT_PREFIXES.values())
     if config:
         for type_config in config.values():

@@ -6,6 +6,7 @@ Run with: pytest tests/impure/test_spacy_real.py -m ner -v
 import importlib.util
 
 import pytest
+
 from argus_redact import redact, restore
 
 HAS_SPACY = importlib.util.find_spec("spacy") is not None
@@ -50,8 +51,7 @@ class TestSpaCyRealNER:
 
         for r in results:
             assert text[r.start : r.end] == r.text, (
-                f"Offset mismatch: text[{r.start}:{r.end}]="
-                f"{text[r.start:r.end]!r} != {r.text!r}"
+                f"Offset mismatch: text[{r.start}:{r.end}]={text[r.start : r.end]!r} != {r.text!r}"
             )
 
     def test_should_handle_complex_sentence(self, adapter):

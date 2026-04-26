@@ -121,7 +121,10 @@ class TestUnifiedPrefix:
         }
         redacted, key = redact(
             "张三电话13812345678，身份证110101199003074610",
-            seed=42, mode="fast", names=["张三"], config=config,
+            seed=42,
+            mode="fast",
+            names=["张三"],
+            config=config,
         )
 
         for code in key:
@@ -129,7 +132,9 @@ class TestUnifiedPrefix:
 
     def test_should_use_default_prefixes_when_not_configured(self):
         redacted, key = redact(
-            "电话13812345678", seed=42, mode="fast",
+            "电话13812345678",
+            seed=42,
+            mode="fast",
         )
 
         # Default: phone uses mask, not pseudonym prefix
@@ -142,6 +147,7 @@ class TestLargeTextDoS:
 
     def test_should_handle_100kb_under_5s(self):
         import time
+
         text = "电话13812345678，邮箱test@example.com。" * 2500  # ~100KB
 
         start = time.perf_counter()
@@ -153,6 +159,7 @@ class TestLargeTextDoS:
 
     def test_should_handle_500kb_under_30s(self):
         import time
+
         text = "电话13812345678，邮箱test@example.com。" * 12500  # ~500KB
 
         start = time.perf_counter()
@@ -163,6 +170,7 @@ class TestLargeTextDoS:
 
     def test_should_reject_over_1mb(self):
         import pytest
+
         text = "x" * (1024 * 1024 + 1)  # just over 1MB
 
         with pytest.raises(ValueError, match="exceeds maximum"):

@@ -4,7 +4,6 @@ semantic structure needed for LLM tool use / function calling."""
 import json
 
 from argus_redact import redact, restore
-
 from tests.conftest import parametrize_examples
 
 
@@ -19,9 +18,9 @@ class TestFunctionCallingCompatibility:
 
         # PII should be gone
         for pii in example["pii_values"]:
-            assert (
-                pii not in redacted
-            ), f"PII '{pii}' still in redacted text: {example['description']}"
+            assert pii not in redacted, (
+                f"PII '{pii}' still in redacted text: {example['description']}"
+            )
 
         # Semantic tokens (actions, times, amounts) must survive
         for token in example["semantic_tokens"]:

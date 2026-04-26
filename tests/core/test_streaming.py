@@ -72,5 +72,6 @@ class TestStreamingRestorer:
 
     def test_should_raise_on_unknown_strategy(self):
         import pytest
+
         with pytest.raises(ValueError, match="Unknown strategy"):
             StreamingRestorer({}, strategy="invalid")

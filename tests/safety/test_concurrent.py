@@ -50,8 +50,7 @@ class TestConcurrentRedact:
         """100 concurrent calls should complete without deadlock."""
         with ThreadPoolExecutor(max_workers=16) as pool:
             futures = [
-                pool.submit(redact, "电话13812345678", seed=i, mode="fast")
-                for i in range(100)
+                pool.submit(redact, "电话13812345678", seed=i, mode="fast") for i in range(100)
             ]
             results = [f.result() for f in futures]
 

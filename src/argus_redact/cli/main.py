@@ -216,7 +216,9 @@ def main():
     p_redact.add_argument("-k", "--key", required=True, help="Key file path")
     p_redact.add_argument("-o", "--output", default=None, help="Output file (default: stdout)")
     p_redact.add_argument("-l", "--lang", default="zh", help="Language (default: zh)")
-    p_redact.add_argument("-m", "--mode", default="fast", help="Detection mode: fast (default), ner, auto")
+    p_redact.add_argument(
+        "-m", "--mode", default="fast", help="Detection mode: fast (default), ner, auto"
+    )
     p_redact.add_argument("-s", "--seed", default=None, help="Random seed for determinism")
     p_redact.add_argument("-c", "--config", default=None, help="Config file (JSON or YAML)")
     p_redact.set_defaults(func=cmd_redact)
@@ -233,7 +235,9 @@ def main():
     p_assess.add_argument("input", nargs="?", default=None, help="Input file (default: stdin)")
     p_assess.add_argument("-o", "--output", default=None, help="Save report to file")
     p_assess.add_argument("-l", "--lang", default="zh", help="Language (default: zh)")
-    p_assess.add_argument("-m", "--mode", default="fast", help="Detection mode: fast (default), ner, auto")
+    p_assess.add_argument(
+        "-m", "--mode", default="fast", help="Detection mode: fast (default), ner, auto"
+    )
     # PDF/markdown report generation removed — use redact(report=True) for raw data
     p_assess.set_defaults(func=cmd_assess)
 

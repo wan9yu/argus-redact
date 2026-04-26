@@ -21,6 +21,7 @@ class TestProfileFiltering:
 
     def test_should_raise_on_unknown_profile(self):
         import pytest
+
         with pytest.raises(ValueError, match="Unknown profile"):
             redact("test", lang="zh", mode="fast", profile="nonexistent")
 
@@ -45,6 +46,7 @@ class TestTypeFiltering:
 
     def test_types_and_types_exclude_are_mutually_exclusive(self):
         import pytest
+
         with pytest.raises(ValueError, match="mutually exclusive"):
             redact("test", lang="zh", mode="fast", types=["phone"], types_exclude=["id_number"])
 

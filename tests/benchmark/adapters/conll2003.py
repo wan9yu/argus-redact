@@ -37,28 +37,34 @@ def _decode_entities(tokens: list[str], tags: list[int]) -> list[Entity]:
 
         if bio == "B":
             if current_tokens and current_type:
-                entities.append(Entity(
-                    text=" ".join(current_tokens),
-                    type=current_type,
-                ))
+                entities.append(
+                    Entity(
+                        text=" ".join(current_tokens),
+                        type=current_type,
+                    )
+                )
             current_tokens = [token]
             current_type = etype
         elif bio == "I" and etype == current_type:
             current_tokens.append(token)
         else:
             if current_tokens and current_type:
-                entities.append(Entity(
-                    text=" ".join(current_tokens),
-                    type=current_type,
-                ))
+                entities.append(
+                    Entity(
+                        text=" ".join(current_tokens),
+                        type=current_type,
+                    )
+                )
             current_tokens = []
             current_type = None
 
     if current_tokens and current_type:
-        entities.append(Entity(
-            text=" ".join(current_tokens),
-            type=current_type,
-        ))
+        entities.append(
+            Entity(
+                text=" ".join(current_tokens),
+                type=current_type,
+            )
+        )
 
     return entities
 

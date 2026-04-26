@@ -84,12 +84,14 @@ class GretelFinanceAdapter(DatasetAdapter):
                 if label in LABEL_MAP:
                     start = span["start"]
                     end = span["end"]
-                    entities.append(Entity(
-                        text=text[start:end],
-                        type=LABEL_MAP[label],
-                        start=start,
-                        end=end,
-                    ))
+                    entities.append(
+                        Entity(
+                            text=text[start:end],
+                            type=LABEL_MAP[label],
+                            start=start,
+                            end=end,
+                        )
+                    )
 
             if not entities:
                 continue

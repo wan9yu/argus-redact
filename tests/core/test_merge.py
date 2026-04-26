@@ -232,8 +232,8 @@ class TestMergeComplexScenarios:
         for e in result:
             assert e.start >= 0
             assert e.end <= len(text)
-            assert text[e.start:e.end] == e.text, (
-                f"Offset mismatch: text[{e.start}:{e.end}]='{text[e.start:e.end]}' != '{e.text}'"
+            assert text[e.start : e.end] == e.text, (
+                f"Offset mismatch: text[{e.start}:{e.end}]='{text[e.start : e.end]}' != '{e.text}'"
             )
 
 

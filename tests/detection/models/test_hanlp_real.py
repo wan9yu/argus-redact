@@ -54,8 +54,7 @@ class TestHanLPRealNER:
 
         for r in results:
             assert text[r.start : r.end] == r.text, (
-                f"Offset mismatch: text[{r.start}:{r.end}]="
-                f"{text[r.start:r.end]!r} != {r.text!r}"
+                f"Offset mismatch: text[{r.start}:{r.end}]={text[r.start : r.end]!r} != {r.text!r}"
             )
 
     def test_should_handle_complex_sentence(self, adapter):

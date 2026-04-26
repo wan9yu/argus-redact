@@ -15,12 +15,11 @@ Organized by user concern, not implementation detail:
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from argus_redact import redact, restore
 from argus_redact._types import NEREntity
 from argus_redact.impure.ner import NERAdapter
-
 from tests.conftest import parametrize_examples
-
 
 # ── Helpers ──
 
@@ -103,7 +102,9 @@ class TestRedactRoundtrip:
 
         if example["pii_values"]:
             for pii in example["pii_values"]:
-                assert pii not in redacted, f"PII '{pii}' still in redacted: {example['description']}"
+                assert pii not in redacted, (
+                    f"PII '{pii}' still in redacted: {example['description']}"
+                )
             restored = restore(redacted, key)
             for pii in example["pii_values"]:
                 assert pii in restored, f"PII '{pii}' not recovered: {example['description']}"
@@ -221,7 +222,10 @@ class TestRedactConfig:
     @parametrize_examples("redact_config.json")
     def test_should_apply_config_when_provided(self, example):
         redacted, key = redact(
-            example["input"], seed=42, mode="fast", config=example["config"],
+            example["input"],
+            seed=42,
+            mode="fast",
+            config=example["config"],
         )
         assert example["entity_text"] not in redacted
         replacement = [k for k, v in key.items() if v == example["entity_text"]]
@@ -309,7 +313,9 @@ class TestDetailedMode:
         assert details["stats"]["total"] == 0
 
     def test_should_show_multiple_entities(self):
-        _, _, details = redact("电话13812345678，邮箱test@example.com", detailed=True, seed=42, mode="fast")
+        _, _, details = redact(
+            "电话13812345678，邮箱test@example.com", detailed=True, seed=42, mode="fast"
+        )
         assert len(details["entities"]) == 2
         types = {e["type"] for e in details["entities"]}
         assert types == {"phone", "email"}
@@ -329,7 +335,9 @@ class TestMultiLanguageRedact:
 
         if example["pii_values"]:
             for pii in example["pii_values"]:
-                assert pii not in redacted, f"PII '{pii}' still in redacted: {example['description']}"
+                assert pii not in redacted, (
+                    f"PII '{pii}' still in redacted: {example['description']}"
+                )
             restored = restore(redacted, key)
             for pii in example["pii_values"]:
                 assert pii in restored, f"PII '{pii}' not recovered: {example['description']}"
@@ -415,9 +423,14 @@ class TestMultiLanguageNER:
         assert restore(redacted, key) == "张三在北京工作"
 
     def test_should_redact_mixed_zh_en_names(self):
-        adapter = _mock_ner_adapter({
-            "张三": [NEREntity("张三", "person", 0, 2, 0.95), NEREntity("John", "person", 3, 7, 0.90)],
-        })
+        adapter = _mock_ner_adapter(
+            {
+                "张三": [
+                    NEREntity("张三", "person", 0, 2, 0.95),
+                    NEREntity("John", "person", 3, 7, 0.90),
+                ],
+            }
+        )
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact("张三和John在星巴克聊天", seed=42, mode="ner", lang=["zh", "en"])
         assert "张三" not in redacted
@@ -426,15 +439,19 @@ class TestMultiLanguageNER:
         assert "张三" in restored and "John" in restored
 
     def test_should_redact_three_language_names(self):
-        adapter = _mock_ner_adapter({
-            "张三": [
-                NEREntity("张三", "person", 0, 2, 0.95),
-                NEREntity("田中", "person", 3, 5, 0.90),
-                NEREntity("김철수", "person", 6, 9, 0.88),
-            ],
-        })
+        adapter = _mock_ner_adapter(
+            {
+                "张三": [
+                    NEREntity("张三", "person", 0, 2, 0.95),
+                    NEREntity("田中", "person", 3, 5, 0.90),
+                    NEREntity("김철수", "person", 6, 9, 0.88),
+                ],
+            }
+        )
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
-            redacted, key = redact("张三和田中和김철수开会", seed=42, mode="ner", lang=["zh", "ja", "ko"])
+            redacted, key = redact(
+                "张三和田中和김철수开会", seed=42, mode="ner", lang=["zh", "ja", "ko"]
+            )
         for name in ("张三", "田中", "김철수"):
             assert name not in redacted
         restored = restore(redacted, key)
@@ -456,20 +473,26 @@ class TestMultiLanguageNER:
 
 class TestRedactWithSemantic:
     def test_should_detect_implicit_pii_when_auto_mode(self):
-        adapter = _mock_semantic_adapter({"那个地方": [NEREntity("那个地方", "location", 8, 12, 0.7)]})
+        adapter = _mock_semantic_adapter(
+            {"那个地方": [NEREntity("那个地方", "location", 8, 12, 0.7)]}
+        )
         with patch("argus_redact.glue.redact._get_semantic_adapter", return_value=adapter):
             redacted, key = redact("老王说他上周在那个地方见了人", seed=42, mode="auto", lang="zh")
         assert "那个地方" not in redacted
 
     def test_should_skip_semantic_when_ner_mode(self):
-        adapter = _mock_semantic_adapter({"那个地方": [NEREntity("那个地方", "location", 8, 12, 0.7)]})
+        adapter = _mock_semantic_adapter(
+            {"那个地方": [NEREntity("那个地方", "location", 8, 12, 0.7)]}
+        )
         with patch("argus_redact.glue.redact._get_semantic_adapter", return_value=adapter):
             redacted, key = redact("老王说他上周在那个地方见了人", seed=42, mode="ner", lang="zh")
         assert "那个地方" in redacted
         adapter.detect.assert_not_called()
 
     def test_should_skip_semantic_when_fast_mode(self):
-        adapter = _mock_semantic_adapter({"那个地方": [NEREntity("那个地方", "location", 8, 12, 0.7)]})
+        adapter = _mock_semantic_adapter(
+            {"那个地方": [NEREntity("那个地方", "location", 8, 12, 0.7)]}
+        )
         with patch("argus_redact.glue.redact._get_semantic_adapter", return_value=adapter):
             redacted, key = redact("老王说他上周在那个地方见了人", seed=42, mode="fast", lang="zh")
         assert "那个地方" in redacted

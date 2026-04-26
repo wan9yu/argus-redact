@@ -70,7 +70,7 @@ def _print_report(title, result):
         total_r = c["tp"] + c["fn"]
         p = c["tp"] / total_p if total_p > 0 else 1.0
         r = c["tp"] / total_r if total_r > 0 else 1.0
-        print(f"  {etype:15s} P={p:.0%} R={r:.0%}" f" (TP={c['tp']} FP={c['fp']} FN={c['fn']})")
+        print(f"  {etype:15s} P={p:.0%} R={r:.0%} (TP={c['tp']} FP={c['fp']} FN={c['fn']})")
 
 
 class TestBenchmarkChinese:

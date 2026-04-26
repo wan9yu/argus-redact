@@ -14,7 +14,23 @@ SURNAMES = (
 SURNAME_SET = frozenset(SURNAMES)
 
 # Compound surnames (2 chars)
-COMPOUND_SURNAMES = frozenset({
-    "欧阳", "司马", "上官", "诸葛", "东方", "皇甫", "令狐", "公孙",
-    "慕容", "尉迟", "长孙", "宇文", "司徒", "端木", "南宫", "西门",
-})
+COMPOUND_SURNAMES = frozenset(
+    {
+        "欧阳",
+        "司马",
+        "上官",
+        "诸葛",
+        "东方",
+        "皇甫",
+        "令狐",
+        "公孙",
+        "慕容",
+        "尉迟",
+        "长孙",
+        "宇文",
+        "司徒",
+        "端木",
+        "南宫",
+        "西门",
+    }
+)

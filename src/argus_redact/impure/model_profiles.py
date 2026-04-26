@@ -14,9 +14,9 @@ class ModelProfile:
     """Configuration for a specific LLM model."""
 
     name: str
-    prompt_prefix: str = ""        # prepended to user prompt (e.g. /no_think)
-    timeout: int = 30              # HTTP timeout per request (seconds)
-    confidence: float = 0.7        # default confidence for detected entities
+    prompt_prefix: str = ""  # prepended to user prompt (e.g. /no_think)
+    timeout: int = 30  # HTTP timeout per request (seconds)
+    confidence: float = 0.7  # default confidence for detected entities
     notes: str = ""
 
 

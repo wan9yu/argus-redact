@@ -4,29 +4,91 @@ Person name detection is handled separately by person.py (candidate + scoring).
 This module only contains structural PII patterns (phone, ID, bank card, etc.).
 """
 
-from argus_redact.lang.zh.surnames import SURNAMES as _SURNAMES
-
 # Leading verbs/particles/questions stripped from org/school candidates before validation.
 # Matched via one-pass longest-prefix scan, so order within the tuple is irrelevant.
 _LEADING_NOISE = (
-    "请查一下", "请查下", "请查", "查一下", "查下",
-    "就职于", "供职于", "任职于", "毕业于", "就读于", "就读",
-    "考入", "考上", "去过", "到过",
-    "这是", "那是", "这个", "那个", "那里", "这里",
-    "在", "去", "从", "到", "被", "给", "让", "有", "是",
-    "的", "了", "和", "与", "把", "将", "已", "问", "看", "找",
+    "请查一下",
+    "请查下",
+    "请查",
+    "查一下",
+    "查下",
+    "就职于",
+    "供职于",
+    "任职于",
+    "毕业于",
+    "就读于",
+    "就读",
+    "考入",
+    "考上",
+    "去过",
+    "到过",
+    "这是",
+    "那是",
+    "这个",
+    "那个",
+    "那里",
+    "这里",
+    "在",
+    "去",
+    "从",
+    "到",
+    "被",
+    "给",
+    "让",
+    "有",
+    "是",
+    "的",
+    "了",
+    "和",
+    "与",
+    "把",
+    "将",
+    "已",
+    "问",
+    "看",
+    "找",
     "一下",
 )
 _ORG_SUFFIXES = (
-    "股份有限公司", "有限责任公司", "有限公司", "责任公司",
-    "集团公司", "集团", "公司", "企业", "工厂", "银行", "保险",
-    "证券", "基金", "医院", "诊所", "药房", "事务所",
-    "研究院", "研究所", "实验室",
+    "股份有限公司",
+    "有限责任公司",
+    "有限公司",
+    "责任公司",
+    "集团公司",
+    "集团",
+    "公司",
+    "企业",
+    "工厂",
+    "银行",
+    "保险",
+    "证券",
+    "基金",
+    "医院",
+    "诊所",
+    "药房",
+    "事务所",
+    "研究院",
+    "研究所",
+    "实验室",
 )
 _SCHOOL_SUFFIXES = (
-    "大学", "学院", "中学", "小学", "高中", "初中", "附中", "附小",
-    "实验学校", "外国语学校", "师范学校", "职业学校", "技术学校",
-    "幼儿园", "书院", "学堂", "党校",
+    "大学",
+    "学院",
+    "中学",
+    "小学",
+    "高中",
+    "初中",
+    "附中",
+    "附小",
+    "实验学校",
+    "外国语学校",
+    "师范学校",
+    "职业学校",
+    "技术学校",
+    "幼儿园",
+    "书院",
+    "学堂",
+    "党校",
 )
 
 
@@ -36,14 +98,11 @@ def _has_name_before_suffix(value: str, suffixes: tuple[str, ...]) -> bool:
     while True:
         for noise in _LEADING_NOISE:
             if stripped.startswith(noise) and len(stripped) > len(noise):
-                stripped = stripped[len(noise):]
+                stripped = stripped[len(noise) :]
                 break
         else:
             break
-    return any(
-        stripped.endswith(suffix) and len(stripped) > len(suffix)
-        for suffix in suffixes
-    )
+    return any(stripped.endswith(suffix) and len(stripped) > len(suffix) for suffix in suffixes)
 
 
 def _validate_organization(value: str) -> bool:
@@ -78,24 +137,62 @@ def _validate_id_number(value: str) -> bool:
 
 # Known Chinese bank BIN prefixes (6 digits)
 _BANK_BINS = {
-    "621700", "621660", "621662", "621663",  # 建设银行
-    "622202", "622200", "622208", "621225",  # 工商银行
-    "622848", "622849", "620059", "621282",  # 农业银行
-    "622568", "622569", "625912", "625911",  # 中国银行
-    "622588", "622598", "621483", "622575",  # 招商银行
-    "622155", "622156", "622157", "621002",  # 交通银行
-    "622689", "622688", "621691", "622622",  # 民生银行
-    "622668", "622669", "622670", "622671",  # 中信银行
-    "622630", "622631", "622632", "622633",  # 浦发银行
-    "621283", "621285", "621286", "621484",  # 光大银行
-    "622580", "622581", "622582", "622583",  # 兴业银行
-    "622150", "622151", "622152", "622153",  # 平安银行
-    "622700", "622701", "622690", "622692",  # 邮储银行
+    "621700",
+    "621660",
+    "621662",
+    "621663",  # 建设银行
+    "622202",
+    "622200",
+    "622208",
+    "621225",  # 工商银行
+    "622848",
+    "622849",
+    "620059",
+    "621282",  # 农业银行
+    "622568",
+    "622569",
+    "625912",
+    "625911",  # 中国银行
+    "622588",
+    "622598",
+    "621483",
+    "622575",  # 招商银行
+    "622155",
+    "622156",
+    "622157",
+    "621002",  # 交通银行
+    "622689",
+    "622688",
+    "621691",
+    "622622",  # 民生银行
+    "622668",
+    "622669",
+    "622670",
+    "622671",  # 中信银行
+    "622630",
+    "622631",
+    "622632",
+    "622633",  # 浦发银行
+    "621283",
+    "621285",
+    "621286",
+    "621484",  # 光大银行
+    "622580",
+    "622581",
+    "622582",
+    "622583",  # 兴业银行
+    "622150",
+    "622151",
+    "622152",
+    "622153",  # 平安银行
+    "622700",
+    "622701",
+    "622690",
+    "622692",  # 邮储银行
 }
 
 
 from argus_redact.lang.shared.patterns import validate_luhn as _validate_luhn
-
 
 # GB 32100-2015 Unified Social Credit Code constants
 _CREDIT_CODE_CHARSET = "0123456789ABCDEFGHJKLMNPQRTUWXY"
@@ -382,7 +479,7 @@ PATTERNS = [
             r"(?:民族\s*[:：]?\s*)" + _ETHNIC_GROUPS_ALL + r"族"
             r"|"
             # Standalone XX族 without 民族 keyword — excludes 高山/土 (ambiguous as common words)
-            + _ETHNIC_GROUPS_SAFE + r"族"
+             + _ETHNIC_GROUPS_SAFE + r"族"
         ),
         "description": "Chinese ethnicity (56 ethnic groups, keyword-triggered or standalone XX族)",
     },
@@ -461,8 +558,7 @@ PATTERNS = [
         "label": "[医疗信息已脱敏]",
         "pattern": (
             r"HIV[阳阴]性"
-            r"|" + _DISEASE_KEYWORDS +
-            r"|[\u4e00-\u9fff]{2,6}手术"
+            r"|" + _DISEASE_KEYWORDS + r"|[\u4e00-\u9fff]{2,6}手术"
         ),
         "description": "Medical standalone (HIV/disease names/surgery)",
     },

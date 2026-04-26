@@ -11,14 +11,25 @@ from argus_redact.telemetry import PerfRecord, set_perf_hook
 class TestPerfRecord:
     def test_should_have_required_fields(self):
         record = PerfRecord(
-            version="0.4.6", timestamp="2026-04-06T12:00:00",
-            text_len=100, text_ascii_ratio=0.5,
-            lang=["zh"], mode="fast",
-            normalize_ms=0.1, layer_1_ms=0.3, layer_1b_person_ms=0.1,
-            layer_2_ms=0.0, layer_3_ms=0.0,
-            merge_ms=0.01, replace_ms=0.02, total_ms=0.54,
-            entities_found=2, entity_types=["phone", "email"],
-            rust_core=True, slow=False, sampled=False,
+            version="0.4.6",
+            timestamp="2026-04-06T12:00:00",
+            text_len=100,
+            text_ascii_ratio=0.5,
+            lang=["zh"],
+            mode="fast",
+            normalize_ms=0.1,
+            layer_1_ms=0.3,
+            layer_1b_person_ms=0.1,
+            layer_2_ms=0.0,
+            layer_3_ms=0.0,
+            merge_ms=0.01,
+            replace_ms=0.02,
+            total_ms=0.54,
+            entities_found=2,
+            entity_types=["phone", "email"],
+            rust_core=True,
+            slow=False,
+            sampled=False,
         )
 
         assert record.text_len == 100
@@ -26,15 +37,27 @@ class TestPerfRecord:
 
     def test_should_serialize_to_json(self):
         from dataclasses import asdict
+
         record = PerfRecord(
-            version="0.4.6", timestamp="2026-04-06T12:00:00",
-            text_len=50, text_ascii_ratio=1.0,
-            lang=["en"], mode="fast",
-            normalize_ms=0.0, layer_1_ms=0.1, layer_1b_person_ms=0.0,
-            layer_2_ms=0.0, layer_3_ms=0.0,
-            merge_ms=0.0, replace_ms=0.0, total_ms=0.1,
-            entities_found=0, entity_types=[],
-            rust_core=False, slow=False, sampled=True,
+            version="0.4.6",
+            timestamp="2026-04-06T12:00:00",
+            text_len=50,
+            text_ascii_ratio=1.0,
+            lang=["en"],
+            mode="fast",
+            normalize_ms=0.0,
+            layer_1_ms=0.1,
+            layer_1b_person_ms=0.0,
+            layer_2_ms=0.0,
+            layer_3_ms=0.0,
+            merge_ms=0.0,
+            replace_ms=0.0,
+            total_ms=0.1,
+            entities_found=0,
+            entity_types=[],
+            rust_core=False,
+            slow=False,
+            sampled=True,
         )
 
         line = json.dumps(asdict(record))
@@ -94,11 +117,13 @@ class TestPerfLogFile:
             os.environ["ARGUS_PERF_LOG"] = path
             os.environ["ARGUS_PERF_SAMPLE"] = "1.0"  # 100% sampling for test
             from argus_redact.telemetry import _init_file_hook
+
             _init_file_hook()
 
             redact("电话13812345678", seed=42, mode="fast")
 
             from argus_redact.telemetry import set_perf_hook
+
             set_perf_hook(None)
 
             with open(path) as f:

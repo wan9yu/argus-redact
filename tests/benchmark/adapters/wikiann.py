@@ -41,10 +41,12 @@ def _decode_entities(tokens: list[str], tags: list[int], lang: str) -> list[Enti
             # Flush previous entity
             if current_tokens and current_type:
                 text = "" if lang in ("zh", "ja") else " "
-                entities.append(Entity(
-                    text=text.join(current_tokens),
-                    type=current_type,
-                ))
+                entities.append(
+                    Entity(
+                        text=text.join(current_tokens),
+                        type=current_type,
+                    )
+                )
             current_tokens = [token]
             current_type = etype
         elif bio == "I" and etype == current_type:
@@ -53,20 +55,24 @@ def _decode_entities(tokens: list[str], tags: list[int], lang: str) -> list[Enti
             # Flush previous entity
             if current_tokens and current_type:
                 text = "" if lang in ("zh", "ja") else " "
-                entities.append(Entity(
-                    text=text.join(current_tokens),
-                    type=current_type,
-                ))
+                entities.append(
+                    Entity(
+                        text=text.join(current_tokens),
+                        type=current_type,
+                    )
+                )
             current_tokens = []
             current_type = None
 
     # Flush last entity
     if current_tokens and current_type:
         text = "" if lang in ("zh", "ja") else " "
-        entities.append(Entity(
-            text=text.join(current_tokens),
-            type=current_type,
-        ))
+        entities.append(
+            Entity(
+                text=text.join(current_tokens),
+                type=current_type,
+            )
+        )
 
     return entities
 

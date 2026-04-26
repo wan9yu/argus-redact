@@ -2,9 +2,9 @@
 
 import random
 
-from argus_redact.pure.patterns import match_patterns
-from argus_redact.lang.zh.patterns import PATTERNS as ZH_PATTERNS
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED
+from argus_redact.lang.zh.patterns import PATTERNS as ZH_PATTERNS
+from argus_redact.pure.patterns import match_patterns
 from argus_redact.specs import get, list_types
 from argus_redact.specs import zh as _zh  # noqa: F401
 
@@ -86,6 +86,7 @@ class TestFaker:
 
     def test_id_number_faker_should_pass_checksum(self):
         from argus_redact.lang.zh.patterns import _validate_id_number
+
         rng = random.Random(42)
         id_def = get("zh", "id_number")
         for _ in range(20):
@@ -94,6 +95,7 @@ class TestFaker:
 
     def test_bank_card_faker_should_pass_validation(self):
         from argus_redact.lang.zh.patterns import _validate_bank_card
+
         rng = random.Random(42)
         card_def = get("zh", "bank_card")
         for _ in range(20):

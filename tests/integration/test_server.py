@@ -11,8 +11,9 @@ pytestmark = pytest.mark.skipif(not HAS_STARLETTE, reason="starlette not install
 
 @pytest.fixture(scope="module")
 def client():
-    from argus_redact.server import create_app
     from starlette.testclient import TestClient
+
+    from argus_redact.server import create_app
 
     return TestClient(create_app())
 
@@ -178,9 +179,11 @@ class TestServerHealth:
 def auth_client():
     """Client for a server with API key auth enabled."""
     import os
+
     os.environ["ARGUS_API_KEY"] = "test-secret-key"
-    from argus_redact.server import create_app
     from starlette.testclient import TestClient
+
+    from argus_redact.server import create_app
 
     app = create_app()
     yield TestClient(app)
@@ -229,7 +232,9 @@ class TestServerInputValidation:
         resp = client.post("/redact", json={"text": text, "mode": "fast"})
 
         assert resp.status_code == 400
-        assert "exceeds" in resp.json()["error"].lower() or "maximum" in resp.json()["error"].lower()
+        assert (
+            "exceeds" in resp.json()["error"].lower() or "maximum" in resp.json()["error"].lower()
+        )
 
     def test_should_reject_missing_text(self, client):
         resp = client.post("/redact", json={"mode": "fast"})

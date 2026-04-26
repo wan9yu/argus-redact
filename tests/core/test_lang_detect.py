@@ -1,7 +1,5 @@
 """Tests for detect_languages() — script-based language detection for lang='auto'."""
 
-import pytest
-
 
 class TestDetectLanguagesPureScripts:
     """Single-script inputs route to the expected language pack."""
