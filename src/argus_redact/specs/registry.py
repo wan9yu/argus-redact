@@ -44,6 +44,7 @@ class PIITypeDef:
 
     # ── Faker ──
     faker: Callable | None = None  # (rng: random.Random) -> str
+    faker_reserved: Callable | None = None  # (value: str, rng: random.Random) -> str — reserved-range or range-noise faker for realistic strategy
 
     # ── Risk / Compliance ──
     sensitivity: int = 2  # 1=low, 2=medium, 3=high, 4=critical

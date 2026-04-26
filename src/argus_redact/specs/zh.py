@@ -27,6 +27,16 @@ from .fakers_zh import (
     fake_social_security,
     fake_wechat,
 )
+from .fakers_zh_reserved import (
+    fake_address_reserved,
+    fake_bank_card_reserved,
+    fake_id_number_reserved,
+    fake_license_plate_reserved,
+    fake_passport_reserved,
+    fake_person_reserved,
+    fake_phone_landline_reserved,
+    fake_phone_reserved,
+)
 from .registry import PIITypeDef, list_types, register
 
 # ── Phone ──
@@ -70,6 +80,7 @@ register(
         ),
         sensitivity=3,
         faker=fake_phone,
+        faker_reserved=fake_phone_reserved,
         source="工信部《电信网编号计划》(2017)",
         description="Chinese mobile phone number",
     )
@@ -108,6 +119,7 @@ register(
         ),
         sensitivity=3,
         faker=fake_phone_landline,
+        faker_reserved=fake_phone_landline_reserved,
         source="工信部《电信网编号计划》(2017)",
         description="Chinese landline phone number",
     )
@@ -159,6 +171,7 @@ register(
         ),
         sensitivity=4,
         faker=fake_id_number,
+        faker_reserved=fake_id_number_reserved,
         source="GB 11643-1999《公民身份号码》",
         description="Chinese 18-digit national ID",
     )
@@ -203,6 +216,7 @@ register(
         ),
         sensitivity=4,
         faker=fake_bank_card,
+        faker_reserved=fake_bank_card_reserved,
         source="ISO/IEC 7812, 中国银联BIN分配表",
         description="Chinese bank card number",
     )
@@ -233,6 +247,7 @@ register(
         _patterns=(),
         sensitivity=3,
         faker=fake_passport,
+        faker_reserved=fake_passport_reserved,
         source="中华人民共和国护照法",
         description="Chinese passport number",
     )
@@ -278,6 +293,7 @@ register(
         ),
         sensitivity=2,
         faker=fake_license_plate,
+        faker_reserved=fake_license_plate_reserved,
         source="GA 36-2018《中华人民共和国机动车号牌》",
         description="Chinese license plate",
     )
@@ -355,6 +371,7 @@ register(
         ),
         sensitivity=2,
         faker=fake_address,
+        faker_reserved=fake_address_reserved,
         source="GB/T 2260《中华人民共和国行政区划代码》",
         description="Chinese structured address",
     )
@@ -967,6 +984,7 @@ register(
         _patterns=(),  # Person names are detected by lang/zh/person.py, not by regex PATTERNS
         sensitivity=3,
         faker=fake_person,
+        faker_reserved=fake_person_reserved,
         source="公安部全国姓名统计, 百家姓",
         description="Chinese person name (candidate generation + evidence scoring, see person.py)",
     )

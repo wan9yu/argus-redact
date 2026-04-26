@@ -2,10 +2,62 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import os
+import random
+from typing import Callable
+
 from argus_redact._types import PatternMatch
 from argus_redact.pure.pseudonym import PseudonymGenerator
 
-VALID_STRATEGIES = ("pseudonym", "mask", "remove", "category", "name_mask", "landline_mask")
+VALID_STRATEGIES = ("pseudonym", "realistic", "mask", "remove", "category", "name_mask", "landline_mask")
+
+_MAX_REROLL_ATTEMPTS = 10  # well above expected HMAC collision rate for practical batch sizes
+
+
+def _seed_from_value(value: str, type_name: str, salt: bytes) -> int:
+    """Stable HMAC-derived seed for a (type, value) pair under a salt."""
+    msg = f"{type_name}:{value}".encode("utf-8")
+    digest = hmac.new(salt, msg, hashlib.sha256).digest()
+    return int.from_bytes(digest[:8], "big")
+
+
+def _resolve_salt(seed: int | None) -> bytes:
+    """Determine effective salt for HMAC seeding.
+
+    Priority: env var ARGUS_REDACT_PSEUDONYM_SALT → derived from seed if int → empty bytes.
+    """
+    env = os.environ.get("ARGUS_REDACT_PSEUDONYM_SALT")
+    if env:
+        return env.encode("utf-8")
+    if seed is not None:
+        return seed.to_bytes(8, "big", signed=False) if seed >= 0 else seed.to_bytes(8, "big", signed=True)
+    return b""
+
+
+def _generate_unique_fake(
+    faker_reserved: Callable[[str, random.Random], str],
+    value: str,
+    type_name: str,
+    salt: bytes,
+    used: set[str],
+) -> str:
+    """Call faker_reserved with HMAC-seeded RNG, re-rolling until unique within `used`."""
+    seed_input = value
+    last = None
+    for attempt in range(_MAX_REROLL_ATTEMPTS):
+        seed = _seed_from_value(seed_input, type_name, salt)
+        rng = random.Random(seed)
+        fake = faker_reserved(value, rng)
+        if fake not in used:
+            return fake
+        last = fake
+        seed_input = f"{seed_input}#{attempt}"
+    raise RuntimeError(
+        f"Could not generate unique fake for {type_name} "
+        f"after {_MAX_REROLL_ATTEMPTS} attempts (last: {last!r})"
+    )
 
 # Default strategies per entity type
 DEFAULT_STRATEGIES = {
@@ -338,6 +390,23 @@ def replace(
                         existing_key=result_key if result_key else None,
                     )
                 replacement = pseudo_gen.get(entity.text)
+        elif strategy == "realistic":
+            from argus_redact.specs.registry import lookup
+
+            faker_reserved = next(
+                (td.faker_reserved for td in lookup(entity.type) if td.faker_reserved),
+                None,
+            )
+
+            if faker_reserved is not None:
+                salt = _resolve_salt(seed)
+                replacement = _generate_unique_fake(
+                    faker_reserved, entity.text, entity.type, salt, used_labels
+                )
+            elif entity.type == "organization":
+                replacement = org_gen.get(entity.text)
+            else:
+                replacement = _get_type_gen(entity.type).get(entity.text)
         elif strategy == "mask":
             replacement = _mask_value(
                 entity.text,
