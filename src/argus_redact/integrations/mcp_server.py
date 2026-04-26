@@ -79,13 +79,8 @@ async def redact_text(
         seed=seed,
     )
     token = _create_key_token(key)
-    warnings.warn(
-        "MCP redact tool's `key` field is deprecated since v0.5.4 and will be "
-        "removed in v0.5.5. Use `key_token` instead — it keeps the raw key out "
-        "of the LLM context window.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
+    # No warning here — the caller controls whether to consume `key` or `key_token`.
+    # Warning fires in restore_text only if the deprecated `key` parameter is used.
     return json.dumps(
         {"redacted": redacted_text, "key_token": token, "key": key},
         ensure_ascii=False,
@@ -93,6 +88,9 @@ async def redact_text(
     )
 
 
+# Empty-string defaults (rather than `str | None`) avoid a FastMCP/Pydantic
+# schema-generation issue where `Optional[str]` triggered JSON auto-parse on
+# string inputs that look like JSON. See v0.5.4 commit history for context.
 @mcp.tool(name="restore")
 async def restore_text(
     text: str,

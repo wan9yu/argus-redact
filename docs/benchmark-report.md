@@ -1,6 +1,6 @@
 # Benchmark Report
 
-> **Environment:** Apple M1 Max, Python 3.11, argus-redact v0.5.3, Presidio 2.2.362, spaCy 3.8 (en_core_web_sm)
+> **Environment:** Apple M1 Max, Python 3.11, argus-redact v0.5.4, Presidio 2.2.362, spaCy 3.8 (en_core_web_sm)
 >
 > **Date:** 2026-03-26
 
@@ -155,12 +155,17 @@ POE_API_KEY=... pytest tests/benchmark/test_prvl_v0_5_x.py::TestPRvLv0_5xBaselin
 # Hand-score U_realistic; commit numbers to tests/benchmark/fixtures/prvl_v0_5_x_baseline.json
 ```
 
-**Performance check** (v0.5.4 restore cache):
+**Performance check** (v0.5.4 restore cache, **Python fallback path only**):
+
+The `_compile_alternation` cache fires when the Rust `_core` extension is unavailable (source-only installs / unsupported platforms / CI environments without the prebuilt wheel). Production wheels load Rust by default — its scan is already fast and the compile cost is internal to the Rust crate, so the Python-side cache is a no-op there.
+
 ```
-1000 restore() calls on 100-entry key dict:  <100ms (cached, single compile)
-                                       was:  ~600ms (recompile each call, pre-v0.5.4)
+Python fallback, 1000 restore() calls on 100-entry key dict:
+   pre-v0.5.4:  ~600ms (recompile alternation each call)
+   v0.5.4:      <100ms (cache hit on second+ call with same key set)
 ```
-Streaming path (`StreamingRestorer.feed` × N sentences) is the primary beneficiary — its key dict is stable across the session, so cache hit rate ≈ 1.
+
+Streaming hot path (`StreamingRestorer.feed` × N sentences) is the primary beneficiary on the Python path — its key dict is stable across the session, so cache hit rate ≈ 1.
 
 ---
 

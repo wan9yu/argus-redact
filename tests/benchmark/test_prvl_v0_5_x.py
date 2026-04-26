@@ -109,16 +109,19 @@ class TestPRvLv0_5xBaselineFixtureContract:
 @_LLM_GATE
 @pytest.mark.semantic
 class TestPRvLv0_5xBaselineRun:
-    """Actual LLM round-trips. Skipped without POE_API_KEY."""
+    """Actual LLM round-trips. Skipped without POE_API_KEY.
 
-    @pytest.mark.parametrize("scenario", list(SCENARIOS.keys()))
-    @pytest.mark.parametrize("llm", LLMS)
-    def test_run_baseline(self, scenario, llm):
-        # Implementation: call default redact + pseudonym-llm; send each downstream
-        # to the LLM via Poe API; restore both; compute R as fraction of original
-        # PII recovered. Output saved to /tmp/prvl_v0_5_x.log for manual capture.
-        # Maintainer copies numbers into fixture JSON + benchmark-report.md.
+    The runner body is intentionally a manual procedure — see module docstring.
+    Parametrization is omitted to keep the collection clean; the maintainer
+    iterates SCENARIOS × LLMS by hand when running with API access.
+    """
+
+    def test_run_baseline_manually(self):
+        # Implementation: for each (scenario, llm), call default redact +
+        # pseudonym-llm; send each downstream to the LLM via Poe API; restore
+        # both; compute R/U/L. Maintainer captures numbers into the fixture
+        # JSON + benchmark-report.md.
         pytest.skip(
             "Manual baseline run — call LLM, capture R/U/L, write to fixture. "
-            "See module docstring for procedure."
+            "See module docstring for the procedure."
         )

@@ -31,23 +31,18 @@ def mcp_app():
 class TestRedactToolReturnsTokenAndDeprecatedKey:
     @pytest.mark.asyncio
     async def test_should_return_both_key_and_key_token(self, mcp_app):
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            result = await mcp_app._tool_manager.call_tool(
-                "redact",
-                {"text": "电话13812345678", "mode": "fast", "seed": 42},
-            )
+        # No DeprecationWarning on redact: the caller chooses whether to consume
+        # `key` or `key_token`. Warning fires on restore() if `key` is used.
+        result = await mcp_app._tool_manager.call_tool(
+            "redact",
+            {"text": "电话13812345678", "mode": "fast", "seed": 42},
+        )
         content = result if isinstance(result, str) else result[0].text
         data = json.loads(content)
         assert "redacted" in data
         assert "key" in data, "raw key still present in v0.5.4 (deprecation period)"
         assert "key_token" in data, "key_token added in v0.5.4"
         assert isinstance(data["key_token"], str) and len(data["key_token"]) > 10
-        # DeprecationWarning emitted
-        assert any(
-            issubclass(w.category, DeprecationWarning) and "key" in str(w.message).lower()
-            for w in caught
-        ), "expected DeprecationWarning for raw key"
 
 
 class TestRestoreToolViaToken:
