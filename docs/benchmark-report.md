@@ -130,7 +130,41 @@ argus-redact in `fast` mode is **~1000x faster** than Presidio for regex-detecta
 
 ---
 
-## 6. When to Use What
+## 6. v0.5.x PRvL Baseline (pseudonym-llm profile)
+
+**Status:** Test infrastructure landed in v0.5.4 (`tests/benchmark/test_prvl_v0_5_x.py`); LLM-driven scoring runs locally with `POE_API_KEY`. Numbers below are populated as the maintainer or contributors run the suite. Empty cells = "not yet captured for this release".
+
+**Scenarios** (each runs against GPT-4o, Claude 3.7 Sonnet, Gemini 2.0 Flash):
+
+| ID | Description | Probe text | Task |
+|---|---|---|---|
+| `zh_fast` | zh fast-mode redact, summarize | 客户王建国电话13912345678... | reference |
+| `en_fast` | en fast-mode redact (v0.5.3 surname list), summarize | Call John Smith at (415) 555-1234... | reference |
+| `mixed_auto` | zh+en mixed, lang="auto" translate | 客户Wang at user@company.com... | reference |
+| `streaming` | 3 chunks via StreamingRedactor | 请联系王建国。/ ... | reference |
+
+**Metrics**:
+- `R_default`: PII recovered after default placeholder profile + LLM round-trip + restore (0–1)
+- `R_realistic`: PII recovered after `pseudonym-llm` profile + LLM round-trip + restore (0–1)
+- `U_realistic`: downstream LLM usability (LLM produced an on-task response, judged 0–1 by maintainer)
+- `L_match`: language of LLM output matches input (yes/no)
+
+**Recipe to populate** (anyone with Poe access can refresh):
+```bash
+POE_API_KEY=... pytest tests/benchmark/test_prvl_v0_5_x.py::TestPRvLv0_5xBaselineRun -v -s -m semantic
+# Hand-score U_realistic; commit numbers to tests/benchmark/fixtures/prvl_v0_5_x_baseline.json
+```
+
+**Performance check** (v0.5.4 restore cache):
+```
+1000 restore() calls on 100-entry key dict:  <100ms (cached, single compile)
+                                       was:  ~600ms (recompile each call, pre-v0.5.4)
+```
+Streaming path (`StreamingRestorer.feed` × N sentences) is the primary beneficiary — its key dict is stable across the session, so cache hit rate ≈ 1.
+
+---
+
+## 7. When to Use What
 
 | Scenario | Best tool | Why |
 |----------|-----------|-----|
@@ -143,7 +177,7 @@ argus-redact in `fast` mode is **~1000x faster** than Presidio for regex-detecta
 
 ---
 
-## 7. Limitations & Roadmap
+## 8. Limitations & Roadmap
 
 **Current limitations:**
 - Chinese address detection (~89% F1) — complex multi-part matching has room to improve

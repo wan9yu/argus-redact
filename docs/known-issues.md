@@ -9,7 +9,6 @@
 | Ollama cold start 10-20s | Inherent model loading; cached after first call | Won't fix |
 | Docker full image ~5GB | Multi-stage build applied; PyTorch dominates | Won't fix |
 | hints 语言覆盖 | self_reference/command detection only covers zh+en; other langs fall back to defaults | Low |
-| MCP key exposure | MCP server returns key in tool response; key visible in Claude Desktop context | Medium |
 
 ## pseudonym-llm Limitations
 
@@ -27,6 +26,8 @@ These are inherent properties of the realistic-redaction design, not bugs to fix
 
 | Issue | Version | Fix |
 |-------|---------|-----|
+| MCP key exposure in tool response | v0.5.4 | `redact` tool now mints `key_token` (process-scoped UUID); raw `key` deprecated this release, removed in v0.5.5 |
+| restore() rebuilt alternation regex per call | v0.5.4 | `lru_cache(maxsize=128)` on `frozenset(key.keys())` — streaming hot path no longer pays compile cost |
 | en/person realistic required NER | v0.5.3 | `lang/en/person.py` adds Census surname + SSA given-name list for fast-mode detection |
 | Pollution scanner false-positive on canonical names | v0.5.3 | `reserved_names` parameter on `redact_pseudonym_llm` / `StreamingRedactor` lets caller override canonical fake-name tables |
 | SSN validation incomplete (666/900-999) | v0.4.10 | Reject invalid area codes per SSA rules |

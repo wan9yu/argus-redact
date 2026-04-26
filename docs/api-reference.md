@@ -454,6 +454,10 @@ restored = restore(llm_output, "key.json")
 - **Unknown pseudonyms are left unchanged.** If the text contains `P-099` but the key has no `P-099`, it stays as `P-099`.
 - **Works on any text.** The text doesn't have to come from an LLM — any string with pseudonyms can be restored.
 
+### Performance
+
+The compiled alternation regex is cached on `frozenset(key.keys())` (since v0.5.4). Repeated `restore()` calls with the same key dict pay only one compile; subsequent calls are pure scan. This is the streaming hot path: `StreamingRestorer.feed()` flushes a sentence per call against an evolving but mostly-stable key, hitting the cache on every flush after the first. Cache is bounded at 128 entries via `lru_cache`.
+
 ### Edge Cases
 
 ```python
