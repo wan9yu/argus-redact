@@ -253,9 +253,31 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 | Tool | Description |
 |------|-------------|
-| `redact` | Redact PII from text. Returns JSON with redacted text and key. |
-| `restore` | Restore redacted text using a key from a previous redact call. |
+| `redact` | Redact PII from text. Returns JSON with redacted text, `key_token`, and (deprecated) `key`. |
+| `restore` | Restore redacted text using either `key_token` (preferred) or `key` (deprecated). |
 | `info` | Show version and installed capabilities. |
+| `assess` | Privacy risk score + entities found. |
+
+### Key handling (v0.5.4 deprecation)
+
+The `redact` tool now mints a **`key_token`** — a process-scoped UUID reference — alongside the legacy raw `key` dict. Always prefer `key_token` for restore: it keeps the key out of the LLM's context window so a malicious prompt cannot exfiltrate the mapping back to the user.
+
+```jsonc
+// redact response (v0.5.4)
+{
+  "redacted": "P-12345 的电话是 138****5678",
+  "key_token": "Aq1f3-Xb9...",            // ← preferred; pass to restore
+  "key": { "P-12345": "王建国", ... }     // ← DEPRECATED, removed in v0.5.5
+}
+
+// restore call (v0.5.4 — preferred)
+{ "text": "...", "key_token": "Aq1f3-Xb9..." }
+
+// restore call (legacy, emits DeprecationWarning)
+{ "text": "...", "key": "{ \"P-12345\": \"王建国\", ... }" }
+```
+
+Tokens live in the MCP server process. Restart invalidates them — fall back to `key` (or call `redact` again) if you see `Token not found or expired`.
 
 ---
 
