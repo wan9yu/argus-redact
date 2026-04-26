@@ -256,6 +256,135 @@ def test_restore_bad_key_type():
 
 ---
 
+## redact_pseudonym_llm()
+
+```python
+from argus_redact import redact_pseudonym_llm
+
+redact_pseudonym_llm(
+    text: str,
+    *,
+    display_marker: str | None = None,
+    salt: bytes | None = None,
+    lang: str | list[str] = "zh",
+    mode: str = "fast",
+    names: list[str] | None = None,
+    types: list[str] | None = None,
+    types_exclude: list[str] | None = None,
+    strict_input: bool = True,
+    _polluted_input_ok: bool = False,
+) -> PseudonymLLMResult
+```
+
+Redact `text` with the `pseudonym-llm` profile, returning **three text forms** sharing one key dict. PII is replaced with realistic-looking but reserved-range fake values (e.g., `19999...` mobile, `999...` ID, `999999...` bank card) so downstream LLMs can reason about message structure. Reserved ranges are unassigned by the relevant authorities (CN MIIT for `199-99` mobile sub-segment, GB/T 2260 for `999` ID address codes, RFC 2606 for `example.com`, RFC 5737 for IP documentation blocks).
+
+Detection runs **once**; the entity set feeds two replacement passes (realistic + audit). Cost is independent of mode for the dual-form output.
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `text` | `str` | *(required)* | Input text to redact. |
+| `display_marker` | `str \| None` | `None` (= `ⓕ`) | Visible marker appended to fake values in `display_text`. Accepts a literal string (e.g., `"*"`, `"(假)"`) or a preset name (`"circled_f"`, `"superscript_s"`, `"asterisk"`, `"chinese"`, `"none"`). |
+| `salt` | `bytes \| None` | `None` | Cross-process stable mapping. Same `salt` + same input → same fake values, suitable for cross-call joinability. Caller-explicit `salt` takes precedence over the `ARGUS_REDACT_PSEUDONYM_SALT` env var. |
+| `lang`, `mode`, `names`, `types`, `types_exclude` | — | — | Same semantics as `redact()`. |
+| `strict_input` | `bool` | `True` | If `True`, raises `PseudonymPollutionError` when the input already contains reserved-range values (i.e., the input was previously realistic-redacted). Set `False` to disable all input validation. |
+| `_polluted_input_ok` | `bool` | `False` | Narrow opt-out: skip only the pollution check, keep other validation. Underscore prefix marks it as advanced usage. |
+
+### Returns
+
+A frozen `PseudonymLLMResult` dataclass with four fields:
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `audit_text` | `str` | Placeholder labels (e.g., `[TEL-79329]`, `P-164`) — for compliance archive. |
+| `downstream_text` | `str` | Realistic reserved-range fake — feed to LLMs. |
+| `display_text` | `str` | Realistic + visible marker — safe to render to humans. |
+| `key` | `dict[str, str]` | Unified `{fake → original}` mapping. `restore()` works on **any** of the three text forms. |
+
+### Examples
+
+```python
+from argus_redact import redact_pseudonym_llm, restore
+
+result = redact_pseudonym_llm("请拨打 13912345678 联系王建国")
+result.audit_text       # "请拨打 [TEL-79329] 联系 P-164"
+result.downstream_text  # "请拨打 19999123456 联系张明"
+result.display_text     # "请拨打 19999123456ⓕ 联系张明ⓕ"
+
+# Round-trip works on any of the three forms
+restore(result.downstream_text, result.key)                       # → original
+restore(result.audit_text, result.key)                            # → original
+restore(result.display_text, result.key, display_marker="ⓕ")     # → original (marker stripped first)
+
+# Cross-process stable mapping
+result1 = redact_pseudonym_llm(text, salt=b"shared-secret-32-bytes-min")
+result2 = redact_pseudonym_llm(text, salt=b"shared-secret-32-bytes-min")
+assert result1.downstream_text == result2.downstream_text
+```
+
+### Errors
+
+| Error | When |
+|-------|------|
+| `PseudonymPollutionError` | `strict_input=True` (default) and input contains reserved-range values (e.g., user passed already-realistic-redacted text for a second pass). Call `restore()` on the input first, or pass `_polluted_input_ok=True`. |
+| `TypeError` | `text` is not a string. |
+| `ValueError` | Input exceeds `MAX_INPUT_SIZE`; or invalid `mode`; or both `types` and `types_exclude` set. |
+
+### When to use which form
+
+| Use case | Form |
+|----------|------|
+| LLM prompt / completion input | `downstream_text` |
+| UI render to a human | `display_text` |
+| Compliance archive / audit log | `audit_text` |
+| API response that may be shown OR consumed | `display_text` (safer default) |
+
+> ⚠️ **Do not store `downstream_text` as business truth.** Realistic data looks real but is synthetic by design. Storing it in customer/business records causes data pollution.
+
+---
+
+## PseudonymLLMResult
+
+```python
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class PseudonymLLMResult:
+    audit_text: str
+    downstream_text: str
+    display_text: str
+    key: dict[str, str]
+```
+
+Frozen result type returned by `redact_pseudonym_llm()`. Importable from `argus_redact`.
+
+---
+
+## PseudonymPollutionError
+
+```python
+from argus_redact import PseudonymPollutionError
+```
+
+Subclass of `ValueError`. Raised by `redact_pseudonym_llm()` when input contains reserved-range values (i.e., the input is already realistic-redacted output). Re-redacting such input would silently corrupt the key dict, so the function refuses by default.
+
+**Recovery**: call `restore(text, key)` to get back the original first, then re-redact if needed:
+
+```python
+from argus_redact import redact_pseudonym_llm, restore, PseudonymPollutionError
+
+try:
+    result = redact_pseudonym_llm(text)
+except PseudonymPollutionError:
+    original = restore(text, prior_key)
+    result = redact_pseudonym_llm(original)
+```
+
+To disable the check (advanced usage), pass `strict_input=False` or `_polluted_input_ok=True`.
+
+---
+
 ## restore()
 
 ```python
