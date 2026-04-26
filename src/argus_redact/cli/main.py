@@ -27,6 +27,32 @@ def _write_output(text: str, output_path: str | None):
             sys.stdout.write("\n")
 
 
+def _parse_strategy_override(s: str | None) -> dict[str, str] | None:
+    """Parse 'phone:realistic,address:remove' → {'phone': 'realistic', ...}.
+
+    Empty / None → None. Malformed pair → ValueError naming the offending pair.
+    """
+    if not s:
+        return None
+    out: dict[str, str] = {}
+    for pair in s.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        if ":" not in pair:
+            raise ValueError(
+                f"Invalid --strategy-override pair {pair!r}; "
+                f"expected 'type:strategy' (e.g. phone:realistic)"
+            )
+        ent_type, _, strategy = pair.partition(":")
+        ent_type = ent_type.strip()
+        strategy = strategy.strip()
+        if not ent_type or not strategy:
+            raise ValueError(f"Empty type or strategy in pair {pair!r}")
+        out[ent_type] = strategy
+    return out or None
+
+
 def cmd_redact(args):
     from argus_redact import redact, redact_pseudonym_llm
 
@@ -37,9 +63,28 @@ def cmd_redact(args):
     seed = int(args.seed) if args.seed else None
     lang = args.lang.split(",") if "," in args.lang else args.lang
 
+    raw_override = getattr(args, "strategy_override", None)
+    try:
+        strategy_overrides = _parse_strategy_override(raw_override)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(2)
+    if strategy_overrides and profile != "pseudonym-llm":
+        print(
+            "Error: --strategy-override only applies with --profile pseudonym-llm",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
     if profile == "pseudonym-llm":
         salt = seed.to_bytes(8, "big", signed=False) if seed is not None and seed >= 0 else None
-        result = redact_pseudonym_llm(text, lang=lang, mode=args.mode, salt=salt)
+        result = redact_pseudonym_llm(
+            text,
+            lang=lang,
+            mode=args.mode,
+            salt=salt,
+            strategy_overrides=strategy_overrides,
+        )
         key_path.write_text(json.dumps(result.key, ensure_ascii=False, indent=2))
         payload = {
             "audit_text": result.audit_text,
@@ -241,6 +286,17 @@ def main():
         help=(
             "Compliance profile. 'pseudonym-llm' emits JSON with audit_text, "
             "downstream_text, display_text, key (for LLM-friendly redaction)."
+        ),
+    )
+    p_redact.add_argument(
+        "--strategy-override",
+        default=None,
+        metavar="TYPE:STRATEGY,...",
+        help=(
+            "Per-type strategy override for --profile pseudonym-llm. "
+            "Example: --strategy-override 'phone:remove,address:realistic'. "
+            "Strategy names: pseudonym, realistic, mask, remove, category, "
+            "name_mask, landline_mask."
         ),
     )
     p_redact.set_defaults(func=cmd_redact)

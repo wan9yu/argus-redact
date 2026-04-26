@@ -44,6 +44,7 @@ argus-redact redact [input] [options]
 | `-s, --seed` | | *(random)* | Fixed seed for deterministic pseudonyms. For testing and reproducibility. |
 | `-c, --config` | | none | Path to config file (JSON or YAML) with per-type strategy overrides. |
 | `--profile` | | none | Compliance profile: `default`, `pipl`, `gdpr`, `hipaa`, or `pseudonym-llm`. |
+| `--strategy-override` | | none | Per-type strategy override for `--profile pseudonym-llm`, e.g. `"phone:remove,address:realistic"`. Strategy names: `pseudonym`, `realistic`, `mask`, `remove`, `category`, `name_mask`, `landline_mask`. |
 
 ### Examples
 
@@ -101,6 +102,12 @@ echo "请拨打 19999123456 联系张明" | argus-redact restore -k key.json
 echo "Call (415) 555-1234, SSN 123-45-6789, email john@company.com" | \
   argus-redact redact -k en-key.json --profile pseudonym-llm -l en
 # downstream_text: "Call (555) 555-0142, SSN 999-37-2811, email user42@example.com"
+
+# Per-call strategy override (v0.5.5+) — keep address realistic, force phone
+# to placeholder. audit_text always emits placeholders regardless.
+echo "电话13912345678 地址北京市朝阳路100号" | \
+  argus-redact redact -k key.json --profile pseudonym-llm \
+  --strategy-override "phone:remove,address:realistic"
 ```
 
 > ⚠️ **Do not show `downstream_text` to humans without context** — it looks like
