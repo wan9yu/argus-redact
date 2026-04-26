@@ -6,8 +6,9 @@ Returns a PseudonymLLMResult dataclass with three text forms sharing one key dic
 from __future__ import annotations
 
 from argus_redact._types import PseudonymLLMResult
-from argus_redact.glue.redact import redact as _redact
+from argus_redact.glue import redact as _redact_module
 from argus_redact.pure.display_marker import mark_for_display, resolve_marker
+from argus_redact.pure.normalize import MAX_INPUT_SIZE
 from argus_redact.pure.reserved_range_scanner import scan_for_pollution
 from argus_redact.specs.profiles import get_profile
 
@@ -59,10 +60,9 @@ def redact_pseudonym_llm(
 
     All three are reversible via the unified `key` dict using restore().
 
-    Note: detection runs twice (once per replacement strategy). For mode="fast"
-    this is negligible; for mode="ner"/"auto" it doubles NER/LLM cost. The
-    duplication is necessary because audit_text and downstream_text need
-    different replacement strategies on the same entity set.
+    Detection runs ONCE and the resulting entity set is fed into two replacement
+    passes (realistic + audit). Cost is one detection plus two cheap replaces,
+    independent of mode.
 
     Two opt-out paths for the input pollution check:
     - ``strict_input=False`` — public toggle that disables ALL input validation
@@ -70,6 +70,20 @@ def redact_pseudonym_llm(
     - ``_polluted_input_ok=True`` — narrow "I accept the collision risk for THIS
       call's pollution check"; underscore-prefix marks it as advanced usage.
     """
+    if not isinstance(text, str):
+        raise TypeError(f"text must be a string, got {type(text).__name__}")
+    if len(text) > MAX_INPUT_SIZE:
+        raise ValueError(
+            f"Input text ({len(text)} chars) exceeds maximum allowed size "
+            f"({MAX_INPUT_SIZE} chars). Split into smaller chunks."
+        )
+    if mode not in _redact_module.VALID_MODES:
+        raise ValueError(
+            f"Invalid mode '{mode}'. Must be one of: {', '.join(_redact_module.VALID_MODES)}"
+        )
+    if types is not None and types_exclude is not None:
+        raise ValueError("types and types_exclude are mutually exclusive")
+
     if strict_input and not _polluted_input_ok:
         _check_input_pollution(text)
 
@@ -80,30 +94,54 @@ def redact_pseudonym_llm(
     audit_config = {ent_type: {"strategy": "remove"} for ent_type in realistic_config}
 
     seed = _seed_from_salt(salt)
-    pass_kwargs = {
-        "lang": lang,
-        "mode": mode,
-        "names": names,
-        "types": types,
-        "types_exclude": types_exclude,
-        "seed": seed,
-    }
 
-    downstream_text, key = _redact(text, config=realistic_config, **pass_kwargs)
-    audit_text, audit_key = _redact(text, config=audit_config, **pass_kwargs)
+    resolved_lang = lang
+    if resolved_lang == "auto":
+        from argus_redact.pure.lang_detect import detect_languages
+
+        resolved_lang = detect_languages(text)
+
+    entities, langs, timing, _layer_stats = _redact_module._detect(
+        text,
+        lang=resolved_lang,
+        mode=mode,
+        names=names,
+        types=types,
+        types_exclude=types_exclude,
+    )
+
+    downstream_text, key = _redact_module._replace_and_emit(
+        text,
+        entities,
+        seed=seed,
+        existing_key=None,
+        key_file=None,
+        config=realistic_config,
+        lang=resolved_lang,
+        langs=langs,
+        timing=dict(timing),
+        mode=mode,
+    )
+    audit_text, audit_key = _redact_module._replace_and_emit(
+        text,
+        entities,
+        seed=seed,
+        existing_key=None,
+        key_file=None,
+        config=audit_config,
+        lang=resolved_lang,
+        langs=langs,
+        timing=dict(timing),
+        mode=mode,
+    )
 
     marker = resolve_marker(display_marker)
     display_text = mark_for_display(downstream_text, key, marker=marker)
 
-    # Realistic and audit pseudonyms are disjoint by construction (digits/Chinese
-    # vs [TYPE-NNNNN]), but defend against future drift with explicit collision check.
-    unified_key = dict(key)
-    for fake, original in audit_key.items():
-        if fake in unified_key and unified_key[fake] != original:
-            raise RuntimeError(
-                f"Key collision: pseudonym {fake!r} maps to two different originals"
-            )
-        unified_key[fake] = original
+    # Detection ran once with one seed; both replace passes use disjoint
+    # output spaces (realistic digits/Chinese vs [TYPE-NNNNN] placeholders),
+    # so a simple union is collision-free by construction.
+    unified_key = {**key, **audit_key}
 
     return PseudonymLLMResult(
         audit_text=audit_text,

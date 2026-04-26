@@ -167,98 +167,24 @@ def _tag_layer(entities: list[PatternMatch], layer: int) -> list[PatternMatch]:
     ]
 
 
-def redact(
+def _detect(
     text: str,
     *,
-    key: dict | str | None = None,
-    lang: str | list[str] = "zh",
-    mode: str = "fast",
-    seed: int | None = None,
-    config: dict | str | None = None,
-    names: list[str] | None = None,
-    detailed: bool = False,
-    report: bool = False,
-    with_types: bool = False,
-    profile: str | None = None,
-    types: list[str] | None = None,
-    types_exclude: list[str] | None = None,
-):
-    """Detect and replace PII in text.
-
-    Args:
-        mode: Detection mode.
-            - "fast" (default): regex only. Zero deps, sub-ms, deterministic.
-              English names / standalone Chinese names are NOT detected at this level
-              — pass them via `names=[...]` or use "ner" / "auto".
-            - "ner": regex + NER model (requires spacy/hanlp). Detects bare names.
-            - "auto": regex + NER + semantic LLM (requires Ollama). Maximum coverage.
-        names: List of known names/entities to always redact (works in fast mode).
-        report: Return a RedactReport with risk assessment and audit info.
-        with_types: Return a 3-tuple (redacted, key, types) where types maps replacement→PII type.
-        profile: Compliance profile name ("default", "pipl", "gdpr", "hipaa").
-        types: Whitelist of PII type names to detect.
-        types_exclude: Blacklist of PII type names to skip.
+    lang: str | list[str],
+    mode: str,
+    names: list[str] | None,
+    types: list[str] | None,
+    types_exclude: list[str] | None,
+) -> tuple[list[PatternMatch], list[str], dict, dict]:
+    """Run the full detection pipeline (L1 regex + L1b person + L2 NER + L3 LLM + merge).
 
     Returns:
-        (redacted_text, key) by default.
-        (redacted_text, key, details) when detailed=True.
-        RedactReport when report=True.
+        entities: final filtered entity list
+        langs: resolved language list (after auto-detect)
+        timing: numeric per-stage timings (ms) — values summed for total_ms
+        layer_stats: counts/status per layer (for detailed/report output)
     """
-    if not isinstance(text, str):
-        raise TypeError(f"text must be a string, got {type(text).__name__}")
-
-    if len(text) > MAX_INPUT_SIZE:
-        raise ValueError(
-            f"Input text ({len(text)} chars) exceeds maximum allowed size "
-            f"({MAX_INPUT_SIZE} chars). Split into smaller chunks."
-        )
-
-    if mode not in VALID_MODES:
-        raise ValueError(f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}")
-
-    if types is not None and types_exclude is not None:
-        raise ValueError("types and types_exclude are mutually exclusive")
-
-    # Resolve profile → types filter + strategy overrides
-    if profile is not None:
-        from argus_redact.specs.profiles import get_profile
-
-        prof = get_profile(profile)
-        if types is None and "types" in prof:
-            types = prof["types"]
-        if "config" in prof:
-            # Profile config is base; user config overrides
-            profile_config = dict(prof["config"])
-            if config:
-                profile_config.update(config)
-            config = profile_config
-
-    # Resolve config from file path
-    if isinstance(config, str):
-        config_path = Path(config)
-        if not config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {config}")
-        if config_path.suffix in (".yaml", ".yml"):
-            import yaml
-
-            config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-        else:
-            config = json.loads(config_path.read_text(encoding="utf-8"))
-
-    # Resolve key
-    existing_key = None
-    key_file = None
-    if isinstance(key, str):
-        key_file = key
-        path = Path(key_file)
-        existing_key = json.loads(path.read_text()) if path.exists() else {}
-    elif isinstance(key, dict):
-        existing_key = dict(key)
-
-    if lang == "auto":
-        lang = detect_languages(text)
-
-    timing = {}
+    timing: dict[str, float] = {}
     entities: list[PatternMatch] = []
     langs = [lang] if isinstance(lang, str) else list(lang)
 
@@ -393,6 +319,34 @@ def redact(
         exclude_set = set(types_exclude)
         entities = [e for e in entities if e.type not in exclude_set]
 
+    layer_stats = {
+        "layer1_count": layer1_count,
+        "layer2_count": layer2_count,
+        "layer2_status": layer2_status,
+        "layer3_count": layer3_count,
+        "layer3_status": layer3_status,
+    }
+    return entities, langs, timing, layer_stats
+
+
+def _replace_and_emit(
+    text: str,
+    entities: list[PatternMatch],
+    *,
+    seed: int | None,
+    existing_key: dict | None,
+    key_file: str | None,
+    config: dict | None,
+    lang: str | list[str],
+    langs: list[str],
+    timing: dict,
+    mode: str,
+) -> tuple[str, dict]:
+    """Apply replacement, run grammar normalization, emit telemetry, persist key file.
+
+    Mutates `timing` in place by adding `replace_ms`. The caller is responsible
+    for any further use of `timing` (e.g., detailed-output stats).
+    """
     t0 = time.perf_counter()
     redacted, result_key = replace(
         text,
@@ -418,6 +372,122 @@ def redact(
             encoding="utf-8",
         )
         tmp.replace(target)
+
+    return redacted, result_key
+
+
+def redact(
+    text: str,
+    *,
+    key: dict | str | None = None,
+    lang: str | list[str] = "zh",
+    mode: str = "fast",
+    seed: int | None = None,
+    config: dict | str | None = None,
+    names: list[str] | None = None,
+    detailed: bool = False,
+    report: bool = False,
+    with_types: bool = False,
+    profile: str | None = None,
+    types: list[str] | None = None,
+    types_exclude: list[str] | None = None,
+):
+    """Detect and replace PII in text.
+
+    Args:
+        mode: Detection mode.
+            - "fast" (default): regex only. Zero deps, sub-ms, deterministic.
+              English names / standalone Chinese names are NOT detected at this level
+              — pass them via `names=[...]` or use "ner" / "auto".
+            - "ner": regex + NER model (requires spacy/hanlp). Detects bare names.
+            - "auto": regex + NER + semantic LLM (requires Ollama). Maximum coverage.
+        names: List of known names/entities to always redact (works in fast mode).
+        report: Return a RedactReport with risk assessment and audit info.
+        with_types: Return a 3-tuple (redacted, key, types) where types maps replacement→PII type.
+        profile: Compliance profile name ("default", "pipl", "gdpr", "hipaa").
+        types: Whitelist of PII type names to detect.
+        types_exclude: Blacklist of PII type names to skip.
+
+    Returns:
+        (redacted_text, key) by default.
+        (redacted_text, key, details) when detailed=True.
+        RedactReport when report=True.
+    """
+    if not isinstance(text, str):
+        raise TypeError(f"text must be a string, got {type(text).__name__}")
+
+    if len(text) > MAX_INPUT_SIZE:
+        raise ValueError(
+            f"Input text ({len(text)} chars) exceeds maximum allowed size "
+            f"({MAX_INPUT_SIZE} chars). Split into smaller chunks."
+        )
+
+    if mode not in VALID_MODES:
+        raise ValueError(f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}")
+
+    if types is not None and types_exclude is not None:
+        raise ValueError("types and types_exclude are mutually exclusive")
+
+    # Resolve profile → types filter + strategy overrides
+    if profile is not None:
+        from argus_redact.specs.profiles import get_profile
+
+        prof = get_profile(profile)
+        if types is None and "types" in prof:
+            types = prof["types"]
+        if "config" in prof:
+            # Profile config is base; user config overrides
+            profile_config = dict(prof["config"])
+            if config:
+                profile_config.update(config)
+            config = profile_config
+
+    # Resolve config from file path
+    if isinstance(config, str):
+        config_path = Path(config)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found: {config}")
+        if config_path.suffix in (".yaml", ".yml"):
+            import yaml
+
+            config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        else:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+
+    # Resolve key
+    existing_key: dict | None = None
+    key_file: str | None = None
+    if isinstance(key, str):
+        key_file = key
+        path = Path(key_file)
+        existing_key = json.loads(path.read_text()) if path.exists() else {}
+    elif isinstance(key, dict):
+        existing_key = dict(key)
+
+    if lang == "auto":
+        lang = detect_languages(text)
+
+    entities, langs, timing, layer_stats = _detect(
+        text,
+        lang=lang,
+        mode=mode,
+        names=names,
+        types=types,
+        types_exclude=types_exclude,
+    )
+
+    redacted, result_key = _replace_and_emit(
+        text,
+        entities,
+        seed=seed,
+        existing_key=existing_key,
+        key_file=key_file,
+        config=config,
+        lang=lang,
+        langs=langs,
+        timing=timing,
+        mode=mode,
+    )
 
     if with_types and not detailed and not report:
         # Build replacement → PII type mapping
@@ -446,11 +516,11 @@ def redact(
         total_ms = sum(timing.values())
         stats = {
             "total": len(entity_details),
-            "layer_1": layer1_count,
-            "layer_2": layer2_count,
-            "layer_2_status": layer2_status,
-            "layer_3": layer3_count,
-            "layer_3_status": layer3_status,
+            "layer_1": layer_stats["layer1_count"],
+            "layer_2": layer_stats["layer2_count"],
+            "layer_2_status": layer_stats["layer2_status"],
+            "layer_3": layer_stats["layer3_count"],
+            "layer_3_status": layer_stats["layer3_status"],
             "duration_ms": round(total_ms, 2),
             **{k: round(v, 2) for k, v in timing.items()},
         }
