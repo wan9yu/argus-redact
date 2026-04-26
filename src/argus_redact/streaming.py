@@ -16,9 +16,10 @@ from argus_redact._types import PseudonymLLMResult
 from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
 from argus_redact.pure.restore import restore
 
-# Schema version stamped into export_state() output. Bumping this in a future
-# release means from_state() rejects older payloads (or grows a migration).
-_STATE_VERSION = "0.5.5"
+# Integer schema version stamped into export_state() output. Decoupled from
+# the package version on purpose — bumped only when the state shape itself
+# changes, so most package releases leave it untouched.
+_STATE_SCHEMA_VERSION = 1
 
 
 class StreamingRestorer:
@@ -171,7 +172,7 @@ class StreamingRedactor:
         ``salt`` is hex-encoded; everything else is plain str / list / dict.
         """
         return {
-            "version": _STATE_VERSION,
+            "version": _STATE_SCHEMA_VERSION,
             "salt": self._salt.hex(),
             "accumulated_key": dict(self._accumulated_key),
             "lang": self._lang,
@@ -198,10 +199,10 @@ class StreamingRedactor:
         passing if you need to change configuration.
         """
         version = state.get("version")
-        if version != _STATE_VERSION:
+        if version != _STATE_SCHEMA_VERSION:
             raise ValueError(
-                f"Unsupported state version {version!r}; this release "
-                f"({_STATE_VERSION}) only loads its own format."
+                f"Unsupported state schema version {version!r}; this release "
+                f"reads schema {_STATE_SCHEMA_VERSION} only."
             )
         reserved = state.get("reserved_names")
         instance = cls(

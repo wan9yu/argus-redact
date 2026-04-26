@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from argus_redact.streaming import StreamingRedactor
+from argus_redact.streaming import _STATE_SCHEMA_VERSION, StreamingRedactor
 
 
 class TestExportStateShape:
@@ -27,7 +27,7 @@ class TestExportStateShape:
         r = StreamingRedactor(salt=b"x")
         state = r.export_state()
         assert "version" in state
-        assert state["version"] == "0.5.5"
+        assert state["version"] == _STATE_SCHEMA_VERSION
 
     def test_salt_round_trips_as_hex_with_edge_bytes(self):
         salt = bytes([0x00, 0xFF, 0x42, 0x00, 0xFE])
@@ -114,10 +114,10 @@ class TestVersionGate:
     def test_unsupported_version_raises_value_error(self):
         r = StreamingRedactor(salt=b"x")
         state = r.export_state()
-        state["version"] = "0.4.99"
+        state["version"] = 99
         with pytest.raises(ValueError) as exc:
             StreamingRedactor.from_state(state)
-        assert "0.4.99" in str(exc.value) or "version" in str(exc.value).lower()
+        assert "99" in str(exc.value) or "version" in str(exc.value).lower()
 
     def test_missing_version_raises_value_error(self):
         with pytest.raises(ValueError):

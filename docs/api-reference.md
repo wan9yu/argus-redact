@@ -782,7 +782,7 @@ result = r.feed("张明又来电话了13912345678确认。")
 # Same original phone reuses the same fake from process A
 ```
 
-State is a plain dict: `version`, `salt` (hex), `accumulated_key`, plus all constructor options. The `version` field gates compatibility — `from_state()` raises `ValueError` for payloads from a release that uses a different schema.
+State is a plain dict: `version` (integer schema version, decoupled from the package version), `salt` (hex), `accumulated_key`, plus all constructor options. `from_state()` raises `ValueError` for payloads with an unsupported `version`.
 
 ### Constraints
 

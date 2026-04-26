@@ -122,14 +122,17 @@ def redact_pseudonym_llm(
         _check_input_pollution(text, reserved_names=reserved_names)
 
     profile = get_profile("pseudonym-llm")
-    # Per-key copy: avoid mutating the static profile config across calls.
-    realistic_config = {k: dict(v) for k, v in profile["config"].items()}
     if strategy_overrides:
+        # Per-key copy needed because we mutate nested dicts below; the
+        # streaming hot path (no overrides) keeps the cheap shallow copy.
+        realistic_config = {k: dict(v) for k, v in profile["config"].items()}
         for ent_type, strategy in strategy_overrides.items():
             if ent_type in realistic_config:
                 realistic_config[ent_type]["strategy"] = strategy
             else:
                 realistic_config[ent_type] = {"strategy": strategy}
+    else:
+        realistic_config = dict(profile["config"])
     # Audit pass uses the (possibly extended) type set with "remove" strategy
     # so audit_text always contains [TYPE-NNNNN] placeholders.
     audit_config = {ent_type: {"strategy": "remove"} for ent_type in realistic_config}
