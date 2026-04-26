@@ -713,6 +713,46 @@ redact(text, types_exclude=["address", "email"])     # everything except these
 
 ---
 
+## Streaming Redact (chunked input)
+
+For chunked input where entities don't cross chunk boundaries, use `StreamingRedactor`. Cross-chunk consistency: same original value in different chunks maps to the same realistic fake (via shared `salt` + accumulated key).
+
+```python
+from argus_redact.streaming import StreamingRedactor
+
+redactor = StreamingRedactor(salt=b"my-secret-salt", lang="zh")
+for chunk in input_stream:                  # complete sentences/paragraphs/turns
+    result = redactor.feed(chunk)
+    send_to_llm(result.downstream_text)
+
+# After all chunks fed, the unified key for cross-chunk restore
+full_key = redactor.aggregate_key()
+```
+
+### Constructor
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `salt` | `bytes` | *(required)* | Required for cross-chunk stable mapping. Same `salt` + same input → same fake. |
+| `display_marker` | `str \| None` | `None` (= `ⓕ`) | Marker for `display_text`. |
+| `lang`, `mode`, `names`, `types`, `types_exclude` | — | — | Same semantics as `redact_pseudonym_llm()`. |
+| `strict_input` | `bool` | `True` | Raises `PseudonymPollutionError` if a chunk contains reserved-range values. Set `False` to disable per-chunk pollution check. |
+
+### Methods
+
+- `feed(chunk: str) -> PseudonymLLMResult` — redact one chunk. Cross-chunk consistency preserved via internal accumulated key.
+- `aggregate_key() -> dict[str, str]` — copy of the unified key across all fed chunks (for batched restore).
+
+### Constraints
+
+- Caller MUST feed complete logical units; entities split across chunk boundaries are not detected.
+- Strict input check applies per-chunk: realistic-faked output from one chunk fed back as input to another raises `PseudonymPollutionError`.
+- Detection mode (`mode="ner"` / `"auto"`) runs full pipeline per chunk; cost scales linearly with chunk count.
+
+> ℹ️ True byte-level streaming with realistic mode requires complete entity boundary detection across chunks; that is roadmapped for a later release. v0.5.2 supports logical-unit chunking only.
+
+---
+
 ## Streaming Restore
 
 For streaming LLM output, use `StreamingRestorer` to restore at sentence boundaries:

@@ -112,6 +112,8 @@ echo "Call (415) 555-1234, SSN 123-45-6789, email john@company.com" | \
 - **File exists:** key is loaded, existing mappings reused, new entities appended. File is updated.
 - This makes batch processing natural — just point multiple `redact` calls at the same `-k` file.
 
+> ℹ️ **Streaming is SDK-only.** The CLI processes one input per invocation. For chunked input with cross-chunk consistency, use `argus_redact.streaming.StreamingRedactor` from Python — see [API reference](api-reference.md#streaming-redact-chunked-input).
+
 ---
 
 ## restore

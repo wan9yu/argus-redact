@@ -201,6 +201,30 @@ echo "Call (415) 555-1234" | \
 
 **Argus Gateway integration**: response headers should include `X-Argus-Redact-Profile: pseudonym-llm`; UI clients render `display_text`, LLM clients consume `downstream_text`. Storage of `downstream_text` as business truth is unsafe — it's synthetic by design.
 
+### Streaming
+
+For chat sessions or long-form input where text arrives in chunks, use `StreamingRedactor` (input side) and `StreamingRestorer` (output side). Both require **complete logical units** per chunk (sentence / paragraph / turn) — entities split across chunk boundaries are not handled.
+
+```python
+from argus_redact.streaming import StreamingRedactor, StreamingRestorer
+
+# Input side: redact each chunk; same original value across chunks → same fake
+r = StreamingRedactor(salt=b"my-secret-salt", lang="zh")
+for chunk in input_stream:                  # one sentence/paragraph/turn each
+    res = r.feed(chunk)
+    send_to_llm(res.downstream_text)
+
+# Output side: restore LLM output stream at sentence boundaries
+restorer = StreamingRestorer(r.aggregate_key())
+for chunk in llm_output_stream:
+    restored = restorer.feed(chunk)
+    if restored:
+        print(restored, end="")
+print(restorer.flush(), end="")
+```
+
+True byte-level streaming (entities crossing chunk boundaries) needs full incremental detection and is roadmapped for a later release.
+
 > ⚠️ Realistic-mode output **must not be re-redacted** (it would corrupt the key dict). `redact_pseudonym_llm` will raise `PseudonymPollutionError` if called on already-faked input — call `restore()` first.
 
 [Full API →](docs/api-reference.md#redact_pseudonym_llm) · [Known limitations →](docs/known-issues.md#pseudonym-llm-limitations)
