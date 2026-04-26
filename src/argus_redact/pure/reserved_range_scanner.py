@@ -52,6 +52,29 @@ _RESERVED_RANGE_PATTERNS = {
 _COMBINED = re.compile("|".join(f"(?P<{k}>{v})" for k, v in _RESERVED_RANGE_PATTERNS.items()))
 
 
-def scan_for_pollution(text: str) -> list[tuple[int, int, str]]:
-    """Return ``[(start, end, type_name)]`` for every reserved-range match in text."""
-    return [(m.start(), m.end(), m.lastgroup) for m in _COMBINED.finditer(text)]
+def scan_for_pollution(
+    text: str,
+    *,
+    reserved_names: dict[str, tuple[str, ...]] | None = None,
+) -> list[tuple[int, int, str]]:
+    """Return ``[(start, end, type_name)]`` for every reserved-range match in text.
+
+    ``reserved_names`` overrides the canonical fake-name tables per type. Pass
+    ``{"person_zh": ()}`` to disable that type entirely (useful when input may
+    legitimately contain names like 张三 / John Doe that match the defaults).
+    The default singleton regex is bypassed only when this argument is provided.
+    """
+    if reserved_names is None:
+        return [(m.start(), m.end(), m.lastgroup) for m in _COMBINED.finditer(text)]
+
+    patterns = dict(_RESERVED_RANGE_PATTERNS)
+    for type_name, names in reserved_names.items():
+        if type_name not in patterns:
+            continue
+        if names:
+            patterns[type_name] = "|".join(re.escape(n) for n in names)
+        else:
+            # Empty tuple → effectively disable that type (use never-match pattern).
+            patterns[type_name] = r"(?!)"
+    combined = re.compile("|".join(f"(?P<{k}>{v})" for k, v in patterns.items()))
+    return [(m.start(), m.end(), m.lastgroup) for m in combined.finditer(text)]

@@ -27,9 +27,13 @@ class PseudonymPollutionError(ValueError):
     """
 
 
-def _check_input_pollution(text: str) -> None:
+def _check_input_pollution(
+    text: str,
+    *,
+    reserved_names: dict[str, tuple[str, ...]] | None = None,
+) -> None:
     """Raise PseudonymPollutionError if `text` contains any reserved-range values."""
-    hits = scan_for_pollution(text)
+    hits = scan_for_pollution(text, reserved_names=reserved_names)
     if hits:
         start, _, type_name = hits[0]
         raise PseudonymPollutionError(
@@ -52,6 +56,7 @@ def redact_pseudonym_llm(
     strict_input: bool = True,
     _polluted_input_ok: bool = False,
     existing_key: dict[str, str] | None = None,
+    reserved_names: dict[str, tuple[str, ...]] | None = None,
 ) -> PseudonymLLMResult:
     """Redact `text` with the pseudonym-llm profile, returning three text forms.
 
@@ -74,6 +79,12 @@ def redact_pseudonym_llm(
     `existing_key` (advanced) — pre-existing fake→original mappings to honor.
     Same original value present in both `text` and `existing_key.values()` reuses
     the same fake. Used by ``StreamingRedactor`` for cross-chunk consistency.
+
+    `reserved_names` — overrides the canonical fake-name tables on a per-type
+    basis. Pass ``{"person_zh": ()}`` to disable zh canonical-name pollution
+    detection (useful when real users may legitimately be named 张三/李四).
+    Pass a custom tuple to use a different list. Default ``None`` keeps the
+    built-in tables active.
     """
     if not isinstance(text, str):
         raise TypeError(f"text must be a string, got {type(text).__name__}")
@@ -90,7 +101,7 @@ def redact_pseudonym_llm(
         raise ValueError("types and types_exclude are mutually exclusive")
 
     if strict_input and not _polluted_input_ok:
-        _check_input_pollution(text)
+        _check_input_pollution(text, reserved_names=reserved_names)
 
     profile = get_profile("pseudonym-llm")
     realistic_config = dict(profile["config"])

@@ -101,6 +101,47 @@ class TestMixedZhEn:
         assert restore(result.downstream_text, result.key) == text
 
 
+class TestCustomReservedNames:
+    """v0.5.3: caller can override canonical fake-name tables to allow real users
+    named 张三 / John Doe to be redacted instead of triggering false-positive pollution.
+    """
+
+    def test_should_redact_real_user_named_zhang_san_when_zh_canonical_disabled(self):
+        # By default, '张三' would trip the pollution scanner (it's in canonical list).
+        # Empty tuple disables zh canonical name detection entirely.
+        result = redact_pseudonym_llm(
+            "客户张三的电话13912345678",
+            salt=b"test",
+            lang=["zh"],
+            mode="fast",
+            names=["张三"],  # treat as person via fast-mode names list
+            reserved_names={"person_zh": ()},
+        )
+        # Phone redacted as usual
+        assert "13912345678" not in result.downstream_text
+
+    def test_should_keep_en_canonical_when_only_zh_overridden(self):
+        # Override zh names but leave en canonical names active.
+        # 'John Doe' should still be flagged as polluted output.
+        with pytest.raises(PseudonymPollutionError):
+            redact_pseudonym_llm(
+                "Contact John Doe today.",
+                salt=b"test",
+                lang=["en"],
+                reserved_names={"person_zh": ()},  # zh disabled, en still strict
+            )
+
+    def test_should_accept_custom_canonical_list(self):
+        # Treat custom names as canonical: '杨过' becomes a canonical fake.
+        with pytest.raises(PseudonymPollutionError):
+            redact_pseudonym_llm(
+                "客户杨过来访",
+                salt=b"test",
+                lang=["zh"],
+                reserved_names={"person_zh": ("杨过", "小龙女")},
+            )
+
+
 class TestPollutionDetectionEnShared:
     def test_should_reject_polluted_en_phone(self):
         """Re-redacting realistic-output en text must raise."""

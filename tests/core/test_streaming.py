@@ -237,3 +237,17 @@ class TestStreamingRedactor:
     def test_should_require_salt(self):
         with pytest.raises(TypeError):
             StreamingRedactor()  # type: ignore[call-arg]
+
+    def test_should_accept_reserved_names_override(self):
+        """Caller can disable canonical fake-name detection across all chunks."""
+        r = StreamingRedactor(
+            salt=b"test",
+            lang="zh",
+            mode="fast",
+            names=["张三"],
+            reserved_names={"person_zh": ()},  # disable zh canonical names
+        )
+        # 张三 is in canonical list — without override, the next chunk would fail
+        # as polluted. With override, 张三 is treated as a real user name.
+        result = r.feed("客户张三电话13912345678。")
+        assert "13912345678" not in result.downstream_text

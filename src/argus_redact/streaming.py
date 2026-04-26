@@ -111,6 +111,7 @@ class StreamingRedactor:
         types: list[str] | None = None,
         types_exclude: list[str] | None = None,
         strict_input: bool = True,
+        reserved_names: dict[str, tuple[str, ...]] | None = None,
     ):
         if not isinstance(salt, (bytes, bytearray)):
             raise TypeError(f"salt must be bytes, got {type(salt).__name__}")
@@ -122,6 +123,7 @@ class StreamingRedactor:
         self._types = types
         self._types_exclude = types_exclude
         self._strict_input = strict_input
+        self._reserved_names = reserved_names
         self._accumulated_key: dict[str, str] = {}
 
     def feed(self, chunk: str) -> PseudonymLLMResult:
@@ -141,6 +143,7 @@ class StreamingRedactor:
             types=self._types,
             types_exclude=self._types_exclude,
             strict_input=self._strict_input,
+            reserved_names=self._reserved_names,
             existing_key=self._accumulated_key,
         )
         # setdefault preserves first-seen mapping; realistic and audit spaces
