@@ -273,6 +273,9 @@ redact_pseudonym_llm(
     types_exclude: list[str] | None = None,
     strict_input: bool = True,
     _polluted_input_ok: bool = False,
+    existing_key: dict[str, str] | None = None,
+    reserved_names: dict[str, tuple[str, ...]] | None = None,
+    strategy_overrides: dict[str, str] | None = None,
 ) -> PseudonymLLMResult
 ```
 
@@ -292,6 +295,7 @@ Detection runs **once**; the entity set feeds two replacement passes (realistic 
 | `_polluted_input_ok` | `bool` | `False` | Narrow opt-out: skip only the pollution check, keep other validation. Underscore prefix marks it as advanced usage. |
 | `existing_key` | `dict[str, str] \| None` | `None` | Pre-existing `fake → original` mappings. Same original value present in both `text` and `existing_key.values()` reuses the same fake. Used by `StreamingRedactor` for cross-chunk consistency. |
 | `reserved_names` | `dict[str, tuple[str, ...]] \| None` | `None` | Override canonical fake-name tables per type (e.g., `{"person_zh": ()}` to disable canonical-name pollution detection so a real user named 张三 / John Doe can be redacted). Pass a custom tuple to use a different list. |
+| `strategy_overrides` | `dict[str, str] \| None` | `None` | Per-call override of the per-type strategy (e.g., `{"phone": "remove", "address": "realistic"}`). Affects the `downstream_text` (realistic) pass only — `audit_text` always emits placeholders. A type listed here that is not in the profile is added to both passes. Strategy names must be in `argus_redact.pure.replacer.VALID_STRATEGIES`. |
 
 ### Returns
 
@@ -335,6 +339,15 @@ restore(en.downstream_text, en.key)  # → original
 # Mixed zh + en (auto-detect)
 mx = redact_pseudonym_llm("客户Wang at user@company.com", lang="auto")
 restore(mx.downstream_text, mx.key)  # → original
+
+# Per-call strategy override (v0.5.5+): keep address realistic, but force
+# phone to placeholder. audit_text is unchanged either way.
+custom = redact_pseudonym_llm(
+    "电话13912345678 地址北京市朝阳路100号",
+    lang="zh",
+    strategy_overrides={"phone": "remove", "address": "realistic"},
+)
+custom.downstream_text  # phone → "PHON-NNNNN", address still realistic
 ```
 
 ### Reserved-range coverage

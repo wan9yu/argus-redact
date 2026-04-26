@@ -9,6 +9,7 @@ from argus_redact._types import PseudonymLLMResult
 from argus_redact.glue import redact as _redact_module
 from argus_redact.pure.display_marker import mark_for_display, resolve_marker
 from argus_redact.pure.normalize import MAX_INPUT_SIZE
+from argus_redact.pure.replacer import VALID_STRATEGIES
 from argus_redact.pure.reserved_range_scanner import scan_for_pollution
 from argus_redact.specs.profiles import get_profile
 
@@ -57,6 +58,7 @@ def redact_pseudonym_llm(
     _polluted_input_ok: bool = False,
     existing_key: dict[str, str] | None = None,
     reserved_names: dict[str, tuple[str, ...]] | None = None,
+    strategy_overrides: dict[str, str] | None = None,
 ) -> PseudonymLLMResult:
     """Redact `text` with the pseudonym-llm profile, returning three text forms.
 
@@ -85,6 +87,14 @@ def redact_pseudonym_llm(
     detection (useful when real users may legitimately be named 张三/李四).
     Pass a custom tuple to use a different list. Default ``None`` keeps the
     built-in tables active.
+
+    `strategy_overrides` — per-call mapping from entity type to strategy
+    name (e.g., ``{"phone": "remove", "address": "realistic"}``). Overrides
+    the active profile's strategy for the realistic (downstream) pass only;
+    the audit pass always emits placeholders regardless. A type listed here
+    that isn't in the profile is added to both the realistic and audit
+    type sets. Strategy names must be in
+    ``argus_redact.pure.replacer.VALID_STRATEGIES``.
     """
     if not isinstance(text, str):
         raise TypeError(f"text must be a string, got {type(text).__name__}")
@@ -100,13 +110,28 @@ def redact_pseudonym_llm(
     if types is not None and types_exclude is not None:
         raise ValueError("types and types_exclude are mutually exclusive")
 
+    if strategy_overrides:
+        for ent_type, strategy in strategy_overrides.items():
+            if strategy not in VALID_STRATEGIES:
+                raise ValueError(
+                    f"Invalid strategy '{strategy}' for type '{ent_type}'. "
+                    f"Must be one of: {', '.join(VALID_STRATEGIES)}"
+                )
+
     if strict_input and not _polluted_input_ok:
         _check_input_pollution(text, reserved_names=reserved_names)
 
     profile = get_profile("pseudonym-llm")
-    realistic_config = dict(profile["config"])
-    # Audit pass uses the same type set with "remove" strategy so audit_text
-    # contains [TYPE-NNNNN] placeholders.
+    # Per-key copy: avoid mutating the static profile config across calls.
+    realistic_config = {k: dict(v) for k, v in profile["config"].items()}
+    if strategy_overrides:
+        for ent_type, strategy in strategy_overrides.items():
+            if ent_type in realistic_config:
+                realistic_config[ent_type]["strategy"] = strategy
+            else:
+                realistic_config[ent_type] = {"strategy": strategy}
+    # Audit pass uses the (possibly extended) type set with "remove" strategy
+    # so audit_text always contains [TYPE-NNNNN] placeholders.
     audit_config = {ent_type: {"strategy": "remove"} for ent_type in realistic_config}
 
     seed = _seed_from_salt(salt)
