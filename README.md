@@ -125,10 +125,10 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 
 ## North Star
 
-| Dimension | Current (v0.5.2) | Next milestone |
+| Dimension | Current (v0.5.3) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini. Cross-layer hints | Adversarial testing |
-| **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (`pseudonym-llm` zh + en + shared RFC) + streaming chunked redact | Incremental detection across chunk boundaries |
+| **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (zh + en + RFC shared) + streaming + en/zh fast-mode person | Incremental detection across chunk boundaries |
 | **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design) | Task-aware guidance |
 | **Compliance** | PIPL ~85%, risk assessment + profiles | PIPL/GDPR/HIPAA (byproduct) |
 | **Coverage** | 8 langs, 4 LLMs benchmarked, 6 frameworks | Browser extension |
@@ -200,6 +200,8 @@ echo "Call (415) 555-1234" | \
 - **shared (RFC)**: `example.com` / `.org` / `.net` email (RFC 2606), `192.0.2.0/24` / `198.51.100.0/24` / `203.0.113.0/24` IPv4 (RFC 5737), `2001:db8::/32` IPv6 (RFC 3849), `00:00:5E:00:53:xx` MAC (RFC 7042).
 
 **Argus Gateway integration**: response headers should include `X-Argus-Redact-Profile: pseudonym-llm`; UI clients render `display_text`, LLM clients consume `downstream_text`. Storage of `downstream_text` as business truth is unsafe — it's synthetic by design.
+
+**Real users named like canonical fakes** (e.g., a real customer named `张三` or `John Doe`): pass `reserved_names={"person_zh": ()}` (or `person_en`) to disable that locale's canonical-name pollution detection so the real user's name flows through normal redaction.
 
 ### Streaming
 

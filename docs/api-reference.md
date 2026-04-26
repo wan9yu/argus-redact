@@ -290,6 +290,8 @@ Detection runs **once**; the entity set feeds two replacement passes (realistic 
 | `lang`, `mode`, `names`, `types`, `types_exclude` | — | — | Same semantics as `redact()`. |
 | `strict_input` | `bool` | `True` | If `True`, raises `PseudonymPollutionError` when the input already contains reserved-range values (i.e., the input was previously realistic-redacted). Set `False` to disable all input validation. |
 | `_polluted_input_ok` | `bool` | `False` | Narrow opt-out: skip only the pollution check, keep other validation. Underscore prefix marks it as advanced usage. |
+| `existing_key` | `dict[str, str] \| None` | `None` | Pre-existing `fake → original` mappings. Same original value present in both `text` and `existing_key.values()` reuses the same fake. Used by `StreamingRedactor` for cross-chunk consistency. |
+| `reserved_names` | `dict[str, tuple[str, ...]] \| None` | `None` | Override canonical fake-name tables per type (e.g., `{"person_zh": ()}` to disable canonical-name pollution detection so a real user named 张三 / John Doe can be redacted). Pass a custom tuple to use a different list. |
 
 ### Returns
 
