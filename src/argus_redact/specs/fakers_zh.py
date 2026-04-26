@@ -293,30 +293,23 @@ def fake_phone_landline(rng: random.Random) -> str:
 
 
 def fake_id_number(rng: random.Random) -> str:
+    from argus_redact.lang.zh.patterns import gb11643_check_char
+
     area = rng.choice(ID_AREA_CODES)
     year = rng.randint(1960, 2005)
     month = rng.randint(1, 12)
     day = rng.randint(1, 28)
     seq = rng.randint(0, 999)
     body = f"{area}{year}{month:02d}{day:02d}{seq:03d}"
-
-    weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
-    check_chars = "10X98765432"
-    total = sum(int(body[i]) * weights[i] for i in range(17))
-    check = check_chars[total % 11]
-    return body + check
+    return body + gb11643_check_char(body)
 
 
 def fake_bank_card(rng: random.Random) -> str:
+    from argus_redact.lang.shared.patterns import luhn_check_digit
+
     bin_prefix = rng.choice(BANK_BINS)
     body = bin_prefix + "".join(str(rng.randint(0, 9)) for _ in range(9))
-
-    digits = [int(d) for d in body]
-    odd_sum = sum(digits[-1::-2])
-    even_digits = digits[-2::-2]
-    even_sum = sum(d * 2 - 9 if d * 2 > 9 else d * 2 for d in even_digits)
-    check = (10 - (odd_sum + even_sum) % 10) % 10
-    return body + str(check)
+    return body + str(luhn_check_digit(body))
 
 
 def fake_passport(rng: random.Random) -> str:

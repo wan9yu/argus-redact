@@ -5,19 +5,21 @@ import json
 import re as _re
 
 
+def luhn_check_digit(body: str) -> int:
+    """Compute the Luhn check digit for a numeric body (digit appended at end)."""
+    digits = [int(d) for d in body]
+    doubled = digits[-1::-2]
+    not_doubled = digits[-2::-2]
+    doubled_sum = sum(d * 2 - 9 if d * 2 > 9 else d * 2 for d in doubled)
+    return (10 - (doubled_sum + sum(not_doubled)) % 10) % 10
+
+
 def validate_luhn(value: str) -> bool:
     """Luhn checksum — shared by all languages' bank/credit card validation."""
-    digits = [int(d) for d in value if d.isdigit()]
+    digits = "".join(d for d in value if d.isdigit())
     if len(digits) < 16:
         return False
-    total = 0
-    for i, d in enumerate(reversed(digits)):
-        if i % 2 == 1:
-            d *= 2
-            if d > 9:
-                d -= 9
-        total += d
-    return total % 10 == 0
+    return luhn_check_digit(digits[:-1]) == int(digits[-1])
 
 
 def _validate_age(value: str) -> bool:

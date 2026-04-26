@@ -45,9 +45,6 @@ PASSPORT_PREFIXES = ("E", "G")
 
 PLATE_SPECIAL_PREFIXES = ("测", "领")
 
-GB11643_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
-GB11643_CHECK_CHARS = "10X98765432"
-
 
 # ── Faker functions ──
 
@@ -72,14 +69,15 @@ def fake_id_number_reserved(value: str, rng: random.Random) -> str:
 
     Address code 999XXX is not assigned in GB/T 2260 (国家行政区划代码).
     """
+    from argus_redact.lang.zh.patterns import gb11643_check_char
+
     area = "999" + "".join(str(rng.randint(0, 9)) for _ in range(3))
     year = rng.randint(1960, 2005)
     month = rng.randint(1, 12)
     day = rng.randint(1, 28)
     seq = rng.randint(0, 999)
     body = f"{area}{year}{month:02d}{day:02d}{seq:03d}"
-    total = sum(int(body[i]) * GB11643_WEIGHTS[i] for i in range(17))
-    return body + GB11643_CHECK_CHARS[total % 11]
+    return body + gb11643_check_char(body)
 
 
 def fake_bank_card_reserved(value: str, rng: random.Random) -> str:
@@ -87,14 +85,10 @@ def fake_bank_card_reserved(value: str, rng: random.Random) -> str:
 
     BIN 999999 is not assigned in 银联 BIN allocation.
     """
+    from argus_redact.lang.shared.patterns import luhn_check_digit
+
     body = "999999" + "".join(str(rng.randint(0, 9)) for _ in range(9))
-    digits = [int(d) for d in body]
-    doubled = digits[-1::-2]
-    not_doubled = digits[-2::-2]
-    doubled_sum = sum(d * 2 - 9 if d * 2 > 9 else d * 2 for d in doubled)
-    total = doubled_sum + sum(not_doubled)
-    check = (10 - total % 10) % 10
-    return body + str(check)
+    return body + str(luhn_check_digit(body))
 
 
 def fake_passport_reserved(value: str, rng: random.Random) -> str:

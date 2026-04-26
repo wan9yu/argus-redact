@@ -26,13 +26,16 @@ def _seed_from_value(value: str, type_name: str, salt: bytes) -> int:
 def _resolve_salt(seed: int | None) -> bytes:
     """Determine effective salt for HMAC seeding.
 
-    Priority: env var ARGUS_REDACT_PSEUDONYM_SALT → derived from seed if int → empty bytes.
+    Priority (caller-explicit wins, per design doc):
+    1. Caller-provided seed (int) → derived bytes
+    2. Env var ARGUS_REDACT_PSEUDONYM_SALT → encoded bytes
+    3. Empty bytes (no stable mapping)
     """
+    if seed is not None:
+        return seed.to_bytes(8, "big", signed=False) if seed >= 0 else seed.to_bytes(8, "big", signed=True)
     env = os.environ.get("ARGUS_REDACT_PSEUDONYM_SALT")
     if env:
         return env.encode("utf-8")
-    if seed is not None:
-        return seed.to_bytes(8, "big", signed=False) if seed >= 0 else seed.to_bytes(8, "big", signed=True)
     return b""
 
 

@@ -129,10 +129,17 @@ def _validate_id_number(value: str) -> bool:
         return False
     if value[0] == "0":
         return False
-    weights = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]
-    check_chars = "10X98765432"
-    total = sum(int(value[i]) * weights[i] for i in range(17))
-    return check_chars[total % 11] == value[17]
+    return gb11643_check_char(value[:17]) == value[17]
+
+
+GB11643_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
+GB11643_CHECK_CHARS = "10X98765432"
+
+
+def gb11643_check_char(body17: str) -> str:
+    """Compute GB 11643 check character for a 17-digit ID body."""
+    total = sum(int(body17[i]) * GB11643_WEIGHTS[i] for i in range(17))
+    return GB11643_CHECK_CHARS[total % 11]
 
 
 # Known Chinese bank BIN prefixes (6 digits)

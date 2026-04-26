@@ -12,7 +12,16 @@ import re
 from argus_redact.pure.reserved_range_scanner import _RESERVED_RANGE_PATTERNS
 from argus_redact.specs import zh as _zh  # noqa: F401  ensure zh registry loaded
 from argus_redact.specs.profiles import get_profile
-from argus_redact.specs.registry import _REGISTRY
+from argus_redact.specs.registry import lookup
+
+
+def _find_typedef(name: str, *langs: str):
+    """Return the first PIITypeDef in `langs` order whose name matches."""
+    by_lang = {td.lang: td for td in lookup(name)}
+    for lang in langs:
+        if lang in by_lang:
+            return by_lang[lang]
+    return None
 
 # Map zh PIITypeDef names → corresponding scanner-pattern keys. Only categorical
 # types (with structured reserved ranges) are listed; numeric types like age and
@@ -37,8 +46,7 @@ class TestRealisticDrift:
     def test_every_profile_type_should_have_faker_reserved(self):
         config = get_profile("pseudonym-llm")["config"]
         for type_name in config:
-            # Try zh first, then shared
-            typedef = _REGISTRY.get(("zh", type_name)) or _REGISTRY.get(("shared", type_name))
+            typedef = _find_typedef(type_name, "zh", "shared")
             assert typedef is not None, f"No PIITypeDef for {type_name}"
             assert typedef.faker_reserved is not None, (
                 f"{type_name} is in pseudonym-llm profile but has no faker_reserved"
@@ -52,7 +60,7 @@ class TestRealisticDrift:
         for type_name in config:
             if type_name not in _TYPE_TO_SCANNER:
                 continue  # numeric types skip
-            typedef = _REGISTRY.get(("zh", type_name))
+            typedef = _find_typedef(type_name, "zh")
             assert typedef is not None
             faker = typedef.faker_reserved
             assert faker is not None
