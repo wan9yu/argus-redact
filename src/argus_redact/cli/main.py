@@ -28,12 +28,29 @@ def _write_output(text: str, output_path: str | None):
 
 
 def cmd_redact(args):
-    from argus_redact import redact
+    from argus_redact import redact, redact_pseudonym_llm
 
     text = _read_input(args.input)
     key_path = Path(args.key)
 
-    # Load existing key if file exists
+    profile = getattr(args, "profile", None)
+    seed = int(args.seed) if args.seed else None
+    lang = args.lang.split(",") if "," in args.lang else args.lang
+
+    if profile == "pseudonym-llm":
+        salt = seed.to_bytes(8, "big", signed=False) if seed is not None and seed >= 0 else None
+        result = redact_pseudonym_llm(text, lang=lang, mode=args.mode, salt=salt)
+        key_path.write_text(json.dumps(result.key, ensure_ascii=False, indent=2))
+        payload = {
+            "audit_text": result.audit_text,
+            "downstream_text": result.downstream_text,
+            "display_text": result.display_text,
+            "key": result.key,
+        }
+        _write_output(json.dumps(payload, ensure_ascii=False, indent=2), args.output)
+        return
+
+    # Standard path (default / pipl / gdpr / hipaa / config-only)
     existing_key = None
     if key_path.exists():
         try:
@@ -42,9 +59,6 @@ def cmd_redact(args):
             print(f"Error: invalid key file: {args.key}", file=sys.stderr)
             sys.exit(5)
 
-    seed = int(args.seed) if args.seed else None
-    lang = args.lang.split(",") if "," in args.lang else args.lang
-
     redacted, key = redact(
         text,
         seed=seed,
@@ -52,11 +66,10 @@ def cmd_redact(args):
         lang=lang,
         key=existing_key,
         config=args.config,
+        profile=profile,
     )
 
-    # Write key file
     key_path.write_text(json.dumps(key, ensure_ascii=False, indent=2))
-
     _write_output(redacted, args.output)
 
 
@@ -221,6 +234,15 @@ def main():
     )
     p_redact.add_argument("-s", "--seed", default=None, help="Random seed for determinism")
     p_redact.add_argument("-c", "--config", default=None, help="Config file (JSON or YAML)")
+    p_redact.add_argument(
+        "--profile",
+        choices=["default", "pipl", "gdpr", "hipaa", "pseudonym-llm"],
+        default=None,
+        help=(
+            "Compliance profile. 'pseudonym-llm' emits JSON with audit_text, "
+            "downstream_text, display_text, key (for LLM-friendly redaction)."
+        ),
+    )
     p_redact.set_defaults(func=cmd_redact)
 
     # restore

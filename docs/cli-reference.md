@@ -42,6 +42,8 @@ argus-redact redact [input] [options]
 | `-l, --lang` | | `zh` | Language(s), comma-separated. `zh`, `en`, `zh,en`. |
 | `-m, --mode` | | `fast` | Detection mode: `fast` (regex only), `ner` (regex + NER), `auto` (all layers). |
 | `-s, --seed` | | *(random)* | Fixed seed for deterministic pseudonyms. For testing and reproducibility. |
+| `-c, --config` | | none | Path to config file (JSON or YAML) with per-type strategy overrides. |
+| `--profile` | | none | Compliance profile: `default`, `pipl`, `gdpr`, `hipaa`, or `pseudonym-llm`. |
 
 ### Examples
 
@@ -58,11 +60,46 @@ cat input.txt | argus-redact redact -k key.json -l zh,en
 # Fast mode (regex only, no NER)
 cat input.txt | argus-redact redact -k key.json -m fast
 
+# Compliance profile (PIPL / GDPR / HIPAA — text output, same as default)
+cat input.txt | argus-redact redact -k key.json --profile pipl
+
 # Batch: reuse key across multiple files
 argus-redact redact file1.txt -k shared.json -o out1.txt
 argus-redact redact file2.txt -k shared.json -o out2.txt   # same pseudonyms
 argus-redact redact file3.txt -k shared.json -o out3.txt   # same pseudonyms
 ```
+
+### `--profile pseudonym-llm` (JSON output)
+
+The `pseudonym-llm` profile produces realistic-looking but reserved-range fake values
+(e.g., `19999...` mobile, `999...` ID, `999999...` bank card) so downstream LLMs can
+reason about message structure. It emits **structured JSON** (not plain text) with
+three text forms sharing one key dict:
+
+| Field | Purpose |
+|-------|---------|
+| `audit_text` | Placeholder labels (e.g., `[TEL-79329]`, `P-164`) — for compliance archive |
+| `downstream_text` | Realistic reserved-range fake — feed to LLMs |
+| `display_text` | Realistic + visible `ⓕ` marker — safe to show to humans |
+| `key` | Unified mapping; `argus-redact restore` works on any of the three forms |
+
+```bash
+# Get all three forms as JSON
+echo "请拨打 13912345678 联系王建国" | \
+  argus-redact redact -k key.json --profile pseudonym-llm
+
+# Pipe one form to an LLM
+echo "请拨打 13912345678 联系王建国" | \
+  argus-redact redact -k key.json --profile pseudonym-llm | \
+  jq -r .downstream_text | \
+  llm "summarize"
+
+# Round-trip restore (works on any of the three forms)
+echo "请拨打 19999123456 联系张明" | argus-redact restore -k key.json
+```
+
+> ⚠️ **Do not show `downstream_text` to humans without context** — it looks like
+> real data. Use `display_text` for UI rendering or `audit_text` for compliance logs.
 
 ### Key File Behavior
 
