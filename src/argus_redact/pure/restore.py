@@ -6,6 +6,7 @@ import re as _re
 
 from argus_redact.pure.display_marker import strip_display_markers
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS, restore_grammar_en
+from argus_redact.pure.reserved_range_scanner import scan_for_pollution
 
 # Danger patterns: pseudonyms appearing near these suggest exfiltration attempts
 _DANGER_PATTERNS = _re.compile(
@@ -27,6 +28,7 @@ def check_restore_safety(
     Checks:
     1. Pseudonym frequency amplification (appears more than in original)
     2. Pseudonym near danger patterns (email, URL, exfiltration verbs)
+    3. Reserved-range value amplification (realistic mode hallucinations)
     """
     warnings = []
     for code in key:
@@ -53,6 +55,17 @@ def check_restore_safety(
                         f"'{danger.group()}' — possible exfiltration"
                     )
                     break  # one warning per pseudonym is enough
+
+    # Check 3: reserved-range amplification (realistic mode). Counts only —
+    # specific values are not enumerated to keep this O(n) over text length.
+    redacted_hits = scan_for_pollution(redacted)
+    output_hits = scan_for_pollution(llm_output)
+    if len(output_hits) > len(redacted_hits):
+        delta = len(output_hits) - len(redacted_hits)
+        warnings.append(
+            f"LLM output contains {delta} additional reserved-range value(s) not in input — "
+            f"possible hallucination or fabrication"
+        )
 
     return warnings
 

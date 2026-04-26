@@ -8,11 +8,34 @@ from __future__ import annotations
 from argus_redact._types import PseudonymLLMResult
 from argus_redact.glue.redact import redact as _redact
 from argus_redact.pure.display_marker import mark_for_display, resolve_marker
+from argus_redact.pure.reserved_range_scanner import scan_for_pollution
 from argus_redact.specs.profiles import get_profile
 
 # Bytes prefix used to derive an int seed from a salt (replace() takes int seeds).
 _SALT_SEED_BYTES = 8
 _SALT_SEED_MASK = 0x7FFFFFFFFFFFFFFF
+
+
+class PseudonymPollutionError(ValueError):
+    """Raised when input to pseudonym-llm already contains reserved-range values.
+
+    Re-redacting realistic-mode output would silently corrupt the key dict
+    (the same fake value cannot map back to two different originals). Callers
+    should restore() first, or pass ``_polluted_input_ok=True`` if the
+    collision risk has been accepted.
+    """
+
+
+def _check_input_pollution(text: str) -> None:
+    """Raise PseudonymPollutionError if `text` contains any reserved-range values."""
+    hits = scan_for_pollution(text)
+    if hits:
+        start, _, type_name = hits[0]
+        raise PseudonymPollutionError(
+            f"Input contains {len(hits)} reserved-range value(s); "
+            f"call restore() first or pass _polluted_input_ok=True. "
+            f"First hit: type={type_name} at offset {start}"
+        )
 
 
 def redact_pseudonym_llm(
@@ -25,6 +48,8 @@ def redact_pseudonym_llm(
     names: list[str] | None = None,
     types: list[str] | None = None,
     types_exclude: list[str] | None = None,
+    strict_input: bool = True,
+    _polluted_input_ok: bool = False,
 ) -> PseudonymLLMResult:
     """Redact `text` with the pseudonym-llm profile, returning three text forms.
 
@@ -38,7 +63,16 @@ def redact_pseudonym_llm(
     this is negligible; for mode="ner"/"auto" it doubles NER/LLM cost. The
     duplication is necessary because audit_text and downstream_text need
     different replacement strategies on the same entity set.
+
+    Two opt-out paths for the input pollution check:
+    - ``strict_input=False`` — public toggle that disables ALL input validation
+      (pollution check today; future strictness checks may be added).
+    - ``_polluted_input_ok=True`` — narrow "I accept the collision risk for THIS
+      call's pollution check"; underscore-prefix marks it as advanced usage.
     """
+    if strict_input and not _polluted_input_ok:
+        _check_input_pollution(text)
+
     profile = get_profile("pseudonym-llm")
     realistic_config = dict(profile["config"])
     # Audit pass uses the same type set with "remove" strategy so audit_text
