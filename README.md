@@ -152,6 +152,45 @@ argus-redact assess <<< "身份证110101199003074610"
 Compliance profiles: `redact(text, profile="pipl")` / `"gdpr"` / `"hipaa"`.
 Type filtering: `redact(text, types=["phone", "id_number"])` / `types_exclude=["address"]`.
 
+## Realistic Redaction (`pseudonym-llm` profile)
+
+Default redaction emits placeholder labels (`[TEL-79329]`, `P-164`) — clear for audit, but breaks downstream LLM reasoning because the message structure is gone. The `pseudonym-llm` profile replaces PII with **realistic-looking but reserved-range fake values** (e.g., `19999...` mobile, `999...` ID, `999999...` bank card). LLMs reason correctly; humans can still tell it's synthetic if they know the convention.
+
+Each call returns **three text forms** sharing one key dict:
+
+| Form | Example | Use for |
+|------|---------|---------|
+| `audit_text` | `请拨打 [TEL-79329] 联系 P-164` | Compliance archive — placeholder labels are auditable |
+| `downstream_text` | `请拨打 19999123456 联系张明` | LLM input — semantic structure preserved |
+| `display_text` | `请拨打 19999123456ⓕ 联系张明ⓕ` | UI rendering — visible `ⓕ` marker prevents confusion |
+
+```python
+from argus_redact import redact_pseudonym_llm, restore
+
+result = redact_pseudonym_llm("请拨打 13912345678 联系王建国")
+result.downstream_text  # "请拨打 19999123456 联系张明"  → LLM
+result.display_text     # "请拨打 19999123456ⓕ 联系张明ⓕ"  → UI
+result.audit_text       # "请拨打 [TEL-79329] 联系 P-164"  → audit log
+
+# Round-trip works on any of the three forms
+restore(result.downstream_text, result.key)  # → original
+```
+
+```bash
+# CLI emits all three forms as JSON
+echo "请拨打 13912345678 联系王建国" | \
+  argus-redact redact -k key.json --profile pseudonym-llm | \
+  jq .downstream_text
+```
+
+**Reserved ranges** (zh): `199-99-XXXXXX` mobile (199-99 sub-segment unassigned), `099-` landline (no such area code), `999XXX` ID address code (GB/T 2260 unassigned), `999999` bank BIN (银联 unassigned), 滨海市 fictional address. International: `example.com` (RFC 2606), `192.0.2.0/24` etc. (RFC 5737).
+
+**Argus Gateway integration**: response headers should include `X-Argus-Redact-Profile: pseudonym-llm`; UI clients render `display_text`, LLM clients consume `downstream_text`. Storage of `downstream_text` as business truth is unsafe — it's synthetic by design.
+
+> ⚠️ Realistic-mode output **must not be re-redacted** (it would corrupt the key dict). `redact_pseudonym_llm` will raise `PseudonymPollutionError` if called on already-faked input — call `restore()` first.
+
+[Full API →](docs/api-reference.md#redact_pseudonym_llm) · [Known limitations →](docs/known-issues.md#pseudonym-llm-limitations)
+
 ## Integrations
 
 | | Install |
