@@ -321,7 +321,29 @@ restore(result.display_text, result.key, display_marker="ⓕ")     # → origina
 result1 = redact_pseudonym_llm(text, salt=b"shared-secret-32-bytes-min")
 result2 = redact_pseudonym_llm(text, salt=b"shared-secret-32-bytes-min")
 assert result1.downstream_text == result2.downstream_text
+
+# English text
+en = redact_pseudonym_llm(
+    "Call John Smith at (415) 555-1234, email john@company.com",
+    lang="en",
+)
+en.downstream_text  # "Call John Doe at (555) 555-0142, email user42@example.com"
+restore(en.downstream_text, en.key)  # → original
+
+# Mixed zh + en (auto-detect)
+mx = redact_pseudonym_llm("客户Wang at user@company.com", lang="auto")
+restore(mx.downstream_text, mx.key)  # → original
 ```
+
+### Reserved-range coverage
+
+| Locale | Types | Reserved range |
+|--------|-------|----------------|
+| zh | phone, phone_landline, id_number, bank_card, license_plate, passport, address, person, age, date_of_birth | 199-99 mobile, 099 landline, 999XXX ID, 999999 BIN, 滨海市 city, 张三 names |
+| en | phone, ssn, credit_card, address, person | (555) 555-01XX, 999-XX SSN, 999999 BIN, 1313 Mockingbird Lane, John Doe |
+| shared (RFC) | email, ip_address, mac_address | example.{com,org,net} (RFC 2606), 192.0.2.0/24 etc. (RFC 5737), 2001:db8::/32 (RFC 3849), 00:00:5E:00:53:xx (RFC 7042) |
+
+> ℹ️ **en/person realistic requires NER**: English person detection is NER-only (spaCy `en_core_web_sm`). In `mode="fast"` no person entity is detected, so realistic person replacement only happens in `mode="ner"` or higher, or when `names=[...]` is supplied for fast-mode list matching.
 
 ### Errors
 

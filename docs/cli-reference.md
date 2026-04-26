@@ -96,6 +96,11 @@ echo "请拨打 13912345678 联系王建国" | \
 
 # Round-trip restore (works on any of the three forms)
 echo "请拨打 19999123456 联系张明" | argus-redact restore -k key.json
+
+# English (NANP phone, SSN, email)
+echo "Call (415) 555-1234, SSN 123-45-6789, email john@company.com" | \
+  argus-redact redact -k en-key.json --profile pseudonym-llm -l en
+# downstream_text: "Call (555) 555-0142, SSN 999-37-2811, email user42@example.com"
 ```
 
 > ⚠️ **Do not show `downstream_text` to humans without context** — it looks like

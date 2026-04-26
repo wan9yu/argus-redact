@@ -125,10 +125,10 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 
 ## North Star
 
-| Dimension | Current (v0.5.0) | Next milestone |
+| Dimension | Current (v0.5.1) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini. Cross-layer hints | Adversarial testing |
-| **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (`pseudonym-llm` zh) | en realistic (v0.5.1) |
+| **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (`pseudonym-llm` zh + en + shared RFC) | Streaming realistic (v0.5.2) |
 | **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design) | Task-aware guidance |
 | **Compliance** | PIPL ~85%, risk assessment + profiles | PIPL/GDPR/HIPAA (byproduct) |
 | **Coverage** | 8 langs, 4 LLMs benchmarked, 6 frameworks | Streaming realistic (v0.5.2) |
@@ -167,23 +167,37 @@ Each call returns **three text forms** sharing one key dict:
 ```python
 from argus_redact import redact_pseudonym_llm, restore
 
-result = redact_pseudonym_llm("请拨打 13912345678 联系王建国")
-result.downstream_text  # "请拨打 19999123456 联系张明"  → LLM
-result.display_text     # "请拨打 19999123456ⓕ 联系张明ⓕ"  → UI
-result.audit_text       # "请拨打 [TEL-79329] 联系 P-164"  → audit log
+# Chinese
+zh = redact_pseudonym_llm("请拨打 13912345678 联系王建国", lang="zh")
+zh.downstream_text  # "请拨打 19999123456 联系张明"           → LLM
+zh.display_text     # "请拨打 19999123456ⓕ 联系张明ⓕ"        → UI
 
-# Round-trip works on any of the three forms
-restore(result.downstream_text, result.key)  # → original
+# English
+en = redact_pseudonym_llm("Call (415) 555-1234, SSN 123-45-6789", lang="en")
+en.downstream_text  # "Call (555) 555-0142, SSN 999-37-2811" → LLM
+en.audit_text       # "Call [PHONE-23801], SSN [SSN-15772]"  → audit
+
+# Mixed (auto-detect)
+mx = redact_pseudonym_llm("客户Wang at user@company.com", lang="auto")
+
+# Round-trip works on any of the three forms, in any language
+restore(zh.downstream_text, zh.key)   # → original
+restore(en.downstream_text, en.key)   # → original
+restore(mx.downstream_text, mx.key)   # → original
 ```
 
 ```bash
 # CLI emits all three forms as JSON
-echo "请拨打 13912345678 联系王建国" | \
-  argus-redact redact -k key.json --profile pseudonym-llm | \
+echo "Call (415) 555-1234" | \
+  argus-redact redact -k key.json --profile pseudonym-llm -l en | \
   jq .downstream_text
+# "Call (555) 555-0142"
 ```
 
-**Reserved ranges** (zh): `199-99-XXXXXX` mobile (199-99 sub-segment unassigned), `099-` landline (no such area code), `999XXX` ID address code (GB/T 2260 unassigned), `999999` bank BIN (银联 unassigned), 滨海市 fictional address. International: `example.com` (RFC 2606), `192.0.2.0/24` etc. (RFC 5737).
+**Reserved ranges**:
+- **zh**: `199-99-XXXXXX` mobile (sub-segment unassigned by 工信部), `099-` landline (no such area code), `999XXX` ID address code (GB/T 2260 unassigned), `999999` bank BIN (银联 unassigned), 滨海市 fictional city.
+- **en**: `(555) 555-01XX` phone (FCC permanent fictional reservation), `999-XX-XXXX` SSN (SSA never assigns 9XX), `999999` credit card BIN, John Doe / Jane Roe person, 1313 Mockingbird Lane address.
+- **shared (RFC)**: `example.com` / `.org` / `.net` email (RFC 2606), `192.0.2.0/24` / `198.51.100.0/24` / `203.0.113.0/24` IPv4 (RFC 5737), `2001:db8::/32` IPv6 (RFC 3849), `00:00:5E:00:53:xx` MAC (RFC 7042).
 
 **Argus Gateway integration**: response headers should include `X-Argus-Redact-Profile: pseudonym-llm`; UI clients render `display_text`, LLM clients consume `downstream_text`. Storage of `downstream_text` as business truth is unsafe — it's synthetic by design.
 
