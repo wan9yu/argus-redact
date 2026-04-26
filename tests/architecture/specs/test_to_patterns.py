@@ -62,6 +62,7 @@ class TestToPatterns:
         "political",
         "sexual_orientation",
         "self_reference",
+        "age",
     }
 
     def test_spec_patterns_should_exist(self):

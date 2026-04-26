@@ -1,5 +1,7 @@
 """Tests for the 'realistic' strategy dispatch in pure/replacer.py."""
 
+import re
+
 from argus_redact.pure.replacer import VALID_STRATEGIES, replace
 from argus_redact.specs import zh as _zh  # noqa: F401  ensure registration
 
@@ -62,3 +64,19 @@ class TestRealisticStrategy:
         assert len(new_fakes) == 1, "Re-roll should have produced one new fake"
         assert new_fakes[0].startswith("19999"), f"Got {new_fakes[0]}"
         assert second_key[new_fakes[0]] == "13912345678"
+
+
+class TestRealisticNumeric:
+    def test_realistic_age_should_shift_within_band(self):
+        text = "年龄32岁"
+        entities = [make_match("32岁", "age", 2)]
+        config = {"age": {"strategy": "realistic"}}
+        redacted, key = replace(text, entities, config=config, seed=42)
+
+        fakes = list(key.keys())
+        assert len(fakes) == 1
+        fake = fakes[0]
+        assert "岁" in fake
+        n = int(re.search(r"\d+", fake).group())
+        assert n != 32, "Identity mapping not avoided"
+        assert 27 <= n <= 37, f"Expected 32 ±5, got {n}"

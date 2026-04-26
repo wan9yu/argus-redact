@@ -11,6 +11,7 @@ from argus_redact.lang.zh.patterns import (
     _validate_id_number,
 )
 
+from .fakers_numeric import fake_age_noise, fake_date_of_birth_noise
 from .fakers_zh import (
     fake_address,
     fake_bank_card,
@@ -552,6 +553,7 @@ register(
         ),
         sensitivity=2,
         faker=fake_date_of_birth,
+        faker_reserved=fake_date_of_birth_noise,
         source="GB/T 2261.1《个人基本信息分类与代码》",
         description="Chinese date of birth (keyword-triggered, multiple formats)",
     )
@@ -987,6 +989,27 @@ register(
         faker_reserved=fake_person_reserved,
         source="公安部全国姓名统计, 百家姓",
         description="Chinese person name (candidate generation + evidence scoring, see person.py)",
+    )
+)
+
+
+# ── Age ──
+
+register(
+    PIITypeDef(
+        name="age",
+        lang="zh",
+        format="X岁 / 年龄: X / 周岁X / X years old",
+        charset="digits",
+        strategy="remove",
+        label="[年龄已脱敏]",
+        examples=("32岁", "年龄: 32", "32 years old"),
+        counterexamples=("999岁",),
+        _patterns=(),
+        sensitivity=2,
+        faker_reserved=fake_age_noise,
+        source="GB/T 2261.1《个人基本信息分类与代码》",
+        description="Age (Chinese 岁/年龄/周岁 + English years old/aged)",
     )
 )
 
