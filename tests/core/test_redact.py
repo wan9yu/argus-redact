@@ -93,6 +93,22 @@ class TestRedactBasic:
         assert "test@example.com" not in redacted
         assert len(key) == 2
 
+    def test_should_detect_en_person_in_fast_mode(self):
+        """v0.5.3: English person detection now works in fast mode (no NER needed)."""
+        text = "Contact John Smith via phone 415-555-1234"
+        redacted, key = redact(text, seed=42, mode="fast", lang="en")
+
+        assert "John Smith" not in redacted
+        assert "John Smith" in key.values()
+
+    def test_should_detect_en_and_zh_person_when_mixed_lang(self):
+        """zh + en lang list: both person detectors fire."""
+        text = "客户王建国 contacted John Smith"
+        redacted, key = redact(text, seed=42, mode="fast", lang=["zh", "en"], names=["王建国"])
+
+        assert "王建国" in key.values()
+        assert "John Smith" in key.values()
+
 
 class TestRedactRoundtrip:
     @parametrize_examples("redact_roundtrip.json")
@@ -557,9 +573,11 @@ class TestRedactMode:
         assert "13812345678" not in redacted
 
     def test_should_default_to_fast_mode(self):
-        # English name is L2-NER only; default must NOT trigger a surprise NER load.
-        redacted, key = redact("John Smith called me", seed=42, lang="en")
-        assert "John Smith" in redacted
+        # Default mode is fast; verify by using a long-tail name NOT in the
+        # top-N surname list so it stays untouched (would only be caught by NER).
+        # Smith is in v0.5.3's surname list — Xeoplux deliberately is not.
+        redacted, key = redact("Quincy Xeoplux called me", seed=42, lang="en")
+        assert "Quincy Xeoplux" in redacted
         assert key == {}
 
 

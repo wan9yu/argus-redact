@@ -243,7 +243,17 @@ def _detect(
         timing["layer_1b_person_ms"] = (time.perf_counter() - t0) * 1000
         entities.extend(_tag_layer(person_names, 1))
         layer1_count += len(person_names)
-    elif names:
+
+    if "en" in langs:
+        from argus_redact.lang.en.person import detect_person_names as detect_en_person
+
+        t0 = time.perf_counter()
+        en_person_names = detect_en_person(text, known_names=names)
+        timing["layer_1b_person_en_ms"] = (time.perf_counter() - t0) * 1000
+        entities.extend(_tag_layer(en_person_names, 1))
+        layer1_count += len(en_person_names)
+
+    if "zh" not in langs and "en" not in langs and names:
         for name in names:
             if not name:
                 continue
