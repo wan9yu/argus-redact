@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re as _re
 
+from argus_redact.pure.display_marker import strip_display_markers
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS, restore_grammar_en
 
 # Danger patterns: pseudonyms appearing near these suggest exfiltration attempts
@@ -66,8 +67,14 @@ def wipe_key(key: dict) -> None:
     key.clear()
 
 
-def restore(text: str, key: dict | str) -> str:
-    """Replace pseudonyms with originals using the key."""
+def restore(text: str, key: dict | str, *, display_marker: str | None = None) -> str:
+    """Replace pseudonyms with originals using the key.
+
+    If `display_marker` is provided, strip markers from `text` before key lookup.
+    """
+    if display_marker is not None:
+        text = strip_display_markers(text, marker=display_marker)
+
     if isinstance(key, str):
         import json
 
