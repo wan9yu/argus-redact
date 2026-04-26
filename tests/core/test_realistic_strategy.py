@@ -1,9 +1,11 @@
 """Tests for the 'realistic' strategy dispatch in pure/replacer.py."""
 
+import random
 import re
 
-from argus_redact.pure.replacer import VALID_STRATEGIES, replace
+from argus_redact.pure.replacer import VALID_STRATEGIES, _find_faker_reserved, replace
 from argus_redact.specs import zh as _zh  # noqa: F401  ensure registration
+from argus_redact.specs.registry import PIITypeDef, _REGISTRY, register
 
 from tests.conftest import make_match
 
@@ -64,6 +66,58 @@ class TestRealisticStrategy:
         assert len(new_fakes) == 1, "Re-roll should have produced one new fake"
         assert new_fakes[0].startswith("19999"), f"Got {new_fakes[0]}"
         assert second_key[new_fakes[0]] == "13912345678"
+
+
+class TestLangAwareLookup:
+    """`_find_faker_reserved` must prefer entity's detected lang, then 'shared', then any.
+
+    Critical for v0.5.1 where en + zh both register `phone`/`address`/`person`.
+    """
+
+    def setup_method(self):
+        # Inject a temporary en typedef sharing zh's `phone` name to simulate collision
+        def _en_phone_faker(value: str, rng: random.Random) -> str:
+            return "(555) 555-0100"
+
+        self._injected = PIITypeDef(
+            name="phone",
+            lang="en",
+            format="(NNN) NNN-NNNN",
+            faker_reserved=_en_phone_faker,
+        )
+        register(self._injected)
+
+    def teardown_method(self):
+        _REGISTRY.pop(("en", "phone"), None)
+
+    def test_should_prefer_detected_lang(self):
+        # zh detected → zh fake_phone_reserved (199-99 prefix)
+        zh_faker = _find_faker_reserved("phone", ["zh"])
+        result = zh_faker("13912345678", random.Random(1))
+        assert result.startswith("19999"), f"Expected zh phone, got {result}"
+
+        # en detected → en _en_phone_faker (555 prefix)
+        en_faker = _find_faker_reserved("phone", ["en"])
+        result = en_faker("415-555-1234", random.Random(1))
+        assert "(555)" in result, f"Expected en phone, got {result}"
+
+    def test_should_fall_through_to_shared_when_lang_not_registered(self):
+        # 'ja' not registered → falls through; with no shared/phone, returns first available
+        faker = _find_faker_reserved("phone", ["ja"])
+        # Either zh or en faker is acceptable as fallback (any-match)
+        assert faker is not None
+
+    def test_should_return_none_when_no_faker_reserved_anywhere(self):
+        assert _find_faker_reserved("nonexistent_type_xyz", ["zh", "en"]) is None
+
+    def test_replace_should_use_lang_preference(self):
+        # When replace() gets langs=["en"], should pick en faker for phone
+        text = "call (415) 555-1234"
+        entities = [make_match("(415) 555-1234", "phone", 5)]
+        config = {"phone": {"strategy": "realistic"}}
+        _, key = replace(text, entities, config=config, seed=42, langs=["en"])
+        fake = next(iter(key))
+        assert "(555)" in fake, f"Expected en phone shape, got {fake}"
 
 
 class TestRealisticNumeric:

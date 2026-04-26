@@ -39,6 +39,27 @@ def _resolve_salt(seed: int | None) -> bytes:
     return b""
 
 
+def _find_faker_reserved(name: str, langs: list[str] | None) -> Callable | None:
+    """Find faker_reserved for a type, preferring detected langs, then 'shared', then any.
+
+    Lang-aware lookup is required when zh and en both register same-named types
+    (e.g., `phone`, `address`, `person`); without preference order, the first
+    registered lang silently wins regardless of the entity's actual language.
+    """
+    from argus_redact.specs.registry import lookup
+
+    by_lang = {td.lang: td for td in lookup(name)}
+    for lang in langs or ():
+        if lang in by_lang and by_lang[lang].faker_reserved:
+            return by_lang[lang].faker_reserved
+    if "shared" in by_lang and by_lang["shared"].faker_reserved:
+        return by_lang["shared"].faker_reserved
+    for td in by_lang.values():
+        if td.faker_reserved:
+            return td.faker_reserved
+    return None
+
+
 def _generate_unique_fake(
     faker_reserved: Callable[[str, random.Random], str],
     value: str,
@@ -312,11 +333,15 @@ def replace(
     seed: int | None = None,
     key: dict[str, str] | None = None,
     config: dict | None = None,
+    langs: list[str] | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Replace detected entities in text, producing (redacted_text, key).
 
     config overrides default strategies per entity type. Example:
         {"phone": {"strategy": "remove", "replacement": "[TEL]"}}
+
+    `langs` provides language preference for the realistic strategy's
+    faker_reserved lookup (e.g., en text prefers en/phone over zh/phone).
     """
     _validate_config(config)
 
@@ -394,12 +419,7 @@ def replace(
                     )
                 replacement = pseudo_gen.get(entity.text)
         elif strategy == "realistic":
-            from argus_redact.specs.registry import lookup
-
-            faker_reserved = next(
-                (td.faker_reserved for td in lookup(entity.type) if td.faker_reserved),
-                None,
-            )
+            faker_reserved = _find_faker_reserved(entity.type, langs)
 
             if faker_reserved is not None:
                 salt = _resolve_salt(seed)

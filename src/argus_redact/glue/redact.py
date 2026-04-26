@@ -354,6 +354,7 @@ def _replace_and_emit(
         seed=seed,
         key=existing_key,
         config=config,
+        langs=langs,
     )
     effective_lang = lang if isinstance(lang, str) else (lang[0] if lang else "zh")
     if effective_lang == "en":
