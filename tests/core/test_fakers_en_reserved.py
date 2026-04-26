@@ -11,6 +11,7 @@ Each faker outputs values in officially-reserved or convention-reserved ranges:
 import random
 import re
 
+from argus_redact.lang.shared.patterns import validate_luhn
 from argus_redact.specs.fakers_en_reserved import (
     RESERVED_PERSON_NAMES_EN,
     fake_address_en_reserved,
@@ -49,11 +50,7 @@ class TestFakeCreditCardEnReserved:
         result = fake_credit_card_en_reserved("4111111111111111", random.Random(1))
         assert result.startswith("999999"), f"Got {result}"
         assert len(result) == 16
-        # Luhn-valid
-        digits = [int(d) for d in result]
-        odd = sum(digits[-1::-2])
-        even = sum(d * 2 - 9 if d * 2 > 9 else d * 2 for d in digits[-2::-2])
-        assert (odd + even) % 10 == 0
+        assert validate_luhn(result)
 
 
 class TestFakePersonEnReserved:

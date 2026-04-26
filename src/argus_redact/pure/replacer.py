@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import hmac
 import os
@@ -45,11 +46,18 @@ def _find_faker_reserved(name: str, langs: list[str] | None) -> Callable | None:
     Lang-aware lookup is required when zh and en both register same-named types
     (e.g., `phone`, `address`, `person`); without preference order, the first
     registered lang silently wins regardless of the entity's actual language.
+
+    Cached on (name, lang_tuple) — registry is built at import and frozen.
     """
+    return _faker_reserved_cached(name, tuple(langs or ()))
+
+
+@functools.lru_cache(maxsize=256)
+def _faker_reserved_cached(name: str, langs: tuple[str, ...]) -> Callable | None:
     from argus_redact.specs.registry import lookup
 
     by_lang = {td.lang: td for td in lookup(name)}
-    for lang in langs or ():
+    for lang in langs:
         if lang in by_lang and by_lang[lang].faker_reserved:
             return by_lang[lang].faker_reserved
     if "shared" in by_lang and by_lang["shared"].faker_reserved:

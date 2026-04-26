@@ -83,14 +83,14 @@ class TestEnglishProfile:
     def test_should_round_trip_ip_and_mac(self):
         # IPv4 detection requires keyword context (e.g. "IP:") per lang/shared/patterns.py.
         # MAC has no such requirement — bare format match.
+        import re
+
+        from argus_redact.pure.reserved_range_scanner import _RESERVED_RANGE_PATTERNS
+
         text = "Server IP 10.0.0.5 with MAC aa:bb:cc:dd:ee:ff"
         result = redact_pseudonym_llm(text, lang="en")
-        assert (
-            "192.0.2." in result.downstream_text
-            or "198.51.100." in result.downstream_text
-            or "203.0.113." in result.downstream_text
-        )
-        assert "00:00:5E:00:53" in result.downstream_text
+        assert re.search(_RESERVED_RANGE_PATTERNS["ipv4_shared"], result.downstream_text)
+        assert re.search(_RESERVED_RANGE_PATTERNS["mac_shared"], result.downstream_text)
         assert restore(result.downstream_text, result.key) == text
 
 

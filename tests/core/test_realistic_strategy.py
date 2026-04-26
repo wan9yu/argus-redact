@@ -3,9 +3,14 @@
 import random
 import re
 
-from argus_redact.pure.replacer import VALID_STRATEGIES, _find_faker_reserved, replace
+from argus_redact.pure.replacer import (
+    VALID_STRATEGIES,
+    _faker_reserved_cached,
+    _find_faker_reserved,
+    replace,
+)
 from argus_redact.specs import zh as _zh  # noqa: F401  ensure registration
-from argus_redact.specs.registry import PIITypeDef, _REGISTRY, register
+from argus_redact.specs.registry import PIITypeDef, register, unregister
 
 from tests.conftest import make_match
 
@@ -75,20 +80,31 @@ class TestLangAwareLookup:
     """
 
     def setup_method(self):
-        # Inject a temporary en typedef sharing zh's `phone` name to simulate collision
+        # Save any existing en/phone registration so teardown can restore it
+        # (specs/en.py registers a real one in v0.5.1+).
+        from argus_redact.specs.registry import _REGISTRY
+
+        self._original_en_phone = _REGISTRY.get(("en", "phone"))
+
         def _en_phone_faker(value: str, rng: random.Random) -> str:
             return "(555) 555-0100"
 
-        self._injected = PIITypeDef(
-            name="phone",
-            lang="en",
-            format="(NNN) NNN-NNNN",
-            faker_reserved=_en_phone_faker,
+        register(
+            PIITypeDef(
+                name="phone",
+                lang="en",
+                format="(NNN) NNN-NNNN",
+                faker_reserved=_en_phone_faker,
+            )
         )
-        register(self._injected)
+        _faker_reserved_cached.cache_clear()
 
     def teardown_method(self):
-        _REGISTRY.pop(("en", "phone"), None)
+        if self._original_en_phone is not None:
+            register(self._original_en_phone)
+        else:
+            unregister("en", "phone")
+        _faker_reserved_cached.cache_clear()
 
     def test_should_prefer_detected_lang(self):
         # zh detected → zh fake_phone_reserved (199-99 prefix)

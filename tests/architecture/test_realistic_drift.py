@@ -64,6 +64,15 @@ class TestRealisticDrift:
                 f"{type_name} is in pseudonym-llm profile but has no faker_reserved"
             )
 
+    def test_scanner_keys_referenced_by_drift_table_must_exist(self):
+        """If _TYPE_LANG_TO_SCANNER points at a renamed/missing scanner key, fail loudly."""
+        missing = set(_TYPE_LANG_TO_SCANNER.values()) - set(_RESERVED_RANGE_PATTERNS)
+        assert not missing, (
+            f"Scanner keys missing from _RESERVED_RANGE_PATTERNS: {missing}. "
+            f"Either add the patterns to reserved_range_scanner.py or remove these "
+            f"entries from _TYPE_LANG_TO_SCANNER."
+        )
+
     def test_every_faker_output_should_match_scanner_pattern(self):
         """For each (type, lang) with a scanner pattern, faker output must match it."""
         for (type_name, lang), scanner_key in _TYPE_LANG_TO_SCANNER.items():

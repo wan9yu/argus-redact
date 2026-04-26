@@ -100,6 +100,11 @@ def register(typedef: PIITypeDef) -> PIITypeDef:
     return typedef
 
 
+def unregister(lang: str, name: str) -> None:
+    """Remove a registration. Primarily for tests that inject temporary types."""
+    _REGISTRY.pop((lang, name), None)
+
+
 def get(lang: str, name: str) -> PIITypeDef:
     """Get a PII type definition by language and name."""
     key = (lang, name)

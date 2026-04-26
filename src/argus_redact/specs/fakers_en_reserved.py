@@ -6,7 +6,7 @@ a value in an officially-reserved or convention-reserved range:
   - ssn:         999-XX-XXXX (SSA permanently excludes 9XX area numbers)
   - credit_card: 999999 BIN (unassigned in card-issuer space) + Luhn
   - person:      John Doe / Jane Roe / Richard Roe etc. (US legal placeholders)
-  - address:     固定虚构 table (1313 Mockingbird Lane, Springfield USA etc.)
+  - address:     fixed-fictional table (1313 Mockingbird Lane, Springfield USA etc.)
 """
 
 from __future__ import annotations
@@ -65,5 +65,5 @@ def fake_person_en_reserved(value: str, rng: random.Random) -> str:
 
 
 def fake_address_en_reserved(value: str, rng: random.Random) -> str:
-    """Pick a fictional pop-culture address from the固定 table."""
+    """Pick a fictional pop-culture address from the fixed table."""
     return rng.choice(RESERVED_ADDRESSES_EN)

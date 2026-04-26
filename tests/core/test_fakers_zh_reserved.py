@@ -9,6 +9,7 @@ Each faker must:
 import random
 import re
 
+from argus_redact.lang.shared.patterns import validate_luhn
 from argus_redact.specs.fakers_zh_reserved import (
     RESERVED_PERSON_NAMES,
     fake_address_reserved,
@@ -61,10 +62,7 @@ class TestFakeBankCardReserved:
 
     def test_should_pass_luhn(self):
         result = fake_bank_card_reserved("orig", random.Random(1))
-        digits = [int(d) for d in result]
-        odd_sum = sum(digits[-1::-2])
-        even_sum = sum(d * 2 - 9 if d * 2 > 9 else d * 2 for d in digits[-2::-2])
-        assert (odd_sum + even_sum) % 10 == 0
+        assert validate_luhn(result)
 
 
 class TestFakePhoneLandlineReserved:
