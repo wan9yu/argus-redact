@@ -56,6 +56,21 @@ redacted, key = redact("他在星巴克和Costa都喝了咖啡")
 # First occurrence: no suffix. Second: ①. Third: ②.
 ```
 
+**Available strategies** (`argus_redact.pure.replacer.VALID_STRATEGIES`):
+
+| Strategy | Effect | Key entry? |
+|----------|--------|------------|
+| `pseudonym` | Replace with `P-NNNNN` (or per-type prefix) | yes |
+| `realistic` | Replace with reserved-range fake (e.g., `19999...`) | yes |
+| `mask` | Replace with prefix + `***` + suffix (`138****5678`) | yes |
+| `name_mask` | Chinese name mask (`张*`, `李**`) | yes |
+| `landline_mask` | Area code + `***` + last 3 (`010****567`) | yes |
+| `remove` | Replace with placeholder code (`MED-00123`) | yes |
+| `category` | Replace with category label (`[LOCATION]`) | yes |
+| `keep` *(v0.5.7+)* | **Preserve original text**; entity still emits hints / risk signal | **no** |
+
+`keep` is useful for entities the LLM should see verbatim — for example, first-person pronouns (`我`, `我的`, `my`) where redacting them produces gibberish prompts. The `self_reference` type defaults to `keep` since v0.5.7.
+
 ### Examples
 
 ```python

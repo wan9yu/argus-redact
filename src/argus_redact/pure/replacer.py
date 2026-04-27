@@ -12,7 +12,16 @@ from typing import Callable
 from argus_redact._types import PatternMatch
 from argus_redact.pure.pseudonym import PseudonymGenerator
 
-VALID_STRATEGIES = ("pseudonym", "realistic", "mask", "remove", "category", "name_mask", "landline_mask")
+VALID_STRATEGIES = (
+    "pseudonym",
+    "realistic",
+    "mask",
+    "remove",
+    "category",
+    "name_mask",
+    "landline_mask",
+    "keep",
+)
 
 _MAX_REROLL_ATTEMPTS = 10  # well above expected HMAC collision rate for practical batch sizes
 
@@ -407,6 +416,13 @@ def replace(
 
         ec = _get_entity_config(entity.type, config)
         strategy = ec.get("strategy", DEFAULT_STRATEGIES.get(entity.type, "remove"))
+
+        if strategy == "keep":
+            # Preserve original text — no placeholder, no key dict entry.
+            # The entity still flows through hints / risk assessment because
+            # detection ran upstream of replace().
+            entity_replacements[entity.text] = entity.text
+            continue
 
         if strategy == "pseudonym":
             prefix = ec.get("prefix", DEFAULT_PREFIXES.get(entity.type, "P"))
