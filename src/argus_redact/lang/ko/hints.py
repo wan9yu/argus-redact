@@ -1,6 +1,6 @@
 """Korean hints data — kinship vocabulary + command-mode suffixes.
 
-Consumed by ``argus_redact.pure.hints``. v0.5.6 minimum-viable list.
+Consumed by ``argus_redact.pure.hints``.
 """
 
 from __future__ import annotations

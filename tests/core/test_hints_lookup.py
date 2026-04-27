@@ -1,8 +1,4 @@
-"""Tests for v0.5.6 per-lang hints registry.
-
-Regression-flavor: kinship + command-mode detection still works after the
-refactor that moved zh/en data into `lang/<code>/hints.py` modules.
-"""
+"""Tests for the per-lang hints registry — kinship + command-mode detection."""
 
 from argus_redact._types import PatternMatch
 from argus_redact.pure.hints import (

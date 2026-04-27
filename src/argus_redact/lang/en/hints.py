@@ -11,10 +11,11 @@ import re
 # permissive so any "my <noun>" hits the proximity boost.
 KINSHIP_PREFIXES: tuple[str, ...] = ("my ",)
 
-# Single compiled regex covering English command-mode triggers.
-COMMAND_PATTERN: re.Pattern = re.compile(
-    r"^(?:can you |could you |please |would you )"
-    r"|\b(?:help me|tell me|show me|explain to me|let me know)\b"
-    r"|^I (?:want to |need to |would like to )(?:know|ask|understand)",
-    re.IGNORECASE,
+COMMAND_PATTERNS: tuple[re.Pattern, ...] = (
+    re.compile(
+        r"^(?:can you |could you |please |would you )"
+        r"|\b(?:help me|tell me|show me|explain to me|let me know)\b"
+        r"|^I (?:want to |need to |would like to )(?:know|ask|understand)",
+        re.IGNORECASE,
+    ),
 )

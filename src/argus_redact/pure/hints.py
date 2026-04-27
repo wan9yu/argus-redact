@@ -16,53 +16,22 @@ from argus_redact.lang.zh import hints as _zh_hints
 # `pure/hints.py` aggregates kinship/command data from every registered
 # language module. Adding a new language means: drop a `lang/<code>/hints.py`
 # exposing any of `KINSHIP`, `KINSHIP_PREFIXES`, `COMMAND_PREFIXES`,
-# `COMMAND_SUFFIXES`, `COMMAND_PATTERN(S)`, and append the module here.
+# `COMMAND_SUFFIXES`, `COMMAND_PATTERNS`, and append the module here.
 _LANG_HINT_MODULES = (_zh_hints, _en_hints, _ja_hints, _ko_hints, _de_hints)
 
 
-def _collect_kinship_exact() -> frozenset[str]:
-    out: set[str] = set()
+def _collect(attr: str) -> tuple:
+    out = []
     for mod in _LANG_HINT_MODULES:
-        out.update(getattr(mod, "KINSHIP", ()))
-    return frozenset(out)
-
-
-def _collect_kinship_prefixes() -> tuple[str, ...]:
-    out: list[str] = []
-    for mod in _LANG_HINT_MODULES:
-        out.extend(getattr(mod, "KINSHIP_PREFIXES", ()))
+        out.extend(getattr(mod, attr, ()))
     return tuple(out)
 
 
-def _collect_command_prefixes() -> tuple[str, ...]:
-    out: list[str] = []
-    for mod in _LANG_HINT_MODULES:
-        out.extend(getattr(mod, "COMMAND_PREFIXES", ()))
-    return tuple(out)
-
-
-def _collect_command_suffixes() -> tuple[str, ...]:
-    out: list[str] = []
-    for mod in _LANG_HINT_MODULES:
-        out.extend(getattr(mod, "COMMAND_SUFFIXES", ()))
-    return tuple(out)
-
-
-def _collect_command_patterns() -> tuple[re.Pattern, ...]:
-    out: list[re.Pattern] = []
-    for mod in _LANG_HINT_MODULES:
-        single = getattr(mod, "COMMAND_PATTERN", None)
-        if single is not None:
-            out.append(single)
-        out.extend(getattr(mod, "COMMAND_PATTERNS", ()))
-    return tuple(out)
-
-
-_KINSHIP_EXACT = _collect_kinship_exact()
-_KINSHIP_PREFIXES = _collect_kinship_prefixes()
-_COMMAND_PREFIXES = _collect_command_prefixes()
-_COMMAND_SUFFIXES = _collect_command_suffixes()
-_COMMAND_PATTERNS = _collect_command_patterns()
+_KINSHIP_EXACT = frozenset(_collect("KINSHIP"))
+_KINSHIP_PREFIXES = _collect("KINSHIP_PREFIXES")
+_COMMAND_PREFIXES = _collect("COMMAND_PREFIXES")
+_COMMAND_SUFFIXES = _collect("COMMAND_SUFFIXES")
+_COMMAND_PATTERNS = _collect("COMMAND_PATTERNS")
 
 # ── Default person name threshold ──
 

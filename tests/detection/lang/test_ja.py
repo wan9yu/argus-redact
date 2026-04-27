@@ -2,8 +2,10 @@
 
 import pytest
 
+from argus_redact._types import PatternMatch
 from argus_redact.lang.ja.patterns import PATTERNS as JA_PATTERNS
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
+from argus_redact.pure.hints import _is_interaction_command, _is_kinship
 from argus_redact.pure.patterns import match_patterns
 from tests.conftest import parametrize_examples
 
@@ -44,22 +46,17 @@ class TestMyNumber:
 
 
 class TestJapaneseHints:
-    """v0.5.6: ja kinship + command-mode hints."""
+    """Japanese kinship + command-mode hints."""
 
     def test_kinship_phrase_is_kinship(self):
-        from argus_redact._types import PatternMatch
-        from argus_redact.pure.hints import _is_kinship
-
-        entity = PatternMatch(text="私の母", type="self_reference", start=0, end=3, confidence=1.0, layer=1)
+        entity = PatternMatch(
+            text="私の母", type="self_reference", start=0, end=3, confidence=1.0, layer=1
+        )
         assert _is_kinship(entity)
 
     def test_command_suffix_marks_command_mode(self):
-        from argus_redact.pure.hints import _is_interaction_command
-
         assert _is_interaction_command("電話番号を教えてください")
         assert _is_interaction_command("連絡してください")
 
     def test_narrative_japanese_is_not_command(self):
-        from argus_redact.pure.hints import _is_interaction_command
-
         assert not _is_interaction_command("田中さんは東京に住んでいます。")
