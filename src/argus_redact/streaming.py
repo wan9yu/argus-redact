@@ -13,8 +13,12 @@ and is roadmapped for a later release.
 from __future__ import annotations
 
 from argus_redact._types import PseudonymLLMResult
+from argus_redact.glue._detect_partial import _last_boundary_index
 from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
 from argus_redact.pure.restore import restore
+
+_INCREMENTAL_MAX_BUFFER = 4096
+_EMPTY_RESULT = PseudonymLLMResult(audit_text="", downstream_text="", display_text="", key={})
 
 # Integer schema version stamped into export_state() output. Decoupled from
 # the package version on purpose — bumped only when the state shape itself
@@ -117,6 +121,7 @@ class StreamingRedactor:
         types_exclude: list[str] | None = None,
         strict_input: bool = True,
         reserved_names: dict[str, tuple[str, ...]] | None = None,
+        incremental: bool = False,
     ):
         if not isinstance(salt, (bytes, bytearray)):
             raise TypeError(f"salt must be bytes, got {type(salt).__name__}")
@@ -129,17 +134,60 @@ class StreamingRedactor:
         self._types_exclude = types_exclude
         self._strict_input = strict_input
         self._reserved_names = reserved_names
+        self._incremental = incremental
+        self._inc_buffer: str = ""
         self._accumulated_key: dict[str, str] = {}
 
     def feed(self, chunk: str) -> PseudonymLLMResult:
-        """Redact a single complete logical unit. Cross-chunk consistency preserved.
+        """Redact a chunk. Cross-chunk consistency preserved via shared key.
 
-        Returns a ``PseudonymLLMResult`` for this chunk; the chunk-local ``key``
-        contains only entries used in this chunk, but each entry is consistent
-        with prior chunks (same original → same fake).
+        Default mode (``incremental=False``): caller MUST feed complete logical
+        units; entities split across chunk boundaries are NOT detected.
+
+        Incremental mode (``incremental=True``, v0.5.7+): chunks accumulate
+        until a sentence boundary, then the buffered prefix is redacted. Returns
+        an empty ``PseudonymLLMResult`` when the buffer has no boundary yet.
+        Call ``flush()`` at end-of-stream to drain a tail with no boundary.
         """
+        if self._incremental:
+            return self._feed_incremental(chunk)
+        return self._redact_and_merge(chunk)
+
+    def flush(self) -> PseudonymLLMResult:
+        """End-of-stream flush — only meaningful in incremental mode.
+
+        Drains any text accumulated past the last sentence boundary,
+        running the full redact pipeline on it. Returns an empty
+        ``PseudonymLLMResult`` if the buffer is empty.
+        """
+        if not self._incremental or not self._inc_buffer:
+            return _EMPTY_RESULT
+        emit = self._inc_buffer
+        self._inc_buffer = ""
+        return self._redact_and_merge(emit)
+
+    def _feed_incremental(self, chunk: str) -> PseudonymLLMResult:
+        combined = self._inc_buffer + chunk
+        if not combined:
+            return _EMPTY_RESULT
+
+        boundary = _last_boundary_index(combined)
+        if boundary < 0:
+            if len(combined) >= _INCREMENTAL_MAX_BUFFER:
+                boundary = len(combined)
+            else:
+                self._inc_buffer = combined
+                return _EMPTY_RESULT
+
+        emit_text = combined[:boundary]
+        self._inc_buffer = combined[boundary:]
+        if not emit_text:
+            return _EMPTY_RESULT
+        return self._redact_and_merge(emit_text)
+
+    def _redact_and_merge(self, text: str) -> PseudonymLLMResult:
         result = redact_pseudonym_llm(
-            chunk,
+            text,
             salt=self._salt,
             display_marker=self._display_marker,
             lang=self._lang,

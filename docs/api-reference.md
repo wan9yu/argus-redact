@@ -771,13 +771,32 @@ full_key = redactor.aggregate_key()
 | `display_marker` | `str \| None` | `None` (= `ⓕ`) | Marker for `display_text`. |
 | `lang`, `mode`, `names`, `types`, `types_exclude` | — | — | Same semantics as `redact_pseudonym_llm()`. |
 | `strict_input` | `bool` | `True` | Raises `PseudonymPollutionError` if a chunk contains reserved-range values. Set `False` to disable per-chunk pollution check. |
+| `incremental` | `bool` | `False` | *(v0.5.7+)* Opt-in incremental detection. When `True`, chunks may split entities mid-value; chunks accumulate until a sentence boundary, then the buffered prefix is redacted. Use `flush()` at end-of-stream to drain a no-boundary tail. |
 
 ### Methods
 
 - `feed(chunk: str) -> PseudonymLLMResult` — redact one chunk. Cross-chunk consistency preserved via internal accumulated key.
+- `flush() -> PseudonymLLMResult` *(v0.5.7+)* — drain any text accumulated past the last sentence boundary (incremental mode only). Default mode: returns an empty result.
 - `aggregate_key() -> dict[str, str]` — copy of the unified key across all fed chunks (for batched restore).
 - `export_state() -> dict` *(v0.5.5+)* — serialize redactor state (salt, accumulated key, all constructor options) to a JSON-friendly dict. Persist to Redis / disk to survive process restarts.
 - `from_state(state: dict) -> StreamingRedactor` *(classmethod, v0.5.5+)* — rebuild an instance from a previously exported state. Subsequent `feed()` calls reuse the same fake values for already-seen originals.
+
+### Incremental mode (v0.5.7+)
+
+By default `feed()` requires complete logical units; entities split mid-value across chunks pass through undetected. With `incremental=True`, the redactor accumulates input until a sentence boundary (`。.！!？?；;\n`), then runs detection + replacement on the buffered prefix. Output for a chunk that has not yet completed a sentence is an empty `PseudonymLLMResult` (caller should accumulate and emit nothing yet).
+
+```python
+r = StreamingRedactor(salt=b"...", lang="zh", mode="fast", incremental=True)
+for chunk in token_stream:
+    out = r.feed(chunk)
+    if out.downstream_text:
+        send_to_llm(out.downstream_text)
+final = r.flush()  # drain whatever is past the last boundary
+if final.downstream_text:
+    send_to_llm(final.downstream_text)
+```
+
+Limitations: detection runs per emit-segment (full L1+L2+L3 pipeline on each completed prefix); chunks without sentence punctuation grow the buffer up to 4096 chars before a forced flush. See `docs/design-streaming-incremental.md` for the full design.
 
 ### Cross-process resume (v0.5.5+)
 
