@@ -13,14 +13,14 @@ def _read_input(input_path: str | None) -> str:
         if not path.exists():
             print(f"Error: input file not found: {input_path}", file=sys.stderr)
             sys.exit(1)
-        return path.read_text()
+        return path.read_text(encoding="utf-8")
     return sys.stdin.read()
 
 
 def _write_output(text: str, output_path: str | None):
     """Write text to file or stdout."""
     if output_path:
-        Path(output_path).write_text(text)
+        Path(output_path).write_text(text, encoding="utf-8")
     else:
         sys.stdout.write(text)
         if not text.endswith("\n"):
@@ -85,7 +85,9 @@ def cmd_redact(args):
             salt=salt,
             strategy_overrides=strategy_overrides,
         )
-        key_path.write_text(json.dumps(result.key, ensure_ascii=False, indent=2))
+        key_path.write_text(
+            json.dumps(result.key, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         payload = {
             "audit_text": result.audit_text,
             "downstream_text": result.downstream_text,
@@ -99,7 +101,7 @@ def cmd_redact(args):
     existing_key = None
     if key_path.exists():
         try:
-            existing_key = json.loads(key_path.read_text())
+            existing_key = json.loads(key_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             print(f"Error: invalid key file: {args.key}", file=sys.stderr)
             sys.exit(5)
@@ -114,7 +116,9 @@ def cmd_redact(args):
         profile=profile,
     )
 
-    key_path.write_text(json.dumps(key, ensure_ascii=False, indent=2))
+    key_path.write_text(
+        json.dumps(key, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     _write_output(redacted, args.output)
 
 
@@ -127,7 +131,7 @@ def cmd_restore(args):
         sys.exit(4)
 
     try:
-        key = json.loads(key_path.read_text())
+        key = json.loads(key_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         print(f"Error: invalid key file: {args.key}", file=sys.stderr)
         sys.exit(5)

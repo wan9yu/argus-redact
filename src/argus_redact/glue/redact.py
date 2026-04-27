@@ -473,7 +473,9 @@ def redact(
     if isinstance(key, str):
         key_file = key
         path = Path(key_file)
-        existing_key = json.loads(path.read_text()) if path.exists() else {}
+        existing_key = (
+            json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        )
     elif isinstance(key, dict):
         existing_key = dict(key)
 
