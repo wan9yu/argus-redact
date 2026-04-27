@@ -123,7 +123,10 @@ def generate_candidates(text: str) -> list[NameCandidate]:
             return
 
         variants: list[NameCandidate] = []
-        if word not in neg:
+        # If the 2-char prefix is a known non-name (e.g. "任何"), the 3-char
+        # extension ("任何评") is almost never a real name either — issue #12.
+        prefix_blocked = len(word) == 3 and not is_compound and word[:2] in neg
+        if word not in neg and not prefix_blocked:
             variants.append(NameCandidate(text=word, start=start, end=end))
         # For 3-char single-surname matches, also offer the 2-char variant
         if len(word) == 3 and not is_compound:
