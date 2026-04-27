@@ -796,12 +796,12 @@ full_key = redactor.aggregate_key()
 - `export_state() -> dict` *(v0.5.5+)* — serialize redactor state (salt, accumulated key, all constructor options) to a JSON-friendly dict. Persist to Redis / disk to survive process restarts.
 - `from_state(state: dict) -> StreamingRedactor` *(classmethod, v0.5.5+)* — rebuild an instance from a previously exported state. Subsequent `feed()` calls reuse the same fake values for already-seen originals.
 
-### Incremental mode (v0.5.7+)
+### Incremental mode (v0.5.7 opt-in, v0.5.8 default)
 
-By default `feed()` requires complete logical units; entities split mid-value across chunks pass through undetected. With `incremental=True`, the redactor accumulates input until a sentence boundary (`。.！!？?；;\n`), then runs detection + replacement on the buffered prefix. Output for a chunk that has not yet completed a sentence is an empty `PseudonymLLMResult` (caller should accumulate and emit nothing yet).
+The redactor accumulates input until a sentence boundary (`。.！!？?；;\n`), then runs detection + replacement on the buffered prefix. Output for a chunk that has not yet completed a sentence is an empty `PseudonymLLMResult` (caller should accumulate and emit nothing yet). Cross-chunk entity boundaries are handled transparently.
 
 ```python
-r = StreamingRedactor(salt=b"...", lang="zh", mode="fast", incremental=True)
+r = StreamingRedactor(salt=b"...", lang="zh", mode="fast")  # incremental=True is default
 for chunk in token_stream:
     out = r.feed(chunk)
     if out.downstream_text:
@@ -810,6 +810,8 @@ final = r.flush()  # drain whatever is past the last boundary
 if final.downstream_text:
     send_to_llm(final.downstream_text)
 ```
+
+Pass `incremental=False` for v0.5.6 logical-unit semantics (each chunk a complete unit; entities split across chunks are silently missed). The opt-out path emits a `DeprecationWarning` and is removed in v0.6.
 
 Limitations: detection runs per emit-segment (full L1+L2+L3 pipeline on each completed prefix); chunks without sentence punctuation grow the buffer up to 4096 chars before a forced flush. See `docs/design-streaming-incremental.md` for the full design.
 
