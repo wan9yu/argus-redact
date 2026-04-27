@@ -399,17 +399,31 @@ custom.downstream_text  # phone → "PHON-NNNNN", address still realistic
 ## PseudonymLLMResult
 
 ```python
-from dataclasses import dataclass
+from argus_redact import PseudonymLLMResult, KeyEntry
 
-@dataclass(frozen=True)
-class PseudonymLLMResult:
-    audit_text: str
-    downstream_text: str
-    display_text: str
-    key: dict[str, str]
+# Frozen result type returned by redact_pseudonym_llm().
+# audit_text / downstream_text / display_text are plain strings.
+# key and key_entries are read-only @property views over internal storage.
+
+result.audit_text       # placeholder labels — for compliance archive
+result.downstream_text  # realistic reserved-range fake — for LLM input
+result.display_text     # realistic + visible marker — for human display
+result.key              # dict[str, str]: fake → original (backward-compat view)
+result.key_entries      # dict[str, KeyEntry]: structured access (v0.5.8+)
 ```
 
-Frozen result type returned by `redact_pseudonym_llm()`. Importable from `argus_redact`.
+Both `key` and `key_entries` return **fresh dict copies** on each access — caller mutations never leak into internal state.
+
+### KeyEntry *(v0.5.8+)*
+
+```python
+@dataclass(frozen=True)
+class KeyEntry:
+    original: str
+    aliases: tuple[str, ...] = ()
+```
+
+`aliases` carries cross-language transliterations the LLM might emit instead of the canonical fake (e.g. `original="王建国"`, `aliases=("Wang Jianguo",)`). `restore()` recognizes both the canonical fake and its aliases and maps them all back to `original`.
 
 ---
 

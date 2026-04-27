@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import re as _re
+from typing import Mapping
 
 from argus_redact.pure.display_marker import strip_display_markers
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS, restore_grammar_en
@@ -108,11 +109,16 @@ def restore(text: str, key: dict | str, *, display_marker: str | None = None) ->
         with open(key, encoding="utf-8") as f:
             key = json.load(f)
 
-    if not isinstance(key, dict):
-        raise TypeError(f"key must be a dict or str (file path), got {type(key).__name__}")
+    if not isinstance(key, Mapping):
+        raise TypeError(f"key must be a Mapping or str (file path), got {type(key).__name__}")
 
     if not key:
         return text
+
+    # Rust binding expects a concrete dict — MappingProxyType / other Mapping
+    # subclasses are rejected. Normalize once at the boundary.
+    if not isinstance(key, dict):
+        key = dict(key)
 
     has_self_ref = any(v in SELF_REF_PRONOUNS for v in key.values())
 

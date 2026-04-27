@@ -5,7 +5,7 @@ Returns a PseudonymLLMResult dataclass with three text forms sharing one key dic
 
 from __future__ import annotations
 
-from argus_redact._types import PseudonymLLMResult
+from argus_redact._types import KeyEntry, PseudonymLLMResult
 from argus_redact.glue import redact as _redact_module
 from argus_redact.pure.display_marker import mark_for_display, resolve_marker
 from argus_redact.pure.normalize import MAX_INPUT_SIZE
@@ -186,12 +186,14 @@ def redact_pseudonym_llm(
     # output spaces (realistic digits/Chinese vs [TYPE-NNNNN] placeholders),
     # so a simple union is collision-free by construction.
     unified_key = {**key, **audit_key}
+    # v0.5.8: aliases default to (); commit 2 fills them from fakers.
+    unified_entries = {fake: KeyEntry(original=orig) for fake, orig in unified_key.items()}
 
     return PseudonymLLMResult(
         audit_text=audit_text,
         downstream_text=downstream_text,
         display_text=display_text,
-        key=unified_key,
+        _key_entries=unified_entries,
     )
 
 

@@ -68,10 +68,44 @@ class RedactReport:
 
 
 @dataclass(frozen=True)
+class KeyEntry:
+    """A single fake → original mapping plus optional cross-language aliases.
+
+    `aliases` carries transliterations the LLM might emit instead of the
+    canonical fake (e.g. ``original="王建国"``, ``aliases=("Wang Jianguo",)``).
+    `restore()` recognizes both the canonical fake and its aliases and maps
+    them all back to ``original``.
+
+    Tuples (not lists) so the dataclass stays hashable and frozen-friendly.
+    """
+
+    original: str
+    aliases: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class PseudonymLLMResult:
-    """Result of redact_pseudonym_llm() — three text forms sharing one key dict."""
+    """Result of redact_pseudonym_llm() — three text forms sharing one key.
+
+    Public access:
+    - ``result.key`` — read-only ``str → str`` dict view (fake → original).
+      Backward-compatible with all v0.5.x callers.
+    - ``result.key_entries`` *(v0.5.8+)* — read-only ``str → KeyEntry`` dict view
+      with cross-language aliases.
+    """
 
     audit_text: str
     downstream_text: str
     display_text: str
-    key: dict[str, str]
+    _key_entries: dict[str, KeyEntry] = field(default_factory=dict, repr=False)
+
+    @property
+    def key(self) -> dict[str, str]:
+        # Fresh copy: caller mutations don't leak into the internal store.
+        return {fake: e.original for fake, e in self._key_entries.items()}
+
+    @property
+    def key_entries(self) -> dict[str, KeyEntry]:
+        # Fresh copy: caller mutations don't leak into the internal store.
+        # KeyEntry is frozen, so values are individually immutable.
+        return dict(self._key_entries)

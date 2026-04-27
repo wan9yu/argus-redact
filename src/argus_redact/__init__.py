@@ -1,6 +1,6 @@
 """argus-redact: Encrypt PII, not meaning. Locally."""
 
-from argus_redact._types import PseudonymLLMResult, RedactReport
+from argus_redact._types import KeyEntry, PseudonymLLMResult, RedactReport
 from argus_redact.glue.redact import redact
 from argus_redact.glue.redact_pseudonym_llm import (
     PseudonymPollutionError,
@@ -19,6 +19,7 @@ __all__ = [
     "wipe_key",
     "assess_risk",
     "max_pseudonym_length",
+    "KeyEntry",
     "PseudonymLLMResult",
     "PseudonymPollutionError",
     "RedactReport",

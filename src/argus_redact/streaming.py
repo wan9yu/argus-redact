@@ -19,9 +19,12 @@ from argus_redact.pure.restore import restore
 
 
 def _empty_result() -> PseudonymLLMResult:
-    # Fresh instance per call: ``key`` is a mutable dict — sharing a singleton
-    # would let one caller's mutation leak into another caller's "empty" result.
-    return PseudonymLLMResult(audit_text="", downstream_text="", display_text="", key={})
+    # Fresh instance per call: backing storage is a mutable dict — sharing a
+    # singleton would let one caller's mutation leak into another caller's
+    # "empty" result.
+    return PseudonymLLMResult(
+        audit_text="", downstream_text="", display_text="", _key_entries={}
+    )
 
 # Integer schema version stamped into export_state() output. Decoupled from
 # the package version on purpose — bumped only when the state shape itself
