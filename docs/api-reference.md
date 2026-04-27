@@ -786,7 +786,7 @@ full_key = redactor.aggregate_key()
 | `display_marker` | `str \| None` | `None` (= `ⓕ`) | Marker for `display_text`. |
 | `lang`, `mode`, `names`, `types`, `types_exclude` | — | — | Same semantics as `redact_pseudonym_llm()`. |
 | `strict_input` | `bool` | `True` | Raises `PseudonymPollutionError` if a chunk contains reserved-range values. Set `False` to disable per-chunk pollution check. |
-| `incremental` | `bool` | `False` | *(v0.5.7+)* Opt-in incremental detection. When `True`, chunks may split entities mid-value; chunks accumulate until a sentence boundary, then the buffered prefix is redacted. Use `flush()` at end-of-stream to drain a no-boundary tail. |
+| `incremental` | `bool` | `True` *(v0.5.8+; was `False` in v0.5.7)* | Sentence-bounded incremental detection. Chunks may split entities mid-value; the redactor accumulates until a sentence boundary, then redacts the buffered prefix. Use `flush()` at end-of-stream to drain the tail. Pass `incremental=False` for v0.5.6 logical-unit semantics — emits a `DeprecationWarning`, removed in v0.6. |
 
 ### Methods
 

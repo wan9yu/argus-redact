@@ -12,6 +12,8 @@ and is roadmapped for a later release.
 
 from __future__ import annotations
 
+import warnings
+
 from argus_redact._types import PseudonymLLMResult
 from argus_redact.glue._detect_partial import _consume_to_boundary
 from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
@@ -127,10 +129,19 @@ class StreamingRedactor:
         types_exclude: list[str] | None = None,
         strict_input: bool = True,
         reserved_names: dict[str, tuple[str, ...]] | None = None,
-        incremental: bool = False,
+        incremental: bool = True,
     ):
         if not isinstance(salt, (bytes, bytearray)):
             raise TypeError(f"salt must be bytes, got {type(salt).__name__}")
+        if not incremental:
+            warnings.warn(
+                "StreamingRedactor(incremental=False) is deprecated since v0.5.8 "
+                "and will be removed in v0.6. The default mode now handles "
+                "cross-chunk entity boundaries via sentence-bounded buffering. "
+                "Pass incremental=True (the default) or omit the argument.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._salt = bytes(salt)
         self._display_marker = display_marker
         self._lang = lang

@@ -58,11 +58,13 @@ class TestRoundTripThroughJson:
 
     def test_resumed_redactor_keeps_growing_aggregate_key(self):
         r1 = StreamingRedactor(salt=b"salt-xyz")
-        r1.feed("张明的手机13912345678")
+        # v0.5.8: incremental default emits at sentence boundaries — feed
+        # complete sentences so the aggregate key actually populates.
+        r1.feed("张明的手机13912345678。")
         keys_before = set(r1.aggregate_key().keys())
         state = r1.export_state()
         r2 = StreamingRedactor.from_state(state)
-        r2.feed("张明又说了一遍13912345678，加上李华15812345678")
+        r2.feed("张明又说了一遍13912345678，加上李华15812345678。")
         keys_after = set(r2.aggregate_key().keys())
         assert keys_before <= keys_after, "resume must not lose mappings"
         # New entity (李华 / 158...) added in r2
@@ -77,12 +79,12 @@ class TestRoundTripThroughJson:
         )
         # Feed input that contains a canonical fake name (张三) — strict_input
         # would normally reject it, but the empty override allows it through.
-        r1.feed("用户张三打来电话13912345678")
+        r1.feed("用户张三打来电话13912345678。")
         state = r1.export_state()
         # Round-trip through JSON
         r2 = StreamingRedactor.from_state(json.loads(json.dumps(state)))
         # Same input must still pass the pollution check on r2
-        r2.feed("张三再次来电15812345678")  # would raise without override
+        r2.feed("张三再次来电15812345678。")  # would raise without override
 
     def test_resumed_session_matches_uninterrupted_session(self):
         # Two redactors with the same salt + same chunk sequence — one

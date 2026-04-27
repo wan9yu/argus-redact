@@ -254,14 +254,39 @@ class TestStreamingRedactor:
 
 
 class TestStreamingRedactorIncremental:
-    """v0.5.7: opt-in incremental mode handles entities split across chunks."""
+    """v0.5.7: opt-in incremental mode handles entities split across chunks.
+    v0.5.8: incremental is now the default; opt-out emits DeprecationWarning.
+    """
 
-    def test_default_mode_unchanged(self):
-        """Default (incremental=False) must behave identically to v0.5.6."""
+    def test_default_mode_is_incremental_in_v058(self):
+        """Default (no incremental kwarg) is incremental=True since v0.5.8."""
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
+        # Single chunk with sentence boundary → emits a full result.
         out = r.feed("电话13912345678。")
         assert "13912345678" not in out.downstream_text
-        assert out.downstream_text != ""  # full result emitted
+        assert out.downstream_text != ""
+
+    def test_explicit_incremental_false_emits_deprecation_warning(self):
+        """v0.5.8 deprecation: opt-out path warns; behavior preserved for one release."""
+        import warnings
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            StreamingRedactor(salt=b"x", lang="zh", mode="fast", incremental=False)
+        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert deprecations, "incremental=False must emit DeprecationWarning"
+        assert "incremental=False" in str(deprecations[0].message)
+
+    def test_explicit_incremental_false_preserves_v056_behavior(self):
+        """Opt-out still works — single chunk with full sentence redacts as in v0.5.6."""
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            r = StreamingRedactor(salt=b"x", lang="zh", mode="fast", incremental=False)
+            out = r.feed("电话13912345678。")
+        assert "13912345678" not in out.downstream_text
+        assert out.downstream_text != ""
 
     def test_cross_chunk_phone_zh(self):
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast", incremental=True)
