@@ -8,7 +8,7 @@
 | HanLP model 500MB | Lightweight NER-only model tested but quality unacceptable (character-level) | Won't fix |
 | Ollama cold start 10-20s | Inherent model loading; cached after first call | Won't fix |
 | Docker full image ~5GB | Multi-stage build applied; PyTorch dominates | Won't fix |
-| hints 语言覆盖 | self_reference/command detection only covers zh+en; other langs fall back to defaults | Low |
+| hints uk/in/br coverage | v0.5.6 covers zh/en/ja/ko/de; uk/in/br fall back to zh defaults | Low |
 
 ## pseudonym-llm Limitations
 
@@ -26,6 +26,8 @@ These are inherent properties of the realistic-redaction design, not bugs to fix
 
 | Issue | Version | Fix |
 |-------|---------|-----|
+| hints language coverage (zh/en only) | v0.5.6 | `self_reference` + command-mode detection now covers zh/en/ja/ko/de via per-lang `lang/<code>/hints.py` modules; aggregated by `pure/hints.py` |
+| specs/en.py asymmetric vs specs/zh.py | v0.5.6 | en regex now lives in `specs/en.py:_patterns`; `lang/en/patterns.py` is a thin re-export. Validators (`_validate_ssn`, Luhn, `_MONTHS`) move to `specs/en.py` to break import cycle |
 | MCP key exposure in tool response | v0.5.4 | `redact` tool now mints `key_token` (process-scoped UUID). Raw `key` was removed in v0.5.5; restore tool accepts `key_token` only. |
 | restore() rebuilt alternation regex per call | v0.5.4 | `lru_cache(maxsize=128)` on `frozenset(key.keys())` — streaming hot path no longer pays compile cost |
 | en/person realistic required NER | v0.5.3 | `lang/en/person.py` adds Census surname + SSA given-name list for fast-mode detection |

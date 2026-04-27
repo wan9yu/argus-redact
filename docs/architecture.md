@@ -115,6 +115,8 @@ After 1a runs, `produce_hints()` generates **cross-layer hints** that downstream
 | `text_intent` | L1a | L1b, L2 | instruction → raise threshold / skip NER |
 | `pii_density` | L1a | L2 | high → lower NER confidence threshold |
 
+Kinship vocabulary and command-mode triggers used by `produce_hints()` are configured per language. v0.5.6 covers `zh`, `en`, `ja`, `ko`, `de` — each maintains its own `lang/<code>/hints.py` module exposing `KINSHIP` / `KINSHIP_PREFIXES` / `COMMAND_PREFIXES` / `COMMAND_SUFFIXES` / `COMMAND_PATTERN(S)` constants. `pure/hints.py` aggregates them at import time; adding a new language is a single-file drop-in plus appending the module to the registry.
+
 **Characteristics:**
 - 1a runs on the full text in one pass (compiled regex union), always confidence = 1.0
 - 1b generates candidates, scores them against evidence signals, confirms above threshold (0.8). Threshold is hint-adjusted: instruction text → 1.2 (effectively suppressed)
