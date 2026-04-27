@@ -36,12 +36,12 @@ class TestRedactCommand:
         assert code == 0
         assert "13812345678" not in stdout
         assert key_file.exists()
-        key = json.loads(key_file.read_text())
+        key = json.loads(key_file.read_text(encoding="utf-8"))
         assert "13812345678" in key.values()
 
     def test_should_redact_file_when_input_file_given(self, tmp_path):
         input_file = tmp_path / "input.txt"
-        input_file.write_text("邮箱zhang@example.com")
+        input_file.write_text("邮箱zhang@example.com", encoding="utf-8")
         key_file = tmp_path / "key.json"
 
         code, stdout, _ = run_cli(
@@ -75,18 +75,18 @@ class TestRedactCommand:
 
         assert code == 0
         assert output_file.exists()
-        assert "13812345678" not in output_file.read_text()
+        assert "13812345678" not in output_file.read_text(encoding="utf-8")
 
     def test_should_reuse_key_when_key_file_exists(self, tmp_path):
         key_file = tmp_path / "key.json"
 
         run_cli("redact", "-k", str(key_file), "-m", "fast", "-s", "42", stdin="电话13812345678")
-        key1 = json.loads(key_file.read_text())
+        key1 = json.loads(key_file.read_text(encoding="utf-8"))
 
         run_cli(
             "redact", "-k", str(key_file), "-m", "fast", "-s", "42", stdin="邮箱test@example.com"
         )
-        key2 = json.loads(key_file.read_text())
+        key2 = json.loads(key_file.read_text(encoding="utf-8"))
 
         assert len(key2) > len(key1)
         # Original phone mapping preserved
@@ -126,7 +126,9 @@ class TestRedactCommand:
 class TestRestoreCommand:
     def test_should_restore_stdin_when_pipe_mode(self, tmp_path):
         key_file = tmp_path / "key.json"
-        key_file.write_text(json.dumps({"P-037": "王五", "P-012": "张三"}))
+        key_file.write_text(
+            json.dumps({"P-037": "王五", "P-012": "张三"}), encoding="utf-8"
+        )
 
         code, stdout, _ = run_cli(
             "restore",
@@ -141,9 +143,9 @@ class TestRestoreCommand:
 
     def test_should_restore_file_when_input_file_given(self, tmp_path):
         key_file = tmp_path / "key.json"
-        key_file.write_text(json.dumps({"P-037": "王五"}))
+        key_file.write_text(json.dumps({"P-037": "王五"}), encoding="utf-8")
         input_file = tmp_path / "input.txt"
-        input_file.write_text("P-037说了话")
+        input_file.write_text("P-037说了话", encoding="utf-8")
 
         code, stdout, _ = run_cli(
             "restore",
@@ -157,7 +159,7 @@ class TestRestoreCommand:
 
     def test_should_write_output_file_when_o_flag(self, tmp_path):
         key_file = tmp_path / "key.json"
-        key_file.write_text(json.dumps({"P-037": "王五"}))
+        key_file.write_text(json.dumps({"P-037": "王五"}), encoding="utf-8")
         output_file = tmp_path / "out.txt"
 
         code, _, _ = run_cli(
@@ -170,7 +172,7 @@ class TestRestoreCommand:
         )
 
         assert code == 0
-        assert "王五" in output_file.read_text()
+        assert "王五" in output_file.read_text(encoding="utf-8")
 
     def test_should_exit_4_when_key_file_not_found(self):
         code, _, stderr = run_cli(
@@ -184,7 +186,7 @@ class TestRestoreCommand:
 
     def test_should_exit_5_when_key_file_invalid(self, tmp_path):
         key_file = tmp_path / "key.json"
-        key_file.write_text("not valid json{{{")
+        key_file.write_text("not valid json{{{", encoding="utf-8")
 
         code, _, stderr = run_cli(
             "restore",
@@ -271,7 +273,7 @@ class TestAssessCommand:
 
         assert code == 0
         assert output_file.exists()
-        data = json.loads(output_file.read_text())
+        data = json.loads(output_file.read_text(encoding="utf-8"))
         assert data["summary"]["entities_detected"] >= 1
 
     def test_should_return_zero_risk_when_no_pii(self):

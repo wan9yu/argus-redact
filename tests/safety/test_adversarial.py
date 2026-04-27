@@ -11,7 +11,7 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 
 def _load_adversarial():
-    with open(FIXTURES_DIR / "adversarial_tests.json") as f:
+    with open(FIXTURES_DIR / "adversarial_tests.json", encoding="utf-8") as f:
         return json.load(f)
 
 

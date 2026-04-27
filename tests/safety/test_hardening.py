@@ -29,6 +29,7 @@ class TestConfigFilePath:
         config_file = tmp_path / "config.json"
         config_file.write_text(
             json.dumps({"phone": {"strategy": "remove", "replacement": "[TEL]"}}),
+            encoding="utf-8",
         )
 
         redacted, key = redact(
@@ -50,7 +51,9 @@ class TestConfigFilePath:
             pytest.skip("pyyaml not installed")
 
         config_file = tmp_path / "config.yaml"
-        config_file.write_text("phone:\n  strategy: remove\n  replacement: '[TEL]'\n")
+        config_file.write_text(
+            "phone:\n  strategy: remove\n  replacement: '[TEL]'\n", encoding="utf-8"
+        )
 
         redacted, key = redact(
             "电话13812345678",

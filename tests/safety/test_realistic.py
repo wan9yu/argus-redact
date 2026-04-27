@@ -11,7 +11,7 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 
 def _load():
-    with open(FIXTURES_DIR / "realistic_scenarios.json") as f:
+    with open(FIXTURES_DIR / "realistic_scenarios.json", encoding="utf-8") as f:
         return json.load(f)
 
 

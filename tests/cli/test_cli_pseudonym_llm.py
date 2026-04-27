@@ -53,7 +53,7 @@ class TestPseudonymLLMProfile:
 
         assert code == 0
         assert key_file.exists()
-        key = json.loads(key_file.read_text())
+        key = json.loads(key_file.read_text(encoding="utf-8"))
         # Original phone must appear as a value in the unified key
         assert "13912345678" in key.values()
 

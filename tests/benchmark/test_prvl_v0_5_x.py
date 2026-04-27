@@ -92,7 +92,7 @@ class TestPRvLv0_5xBaselineFixtureContract:
         if not FIXTURE_PATH.exists():
             pytest.skip("baseline fixture not committed yet; run with POE_API_KEY first")
         try:
-            data = json.loads(FIXTURE_PATH.read_text())
+            data = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
         except json.JSONDecodeError as e:
             pytest.fail(f"baseline fixture is not valid JSON: {e}")
         if not data:

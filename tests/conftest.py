@@ -16,7 +16,7 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 def load_examples(filename: str) -> list[dict]:
     """Load test examples from a JSON fixture file."""
-    with open(FIXTURES_DIR / filename) as f:
+    with open(FIXTURES_DIR / filename, encoding="utf-8") as f:
         return json.load(f)
 
 
