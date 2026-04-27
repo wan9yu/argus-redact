@@ -137,7 +137,6 @@ def _normalize_digit_sequences(chars: list[str]) -> None:
             continue
 
         # Scan a contiguous digit-equivalent sequence (with optional separators)
-        seq_start = i
         digits: list[tuple[int, str]] = [(i, d)]  # (index, ascii_digit)
         i += 1
         while i < n:

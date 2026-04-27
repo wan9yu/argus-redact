@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 from argus_redact._types import Hint, PatternMatch
 from argus_redact.lang.br import hints as _br_hints
 from argus_redact.lang.de import hints as _de_hints
