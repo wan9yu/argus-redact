@@ -154,6 +154,7 @@ def redact_pseudonym_llm(
         types_exclude=types_exclude,
     )
 
+    realistic_aliases: dict[str, list[str]] = {}
     downstream_text, key = _redact_module._replace_and_emit(
         text,
         entities,
@@ -165,6 +166,7 @@ def redact_pseudonym_llm(
         langs=langs,
         timing=dict(timing),
         mode=mode,
+        aliases_out=realistic_aliases,
     )
     audit_text, audit_key = _redact_module._replace_and_emit(
         text,
@@ -186,8 +188,14 @@ def redact_pseudonym_llm(
     # output spaces (realistic digits/Chinese vs [TYPE-NNNNN] placeholders),
     # so a simple union is collision-free by construction.
     unified_key = {**key, **audit_key}
-    # v0.5.8: aliases default to (); commit 2 fills them from fakers.
-    unified_entries = {fake: KeyEntry(original=orig) for fake, orig in unified_key.items()}
+    # Attach aliases (only realistic-pass fakers emit them; audit placeholders
+    # never have transliterations).
+    unified_entries = {
+        fake: KeyEntry(
+            original=orig, aliases=tuple(realistic_aliases.get(fake, ()))
+        )
+        for fake, orig in unified_key.items()
+    }
 
     return PseudonymLLMResult(
         audit_text=audit_text,

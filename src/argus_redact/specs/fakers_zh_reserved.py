@@ -35,6 +35,26 @@ RESERVED_PERSON_NAMES = (
     "毕马温",
 )
 
+# v0.5.8: pinyin transliterations the LLM might emit when it rephrases
+# zh fakes into Latin script. `restore()` matches both the canonical fake
+# and its aliases back to the original. Hyphenated and concatenated forms
+# both common in real LLM output.
+RESERVED_PERSON_NAMES_ALIASES: dict[str, list[str]] = {
+    "张三": ["Zhang San", "Zhang3", "ZhangSan"],
+    "李四": ["Li Si", "Li4", "LiSi"],
+    "王五": ["Wang Wu", "Wang5", "WangWu"],
+    "赵六": ["Zhao Liu", "Zhao6", "ZhaoLiu"],
+    "钱七": ["Qian Qi", "Qian7", "QianQi"],
+    "焦大": ["Jiao Da", "JiaoDa"],
+    "茗烟": ["Ming Yan", "MingYan"],
+    "傻大姐": ["Sha Dajie", "Silly Big Sister"],
+    "彩云": ["Cai Yun", "CaiYun"],
+    "佩凤": ["Pei Feng", "PeiFeng"],
+    "偕鸳": ["Xie Yuan", "XieYuan"],
+    "卷帘": ["Juan Lian", "JuanLian"],
+    "毕马温": ["Bi Mawen", "BiMawen"],
+}
+
 RESERVED_CITIES = (
     ("滨海市", "东江区", ("八荒街", "九垣街", "十方路", "万象路")),
     ("滨海市", "西陆区", ("青鸾街", "白虎街", "玄武路")),
@@ -49,22 +69,22 @@ PLATE_SPECIAL_PREFIXES = ("测", "领")
 # ── Faker functions ──
 
 
-def fake_phone_reserved(value: str, rng: random.Random) -> str:
+def fake_phone_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate a 199-99-XXXXXX mobile number (11 digits).
 
     Format: 19999 + 6 random digits. 199-99 子段当前未分配运营商。
     """
     suffix = "".join(str(rng.randint(0, 9)) for _ in range(6))
-    return "19999" + suffix
+    return "19999" + suffix, []
 
 
-def fake_phone_landline_reserved(value: str, rng: random.Random) -> str:
+def fake_phone_landline_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate a 099-XXXXXXXX landline (区号 099 不存在)."""
     body = "".join(str(rng.randint(0, 9)) for _ in range(8))
-    return "099-" + body
+    return "099-" + body, []
 
 
-def fake_id_number_reserved(value: str, rng: random.Random) -> str:
+def fake_id_number_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate a 999XXX-prefixed 18-char ID with valid GB 11643 checksum.
 
     Address code 999XXX is not assigned in GB/T 2260 (国家行政区划代码).
@@ -77,10 +97,10 @@ def fake_id_number_reserved(value: str, rng: random.Random) -> str:
     day = rng.randint(1, 28)
     seq = rng.randint(0, 999)
     body = f"{area}{year}{month:02d}{day:02d}{seq:03d}"
-    return body + gb11643_check_char(body)
+    return body + gb11643_check_char(body), []
 
 
-def fake_bank_card_reserved(value: str, rng: random.Random) -> str:
+def fake_bank_card_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate a 999999-BIN bank card with valid Luhn checksum.
 
     BIN 999999 is not assigned in 银联 BIN allocation.
@@ -88,31 +108,34 @@ def fake_bank_card_reserved(value: str, rng: random.Random) -> str:
     from argus_redact.lang.shared.patterns import luhn_check_digit
 
     body = "999999" + "".join(str(rng.randint(0, 9)) for _ in range(9))
-    return body + str(luhn_check_digit(body))
+    return body + str(luhn_check_digit(body)), []
 
 
-def fake_passport_reserved(value: str, rng: random.Random) -> str:
+def fake_passport_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate E99999XXX or G99999XXX passport number (实际前缀 + 假序列)."""
     prefix = rng.choice(PASSPORT_PREFIXES)
     serial = "".join(str(rng.randint(0, 9)) for _ in range(3))
-    return f"{prefix}99999{serial}"
+    return f"{prefix}99999{serial}", []
 
 
-def fake_license_plate_reserved(value: str, rng: random.Random) -> str:
+def fake_license_plate_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate '测/领'-prefixed plate with 99999 body."""
     prefix = rng.choice(PLATE_SPECIAL_PREFIXES)
     letter = rng.choice(string.ascii_uppercase)
-    return f"{prefix}{letter}99999"
+    return f"{prefix}{letter}99999", []
 
 
-def fake_address_reserved(value: str, rng: random.Random) -> str:
+def fake_address_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate a 滨海市 fictional address (city does not exist in real China)."""
     city, district, streets = rng.choice(RESERVED_CITIES)
     street = rng.choice(streets)
     num = rng.randint(1, 999)
-    return f"{city}{district}{street}{num}号"
+    # Address transliteration is noisy (street/district names rarely round-trip
+    # cleanly); deferred to v0.6+. v0.5.8 returns no aliases here.
+    return f"{city}{district}{street}{num}号", []
 
 
-def fake_person_reserved(value: str, rng: random.Random) -> str:
-    """Pick a name from the canonical fake-name table."""
-    return rng.choice(RESERVED_PERSON_NAMES)
+def fake_person_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
+    """Pick a name from the canonical fake-name table; emit pinyin aliases."""
+    fake = rng.choice(RESERVED_PERSON_NAMES)
+    return fake, list(RESERVED_PERSON_NAMES_ALIASES.get(fake, []))

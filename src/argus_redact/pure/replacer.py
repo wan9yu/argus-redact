@@ -78,21 +78,29 @@ def _faker_reserved_cached(name: str, langs: tuple[str, ...]) -> Callable | None
 
 
 def _generate_unique_fake(
-    faker_reserved: Callable[[str, random.Random], str],
+    faker_reserved: Callable,
     value: str,
     type_name: str,
     salt: bytes,
     used: set[str],
-) -> str:
-    """Call faker_reserved with HMAC-seeded RNG, re-rolling until unique within `used`."""
+) -> tuple[str, list[str]]:
+    """Call faker_reserved with HMAC-seeded RNG, re-rolling until unique within `used`.
+
+    Returns ``(fake, aliases)``. v0.5.8 fakers return a tuple; older fakers
+    that returned a bare string are still accepted (aliases default to ``[]``).
+    """
     seed_input = value
     last = None
     for attempt in range(_MAX_REROLL_ATTEMPTS):
         seed = _seed_from_value(seed_input, type_name, salt)
         rng = random.Random(seed)
-        fake = faker_reserved(value, rng)
+        result = faker_reserved(value, rng)
+        if isinstance(result, tuple):
+            fake, aliases = result[0], list(result[1])
+        else:
+            fake, aliases = result, []
         if fake not in used:
-            return fake
+            return fake, aliases
         last = fake
         seed_input = f"{seed_input}#{attempt}"
     raise RuntimeError(
@@ -353,6 +361,7 @@ def replace(
     key: dict[str, str] | None = None,
     config: dict | None = None,
     langs: list[str] | None = None,
+    aliases_out: dict[str, list[str]] | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Replace detected entities in text, producing (redacted_text, key).
 
@@ -361,6 +370,11 @@ def replace(
 
     `langs` provides language preference for the realistic strategy's
     faker_reserved lookup (e.g., en text prefers en/phone over zh/phone).
+
+    `aliases_out` (v0.5.8+, optional): if provided, populated with
+    ``{fake: list_of_aliases}`` for entries whose fakers emitted aliases.
+    Caller mutation of this dict observable post-call. The legacy
+    ``(text, key)`` return shape is preserved.
     """
     _validate_config(config)
 
@@ -449,9 +463,11 @@ def replace(
 
             if faker_reserved is not None:
                 salt = _resolve_salt(seed)
-                replacement = _generate_unique_fake(
+                replacement, aliases = _generate_unique_fake(
                     faker_reserved, entity.text, entity.type, salt, used_labels
                 )
+                if aliases and aliases_out is not None:
+                    aliases_out[replacement] = aliases
             elif entity.type == "organization":
                 replacement = org_gen.get(entity.text)
             else:

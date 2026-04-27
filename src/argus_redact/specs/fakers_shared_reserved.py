@@ -23,14 +23,14 @@ RFC5737_PREFIXES = ("192.0.2", "198.51.100", "203.0.113")
 RFC7042_MAC_PREFIX = "00:00:5E:00:53"
 
 
-def fake_email_reserved(value: str, rng: random.Random) -> str:
+def fake_email_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate an email under an RFC 2606 reserved domain."""
     local = f"user{rng.randint(1000, 99999)}"
     domain = rng.choice(RFC2606_DOMAINS)
-    return f"{local}@{domain}"
+    return f"{local}@{domain}", []
 
 
-def fake_ip_reserved(value: str, rng: random.Random) -> str:
+def fake_ip_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate a documentation-range IP. Detects v4 vs v6 from the input shape.
 
     IPv4 → one of RFC 5737 TEST-NET-1/2/3 with random last octet.
@@ -39,14 +39,14 @@ def fake_ip_reserved(value: str, rng: random.Random) -> str:
     if ":" in value:
         # IPv6 input → RFC 3849
         suffix = f"{rng.randint(1, 0xFFFF):x}"
-        return f"2001:db8::{suffix}"
+        return f"2001:db8::{suffix}", []
     # IPv4 input (default)
     prefix = rng.choice(RFC5737_PREFIXES)
     last = rng.randint(1, 254)
-    return f"{prefix}.{last}"
+    return f"{prefix}.{last}", []
 
 
-def fake_mac_reserved(value: str, rng: random.Random) -> str:
+def fake_mac_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate a MAC address in the RFC 7042 documentation block."""
     last_byte = rng.randint(0, 255)
-    return f"{RFC7042_MAC_PREFIX}:{last_byte:02X}"
+    return f"{RFC7042_MAC_PREFIX}:{last_byte:02X}", []

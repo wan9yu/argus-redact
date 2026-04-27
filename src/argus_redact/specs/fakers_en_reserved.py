@@ -27,6 +27,22 @@ RESERVED_PERSON_NAMES_EN = (
     "Bob Loblaw",
 )
 
+# v0.5.8: zh transliterations the LLM might emit when it rephrases en fakes
+# into Chinese script. `restore()` matches both the canonical fake and its
+# aliases back to the original.
+RESERVED_PERSON_NAMES_EN_ALIASES: dict[str, list[str]] = {
+    "John Doe": ["约翰·多伊", "约翰多伊"],
+    "Jane Doe": ["简·多伊", "简多伊"],
+    "Jane Roe": ["简·罗", "简罗"],
+    "John Roe": ["约翰·罗", "约翰罗"],
+    "Richard Roe": ["理查德·罗", "理查德罗"],
+    "Mary Roe": ["玛丽·罗", "玛丽罗"],
+    "John Q. Public": ["约翰·Q·普布利克"],
+    "James Smith": ["詹姆斯·史密斯", "詹姆斯史密斯"],
+    "Alice Liddell": ["爱丽丝·利德尔", "爱丽丝利德尔"],
+    "Bob Loblaw": ["鲍勃·洛布劳"],
+}
+
 # Fictional addresses from US/UK pop culture; deliberately recognizable as fake
 RESERVED_ADDRESSES_EN = (
     "1313 Mockingbird Lane, Springfield, USA",
@@ -38,32 +54,34 @@ RESERVED_ADDRESSES_EN = (
 )
 
 
-def fake_phone_en_reserved(value: str, rng: random.Random) -> str:
+def fake_phone_en_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate a (555) 555-01XX number — NANP fictional reservation."""
     last_two = rng.randint(0, 99)
-    return f"(555) 555-01{last_two:02d}"
+    return f"(555) 555-01{last_two:02d}", []
 
 
-def fake_ssn_en_reserved(value: str, rng: random.Random) -> str:
+def fake_ssn_en_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate a 999-XX-XXXX SSN — SSA excludes 9XX area numbers."""
     group = rng.randint(1, 99)
     serial = rng.randint(1, 9999)
-    return f"999-{group:02d}-{serial:04d}"
+    return f"999-{group:02d}-{serial:04d}", []
 
 
-def fake_credit_card_en_reserved(value: str, rng: random.Random) -> str:
+def fake_credit_card_en_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate a 999999-BIN 16-digit credit card with valid Luhn."""
     from argus_redact.lang.shared.patterns import luhn_check_digit
 
     body = "999999" + "".join(str(rng.randint(0, 9)) for _ in range(9))
-    return body + str(luhn_check_digit(body))
+    return body + str(luhn_check_digit(body)), []
 
 
-def fake_person_en_reserved(value: str, rng: random.Random) -> str:
-    """Pick a US legal placeholder name from the canonical fake-name table."""
-    return rng.choice(RESERVED_PERSON_NAMES_EN)
+def fake_person_en_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
+    """Pick a US legal placeholder name; emit zh transliteration aliases."""
+    fake = rng.choice(RESERVED_PERSON_NAMES_EN)
+    return fake, list(RESERVED_PERSON_NAMES_EN_ALIASES.get(fake, []))
 
 
-def fake_address_en_reserved(value: str, rng: random.Random) -> str:
+def fake_address_en_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Pick a fictional pop-culture address from the fixed table."""
-    return rng.choice(RESERVED_ADDRESSES_EN)
+    # Address transliteration deferred to v0.6+ (see fakers_zh_reserved.py rationale).
+    return rng.choice(RESERVED_ADDRESSES_EN), []

@@ -353,11 +353,15 @@ def _replace_and_emit(
     langs: list[str],
     timing: dict,
     mode: str,
+    aliases_out: dict[str, list[str]] | None = None,
 ) -> tuple[str, dict]:
     """Apply replacement, run grammar normalization, emit telemetry, persist key file.
 
     Mutates `timing` in place by adding `replace_ms`. The caller is responsible
     for any further use of `timing` (e.g., detailed-output stats).
+
+    `aliases_out` (v0.5.8+, optional): forwarded to ``replace()`` so the caller
+    can capture cross-language aliases emitted by realistic-strategy fakers.
     """
     t0 = time.perf_counter()
     redacted, result_key = replace(
@@ -367,6 +371,7 @@ def _replace_and_emit(
         key=existing_key,
         config=config,
         langs=langs,
+        aliases_out=aliases_out,
     )
     effective_lang = lang if isinstance(lang, str) else (lang[0] if lang else "zh")
     if effective_lang == "en":

@@ -86,8 +86,8 @@ class TestLangAwareLookup:
 
         self._original_en_phone = _REGISTRY.get(("en", "phone"))
 
-        def _en_phone_faker(value: str, rng: random.Random) -> str:
-            return "(555) 555-0100"
+        def _en_phone_faker(value: str, rng: random.Random) -> tuple[str, list[str]]:
+            return "(555) 555-0100", []
 
         register(
             PIITypeDef(
@@ -109,12 +109,12 @@ class TestLangAwareLookup:
     def test_should_prefer_detected_lang(self):
         # zh detected → zh fake_phone_reserved (199-99 prefix)
         zh_faker = _find_faker_reserved("phone", ["zh"])
-        result = zh_faker("13912345678", random.Random(1))
+        result, _ = zh_faker("13912345678", random.Random(1))
         assert result.startswith("19999"), f"Expected zh phone, got {result}"
 
         # en detected → en _en_phone_faker (555 prefix)
         en_faker = _find_faker_reserved("phone", ["en"])
-        result = en_faker("415-555-1234", random.Random(1))
+        result, _ = en_faker("415-555-1234", random.Random(1))
         assert "(555)" in result, f"Expected en phone, got {result}"
 
     def test_should_fall_through_to_shared_when_lang_not_registered(self):
