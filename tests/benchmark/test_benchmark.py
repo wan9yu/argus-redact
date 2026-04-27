@@ -13,7 +13,7 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 
 def _load_benchmark(filename):
-    with open(FIXTURES_DIR / filename) as f:
+    with open(FIXTURES_DIR / filename, encoding="utf-8") as f:
         return json.load(f)
 
 

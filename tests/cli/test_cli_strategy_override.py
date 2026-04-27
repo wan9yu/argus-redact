@@ -17,6 +17,7 @@ def run_cli(*args, stdin=None):
         input=stdin,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     return result.returncode, result.stdout, result.stderr
 
