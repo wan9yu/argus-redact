@@ -125,10 +125,10 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 
 ## North Star
 
-| Dimension | Current (v0.5.6) | Next milestone |
+| Dimension | Current (v0.5.7) | Next milestone |
 |-----------|:----------------:|:---:|
-| **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini. Cross-layer hints in 5 langs (zh/en/ja/ko/de). MCP token-only key handling | Adversarial testing |
-| **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (zh + en + RFC shared) + per-call strategy overrides + resumable streaming sessions + cached restore | Incremental detection across chunk boundaries |
+| **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini. Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). MCP token-only key handling. Windows CI | Adversarial testing |
+| **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (zh + en + RFC shared) + per-call strategy overrides + `keep` strategy + resumable streaming sessions + cross-chunk incremental detection (opt-in) | Task-aware guidance |
 | **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design) | Task-aware guidance |
 | **Compliance** | PIPL ~85%, risk assessment + profiles | PIPL/GDPR/HIPAA (byproduct) |
 | **Coverage** | 8 langs, 4 LLMs benchmarked, 6 frameworks | Browser extension |
