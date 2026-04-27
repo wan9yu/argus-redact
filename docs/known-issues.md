@@ -1,29 +1,87 @@
 # Known Issues
 
-## Unresolved
+> **v0.5.x zero-debt milestone**: as of v0.5.8 there are no open Unresolved entries.
+> All remaining items are explicit **Design Constraints** — permanent trade-offs
+> documented for transparency, not a backlog. New defects discovered post-v0.5.8
+> will reappear in an `## Unresolved` section above.
 
-| Issue | Detail | Priority |
-|-------|--------|----------|
-| HanLP model 500MB | Lightweight NER-only model tested but quality unacceptable (character-level) | Won't fix |
-| Ollama cold start 10-20s | Inherent model loading; cached after first call | Won't fix |
-| Docker full image ~5GB | Multi-stage build applied; PyTorch dominates | Won't fix |
+## Design Constraints
 
-## pseudonym-llm Limitations
+Each entry follows three lines:
 
-These are inherent properties of the realistic-redaction design, not bugs to fix:
+- **What** — one-sentence description of the constraint.
+- **Why we won't fix** — the design / external trade-off it reflects.
+- **What you should do** — caller-side mitigation.
 
-| Limitation | Detail | Mitigation |
-|------------|--------|------------|
-| **199-99 mobile sub-segment requires annual review** | The `199-99-XXXXXX` reserved range relies on this sub-segment remaining unassigned by 工信部. Numbering plans are revised periodically. | Re-verify against MIIT public allocations annually; if assigned, switch to a different unassigned sub-segment via configuration. |
-| **Realistic-mode output must not be re-redacted** | Re-redacting realistic output would silently corrupt the key dict (the same fake value mapping to two different originals). | `redact_pseudonym_llm` raises `PseudonymPollutionError` by default. Call `restore()` first, then re-redact if needed. |
-| **Cross-language LLM rewrites not auto-restored** | If an LLM rewrites a fake value across languages (e.g., `张明` → `Zhang Ming`), `restore()` won't match it back. Word-boundary matching covers `张明先生` but not transliteration. | Document the LLM contract: ask the model to preserve fake values verbatim. Out-of-scope: add `aliases` to the key for cross-language equivalents. |
-| **Realistic data must not be stored as business truth** | `downstream_text` looks like real PII but is synthetic by design. Storing it in customer/business records causes data pollution that's hard to detect post-hoc. | Always pair `downstream_text` with the key dict; never persist `downstream_text` in business databases. Use `audit_text` for compliance archives. |
-| **`StreamingRedactor` default mode requires complete logical-unit chunks** | Default `feed()` requires each chunk to be a complete sentence / paragraph / turn. Entities that cross chunk boundaries (e.g., a phone number split across two chunks) are NOT detected. | Pass `incremental=True` (v0.5.7+) to opt into sentence-bounded incremental detection that handles cross-chunk entities. Or split inputs at logical boundaries before feeding (default mode). |
+### `199-99` mobile sub-segment requires annual review
+
+- **What**: The realistic-mode `199-99-XXXXXX` mobile range relies on this
+  sub-segment remaining unassigned by 工信部 (MIIT). Numbering plans are revised
+  periodically.
+- **Why we won't fix**: External regulatory authority controls this allocation.
+  argus-redact cannot anticipate when (or whether) it will be assigned.
+- **What you should do**: Re-verify against MIIT public allocations annually.
+  If the sub-segment gets assigned, switch to a different unassigned sub-segment
+  via configuration (the choice is a single constant in
+  `specs/fakers_zh_reserved.py`).
+
+### Realistic-mode output must not be re-redacted
+
+- **What**: Re-redacting realistic output (`downstream_text` from
+  `redact_pseudonym_llm`) would silently corrupt the key dict — the same fake
+  value would map to two different originals.
+- **Why we won't fix**: This is intrinsic to deterministic-fake redaction.
+  Detecting "is this input already faked?" precisely would require a marker
+  channel that defeats the purpose.
+- **What you should do**: `redact_pseudonym_llm` raises `PseudonymPollutionError`
+  by default. Call `restore()` first; then re-redact the original if needed.
+
+### Realistic data must not be stored as business truth
+
+- **What**: `downstream_text` looks like real PII (`19999...` mobile,
+  `999-XX-XXXX` SSN) but is synthetic by design. Persisting it in
+  customer / business records causes data pollution that's hard to detect
+  post-hoc.
+- **Why we won't fix**: This is an operational constraint, not a code
+  property. The library cannot enforce how downstream systems persist its
+  output.
+- **What you should do**: Always pair `downstream_text` with the key dict.
+  Never persist `downstream_text` in business databases. Use `audit_text`
+  (placeholder labels) for compliance archives.
+
+### HanLP model size (~500MB)
+
+- **What**: The Chinese NER backend (HanLP) ships a ~500MB model file.
+- **Why we won't fix**: Smaller character-level models tested produced
+  unacceptable quality. The full model is the smallest with usable recall.
+- **What you should do**: Use `mode="fast"` (regex + L1b person scoring) for
+  production paths where model size matters; reserve `mode="ner"` for
+  corpus-scale processing where the larger model amortizes over many calls.
+
+### Ollama cold start (10-20s)
+
+- **What**: First Layer-3 call after process start has a 10-20 second
+  initialization cost as the local LLM model loads into memory.
+- **Why we won't fix**: Inherent to local-LLM model loading.
+- **What you should do**: Warm up Layer 3 at process start by calling
+  `redact()` with `mode="auto"` on a no-op input. Subsequent calls are cached.
+
+### Docker full image size (~5GB)
+
+- **What**: The full-stack Docker image (regex + NER + L3 + benchmark) is
+  ~5GB.
+- **Why we won't fix**: PyTorch + transformer model weights dominate the
+  size; multi-stage build is already applied.
+- **What you should do**: For deployments that don't need Layer 3, use the
+  fast-mode subset image (no PyTorch — typically <1GB).
 
 ## Recently Fixed
 
 | Issue | Version | Fix |
 |-------|---------|-----|
+| Cross-language LLM rewrites not auto-restored | v0.5.8 | New `KeyEntry` dataclass with `aliases`. Person fakers (zh + en) emit pinyin / Chinese-transliteration aliases. `restore()` accepts `result.key_entries` and matches both canonical fake and aliases back to the original. |
+| `StreamingRedactor` default mode required complete logical-unit chunks | v0.5.8 | `incremental=True` is now the default — sentence-bounded buffering handles cross-chunk entities transparently. `incremental=False` opt-out emits `DeprecationWarning`; removed in v0.6. |
+| Windows CI test fixture encoding | v0.5.8 hotfix | `tests/conftest.py:load_examples`, `tests/safety/test_*.py` JSON loaders, and CLI `read_text/write_text` test helpers all pin `encoding="utf-8"` for cross-platform compat. |
 | zh fast-mode over-redacts pronouns / 3-char co-occurrences (issue #12) | v0.5.7 | (a) `self_reference` now defaults to new `keep` strategy — pronouns / kinship phrases preserved verbatim, never become `P-NNN`. (b) zh person candidate generator propagates `not_names.txt` blocks to 3-char extensions, blocking false positives like `任何评`. |
 | `StreamingRedactor` cross-chunk entity detection | v0.5.7 | Opt-in `incremental=True` accumulates chunks until a sentence boundary, then runs detection on the buffered prefix. `flush()` drains end-of-stream tail. |
 | Windows untested | v0.5.7 | GitHub Actions Windows runner added (Python 3.12 smoke test). UTF-8 encoding pinned on all CLI / glue file I/O for cross-platform stability. |
