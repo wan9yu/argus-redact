@@ -66,11 +66,6 @@ class TestToPatterns:
         "email",
         "ip_address",
         "mac_address",
-        # en types — registered via specs/en.py with _patterns=() (regex in lang/en/patterns.py)
-        "ssn",
-        "credit_card",
-        "address",
-        "phone",
     }
 
     def test_spec_patterns_should_exist(self):
@@ -127,6 +122,41 @@ class TestToPatterns:
             assert hand == spec, (
                 f"Mismatch on '{text[:40]}...': hand-only={hand - spec} spec-only={spec - hand}"
             )
+
+
+class TestToPatternsEn:
+    """Parity test for specs/en.py — every en spec's _patterns drives detection.
+
+    Unlike zh, en has no `_PATTERNS_IN_SOURCE` allowlist: all en regex now lives
+    in specs/en.py:_patterns (v0.5.6 migration). The exception is `person`,
+    which is NER-only and intentionally has _patterns=().
+    """
+
+    _NER_ONLY = {"person"}
+
+    def test_spec_patterns_should_exist(self):
+        """Every en spec except NER-only types should produce at least one pattern."""
+        for typedef in list_types("en"):
+            if typedef.name in self._NER_ONLY:
+                continue
+            patterns = typedef.to_patterns()
+            assert len(patterns) >= 1, f"en/{typedef.name} produced no patterns"
+
+    def test_spec_patterns_should_have_required_keys(self):
+        for typedef in list_types("en"):
+            for pat in typedef.to_patterns():
+                assert "type" in pat
+                assert "label" in pat
+                assert "pattern" in pat
+                assert pat["type"] == typedef.name
+
+    def test_build_patterns_provides_drop_in_for_lang_module(self):
+        """specs/en.py:build_patterns() output equals lang/en/patterns.py:PATTERNS."""
+        from argus_redact.lang.en.patterns import PATTERNS as EN_PATTERNS
+        from argus_redact.specs.en import build_patterns
+
+        built = build_patterns()
+        assert built == EN_PATTERNS, "lang/en/patterns.py must re-export the spec output"
 
 
 from tests.conftest import load_examples
