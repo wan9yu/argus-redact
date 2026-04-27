@@ -5,21 +5,10 @@ so shell pipelines can change per-type strategy without writing Python.
 """
 
 import json
-import subprocess
-import sys
 
 import pytest
 
-
-def run_cli(*args, stdin=None):
-    result = subprocess.run(
-        [sys.executable, "-m", "argus_redact.cli.main", *args],
-        input=stdin,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    return result.returncode, result.stdout, result.stderr
+from tests.cli.conftest import run_cli
 
 
 class TestParseStrategyOverride:

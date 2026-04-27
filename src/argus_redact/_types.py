@@ -101,11 +101,14 @@ class PseudonymLLMResult:
 
     @property
     def key(self) -> dict[str, str]:
-        # Fresh copy: caller mutations don't leak into the internal store.
+        # Fresh dict per access: keeps caller mutations isolated and stays
+        # ``json.dumps`` / ``isinstance(dict)`` compatible. Allocation cost is
+        # O(n) per access — the typical pattern is one access per redact call,
+        # so cache locally for tight loops.
         return {fake: e.original for fake, e in self._key_entries.items()}
 
     @property
     def key_entries(self) -> dict[str, KeyEntry]:
-        # Fresh copy: caller mutations don't leak into the internal store.
-        # KeyEntry is frozen, so values are individually immutable.
+        # Fresh dict per access for the same reasons. KeyEntry is frozen, so
+        # individual entries can't mutate.
         return dict(self._key_entries)

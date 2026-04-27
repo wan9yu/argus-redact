@@ -5,19 +5,8 @@ audit_text (placeholder), downstream_text (realistic), display_text (marked).
 """
 
 import json
-import subprocess
-import sys
 
-
-def run_cli(*args, stdin=None):
-    result = subprocess.run(
-        [sys.executable, "-m", "argus_redact.cli.main", *args],
-        input=stdin,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    return result.returncode, result.stdout, result.stderr
+from tests.cli.conftest import run_cli
 
 
 class TestPseudonymLLMProfile:

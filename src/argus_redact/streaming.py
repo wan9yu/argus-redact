@@ -158,13 +158,14 @@ class StreamingRedactor:
     def feed(self, chunk: str) -> PseudonymLLMResult:
         """Redact a chunk. Cross-chunk consistency preserved via shared key.
 
-        Default mode (``incremental=False``): caller MUST feed complete logical
-        units; entities split across chunk boundaries are NOT detected.
+        Incremental mode (default since v0.5.8): chunks accumulate until a
+        sentence boundary, then the buffered prefix is redacted. Returns an
+        empty ``PseudonymLLMResult`` when the buffer has no boundary yet. Call
+        ``flush()`` at end-of-stream to drain the tail.
 
-        Incremental mode (``incremental=True``, v0.5.7+): chunks accumulate
-        until a sentence boundary, then the buffered prefix is redacted. Returns
-        an empty ``PseudonymLLMResult`` when the buffer has no boundary yet.
-        Call ``flush()`` at end-of-stream to drain a tail with no boundary.
+        Legacy mode (``incremental=False``, deprecated v0.5.8 → removed v0.6):
+        caller must feed complete logical units; entities split across chunk
+        boundaries are NOT detected.
         """
         if self._incremental:
             return self._feed_incremental(chunk)

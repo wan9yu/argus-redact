@@ -1,22 +1,10 @@
 """Tests for CLI — argus-redact redact / restore / info."""
 
 import json
-import subprocess
-import sys
 
 from argus_redact import __version__
 
-
-def run_cli(*args, stdin=None):
-    """Run argus-redact CLI and return (returncode, stdout, stderr)."""
-    result = subprocess.run(
-        [sys.executable, "-m", "argus_redact.cli.main", *args],
-        input=stdin,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-    return result.returncode, result.stdout, result.stderr
+from tests.cli.conftest import run_cli
 
 
 class TestRedactCommand:

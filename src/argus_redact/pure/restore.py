@@ -136,14 +136,14 @@ def restore(text: str, key: dict | str, *, display_marker: str | None = None) ->
     if not key:
         return text
 
-    # Rust binding expects a concrete dict — MappingProxyType / other Mapping
-    # subclasses are rejected. Normalize once at the boundary.
+    # v0.5.8: accept KeyEntry-shaped dicts (result.key_entries) and expand
+    # aliases into a flat str→str lookup. _flatten_key_entries always returns
+    # a fresh dict on the KeyEntry path; on the str→str path it returns the
+    # input unchanged. Either way, the next isinstance check normalizes to dict
+    # for the Rust binding (MappingProxyType / other Mapping subclasses fail).
+    key = _flatten_key_entries(key)
     if not isinstance(key, dict):
         key = dict(key)
-
-    # v0.5.8: accept KeyEntry-shaped dicts (result.key_entries) and expand
-    # aliases into a flat str→str lookup transparently.
-    key = _flatten_key_entries(key)
 
     has_self_ref = any(v in SELF_REF_PRONOUNS for v in key.values())
 
