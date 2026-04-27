@@ -5,10 +5,13 @@ from __future__ import annotations
 import re
 
 from argus_redact._types import Hint, PatternMatch
+from argus_redact.lang.br import hints as _br_hints
 from argus_redact.lang.de import hints as _de_hints
 from argus_redact.lang.en import hints as _en_hints
+from argus_redact.lang.in_ import hints as _in_hints
 from argus_redact.lang.ja import hints as _ja_hints
 from argus_redact.lang.ko import hints as _ko_hints
+from argus_redact.lang.uk import hints as _uk_hints
 from argus_redact.lang.zh import hints as _zh_hints
 
 # ── Per-language hint registry ──
@@ -17,7 +20,16 @@ from argus_redact.lang.zh import hints as _zh_hints
 # language module. Adding a new language means: drop a `lang/<code>/hints.py`
 # exposing any of `KINSHIP`, `KINSHIP_PREFIXES`, `COMMAND_PREFIXES`,
 # `COMMAND_SUFFIXES`, `COMMAND_PATTERNS`, and append the module here.
-_LANG_HINT_MODULES = (_zh_hints, _en_hints, _ja_hints, _ko_hints, _de_hints)
+_LANG_HINT_MODULES = (
+    _zh_hints,
+    _en_hints,
+    _ja_hints,
+    _ko_hints,
+    _de_hints,
+    _uk_hints,
+    _in_hints,
+    _br_hints,
+)
 
 
 def _collect(attr: str) -> tuple:

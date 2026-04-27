@@ -8,7 +8,6 @@
 | HanLP model 500MB | Lightweight NER-only model tested but quality unacceptable (character-level) | Won't fix |
 | Ollama cold start 10-20s | Inherent model loading; cached after first call | Won't fix |
 | Docker full image ~5GB | Multi-stage build applied; PyTorch dominates | Won't fix |
-| hints uk/in/br coverage | v0.5.6 covers zh/en/ja/ko/de; uk/in/br fall back to zh defaults | Low |
 
 ## pseudonym-llm Limitations
 
