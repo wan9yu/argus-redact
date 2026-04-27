@@ -5,69 +5,61 @@ from __future__ import annotations
 import re
 
 from argus_redact._types import Hint, PatternMatch
+from argus_redact.lang.en import hints as _en_hints
+from argus_redact.lang.zh import hints as _zh_hints
 
-# ── Kinship terms (always Tier 1) ──
+# ── Per-language hint registry ──
+#
+# `pure/hints.py` aggregates kinship/command data from every registered
+# language module. Adding a new language means: drop a `lang/<code>/hints.py`
+# exposing any of `KINSHIP`, `KINSHIP_PREFIXES`, `COMMAND_PREFIXES`,
+# `COMMAND_SUFFIXES`, `COMMAND_PATTERN(S)`, and append the module here.
+_LANG_HINT_MODULES = (_zh_hints, _en_hints)
 
-_KINSHIP_ZH = {
-    "我妈妈",
-    "我爸爸",
-    "我母亲",
-    "我父亲",
-    "我老公",
-    "我老婆",
-    "我丈夫",
-    "我妻子",
-    "我先生",
-    "我太太",
-    "我儿子",
-    "我女儿",
-    "我哥哥",
-    "我姐姐",
-    "我弟弟",
-    "我妹妹",
-    "我哥",
-    "我姐",
-    "我弟",
-    "我妹",
-    "我妈",
-    "我爸",
-    "我爷爷",
-    "我奶奶",
-    "我外公",
-    "我外婆",
-    "我叔叔",
-    "我阿姨",
-    "我舅舅",
-    "我姑姑",
-    "我家人",
-    "我家里人",
-    "我孩子",
-}
 
-# ── Interaction command patterns (Tier 3) ──
+def _collect_kinship_exact() -> frozenset[str]:
+    out: set[str] = set()
+    for mod in _LANG_HINT_MODULES:
+        out.update(getattr(mod, "KINSHIP", ()))
+    return frozenset(out)
 
-_COMMAND_PREFIXES_ZH = (
-    "我想问",
-    "我想知道",
-    "我需要",
-    "我要问",
-    "帮我",
-    "请帮我",
-    "请告诉我",
-    "告诉我",
-    "我想让你",
-    "我希望你",
-    "我要你",
-    "麻烦帮我",
-    "能帮我",
-    "可以帮我",
-)
-_COMMAND_PATTERNS_EN = re.compile(
-    r"^(?:can you |could you |please |would you )"
-    r"|\b(?:help me|tell me|show me|explain to me|let me know)\b"
-    r"|^I (?:want to |need to |would like to )(?:know|ask|understand)",
-    re.IGNORECASE,
-)
+
+def _collect_kinship_prefixes() -> tuple[str, ...]:
+    out: list[str] = []
+    for mod in _LANG_HINT_MODULES:
+        out.extend(getattr(mod, "KINSHIP_PREFIXES", ()))
+    return tuple(out)
+
+
+def _collect_command_prefixes() -> tuple[str, ...]:
+    out: list[str] = []
+    for mod in _LANG_HINT_MODULES:
+        out.extend(getattr(mod, "COMMAND_PREFIXES", ()))
+    return tuple(out)
+
+
+def _collect_command_suffixes() -> tuple[str, ...]:
+    out: list[str] = []
+    for mod in _LANG_HINT_MODULES:
+        out.extend(getattr(mod, "COMMAND_SUFFIXES", ()))
+    return tuple(out)
+
+
+def _collect_command_patterns() -> tuple[re.Pattern, ...]:
+    out: list[re.Pattern] = []
+    for mod in _LANG_HINT_MODULES:
+        single = getattr(mod, "COMMAND_PATTERN", None)
+        if single is not None:
+            out.append(single)
+        out.extend(getattr(mod, "COMMAND_PATTERNS", ()))
+    return tuple(out)
+
+
+_KINSHIP_EXACT = _collect_kinship_exact()
+_KINSHIP_PREFIXES = _collect_kinship_prefixes()
+_COMMAND_PREFIXES = _collect_command_prefixes()
+_COMMAND_SUFFIXES = _collect_command_suffixes()
+_COMMAND_PATTERNS = _collect_command_patterns()
 
 # ── Default person name threshold ──
 
@@ -80,16 +72,18 @@ _DEFAULT_PERSON_THRESHOLD = 0.8
 
 
 def _is_kinship(entity: PatternMatch) -> bool:
-    return entity.text in _KINSHIP_ZH or entity.text.startswith("my ")
+    if entity.text in _KINSHIP_EXACT:
+        return True
+    return any(entity.text.startswith(p) for p in _KINSHIP_PREFIXES)
 
 
 def _is_interaction_command(text: str) -> bool:
     stripped = text.strip()
-    if any(stripped.startswith(p) for p in _COMMAND_PREFIXES_ZH):
+    if any(stripped.startswith(p) for p in _COMMAND_PREFIXES):
         return True
-    if _COMMAND_PATTERNS_EN.search(stripped):
+    if _COMMAND_SUFFIXES and any(stripped.endswith(s) for s in _COMMAND_SUFFIXES):
         return True
-    return False
+    return any(p.search(stripped) for p in _COMMAND_PATTERNS)
 
 
 def produce_hints(
