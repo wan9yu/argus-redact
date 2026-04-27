@@ -4,7 +4,6 @@
 
 | Issue | Detail | Priority |
 |-------|--------|----------|
-| Windows untested | encoding="utf-8" applied everywhere, no CI or manual verification | Low |
 | HanLP model 500MB | Lightweight NER-only model tested but quality unacceptable (character-level) | Won't fix |
 | Ollama cold start 10-20s | Inherent model loading; cached after first call | Won't fix |
 | Docker full image ~5GB | Multi-stage build applied; PyTorch dominates | Won't fix |
@@ -25,6 +24,10 @@ These are inherent properties of the realistic-redaction design, not bugs to fix
 
 | Issue | Version | Fix |
 |-------|---------|-----|
+| zh fast-mode over-redacts pronouns / 3-char co-occurrences (issue #12) | v0.5.7 | (a) `self_reference` now defaults to new `keep` strategy — pronouns / kinship phrases preserved verbatim, never become `P-NNN`. (b) zh person candidate generator propagates `not_names.txt` blocks to 3-char extensions, blocking false positives like `任何评`. |
+| `StreamingRedactor` cross-chunk entity detection | v0.5.7 | Opt-in `incremental=True` accumulates chunks until a sentence boundary, then runs detection on the buffered prefix. `flush()` drains end-of-stream tail. |
+| Windows untested | v0.5.7 | GitHub Actions Windows runner added (Python 3.12 smoke test). UTF-8 encoding pinned on all CLI / glue file I/O for cross-platform stability. |
+| hints uk/in/br coverage | v0.5.7 | New `lang/{uk,in_,br}/hints.py` modules; aggregated by `pure/hints.py` registry. v0.5.6 covered zh/en/ja/ko/de; v0.5.7 closes the remaining three. |
 | hints language coverage (zh/en only) | v0.5.6 | `self_reference` + command-mode detection now covers zh/en/ja/ko/de via per-lang `lang/<code>/hints.py` modules; aggregated by `pure/hints.py` |
 | specs/en.py asymmetric vs specs/zh.py | v0.5.6 | en regex now lives in `specs/en.py:_patterns`; `lang/en/patterns.py` is a thin re-export. Validators (`_validate_ssn`, Luhn, `_MONTHS`) move to `specs/en.py` to break import cycle |
 | MCP key exposure in tool response | v0.5.4 | `redact` tool now mints `key_token` (process-scoped UUID). Raw `key` was removed in v0.5.5; restore tool accepts `key_token` only. |
