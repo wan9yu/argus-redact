@@ -135,86 +135,77 @@ class TestRedactRoundtrip:
 
 
 class TestRedactSelfReference:
-    """Tier 1: replace when other PII present. Tier 2: skip. Tier 3: ignore commands."""
+    """v0.5.7+: self_reference defaults to "keep" — the pronoun / kinship
+    text is preserved verbatim regardless of tier; only the type detection
+    flows through (feeding hints / risk). Old tests asserted pseudonym
+    replacement behavior; that's now an explicit opt-in via
+    ``strategy_overrides={"self_reference": "pseudonym"}``.
+    """
 
-    # Tier 1: with PII → replace
-    def test_should_replace_wo_when_text_contains_pii_zh(self):
+    def test_should_keep_wo_when_text_contains_pii_zh(self):
         redacted, key = redact("我确诊了糖尿病", seed=42, mode="fast")
-        assert "我" not in redacted
-        assert "我" in key.values()
+        # Pronoun preserved
+        assert "我" in redacted
+        # And not minted as a key entry
+        assert "我" not in key.values()
 
-    def test_should_replace_I_when_text_contains_pii_en(self):
-        redacted, key = redact("I was diagnosed with diabetes", seed=42, mode="fast", lang="en")
-        assert " I " not in redacted
+    def test_should_keep_I_when_text_contains_pii_en(self):
+        redacted, _ = redact("I was diagnosed with diabetes", seed=42, mode="fast", lang="en")
+        assert redacted.startswith("I "), f"first-person preserved, got {redacted!r}"
 
     def test_should_roundtrip_when_self_reference_zh(self):
         original = "我在协和医院做了体检，医生说我血糖偏高"
         redacted, key = redact(original, seed=42, mode="fast")
         restored = restore(redacted, key)
-        assert "我" not in redacted
-        assert "我" in restored
+        # 我 preserved in redacted, round-trip still recovers exactly the input
+        assert "我" in redacted
+        assert restored == original
 
     def test_should_roundtrip_when_kinship_zh(self):
         original = "我妈在301医院住院"
         redacted, key = redact(original, seed=42, mode="fast")
         restored = restore(redacted, key)
-        assert "我妈" not in redacted
-        assert "我妈" in restored
+        assert "我妈" in redacted
+        assert restored == original
 
-    def test_should_use_same_pseudonym_for_all_wo_in_text(self):
+    def test_should_keep_every_wo_in_text(self):
         redacted, key = redact("我去了医院，我很担心", seed=42, mode="fast")
-        wo_codes = [code for code, val in key.items() if val == "我"]
-        assert len(wo_codes) == 1
+        # Both occurrences preserved
+        assert redacted.count("我") == 2
+        # No self_reference entry in the key
+        assert "我" not in key.values()
 
-    # Tier 2: no PII → skip
-    def test_should_not_replace_wo_when_no_pii_zh(self):
+    # Tier 2: no PII → also keep (always preserved under the new default)
+    def test_should_keep_wo_when_no_pii_zh(self):
         redacted, key = redact("我觉得天气很好", seed=42, mode="fast")
         assert "我" in redacted
         assert key == {}
 
-    def test_should_not_replace_I_when_no_pii_en(self):
+    def test_should_keep_I_when_no_pii_en(self):
         redacted, key = redact("I think this is a good plan", seed=42, mode="fast", lang="en")
         assert redacted.startswith("I ")
         assert key == {}
 
-    def test_should_not_replace_women_when_no_pii_zh(self):
-        redacted, key = redact("我们今天开会讨论一下", seed=42, mode="fast")
+    def test_should_keep_women_when_no_pii_zh(self):
+        redacted, _ = redact("我们今天开会讨论一下", seed=42, mode="fast")
         assert "我们" in redacted
 
-    # Tier 3: commands → ignore
-    def test_should_ignore_wo_in_command_zh(self):
+    # Tier 3: commands → also keep
+    def test_should_keep_wo_in_command_zh(self):
         redacted, key = redact("我想问一下怎么用Python", seed=42, mode="fast")
         assert "我" in redacted
         assert key == {}
 
-    def test_should_ignore_I_in_command_en(self):
-        redacted, key = redact("Can you help me with Python?", seed=42, mode="fast", lang="en")
+    def test_should_keep_me_in_command_en(self):
+        redacted, _ = redact("Can you help me with Python?", seed=42, mode="fast", lang="en")
         assert "me" in redacted
 
-    # Kinship: always Tier 1
-    def test_should_always_replace_kinship_zh(self):
-        redacted, key = redact("我妈最近身体不好", seed=42, mode="fast")
-        assert "我妈" not in redacted
+    # Kinship: always preserved
+    def test_should_keep_kinship_zh(self):
+        redacted, _ = redact("我妈最近身体不好", seed=42, mode="fast")
+        assert "我妈" in redacted
 
-
-class TestRedactSelfReferenceGrammar:
-    """English grammar normalization after first-person replacement."""
-
-    def test_should_fix_I_am_to_is(self):
-        redacted, _ = redact("I am diagnosed with diabetes", seed=42, mode="fast", lang="en")
-        assert " am " not in redacted
-        assert " is " in redacted
-
-    def test_should_fix_I_have_to_has(self):
-        redacted, _ = redact("I have diabetes and hypertension", seed=42, mode="fast", lang="en")
-        assert " have " not in redacted
-        assert " has " in redacted
-
-    def test_should_fix_Im_contraction(self):
-        redacted, _ = redact("I'm diagnosed with diabetes", seed=42, mode="fast", lang="en")
-        assert "'m " not in redacted
-
-    def test_should_fix_I_was_stays_was(self):
+    def test_should_preserve_I_was_grammar(self):
         redacted, _ = redact("I was diagnosed with diabetes", seed=42, mode="fast", lang="en")
         assert " was " in redacted
 
@@ -222,7 +213,8 @@ class TestRedactSelfReferenceGrammar:
         redacted, _ = redact("我很开心", seed=42, mode="fast")
         assert "很开心" in redacted
 
-    def test_should_restore_grammar_on_roundtrip(self):
+    def test_should_roundtrip_with_grammar_unchanged(self):
+        # With keep, round-trip is by definition exact: pronoun stays, other PII restored.
         original = "I'm feeling sick. I have diabetes."
         redacted, key = redact(original, seed=42, mode="fast", lang="en")
         restored = restore(redacted, key)

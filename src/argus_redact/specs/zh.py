@@ -888,7 +888,7 @@ register(
         charset="cjk",
         structure={"pronoun": "我/我们/我的", "kinship": "我妈/我爸/我老公等"},
         prefixes=(),
-        strategy="pseudonym",
+        strategy="keep",
         label="[自称已脱敏]",
         examples=("我确诊了糖尿病", "我妈住院了", "我们公司裁员了"),
         counterexamples=("他确诊了糖尿病", "你住院了"),

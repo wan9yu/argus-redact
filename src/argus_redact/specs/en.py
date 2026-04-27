@@ -515,7 +515,7 @@ register(
         lang="en",
         format="First-person pronoun or my-kinship phrase",
         charset="alpha",
-        strategy="remove",
+        strategy="keep",
         label="[SELF REDACTED]",
         examples=("my mother", "my husband", "I", "we"),
         counterexamples=("my book",),

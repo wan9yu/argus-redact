@@ -136,8 +136,10 @@ DEFAULT_STRATEGIES = {
     "religion": "remove",
     "political": "remove",
     "sexual_orientation": "remove",
-    # Self-reference
-    "self_reference": "pseudonym",
+    # Self-reference: keep original text (since v0.5.7) so the LLM still
+    # sees pronouns / kinship verbatim. The type is still detected upstream
+    # and feeds the self_reference_tier hint; only the replacement is skipped.
+    "self_reference": "keep",
     # Level 4
     "ip_address": "remove",
     "mac_address": "remove",
