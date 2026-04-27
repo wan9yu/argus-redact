@@ -25,17 +25,23 @@ Each turn alone may be harmless. Together, they build a complete user profile.
 
 Not all "我" are equal. Treatment depends on context:
 
-### Tier 1: Identity Binding (replace)
+### Tier 1: Identity Binding (keep, since v0.5.7)
 
-"我" co-occurs with explicit PII in the same text. Replacing "我" severs the link between user and PII.
+"我" co-occurs with explicit PII in the same text. The first-person reference is detected so it can feed downstream hints (PII density, command-mode), but the pronoun itself is **preserved verbatim** so the LLM gets an intelligible prompt.
 
 ```
-"我确诊了糖尿病"       → "P-83811确诊了MED-01532"    ← replace
-"我住在望京西路"       → "P-83811住在ADDR-05432"     ← replace
-"我妈在301医院住院"    → "P-14593在[LOCATION]住院"   ← replace
+"我确诊了糖尿病"       → "我确诊了MED-01532"      ← pronoun kept; medical redacted
+"我住在望京西路"       → "我住在ADDR-05432"       ← pronoun kept; address redacted
+"我妈在301医院住院"    → "我妈在[LOCATION]住院"   ← kinship + location both kept / redacted
 ```
 
 **Trigger:** other PII entities detected in same text.
+
+> Historical note: v0.5.0–v0.5.6 used `strategy="pseudonym"` for self_reference,
+> producing `P-NNN` placeholders. v0.5.7 flipped the default to the new `keep`
+> strategy after issue #12 (LLMs treated `P-NNN` chains as gibberish).
+> To restore the old behavior, pass
+> `strategy_overrides={"self_reference": "pseudonym"}`.
 
 ### Tier 2: Preference Leakage (assess, don't replace)
 
@@ -66,20 +72,20 @@ Not all "我" are equal. Treatment depends on context:
 # Detection: always detect self_reference
 entities = detect_all(text)    # includes self_reference entities
 
-# Classification
+# Classification (drives the Tier 1/2/3 hint passed to L2/L3)
 has_real_pii = any(e.type != "self_reference" for e in entities)
 is_command = _is_interaction_command(text)
 
-if is_command:
-    # Tier 3: drop self_reference entities entirely
-    entities = [e for e in entities if e.type != "self_reference"]
-elif has_real_pii:
-    # Tier 1: keep self_reference, replace along with other PII
-    pass
+# v0.5.7+: replacement uses strategy="keep" by default, so the entity
+# flows through hints / risk but the original text is preserved at emit
+# time. The conditional below classifies the *hint* tier, not whether to
+# replace.
+if is_command and not has_kinship and not has_real_pii:
+    tier = 3   # interaction command — pure prompt noise
+elif has_real_pii or has_kinship:
+    tier = 1   # identity binding — pronoun keeps, surrounding PII redacts
 else:
-    # Tier 2: drop from replacement, but keep for risk assessment
-    entities_for_replace = [e for e in entities if e.type != "self_reference"]
-    entities_for_risk = entities  # risk sees everything
+    tier = 2   # preference leakage — only risk assessment sees it
 ```
 
 ### Merger Priority
