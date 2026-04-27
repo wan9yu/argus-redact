@@ -14,3 +14,8 @@ tests/benchmark/data/
 .claude/
 _core*.so
 target/
+
+# Workspace-only design / planning artifacts (per convention — not committed)
+docs/design-pseudonym-llm.md
+docs/roadmap-v0.5.x.md
+docs/superpowers/
