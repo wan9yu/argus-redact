@@ -469,7 +469,7 @@ Reverse redaction — replace pseudonyms with originals using the key.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `text` | `str` | *(required)* | Text containing pseudonyms (typically LLM output). |
-| `key` | `dict \| str` | *(required)* | The key from `redact()`. `dict` = use directly. `str` = load from JSON file path (**read-only** — unlike `redact()`, `restore()` never writes to the file). |
+| `key` | `dict \| str` | *(required)* | The key from `redact()` or `redact_pseudonym_llm()`. Accepts: (a) `dict[str, str]` (legacy fake → original), (b) `dict[str, KeyEntry]` (v0.5.8+ — adds cross-language aliases), (c) `str` = load from JSON file path (read-only). |
 
 ### Returns
 
@@ -494,6 +494,7 @@ restored = restore(llm_output, "key.json")
 - **Exact string replacement.** `P-037` in text → looked up in key → replaced with original.
 - **Longer replacements first.** `[某公司总部]` is matched before `[某公司]` to avoid partial replacement.
 - **Unknown pseudonyms are left unchanged.** If the text contains `P-099` but the key has no `P-099`, it stays as `P-099`.
+- **Cross-language aliases** *(v0.5.8+, when key is `dict[str, KeyEntry]`)*: each entry's `aliases` are added to the alternation alongside the canonical fake. If an LLM transliterates `张三` into `Zhang San`, both forms map back to the original. Pass `result.key_entries` from `redact_pseudonym_llm()` to enable.
 - **Works on any text.** The text doesn't have to come from an LLM — any string with pseudonyms can be restored.
 
 ### Performance

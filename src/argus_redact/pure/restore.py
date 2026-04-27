@@ -6,9 +6,30 @@ import functools
 import re as _re
 from typing import Mapping
 
+from argus_redact._types import KeyEntry
 from argus_redact.pure.display_marker import strip_display_markers
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS, restore_grammar_en
 from argus_redact.pure.reserved_range_scanner import scan_for_pollution
+
+
+def _flatten_key_entries(key: dict) -> dict[str, str]:
+    """Expand a {fake: KeyEntry} dict into a flat {fake_or_alias: original} dict.
+
+    Each KeyEntry contributes one entry for its canonical fake and one for
+    each alias, all pointing at the same ``original``. A plain str→str dict
+    passes through unchanged.
+    """
+    if not key:
+        return {}
+    sample = next(iter(key.values()))
+    if not isinstance(sample, KeyEntry):
+        return key  # already str → str
+    flat: dict[str, str] = {}
+    for fake, entry in key.items():
+        flat[fake] = entry.original
+        for alias in entry.aliases:
+            flat[alias] = entry.original
+    return flat
 
 
 @functools.lru_cache(maxsize=128)
@@ -119,6 +140,10 @@ def restore(text: str, key: dict | str, *, display_marker: str | None = None) ->
     # subclasses are rejected. Normalize once at the boundary.
     if not isinstance(key, dict):
         key = dict(key)
+
+    # v0.5.8: accept KeyEntry-shaped dicts (result.key_entries) and expand
+    # aliases into a flat str→str lookup transparently.
+    key = _flatten_key_entries(key)
 
     has_self_ref = any(v in SELF_REF_PRONOUNS for v in key.values())
 
