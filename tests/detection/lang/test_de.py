@@ -27,3 +27,28 @@ class TestGermanPatterns:
                 assert any(r.text == example["expected_text"] for r in typed)
         else:
             assert len(typed) == 0, f"Should NOT match: {example['description']}"
+
+
+class TestGermanHints:
+    """v0.5.6: de kinship + command-mode hints."""
+
+    def test_kinship_prefix_is_kinship(self):
+        from argus_redact._types import PatternMatch
+        from argus_redact.pure.hints import _is_kinship
+
+        entity = PatternMatch(
+            text="meine Mutter", type="self_reference", start=0, end=12, confidence=1.0, layer=1
+        )
+        assert _is_kinship(entity)
+
+    def test_command_pattern_marks_command_mode(self):
+        from argus_redact.pure.hints import _is_interaction_command
+
+        assert _is_interaction_command("Können Sie mir die Telefonnummer sagen?")
+        assert _is_interaction_command("Bitte kontaktieren Sie mich.")
+
+    def test_narrative_german_is_not_command(self):
+        from argus_redact.pure.hints import _is_interaction_command
+
+        # No \bbitte\b, no Höflichkeitsform.
+        assert not _is_interaction_command("Herr Schmidt arbeitet in München.")

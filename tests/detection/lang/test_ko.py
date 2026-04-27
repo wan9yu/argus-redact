@@ -41,3 +41,27 @@ class TestRRN:
                 assert any(r.text == example["expected_text"] for r in rrn_results)
         else:
             assert len(rrn_results) == 0, f"Should NOT match: {example['description']}"
+
+
+class TestKoreanHints:
+    """v0.5.6: ko kinship + command-mode hints."""
+
+    def test_kinship_phrase_is_kinship(self):
+        from argus_redact._types import PatternMatch
+        from argus_redact.pure.hints import _is_kinship
+
+        entity = PatternMatch(
+            text="저의 어머니", type="self_reference", start=0, end=6, confidence=1.0, layer=1
+        )
+        assert _is_kinship(entity)
+
+    def test_command_suffix_marks_command_mode(self):
+        from argus_redact.pure.hints import _is_interaction_command
+
+        assert _is_interaction_command("전화번호를 가르쳐 주세요")
+        assert _is_interaction_command("연락해 주세요")
+
+    def test_narrative_korean_is_not_command(self):
+        from argus_redact.pure.hints import _is_interaction_command
+
+        assert not _is_interaction_command("김씨는 서울에 살고 있습니다.")
