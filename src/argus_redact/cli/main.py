@@ -7,24 +7,28 @@ from pathlib import Path
 
 
 def _read_input(input_path: str | None) -> str:
-    """Read text from file or stdin."""
+    """Read text from file or stdin. Forces UTF-8 decoding."""
     if input_path:
         path = Path(input_path)
         if not path.exists():
             print(f"Error: input file not found: {input_path}", file=sys.stderr)
             sys.exit(1)
         return path.read_text(encoding="utf-8")
-    return sys.stdin.read()
+    # Bypass platform-default encoding (cp1252 on Windows) — read raw bytes
+    # and decode as UTF-8. Without this, Chinese stdin produces surrogate
+    # characters that downstream Rust regex / json.dumps reject.
+    return sys.stdin.buffer.read().decode("utf-8")
 
 
 def _write_output(text: str, output_path: str | None):
-    """Write text to file or stdout."""
+    """Write text to file or stdout. Forces UTF-8 encoding on stdout."""
     if output_path:
         Path(output_path).write_text(text, encoding="utf-8")
-    else:
-        sys.stdout.write(text)
-        if not text.endswith("\n"):
-            sys.stdout.write("\n")
+        return
+    # Bypass platform-default stdout encoding (cp1252 on Windows). Use the
+    # binary buffer to avoid UnicodeEncodeError on CJK output.
+    payload = text if text.endswith("\n") else text + "\n"
+    sys.stdout.buffer.write(payload.encode("utf-8"))
 
 
 def _parse_strategy_override(s: str | None) -> dict[str, str] | None:
@@ -266,6 +270,14 @@ def cmd_serve(args):
 
 
 def main():
+    # Force UTF-8 on stdout/stderr so CJK output / error messages don't crash
+    # under Windows cp1252 default. _read_input / _write_output bypass these
+    # for stdin/stdout binary paths, but `print(..., file=sys.stderr)` and
+    # CLI subcommands using `print()` rely on the configured encoding.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(
         prog="argus-redact",
         description="Encrypt PII, not meaning. Locally.",
