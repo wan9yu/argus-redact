@@ -61,9 +61,10 @@ We rejected it for v0.5.7 because:
   third-party `regex` library (new runtime dependency) or hand-rolled
   per-pattern automata (large surface area, hard to keep correct as patterns
   evolve).
-- **Recall scope**: 98% of real-world LLM output contains sentence
-  punctuation within a few hundred characters. Sentence boundaries are good
-  enough for the dominant use case.
+- **Recall scope**: typical LLM output contains sentence punctuation
+  within a few hundred characters; sentence boundaries are sufficient for
+  the dominant chat / summarization / writing use cases. Token streams
+  without punctuation (raw JSON, code) are the documented edge case.
 - **NER + L3 LLM compatibility**: Layer 2 NER and Layer 3 semantic detection
   operate on complete sentences anyway. A byte-level partial scheme would
   need per-layer adaptation; sentence boundaries are uniform.

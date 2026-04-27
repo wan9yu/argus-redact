@@ -13,12 +13,15 @@ and is roadmapped for a later release.
 from __future__ import annotations
 
 from argus_redact._types import PseudonymLLMResult
-from argus_redact.glue._detect_partial import _last_boundary_index
+from argus_redact.glue._detect_partial import _consume_to_boundary
 from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
 from argus_redact.pure.restore import restore
 
-_INCREMENTAL_MAX_BUFFER = 4096
-_EMPTY_RESULT = PseudonymLLMResult(audit_text="", downstream_text="", display_text="", key={})
+
+def _empty_result() -> PseudonymLLMResult:
+    # Fresh instance per call: ``key`` is a mutable dict — sharing a singleton
+    # would let one caller's mutation leak into another caller's "empty" result.
+    return PseudonymLLMResult(audit_text="", downstream_text="", display_text="", key={})
 
 # Integer schema version stamped into export_state() output. Decoupled from
 # the package version on purpose — bumped only when the state shape itself
@@ -161,28 +164,16 @@ class StreamingRedactor:
         ``PseudonymLLMResult`` if the buffer is empty.
         """
         if not self._incremental or not self._inc_buffer:
-            return _EMPTY_RESULT
+            return _empty_result()
         emit = self._inc_buffer
         self._inc_buffer = ""
         return self._redact_and_merge(emit)
 
     def _feed_incremental(self, chunk: str) -> PseudonymLLMResult:
-        combined = self._inc_buffer + chunk
-        if not combined:
-            return _EMPTY_RESULT
-
-        boundary = _last_boundary_index(combined)
-        if boundary < 0:
-            if len(combined) >= _INCREMENTAL_MAX_BUFFER:
-                boundary = len(combined)
-            else:
-                self._inc_buffer = combined
-                return _EMPTY_RESULT
-
-        emit_text = combined[:boundary]
-        self._inc_buffer = combined[boundary:]
+        emit_text, residual = _consume_to_boundary(self._inc_buffer, chunk)
+        self._inc_buffer = residual
         if not emit_text:
-            return _EMPTY_RESULT
+            return _empty_result()
         return self._redact_and_merge(emit_text)
 
     def _redact_and_merge(self, text: str) -> PseudonymLLMResult:

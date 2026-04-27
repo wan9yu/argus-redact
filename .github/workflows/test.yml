@@ -15,7 +15,8 @@ jobs:
         os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
         include:
-          # v0.5.7+: smoke-test the Windows path/encoding contract.
+          # Windows: smoke-test path/encoding contract on a single Python
+          # (full version coverage already runs on Linux).
           - os: windows-latest
             python-version: "3.12"
 
