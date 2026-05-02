@@ -112,3 +112,42 @@ class TestAssessRisk:
     def test_result_is_frozen_dataclass(self):
         result = assess_risk([])
         assert isinstance(result, RiskResult)
+
+
+class TestComplianceMetadataFields:
+    """v0.5.9: assess_risk reads PIPL/GDPR/HIPAA metadata from PIITypeDef
+    rather than the previous hardcoded inference. New RiskResult fields
+    aggregate the metadata across all entities present.
+
+    Existing 14 tests above MUST still pass — the migration preserves
+    behavior exactly. These tests cover the new fields.
+    """
+
+    def test_should_expose_gdpr_special_category(self):
+        # medical is GDPR Art.9 special category
+        result = assess_risk([{"type": "medical", "sensitivity": 4}])
+        assert result.gdpr_special_category is True
+
+    def test_should_clear_gdpr_special_when_no_special_types(self):
+        result = assess_risk([{"type": "phone", "sensitivity": 3}])
+        assert result.gdpr_special_category is False
+
+    def test_should_expose_hipaa_categories(self):
+        result = assess_risk(
+            [
+                {"type": "phone", "sensitivity": 3},
+                {"type": "medical", "sensitivity": 4},
+            ]
+        )
+        assert "phone_numbers" in result.hipaa_categories
+        assert "medical_record" in result.hipaa_categories
+
+    def test_should_have_empty_hipaa_categories_for_non_phi_types(self):
+        # qq is a Chinese-specific type with no HIPAA mapping
+        result = assess_risk([{"type": "qq", "sensitivity": 2}])
+        assert result.hipaa_categories == ()
+
+    def test_empty_entities_have_empty_compliance_fields(self):
+        result = assess_risk([])
+        assert result.gdpr_special_category is False
+        assert result.hipaa_categories == ()

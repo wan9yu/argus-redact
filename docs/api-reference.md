@@ -807,11 +807,29 @@ result = assess_risk([
     {"type": "id_number", "sensitivity": 4},
     {"type": "phone", "sensitivity": 3},
 ])
-result.score          # 0.85
-result.level          # "critical"
-result.reasons        # ("id_number (critical)", "phone (high)", "multiple high/critical entities detected")
-result.pipl_articles  # ("PIPL Art.28", "PIPL Art.51")
+result.score                   # 0.85
+result.level                   # "critical"
+result.reasons                 # ("id_number (critical)", "phone (high)", ...)
+result.pipl_articles           # ("PIPL Art.13", "PIPL Art.28", "PIPL Art.51", ...)
+result.gdpr_special_category   # False (id_number/phone not GDPR Art.9)        ← v0.5.9+
+result.hipaa_categories        # ("phone_numbers",)                            ← v0.5.9+
 ```
+
+**v0.5.9+**: `pipl_articles`, `gdpr_special_category`, and `hipaa_categories`
+are read from `PIITypeDef` metadata via `argus_redact.specs.get(lang, name)`.
+Gateway DPIA generators can read the same data statically:
+
+```python
+from argus_redact.specs import get
+get("zh", "medical").pipl_articles
+# → ("PIPL Art.13", "PIPL Art.28", "PIPL Art.51", "PIPL Art.29", "PIPL Art.55", "PIPL Art.56")
+get("zh", "medical").gdpr_special_category   # True (GDPR Art.9 health data)
+get("zh", "medical").hipaa_phi_category      # "medical_record"
+```
+
+The full mapping is documented in [`docs/pii-types.md`](pii-types.md). Rules
+live in `src/argus_redact/specs/_compliance.py` — change them once and every
+typedef + risk report picks up the change.
 
 ### Report mode
 
@@ -819,13 +837,15 @@ result.pipl_articles  # ("PIPL Art.28", "PIPL Art.51")
 from argus_redact import redact
 
 report = redact("身份证110101199003074610，手机13812345678", report=True, mode="fast")
-report.redacted_text   # redacted text
-report.key             # {replacement: original}
-report.entities        # tuple of entity dicts
-report.stats           # {"total": 2, "layer_1": 2, ...}
-report.risk.score      # 0.85
-report.risk.level      # "critical"
-report.risk.pipl_articles  # ("PIPL Art.28", "PIPL Art.51")
+report.redacted_text                # redacted text
+report.key                          # {replacement: original}
+report.entities                     # tuple of entity dicts
+report.stats                        # {"total": 2, "layer_1": 2, ...}
+report.risk.score                   # 0.85
+report.risk.level                   # "critical"
+report.risk.pipl_articles           # ("PIPL Art.13", "PIPL Art.28", "PIPL Art.51", ...)
+report.risk.gdpr_special_category   # False                                    ← v0.5.9+
+report.risk.hipaa_categories        # ("phone_numbers",)                       ← v0.5.9+
 ```
 
 ### Compliance profiles

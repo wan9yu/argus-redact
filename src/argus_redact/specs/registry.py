@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -48,6 +49,13 @@ class PIITypeDef:
 
     # ── Risk / Compliance ──
     sensitivity: int = 2  # 1=low, 2=medium, 3=high, 4=critical
+
+    # PIPL / GDPR / HIPAA classification — read by `assess_risk()` and
+    # exposed in `docs/pii-types.md` so downstream DPIA generators don't
+    # need to mirror the rules. (v0.5.9+)
+    pipl_articles: tuple[str, ...] = ()  # e.g. ("PIPL Art.13", "PIPL Art.51")
+    gdpr_special_category: bool = False  # GDPR Art.9 special category
+    hipaa_phi_category: str | None = None  # one of HIPAA Safe Harbor 18
 
     # ── Description ──
     description: str = ""
@@ -103,7 +111,28 @@ _REGISTRY: dict[tuple[str, str], PIITypeDef] = {}
 
 
 def register(typedef: PIITypeDef) -> PIITypeDef:
-    """Register a PII type definition."""
+    """Register a PII type definition.
+
+    If compliance metadata fields are unset (the v0.5.9 default), they are
+    derived from `name + sensitivity` via `specs/_compliance.py` rules so
+    spec files do not need to spell out PIPL/GDPR/HIPAA per type. Explicit
+    values pass through unchanged.
+    """
+    if not typedef.pipl_articles:
+        from argus_redact.specs._compliance import (
+            gdpr_special_for,
+            hipaa_for,
+            pipl_articles_for,
+        )
+
+        typedef = dataclasses.replace(
+            typedef,
+            pipl_articles=pipl_articles_for(typedef.name, typedef.sensitivity),
+            gdpr_special_category=(
+                typedef.gdpr_special_category or gdpr_special_for(typedef.name)
+            ),
+            hipaa_phi_category=typedef.hipaa_phi_category or hipaa_for(typedef.name),
+        )
     key = (typedef.lang, typedef.name)
     _REGISTRY[key] = typedef
     return typedef
