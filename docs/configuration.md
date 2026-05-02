@@ -2,6 +2,38 @@
 
 argus-redact supports per-entity-type configuration to control redaction strategies. Pass a `config` dict to `redact()`. Without config, built-in defaults are used.
 
+## Default redacted output by strategy
+
+| Strategy | Example output | Reversible |
+|---|---|:---:|
+| `pseudonym` | `P-83811` (random code with type prefix) | ✓ |
+| `realistic` (`pseudonym-llm` profile) | `19999123456` (reserved-range fake) | ✓ |
+| `remove` | `ID-89732` (per-type code) — **not** `[身份证号已脱敏]` literal | ✓ |
+| `mask` | `138****5678` (partial digits visible) | ✗ |
+| `name_mask` | `张*` | ✗ |
+| `landline_mask` | `010-****-1234` | ✗ |
+| `category` | `[LOCATION]` | ✗ |
+| `keep` | original text untouched | ✓ |
+
+> ⚠️ **Common misread**: `remove` strategy emits `ID-NNNNN` codes by default, NOT Chinese label literals like `[身份证号已脱敏]`. The label form only appears if you explicitly pass `config={"id_number": {"replacement": "[身份证号已脱敏]"}}`. See [API reference: is_strategy_reversible](api-reference.md#is_strategy_reversible-v059).
+
+## Unified Prefix (hide PII type)
+
+By default, pseudonym codes still reveal the PII type via prefix: `P-00037` (person), `MED-00123` (medical), `ADDR-05432` (address). To hide type information from the LLM, use `_unified_prefix`:
+
+```python
+redact(text, config={
+    "_unified_prefix": "R",
+    "phone": {"strategy": "remove"},   # ← mask types must opt in
+    "email": {"strategy": "remove"},
+})
+# All reversible types collapse to R-NNNNN: R-00037, R-00123, R-05432
+```
+
+> ⚠️ `mask` / `name_mask` / `landline_mask` / `category` strategies don't use prefixes — they emit shape-preserving output by design (`138****5678`, `张*`, `[LOCATION]`). Override those types to `remove` if you want them unified.
+
+`<TYPE_N>` 1-based sequential token style (e.g. `<PHONE_1>`, `<PERSON_1>`) is roadmapped for v0.6.x.
+
 ## Usage
 
 ```python
@@ -31,17 +63,6 @@ Compliance profiles (`pipl`, `gdpr`, `hipaa`) automatically override `mask` stra
 | credit_card | mask | remove | Same as bank_card |
 
 User config overrides profile config: `redact(text, profile="pipl", config={"phone": {"strategy": "mask"}})` uses mask despite PIPL profile.
-
-### Unified Prefix (hide PII type)
-
-By default, pseudonym codes reveal the PII type: `P-00037` (person), `MED-00123` (medical), `ADDR-05432` (address). To hide type information:
-
-```python
-redact(text, config={"_unified_prefix": "R", "phone": {"strategy": "remove"}})
-# All types use R-XXXXX: R-00037, R-00123, R-05432
-```
-
-Note: `mask` strategy doesn't use prefixes. Override to `remove` for types you want unified.
 
 ---
 

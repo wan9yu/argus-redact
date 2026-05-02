@@ -55,8 +55,10 @@ from argus_redact import redact, restore
 redacted, key = redact("张三的手机号是13812345678，身份证号是110101199003071234")
 
 print(redacted)
-# "P-042的手机号是138****5678，身份证号是[身份证号已脱敏]"
+# "P-83811的手机号是138****5678，身份证号是ID-89732"
 # 张三 IS detected — nearby phone/ID signals boost name confidence
+# id_number → per-type code (ID-NNNNN), reversible via key dict
+# phone → mask (partial digits visible), NOT reversible — see Configuration
 
 print(key)
 # {

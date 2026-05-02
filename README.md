@@ -31,6 +31,36 @@ pip install argus-redact
 
 Other tools shred your PII — it's gone forever. argus-redact encrypts it with a different key every time. [ETH Zurich research](https://arxiv.org/abs/2602.16800) shows LLMs can deanonymize users for $1-4/person when pseudonyms are fixed. We generate **fresh random keys per call** — the cloud sees unrelated pseudonyms every time.
 
+## Default redaction output
+
+`redact()` emits **per-type pseudonym codes**, not Chinese label literals:
+
+```python
+>>> redact("员工张三，身份证110101199003074610，电话13812345678", mode='fast', lang='zh')
+('员工P-83811，身份证ID-89732，电话138****5678',
+ {'P-83811': '张三', 'ID-89732': '110101199003074610', '138****5678': '13812345678'})
+```
+
+| Type group | Default output | Strategy | Reversible |
+|---|---|---|:---:|
+| `person` / `organization` | `P-NNNNN` / `O-NNNNN` | `pseudonym` | ✓ |
+| `phone` / `email` / `bank_card` | `138****5678` (partial digits visible) | `mask` | ✗ |
+| `id_number` / `medical` / `ssn` / ... | `ID-NNNNN` / `MED-NNNNN` / `SSN-NNNNN` | `remove` → per-type code | ✓ |
+| `self_reference` | `我` / `我妈` (kept verbatim) | `keep` | ✓ |
+
+To **unify all reversible types** under one prefix (hides PII type from the LLM):
+
+```python
+redact(text, config={
+    "_unified_prefix": "R",
+    "phone": {"strategy": "remove"},   # mask types must opt in to participate
+    "email": {"strategy": "remove"},
+})
+# → "员工R-83811，身份证R-89732，电话R-12345"
+```
+
+`<TYPE_N>` 1-based sequential token style is roadmapped for v0.6.x. See [docs/configuration.md](docs/configuration.md#unified-prefix-hide-pii-type) for full strategy reference.
+
 ## Privacy Levels
 
 argus-redact evaluates your text from **your perspective**, not a regulator's:
