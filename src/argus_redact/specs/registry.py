@@ -62,6 +62,15 @@ class PIITypeDef:
             return list(self._patterns)
         return []
 
+    @property
+    def is_reversible(self) -> bool:
+        """Whether ``replace()→restore()`` recovers the original. Derived
+        from ``self.strategy``. Lazy import avoids registry → replacer cycle.
+        """
+        from argus_redact.pure.replacer import is_strategy_reversible
+
+        return is_strategy_reversible(self.strategy)
+
     def to_fixtures(self) -> list[dict]:
         """Generate test fixture entries from examples and counterexamples."""
         fixtures = []

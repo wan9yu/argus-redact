@@ -580,6 +580,51 @@ wipe_key(key)  # done with key, clear it
 
 ---
 
+## is_strategy_reversible() *(v0.5.9+)*
+
+Public helper for callers that need to know whether a redaction strategy
+emits output that ``restore()`` can recover.
+
+```python
+from argus_redact import is_strategy_reversible
+from argus_redact.specs import get
+
+is_strategy_reversible("pseudonym")   # True
+is_strategy_reversible("mask")        # False — middle digits are lost
+is_strategy_reversible("nonexistent") # raises ValueError
+
+# PIITypeDef exposes the same answer for the type's *default* strategy:
+get("zh", "phone").is_reversible      # False (default = mask)
+get("zh", "person").is_reversible     # True  (default = pseudonym)
+```
+
+| Strategy | Reversible? | Why |
+|---|:---:|---|
+| `pseudonym` | ✓ | random code stored 1:1 in key dict |
+| `realistic` | ✓ | reserved-range fake stored 1:1 in key dict |
+| `remove` | ✓ | per-type `[ID-NNNNN]` code stored 1:1 |
+| `keep` | ✓ | original text untouched |
+| `mask` | ✗ | middle characters replaced with `*` — lossy |
+| `name_mask` | ✗ | `张*` style — lossy |
+| `landline_mask` | ✗ | masked middle digits — lossy |
+| `category` | ✗ | many-to-one mapping (`[LOCATION]`) |
+
+### When to use
+
+Multi-turn dialog flows where the LLM may echo redacted values back: prefer
+reversible strategies so the assistant can quote real PII to the user. Audit
+flows where partial visibility is preferred can stay on `mask` / `category`.
+
+To force-override a single type to a reversible strategy:
+
+```python
+from argus_redact import redact
+
+redact(text, config={"phone": {"strategy": "remove"}})  # PHONE-NNNNN, reversible
+```
+
+---
+
 ## Layer Constants *(v0.5.9+)*
 
 `argus_redact.layers` exposes the canonical layer names used throughout the
