@@ -580,6 +580,41 @@ wipe_key(key)  # done with key, clear it
 
 ---
 
+## Layer Constants *(v0.5.9+)*
+
+`argus_redact.layers` exposes the canonical layer names used throughout the
+detection pipeline and `PatternMatch.layer` field. Downstream consumers
+should import from this module rather than defining their own constants.
+
+```python
+from argus_redact.layers import (
+    LAYER_REGEX,            # 1
+    LAYER_REGEX_EVIDENCE,   # "1b"
+    LAYER_NER,              # 2
+    LAYER_SEMANTIC,         # 3
+    LAYER_NAMES,            # dict[int | str, str] with descriptions
+)
+```
+
+| Constant | Value | Description |
+|---|---|---|
+| `LAYER_REGEX` | `1` | L1: regex pattern matching with prefix/suffix context |
+| `LAYER_REGEX_EVIDENCE` | `"1b"` | L1b: evidence scoring on regex candidates (PII proximity, honorifics, kinship) |
+| `LAYER_NER` | `2` | L2: NER model (HanLP / spaCy) for open-vocabulary entities |
+| `LAYER_SEMANTIC` | `3` | L3: semantic LLM judgment (Ollama-backed) |
+
+### Notes
+
+- `PatternMatch.layer` is `int`-typed. L1b is a sub-stage of L1 — its
+  candidates carry `layer=1`, not `"1b"`. The `"1b"` sentinel is for
+  documentation and `LAYER_NAMES` lookup only.
+- `LAYER_NAMES` is a `dict[int | str, str]`. Iterate it for tables and
+  generated docs; do not hardcode descriptions.
+- Adding a new layer index is a coordinated change: `_types.PatternMatch.layer`,
+  the relevant glue stage in `glue/redact.py`, and this constant set.
+
+---
+
 ## Performance Telemetry
 
 Opt-in timing logs for diagnosing performance.

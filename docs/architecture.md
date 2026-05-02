@@ -1,5 +1,25 @@
 # Architecture
 
+## Layer naming SSOT
+
+This document and the rest of the project — including downstream consumers
+(Argus Gateway, Whitepaper, Landing) — use the layer names exposed by
+`argus_redact.layers`. Import them rather than coining your own:
+
+```python
+from argus_redact.layers import (
+    LAYER_REGEX,            # 1  — L1: regex pattern matching
+    LAYER_REGEX_EVIDENCE,   # "1b" — L1b: evidence scoring on candidates
+    LAYER_NER,              # 2  — L2: NER models
+    LAYER_SEMANTIC,         # 3  — L3: semantic LLM
+    LAYER_NAMES,            # full mapping with descriptions
+)
+```
+
+`PatternMatch.layer` is an integer; L1b candidates flow through with
+`layer=1` (L1b is a sub-stage of L1, not a separate layer index). The
+`"1b"` sentinel is for naming and documentation only.
+
 ## Overview
 
 argus-redact is two functions and a processing pipeline between them:

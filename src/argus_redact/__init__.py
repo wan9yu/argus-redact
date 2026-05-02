@@ -1,5 +1,6 @@
 """argus-redact: Encrypt PII, not meaning. Locally."""
 
+from argus_redact import layers
 from argus_redact._types import KeyEntry, PseudonymLLMResult, RedactReport
 from argus_redact.glue.redact import redact
 from argus_redact.glue.redact_pseudonym_llm import (
@@ -23,5 +24,6 @@ __all__ = [
     "PseudonymLLMResult",
     "PseudonymPollutionError",
     "RedactReport",
+    "layers",
     "__version__",
 ]
