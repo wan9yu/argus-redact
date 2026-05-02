@@ -258,6 +258,7 @@ Meets **PIPL** · **GDPR** · **HIPAA** technical requirements as a byproduct of
 | [CLI Reference](docs/cli-reference.md) | Commands, flags, serve, MCP server |
 | [Configuration](docs/configuration.md) | Per-type strategies, enterprise mask rules, false positive reduction |
 | [Sensitive Info](docs/sensitive-info.md) | Taxonomy, privacy levels, roadmap |
+| [PII Type Catalog](docs/pii-types.md) | All 52 types — strategy, sensitivity, PIPL/GDPR/HIPAA mapping (auto-generated) |
 | [Architecture](docs/architecture.md) | Three-layer engine, cross-layer hints, pure/impure separation |
 | [Language Packs](docs/language-packs.md) | Adding new languages |
 | [Security Model](docs/security-model.md) | Threat model, compliance, per-message keys |
