@@ -28,6 +28,42 @@ PIPL_ART_51 = "PIPL Art.51"  # Sensitive personal information definition
 PIPL_ART_55 = "PIPL Art.55"  # Personal information protection impact assessment
 PIPL_ART_56 = "PIPL Art.56"  # Record-keeping obligation for PI processors
 
+# Canonical legal-reference order (not numerical) — used by `assess_risk()`
+# to keep `pipl_articles` output stable across releases.
+PIPL_SORT_ORDER: dict[str, int] = {
+    PIPL_ART_13: 0,
+    PIPL_ART_28: 1,
+    PIPL_ART_51: 2,
+    PIPL_ART_29: 3,
+    PIPL_ART_55: 4,
+    PIPL_ART_56: 5,
+}
+
+# HIPAA Safe Harbor 18 PHI categories. Test suites and `_HIPAA_MAP` validate
+# against this set. Adding a new category requires a corresponding mapping
+# in `_HIPAA_MAP` below, otherwise it's a dead category.
+HIPAA_SAFE_HARBOR_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "names",
+        "geographic",
+        "dates",
+        "phone_numbers",
+        "fax_numbers",
+        "email_addresses",
+        "ssn",
+        "medical_record",
+        "account_numbers",
+        "certificate_number",
+        "vehicle_identifier",
+        "device_identifier",
+        "biometric",
+        "ip_address",
+        "url",
+        "full_face_photo",
+        "other_unique_identifier",
+    }
+)
+
 # PIPL Art.28 sensitive personal information categories. Triggers Art.55
 # (impact assessment) at the typedef level. Cardinality threshold (≥3
 # entities) lives in `assess_risk()` rather than the typedef.

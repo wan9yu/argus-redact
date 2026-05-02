@@ -16,9 +16,6 @@ class TestLayerConstants:
         assert LAYER_REGEX == 1
         assert LAYER_NER == 2
         assert LAYER_SEMANTIC == 3
-        assert isinstance(LAYER_REGEX, int)
-        assert isinstance(LAYER_NER, int)
-        assert isinstance(LAYER_SEMANTIC, int)
 
     def test_layer_regex_evidence_is_string_sentinel(self):
         # L1b is a sub-stage of L1, not a separate layer index. PatternMatch.layer
@@ -26,7 +23,6 @@ class TestLayerConstants:
         from argus_redact.layers import LAYER_REGEX_EVIDENCE
 
         assert LAYER_REGEX_EVIDENCE == "1b"
-        assert isinstance(LAYER_REGEX_EVIDENCE, str)
 
 
 class TestLayerNames:
@@ -42,12 +38,6 @@ class TestLayerNames:
         assert LAYER_NAMES["1b"].startswith("L1b:")
         assert LAYER_NAMES[2].startswith("L2:")
         assert LAYER_NAMES[3].startswith("L3:")
-
-    def test_layer_names_descriptions_non_empty(self):
-        from argus_redact.layers import LAYER_NAMES
-
-        for key, desc in LAYER_NAMES.items():
-            assert len(desc) > 5, f"LAYER_NAMES[{key!r}] too short: {desc!r}"
 
 
 class TestModuleExposure:

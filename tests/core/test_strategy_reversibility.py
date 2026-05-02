@@ -40,18 +40,15 @@ class TestStrategyClassification:
 
     def test_every_valid_strategy_classified(self):
         # Every strategy in VALID_STRATEGIES must be classified as either
-        # reversible or irreversible. Adding a new strategy without updating
-        # the classification will be caught by the parametrized tests above
-        # (`pytest.mark.parametrize` would not include the new strategy).
-        # This test guards against the strategy lists silently diverging.
-        from argus_redact.pure.replacer import _REVERSIBLE_STRATEGIES
-
+        # reversible or irreversible — no new strategy can sneak in without
+        # an explicit verdict. Uses the public API only (no private import).
         irreversible = {"mask", "name_mask", "landline_mask", "category"}
-        assert _REVERSIBLE_STRATEGIES | irreversible == set(VALID_STRATEGIES), (
-            "Every VALID_STRATEGIES member must appear in either "
-            "_REVERSIBLE_STRATEGIES or the irreversible set."
+        reversible = {s for s in VALID_STRATEGIES if is_strategy_reversible(s)}
+        assert reversible | irreversible == set(VALID_STRATEGIES), (
+            "Every VALID_STRATEGIES member must be classified as either "
+            "reversible or irreversible."
         )
-        assert _REVERSIBLE_STRATEGIES.isdisjoint(irreversible)
+        assert reversible.isdisjoint(irreversible)
 
 
 class TestUnknownStrategy:
@@ -77,16 +74,14 @@ class TestRoundTripBehavior:
         redacted, key = replace("110101199003074610", entities, seed=42)
         assert restore(redacted, key) == "110101199003074610"
 
-    def test_mask_does_not_round_trip(self):
-        # mask emits 138****5678 — the middle 4 digits cannot be recovered.
+    def test_mask_emits_partial_visible_form(self):
+        # mask emits 138****5678 — the middle 4 digits are lost. Two distinct
+        # phones with the same prefix+suffix would collide to the same fake,
+        # which is why mask is classified irreversible at the strategy level
+        # even when the per-call key dict happens to round-trip.
         entities = [_match("13812345678", "phone", 0)]
         redacted, _key = replace("13812345678", entities, seed=42)
         assert "****" in redacted
-        # restore() with the mask key gives back the original (because mask
-        # output IS in the key dict), but the strategy is still classified
-        # irreversible because OTHER mask outputs with same prefix/suffix
-        # could collide. The classification reflects the design intent.
-        assert is_strategy_reversible("mask") is False
 
 
 class TestPIITypeDefProperty:

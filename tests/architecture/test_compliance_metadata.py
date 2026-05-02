@@ -16,6 +16,7 @@ import argus_redact.specs.shared  # noqa: F401
 import argus_redact.specs.zh  # noqa: F401
 from argus_redact.specs._compliance import (
     GDPR_SPECIAL_CATEGORY,
+    HIPAA_SAFE_HARBOR_CATEGORIES,
     PIPL_SENSITIVE_PI,
 )
 from argus_redact.specs.registry import PIITypeDef, list_types
@@ -34,29 +35,6 @@ _CREDENTIAL_TYPES = {
     "github_token",
     "jwt",
     "ssh_private_key",
-}
-
-# HIPAA Safe Harbor 18 PHI categories used in this project. Not every
-# category needs to map to an argus-redact type — the test only checks that
-# every value used in a typedef is one of these.
-_HIPAA_SAFE_HARBOR_CATEGORIES = {
-    "names",
-    "geographic",
-    "dates",
-    "phone_numbers",
-    "fax_numbers",
-    "email_addresses",
-    "ssn",
-    "medical_record",
-    "account_numbers",
-    "certificate_number",
-    "vehicle_identifier",
-    "device_identifier",
-    "biometric",
-    "ip_address",
-    "url",
-    "full_face_photo",
-    "other_unique_identifier",
 }
 
 
@@ -105,24 +83,17 @@ class TestSensitivityDrivenPIPLArticles:
 
 
 class TestSensitivePITypesCoverage:
-    def test_pipl_sensitive_types_have_art_55(self):
-        # PIPL Art.55: impact assessment required for sensitive PI types
-        # (medical, financial, religion, political, sexual_orientation,
-        # criminal_record, biometric).
+    def test_art_55_iff_sensitive_pi_type(self):
+        # Art.55 (impact assessment) on a typedef must align exactly with
+        # PIPL_SENSITIVE_PI. The cardinality rule (≥3 entities → Art.55)
+        # is enforced separately by assess_risk(), not at the typedef level.
         for td in list_types():
-            if td.name in _PIPL_SENSITIVE_TYPES:
-                assert "PIPL Art.55" in td.pipl_articles, (
-                    f"{td.lang}/{td.name} is sensitive PI but missing Art.55"
-                )
-
-    def test_non_sensitive_types_no_art_55_at_typedef_level(self):
-        # Art.55 from typedef should only flag truly sensitive PI types.
-        # The cardinality rule (≥3 entities → Art.55) lives in assess_risk.
-        for td in list_types():
-            if td.name not in _PIPL_SENSITIVE_TYPES and "PIPL Art.55" in td.pipl_articles:
-                raise AssertionError(
-                    f"{td.lang}/{td.name} has Art.55 but isn't in _PIPL_SENSITIVE_TYPES"
-                )
+            has_art_55 = "PIPL Art.55" in td.pipl_articles
+            should_have = td.name in _PIPL_SENSITIVE_TYPES
+            assert has_art_55 == should_have, (
+                f"{td.lang}/{td.name}: Art.55 present={has_art_55} "
+                f"but should be {should_have} (sensitive PI: {should_have})"
+            )
 
 
 class TestGDPRSpecialCategory:
@@ -149,7 +120,7 @@ class TestHIPAACategories:
     def test_hipaa_categories_are_valid_safe_harbor_values(self):
         for td in list_types():
             if td.hipaa_phi_category is not None:
-                assert td.hipaa_phi_category in _HIPAA_SAFE_HARBOR_CATEGORIES, (
+                assert td.hipaa_phi_category in HIPAA_SAFE_HARBOR_CATEGORIES, (
                     f"{td.lang}/{td.name} hipaa_phi_category={td.hipaa_phi_category!r} "
                     f"not in HIPAA Safe Harbor 18 set"
                 )

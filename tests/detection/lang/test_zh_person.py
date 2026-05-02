@@ -171,6 +171,8 @@ class TestScoringWindowConstants:
         assert score >= 0.8
 
     def test_context_prefix_beyond_20_char_window_misses(self):
+        import pytest
+
         from argus_redact.lang.zh.person import generate_candidates, score_candidate
 
         # 25 chars of filler push "客户" outside the ±20 window
@@ -179,7 +181,7 @@ class TestScoringWindowConstants:
         candidates = generate_candidates(text)
         zhang_candidates = [c for c in candidates if c.text == "张明"]
         if not zhang_candidates:
-            return  # generator may not emit a candidate without surname trigger; skip
+            pytest.skip("candidate generator returned no '张明' for this fixture")
         zhang = zhang_candidates[0]
         score = score_candidate(zhang, text, pii_entities=[])
         # Without the prefix bonus and without PII, 2-char base 0.3 < 0.8

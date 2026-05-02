@@ -12,13 +12,9 @@ import functools
 from dataclasses import dataclass
 
 from argus_redact.specs._compliance import (
-    PIPL_ART_13,
-    PIPL_ART_28,
-    PIPL_ART_29,
-    PIPL_ART_51,
     PIPL_ART_55,
-    PIPL_ART_56,
     PIPL_SENSITIVE_PI,
+    PIPL_SORT_ORDER,
 )
 from argus_redact.specs.registry import get as _registry_get
 from argus_redact.specs.registry import lookup as _registry_lookup
@@ -39,16 +35,6 @@ _QUASI_ID_COMBOS = [
 # types — keeps the score rule in sync with the compliance classification.
 _SELF_REF_AMPLIFY_WITH = PIPL_SENSITIVE_PI | {"phone", "id_number", "bank_card"}
 
-# Stable output ordering for `pipl_articles` matching pre-v0.5.9 list order
-# (Art.13, 28, 51, 29, 55, 56 — the canonical legal sequence, not numerical).
-_PIPL_SORT_ORDER = {
-    PIPL_ART_13: 0,
-    PIPL_ART_28: 1,
-    PIPL_ART_51: 2,
-    PIPL_ART_29: 3,
-    PIPL_ART_55: 4,
-    PIPL_ART_56: 5,
-}
 
 
 @dataclass(frozen=True)
@@ -158,7 +144,7 @@ def assess_risk(entities: list[dict], lang: str = "zh") -> RiskResult:
         pipl_set.add("PIPL Art.55")
 
     pipl_articles = tuple(
-        sorted(pipl_set, key=lambda art: _PIPL_SORT_ORDER.get(art, 999))
+        sorted(pipl_set, key=lambda art: PIPL_SORT_ORDER.get(art, 999))
     )
 
     return RiskResult(
