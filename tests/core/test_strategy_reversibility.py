@@ -39,11 +39,19 @@ class TestStrategyClassification:
         assert is_strategy_reversible(strategy) is False
 
     def test_every_valid_strategy_classified(self):
-        # Every strategy in VALID_STRATEGIES must have a verdict — adding a
-        # new strategy must update _REVERSIBLE_STRATEGIES too.
-        for strategy in VALID_STRATEGIES:
-            result = is_strategy_reversible(strategy)
-            assert result in (True, False), f"{strategy!r} returned {result!r}"
+        # Every strategy in VALID_STRATEGIES must be classified as either
+        # reversible or irreversible. Adding a new strategy without updating
+        # the classification will be caught by the parametrized tests above
+        # (`pytest.mark.parametrize` would not include the new strategy).
+        # This test guards against the strategy lists silently diverging.
+        from argus_redact.pure.replacer import _REVERSIBLE_STRATEGIES
+
+        irreversible = {"mask", "name_mask", "landline_mask", "category"}
+        assert _REVERSIBLE_STRATEGIES | irreversible == set(VALID_STRATEGIES), (
+            "Every VALID_STRATEGIES member must appear in either "
+            "_REVERSIBLE_STRATEGIES or the irreversible set."
+        )
+        assert _REVERSIBLE_STRATEGIES.isdisjoint(irreversible)
 
 
 class TestUnknownStrategy:

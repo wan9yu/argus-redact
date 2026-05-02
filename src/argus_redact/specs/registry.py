@@ -6,6 +6,10 @@ import dataclasses
 from dataclasses import dataclass, field
 from typing import Callable
 
+from argus_redact.specs._compliance import gdpr_special_for as _gdpr_special_for
+from argus_redact.specs._compliance import hipaa_for as _hipaa_for
+from argus_redact.specs._compliance import pipl_articles_for as _pipl_articles_for
+
 
 @dataclass(frozen=True)
 class PIITypeDef:
@@ -113,25 +117,24 @@ _REGISTRY: dict[tuple[str, str], PIITypeDef] = {}
 def register(typedef: PIITypeDef) -> PIITypeDef:
     """Register a PII type definition.
 
-    If compliance metadata fields are unset (the v0.5.9 default), they are
-    derived from `name + sensitivity` via `specs/_compliance.py` rules so
-    spec files do not need to spell out PIPL/GDPR/HIPAA per type. Explicit
-    values pass through unchanged.
+    Compliance metadata fields are auto-derived from `name + sensitivity` via
+    `specs/_compliance.py` rules. Each field falls back independently — a
+    caller can pre-populate `pipl_articles` while still letting `gdpr_*` /
+    `hipaa_*` derive from the central rule book.
     """
-    if not typedef.pipl_articles:
-        from argus_redact.specs._compliance import (
-            gdpr_special_for,
-            hipaa_for,
-            pipl_articles_for,
-        )
-
+    pipl = typedef.pipl_articles or _pipl_articles_for(typedef.name, typedef.sensitivity)
+    gdpr = typedef.gdpr_special_category or _gdpr_special_for(typedef.name)
+    hipaa = typedef.hipaa_phi_category or _hipaa_for(typedef.name)
+    if (pipl, gdpr, hipaa) != (
+        typedef.pipl_articles,
+        typedef.gdpr_special_category,
+        typedef.hipaa_phi_category,
+    ):
         typedef = dataclasses.replace(
             typedef,
-            pipl_articles=pipl_articles_for(typedef.name, typedef.sensitivity),
-            gdpr_special_category=(
-                typedef.gdpr_special_category or gdpr_special_for(typedef.name)
-            ),
-            hipaa_phi_category=typedef.hipaa_phi_category or hipaa_for(typedef.name),
+            pipl_articles=pipl,
+            gdpr_special_category=gdpr,
+            hipaa_phi_category=hipaa,
         )
     key = (typedef.lang, typedef.name)
     _REGISTRY[key] = typedef

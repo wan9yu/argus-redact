@@ -17,7 +17,6 @@ typedefs or compliance rules, run `make catalog` and commit the result.
 from __future__ import annotations
 
 # Importing the spec modules registers their typedefs as a side effect.
-from argus_redact.pure.replacer import is_strategy_reversible
 from argus_redact.specs import en as _en  # noqa: F401
 from argus_redact.specs import shared as _shared  # noqa: F401
 from argus_redact.specs import zh as _zh  # noqa: F401
@@ -32,11 +31,18 @@ _OUT_OF_SCOPE = (
     ("taiwan_arc", "台湾居留证 (ARC)", "1 letter + 9 chars"),
 )
 
+# Section labels — counts are interpolated at render time so they can't go
+# stale when types are added or removed.
 _LANG_LABELS = (
-    ("zh", "Chinese (zh) — 28 types"),
-    ("en", "English (en) — 15 types"),
-    ("shared", "Shared (cross-lang) — 9 types"),
+    ("zh", "Chinese (zh)"),
+    ("en", "English (en)"),
+    ("shared", "Shared (cross-lang)"),
 )
+
+
+def _collapse(text: str) -> str:
+    """Flatten line breaks for markdown-table-cell-safe rendering."""
+    return text.replace("\n", " / ").replace("\r", "")
 
 
 def _render_type(td) -> list[str]:
@@ -45,7 +51,7 @@ def _render_type(td) -> list[str]:
     out.append("|---|---|")
     out.append(f"| Default strategy | `{td.strategy}` |")
     out.append(f"| Sensitivity | {td.sensitivity} |")
-    out.append(f"| Reversible | {'✓' if is_strategy_reversible(td.strategy) else '✗'} |")
+    out.append(f"| Reversible | {'✓' if td.is_reversible else '✗'} |")
     if td.pipl_articles:
         out.append(f"| PIPL articles | {', '.join(td.pipl_articles)} |")
     if td.gdpr_special_category:
@@ -57,8 +63,7 @@ def _render_type(td) -> list[str]:
     if td.examples:
         # Markdown table cells can't span lines; collapse multi-line examples.
         rendered = ", ".join(
-            f"`{e.replace(chr(10), ' / ').replace(chr(13), '')}`"
-            for e in td.examples[:3]
+            f"`{_collapse(e)}`" for e in td.examples[:3]
         )
         out.append(f"| Examples | {rendered} |")
     if td.source:
@@ -92,7 +97,7 @@ def render_catalog() -> str:
         bucket = sorted(by_lang.get(lang_code, []), key=lambda t: t.name)
         if not bucket:
             continue
-        lines.append(f"## {lang_label}")
+        lines.append(f"## {lang_label} — {len(bucket)} types")
         lines.append("")
         for td in bucket:
             lines.extend(_render_type(td))

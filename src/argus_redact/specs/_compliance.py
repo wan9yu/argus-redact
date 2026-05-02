@@ -7,14 +7,31 @@ the rule encoded once instead of duplicated across 50+ spec entries.
 If you need to add or change a rule, edit the constants here. The catalog
 (`docs/pii-types.md`) and `assess_risk()` will pick up the change after
 re-import / re-generation.
+
+Public exports (re-used by `pure/risk.py` and the test suite to avoid
+parallel literal copies of the same sets):
+
+- ``PIPL_ART_13`` … ``PIPL_ART_56`` — string constants for the six PIPL articles
+- ``PIPL_SENSITIVE_PI`` — Art.28 sensitive PI category set
+- ``GDPR_SPECIAL_CATEGORY`` — GDPR Art.9 set
 """
 
 from __future__ import annotations
 
+# PIPL article string constants. Centralizing them here prevents typo drift
+# (e.g. "PIPL Art.13 " with trailing space) and keeps `pure/risk.py`,
+# `assess_risk` callers, and tests in sync.
+PIPL_ART_13 = "PIPL Art.13"  # Lawful basis for processing personal information
+PIPL_ART_28 = "PIPL Art.28"  # De-identification requirement (any PII)
+PIPL_ART_29 = "PIPL Art.29"  # Separate consent for sensitive PI
+PIPL_ART_51 = "PIPL Art.51"  # Sensitive personal information definition
+PIPL_ART_55 = "PIPL Art.55"  # Personal information protection impact assessment
+PIPL_ART_56 = "PIPL Art.56"  # Record-keeping obligation for PI processors
+
 # PIPL Art.28 sensitive personal information categories. Triggers Art.55
 # (impact assessment) at the typedef level. Cardinality threshold (≥3
 # entities) lives in `assess_risk()` rather than the typedef.
-_PIPL_SENSITIVE_PI = frozenset(
+PIPL_SENSITIVE_PI = frozenset(
     {
         "medical",
         "financial",
@@ -29,7 +46,7 @@ _PIPL_SENSITIVE_PI = frozenset(
 # GDPR Art.9 special categories of personal data. Note this differs from
 # PIPL_SENSITIVE_PI — GDPR does not single out financial as a special
 # category, while PIPL does.
-_GDPR_SPECIAL_CATEGORY = frozenset(
+GDPR_SPECIAL_CATEGORY = frozenset(
     {
         "medical",
         "biometric",
@@ -75,19 +92,19 @@ def pipl_articles_for(name: str, sensitivity: int) -> tuple[str, ...]:
     consent).
     Sensitive PI types: + Art.55 (impact assessment).
     """
-    arts = ["PIPL Art.13", "PIPL Art.28"]
+    arts = [PIPL_ART_13, PIPL_ART_28]
     if sensitivity >= 3:
-        arts.append("PIPL Art.51")
-        arts.append("PIPL Art.29")
-    if name in _PIPL_SENSITIVE_PI:
-        arts.append("PIPL Art.55")
-    arts.append("PIPL Art.56")
+        arts.append(PIPL_ART_51)
+        arts.append(PIPL_ART_29)
+    if name in PIPL_SENSITIVE_PI:
+        arts.append(PIPL_ART_55)
+    arts.append(PIPL_ART_56)
     return tuple(arts)
 
 
 def gdpr_special_for(name: str) -> bool:
     """Whether this type is a GDPR Art.9 special category."""
-    return name in _GDPR_SPECIAL_CATEGORY
+    return name in GDPR_SPECIAL_CATEGORY
 
 
 def hipaa_for(name: str) -> str | None:

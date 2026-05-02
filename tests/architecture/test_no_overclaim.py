@@ -11,6 +11,7 @@ gap; future maintainers should not silently overclaim again.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -37,26 +38,20 @@ _COVERAGE_TRIGGERS = (
 )
 
 
+_QUALIFIERS = ("out of scope", "roadmap", "v0.6", "not covered", "deferred")
+_COVERAGE_PATTERN = re.compile("|".join(re.escape(t) for t in _COVERAGE_TRIGGERS))
+
+
 def test_no_overclaim_hk_tw_macau():
     for path in _USER_FACING:
         if not path.exists():
             continue
         text = path.read_text(encoding="utf-8")
-        for trigger in _COVERAGE_TRIGGERS:
-            idx = 0
-            while True:
-                hit = text.find(trigger, idx)
-                if hit == -1:
-                    break
-                ctx = text[max(0, hit - 200) : hit + 200].lower()
-                qualified = any(
-                    marker in ctx
-                    for marker in ("out of scope", "roadmap", "v0.6", "not covered",
-                                   "deferred")
-                )
-                assert qualified, (
-                    f"{path.name} contains {trigger!r} without an "
-                    f"out-of-scope / roadmap qualifier within 200 chars. "
-                    f"Either add the qualifier or remove the claim."
-                )
-                idx = hit + len(trigger)
+        for m in _COVERAGE_PATTERN.finditer(text):
+            ctx = text[max(0, m.start() - 200) : m.end() + 200].lower()
+            qualified = any(marker in ctx for marker in _QUALIFIERS)
+            assert qualified, (
+                f"{path.name} contains {m.group()!r} without an "
+                f"out-of-scope / roadmap qualifier within 200 chars. "
+                f"Either add the qualifier or remove the claim."
+            )

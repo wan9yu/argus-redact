@@ -14,20 +14,16 @@ from __future__ import annotations
 import argus_redact.specs.en  # noqa: F401  ensure registry loaded
 import argus_redact.specs.shared  # noqa: F401
 import argus_redact.specs.zh  # noqa: F401
+from argus_redact.specs._compliance import (
+    GDPR_SPECIAL_CATEGORY,
+    PIPL_SENSITIVE_PI,
+)
 from argus_redact.specs.registry import PIITypeDef, list_types
 
-# PIPL Art.28 sensitive personal information categories — match the
-# pre-migration `_SENSITIVE_PI_TYPES` set exactly. Used to verify Art.55
-# (impact assessment) coverage.
-_PIPL_SENSITIVE_TYPES = {
-    "medical",
-    "financial",
-    "religion",
-    "political",
-    "sexual_orientation",
-    "criminal_record",
-    "biometric",
-}
+# Test imports the central sets rather than re-listing them — that way the
+# test verifies the typedef respects the rule, not a parallel literal that
+# could drift from the source of truth.
+_PIPL_SENSITIVE_TYPES = PIPL_SENSITIVE_PI
 
 # Credentials and secrets are not personal data — they should not carry
 # GDPR special-category or HIPAA flags even if highly sensitive.
@@ -131,20 +127,11 @@ class TestSensitivePITypesCoverage:
 
 class TestGDPRSpecialCategory:
     def test_gdpr_special_category_set_on_art9_types(self):
-        # GDPR Art.9 special categories: health, race/ethnicity, religion,
-        # political opinions, sexual orientation, biometric, criminal record.
-        # Note: financial is NOT GDPR Art.9 special category.
-        gdpr_art9 = {
-            "medical",
-            "biometric",
-            "ethnicity",
-            "religion",
-            "political",
-            "sexual_orientation",
-            "criminal_record",
-        }
+        # Verify each typedef respects the central GDPR_SPECIAL_CATEGORY set
+        # (financial is NOT included — PIPL treats it as sensitive PI but
+        # GDPR Art.9 does not).
         for td in list_types():
-            if td.name in gdpr_art9 and td.lang in ("zh", "en"):
+            if td.name in GDPR_SPECIAL_CATEGORY and td.lang in ("zh", "en"):
                 assert td.gdpr_special_category is True, (
                     f"{td.lang}/{td.name} should be GDPR Art.9 special category"
                 )

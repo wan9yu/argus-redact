@@ -8,7 +8,20 @@ via `argus_redact.specs.get(...)` without mirroring rules.
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass
+
+from argus_redact.specs._compliance import (
+    PIPL_ART_13,
+    PIPL_ART_28,
+    PIPL_ART_29,
+    PIPL_ART_51,
+    PIPL_ART_55,
+    PIPL_ART_56,
+    PIPL_SENSITIVE_PI,
+)
+from argus_redact.specs.registry import get as _registry_get
+from argus_redact.specs.registry import lookup as _registry_lookup
 
 # Sensitivity level labels
 _LEVEL_LABELS = {1: "low", 2: "medium", 3: "high", 4: "critical"}
@@ -21,32 +34,20 @@ _QUASI_ID_COMBOS = [
     {"address", "phone"},
 ]
 
-# Types that amplify the risk score when combined with self_reference. Kept
-# inline here because the score-amplification rule is independent of the
-# PIPL/GDPR classification on the typedef.
-_SELF_REF_AMPLIFY_WITH = frozenset(
-    {
-        "medical",
-        "financial",
-        "religion",
-        "political",
-        "sexual_orientation",
-        "criminal_record",
-        "biometric",
-        "phone",
-        "id_number",
-        "bank_card",
-    }
-)
+# Types that amplify the risk score when combined with self_reference.
+# Composed from the central PIPL_SENSITIVE_PI set plus three structural-PII
+# types — keeps the score rule in sync with the compliance classification.
+_SELF_REF_AMPLIFY_WITH = PIPL_SENSITIVE_PI | {"phone", "id_number", "bank_card"}
 
-# Stable output ordering for `pipl_articles` matching pre-v0.5.9 list order.
+# Stable output ordering for `pipl_articles` matching pre-v0.5.9 list order
+# (Art.13, 28, 51, 29, 55, 56 — the canonical legal sequence, not numerical).
 _PIPL_SORT_ORDER = {
-    "PIPL Art.13": 0,
-    "PIPL Art.28": 1,
-    "PIPL Art.51": 2,
-    "PIPL Art.29": 3,
-    "PIPL Art.55": 4,
-    "PIPL Art.56": 5,
+    PIPL_ART_13: 0,
+    PIPL_ART_28: 1,
+    PIPL_ART_51: 2,
+    PIPL_ART_29: 3,
+    PIPL_ART_55: 4,
+    PIPL_ART_56: 5,
 }
 
 
@@ -61,14 +62,18 @@ class RiskResult:
     hipaa_categories: tuple[str, ...] = ()  # v0.5.9+
 
 
+@functools.lru_cache(maxsize=512)
 def _lookup_typedef(type_name: str, lang: str):
-    """Resolve a typedef by (lang, name), falling back to any-lang lookup."""
-    from argus_redact.specs.registry import get, lookup
+    """Resolve a typedef by (lang, name), falling back to any-lang lookup.
 
+    Cached because `assess_risk()` may iterate many entities of the same type
+    (a long form with 50 phone numbers shouldn't do 50 dict lookups). The
+    registry is frozen at import, so caching is safe.
+    """
     try:
-        return get(lang, type_name)
+        return _registry_get(lang, type_name)
     except KeyError:
-        candidates = lookup(type_name)
+        candidates = _registry_lookup(type_name)
         return candidates[0] if candidates else None
 
 
