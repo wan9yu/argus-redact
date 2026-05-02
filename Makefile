@@ -28,7 +28,8 @@ clean:
 	find . -type d -name __pycache__ -exec rm -rf {} +
 
 release:
-	@VERSION=$$(python -c "from src.argus_redact import __version__; print(__version__)"); \
+	@VERSION=$$(awk -F'"' '/^version = "/ {print $$2; exit}' pyproject.toml); \
+	if [ -z "$$VERSION" ]; then echo "ERROR: could not extract version from pyproject.toml" >&2; exit 1; fi; \
 	echo "Releasing v$$VERSION"; \
 	git tag "v$$VERSION" && \
 	git push origin main --tags && \
