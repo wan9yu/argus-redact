@@ -154,6 +154,64 @@ class TestEvidenceScoring:
         assert score < 0.8
 
 
+class TestScoringWindowConstants:
+    """v0.5.9: lock the ±20 char prefix/suffix window and 50/150 char PII
+    proximity tiers documented in docs/architecture.md. These numbers are
+    module-private but their behavior is part of the contract — changing
+    them must be a deliberate decision, not silent drift.
+    """
+
+    def test_context_prefix_within_20_char_window_hits(self):
+        from argus_redact.lang.zh.person import generate_candidates, score_candidate
+
+        # "客户" sits 0 chars before "张明" — well within ±20 window
+        text = "客户张明已完成登记"
+        zhang = [c for c in generate_candidates(text) if c.text == "张明"][0]
+        score = score_candidate(zhang, text, pii_entities=[])
+        assert score >= 0.8
+
+    def test_context_prefix_beyond_20_char_window_misses(self):
+        from argus_redact.lang.zh.person import generate_candidates, score_candidate
+
+        # 25 chars of filler push "客户" outside the ±20 window
+        filler = "嗯" * 25
+        text = f"客户{filler}张明"
+        candidates = generate_candidates(text)
+        zhang_candidates = [c for c in candidates if c.text == "张明"]
+        if not zhang_candidates:
+            return  # generator may not emit a candidate without surname trigger; skip
+        zhang = zhang_candidates[0]
+        score = score_candidate(zhang, text, pii_entities=[])
+        # Without the prefix bonus and without PII, 2-char base 0.3 < 0.8
+        assert score < 0.8
+
+    def test_pii_proximity_within_50_chars_strong_signal(self):
+        from argus_redact._types import PatternMatch
+        from argus_redact.lang.zh.person import generate_candidates, score_candidate
+
+        # ~30 chars between "张明" and the phone
+        text = "张明" + ("，" * 30) + "13812345678"
+        zhang = [c for c in generate_candidates(text) if c.text == "张明"][0]
+        # Anchor PII to a position ≤ 50 away
+        pii = [PatternMatch(text="13812345678", type="phone", start=32, end=43)]
+        score = score_candidate(zhang, text, pii_entities=pii)
+        # Base 2-char 0.3 + strong PII proximity 0.5 = 0.8 → confirmed
+        assert score >= 0.8
+
+    def test_pii_proximity_50_to_150_weak_signal(self):
+        from argus_redact._types import PatternMatch
+        from argus_redact.lang.zh.person import generate_candidates, score_candidate
+
+        # ~80 chars between "张明" and the phone — weak proximity tier
+        text = "张明" + ("，" * 80) + "13812345678"
+        zhang = [c for c in generate_candidates(text) if c.text == "张明"][0]
+        pii = [PatternMatch(text="13812345678", type="phone", start=82, end=93)]
+        score = score_candidate(zhang, text, pii_entities=pii)
+        # Base 2-char 0.3 + weak proximity 0.3 = 0.6 → below 0.8 threshold
+        assert score < 0.8
+        assert score >= 0.5  # but evidence > 0
+
+
 # ── Integration: detect_person_names (full pipeline) ──
 
 

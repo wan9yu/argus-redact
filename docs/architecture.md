@@ -127,6 +127,35 @@ Layer 1 has two sub-phases:
 - **1a: Structural PII** — regex patterns for phone, ID, bank card, email, self-reference pronouns, medical, etc.
 - **1b: Person names (zh)** — candidate generation (surname + CJK chars, filtered by negative dictionary) + evidence scoring. **Requires at least one structural evidence signal** (context prefix, honorific suffix, PII proximity) — bare names without evidence are left to Layer 2 NER.
 
+#### L1b evidence scoring (zh)
+
+L1b combines two independent distance mechanisms — they are not the same number despite occasionally being conflated:
+
+**(a) Prefix/suffix keyword window — ±20 chars**
+
+`src/argus_redact/lang/zh/person.py:_CONTEXT_WINDOW = 20`. Within 20 chars before/after the candidate, the scorer scans for:
+
+- Context prefix → +0.6 (`客户` / `我是` / `姓名` / `主治医生` …)
+- Honorific suffix → +0.5 (`先生` / `女士` / `老师` / `教授` …)
+- PII suffix → +0.5 (`的手机号` / `的身份证` / `，电话` …)
+- Parenthesized phone → +0.5 (`(13812345678)` immediately after the name)
+
+**(b) PII proximity tiers — 50 / 150 char two-tier**
+
+The candidate's distance to the nearest already-detected PII entity (phone, id_number, etc.):
+
+- ≤ 50 chars → +0.5 (strong signal)
+- ≤ 150 chars → +0.3 (weak signal)
+- &gt; 150 chars → 0
+
+**Combined into a final score**
+
+Base = name length (2 char → 0.3, 3 char → 0.4, ≥ 4 char → 0.5) + the evidence signals above, capped at 1.0.
+
+Threshold = 0.8 → confirmed person entity. The threshold is hint-driven: instruction text raises it to 1.2 (effectively suppresses L1b output) so the cleanup runs only at L2 NER.
+
+**Configurability (v0.5.x)**: 20 / 50 / 150 / 0.8 are module-private constants. There is no kwarg or env var to tune them. If your use case needs different values, file feedback — `score_config` is on the v0.6 candidate list.
+
 After 1a runs, `produce_hints()` generates **cross-layer hints** that downstream layers consume:
 
 | Hint | Producer | Consumers | Effect |
