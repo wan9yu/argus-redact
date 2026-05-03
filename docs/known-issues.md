@@ -75,27 +75,11 @@ Each entry follows three lines:
 - **What you should do**: For deployments that don't need Layer 3, use the
   fast-mode subset image (no PyTorch — typically <1GB).
 
-## Out of scope (v0.5.x)
-
-The following PII types are explicitly **not covered** in v0.5.x. Do not
-configure `lang="zh"` expecting them to redact — they will pass through
-untouched. Use explicit `names=[...]` patterns to mask them, or wait for
-v0.6.x where they are roadmapped:
-
-- **HKID** — 8 char `A123456(7)` format with check digit (Hong Kong)
-- **台湾身份证** — `[A-Z]\d{9}` 1 letter + 9 digits (Taiwan)
-- **澳门身份证** — `\d/\d{6}/\d` format (Macau)
-- **台湾居留证 (ARC)** — 1 letter + 9 chars
-
-The auto-generated [`docs/pii-types.md`](pii-types.md#out-of-scope-v05x)
-catalog also lists these in its "Out of scope" section. If marketing
-copy elsewhere references these types as covered, please file an issue —
-they are roadmapped, not shipped.
-
 ## Recently Fixed
 
 | Issue | Version | Fix |
 |-------|---------|-----|
+| HK / TW / Macau / Taiwan ARC ID types not covered | v0.5.10 | Four new PII types registered: `hk_id`, `tw_id`, `macau_id`, `taiwan_arc`. HKID + TWID have full check-digit validators; Macau and Taiwan ARC are format-only. The `Out of scope (v0.5.x)` section has been removed from this file and from the auto-generated `docs/pii-types.md` catalog. |
 | `assess_risk` PIPL/GDPR/HIPAA inference hardcoded | v0.5.9 | Compliance metadata moved to `PIITypeDef.pipl_articles` / `gdpr_special_category` / `hipaa_phi_category` fields. Rules centralized in `specs/_compliance.py`; downstream DPIA generators read via `specs.get(lang, name)` without mirroring rules. |
 | No public way to ask "is this strategy reversible?" | v0.5.9 | New `is_strategy_reversible(strategy)` public helper + `PIITypeDef.is_reversible` derived property. |
 | L1/L1b/L2/L3 layer naming had no SSOT | v0.5.9 | New `argus_redact.layers` module exposes `LAYER_REGEX` / `LAYER_NER` / `LAYER_SEMANTIC` / `LAYER_NAMES`. Downstream docs import rather than coining their own. |

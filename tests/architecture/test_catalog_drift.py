@@ -39,13 +39,24 @@ class TestCatalogDrift:
             heading = f"### `{td.name}`"
             assert heading in catalog, f"Missing in catalog: {td.lang}/{td.name}"
 
-    def test_catalog_marks_out_of_scope_types(self):
-        from argus_redact.specs.gen_catalog import render_catalog
+    def test_catalog_omits_empty_out_of_scope_section(self):
+        """v0.5.10: HK / TW / Macau / Taiwan ARC shipped, so the
+        'Out of scope' section should not render when ``_OUT_OF_SCOPE``
+        is empty. If a future release adds a deferred type, populate
+        ``_OUT_OF_SCOPE`` and update this test to reassert the section."""
+        from argus_redact.specs.gen_catalog import _OUT_OF_SCOPE, render_catalog
 
         catalog = render_catalog()
-        # HK/TW/Macau IDs explicitly listed under "Out of scope (v0.5.x)".
-        assert "## Out of scope (v0.5.x)" in catalog, (
-            "Catalog missing 'Out of scope (v0.5.x)' section header"
-        )
-        for label in ("HKID", "台湾身份证", "澳门身份证", "台湾居留证"):
-            assert label in catalog, f"Missing out-of-scope marker: {label}"
+        if _OUT_OF_SCOPE:
+            assert "## Out of scope" in catalog, (
+                "Catalog must render 'Out of scope' section when _OUT_OF_SCOPE is non-empty"
+            )
+        else:
+            assert "## Out of scope" not in catalog, (
+                "Catalog must not render an empty 'Out of scope' section"
+            )
+        # The four ID types must now appear as fully shipped catalog entries.
+        for type_name in ("hk_id", "tw_id", "macau_id", "taiwan_arc"):
+            assert f"### `{type_name}`" in catalog, (
+                f"v0.5.10: {type_name} should now appear as a shipped catalog entry"
+            )

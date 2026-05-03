@@ -22,14 +22,10 @@ from argus_redact.specs import shared as _shared  # noqa: F401
 from argus_redact.specs import zh as _zh  # noqa: F401
 from argus_redact.specs.registry import list_types
 
-# Types explicitly out of scope for v0.5.x. Listed here so the catalog
-# documents the gap and the Landing claim retraction is auditable.
-_OUT_OF_SCOPE = (
-    ("hk_id", "HKID 香港身份证", r"8 char `A123456(7)` format with check digit"),
-    ("tw_id", "台湾身份证", r"`[A-Z]\d{9}` 1 letter + 9 digits"),
-    ("macau_id", "澳门身份证", r"`\d/\d{6}/\d` format"),
-    ("taiwan_arc", "台湾居留证 (ARC)", "1 letter + 9 chars"),
-)
+# Types explicitly out of scope. Cleared in v0.5.10 — all four shipped.
+# Re-populate this tuple if a future release defers a known type so the
+# catalog documents the gap and the Landing claim retraction is auditable.
+_OUT_OF_SCOPE: tuple[tuple[str, str, str], ...] = ()
 
 # Section labels — counts are interpolated at render time so they can't go
 # stale when types are added or removed.
@@ -102,14 +98,16 @@ def render_catalog() -> str:
         for td in bucket:
             lines.extend(_render_type(td))
 
-    lines.append("## Out of scope (v0.5.x)")
-    lines.append("")
-    lines.append("Roadmapped for v0.6.x. Do not configure `lang=\"zh\"` expecting these")
-    lines.append("types to redact. Use explicit `names=[...]` patterns or wait for v0.6.x.")
-    lines.append("")
-    for name, label, fmt in _OUT_OF_SCOPE:
-        lines.append(f"- **`{name}` — {label}**: {fmt}")
-    lines.append("")
+    if _OUT_OF_SCOPE:
+        lines.append("## Out of scope")
+        lines.append("")
+        lines.append("Listed types are roadmapped but not shipped. Do not configure")
+        lines.append("`lang=\"zh\"` expecting these to redact. Use explicit `names=[...]`")
+        lines.append("patterns until they ship.")
+        lines.append("")
+        for name, label, fmt in _OUT_OF_SCOPE:
+            lines.append(f"- **`{name}` — {label}**: {fmt}")
+        lines.append("")
 
     return "\n".join(lines) + "\n"
 

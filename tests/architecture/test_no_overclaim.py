@@ -1,9 +1,10 @@
 """Architecture: marketing/landing claims must match shipped capabilities.
 
-Specifically: HK / TW / Macau / Taiwan ARC IDs are NOT covered in v0.5.x.
-This test fails if README, docs/, or marketing/ start claiming coverage of
-those types without explicit "Out of scope" or "Roadmapped" qualifier
-within 200 chars of the claim.
+As of v0.5.10 the four individual ID types (HKID / TWID / Macau / Taiwan
+ARC) are shipped, so they no longer need a qualifier. The umbrella claim
+"港澳台证件" remains in the trigger list because "all three" is still
+imprecise — the umbrella implies coverage parity that v0.5.10 does not
+provide (e.g. legacy ARC, certain HKID edge cases).
 
 The test exists because we shipped a reply to downstream documenting the
 gap; future maintainers should not silently overclaim again.
@@ -26,15 +27,12 @@ _USER_FACING = [
 
 # Strings whose appearance suggests a coverage claim. If found, the
 # surrounding 200-char context must include an "out of scope" / "roadmap" /
-# "v0.6" disclaimer.
+# "v0.6" disclaimer. The four individual types (HKID / TWID / Macau /
+# Taiwan ARC) shipped in v0.5.10 and were dropped from this list; the
+# umbrella claim 港澳台证件 stays because "all three" still implies more
+# parity than v0.5.10 provides.
 _COVERAGE_TRIGGERS = (
     "港澳台证件",
-    "HKID",
-    "台湾身份证",
-    "澳门身份证",
-    "Taiwan ARC",
-    "Hong Kong ID",
-    "Macau ID",
 )
 
 

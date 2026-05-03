@@ -3,9 +3,9 @@
 Auto-generated from `argus_redact.specs.list_types()`. Do not hand-edit.
 Regenerate via: `make catalog`
 
-Total: 52 types (28 zh / 15 en / 9 shared)
+Total: 56 types (32 zh / 15 en / 9 shared)
 
-## Chinese (zh) — 28 types
+## Chinese (zh) — 32 types
 
 ### `address`
 
@@ -134,6 +134,20 @@ Chinese ethnicity (56 ethnic groups)
 
 Financial info (salary/debt/credit score with amounts)
 
+### `hk_id`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Checksum | HKID mod-11 |
+| Examples | `A123456(9)`, `Z684325(1)`, `WX123456(8)` |
+| Source | Hong Kong Immigration Department; Wikipedia HKID |
+
+Hong Kong Identity Card — 1-2 letter + 6 digit + parenthesized check
+
 ### `id_number`
 
 | Field | Value |
@@ -174,6 +188,19 @@ Chinese job title (suffix-based detection)
 | Source | GA 36-2018《中华人民共和国机动车号牌》 |
 
 Chinese license plate
+
+### `macau_id`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Examples | `1/234567/8`, `5/123456/0`, `7/000001/2` |
+| Source | Macau Identification Services Bureau |
+
+Macau Resident ID Card — format-only validation
 
 ### `medical`
 
@@ -366,6 +393,33 @@ Sexual orientation (explicit terms)
 | Source | 人力资源和社会保障部社保卡管理规定 |
 
 Chinese social security number (keyword-triggered)
+
+### `taiwan_arc`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Examples | `AB12345678`, `AC98765432`, `WX00000001` |
+| Source | ROC National Immigration Agency |
+
+Taiwan Alien Resident Certificate (post-2020)
+
+### `tw_id`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Checksum | TWID weighted mod-10 |
+| Examples | `A123456789`, `B142536472`, `F131011128` |
+| Source | ROC household registration; Wikipedia ROC ID |
+
+Republic of China (Taiwan) national ID
 
 ### `wechat`
 
@@ -729,14 +783,4 @@ OpenAI API key (legacy sk- and project sk-proj- prefixes)
 | Source | PEM format (RFC 7468) for SSH / TLS private keys |
 
 SSH private key PEM block (RSA, OPENSSH, DSA, EC variants)
-
-## Out of scope (v0.5.x)
-
-Roadmapped for v0.6.x. Do not configure `lang="zh"` expecting these
-types to redact. Use explicit `names=[...]` patterns or wait for v0.6.x.
-
-- **`hk_id` — HKID 香港身份证**: 8 char `A123456(7)` format with check digit
-- **`tw_id` — 台湾身份证**: `[A-Z]\d{9}` 1 letter + 9 digits
-- **`macau_id` — 澳门身份证**: `\d/\d{6}/\d` format
-- **`taiwan_arc` — 台湾居留证 (ARC)**: 1 letter + 9 chars
 
