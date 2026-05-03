@@ -253,43 +253,33 @@ class TestStreamingRedactor:
         assert "13912345678" not in result.downstream_text
 
 
+class TestIncrementalKwargRemoved:
+    """v0.6.0: incremental=False is removed; passing it must raise TypeError."""
+
+    def test_incremental_kwarg_no_longer_accepted(self):
+        import pytest
+        from argus_redact.streaming import StreamingRedactor
+
+        with pytest.raises(TypeError, match="incremental"):
+            StreamingRedactor(salt=b"x", incremental=False)
+
+
 class TestStreamingRedactorIncremental:
     """v0.5.7: opt-in incremental mode handles entities split across chunks.
-    v0.5.8: incremental is now the default; opt-out emits DeprecationWarning.
+    v0.5.8: incremental is now the default.
+    v0.6.0: incremental is the only mode; opt-out kwarg removed.
     """
 
     def test_default_mode_is_incremental_in_v058(self):
-        """Default (no incremental kwarg) is incremental=True since v0.5.8."""
+        """Default (no incremental kwarg) is incremental mode since v0.5.8."""
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         # Single chunk with sentence boundary → emits a full result.
         out = r.feed("电话13912345678。")
         assert "13912345678" not in out.downstream_text
         assert out.downstream_text != ""
 
-    def test_explicit_incremental_false_emits_deprecation_warning(self):
-        """v0.5.8 deprecation: opt-out path warns; behavior preserved for one release."""
-        import warnings
-
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            StreamingRedactor(salt=b"x", lang="zh", mode="fast", incremental=False)
-        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-        assert deprecations, "incremental=False must emit DeprecationWarning"
-        assert "incremental=False" in str(deprecations[0].message)
-
-    def test_explicit_incremental_false_preserves_v056_behavior(self):
-        """Opt-out still works — single chunk with full sentence redacts as in v0.5.6."""
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            r = StreamingRedactor(salt=b"x", lang="zh", mode="fast", incremental=False)
-            out = r.feed("电话13912345678。")
-        assert "13912345678" not in out.downstream_text
-        assert out.downstream_text != ""
-
     def test_cross_chunk_phone_zh(self):
-        r = StreamingRedactor(salt=b"x", lang="zh", mode="fast", incremental=True)
+        r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         out1 = r.feed("电话1391")  # no boundary → buffered
         # First chunk produces no output (waiting for boundary)
         assert out1.downstream_text == ""
@@ -299,7 +289,7 @@ class TestStreamingRedactorIncremental:
         )
 
     def test_cross_chunk_id_zh(self):
-        r = StreamingRedactor(salt=b"x", lang="zh", mode="fast", incremental=True)
+        r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         # Split id_number 110101199001011234 mid-value
         r.feed("身份证号码11010")
         out = r.feed("1199001011234。")
@@ -307,7 +297,7 @@ class TestStreamingRedactorIncremental:
         # (id_number requires checksum, so this synthetic may not match — use a valid one)
 
     def test_cross_chunk_email(self):
-        r = StreamingRedactor(salt=b"x", lang="en", mode="fast", incremental=True)
+        r = StreamingRedactor(salt=b"x", lang="en", mode="fast")
         r.feed("Email me at user@")
         out = r.feed("company.com.")
         assert "user@company.com" not in out.downstream_text, (
@@ -315,7 +305,7 @@ class TestStreamingRedactorIncremental:
         )
 
     def test_flush_drains_remaining_buffer(self):
-        r = StreamingRedactor(salt=b"x", lang="zh", mode="fast", incremental=True)
+        r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         r.feed("最后一句没有标点，电话1391")
         flushed = r.feed("2345678")  # still no boundary
         assert flushed.downstream_text == ""
@@ -325,7 +315,7 @@ class TestStreamingRedactorIncremental:
         )
 
     def test_flush_idempotent_on_empty(self):
-        r = StreamingRedactor(salt=b"x", lang="zh", mode="fast", incremental=True)
+        r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         # Feed a complete sentence — buffer drains
         r.feed("电话13912345678。")
         # Now flush should be a no-op
@@ -335,7 +325,7 @@ class TestStreamingRedactorIncremental:
 
     def test_aggregate_key_preserved_across_incremental_chunks(self):
         """Same original across chunks must reuse the same fake (not minted twice)."""
-        r = StreamingRedactor(salt=b"x", lang="zh", mode="fast", incremental=True)
+        r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         out1 = r.feed("第一次提到13912345678。")
         out2 = r.feed("第二次还是13912345678。")
 

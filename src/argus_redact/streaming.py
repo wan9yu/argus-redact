@@ -3,16 +3,15 @@
 Two complementary classes:
 - ``StreamingRestorer`` — buffer streaming LLM output and restore at sentence boundaries.
 - ``StreamingRedactor`` — chunked input redaction with cross-chunk key continuity
-  (same original value across chunks maps to same realistic fake).
+  (same original value across chunks maps to same realistic fake). Buffers chunks
+  until a sentence boundary, then redacts the buffered prefix; ``flush()`` drains
+  the tail at end-of-stream.
 
-Both require caller to feed *complete logical units* (sentences, paragraphs, turns).
 True byte-level streaming with realistic mode requires complete entity boundaries
 and is roadmapped for a later release.
 """
 
 from __future__ import annotations
-
-import warnings
 
 from argus_redact._types import PseudonymLLMResult
 from argus_redact.glue._detect_partial import _consume_to_boundary
@@ -93,15 +92,14 @@ class StreamingRestorer:
 
 
 class StreamingRedactor:
-    """Per-chunk realistic redaction with cross-chunk key continuity.
+    """Sentence-bounded incremental redaction with cross-chunk key continuity.
 
-    Each ``.feed(chunk)`` runs the full pseudonym-llm pipeline on the chunk
-    and returns a ``PseudonymLLMResult``. Same original value across chunks
-    maps to the same fake (via shared salt + accumulated key dict).
-
-    Caller MUST feed complete logical units (sentence / paragraph / turn).
-    Entity boundaries that cross chunk boundaries are NOT handled — split
-    such inputs at logical boundaries first.
+    Each ``.feed(chunk)`` accumulates input until a sentence boundary, then
+    runs the full pseudonym-llm pipeline on the buffered prefix and returns a
+    ``PseudonymLLMResult``. Returns an empty result when the buffer hasn't
+    reached a boundary yet. Call ``flush()`` at end-of-stream to drain the
+    tail. Same original value across chunks maps to the same fake (via shared
+    salt + accumulated key dict).
 
     Key retention: ``_accumulated_key`` grows monotonically over the session.
     Construct one ``StreamingRedactor`` per logical session and discard it when
@@ -110,9 +108,13 @@ class StreamingRedactor:
 
     Usage:
         redactor = StreamingRedactor(salt=b"my-secret-salt", lang="zh")
-        for chunk in input_stream:                  # one sentence/paragraph/turn each
+        for chunk in input_stream:
             result = redactor.feed(chunk)
-            send_to_llm(result.downstream_text)
+            if result.downstream_text:
+                send_to_llm(result.downstream_text)
+        final = redactor.flush()
+        if final.downstream_text:
+            send_to_llm(final.downstream_text)
         # Aggregate key for cross-chunk restore
         full_key = redactor.aggregate_key()
     """
@@ -129,19 +131,9 @@ class StreamingRedactor:
         types_exclude: list[str] | None = None,
         strict_input: bool = True,
         reserved_names: dict[str, tuple[str, ...]] | None = None,
-        incremental: bool = True,
     ):
         if not isinstance(salt, (bytes, bytearray)):
             raise TypeError(f"salt must be bytes, got {type(salt).__name__}")
-        if not incremental:
-            warnings.warn(
-                "StreamingRedactor(incremental=False) is deprecated since v0.5.8 "
-                "and will be removed in v0.6. The default mode now handles "
-                "cross-chunk entity boundaries via sentence-bounded buffering. "
-                "Pass incremental=True (the default) or omit the argument.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         self._salt = bytes(salt)
         self._display_marker = display_marker
         self._lang = lang
@@ -151,34 +143,26 @@ class StreamingRedactor:
         self._types_exclude = types_exclude
         self._strict_input = strict_input
         self._reserved_names = reserved_names
-        self._incremental = incremental
         self._inc_buffer: str = ""
         self._accumulated_key: dict[str, str] = {}
 
     def feed(self, chunk: str) -> PseudonymLLMResult:
-        """Redact a chunk. Cross-chunk consistency preserved via shared key.
+        """Buffer until a sentence boundary, then redact the buffered prefix.
 
-        Incremental mode (default since v0.5.8): chunks accumulate until a
-        sentence boundary, then the buffered prefix is redacted. Returns an
-        empty ``PseudonymLLMResult`` when the buffer has no boundary yet. Call
-        ``flush()`` at end-of-stream to drain the tail.
-
-        Legacy mode (``incremental=False``, deprecated v0.5.8 → removed v0.6):
-        caller must feed complete logical units; entities split across chunk
-        boundaries are NOT detected.
+        Returns an empty ``PseudonymLLMResult`` when the buffer hasn't reached
+        a boundary yet. Call ``flush()`` at end-of-stream to drain the tail.
+        Cross-chunk consistency is preserved via the shared accumulated key.
         """
-        if self._incremental:
-            return self._feed_incremental(chunk)
-        return self._redact_and_merge(chunk)
+        return self._feed_incremental(chunk)
 
     def flush(self) -> PseudonymLLMResult:
-        """End-of-stream flush — only meaningful in incremental mode.
+        """End-of-stream flush — drain pending buffer.
 
         Drains any text accumulated past the last sentence boundary,
         running the full redact pipeline on it. Returns an empty
         ``PseudonymLLMResult`` if the buffer is empty.
         """
-        if not self._incremental or not self._inc_buffer:
+        if not self._inc_buffer:
             return _empty_result()
         emit = self._inc_buffer
         self._inc_buffer = ""

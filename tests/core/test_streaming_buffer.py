@@ -1,8 +1,7 @@
 """Tests for v0.5.7 ``_StreamingBuffer`` — stateful wrapper around
 ``_detect_partial`` for cross-chunk entity detection.
 
-Private API; tested directly. Public users go through
-``StreamingRedactor(incremental=True)``.
+Private API; tested directly. Public users go through ``StreamingRedactor``.
 """
 
 import pytest

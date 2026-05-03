@@ -6,8 +6,9 @@ is returned as the new buffer state. `force_flush=True` emits everything
 regardless of boundary state — used by ``_StreamingBuffer.flush()`` at
 end-of-stream.
 
-Used by ``_StreamingBuffer`` and the ``incremental=True`` mode of
-``StreamingRedactor``. See ``docs/design-streaming-incremental.md``.
+Used by ``_StreamingBuffer`` and ``StreamingRedactor`` (which since v0.6.0
+runs incremental detection unconditionally). See
+``docs/design-streaming-incremental.md``.
 """
 
 from __future__ import annotations
@@ -20,8 +21,8 @@ from argus_redact.glue.redact import _detect
 _BOUNDARIES = ("\n", "。", ".", "！", "!", "？", "?", "；", ";")
 
 # Maximum buffer size before forcing a flush on input without sentence
-# punctuation. Shared between ``_detect_partial`` and
-# ``StreamingRedactor(incremental=True)`` so they enforce the same bound.
+# punctuation. Shared between ``_detect_partial`` and ``StreamingRedactor``
+# so they enforce the same bound.
 DEFAULT_MAX_BUFFER = 4096
 
 

@@ -886,22 +886,23 @@ full_key = redactor.aggregate_key()
 | `display_marker` | `str \| None` | `None` (= `ⓕ`) | Marker for `display_text`. |
 | `lang`, `mode`, `names`, `types`, `types_exclude` | — | — | Same semantics as `redact_pseudonym_llm()`. |
 | `strict_input` | `bool` | `True` | Raises `PseudonymPollutionError` if a chunk contains reserved-range values. Set `False` to disable per-chunk pollution check. |
-| `incremental` | `bool` | `True` *(v0.5.8+; was `False` in v0.5.7)* | Sentence-bounded incremental detection. Chunks may split entities mid-value; the redactor accumulates until a sentence boundary, then redacts the buffered prefix. Use `flush()` at end-of-stream to drain the tail. Pass `incremental=False` for v0.5.6 logical-unit semantics — emits a `DeprecationWarning`, removed in v0.6. |
+
+Sentence-bounded incremental detection runs unconditionally: chunks may split entities mid-value; the redactor accumulates until a sentence boundary, then redacts the buffered prefix. Use `flush()` at end-of-stream to drain the tail. *(The `incremental=False` opt-out, deprecated in v0.5.8, was removed in v0.6.0.)*
 
 ### Methods
 
 - `feed(chunk: str) -> PseudonymLLMResult` — redact one chunk. Cross-chunk consistency preserved via internal accumulated key.
-- `flush() -> PseudonymLLMResult` *(v0.5.7+)* — drain any text accumulated past the last sentence boundary (incremental mode only). Default mode: returns an empty result.
+- `flush() -> PseudonymLLMResult` *(v0.5.7+)* — drain any text accumulated past the last sentence boundary.
 - `aggregate_key() -> dict[str, str]` — copy of the unified key across all fed chunks (for batched restore).
 - `export_state() -> dict` *(v0.5.5+)* — serialize redactor state (salt, accumulated key, all constructor options) to a JSON-friendly dict. Persist to Redis / disk to survive process restarts.
 - `from_state(state: dict) -> StreamingRedactor` *(classmethod, v0.5.5+)* — rebuild an instance from a previously exported state. Subsequent `feed()` calls reuse the same fake values for already-seen originals.
 
-### Incremental mode (v0.5.7 opt-in, v0.5.8 default)
+### Incremental mode (v0.5.7 opt-in → v0.5.8 default → v0.6.0 only mode)
 
 The redactor accumulates input until a sentence boundary (`。.！!？?；;\n`), then runs detection + replacement on the buffered prefix. Output for a chunk that has not yet completed a sentence is an empty `PseudonymLLMResult` (caller should accumulate and emit nothing yet). Cross-chunk entity boundaries are handled transparently.
 
 ```python
-r = StreamingRedactor(salt=b"...", lang="zh", mode="fast")  # incremental=True is default
+r = StreamingRedactor(salt=b"...", lang="zh", mode="fast")
 for chunk in token_stream:
     out = r.feed(chunk)
     if out.downstream_text:
@@ -910,8 +911,6 @@ final = r.flush()  # drain whatever is past the last boundary
 if final.downstream_text:
     send_to_llm(final.downstream_text)
 ```
-
-Pass `incremental=False` for v0.5.6 logical-unit semantics (each chunk a complete unit; entities split across chunks are silently missed). The opt-out path emits a `DeprecationWarning` and is removed in v0.6.
 
 Limitations: detection runs per emit-segment (full L1+L2+L3 pipeline on each completed prefix); chunks without sentence punctuation grow the buffer up to 4096 chars before a forced flush. See `docs/design-streaming-incremental.md` for the full design.
 

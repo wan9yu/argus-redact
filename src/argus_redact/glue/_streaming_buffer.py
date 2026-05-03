@@ -1,8 +1,8 @@
 """Private incremental-detection buffer for v0.5.7+ streaming.
 
 ``_StreamingBuffer`` is a stateful wrapper around ``_detect_partial``. The
-public surface (``StreamingRedactor`` with ``incremental=True``) drives this
-class internally; direct usage is private.
+public surface (``StreamingRedactor``) drives this class internally; direct
+usage is private.
 """
 
 from __future__ import annotations

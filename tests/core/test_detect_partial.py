@@ -1,7 +1,7 @@
 """Tests for v0.5.7 ``_detect_partial`` — sentence-bounded incremental detection.
 
-Used by ``_StreamingBuffer`` and ``StreamingRedactor(incremental=True)``.
-Private API; tested here directly.
+Used by ``_StreamingBuffer`` and ``StreamingRedactor``. Private API; tested
+here directly.
 """
 
 import pytest
