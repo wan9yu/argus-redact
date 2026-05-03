@@ -24,9 +24,12 @@ RESERVED_PERSON_NAMES_EN = (
     "Richard Roe",
     "Mary Roe",
     "John Q. Public",
-    "James Smith",
     "Alice Liddell",
-    "Bob Loblaw",
+    # v0.6.1: "James Smith" + "Bob Loblaw" removed (statistically common real
+    # US names — would alias the very PII they're meant to redact). Backfilled
+    # with two more legal-placeholder Doe/Roe combinations to keep pool ≥ 10.
+    "Pat Roe",
+    "Sandy Doe",
 )
 
 # v0.5.8: zh transliterations the LLM might emit when it rephrases en fakes
@@ -40,9 +43,9 @@ RESERVED_PERSON_NAMES_EN_ALIASES: dict[str, list[str]] = {
     "Richard Roe": ["理查德·罗", "理查德罗"],
     "Mary Roe": ["玛丽·罗", "玛丽罗"],
     "John Q. Public": ["约翰·Q·普布利克"],
-    "James Smith": ["詹姆斯·史密斯", "詹姆斯史密斯"],
     "Alice Liddell": ["爱丽丝·利德尔", "爱丽丝利德尔"],
-    "Bob Loblaw": ["鲍勃·洛布劳"],
+    "Pat Roe": ["帕特·罗", "帕特罗"],
+    "Sandy Doe": ["桑迪·多伊", "桑迪多伊"],
 }
 
 # Fictional addresses from US/UK pop culture; deliberately recognizable as fake

@@ -209,12 +209,17 @@ def _generate_unique_fake(
     """
     seed_input = value
     last = None
+    # Reject identity-pass: faker must never return the input value as the fake.
+    # Pre-fix only checked ``fake not in used``; with small reserved-name pools,
+    # the HMAC-seeded RNG could pick the input back with non-trivial probability,
+    # producing a "redacted" output bit-identical to the input.
+    used_with_input = used | {value}
     for attempt in range(_MAX_REROLL_ATTEMPTS):
         master_key = _seed_from_value(seed_input, type_name, salt)
         rng = _ShakeRng(seed=master_key)
         fake, aliases_raw = faker_reserved(value, rng)
         aliases = list(aliases_raw)
-        if fake not in used:
+        if fake not in used_with_input:
             return fake, aliases
         last = fake
         seed_input = f"{seed_input}#{attempt}"
