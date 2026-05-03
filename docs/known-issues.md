@@ -79,7 +79,15 @@ Each entry follows three lines:
 
 | Issue | Version | Fix |
 |-------|---------|-----|
+| `StreamingRedactor(incremental=False)` legacy opt-out | v0.6.0 | Removed. Sentence-bounded buffering is now the only streaming mode. Passing the kwarg raises `TypeError`. |
+| Faker `bare-string` return fallback | v0.6.0 | Removed. `faker_reserved` callables MUST return `tuple[str, list[str]]`. Bare-string returns raise on tuple unpack. |
+| Dual `result.key` / `result.key_entries` views | v0.6.0 | Unified to single `result.key: dict[str, str]` + sibling `result.aliases: dict[str, tuple[str, ...]]`. `KeyEntry` dataclass removed. `restore(text, key, aliases=...)` accepts the new kwarg for cross-language recovery. |
+| `_unified_prefix` config-dict sentinel | v0.6.0 | Promoted to top-level kwarg `redact(text, unified_prefix="R")` / `redact_pseudonym_llm(..., unified_prefix=...)` / CLI `--unified-prefix`. Passing it as a config key now raises `ValueError`. |
+| `replace()` `aliases_out` mutable out-parameter | v0.6.0 | `replace()` returns 3-tuple `(text, key, aliases)` — Pythonic multi-value return. The C-style fill-in-caller-dict pattern is gone. |
+| `restore()` silent failure on display-marker text | v0.6.0 | Auto-detects known preset markers (`ⓕ`, `ˢ`, `*`, `(`, `假`, `)`) adjacent to keys and substitutes inline while preserving the marker. Custom markers still require explicit `display_marker=` kwarg. |
 | HK / TW / Macau / Taiwan ARC ID types not covered | v0.5.10 | Four new PII types registered: `hk_id`, `tw_id`, `macau_id`, `taiwan_arc`. HKID + TWID have full check-digit validators; Macau and Taiwan ARC are format-only. The `Out of scope (v0.5.x)` section has been removed from this file and from the auto-generated `docs/pii-types.md` catalog. |
+| Address transliteration aliases (zh ↔ en) | v0.5.10 | Closes the v0.5.8 `# deferred to v0.6+` TODO. `RESERVED_ADDRESSES_ZH_ALIASES` and `RESERVED_ADDRESSES_EN_ALIASES` populated; address fakers emit non-empty aliases; drift tests guard coverage. |
+| `fakers_zh.py` ↔ `fakers_zh_reserved.py` naming asymmetry | v0.5.10 | Renamed `fakers_zh.py` → `fakers_zh_real.py` for symmetry with `fakers_zh_reserved.py`. Module is benchmark-only; no public API impact. |
 | `assess_risk` PIPL/GDPR/HIPAA inference hardcoded | v0.5.9 | Compliance metadata moved to `PIITypeDef.pipl_articles` / `gdpr_special_category` / `hipaa_phi_category` fields. Rules centralized in `specs/_compliance.py`; downstream DPIA generators read via `specs.get(lang, name)` without mirroring rules. |
 | No public way to ask "is this strategy reversible?" | v0.5.9 | New `is_strategy_reversible(strategy)` public helper + `PIITypeDef.is_reversible` derived property. |
 | L1/L1b/L2/L3 layer naming had no SSOT | v0.5.9 | New `argus_redact.layers` module exposes `LAYER_REGEX` / `LAYER_NER` / `LAYER_SEMANTIC` / `LAYER_NAMES`. Downstream docs import rather than coining their own. |
