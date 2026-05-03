@@ -79,6 +79,13 @@ Each entry follows three lines:
 
 | Issue | Version | Fix |
 |-------|---------|-----|
+| Salt entropy collapsed from caller's full bytes to 8 bytes / 63 bits | v0.6.1 | `_seed_from_salt` no longer truncates: full salt bytes flow through HMAC-SHA256 keying. Caller's 32-byte salt now provides 32 bytes of entropy (was: first 8 bytes). |
+| `random.Random` (Mersenne Twister) drove realistic-faker derivation | v0.6.1 | Replaced with `_ShakeRng`, a SHAKE-256-keyed PRNG with rejection-sampled `randint`/`choice`. MT-19937 is reconstructible from output and broke realistic-strategy privacy under chosen-plaintext analysis. |
+| `hash(entity_type) % 10000` was process-randomized via PYTHONHASHSEED | v0.6.1 | Replaced with `_type_seed_offset` deriving from SHA-256. "Same salt → same fake" now holds across multi-worker deployments and `from_state` cross-process resume. |
+| Empty-salt path silently returned `b""` | v0.6.1 | `_resolve_salt` raises `ValueError` when caller provides no seed/salt and `ARGUS_REDACT_PSEUDONYM_SALT` env var is unset. Pre-fix, the realistic faker derivation collapsed to a deterministic public hash recoverable from one observed (fake, original) pair. |
+| Faker could return the input value as the fake (identity-pass leak) | v0.6.1 | `_generate_unique_fake` adds `value` to `used` before rolling. `RESERVED_PERSON_NAMES_EN` no longer contains real common names (`James Smith` / `Bob Loblaw` removed). |
+| `strategy="keep"` on non-self-reference type silently passed PII through | v0.6.1 | `keep` now restricted to entities of `type == "self_reference"` whose text is in a whitelist of pronouns + kinship phrases. Other uses downgrade to the type's default with a `SecurityWarning`. Guards against Layer-3 misclassifying sensitive PII as `self_reference`. |
+| GitHub Actions used floating tags (incl. PyPI publish step) | v0.6.1 | Every `uses:` in `.github/workflows/*.yml` pinned to a 40-char commit SHA. `id-token: write` scoped to the publish job only. New `.github/dependabot.yml` for weekly grouped SHA bumps. |
 | `StreamingRedactor(incremental=False)` legacy opt-out | v0.6.0 | Removed. Sentence-bounded buffering is now the only streaming mode. Passing the kwarg raises `TypeError`. |
 | Faker `bare-string` return fallback | v0.6.0 | Removed. `faker_reserved` callables MUST return `tuple[str, list[str]]`. Bare-string returns raise on tuple unpack. |
 | Dual `result.key` / `result.key_entries` views | v0.6.0 | Unified to single `result.key: dict[str, str]` + sibling `result.aliases: dict[str, tuple[str, ...]]`. `KeyEntry` dataclass removed. `restore(text, key, aliases=...)` accepts the new kwarg for cross-language recovery. |
