@@ -10,18 +10,13 @@ import warnings
 from typing import Callable
 
 from argus_redact._types import PatternMatch
+from argus_redact.lang.zh.hints import KINSHIP as _ZH_KINSHIP
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS
 from argus_redact.pure.pseudonym import PseudonymGenerator
 
 
 class SecurityWarning(UserWarning):
-    """Emitted when a misconfiguration would silently weaken redaction.
-
-    Examples: ``strategy="keep"`` applied to a non-self-reference type
-    (downgraded to the type's default to avoid leaking original PII), or
-    server starting with ``allow_no_auth=True`` (v0.6.2). Subclass of
-    ``UserWarning`` so it shows up by default in caller code.
-    """
+    """Emitted when a misconfiguration would silently weaken redaction."""
 
 VALID_STRATEGIES = (
     "pseudonym",
@@ -60,34 +55,21 @@ def is_strategy_reversible(strategy: str) -> bool:
 _MAX_REROLL_ATTEMPTS = 10  # well above expected HMAC collision rate for practical batch sizes
 
 
-# Whitelist of self_reference texts that ``keep`` strategy is allowed to
-# preserve verbatim. Anything else with strategy="keep" downgrades to the
-# type's default (with SecurityWarning) — guards against H6 where Layer-3
-# could misclassify sensitive PII (e.g. SSN strings) as ``self_reference``
-# and the keep path would emit the original verbatim.
-_ZH_SELF_REF_KINSHIP = frozenset({
-    # Pronouns
-    "我", "我的", "我们", "我们的",
-    # Kinship (matches lang/zh/patterns.py self_reference regex)
-    "我妈妈", "我爸爸", "我母亲", "我父亲",
-    "我老公", "我老婆", "我丈夫", "我妻子", "我先生", "我太太",
-    "我儿子", "我女儿", "我哥哥", "我姐姐", "我弟弟", "我妹妹",
-    "我哥", "我姐", "我弟", "我妹", "我妈", "我爸",
-    "我爷爷", "我奶奶", "我外公", "我外婆",
-    "我叔叔", "我阿姨", "我舅舅", "我姑姑",
-    "我家人", "我家里人", "我孩子",
-})
-_KEEP_WHITELIST = SELF_REF_PRONOUNS | _ZH_SELF_REF_KINSHIP
+# ``keep`` strategy preserves these verbatim; anything else downgrades to the
+# type's default with SecurityWarning. Guards against H6 where Layer-3 could
+# misclassify sensitive PII (e.g. SSN strings) as ``self_reference``.
+# Sources: en pronouns from grammar.SELF_REF_PRONOUNS; zh kinship from the
+# same SSOT consumed by hints.kinship_tier (no parallel list to drift).
+_ZH_PRONOUNS = frozenset({"我", "我的", "我们", "我们的"})
+_KEEP_WHITELIST = SELF_REF_PRONOUNS | _ZH_PRONOUNS | _ZH_KINSHIP
+
+
+_SALT_INT_BYTES = 8  # int↔bytes boundary for back-compat seed encoding
 
 
 def _seed_from_value(value: str, type_name: str, salt: bytes) -> bytes:
-    """Stable HMAC-derived 32-byte master key for a (type, value) pair under a salt.
-
-    Output drives a SHAKE-256 stream consumed by ``_ShakeRng``. v0.6.0 returned
-    the first 8 bytes as an int seed for ``random.Random`` (Mersenne Twister) —
-    that path is gone: MT-19937 is reconstructible from output and breaks the
-    realistic strategy's privacy guarantees under chosen-plaintext analysis.
-    """
+    """32-byte HMAC-SHA256 master key for ``(type, value)`` under ``salt``,
+    consumed by ``_ShakeRng`` to derive realistic-strategy fakes."""
     msg = f"{type_name}:{value}".encode("utf-8")
     return hmac.new(salt, msg, hashlib.sha256).digest()
 
@@ -95,41 +77,35 @@ def _seed_from_value(value: str, type_name: str, salt: bytes) -> bytes:
 def _resolve_salt(seed: int | bytes | None) -> bytes:
     """Determine effective salt for HMAC seeding.
 
-    Priority (caller-explicit wins, per design doc):
-    1. Caller-provided salt (bytes) → used verbatim (full entropy preserved)
-    2. Caller-provided seed (int) → 8-byte big-endian (back-compat; 64-bit entropy)
-    3. Env var ARGUS_REDACT_PSEUDONYM_SALT → encoded bytes
-
-    Pre-v0.6.1 silently returned ``b""`` when none of the three were available,
-    which collapsed HMAC to a deterministic public hash (de-anonymizable with
-    one observed pair). v0.6.1+ raises ``ValueError`` instead.
+    Priority: caller bytes → caller int (8-byte BE, 64-bit entropy) → env var.
+    Raises ``ValueError`` if none are set; pre-v0.6.1 silently used ``b""``
+    which collapsed HMAC to a public hash recoverable from one observed pair.
     """
     if isinstance(seed, (bytes, bytearray)):
         return bytes(seed)
     if isinstance(seed, int):
-        return seed.to_bytes(8, "big", signed=False) if seed >= 0 else seed.to_bytes(8, "big", signed=True)
+        signed = seed < 0
+        return seed.to_bytes(_SALT_INT_BYTES, "big", signed=signed)
     env = os.environ.get("ARGUS_REDACT_PSEUDONYM_SALT")
     if env:
         return env.encode("utf-8")
     raise ValueError(
-        "realistic strategy requires an explicit salt. Pass `seed=<int>` or "
-        "`salt=<bytes>` to redact() / redact_pseudonym_llm(), or set "
-        "ARGUS_REDACT_PSEUDONYM_SALT env var. Pre-v0.6.1 silently used b'' "
-        "which produced predictable mappings."
+        "realistic strategy requires explicit salt: pass `seed=<int>`, "
+        "`salt=<bytes>`, or set ARGUS_REDACT_PSEUDONYM_SALT."
     )
 
 
 def _pseudonym_seed_int(seed: int | bytes | None) -> int | None:
-    """Coerce ``seed`` into an int for ``PseudonymGenerator`` (which uses
-    ``random.Random`` to derive non-cryptographic ``P-NNNNN`` codes — int seed
-    is sufficient there; bytes get truncated to first 8 bytes BE).
-    """
+    """Coerce ``seed`` to int for ``PseudonymGenerator`` (uses ``random.Random``
+    to derive non-cryptographic ``P-NNNNN`` codes — int seed is sufficient;
+    bytes get truncated to first 8 bytes BE)."""
     if seed is None:
         return None
     if isinstance(seed, int):
         return seed
     if isinstance(seed, (bytes, bytearray)):
-        return int.from_bytes(bytes(seed)[:8].ljust(8, b"\x00"), "big")
+        b = bytes(seed)[:_SALT_INT_BYTES].ljust(_SALT_INT_BYTES, b"\x00")
+        return int.from_bytes(b, "big")
     raise TypeError(f"seed must be int, bytes, or None, got {type(seed).__name__}")
 
 
@@ -578,7 +554,7 @@ def replace(
             prefix = unified_prefix or DEFAULT_PREFIXES.get(entity_type, entity_type.upper()[:4])
             _type_gens[entity_type] = PseudonymGenerator(
                 prefix=prefix,
-                seed=(_pseudonym_seed_int(seed) + _type_seed_offset(entity_type)) if seed is not None else None,
+                seed=(pseudo_seed_int + _type_seed_offset(entity_type)) if pseudo_seed_int is not None else None,
                 existing_key=result_key if result_key else None,
             )
         return _type_gens[entity_type]

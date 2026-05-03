@@ -8,15 +8,7 @@ the document with no entropy. v0.6.1+ raises ``ValueError`` instead.
 
 from __future__ import annotations
 
-import os
-
 import pytest
-
-
-@pytest.fixture(autouse=True)
-def _no_env_salt(monkeypatch):
-    """Ensure ARGUS_REDACT_PSEUDONYM_SALT is unset for these tests."""
-    monkeypatch.delenv("ARGUS_REDACT_PSEUDONYM_SALT", raising=False)
 
 
 def test_realistic_strategy_without_salt_raises():
