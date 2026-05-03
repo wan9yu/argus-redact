@@ -75,7 +75,7 @@ jobs:
         with:
           platforms: arm64
 
-      - uses: PyO3/maturin-action@ea5bac0f1ccd0ab11c805e2b804bfcb65dac2eab # v1.45.0
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           command: build
           target: ${{ matrix.target }}
