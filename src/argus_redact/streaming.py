@@ -13,6 +13,8 @@ and is roadmapped for a later release.
 
 from __future__ import annotations
 
+import warnings
+
 from argus_redact._types import PseudonymLLMResult
 from argus_redact.glue._detect_partial import _consume_to_boundary
 from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
@@ -196,19 +198,19 @@ class StreamingRedactor:
         """Return a copy of the unified key across all fed chunks."""
         return dict(self._accumulated_key)
 
-    def export_state(self) -> dict:
+    def export_state(self, *, include_salt: bool = False) -> dict:
         """Serialize this redactor's state to a JSON-friendly dict.
 
-        Round-tripping the result through JSON and back into ``from_state``
-        produces an instance whose subsequent ``feed()`` calls reuse the same
-        fake values for already-seen originals — supports cross-process
-        resume of a long-running session.
+        ⚠️ The salt is the cryptographic root of trust — by default v0.6.2+
+        excludes it from the output. ``accumulated_key`` still carries
+        plaintext originals; encrypt the dict at rest if persisted.
 
-        ``salt`` is hex-encoded; everything else is plain str / list / dict.
+        Pass ``include_salt=True`` for v0.6.0/v0.6.1-shaped exports (deprecated;
+        will be removed in v0.7.0). Prefer storing the salt out-of-band and
+        passing it to ``from_state(state, salt=...)`` on resume.
         """
-        return {
+        state = {
             "version": _STATE_SCHEMA_VERSION,
-            "salt": self._salt.hex(),
             "accumulated_key": dict(self._accumulated_key),
             "lang": self._lang,
             "mode": self._mode,
@@ -225,13 +227,27 @@ class StreamingRedactor:
                 else None
             ),
         }
+        if include_salt:
+            warnings.warn(
+                "export_state(include_salt=True) is deprecated and will be "
+                "removed in v0.7.0; pass salt to from_state(state, salt=...) "
+                "instead. Embedding the salt in the serialized dict makes the "
+                "cryptographic root of trust trivially recoverable from any "
+                "leaked dump.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            state["salt"] = self._salt.hex()
+        return state
 
     @classmethod
-    def from_state(cls, state: dict) -> "StreamingRedactor":
+    def from_state(cls, state: dict, *, salt: bytes | None = None) -> "StreamingRedactor":
         """Rebuild a StreamingRedactor from a previously exported state dict.
 
-        Pure replay — no kwargs override. Modify ``state`` yourself before
-        passing if you need to change configuration.
+        ``salt`` is required — pass the value held out-of-band when the state
+        was exported. v0.6.0/v0.6.1 dumps that embed ``state["salt"]`` still
+        load (with DeprecationWarning) for back-compat; explicit ``salt=``
+        kwarg always wins if both are present.
         """
         version = state.get("version")
         if version != _STATE_SCHEMA_VERSION:
@@ -239,9 +255,24 @@ class StreamingRedactor:
                 f"Unsupported state schema version {version!r}; this release "
                 f"reads schema {_STATE_SCHEMA_VERSION} only."
             )
+        if salt is None:
+            embedded = state.get("salt")
+            if embedded is None:
+                raise ValueError(
+                    "from_state requires salt= kwarg (state does not contain "
+                    "an embedded salt). Pass the salt held out-of-band: "
+                    "StreamingRedactor.from_state(state, salt=<bytes>)."
+                )
+            warnings.warn(
+                "Loading state with embedded salt is deprecated; pass salt= "
+                "kwarg explicitly. Will be rejected in v0.7.0.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            salt = bytes.fromhex(embedded)
         reserved = state.get("reserved_names")
         instance = cls(
-            salt=bytes.fromhex(state["salt"]),
+            salt=salt,
             display_marker=state.get("display_marker"),
             lang=state.get("lang", "zh"),
             mode=state.get("mode", "fast"),

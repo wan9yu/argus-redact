@@ -29,13 +29,14 @@ class TestExportStateShape:
         assert "version" in state
         assert state["version"] == _STATE_SCHEMA_VERSION
 
-    def test_salt_round_trips_as_hex_with_edge_bytes(self):
+    def test_salt_passed_out_of_band_round_trips_with_edge_bytes(self):
+        # v0.6.2: export_state() omits salt by default; caller passes it
+        # out-of-band to from_state(state, salt=...).
         salt = bytes([0x00, 0xFF, 0x42, 0x00, 0xFE])
         r = StreamingRedactor(salt=salt)
         state = r.export_state()
-        assert state["salt"] == salt.hex()
-        # Reconstruct
-        r2 = StreamingRedactor.from_state(state)
+        assert "salt" not in state
+        r2 = StreamingRedactor.from_state(state, salt=salt)
         assert r2._salt == salt
 
 
@@ -46,7 +47,7 @@ class TestRoundTripThroughJson:
         r1.feed("张明今天打了13912345678。")
         state_json = json.dumps(r1.export_state())
 
-        r2 = StreamingRedactor.from_state(json.loads(state_json))
+        r2 = StreamingRedactor.from_state(json.loads(state_json), salt=salt)
         # Re-feed same originals — should reuse the same fakes
         res2 = r2.feed("又一次13912345678。")
         # Phone fake from r2 must be present in r1's accumulated mapping too
@@ -57,13 +58,14 @@ class TestRoundTripThroughJson:
         )
 
     def test_resumed_redactor_keeps_growing_aggregate_key(self):
-        r1 = StreamingRedactor(salt=b"salt-xyz")
+        salt = b"salt-xyz"
+        r1 = StreamingRedactor(salt=salt)
         # v0.5.8: incremental default emits at sentence boundaries — feed
         # complete sentences so the aggregate key actually populates.
         r1.feed("张明的手机13912345678。")
         keys_before = set(r1.aggregate_key().keys())
         state = r1.export_state()
-        r2 = StreamingRedactor.from_state(state)
+        r2 = StreamingRedactor.from_state(state, salt=salt)
         r2.feed("张明又说了一遍13912345678，加上李华15812345678。")
         keys_after = set(r2.aggregate_key().keys())
         assert keys_before <= keys_after, "resume must not lose mappings"
@@ -73,8 +75,9 @@ class TestRoundTripThroughJson:
     def test_round_trip_preserves_reserved_names_override(self):
         # `reserved_names={"person_zh": ()}` disables canonical-name pollution
         # detection; this option must round-trip.
+        salt = b"with-reserved-override"
         r1 = StreamingRedactor(
-            salt=b"with-reserved-override",
+            salt=salt,
             reserved_names={"person_zh": ()},
         )
         # Feed input that contains a canonical fake name (张三) — strict_input
@@ -82,7 +85,7 @@ class TestRoundTripThroughJson:
         r1.feed("用户张三打来电话13912345678。")
         state = r1.export_state()
         # Round-trip through JSON
-        r2 = StreamingRedactor.from_state(json.loads(json.dumps(state)))
+        r2 = StreamingRedactor.from_state(json.loads(json.dumps(state)), salt=salt)
         # Same input must still pass the pollution check on r2
         r2.feed("张三再次来电15812345678。")  # would raise without override
 
@@ -105,7 +108,7 @@ class TestRoundTripThroughJson:
         r_partial = StreamingRedactor(salt=salt)
         r_partial.feed(chunks[0])
         state = r_partial.export_state()
-        r_resumed = StreamingRedactor.from_state(state)
+        r_resumed = StreamingRedactor.from_state(state, salt=salt)
         for c in chunks[1:]:
             r_resumed.feed(c)
 
@@ -118,9 +121,9 @@ class TestVersionGate:
         state = r.export_state()
         state["version"] = 99
         with pytest.raises(ValueError) as exc:
-            StreamingRedactor.from_state(state)
+            StreamingRedactor.from_state(state, salt=b"x")
         assert "99" in str(exc.value) or "version" in str(exc.value).lower()
 
     def test_missing_version_raises_value_error(self):
         with pytest.raises(ValueError):
-            StreamingRedactor.from_state({"salt": "00", "accumulated_key": {}})
+            StreamingRedactor.from_state({"accumulated_key": {}}, salt=b"x")
