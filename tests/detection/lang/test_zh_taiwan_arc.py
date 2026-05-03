@@ -26,18 +26,19 @@ def test_invalid_arc_not_detected(text):
     assert text in out, f"Invalid ARC {text!r} unexpectedly redacted: {out}"
 
 
-def test_legacy_a_prefix_consumed_by_twid_not_arc():
-    """Legacy ARC shape `[A-Z]\\d{9}` collides with TWID; we only support
-    the post-2020 ARC format (`[A-Z]{2}\\d{8}`). Valid TWIDs still get
-    redacted (as TWID) and that's acceptable. This test documents the
-    decision: ARC pattern itself does not match single-letter prefixes.
-    """
-    from argus_redact.lang.zh.patterns import PATTERNS
-    import re
+def test_legacy_a_prefix_redacts_as_twid_not_arc():
+    """Legacy single-letter prefix (e.g. A123456789) is a TWID shape, not ARC.
 
-    arc_patterns = [p for p in PATTERNS if p.get("type") == "taiwan_arc"]
-    assert arc_patterns, "Taiwan ARC pattern not registered"
-    for p in arc_patterns:
-        assert not re.fullmatch(p["pattern"], "A123456789"), (
-            "ARC pattern must not match single-letter (legacy) prefix"
-        )
+    Verifies the multi-pattern detection picks the correct type end-to-end:
+    we only support the post-2020 ARC format ([A-Z]{2}\\d{8}); legacy
+    [A-Z]\\d{9} input must classify as twid, never taiwan_arc.
+    """
+    from argus_redact import redact
+
+    redacted, _key, types = redact(
+        "A123456789", lang="zh", mode="fast", seed=42, with_types=True
+    )
+    arc_keys = [k for k, t in types.items() if t == "taiwan_arc"]
+    assert not arc_keys, (
+        f"Legacy A-prefix shape must not classify as taiwan_arc; got types={types}"
+    )

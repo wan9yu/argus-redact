@@ -19,7 +19,14 @@ from argus_redact.specs.fakers_en_reserved import (
     RESERVED_ADDRESSES_EN,
     RESERVED_PERSON_NAMES_EN,
 )
-from argus_redact.specs.fakers_zh_reserved import RESERVED_CITIES, RESERVED_PERSON_NAMES
+from argus_redact.specs.fakers_zh_reserved import (
+    HKID_RESERVED_LETTER,
+    MACAU_RESERVED_LEAD,
+    RESERVED_CITIES,
+    RESERVED_PERSON_NAMES,
+    TWARC_RESERVED_PREFIX,
+    TWID_RESERVED_LETTER,
+)
 
 # Districts used by ``fake_address_reserved`` — every reserved address starts
 # with 滨海市 + one of these districts, so matching the prefix is sufficient.
@@ -34,10 +41,10 @@ _RESERVED_RANGE_PATTERNS = {
     "id_number_zh": r"(?<!\d)999\d{14}[\dX](?!\d)",
     "bank_card_zh": r"(?<!\d)999999\d{10}(?!\d)",
     "passport_zh": r"(?<![A-Z])[EG]99999\d{3}(?![0-9A-Z])",
-    "hk_id_zh": r"(?<![A-Z])Z\d{6}\((?:\d|X)\)",
-    "tw_id_zh": r"(?<![A-Za-z0-9])W\d{9}(?!\d)",
-    "macau_id_zh": r"(?<!\d)9/\d{6}/\d(?!\d)",
-    "taiwan_arc_zh": r"(?<![A-Za-z0-9])WW\d{8}(?!\d)",
+    "hk_id_zh": rf"(?<![A-Z]){HKID_RESERVED_LETTER}\d{{6}}\((?:\d|X)\)",
+    "tw_id_zh": rf"(?<![A-Za-z0-9]){TWID_RESERVED_LETTER}\d{{9}}(?!\d)",
+    "macau_id_zh": rf"(?<!\d){MACAU_RESERVED_LEAD}/\d{{6}}/\d(?!\d)",
+    "taiwan_arc_zh": rf"(?<![A-Za-z0-9]){TWARC_RESERVED_PREFIX}\d{{8}}(?!\d)",
     "license_plate_zh": r"[测领][A-Z]99999",
     "person_zh": "|".join(re.escape(name) for name in RESERVED_PERSON_NAMES),
     "address_zh": r"滨海市(?:" + "|".join(re.escape(d) for d in _RESERVED_ADDRESS_DISTRICTS) + r")",

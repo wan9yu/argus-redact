@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import random
 
+from argus_redact.specs._fakers_util import rand_digits
+
 
 RESERVED_PERSON_NAMES_EN = (
     "John Doe",
@@ -82,7 +84,7 @@ def fake_credit_card_en_reserved(value: str, rng: random.Random) -> tuple[str, l
     """Generate a 999999-BIN 16-digit credit card with valid Luhn."""
     from argus_redact.lang.shared.patterns import luhn_check_digit
 
-    body = "999999" + "".join(str(rng.randint(0, 9)) for _ in range(9))
+    body = "999999" + rand_digits(rng, 9)
     return body + str(luhn_check_digit(body)), []
 
 

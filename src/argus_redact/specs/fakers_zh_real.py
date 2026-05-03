@@ -12,6 +12,8 @@ from __future__ import annotations
 import random
 import string
 
+from argus_redact.specs._fakers_util import rand_digits
+
 # ── Data pools (canonical source — do not duplicate elsewhere) ──
 
 SURNAMES = [
@@ -282,13 +284,13 @@ PERSON_PREFIXES = ["客户", "用户", "患者", "联系人", "收件人"]
 
 def fake_phone(rng: random.Random) -> str:
     prefix = rng.choice(["13", "14", "15", "16", "17", "18", "19"])
-    suffix = "".join(str(rng.randint(0, 9)) for _ in range(9))
+    suffix = rand_digits(rng, 9)
     return prefix + suffix
 
 
 def fake_phone_landline(rng: random.Random) -> str:
     area = rng.choice(["010", "021", "0755", "0571", "028", "025"])
-    num = "".join(str(rng.randint(0, 9)) for _ in range(8))
+    num = rand_digits(rng, 8)
     return area + "-" + num
 
 
@@ -308,13 +310,13 @@ def fake_bank_card(rng: random.Random) -> str:
     from argus_redact.lang.shared.patterns import luhn_check_digit
 
     bin_prefix = rng.choice(BANK_BINS)
-    body = bin_prefix + "".join(str(rng.randint(0, 9)) for _ in range(9))
+    body = bin_prefix + rand_digits(rng, 9)
     return body + str(luhn_check_digit(body))
 
 
 def fake_passport(rng: random.Random) -> str:
     prefix = rng.choice(["E", "G"])
-    digits = "".join(str(rng.randint(0, 9)) for _ in range(8))
+    digits = rand_digits(rng, 8)
     return "护照号" + prefix + digits
 
 
@@ -368,7 +370,7 @@ def fake_credit_code(rng: random.Random) -> str:
 def fake_qq(rng: random.Random) -> str:
     length = rng.randint(5, 11)
     first = str(rng.randint(1, 9))
-    rest = "".join(str(rng.randint(0, 9)) for _ in range(length - 1))
+    rest = rand_digits(rng, length - 1)
     return "QQ" + first + rest
 
 
@@ -395,7 +397,7 @@ def fake_date_of_birth(rng: random.Random) -> str:
 
 def fake_military_id(rng: random.Random) -> str:
     keyword = rng.choice(["军字第", "武字第"])
-    digits = "".join(str(rng.randint(0, 9)) for _ in range(8))
+    digits = rand_digits(rng, 8)
     return f"{keyword}{digits}号"
 
 

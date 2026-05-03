@@ -6,6 +6,8 @@ This module only contains structural PII patterns (phone, ID, bank card, etc.).
 
 import re
 
+from argus_redact.lang.shared.patterns import validate_luhn as _validate_luhn
+
 # Leading verbs/particles/questions stripped from org/school candidates before validation.
 # Matched via one-pass longest-prefix scan, so order within the tuple is irrelevant.
 _LEADING_NOISE = (
@@ -272,8 +274,6 @@ _BANK_BINS = {
     "622692",  # 邮储银行
 }
 
-
-from argus_redact.lang.shared.patterns import validate_luhn as _validate_luhn
 
 # GB 32100-2015 Unified Social Credit Code constants
 _CREDIT_CODE_CHARSET = "0123456789ABCDEFGHJKLMNPQRTUWXY"

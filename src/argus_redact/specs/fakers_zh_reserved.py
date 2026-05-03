@@ -10,6 +10,14 @@ from __future__ import annotations
 import random
 import string
 
+from argus_redact.lang.shared.patterns import luhn_check_digit
+from argus_redact.lang.zh.patterns import (
+    gb11643_check_char,
+    hkid_check_digit,
+    twid_check_digit,
+)
+from argus_redact.specs._fakers_util import rand_digits
+
 # ── Canonical fake-data pools ──
 
 # Note: 张三/李四/王五/赵六/钱七 are extremely common as actual Chinese names,
@@ -81,6 +89,14 @@ PASSPORT_PREFIXES = ("E", "G")
 
 PLATE_SPECIAL_PREFIXES = ("测", "领")
 
+# Reserved-range letter prefixes for Hong Kong / Taiwan / Macau / ARC IDs.
+# Used by both the faker bodies AND the pollution scanner regex — keep
+# them in sync via these single source-of-truth constants.
+HKID_RESERVED_LETTER = "Z"
+TWID_RESERVED_LETTER = "W"
+MACAU_RESERVED_LEAD = "9"
+TWARC_RESERVED_PREFIX = "WW"
+
 
 # ── Faker functions ──
 
@@ -90,13 +106,13 @@ def fake_phone_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]
 
     Format: 19999 + 6 random digits. 199-99 子段当前未分配运营商。
     """
-    suffix = "".join(str(rng.randint(0, 9)) for _ in range(6))
+    suffix = rand_digits(rng, 6)
     return "19999" + suffix, []
 
 
 def fake_phone_landline_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate a 099-XXXXXXXX landline (区号 099 不存在)."""
-    body = "".join(str(rng.randint(0, 9)) for _ in range(8))
+    body = rand_digits(rng, 8)
     return "099-" + body, []
 
 
@@ -105,9 +121,7 @@ def fake_id_number_reserved(value: str, rng: random.Random) -> tuple[str, list[s
 
     Address code 999XXX is not assigned in GB/T 2260 (国家行政区划代码).
     """
-    from argus_redact.lang.zh.patterns import gb11643_check_char
-
-    area = "999" + "".join(str(rng.randint(0, 9)) for _ in range(3))
+    area = "999" + rand_digits(rng, 3)
     year = rng.randint(1960, 2005)
     month = rng.randint(1, 12)
     day = rng.randint(1, 28)
@@ -121,16 +135,14 @@ def fake_bank_card_reserved(value: str, rng: random.Random) -> tuple[str, list[s
 
     BIN 999999 is not assigned in 银联 BIN allocation.
     """
-    from argus_redact.lang.shared.patterns import luhn_check_digit
-
-    body = "999999" + "".join(str(rng.randint(0, 9)) for _ in range(9))
+    body = "999999" + rand_digits(rng, 9)
     return body + str(luhn_check_digit(body)), []
 
 
 def fake_passport_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate E99999XXX or G99999XXX passport number (实际前缀 + 假序列)."""
     prefix = rng.choice(PASSPORT_PREFIXES)
-    serial = "".join(str(rng.randint(0, 9)) for _ in range(3))
+    serial = rand_digits(rng, 3)
     return f"{prefix}99999{serial}", []
 
 
@@ -164,30 +176,26 @@ def fake_hkid_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     HK uses `Z` for stateless / refugee IDs, deliberately rare in real
     life so reserved-range usage is safe.
     """
-    from argus_redact.lang.zh.patterns import hkid_check_digit
-
-    letter = "Z"
-    digits = "".join(str(rng.randint(0, 9)) for _ in range(6))
+    letter = HKID_RESERVED_LETTER
+    digits = rand_digits(rng, 6)
     return f"{letter}{digits}({hkid_check_digit(letter, digits)})", []
 
 
 def fake_twid_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Generate TWID with `W` letter (Lienchiang region 32 — geographically tiny)."""
-    from argus_redact.lang.zh.patterns import twid_check_digit
-
-    letter = "W"
-    digits = "".join(str(rng.randint(0, 9)) for _ in range(8))
+    letter = TWID_RESERVED_LETTER
+    digits = rand_digits(rng, 8)
     return f"{letter}{digits}{twid_check_digit(letter, digits)}", []
 
 
 def fake_macau_id_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Use leading `9` (unassigned in real Macau allocations)."""
-    body = "".join(str(rng.randint(0, 9)) for _ in range(6))
+    body = rand_digits(rng, 6)
     check = str(rng.randint(0, 9))
-    return f"9/{body}/{check}", []
+    return f"{MACAU_RESERVED_LEAD}/{body}/{check}", []
 
 
 def fake_taiwan_arc_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Use `WW` prefix (unassigned region pair)."""
-    digits = "".join(str(rng.randint(0, 9)) for _ in range(8))
-    return f"WW{digits}", []
+    digits = rand_digits(rng, 8)
+    return f"{TWARC_RESERVED_PREFIX}{digits}", []
