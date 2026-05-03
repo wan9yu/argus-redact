@@ -64,7 +64,7 @@ def test_shake_rng_replaces_random_in_generate_unique_fake():
     """Faker output must derive from a SHAKE-256 stream, not Mersenne Twister."""
     import argus_redact.pure.replacer as r
 
-    src = open(r.__file__).read()
+    src = open(r.__file__, encoding="utf-8").read()
     fn_start = src.find("def _generate_unique_fake")
     assert fn_start != -1
     # Find end of function (next def at column 0)
