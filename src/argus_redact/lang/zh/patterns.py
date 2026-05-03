@@ -380,6 +380,12 @@ PATTERNS = [
         "description": "Macau Resident ID Card — format-only (no public check-digit algorithm)",
     },
     {
+        "type": "taiwan_arc",
+        "label": "[ARC-REDACTED]",
+        "pattern": r"(?<![A-Za-z0-9])[A-Z]{2}\d{8}(?!\d)",
+        "description": "Taiwan Alien Resident Certificate (post-2020 LL+8-digit format)",
+    },
+    {
         "type": "bank_card",
         "label": "[银行卡号已脱敏]",
         "pattern": r"(?<!\d)[3-6]\d{3}(?:[\s-]?\d{4}){2,3}[\s-]?\d{1,4}(?!\d)",

@@ -41,6 +41,7 @@ from .fakers_zh_reserved import (
     fake_person_reserved,
     fake_phone_landline_reserved,
     fake_phone_reserved,
+    fake_taiwan_arc_reserved,
     fake_twid_reserved,
 )
 from .registry import PIITypeDef, list_types, register
@@ -228,7 +229,7 @@ register(
         strategy="remove",
         label="[TWID-REDACTED]",
         examples=("A123456789", "B142536472", "F131011128"),
-        counterexamples=("A123456780", "A12345678"),
+        counterexamples=("A123456780", "A12345678", "1A12345678"),
         _patterns=(
             {
                 "type": "tw_id",
@@ -270,6 +271,34 @@ register(
         faker_reserved=fake_macau_id_reserved,
         source="Macau Identification Services Bureau",
         description="Macau Resident ID Card — format-only validation",
+    )
+)
+
+# ── Taiwan Alien Resident Certificate (ARC, post-2020) ──
+
+register(
+    PIITypeDef(
+        name="taiwan_arc",
+        lang="zh",
+        format="LLNNNNNNNN",
+        length=10,
+        charset="alpha + digits",
+        strategy="remove",
+        label="[ARC-REDACTED]",
+        examples=("AB12345678", "AC98765432", "WX00000001"),
+        counterexamples=("A123456789", "AB1234567"),
+        _patterns=(
+            {
+                "type": "taiwan_arc",
+                "label": "[ARC-REDACTED]",
+                "pattern": r"(?<![A-Za-z0-9])[A-Z]{2}\d{8}(?!\d)",
+                "description": "Taiwan Alien Resident Certificate (post-2020 LL+8-digit format)",
+            },
+        ),
+        sensitivity=4,
+        faker_reserved=fake_taiwan_arc_reserved,
+        source="ROC National Immigration Agency",
+        description="Taiwan Alien Resident Certificate (post-2020)",
     )
 )
 

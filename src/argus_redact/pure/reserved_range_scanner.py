@@ -37,6 +37,7 @@ _RESERVED_RANGE_PATTERNS = {
     "hk_id_zh": r"(?<![A-Z])Z\d{6}\((?:\d|X)\)",
     "tw_id_zh": r"(?<![A-Za-z0-9])W\d{9}(?!\d)",
     "macau_id_zh": r"(?<!\d)9/\d{6}/\d(?!\d)",
+    "taiwan_arc_zh": r"(?<![A-Za-z0-9])WW\d{8}(?!\d)",
     "license_plate_zh": r"[测领][A-Z]99999",
     "person_zh": "|".join(re.escape(name) for name in RESERVED_PERSON_NAMES),
     "address_zh": r"滨海市(?:" + "|".join(re.escape(d) for d in _RESERVED_ADDRESS_DISTRICTS) + r")",

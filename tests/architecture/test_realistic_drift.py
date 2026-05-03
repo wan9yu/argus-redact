@@ -39,6 +39,7 @@ _TYPE_LANG_TO_SCANNER = {
     ("hk_id", "zh"): "hk_id_zh",
     ("tw_id", "zh"): "tw_id_zh",
     ("macau_id", "zh"): "macau_id_zh",
+    ("taiwan_arc", "zh"): "taiwan_arc_zh",
     ("license_plate", "zh"): "license_plate_zh",
     ("address", "zh"): "address_zh",
     ("person", "zh"): "person_zh",

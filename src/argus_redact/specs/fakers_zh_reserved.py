@@ -168,3 +168,9 @@ def fake_macau_id_reserved(value: str, rng: random.Random) -> tuple[str, list[st
     body = "".join(str(rng.randint(0, 9)) for _ in range(6))
     check = str(rng.randint(0, 9))
     return f"9/{body}/{check}", []
+
+
+def fake_taiwan_arc_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
+    """Use `WW` prefix (unassigned region pair)."""
+    digits = "".join(str(rng.randint(0, 9)) for _ in range(8))
+    return f"WW{digits}", []

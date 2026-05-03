@@ -9,9 +9,9 @@ VALID_TWID = [
     "F131011128",   # New Taipei (F=15)
 ]
 INVALID_TWID = [
-    "A123456780",   # wrong check
-    "A12345678",    # too short
-    "AA12345678",   # double letter
+    "A123456780",   # wrong check digit
+    "A12345678",    # too short (9 chars)
+    "1A12345678",   # leading digit (not a letter)
 ]
 
 
