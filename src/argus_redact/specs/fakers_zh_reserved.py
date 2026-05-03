@@ -139,3 +139,16 @@ def fake_person_reserved(value: str, rng: random.Random) -> tuple[str, list[str]
     """Pick a name from the canonical fake-name table; emit pinyin aliases."""
     fake = rng.choice(RESERVED_PERSON_NAMES)
     return fake, list(RESERVED_PERSON_NAMES_ALIASES.get(fake, []))
+
+
+def fake_hkid_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
+    """Generate HKID using `Z` letter prefix + random 6 digits.
+
+    HK uses `Z` for stateless / refugee IDs, deliberately rare in real
+    life so reserved-range usage is safe.
+    """
+    from argus_redact.lang.zh.patterns import hkid_check_digit
+
+    letter = "Z"
+    digits = "".join(str(rng.randint(0, 9)) for _ in range(6))
+    return f"{letter}{digits}({hkid_check_digit(letter, digits)})", []

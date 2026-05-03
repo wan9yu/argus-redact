@@ -8,6 +8,7 @@ list that can replace the hand-written PATTERNS in lang/zh/patterns.py.
 from argus_redact.lang.zh.patterns import (
     _validate_bank_card,
     _validate_credit_code,
+    _validate_hkid,
     _validate_id_number,
 )
 
@@ -31,6 +32,7 @@ from .fakers_zh import (
 from .fakers_zh_reserved import (
     fake_address_reserved,
     fake_bank_card_reserved,
+    fake_hkid_reserved,
     fake_id_number_reserved,
     fake_license_plate_reserved,
     fake_passport_reserved,
@@ -175,6 +177,37 @@ register(
         faker_reserved=fake_id_number_reserved,
         source="GB 11643-1999《公民身份号码》",
         description="Chinese 18-digit national ID",
+    )
+)
+
+# ── Hong Kong Identity Card ──
+
+register(
+    PIITypeDef(
+        name="hk_id",
+        lang="zh",
+        format="L(L)NNNNNN(C)",
+        length=(9, 11),
+        charset="alpha + digits + parens",
+        checksum="HKID mod-11",
+        validate=_validate_hkid,
+        strategy="remove",
+        label="[HKID-REDACTED]",
+        examples=("A123456(9)", "Z684325(1)", "WX123456(8)"),
+        counterexamples=("A123456(0)", "A12345(7)", "1A12345(7)"),
+        _patterns=(
+            {
+                "type": "hk_id",
+                "label": "[HKID-REDACTED]",
+                "pattern": r"(?<![A-Z])[A-Z]{1,2}\d{6}\((?:\d|X)\)",
+                "validate": _validate_hkid,
+                "description": "Hong Kong Identity Card (1-2 letter + 6 digit + parenthesized check, mod-11)",
+            },
+        ),
+        sensitivity=4,
+        faker_reserved=fake_hkid_reserved,
+        source="Hong Kong Immigration Department; Wikipedia HKID",
+        description="Hong Kong Identity Card — 1-2 letter + 6 digit + parenthesized check",
     )
 )
 

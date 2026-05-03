@@ -142,6 +142,43 @@ def gb11643_check_char(body17: str) -> str:
     return GB11643_CHECK_CHARS[total % 11]
 
 
+def hkid_check_digit(letters: str, digits: str) -> str:
+    """Compute HKID check digit per Wikipedia HKID algorithm.
+
+    `letters` is 1-2 uppercase ASCII letters; `digits` is 6 digits.
+    Single-letter HKIDs are padded with a leading space (value 36) so the
+    body+letter is always 8 chars before the check digit. Letters map
+    A=1..Z=26; weights [9,8,7,6,5,4,3,2] over the 8-char body+letter.
+    Returns the check character ('0'-'9' or 'X' for 10).
+    """
+    pad = " " if len(letters) == 1 else ""
+    body = pad + letters + digits
+    weights = [9, 8, 7, 6, 5, 4, 3, 2]
+    total = 0
+    for ch, w in zip(body, weights):
+        if ch == " ":
+            v = 36
+        elif ch.isalpha():
+            v = ord(ch) - ord("A") + 1
+        else:
+            v = int(ch)
+        total += v * w
+    rem = total % 11
+    check = (11 - rem) % 11
+    return "X" if check == 10 else str(check)
+
+
+def _validate_hkid(value: str) -> bool:
+    """Validate HKID format L(L)NNNNNN(C). Strips parens to extract check."""
+    import re
+
+    m = re.fullmatch(r"([A-Z]{1,2})(\d{6})\((\d|X)\)", value)
+    if not m:
+        return False
+    letters, digits, check = m.group(1), m.group(2), m.group(3)
+    return hkid_check_digit(letters, digits) == check
+
+
 # Known Chinese bank BIN prefixes (6 digits)
 _BANK_BINS = {
     "621700",
@@ -287,6 +324,13 @@ PATTERNS = [
             r"\d{3}(?!\d)"
         ),
         "description": "Chinese 15-digit national ID (pre-1999, no checksum)",
+    },
+    {
+        "type": "hk_id",
+        "label": "[HKID-REDACTED]",
+        "pattern": r"(?<![A-Z])[A-Z]{1,2}\d{6}\((?:\d|X)\)",
+        "validate": _validate_hkid,
+        "description": "Hong Kong Identity Card (1-2 letter + 6 digit + parenthesized check, mod-11)",
     },
     {
         "type": "bank_card",

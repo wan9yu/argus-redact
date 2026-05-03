@@ -36,6 +36,7 @@ _TYPE_LANG_TO_SCANNER = {
     ("id_number", "zh"): "id_number_zh",
     ("bank_card", "zh"): "bank_card_zh",
     ("passport", "zh"): "passport_zh",
+    ("hk_id", "zh"): "hk_id_zh",
     ("license_plate", "zh"): "license_plate_zh",
     ("address", "zh"): "address_zh",
     ("person", "zh"): "person_zh",
