@@ -66,12 +66,12 @@ class TestRoundTripBehavior:
 
     def test_pseudonym_round_trips(self):
         entities = [_match("张三", "person", 0)]
-        redacted, key = replace("张三说了话", entities, seed=42)
+        redacted, key, _ = replace("张三说了话", entities, seed=42)
         assert restore(redacted, key) == "张三说了话"
 
     def test_remove_round_trips(self):
         entities = [_match("110101199003074610", "id_number", 0)]
-        redacted, key = replace("110101199003074610", entities, seed=42)
+        redacted, key, _ = replace("110101199003074610", entities, seed=42)
         assert restore(redacted, key) == "110101199003074610"
 
     def test_mask_emits_partial_visible_form(self):
@@ -80,7 +80,7 @@ class TestRoundTripBehavior:
         # which is why mask is classified irreversible at the strategy level
         # even when the per-call key dict happens to round-trip.
         entities = [_match("13812345678", "phone", 0)]
-        redacted, _key = replace("13812345678", entities, seed=42)
+        redacted, _key, _ = replace("13812345678", entities, seed=42)
         assert "****" in redacted
 
 

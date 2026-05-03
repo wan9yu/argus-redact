@@ -120,7 +120,7 @@ class TestHanLPRealRedactIntegration:
         merged = merge_entities(all_entities)
 
         # Replace
-        redacted, key = replace(text, merged, seed=42)
+        redacted, key, _ = replace(text, merged, seed=42)
 
         assert "张三" not in redacted
         assert "13812345678" not in redacted

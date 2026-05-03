@@ -115,7 +115,6 @@ class TestUnifiedPrefix:
 
     def test_should_use_unified_prefix_when_configured(self):
         config = {
-            "_unified_prefix": "R",
             "phone": {"strategy": "remove"},  # override mask to use prefix
             "email": {"strategy": "remove"},
         }
@@ -124,6 +123,7 @@ class TestUnifiedPrefix:
             seed=42,
             mode="fast",
             names=["张三"],
+            unified_prefix="R",
             config=config,
         )
 

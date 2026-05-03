@@ -59,6 +59,7 @@ def redact_pseudonym_llm(
     existing_key: dict[str, str] | None = None,
     reserved_names: dict[str, tuple[str, ...]] | None = None,
     strategy_overrides: dict[str, str] | None = None,
+    unified_prefix: str | None = None,
 ) -> PseudonymLLMResult:
     """Redact `text` with the pseudonym-llm profile, returning three text forms.
 
@@ -154,8 +155,7 @@ def redact_pseudonym_llm(
         types_exclude=types_exclude,
     )
 
-    realistic_aliases: dict[str, list[str]] = {}
-    downstream_text, key = _redact_module._replace_and_emit(
+    downstream_text, key, realistic_aliases = _redact_module._replace_and_emit(
         text,
         entities,
         seed=seed,
@@ -166,9 +166,9 @@ def redact_pseudonym_llm(
         langs=langs,
         timing=dict(timing),
         mode=mode,
-        aliases_out=realistic_aliases,
+        unified_prefix=unified_prefix,
     )
-    audit_text, audit_key = _redact_module._replace_and_emit(
+    audit_text, audit_key, _audit_aliases = _redact_module._replace_and_emit(
         text,
         entities,
         seed=seed,
@@ -179,6 +179,7 @@ def redact_pseudonym_llm(
         langs=langs,
         timing=dict(timing),
         mode=mode,
+        unified_prefix=unified_prefix,
     )
 
     marker = resolve_marker(display_marker)

@@ -26,7 +26,7 @@ class TestKeepStrategyPreservesText:
         entities = [_entity("13912345678", "phone", 6, 17)]
         config = {"phone": {"strategy": "keep"}}
 
-        redacted, key = replace(text, entities, config=config)
+        redacted, key, _ = replace(text, entities, config=config)
 
         assert redacted == text, f"text should be untouched, got {redacted!r}"
 
@@ -35,7 +35,7 @@ class TestKeepStrategyPreservesText:
         entities = [_entity("13912345678", "phone", 6, 17)]
         config = {"phone": {"strategy": "keep"}}
 
-        _, key = replace(text, entities, config=config)
+        _, key, _ = replace(text, entities, config=config)
 
         assert "13912345678" not in key.values(), "kept entity should not appear in key dict"
 
@@ -53,7 +53,7 @@ class TestKeepStrategyMixed:
             # person + phone go through default strategies
         }
 
-        redacted, key = replace(text, entities, config=config)
+        redacted, key, _ = replace(text, entities, config=config)
 
         # self-reference '我' preserved
         assert "我叫" in redacted, f"pronoun should be preserved, got {redacted!r}"
@@ -79,7 +79,7 @@ class TestKeepStrategyViaOverrides:
             "ssn": {"strategy": "remove"},
         }
 
-        redacted, key = replace(text, entities, config=config)
+        redacted, key, _ = replace(text, entities, config=config)
 
         assert "13912345678" in redacted, "phone (keep) should be preserved"
         assert "123-45-6789" not in redacted, "ssn (remove) should be replaced"

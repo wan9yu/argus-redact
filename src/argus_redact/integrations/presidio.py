@@ -88,7 +88,10 @@ class PresidioBridge:
             )
 
         entities = merge_entities(entities)
-        return replace(text, entities, seed=seed, key=key, config=config)
+        redacted, result_key, _aliases = replace(
+            text, entities, seed=seed, key=key, config=config
+        )
+        return redacted, result_key
 
     def restore(self, text: str, key: dict) -> str:
         """Restore pseudonyms to originals. Same as argus_redact.restore()."""

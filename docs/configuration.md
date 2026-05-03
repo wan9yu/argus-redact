@@ -19,16 +19,21 @@ argus-redact supports per-entity-type configuration to control redaction strateg
 
 ## Unified Prefix (hide PII type)
 
-By default, pseudonym codes still reveal the PII type via prefix: `P-00037` (person), `MED-00123` (medical), `ADDR-05432` (address). To hide type information from the LLM, use `_unified_prefix`:
+By default, pseudonym codes still reveal the PII type via prefix: `P-00037` (person), `MED-00123` (medical), `ADDR-05432` (address). To hide type information from the LLM, pass the top-level `unified_prefix=` kwarg:
 
 ```python
-redact(text, config={
-    "_unified_prefix": "R",
-    "phone": {"strategy": "remove"},   # ← mask types must opt in
-    "email": {"strategy": "remove"},
-})
+redact(
+    text,
+    unified_prefix="R",
+    config={
+        "phone": {"strategy": "remove"},   # ← mask types must opt in
+        "email": {"strategy": "remove"},
+    },
+)
 # All reversible types collapse to R-NNNNN: R-00037, R-00123, R-05432
 ```
+
+> ⚠️ **v0.6.0 breaking change**: passing `_unified_prefix` as a config key now raises `ValueError`. Use `redact(text, unified_prefix='R', ...)` instead. The same kwarg is available on `redact_pseudonym_llm()`.
 
 > ⚠️ `mask` / `name_mask` / `landline_mask` / `category` strategies don't use prefixes — they emit shape-preserving output by design (`138****5678`, `张*`, `[LOCATION]`). Override those types to `remove` if you want them unified.
 

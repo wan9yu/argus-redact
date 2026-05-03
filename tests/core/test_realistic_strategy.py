@@ -23,7 +23,7 @@ class TestRealisticStrategy:
         text = "请拨打 13912345678"
         entities = [make_match("13912345678", "phone", 4)]
         config = {"phone": {"strategy": "realistic"}}
-        redacted, key = replace(text, entities, config=config, seed=42)
+        redacted, key, _ = replace(text, entities, config=config, seed=42)
 
         assert "13912345678" not in redacted
         fakes = list(key.keys())
@@ -35,15 +35,15 @@ class TestRealisticStrategy:
         text = "联系 13912345678"
         entities = [make_match("13912345678", "phone", 3)]
         config = {"phone": {"strategy": "realistic"}}
-        a, _ = replace(text, entities, config=config, seed=7)
-        b, _ = replace(text, entities, config=config, seed=7)
+        a, _, _ = replace(text, entities, config=config, seed=7)
+        b, _, _ = replace(text, entities, config=config, seed=7)
         assert a == b
 
     def test_realistic_should_fall_back_to_pseudonym_when_no_faker_reserved(self):
         text = "公司名 ABC公司"
         entities = [make_match("ABC公司", "organization", 4)]
         config = {"organization": {"strategy": "realistic"}}
-        redacted, key = replace(text, entities, config=config, seed=42)
+        redacted, key, _ = replace(text, entities, config=config, seed=42)
 
         fakes = list(key.keys())
         assert len(fakes) == 1
@@ -56,13 +56,13 @@ class TestRealisticStrategy:
         config = {"phone": {"strategy": "realistic"}}
 
         # First, learn what the first-attempt fake would be
-        _, first_key = replace(text, entities, config=config, seed=7)
+        _, first_key, _ = replace(text, entities, config=config, seed=7)
         first_fake = next(iter(first_key))
 
         # Now seed the replace() with a key that already claims first_fake for a different original
         # → forces _generate_unique_fake to re-roll
         pre_claimed = {first_fake: "13900000000"}
-        _, second_key = replace(
+        _, second_key, _ = replace(
             text, entities, config=config, seed=7, key=pre_claimed
         )
 
@@ -131,7 +131,7 @@ class TestLangAwareLookup:
         text = "call (415) 555-1234"
         entities = [make_match("(415) 555-1234", "phone", 5)]
         config = {"phone": {"strategy": "realistic"}}
-        _, key = replace(text, entities, config=config, seed=42, langs=["en"])
+        _, key, _ = replace(text, entities, config=config, seed=42, langs=["en"])
         fake = next(iter(key))
         assert "(555)" in fake, f"Expected en phone shape, got {fake}"
 
@@ -155,7 +155,7 @@ class TestRealisticNumeric:
         text = "年龄32岁"
         entities = [make_match("32岁", "age", 2)]
         config = {"age": {"strategy": "realistic"}}
-        redacted, key = replace(text, entities, config=config, seed=42)
+        redacted, key, _ = replace(text, entities, config=config, seed=42)
 
         fakes = list(key.keys())
         assert len(fakes) == 1

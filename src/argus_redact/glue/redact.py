@@ -353,25 +353,25 @@ def _replace_and_emit(
     langs: list[str],
     timing: dict,
     mode: str,
-    aliases_out: dict[str, list[str]] | None = None,
-) -> tuple[str, dict]:
+    unified_prefix: str | None = None,
+) -> tuple[str, dict, dict[str, list[str]]]:
     """Apply replacement, run grammar normalization, emit telemetry, persist key file.
 
     Mutates `timing` in place by adding `replace_ms`. The caller is responsible
     for any further use of `timing` (e.g., detailed-output stats).
 
-    `aliases_out` (v0.5.8+, optional): forwarded to ``replace()`` so the caller
-    can capture cross-language aliases emitted by realistic-strategy fakers.
+    Returns ``(redacted_text, key, aliases)``. ``aliases`` carries the cross-language
+    transliterations emitted by realistic-strategy fakers (empty dict when none ran).
     """
     t0 = time.perf_counter()
-    redacted, result_key = replace(
+    redacted, result_key, aliases = replace(
         text,
         entities,
         seed=seed,
         key=existing_key,
         config=config,
         langs=langs,
-        aliases_out=aliases_out,
+        unified_prefix=unified_prefix,
     )
     effective_lang = lang if isinstance(lang, str) else (lang[0] if lang else "zh")
     if effective_lang == "en":
@@ -391,7 +391,7 @@ def _replace_and_emit(
         )
         tmp.replace(target)
 
-    return redacted, result_key
+    return redacted, result_key, aliases
 
 
 def redact(
@@ -409,6 +409,7 @@ def redact(
     profile: str | None = None,
     types: list[str] | None = None,
     types_exclude: list[str] | None = None,
+    unified_prefix: str | None = None,
 ):
     """Detect and replace PII in text.
 
@@ -496,7 +497,7 @@ def redact(
         types_exclude=types_exclude,
     )
 
-    redacted, result_key = _replace_and_emit(
+    redacted, result_key, _aliases = _replace_and_emit(
         text,
         entities,
         seed=seed,
@@ -507,6 +508,7 @@ def redact(
         langs=langs,
         timing=timing,
         mode=mode,
+        unified_prefix=unified_prefix,
     )
 
     if with_types and not detailed and not report:

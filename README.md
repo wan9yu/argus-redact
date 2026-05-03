@@ -51,11 +51,14 @@ Other tools shred your PII — it's gone forever. argus-redact encrypts it with 
 To **unify all reversible types** under one prefix (hides PII type from the LLM):
 
 ```python
-redact(text, config={
-    "_unified_prefix": "R",
-    "phone": {"strategy": "remove"},   # mask types must opt in to participate
-    "email": {"strategy": "remove"},
-})
+redact(
+    text,
+    unified_prefix="R",
+    config={
+        "phone": {"strategy": "remove"},   # mask types must opt in to participate
+        "email": {"strategy": "remove"},
+    },
+)
 # → "员工R-83811，身份证R-89732，电话R-12345"
 ```
 

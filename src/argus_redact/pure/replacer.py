@@ -381,9 +381,9 @@ def replace(
     key: dict[str, str] | None = None,
     config: dict | None = None,
     langs: list[str] | None = None,
-    aliases_out: dict[str, list[str]] | None = None,
-) -> tuple[str, dict[str, str]]:
-    """Replace detected entities in text, producing (redacted_text, key).
+    unified_prefix: str | None = None,
+) -> tuple[str, dict[str, str], dict[str, list[str]]]:
+    """Replace detected entities in text, producing ``(redacted_text, key, aliases)``.
 
     config overrides default strategies per entity type. Example:
         {"phone": {"strategy": "remove", "replacement": "[TEL]"}}
@@ -391,15 +391,26 @@ def replace(
     `langs` provides language preference for the realistic strategy's
     faker_reserved lookup (e.g., en text prefers en/phone over zh/phone).
 
-    `aliases_out` (v0.5.8+, optional): if provided, populated with
-    ``{fake: list_of_aliases}`` for entries whose fakers emitted aliases.
-    Caller mutation of this dict observable post-call. The legacy
-    ``(text, key)`` return shape is preserved.
+    `unified_prefix` (v0.6.0+): if provided, all reversible-strategy types
+    collapse to a single ``<prefix>-NNNNN`` form, hiding PII type information
+    from the output. Replaces the legacy ``config["_unified_prefix"]`` sentinel.
+
+    Returns ``(redacted_text, key, aliases)`` where ``aliases`` is
+    ``{fake: list_of_aliases}`` for entries whose realistic-strategy fakers
+    emitted aliases (empty dict when no realistic-strategy fakers ran).
     """
     _validate_config(config)
+    if config and "_unified_prefix" in config:
+        raise ValueError(
+            "_unified_prefix is no longer accepted as a config key in v0.6.0. "
+            "Use the top-level `unified_prefix=` kwarg on redact() / "
+            "redact_pseudonym_llm() instead."
+        )
+
+    aliases: dict[str, list[str]] = {}
 
     if not entities:
-        return text, key if key is not None else {}
+        return text, key if key is not None else {}, aliases
 
     result_key = dict(key) if key else {}
     used_labels = set(result_key.keys())
@@ -416,8 +427,6 @@ def replace(
         org_prefix = config.get("organization", {}).get("prefix", org_prefix)
 
     # Unified prefix mode: all types use same prefix (hides PII type from output)
-    unified_prefix = config.get("_unified_prefix") if config else None
-
     pseudo_gen = PseudonymGenerator(
         prefix=unified_prefix or person_prefix,
         seed=seed,
@@ -483,11 +492,11 @@ def replace(
 
             if faker_reserved is not None:
                 salt = _resolve_salt(seed)
-                replacement, aliases = _generate_unique_fake(
+                replacement, alias_list = _generate_unique_fake(
                     faker_reserved, entity.text, entity.type, salt, used_labels
                 )
-                if aliases and aliases_out is not None:
-                    aliases_out[replacement] = aliases
+                if alias_list:
+                    aliases[replacement] = alias_list
             elif entity.type == "organization":
                 replacement = org_gen.get(entity.text)
             else:
@@ -539,4 +548,4 @@ def replace(
         replacement = entity_replacements[entity.text]
         result = result[: entity.start] + replacement + result[entity.end :]
 
-    return result, result_key
+    return result, result_key, aliases

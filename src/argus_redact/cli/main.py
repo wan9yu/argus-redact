@@ -80,6 +80,8 @@ def cmd_redact(args):
         )
         sys.exit(2)
 
+    unified_prefix = getattr(args, "unified_prefix", None)
+
     if profile == "pseudonym-llm":
         salt = seed.to_bytes(8, "big", signed=False) if seed is not None and seed >= 0 else None
         result = redact_pseudonym_llm(
@@ -88,6 +90,7 @@ def cmd_redact(args):
             mode=args.mode,
             salt=salt,
             strategy_overrides=strategy_overrides,
+            unified_prefix=unified_prefix,
         )
         key_path.write_text(
             json.dumps(result.key, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -118,6 +121,7 @@ def cmd_redact(args):
         key=existing_key,
         config=args.config,
         profile=profile,
+        unified_prefix=unified_prefix,
     )
 
     key_path.write_text(
@@ -314,6 +318,12 @@ def main():
             "Strategy names: pseudonym, realistic, mask, remove, category, "
             "name_mask, landline_mask."
         ),
+    )
+    p_redact.add_argument(
+        "--unified-prefix",
+        metavar="PREFIX",
+        default=None,
+        help="Unify all reversible-strategy types under one prefix (e.g. 'R' -> R-NNNNN)",
     )
     p_redact.set_defaults(func=cmd_redact)
 
