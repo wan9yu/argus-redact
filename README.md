@@ -62,7 +62,7 @@ redact(
 # → "员工R-83811，身份证R-89732，电话R-12345"
 ```
 
-`<TYPE_N>` 1-based sequential token style is roadmapped for v0.6.x. See [docs/configuration.md](docs/configuration.md#unified-prefix-hide-pii-type) for full strategy reference.
+`<TYPE_N>` 1-based sequential token style is on the future-release candidate list (no committed timeline). See [docs/configuration.md](docs/configuration.md#unified-prefix-hide-pii-type) for the current strategy reference.
 
 ## Privacy Levels
 
@@ -162,7 +162,7 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 |-----------|:----------------:|:---:|
 | **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini. Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). MCP token-only key handling. Windows CI | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (zh + en + RFC shared) + per-call strategy overrides + `keep` strategy + resumable streaming sessions + incremental streaming default + cross-language alias restore (zh ↔ en) | Task-aware guidance |
-| **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design). Cross-language LLM rewrites (`张三` → `Zhang San`) auto-restored via `KeyEntry.aliases` | Task-aware guidance |
+| **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design). Cross-language LLM rewrites (`张三` → `Zhang San`) auto-restored via `result.aliases` + `restore(text, key, aliases=...)` | Task-aware guidance |
 | **Compliance** | PIPL ~85%, risk assessment + profiles | PIPL/GDPR/HIPAA (byproduct) |
 | **Coverage** | 8 langs, 4 LLMs benchmarked, 6 frameworks | Browser extension |
 
@@ -262,7 +262,7 @@ True byte-level streaming (entities crossing chunk boundaries) needs full increm
 
 > ⚠️ Realistic-mode output **must not be re-redacted** (it would corrupt the key dict). `redact_pseudonym_llm` will raise `PseudonymPollutionError` if called on already-faked input — call `restore()` first.
 
-[Full API →](docs/api-reference.md#redact_pseudonym_llm) · [Known limitations →](docs/known-issues.md#pseudonym-llm-limitations)
+[Full API →](docs/api-reference.md#redact_pseudonym_llm) · [Design constraints →](docs/known-issues.md#design-constraints)
 
 ## Integrations
 

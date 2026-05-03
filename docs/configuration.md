@@ -37,7 +37,7 @@ redact(
 
 > ⚠️ `mask` / `name_mask` / `landline_mask` / `category` strategies don't use prefixes — they emit shape-preserving output by design (`138****5678`, `张*`, `[LOCATION]`). Override those types to `remove` if you want them unified.
 
-`<TYPE_N>` 1-based sequential token style (e.g. `<PHONE_1>`, `<PERSON_1>`) is roadmapped for v0.6.x.
+`<TYPE_N>` 1-based sequential token style (e.g. `<PHONE_1>`, `<PERSON_1>`) is a future-release candidate (no committed timeline).
 
 ## Usage
 

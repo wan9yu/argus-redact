@@ -154,7 +154,7 @@ Base = name length (2 char → 0.3, 3 char → 0.4, ≥ 4 char → 0.5) + the ev
 
 Threshold = 0.8 → confirmed person entity. The threshold is hint-driven: instruction text raises it to 1.2 (effectively suppresses L1b output) so the cleanup runs only at L2 NER.
 
-**Configurability (v0.5.x)**: 20 / 50 / 150 / 0.8 are module-private constants. There is no kwarg or env var to tune them. If your use case needs different values, file feedback — `score_config` is on the v0.6 candidate list.
+**Configurability**: 20 / 50 / 150 / 0.8 are module-private constants. There is no kwarg or env var to tune them. If your use case needs different values, file feedback — `score_config` is a future-release candidate (no committed timeline).
 
 After 1a runs, `produce_hints()` generates **cross-layer hints** that downstream layers consume:
 

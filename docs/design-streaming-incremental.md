@@ -116,4 +116,4 @@ Two private modules in `glue/`:
   via `from_state()` will lose the incomplete tail. v0.5.8+ schema bump can
   add it.
 - **Byte-level partial detection** (a true state machine across regex
-  patterns) is the v0.6+ candidate when token-stream latency demands it.
+  patterns) is a future candidate when token-stream latency demands it.
