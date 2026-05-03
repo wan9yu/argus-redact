@@ -73,3 +73,18 @@ filterwarnings = [
     "ignore::UserWarning:thinc.*",
 ]
 addopts = "-p no:recording"
+
+[tool.mutmut]
+paths_to_mutate = [
+    "src/argus_redact/pure/replacer.py",
+    "src/argus_redact/pure/restore.py",
+    "src/argus_redact/pure/pseudonym.py",
+]
+tests_dir = ["tests/core/"]
+also_copy = ["docs/", "README.md", "src/"]
+pytest_add_cli_args = [
+    "-p", "no:recording",
+    "-m", "not ner and not semantic and not slow",
+    "--deselect", "tests/core/test_redact.py::TestRedactWithNER",
+    "--deselect", "tests/core/test_redact.py::TestRedactWithSemantic",
+]

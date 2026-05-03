@@ -1,7 +1,32 @@
 """Shared test fixtures and data loading for argus-redact."""
 
 import json
+import os
+import sys
 from pathlib import Path
+
+# ── mutmut: block argus_redact._core (PyO3 .so) BEFORE any package import ──
+# mutmut runs every mutant in an os.fork()-ed child. If the parent already
+# imported _core during baseline / clean-test phases the child inherits
+# stale PyO3 / Tokio runtime state and segfaults the moment any Rust
+# function is called. Blocking the .so for the whole mutmut run keeps the
+# Python-only fallback path active (every consumer wraps the import in
+# try/except ImportError) and the test suite still passes end-to-end.
+# Gated on MUTANT_UNDER_TEST so it's a no-op outside mutmut.
+if os.environ.get("MUTANT_UNDER_TEST"):
+    import importlib.abc
+
+    class _BlockArgusCoreFinder(importlib.abc.MetaPathFinder):
+        def find_spec(self, fullname, path, target=None):
+            if fullname == "argus_redact._core" or fullname.startswith(
+                "argus_redact._core."
+            ):
+                raise ImportError("argus_redact._core blocked under mutmut")
+            return None
+
+    for _cached in [n for n in sys.modules if n == "argus_redact._core" or n.startswith("argus_redact._core.")]:
+        sys.modules.pop(_cached, None)
+    sys.meta_path.insert(0, _BlockArgusCoreFinder())
 
 import pytest
 

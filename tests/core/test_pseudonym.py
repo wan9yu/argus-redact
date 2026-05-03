@@ -108,3 +108,57 @@ class TestPseudonymGenerator:
             codes.add(code)
         # Should have generated 10 unique codes by expanding range
         assert len(codes) == 10
+
+
+# ─── Mutation-testing-killers ──────────────────────────────────────────
+
+
+class TestMaxPseudonymLengthInvariants:
+    """``max_pseudonym_length`` returns the upper bound on a pseudonym string,
+    used by the streaming buffer to size flush windows. Off-by-one would let
+    a real pseudonym overflow the buffer and leak through."""
+
+    def test_should_return_dash_plus_5_digits_layout(self):
+        from argus_redact.pure.pseudonym import max_pseudonym_length
+
+        # Default prefixes top out at "GH-TOKEN" (8 chars). 8 + "-" + 5 = 14.
+        # Any mutant that returns 8 (no-prefix fallback) instead of computing
+        # from DEFAULT_PREFIXES is killed.
+        result = max_pseudonym_length()
+        assert result == 14
+
+    def test_should_grow_when_user_config_has_longer_prefix(self):
+        from argus_redact.pure.pseudonym import max_pseudonym_length
+
+        # Custom 10-char prefix → 10 + 1 + 5 = 16
+        config = {"person": {"prefix": "VERYLONGPRE"}}  # 11 chars
+        result = max_pseudonym_length(config)
+        assert result == 11 + 1 + 5
+
+    def test_should_use_dict_value_not_dict_keys(self):
+        from argus_redact.pure.pseudonym import max_pseudonym_length
+
+        # `and` → `or` mutant on the inner check would treat any truthy
+        # type_config (e.g. a string) as having a "prefix" key — and try
+        # to .add(), exploding. This call must not raise.
+        config = {"person": "not a dict"}  # type: ignore[dict-item]
+        # Should silently skip non-dict entries
+        result = max_pseudonym_length(config)
+        assert result == 14  # baseline DEFAULT_PREFIXES result
+
+
+class TestGeneratePseudonymRange:
+    """``generate_pseudonym`` must produce numbers strictly inside ``code_range``."""
+
+    def test_should_stay_at_lower_bound_when_range_is_singleton(self):
+        # code_range=(7, 7) — only one valid number. Kills `+ lo` → `- lo`
+        # arith mutants which would produce a negative number for non-zero lo.
+        for seed in range(20):
+            code = generate_pseudonym(seed=seed, code_range=(7, 7))
+            num = int(code.split("-")[1])
+            assert num == 7, f"seed={seed} produced {code}"
+
+    def test_should_use_5_digit_zero_padding(self):
+        # f"{num:05d}" — kills width mutants (5 → 4 / 6).
+        code = generate_pseudonym(seed=1, code_range=(1, 1))
+        assert code == "P-00001"
