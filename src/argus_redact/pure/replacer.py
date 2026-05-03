@@ -6,10 +6,22 @@ import functools
 import hashlib
 import hmac
 import os
+import warnings
 from typing import Callable
 
 from argus_redact._types import PatternMatch
+from argus_redact.pure.grammar import SELF_REF_PRONOUNS
 from argus_redact.pure.pseudonym import PseudonymGenerator
+
+
+class SecurityWarning(UserWarning):
+    """Emitted when a misconfiguration would silently weaken redaction.
+
+    Examples: ``strategy="keep"`` applied to a non-self-reference type
+    (downgraded to the type's default to avoid leaking original PII), or
+    server starting with ``allow_no_auth=True`` (v0.6.2). Subclass of
+    ``UserWarning`` so it shows up by default in caller code.
+    """
 
 VALID_STRATEGIES = (
     "pseudonym",
@@ -46,6 +58,26 @@ def is_strategy_reversible(strategy: str) -> bool:
 
 
 _MAX_REROLL_ATTEMPTS = 10  # well above expected HMAC collision rate for practical batch sizes
+
+
+# Whitelist of self_reference texts that ``keep`` strategy is allowed to
+# preserve verbatim. Anything else with strategy="keep" downgrades to the
+# type's default (with SecurityWarning) — guards against H6 where Layer-3
+# could misclassify sensitive PII (e.g. SSN strings) as ``self_reference``
+# and the keep path would emit the original verbatim.
+_ZH_SELF_REF_KINSHIP = frozenset({
+    # Pronouns
+    "我", "我的", "我们", "我们的",
+    # Kinship (matches lang/zh/patterns.py self_reference regex)
+    "我妈妈", "我爸爸", "我母亲", "我父亲",
+    "我老公", "我老婆", "我丈夫", "我妻子", "我先生", "我太太",
+    "我儿子", "我女儿", "我哥哥", "我姐姐", "我弟弟", "我妹妹",
+    "我哥", "我姐", "我弟", "我妹", "我妈", "我爸",
+    "我爷爷", "我奶奶", "我外公", "我外婆",
+    "我叔叔", "我阿姨", "我舅舅", "我姑姑",
+    "我家人", "我家里人", "我孩子",
+})
+_KEEP_WHITELIST = SELF_REF_PRONOUNS | _ZH_SELF_REF_KINSHIP
 
 
 def _seed_from_value(value: str, type_name: str, salt: bytes) -> bytes:
@@ -564,11 +596,22 @@ def replace(
         strategy = ec.get("strategy", DEFAULT_STRATEGIES.get(entity.type, "remove"))
 
         if strategy == "keep":
-            # Preserve original text — no placeholder, no key dict entry.
-            # The entity still flows through hints / risk assessment because
-            # detection ran upstream of replace().
-            entity_replacements[entity.text] = entity.text
-            continue
+            # ``keep`` is for pronouns / kinship phrases the LLM needs in the
+            # clear (e.g. "我妈" / "I"). Anything else gets downgraded to the
+            # type's default — Layer-3 sometimes misclassifies sensitive PII
+            # as self_reference, and silent passthrough would leak originals.
+            if entity.type == "self_reference" and entity.text in _KEEP_WHITELIST:
+                entity_replacements[entity.text] = entity.text
+                continue
+            warnings.warn(
+                f"strategy='keep' is only supported for self_reference pronouns "
+                f"and kinship phrases; downgrading to default for "
+                f"type={entity.type!r}, text={entity.text[:40]!r}.",
+                SecurityWarning,
+                stacklevel=3,
+            )
+            strategy = DEFAULT_STRATEGIES.get(entity.type, "remove")
+            # fall through to the strategy dispatch below
 
         if strategy == "pseudonym":
             prefix = ec.get("prefix", DEFAULT_PREFIXES.get(entity.type, "P"))
