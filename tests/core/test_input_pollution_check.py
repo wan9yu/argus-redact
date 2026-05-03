@@ -19,12 +19,16 @@ class TestPollutionCheck:
 
     def test_should_allow_with_polluted_input_ok_flag(self):
         polluted = "second pass on 19999123456"
-        result = redact_pseudonym_llm(polluted, _polluted_input_ok=True)
+        result = redact_pseudonym_llm(
+            polluted, salt=b"fixed-salt-for-test", _polluted_input_ok=True
+        )
         assert result is not None
 
     def test_should_allow_with_strict_input_disabled(self):
         polluted = "second pass on 19999123456"
-        result = redact_pseudonym_llm(polluted, strict_input=False)
+        result = redact_pseudonym_llm(
+            polluted, salt=b"fixed-salt-for-test", strict_input=False
+        )
         assert result is not None
 
     def test_default_profile_should_not_run_pollution_check(self):

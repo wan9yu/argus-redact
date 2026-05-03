@@ -17,6 +17,7 @@ class TestStrategyOverridesBasic:
         result = redact_pseudonym_llm(
             text,
             lang="zh",
+            salt=b"fixed-salt-for-test",
             strategy_overrides={"phone": "remove"},
         )
         # phone fake is no longer the realistic 199-99 reserved range
@@ -47,6 +48,7 @@ class TestStrategyOverridesValidation:
             redact_pseudonym_llm(
                 "电话13912345678",
                 lang="zh",
+                salt=b"fixed-salt-for-test",
                 strategy_overrides={"phone": "bogus"},
             )
         assert "Must be one of:" in str(exc.value)
@@ -61,6 +63,7 @@ class TestStrategyOverridesDoesNotAffectAudit:
         result = redact_pseudonym_llm(
             text,
             lang="zh",
+            salt=b"fixed-salt-for-test",
             strategy_overrides={"phone": "mask"},
         )
         # downstream got mask treatment (139****5678 etc.)
@@ -80,6 +83,7 @@ class TestStrategyOverridesDoesNotPolluteProfile:
         redact_pseudonym_llm(
             "电话13912345678",
             lang="zh",
+            salt=b"fixed-salt-for-test",
             strategy_overrides={"phone": "remove"},
         )
 

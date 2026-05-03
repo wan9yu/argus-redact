@@ -57,6 +57,7 @@ class TestCliEndToEnd:
             "-k", str(key_file),
             "--profile", "pseudonym-llm",
             "--strategy-override", "phone:remove",
+            "-s", "42",
             stdin="请拨打 13912345678 联系王建国",
         )
 

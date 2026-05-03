@@ -19,6 +19,8 @@ class TestPseudonymLLMProfile:
             str(key_file),
             "--profile",
             "pseudonym-llm",
+            "-s",
+            "42",
             stdin="请拨打 13912345678 联系王建国",
         )
 
@@ -38,6 +40,8 @@ class TestPseudonymLLMProfile:
             str(key_file),
             "--profile",
             "pseudonym-llm",
+            "-s",
+            "42",
             stdin="请拨打 13912345678",
         )
 
@@ -57,6 +61,8 @@ class TestPseudonymLLMProfile:
             str(key_file),
             "--profile",
             "pseudonym-llm",
+            "-s",
+            "42",
             stdin=text,
         )
         assert code == 0

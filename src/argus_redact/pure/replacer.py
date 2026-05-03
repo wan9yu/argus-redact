@@ -67,10 +67,10 @@ def _resolve_salt(seed: int | bytes | None) -> bytes:
     1. Caller-provided salt (bytes) → used verbatim (full entropy preserved)
     2. Caller-provided seed (int) → 8-byte big-endian (back-compat; 64-bit entropy)
     3. Env var ARGUS_REDACT_PSEUDONYM_SALT → encoded bytes
-    4. Empty bytes (no stable mapping; v0.6.1+ commit 3 will raise instead)
 
-    bytes is the recommended form; int is preserved for back-compat with
-    callers that pass ``seed=42`` for testing or stable cross-session mapping.
+    Pre-v0.6.1 silently returned ``b""`` when none of the three were available,
+    which collapsed HMAC to a deterministic public hash (de-anonymizable with
+    one observed pair). v0.6.1+ raises ``ValueError`` instead.
     """
     if isinstance(seed, (bytes, bytearray)):
         return bytes(seed)
@@ -79,7 +79,12 @@ def _resolve_salt(seed: int | bytes | None) -> bytes:
     env = os.environ.get("ARGUS_REDACT_PSEUDONYM_SALT")
     if env:
         return env.encode("utf-8")
-    return b""
+    raise ValueError(
+        "realistic strategy requires an explicit salt. Pass `seed=<int>` or "
+        "`salt=<bytes>` to redact() / redact_pseudonym_llm(), or set "
+        "ARGUS_REDACT_PSEUDONYM_SALT env var. Pre-v0.6.1 silently used b'' "
+        "which produced predictable mappings."
+    )
 
 
 def _pseudonym_seed_int(seed: int | bytes | None) -> int | None:

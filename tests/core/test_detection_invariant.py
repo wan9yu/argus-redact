@@ -35,7 +35,7 @@ class TestDetectionInvariant:
         monkeypatch.setattr(redact_module, "_detect", counting_detect)
         monkeypatch.setattr(redact_module, "_replace_and_emit", counting_replace_and_emit)
 
-        redact_pseudonym_llm(text)
+        redact_pseudonym_llm(text, salt=b"fixed-salt-for-test")
 
         assert detect_calls == 1, f"_detect should run exactly once, ran {detect_calls}"
         assert replace_calls == 2, f"_replace_and_emit should run exactly twice, ran {replace_calls}"

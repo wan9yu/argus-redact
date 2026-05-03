@@ -12,7 +12,7 @@ from argus_redact.pure.restore import restore
 class TestThreeOutputBasics:
     def test_should_produce_three_distinct_texts(self):
         text = "请拨打 13912345678 联系王建国"
-        result = redact_pseudonym_llm(text)
+        result = redact_pseudonym_llm(text, salt=b"fixed-salt-for-test")
 
         assert "[" in result.audit_text or "P-" in result.audit_text or "TEL-" in result.audit_text
         assert "19999" in result.downstream_text
@@ -42,7 +42,7 @@ class TestThreeOutputBasics:
 class TestCredentialsBypass:
     def test_credentials_should_be_removed_not_realistic(self):
         text = "API key: sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ"
-        result = redact_pseudonym_llm(text)
+        result = redact_pseudonym_llm(text, salt=b"fixed-salt-for-test")
         assert "sk-TEST" not in result.downstream_text
         # Credentials use OAI-KEY-NNNNN placeholder, not realistic faking
         assert "OAI" in result.downstream_text
@@ -51,20 +51,20 @@ class TestCredentialsBypass:
 class TestDisplayMarkerConfig:
     def test_should_accept_custom_marker(self):
         text = "联系 王建国"
-        result = redact_pseudonym_llm(text, display_marker="*")
+        result = redact_pseudonym_llm(text, display_marker="*", salt=b"fixed-salt-for-test")
         assert "ⓕ" not in result.display_text
         assert "*" in result.display_text
 
     def test_should_accept_preset_name(self):
         text = "联系 王建国"
-        result = redact_pseudonym_llm(text, display_marker="chinese")
+        result = redact_pseudonym_llm(text, display_marker="chinese", salt=b"fixed-salt-for-test")
         assert "(假)" in result.display_text
 
 
 class TestEnglishProfile:
     def test_should_round_trip_en_phone_ssn_email(self):
         text = "Call (415) 555-1234, SSN 123-45-6789, email john@company.com"
-        result = redact_pseudonym_llm(text, lang="en")
+        result = redact_pseudonym_llm(text, lang="en", salt=b"fixed-salt-for-test")
         # Realistic-faked en values present
         assert "(555) 555-01" in result.downstream_text
         assert "999-" in result.downstream_text  # SSN 999 area
@@ -76,7 +76,7 @@ class TestEnglishProfile:
 
     def test_should_round_trip_credit_card(self):
         text = "Card: 4111-1111-1111-1111"
-        result = redact_pseudonym_llm(text, lang="en")
+        result = redact_pseudonym_llm(text, lang="en", salt=b"fixed-salt-for-test")
         assert "999999" in result.downstream_text
         assert restore(result.downstream_text, result.key) == text
 
@@ -88,7 +88,7 @@ class TestEnglishProfile:
         from argus_redact.pure.reserved_range_scanner import _RESERVED_RANGE_PATTERNS
 
         text = "Server IP 10.0.0.5 with MAC aa:bb:cc:dd:ee:ff"
-        result = redact_pseudonym_llm(text, lang="en")
+        result = redact_pseudonym_llm(text, lang="en", salt=b"fixed-salt-for-test")
         assert re.search(_RESERVED_RANGE_PATTERNS["ipv4_shared"], result.downstream_text)
         assert re.search(_RESERVED_RANGE_PATTERNS["mac_shared"], result.downstream_text)
         assert restore(result.downstream_text, result.key) == text
@@ -97,7 +97,7 @@ class TestEnglishProfile:
 class TestMixedZhEn:
     def test_should_round_trip_mixed_text(self):
         text = "客户Wang at (415) 555-1234, 邮箱 wang@company.com"
-        result = redact_pseudonym_llm(text, lang="auto")
+        result = redact_pseudonym_llm(text, lang="auto", salt=b"fixed-salt-for-test")
         assert restore(result.downstream_text, result.key) == text
 
 
