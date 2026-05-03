@@ -113,11 +113,14 @@ def main() -> None:
         "platform": args.platform,
         "python": f"{sys.version_info.major}.{sys.version_info.minor}",
         "commit": args.commit,
-        "measurements": measurements,
+        # Round to 4 decimals — measurement precision is sub-µs, so keeping 16
+        # significant digits creates noise in baseline.json git diffs.
+        "measurements": {k: round(v, 4) for k, v in measurements.items()},
     }
 
-    Path(args.output).write_text(json.dumps(output, indent=2), encoding="utf-8")
-    print(json.dumps(output, indent=2))
+    serialized = json.dumps(output, indent=2) + "\n"
+    Path(args.output).write_text(serialized, encoding="utf-8")
+    print(serialized, end="")
 
 
 def _restore_workload() -> None:

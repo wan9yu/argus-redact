@@ -51,6 +51,6 @@ perf-update:
 	@echo "Baseline updated. Review and commit tests/benchmark/baseline.json"
 
 perf-check:
-	PYTHONPATH=src python tests/benchmark/run_perf_budget.py --output /tmp/argus-perf-current.json
-	python tests/benchmark/compare_baseline.py /tmp/argus-perf-current.json tests/benchmark/baseline.json
-	@rm -f /tmp/argus-perf-current.json
+	@PYTHONPATH=src python tests/benchmark/run_perf_budget.py --output /tmp/argus-perf-current.json && \
+		python tests/benchmark/compare_baseline.py /tmp/argus-perf-current.json tests/benchmark/baseline.json; \
+		status=$$?; rm -f /tmp/argus-perf-current.json; exit $$status

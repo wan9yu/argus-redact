@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 
-_THRESHOLD = 0.10  # 10%
+_THRESHOLD = 0.10  # regression gate: ±10% per workload (see docs/perf-history.md)
 
 
 def _compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
@@ -52,13 +52,13 @@ def main() -> int:
     regressions, improvements = _compare(current, baseline)
 
     if regressions:
-        print("Performance regressions detected (>10% slower):")
+        print(f"Performance regressions detected (>{_THRESHOLD:.0%} slower):")
         for line in regressions:
             print(line)
         return 1
 
     if improvements:
-        print("Performance improved (>10% faster):")
+        print(f"Performance improved (>{_THRESHOLD:.0%} faster):")
         for line in improvements:
             print(line)
         print(
