@@ -84,11 +84,6 @@ class TestNonPersonFakersReturnEmptyAliases:
         _, aliases = fake_license_plate_reserved("京A12345", _rng())
         assert aliases == []
 
-    def test_zh_address_empty_aliases(self):
-        # Address aliases out of scope for v0.5.8 (address transliteration is
-        # noisy — defer to v0.6+).
-        _, aliases = fake_address_reserved("北京市", _rng())
-        assert aliases == []
 
     def test_en_phone_empty_aliases(self):
         _, aliases = fake_phone_en_reserved("(415) 555-1234", _rng())
@@ -102,10 +97,6 @@ class TestNonPersonFakersReturnEmptyAliases:
         _, aliases = fake_credit_card_en_reserved("4111111111111111", _rng())
         assert aliases == []
 
-    def test_en_address_empty_aliases(self):
-        _, aliases = fake_address_en_reserved("1234 Main St", _rng())
-        assert aliases == []
-
     def test_email_empty_aliases(self):
         _, aliases = fake_email_reserved("user@example.com", _rng())
         assert aliases == []
@@ -117,6 +108,27 @@ class TestNonPersonFakersReturnEmptyAliases:
     def test_mac_empty_aliases(self):
         _, aliases = fake_mac_reserved("aa:bb:cc:dd:ee:ff", _rng())
         assert aliases == []
+
+
+class TestAddressAliases:
+    """v0.5.10: address fakers now emit cross-language transliteration aliases."""
+
+    def test_zh_address_returns_en_alias_with_number(self):
+        fake, aliases = fake_address_reserved("北京市朝阳区某路1号", _rng())
+        assert fake.startswith("滨海市")
+        assert aliases, f"zh address fake {fake!r} should have at least one en alias"
+        # The fake ends in "<num>号"; the alias prepends that same number
+        # in en convention (e.g. "42 Bahuang Street, Dongjiang District, Binhai City").
+        for alias in aliases:
+            assert alias[0].isdigit(), f"alias {alias!r} should start with the street number"
+            assert any(c.isalpha() and c.isascii() for c in alias)
+
+    def test_en_address_returns_zh_alias(self):
+        fake, aliases = fake_address_en_reserved("1234 Main St", _rng())
+        assert "," in fake  # Sanity: picked from the table
+        assert aliases, f"en address fake {fake!r} should have at least one zh alias"
+        # Alias should contain CJK characters
+        assert all(any("一" <= c <= "鿿" for c in a) for a in aliases)
 
 
 class TestReplaceAttachesAliasesToKeyEntries:

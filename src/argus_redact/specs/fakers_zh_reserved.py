@@ -61,6 +61,22 @@ RESERVED_CITIES = (
     ("滨海市", "北原区", ("朱雀路", "麒麟街")),
 )
 
+# v0.5.10: en transliterations the LLM might emit when it rephrases zh fake
+# addresses into Latin script. Keyed on (city, district, street). The street
+# number is prepended at faker time. Format follows en convention
+# "<Street>, <District>, <City>".
+RESERVED_ADDRESSES_ZH_ALIASES: dict[tuple[str, str, str], list[str]] = {
+    ("滨海市", "东江区", "八荒街"): ["Bahuang Street, Dongjiang District, Binhai City"],
+    ("滨海市", "东江区", "九垣街"): ["Jiuyuan Street, Dongjiang District, Binhai City"],
+    ("滨海市", "东江区", "十方路"): ["Shifang Road, Dongjiang District, Binhai City"],
+    ("滨海市", "东江区", "万象路"): ["Wanxiang Road, Dongjiang District, Binhai City"],
+    ("滨海市", "西陆区", "青鸾街"): ["Qingluan Street, Xilu District, Binhai City"],
+    ("滨海市", "西陆区", "白虎街"): ["Baihu Street, Xilu District, Binhai City"],
+    ("滨海市", "西陆区", "玄武路"): ["Xuanwu Road, Xilu District, Binhai City"],
+    ("滨海市", "北原区", "朱雀路"): ["Zhuque Road, Beiyuan District, Binhai City"],
+    ("滨海市", "北原区", "麒麟街"): ["Qilin Street, Beiyuan District, Binhai City"],
+}
+
 PASSPORT_PREFIXES = ("E", "G")
 
 PLATE_SPECIAL_PREFIXES = ("测", "领")
@@ -126,13 +142,14 @@ def fake_license_plate_reserved(value: str, rng: random.Random) -> tuple[str, li
 
 
 def fake_address_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
-    """Generate a 滨海市 fictional address (city does not exist in real China)."""
+    """Generate a 滨海市 fictional address with en transliteration aliases."""
     city, district, streets = rng.choice(RESERVED_CITIES)
     street = rng.choice(streets)
     num = rng.randint(1, 999)
-    # Address transliteration is noisy (street/district names rarely round-trip
-    # cleanly); deferred to v0.6+. v0.5.8 returns no aliases here.
-    return f"{city}{district}{street}{num}号", []
+    fake = f"{city}{district}{street}{num}号"
+    base_aliases = RESERVED_ADDRESSES_ZH_ALIASES.get((city, district, street), [])
+    aliases = [f"{num} {a}" for a in base_aliases]
+    return fake, aliases
 
 
 def fake_person_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:

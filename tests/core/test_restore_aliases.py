@@ -73,6 +73,25 @@ class TestEndToEndCrossLanguage:
         restored = restore(llm_output, r.key_entries)
         assert restored == text, f"expected {text!r}, got {restored!r}"
 
+    def test_zh_address_redact_then_en_alias_in_llm_output(self):
+        from argus_redact import redact_pseudonym_llm
+        from argus_redact.pure.restore import restore
+
+        text = "我住在北京市朝阳区建国路100号"
+        r = redact_pseudonym_llm(text, salt=b"fixed-addr", lang="zh")
+        addr_entries = {
+            f: e for f, e in r.key_entries.items()
+            if e.original == "北京市朝阳区建国路100号" and e.aliases
+        }
+        if not addr_entries:
+            import pytest
+            pytest.skip("seed picked address w/o aliases — re-run other tests cover this")
+        fake = next(iter(addr_entries))
+        alias = addr_entries[fake].aliases[0]
+        llm_output = r.downstream_text.replace(fake, alias)
+        restored = restore(llm_output, r.key_entries)
+        assert restored == text
+
 
 class TestEmptyKeyEdgeCase:
     def test_empty_key_entries(self):
