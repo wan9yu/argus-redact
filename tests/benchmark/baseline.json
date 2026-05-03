@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "platform": "ubuntu-latest",
+  "python": "3.11",
+  "commit": "56b5e10",
+  "measurements": {
+    "import_time_ms": 66.95412495173514,
+    "redact_zh_fast_1kb_p50_ms": 1.7929159803315997,
+    "redact_en_fast_1kb_p50_ms": 0.8438749937340617,
+    "redact_pseudonym_llm_zh_1kb_p50_ms": 2.0393329905346036,
+    "restore_1kb_p50_ms": 1.8062499584630132,
+    "streaming_feed_per_chunk_p50_ms": 0.7802089676260948
+  }
+}

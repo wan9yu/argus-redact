@@ -1,4 +1,4 @@
-.PHONY: install dev test cov lint build clean release catalog catalog-check
+.PHONY: install dev test cov lint build clean release catalog catalog-check perf-update perf-check
 
 install:
 	pip install -e .
@@ -42,3 +42,15 @@ catalog-check:
 	@PYTHONPATH=src python -m argus_redact.specs.gen_catalog | diff -u docs/pii-types.md - >/dev/null \
 		|| (echo "docs/pii-types.md is out of sync with the registry. Run: make catalog" && exit 1)
 	@echo "docs/pii-types.md is in sync"
+
+perf-update:
+	PYTHONPATH=src python tests/benchmark/run_perf_budget.py \
+		--output tests/benchmark/baseline.json \
+		--platform "$$(uname -s)" \
+		--commit "$$(git rev-parse --short HEAD)"
+	@echo "Baseline updated. Review and commit tests/benchmark/baseline.json"
+
+perf-check:
+	PYTHONPATH=src python tests/benchmark/run_perf_budget.py --output /tmp/argus-perf-current.json
+	python tests/benchmark/compare_baseline.py /tmp/argus-perf-current.json tests/benchmark/baseline.json
+	@rm -f /tmp/argus-perf-current.json
