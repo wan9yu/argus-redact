@@ -24,7 +24,7 @@ def _empty_result() -> PseudonymLLMResult:
     # singleton would let one caller's mutation leak into another caller's
     # "empty" result.
     return PseudonymLLMResult(
-        audit_text="", downstream_text="", display_text="", _key_entries={}
+        audit_text="", downstream_text="", display_text="", key={}, aliases={}
     )
 
 # Integer schema version stamped into export_state() output. Decoupled from

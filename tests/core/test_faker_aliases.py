@@ -132,24 +132,26 @@ class TestAddressAliases:
         assert all(any("一" <= c <= "鿿" for c in a) for a in aliases)
 
 
-class TestReplaceAttachesAliasesToKeyEntries:
-    def test_person_zh_alias_in_key_entries(self):
+class TestReplaceAttachesAliasesToResult:
+    def test_person_zh_alias_in_result_aliases(self):
         from argus_redact import redact_pseudonym_llm
 
         r = redact_pseudonym_llm("联系王建国", lang="zh", salt=b"x")
-        # Find the realistic-pass entry for 王建国
-        person_entries = [e for e in r.key_entries.values() if e.original == "王建国"]
-        assert person_entries, f"missing person entry: {dict(r.key_entries)}"
-        # At least one entry has aliases (the realistic fake; audit placeholder has none)
-        assert any(e.aliases for e in person_entries), (
-            f"expected aliases on realistic person fake, got {[(e.original, e.aliases) for e in person_entries]}"
+        # Find any fake whose original is 王建国 with aliases attached
+        person_fakes_with_aliases = [
+            f for f, orig in r.key.items()
+            if orig == "王建国" and r.aliases.get(f)
+        ]
+        assert person_fakes_with_aliases, (
+            f"expected aliases on realistic person fake; key={r.key}, aliases={r.aliases}"
         )
 
     def test_phone_no_aliases(self):
         from argus_redact import redact_pseudonym_llm
 
         r = redact_pseudonym_llm("电话13912345678", lang="zh", salt=b"x")
-        phone_entries = [e for e in r.key_entries.values() if e.original == "13912345678"]
-        # All phone fakes have empty aliases
-        assert phone_entries
-        assert all(e.aliases == () for e in phone_entries)
+        phone_fakes = [f for f, orig in r.key.items() if orig == "13912345678"]
+        # All phone fakes have no alias entries (skipped in unified_aliases)
+        assert phone_fakes
+        for f in phone_fakes:
+            assert f not in r.aliases or r.aliases[f] == ()

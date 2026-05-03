@@ -399,31 +399,23 @@ custom.downstream_text  # phone → "PHON-NNNNN", address still realistic
 ## PseudonymLLMResult
 
 ```python
-from argus_redact import PseudonymLLMResult, KeyEntry
+from argus_redact import PseudonymLLMResult
 
 # Frozen result type returned by redact_pseudonym_llm().
-# audit_text / downstream_text / display_text are plain strings.
-# key and key_entries are read-only @property views over internal storage.
+# All five fields are plain attributes; mutating result.key / result.aliases
+# directly mutates internal storage (the dataclass is frozen, but its dict
+# fields are not). Copy first if you need to mutate.
 
 result.audit_text       # placeholder labels — for compliance archive
 result.downstream_text  # realistic reserved-range fake — for LLM input
 result.display_text     # realistic + visible marker — for human display
-result.key              # dict[str, str]: fake → original (backward-compat view)
-result.key_entries      # dict[str, KeyEntry]: structured access (v0.5.8+)
+result.key              # dict[str, str]: fake → original
+result.aliases          # dict[str, tuple[str, ...]]: fake → cross-language aliases (v0.6.0+)
 ```
 
-Both `key` and `key_entries` return **fresh dict copies** on each access — caller mutations never leak into internal state.
+### result.aliases *(v0.6.0+)*
 
-### KeyEntry *(v0.5.8+)*
-
-```python
-@dataclass(frozen=True)
-class KeyEntry:
-    original: str
-    aliases: tuple[str, ...] = ()
-```
-
-`aliases` carries cross-language transliterations the LLM might emit instead of the canonical fake (e.g. `original="王建国"`, `aliases=("Wang Jianguo",)`). `restore()` recognizes both the canonical fake and its aliases and maps them all back to `original`.
+Maps a fake to alternate transliterations a downstream LLM might emit instead of the canonical fake — e.g. `result.key["王五"] == "王建国"` paired with `result.aliases["王五"] == ("Wang Jianguo",)`. Pass to `restore(text, key, aliases=...)` to recover originals from LLM output that rewrote names across languages. Fakes without aliases (phones, IDs, etc.) are absent from the dict — check with `result.aliases.get(fake, ())`.
 
 ---
 
@@ -458,7 +450,10 @@ from argus_redact import restore
 
 restore(
     text: str,
-    key: dict | str,
+    key: dict[str, str] | str,
+    *,
+    aliases: dict[str, tuple[str, ...]] | None = None,
+    display_marker: str | None = None,
 ) -> str
 ```
 
@@ -469,7 +464,9 @@ Reverse redaction — replace pseudonyms with originals using the key.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `text` | `str` | *(required)* | Text containing pseudonyms (typically LLM output). |
-| `key` | `dict \| str` | *(required)* | The key from `redact()` or `redact_pseudonym_llm()`. Accepts: (a) `dict[str, str]` (legacy fake → original), (b) `dict[str, KeyEntry]` (v0.5.8+ — adds cross-language aliases), (c) `str` = load from JSON file path (read-only). |
+| `key` | `dict[str, str] \| str` | *(required)* | The key from `redact()` or `redact_pseudonym_llm()`. Accepts: (a) `dict[str, str]` (fake → original), or (b) `str` = path to a JSON file holding such a dict. |
+| `aliases` | `dict[str, tuple[str, ...]] \| None` | `None` | *(v0.6.0+)* Per-fake alternate transliterations to also match. Pass `result.aliases` from `redact_pseudonym_llm()` to recover originals from LLM output that transliterated names across languages. |
+| `display_marker` | `str \| None` | `None` | If set, strip the named display marker from `text` before key lookup. |
 
 ### Returns
 
@@ -494,7 +491,7 @@ restored = restore(llm_output, "key.json")
 - **Exact string replacement.** `P-037` in text → looked up in key → replaced with original.
 - **Longer replacements first.** `[某公司总部]` is matched before `[某公司]` to avoid partial replacement.
 - **Unknown pseudonyms are left unchanged.** If the text contains `P-099` but the key has no `P-099`, it stays as `P-099`.
-- **Cross-language aliases** *(v0.5.8+, when key is `dict[str, KeyEntry]`)*: each entry's `aliases` are added to the alternation alongside the canonical fake. If an LLM transliterates `张三` into `Zhang San`, both forms map back to the original. Pass `result.key_entries` from `redact_pseudonym_llm()` to enable.
+- **Cross-language aliases** *(v0.6.0+, via `aliases=` kwarg)*: alternates in `aliases` are added to the alternation alongside the canonical fake. If an LLM transliterates `张三` into `Zhang San`, both forms map back to the original. Pass `result.aliases` from `redact_pseudonym_llm()` to enable.
 - **Works on any text.** The text doesn't have to come from an LLM — any string with pseudonyms can be restored.
 
 ### Performance

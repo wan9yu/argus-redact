@@ -68,47 +68,18 @@ class RedactReport:
 
 
 @dataclass(frozen=True)
-class KeyEntry:
-    """A single fake → original mapping plus optional cross-language aliases.
-
-    `aliases` carries transliterations the LLM might emit instead of the
-    canonical fake (e.g. ``original="王建国"``, ``aliases=("Wang Jianguo",)``).
-    `restore()` recognizes both the canonical fake and its aliases and maps
-    them all back to ``original``.
-
-    Tuples (not lists) so the dataclass stays hashable and frozen-friendly.
-    """
-
-    original: str
-    aliases: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class PseudonymLLMResult:
-    """Result of redact_pseudonym_llm() — three text forms sharing one key.
+    """Result of redact_pseudonym_llm() — three text forms sharing one key dict.
 
     Public access:
-    - ``result.key`` — read-only ``str → str`` dict view (fake → original).
-      Backward-compatible with all v0.5.x callers.
-    - ``result.key_entries`` *(v0.5.8+)* — read-only ``str → KeyEntry`` dict view
-      with cross-language aliases.
+    - ``result.key`` — ``str → str`` dict (fake → original).
+    - ``result.aliases`` *(v0.6.0+)* — ``str → tuple[str, ...]`` dict mapping a
+      fake to alternate transliterations a downstream LLM might emit. Pass
+      ``aliases`` to ``restore()`` for cross-language recovery.
     """
 
     audit_text: str
     downstream_text: str
     display_text: str
-    _key_entries: dict[str, KeyEntry] = field(default_factory=dict, repr=False)
-
-    @property
-    def key(self) -> dict[str, str]:
-        # Fresh dict per access: keeps caller mutations isolated and stays
-        # ``json.dumps`` / ``isinstance(dict)`` compatible. Allocation cost is
-        # O(n) per access — the typical pattern is one access per redact call,
-        # so cache locally for tight loops.
-        return {fake: e.original for fake, e in self._key_entries.items()}
-
-    @property
-    def key_entries(self) -> dict[str, KeyEntry]:
-        # Fresh dict per access for the same reasons. KeyEntry is frozen, so
-        # individual entries can't mutate.
-        return dict(self._key_entries)
+    key: dict[str, str] = field(default_factory=dict)
+    aliases: dict[str, tuple[str, ...]] = field(default_factory=dict)

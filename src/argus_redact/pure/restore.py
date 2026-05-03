@@ -6,30 +6,9 @@ import functools
 import re as _re
 from typing import Mapping
 
-from argus_redact._types import KeyEntry
 from argus_redact.pure.display_marker import strip_display_markers
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS, restore_grammar_en
 from argus_redact.pure.reserved_range_scanner import scan_for_pollution
-
-
-def _flatten_key_entries(key: dict) -> dict[str, str]:
-    """Expand a {fake: KeyEntry} dict into a flat {fake_or_alias: original} dict.
-
-    Each KeyEntry contributes one entry for its canonical fake and one for
-    each alias, all pointing at the same ``original``. A plain str→str dict
-    passes through unchanged.
-    """
-    if not key:
-        return {}
-    sample = next(iter(key.values()))
-    if not isinstance(sample, KeyEntry):
-        return key  # already str → str
-    flat: dict[str, str] = {}
-    for fake, entry in key.items():
-        flat[fake] = entry.original
-        for alias in entry.aliases:
-            flat[alias] = entry.original
-    return flat
 
 
 @functools.lru_cache(maxsize=128)
@@ -116,8 +95,19 @@ def wipe_key(key: dict) -> None:
     key.clear()
 
 
-def restore(text: str, key: dict | str, *, display_marker: str | None = None) -> str:
+def restore(
+    text: str,
+    key: dict[str, str] | str,
+    *,
+    aliases: dict[str, tuple[str, ...]] | None = None,
+    display_marker: str | None = None,
+) -> str:
     """Replace pseudonyms with originals using the key.
+
+    `aliases` (v0.6.0+): optional dict mapping a fake to alternate
+    transliterations. Each alias is also matched and mapped back to the
+    fake's original. Useful when the LLM rewrites Chinese names into pinyin
+    or English addresses into 中文.
 
     If `display_marker` is provided, strip markers from `text` before key lookup.
     """
@@ -136,12 +126,19 @@ def restore(text: str, key: dict | str, *, display_marker: str | None = None) ->
     if not key:
         return text
 
-    # v0.5.8: accept KeyEntry-shaped dicts (result.key_entries) and expand
-    # aliases into a flat str→str lookup. _flatten_key_entries always returns
-    # a fresh dict on the KeyEntry path; on the str→str path it returns the
-    # input unchanged. Either way, the next isinstance check normalizes to dict
-    # for the Rust binding (MappingProxyType / other Mapping subclasses fail).
-    key = _flatten_key_entries(key)
+    # Merge aliases into the lookup if provided. Each alias points at the same
+    # original as its canonical fake — the alternation matches both forms and
+    # maps them back. Aliases for fakes not in `key` are ignored.
+    if aliases:
+        flat: dict[str, str] = dict(key)
+        for fake, alias_tuple in aliases.items():
+            original = key.get(fake)
+            if original is None:
+                continue
+            for alias in alias_tuple:
+                flat[alias] = original
+        key = flat
+
     if not isinstance(key, dict):
         key = dict(key)
 
