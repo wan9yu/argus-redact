@@ -179,6 +179,40 @@ def _validate_hkid(value: str) -> bool:
     return hkid_check_digit(letters, digits) == check
 
 
+_TWID_LETTER_TO_CODE = {
+    "A": 10, "B": 11, "C": 12, "D": 13, "E": 14, "F": 15, "G": 16,
+    "H": 17, "I": 34, "J": 18, "K": 19, "L": 20, "M": 21, "N": 22,
+    "O": 35, "P": 23, "Q": 24, "R": 25, "S": 26, "T": 27, "U": 28,
+    "V": 29, "W": 32, "X": 30, "Y": 31, "Z": 33,
+}
+
+
+def twid_check_digit(letter: str, digits: str) -> str:
+    """Compute TWID check per ROC weighted-sum mod-10 algorithm.
+
+    `digits` is the 8-digit body; returns 1-char check digit.
+    Letter maps to a 2-digit region code (A=10..Z=33); first digit is
+    multiplied by 1, second by 9, then body digits use weights [8..1].
+    """
+    code = _TWID_LETTER_TO_CODE[letter]
+    n1, n2 = code // 10, code % 10
+    weights_body = [8, 7, 6, 5, 4, 3, 2, 1]
+    total = n1 * 1 + n2 * 9
+    for d, w in zip(digits, weights_body):
+        total += int(d) * w
+    rem = total % 10
+    return str((10 - rem) % 10)
+
+
+def _validate_twid(value: str) -> bool:
+    """Validate Republic of China (Taiwan) national ID card number."""
+    if len(value) != 10 or not value[0].isalpha() or not value[1:].isdigit():
+        return False
+    if value[0] not in _TWID_LETTER_TO_CODE:
+        return False
+    return twid_check_digit(value[0], value[1:9]) == value[9]
+
+
 # Known Chinese bank BIN prefixes (6 digits)
 _BANK_BINS = {
     "621700",
@@ -331,6 +365,13 @@ PATTERNS = [
         "pattern": r"(?<![A-Z])[A-Z]{1,2}\d{6}\((?:\d|X)\)",
         "validate": _validate_hkid,
         "description": "Hong Kong Identity Card (1-2 letter + 6 digit + parenthesized check, mod-11)",
+    },
+    {
+        "type": "tw_id",
+        "label": "[TWID-REDACTED]",
+        "pattern": r"(?<![A-Za-z0-9])[A-Z]\d{9}(?!\d)",
+        "validate": _validate_twid,
+        "description": "Taiwan (ROC) national ID (1 letter + 9 digits, weighted mod-10)",
     },
     {
         "type": "bank_card",

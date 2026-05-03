@@ -10,6 +10,7 @@ from argus_redact.lang.zh.patterns import (
     _validate_credit_code,
     _validate_hkid,
     _validate_id_number,
+    _validate_twid,
 )
 
 from .fakers_numeric import fake_age_noise, fake_date_of_birth_noise
@@ -39,6 +40,7 @@ from .fakers_zh_reserved import (
     fake_person_reserved,
     fake_phone_landline_reserved,
     fake_phone_reserved,
+    fake_twid_reserved,
 )
 from .registry import PIITypeDef, list_types, register
 
@@ -208,6 +210,37 @@ register(
         faker_reserved=fake_hkid_reserved,
         source="Hong Kong Immigration Department; Wikipedia HKID",
         description="Hong Kong Identity Card — 1-2 letter + 6 digit + parenthesized check",
+    )
+)
+
+# ── Taiwan Identity Card ──
+
+register(
+    PIITypeDef(
+        name="tw_id",
+        lang="zh",
+        format="LNNNNNNNNN",
+        length=10,
+        charset="alpha + digits",
+        checksum="TWID weighted mod-10",
+        validate=_validate_twid,
+        strategy="remove",
+        label="[TWID-REDACTED]",
+        examples=("A123456789", "B142536472", "F131011128"),
+        counterexamples=("A123456780", "A12345678"),
+        _patterns=(
+            {
+                "type": "tw_id",
+                "label": "[TWID-REDACTED]",
+                "pattern": r"(?<![A-Za-z0-9])[A-Z]\d{9}(?!\d)",
+                "validate": _validate_twid,
+                "description": "Taiwan (ROC) national ID (1 letter + 9 digits, weighted mod-10)",
+            },
+        ),
+        sensitivity=4,
+        faker_reserved=fake_twid_reserved,
+        source="ROC household registration; Wikipedia ROC ID",
+        description="Republic of China (Taiwan) national ID",
     )
 )
 

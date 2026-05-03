@@ -152,3 +152,12 @@ def fake_hkid_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     letter = "Z"
     digits = "".join(str(rng.randint(0, 9)) for _ in range(6))
     return f"{letter}{digits}({hkid_check_digit(letter, digits)})", []
+
+
+def fake_twid_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
+    """Generate TWID with `W` letter (Lienchiang region 32 — geographically tiny)."""
+    from argus_redact.lang.zh.patterns import twid_check_digit
+
+    letter = "W"
+    digits = "".join(str(rng.randint(0, 9)) for _ in range(8))
+    return f"{letter}{digits}{twid_check_digit(letter, digits)}", []
