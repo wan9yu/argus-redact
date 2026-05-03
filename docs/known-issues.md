@@ -79,6 +79,7 @@ Each entry follows three lines:
 
 | Issue | Version | Fix |
 |-------|---------|-----|
+| Performance regressions could land silently | v0.6.4 | New `.github/workflows/perf.yml` runs 5-run median over 6 workloads on every PR; compares against committed `tests/benchmark/baseline.json` with 10% threshold. Touching the baseline file in a PR exempts the gate (caller-owned). |
 | Hypothesis property tests for security invariants | v0.6.3 | New `tests/security/property/`: 6 properties (round-trip, faker-in-reserved-range derived from registry, determinism, keep-whitelist, state round-trip, pseudonym format). Findings landed as fixes in same release. |
 | Mutation testing pass on `pure/{replacer,restore,pseudonym}.py` | v0.6.3 | One-shot mutmut audit (502 killed / 296 survived / 0 real bugs); 27 targeted unit tests added to kill survivors. Audit recorded in workspace audit doc. |
 | `SECURITY.md` + GitHub private vulnerability reporting | v0.6.3 | Canonical disclosure channel; supported-versions table; threat-model link to `docs/security.md`; SLA tiers. |
