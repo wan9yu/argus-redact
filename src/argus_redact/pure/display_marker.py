@@ -19,6 +19,14 @@ DISPLAY_MARKER_PRESETS = {
     "none": "",
 }
 
+# Characters that may appear in any preset marker label. Used by `restore()` to
+# auto-detect and strip known preset markers attached to keys when the caller
+# omitted `display_marker=`. Custom markers (not in DISPLAY_MARKER_PRESETS) are
+# NOT included — those still require explicit pass-through.
+PRESET_MARKER_CHARS: frozenset[str] = frozenset(
+    ch for label in DISPLAY_MARKER_PRESETS.values() for ch in label if ch
+)
+
 
 def resolve_marker(marker: str | None) -> str:
     """Resolve a marker preset name or literal string. None -> default."""

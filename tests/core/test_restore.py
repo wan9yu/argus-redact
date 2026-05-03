@@ -290,6 +290,45 @@ class TestRestoreErrors:
             restore("text", None)
 
 
+class TestRestoreAutoDetectsMarkers:
+    """v0.6.0: restore() automatically strips known preset markers."""
+
+    def test_auto_strips_circled_f(self):
+        from argus_redact.pure.restore import restore
+
+        # Pretend display_text has 19999... fake with ⓕ marker appended
+        text = "Call 19999123456ⓕ"
+        key = {"19999123456": "13800138000"}
+        out = restore(text, key)
+        assert out == "Call 13800138000ⓕ"
+
+    def test_auto_strips_chinese_marker(self):
+        from argus_redact.pure.restore import restore
+
+        text = "联系张明(假)"
+        key = {"张明": "王建国"}
+        out = restore(text, key)
+        assert out == "联系王建国(假)"
+
+    def test_explicit_marker_still_works(self):
+        from argus_redact.pure.restore import restore
+
+        text = "联系张明🌟"
+        key = {"张明": "王建国"}
+        out = restore(text, key, display_marker="🌟")
+        assert out == "联系王建国"
+
+    def test_unknown_custom_marker_still_silent(self):
+        # User-defined custom marker not in presets → caller must pass display_marker=
+        from argus_redact.pure.restore import restore
+
+        text = "联系张明🌟"
+        key = {"张明": "王建国"}
+        out = restore(text, key)  # no display_marker
+        # Token "张明🌟" is NOT in key → not matched → output unchanged
+        assert "🌟" in out
+
+
 class TestRestoreCacheCompiledRegex:
     """v0.5.4: alternation regex is cached on frozenset(keys); streaming hot path
     that calls restore() repeatedly with the same key dict avoids re-compilation."""

@@ -109,7 +109,14 @@ def restore(
     fake's original. Useful when the LLM rewrites Chinese names into pinyin
     or English addresses into 中文.
 
-    If `display_marker` is provided, strip markers from `text` before key lookup.
+    If `display_marker` is provided, strip THAT marker from `text` before key
+    lookup. If omitted (v0.6.0+), `restore` auto-detects known preset markers
+    from `DISPLAY_MARKER_PRESETS` (`ⓕ`, `*`, `(假)`, `ˢ`) attached after a
+    key token: the marker stays in the output but the key is restored
+    underneath (e.g. `"19999123456ⓕ"` -> `"13800138000ⓕ"`). Custom markers
+    not in the preset list still require explicit `display_marker=`
+    pass-through. See `PRESET_MARKER_CHARS` in `pure/display_marker.py` for
+    the canonical preset character set.
     """
     if display_marker is not None:
         text = strip_display_markers(text, marker=display_marker)
@@ -141,6 +148,27 @@ def restore(
 
     if not isinstance(key, dict):
         key = dict(key)
+
+    # Auto-detect known preset display markers when caller didn't pass
+    # display_marker=. For each occurrence of `key + preset_marker_chars+` in
+    # text, replace inline with `value + same_marker_chars` so the marker stays
+    # attached to the restored value. Custom markers (not in the preset set)
+    # are left alone — caller must pass `display_marker=` for those.
+    #
+    # This is conservative: stand-alone preset chars (e.g. `*` in regular
+    # prose) are NOT stripped because they are not adjacent to a key.
+    if display_marker is None:
+        from argus_redact.pure.display_marker import PRESET_MARKER_CHARS
+
+        if PRESET_MARKER_CHARS:
+            keys_alt = "|".join(_re.escape(k) for k in sorted(key, key=len, reverse=True))
+            if keys_alt:
+                marker_class = "[" + "".join(_re.escape(c) for c in PRESET_MARKER_CHARS) + "]"
+                decoration_pattern = _re.compile(f"({keys_alt})({marker_class}+)")
+                text = decoration_pattern.sub(
+                    lambda m: key.get(m.group(1), m.group(1)) + m.group(2),
+                    text,
+                )
 
     has_self_ref = any(v in SELF_REF_PRONOUNS for v in key.values())
 
