@@ -79,6 +79,10 @@ Each entry follows three lines:
 
 | Issue | Version | Fix |
 |-------|---------|-----|
+| `StreamingRedactor.export_state()` embedded the salt in the serialized dict | v0.6.2 | Default omits salt; pass `include_salt=True` (deprecated) for back-compat. `from_state(state, *, salt=...)` now requires explicit salt kwarg; legacy embedded-salt dumps still load with `DeprecationWarning`. Caller-supplied salt always wins when both are present. |
+| HTTP server `/redact` and `/restore` open by default when `ARGUS_API_KEY` unset | v0.6.2 | `create_app(allow_no_auth=False)` raises `RuntimeError` when env var missing. CLI gains `argus-redact serve --insecure` flag for local dev opt-out (emits `SecurityWarning`). |
+| CLI write paths followed symlinks; key files mode 0644 | v0.6.2 | New `_safe_io` module: `safe_write_text` / `safe_write_key` / `safe_atomic_write_text` use `O_NOFOLLOW` on POSIX (Windows: `is_symlink` pre-check). Key files written mode 0600. `glue/redact.py:_replace_and_emit` (default redact path's key persistence) also routed through the safe path. |
+| MCP `_TOKEN_STORE` was an unbounded module-level dict with no eviction | v0.6.2 | Switched to `OrderedDict` with 5-min idle TTL + 100-entry LRU cap. Token access bumps timestamp (sliding window). Per-session binding deferred to v0.7 (FastMCP API survey). |
 | Salt entropy collapsed from caller's full bytes to 8 bytes / 63 bits | v0.6.1 | `_seed_from_salt` no longer truncates: full salt bytes flow through HMAC-SHA256 keying. Caller's 32-byte salt now provides 32 bytes of entropy (was: first 8 bytes). |
 | `random.Random` (Mersenne Twister) drove realistic-faker derivation | v0.6.1 | Replaced with `_ShakeRng`, a SHAKE-256-keyed PRNG with rejection-sampled `randint`/`choice`. MT-19937 is reconstructible from output and broke realistic-strategy privacy under chosen-plaintext analysis. |
 | `hash(entity_type) % 10000` was process-randomized via PYTHONHASHSEED | v0.6.1 | Replaced with `_type_seed_offset` deriving from SHA-256. "Same salt → same fake" now holds across multi-worker deployments and `from_state` cross-process resume. |

@@ -116,14 +116,34 @@ originals.** Treat it as sensitive material:
 
 - Never commit `key.json` to source control.
 - Encrypt at rest if persisted.
-- The CLI writes key files mode 0644 in v0.6.1; v0.6.2 hardens this to 0600.
+- v0.6.2+ writes key files mode 0600 (POSIX) and refuses to follow symlinks
+  on either the temp file or the final target during atomic-replace.
 
 ## What is in `StreamingRedactor.export_state()`
 
-v0.6.1 export_state still includes the salt and `accumulated_key` (which
-contains plaintext originals). v0.6.2 changes the default to omit the salt
-and require `salt=` kwarg on `from_state`. Even after that change, the
-`accumulated_key` field still carries originals — encrypt at rest.
+v0.6.2+ omits the salt by default. Caller holds the salt out-of-band and
+passes it to `from_state(state, salt=...)` on resume. Pass `include_salt=True`
+to `export_state()` for v0.6.0/v0.6.1-shaped output (deprecated; will be
+removed in v0.7.0). Even with the salt out of the dict, `accumulated_key`
+still carries plaintext originals — encrypt the serialized state at rest.
+
+## Server deployment
+
+`argus_redact.server.create_app()` refuses to start when `ARGUS_API_KEY` is
+unset. Pass `allow_no_auth=True` (CLI: `argus-redact serve --insecure`) to
+opt out for local development; a `SecurityWarning` is emitted in that case.
+The `/restore` endpoint exposes PII recovery — running it open to the
+network is unsafe.
+
+## MCP token store
+
+`argus_redact.integrations.mcp_server` keeps key dicts in a process-scoped
+store keyed by 128-bit `secrets.token_urlsafe(16)` tokens. v0.6.2+ adds:
+- 5-minute idle TTL (sliding window — access bumps the timestamp).
+- 100-entry LRU bound (oldest evicted on overflow).
+
+Per-session binding (so two MCP consumers of the same server cannot replay
+each other's tokens) is a v0.7 candidate pending FastMCP session API survey.
 
 ## Reporting issues
 
