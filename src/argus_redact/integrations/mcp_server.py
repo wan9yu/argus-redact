@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 import secrets
+import time
+from collections import OrderedDict
 
 from mcp.server.fastmcp import FastMCP
 
@@ -26,23 +28,51 @@ from argus_redact import RedactReport, __version__, redact, restore
 mcp = FastMCP("argus-redact")
 
 
-# Process-scoped token store for secure key handling (v0.5.4+).
-# Tokens map to key dicts; lifetime = MCP server process. Claude Desktop
-# sessions are short-lived, so the dict naturally clears on disconnect.
-# Long-running deployments should restart the server periodically.
-_TOKEN_STORE: dict[str, dict] = {}
+# Process-scoped token store with idle TTL + LRU bound (v0.6.2+).
+# Pre-fix the store was unbounded and tokens never expired — combined with
+# no per-session binding, a leaked token could be replayed indefinitely.
+# Per-session binding is a v0.7+ candidate (requires FastMCP API survey).
+_TOKEN_TTL_SECONDS = 5 * 60
+_TOKEN_STORE_MAX = 100
+_TOKEN_STORE: "OrderedDict[str, tuple[dict, float]]" = OrderedDict()
+
+
+def _now() -> float:
+    """Wrapped for monkeypatch in tests; ``time.monotonic`` is robust to
+    system clock adjustments."""
+    return time.monotonic()
 
 
 def _create_key_token(key: dict) -> str:
-    """Mint a 128-bit URL-safe token referencing this key dict."""
+    """Mint a 128-bit URL-safe token referencing this key dict.
+
+    Evicts the oldest entry when the store exceeds ``_TOKEN_STORE_MAX``
+    (LRU). Tokens themselves expire ``_TOKEN_TTL_SECONDS`` after their
+    last access — see ``_resolve_key_token``.
+    """
     token = secrets.token_urlsafe(16)
-    _TOKEN_STORE[token] = key
+    _TOKEN_STORE[token] = (key, _now())
+    _TOKEN_STORE.move_to_end(token)
+    while len(_TOKEN_STORE) > _TOKEN_STORE_MAX:
+        _TOKEN_STORE.popitem(last=False)
     return token
 
 
 def _resolve_key_token(token: str) -> dict | None:
-    """Look up a key dict by token; None if not found (process restart, expired)."""
-    return _TOKEN_STORE.get(token)
+    """Look up a key dict by token, returning ``None`` if absent or expired.
+
+    Successful lookup bumps the entry's timestamp (sliding-window TTL).
+    """
+    entry = _TOKEN_STORE.get(token)
+    if entry is None:
+        return None
+    key, ts = entry
+    if _now() - ts > _TOKEN_TTL_SECONDS:
+        del _TOKEN_STORE[token]
+        return None
+    _TOKEN_STORE[token] = (key, _now())
+    _TOKEN_STORE.move_to_end(token)
+    return key
 
 
 @mcp.tool(name="redact")
