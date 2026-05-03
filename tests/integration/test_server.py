@@ -15,7 +15,15 @@ def client():
 
     from argus_redact.server import create_app
 
-    return TestClient(create_app())
+    # v0.6.2: server refuses to start without ARGUS_API_KEY; allow_no_auth=True
+    # opts out for local/in-process testing.
+    import warnings
+
+    from argus_redact import SecurityWarning
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SecurityWarning)
+        return TestClient(create_app(allow_no_auth=True))
 
 
 class TestServerRedact:
