@@ -6,7 +6,6 @@ import functools
 import hashlib
 import hmac
 import os
-import random
 from typing import Callable
 
 from argus_redact._types import PatternMatch
@@ -49,27 +48,118 @@ def is_strategy_reversible(strategy: str) -> bool:
 _MAX_REROLL_ATTEMPTS = 10  # well above expected HMAC collision rate for practical batch sizes
 
 
-def _seed_from_value(value: str, type_name: str, salt: bytes) -> int:
-    """Stable HMAC-derived seed for a (type, value) pair under a salt."""
+def _seed_from_value(value: str, type_name: str, salt: bytes) -> bytes:
+    """Stable HMAC-derived 32-byte master key for a (type, value) pair under a salt.
+
+    Output drives a SHAKE-256 stream consumed by ``_ShakeRng``. v0.6.0 returned
+    the first 8 bytes as an int seed for ``random.Random`` (Mersenne Twister) —
+    that path is gone: MT-19937 is reconstructible from output and breaks the
+    realistic strategy's privacy guarantees under chosen-plaintext analysis.
+    """
     msg = f"{type_name}:{value}".encode("utf-8")
-    digest = hmac.new(salt, msg, hashlib.sha256).digest()
-    return int.from_bytes(digest[:8], "big")
+    return hmac.new(salt, msg, hashlib.sha256).digest()
 
 
-def _resolve_salt(seed: int | None) -> bytes:
+def _resolve_salt(seed: int | bytes | None) -> bytes:
     """Determine effective salt for HMAC seeding.
 
     Priority (caller-explicit wins, per design doc):
-    1. Caller-provided seed (int) → derived bytes
-    2. Env var ARGUS_REDACT_PSEUDONYM_SALT → encoded bytes
-    3. Empty bytes (no stable mapping)
+    1. Caller-provided salt (bytes) → used verbatim (full entropy preserved)
+    2. Caller-provided seed (int) → 8-byte big-endian (back-compat; 64-bit entropy)
+    3. Env var ARGUS_REDACT_PSEUDONYM_SALT → encoded bytes
+    4. Empty bytes (no stable mapping; v0.6.1+ commit 3 will raise instead)
+
+    bytes is the recommended form; int is preserved for back-compat with
+    callers that pass ``seed=42`` for testing or stable cross-session mapping.
     """
-    if seed is not None:
+    if isinstance(seed, (bytes, bytearray)):
+        return bytes(seed)
+    if isinstance(seed, int):
         return seed.to_bytes(8, "big", signed=False) if seed >= 0 else seed.to_bytes(8, "big", signed=True)
     env = os.environ.get("ARGUS_REDACT_PSEUDONYM_SALT")
     if env:
         return env.encode("utf-8")
     return b""
+
+
+def _pseudonym_seed_int(seed: int | bytes | None) -> int | None:
+    """Coerce ``seed`` into an int for ``PseudonymGenerator`` (which uses
+    ``random.Random`` to derive non-cryptographic ``P-NNNNN`` codes — int seed
+    is sufficient there; bytes get truncated to first 8 bytes BE).
+    """
+    if seed is None:
+        return None
+    if isinstance(seed, int):
+        return seed
+    if isinstance(seed, (bytes, bytearray)):
+        return int.from_bytes(bytes(seed)[:8].ljust(8, b"\x00"), "big")
+    raise TypeError(f"seed must be int, bytes, or None, got {type(seed).__name__}")
+
+
+@functools.lru_cache(maxsize=128)
+def _type_seed_offset(entity_type: str) -> int:
+    """Stable per-type integer offset for PseudonymGenerator seed derivation.
+
+    Replaces ``hash(entity_type) % 10000`` whose output varies across processes
+    via PYTHONHASHSEED — that broke "same salt → same fake" across multi-worker
+    deployments. SHA-256 of the UTF-8 type name is stable everywhere.
+    """
+    digest = hashlib.sha256(entity_type.encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big") % 10000
+
+
+class _ShakeRng:
+    """Cryptographically-keyed PRNG replacing ``random.Random`` on the realistic path.
+
+    Drives reserved-range fakers from a SHAKE-256 stream keyed by an HMAC-SHA256
+    master derived from (salt, type, value). Exposes only the subset of
+    ``random.Random`` used by ``specs/fakers_*.py``: ``randint`` and ``choice``.
+    Output is uniform via rejection sampling (no modulo bias).
+    """
+
+    # Pre-compute bytes lazily; 256 is a safe ceiling for any current faker
+    # (worst case: ~30 randint calls each consuming ≤ 4 bytes).
+    _PRECOMPUTE_BYTES = 256
+
+    __slots__ = ("_seed", "_buf", "_pos")
+
+    def __init__(self, seed: bytes) -> None:
+        if not isinstance(seed, (bytes, bytearray)):
+            raise TypeError(f"_ShakeRng seed must be bytes, got {type(seed).__name__}")
+        self._seed = bytes(seed)
+        self._buf = hashlib.shake_256(self._seed).digest(self._PRECOMPUTE_BYTES)
+        self._pos = 0
+
+    def _take(self, n: int) -> bytes:
+        end = self._pos + n
+        if end > len(self._buf):
+            # Extend: re-derive the digest at the new (larger) length.
+            # SHAKE-256.digest(N) is deterministic in N — bytes [0:M] of
+            # digest(N) for N>M equal digest(M).
+            new_len = max(end + self._PRECOMPUTE_BYTES, len(self._buf) * 2)
+            self._buf = hashlib.shake_256(self._seed).digest(new_len)
+        chunk = self._buf[self._pos : end]
+        self._pos = end
+        return chunk
+
+    def randint(self, a: int, b: int) -> int:
+        """Uniform integer in ``[a, b]``. Uses rejection sampling to avoid
+        modulo bias when ``b - a + 1`` is not a power of 256."""
+        if b < a:
+            raise ValueError(f"randint: empty range [{a}, {b}]")
+        rng = b - a + 1
+        bytes_needed = max(1, ((rng - 1).bit_length() + 7) // 8)
+        max_unbiased = (1 << (bytes_needed * 8)) - ((1 << (bytes_needed * 8)) % rng)
+        while True:
+            n = int.from_bytes(self._take(bytes_needed), "big")
+            if n < max_unbiased:
+                return a + (n % rng)
+
+    def choice(self, seq):
+        """Uniformly pick one element of ``seq``. Empty seq raises IndexError."""
+        if len(seq) == 0:
+            raise IndexError("Cannot choose from an empty sequence")
+        return seq[self.randint(0, len(seq) - 1)]
 
 
 def _find_faker_reserved(name: str, langs: list[str] | None) -> Callable | None:
@@ -115,8 +205,8 @@ def _generate_unique_fake(
     seed_input = value
     last = None
     for attempt in range(_MAX_REROLL_ATTEMPTS):
-        seed = _seed_from_value(seed_input, type_name, salt)
-        rng = random.Random(seed)
+        master_key = _seed_from_value(seed_input, type_name, salt)
+        rng = _ShakeRng(seed=master_key)
         fake, aliases_raw = faker_reserved(value, rng)
         aliases = list(aliases_raw)
         if fake not in used:
@@ -377,7 +467,7 @@ def replace(
     text: str,
     entities: list[PatternMatch],
     *,
-    seed: int | None = None,
+    seed: int | bytes | None = None,
     key: dict[str, str] | None = None,
     config: dict | None = None,
     langs: list[str] | None = None,
@@ -427,14 +517,15 @@ def replace(
         org_prefix = config.get("organization", {}).get("prefix", org_prefix)
 
     # Unified prefix mode: all types use same prefix (hides PII type from output)
+    pseudo_seed_int = _pseudonym_seed_int(seed)
     pseudo_gen = PseudonymGenerator(
         prefix=unified_prefix or person_prefix,
-        seed=seed,
+        seed=pseudo_seed_int,
         existing_key=result_key if result_key else None,
     )
     org_gen = PseudonymGenerator(
         prefix=unified_prefix or org_prefix,
-        seed=(seed + 1) if seed is not None else None,
+        seed=(pseudo_seed_int + 1) if pseudo_seed_int is not None else None,
         existing_key=result_key if result_key else None,
     )
     # Per-type pseudonym generators for remove strategy (improves LLM survival)
@@ -445,7 +536,7 @@ def replace(
             prefix = unified_prefix or DEFAULT_PREFIXES.get(entity_type, entity_type.upper()[:4])
             _type_gens[entity_type] = PseudonymGenerator(
                 prefix=prefix,
-                seed=(seed + hash(entity_type) % 10000) if seed is not None else None,
+                seed=(_pseudonym_seed_int(seed) + _type_seed_offset(entity_type)) if seed is not None else None,
                 existing_key=result_key if result_key else None,
             )
         return _type_gens[entity_type]
@@ -475,7 +566,7 @@ def replace(
                 if "prefix" in ec:
                     org_gen = PseudonymGenerator(
                         prefix=prefix,
-                        seed=(seed + 1) if seed is not None else None,
+                        seed=(pseudo_seed_int + 1) if pseudo_seed_int is not None else None,
                         existing_key=result_key if result_key else None,
                     )
                 replacement = org_gen.get(entity.text)
@@ -483,7 +574,7 @@ def replace(
                 if "prefix" in ec:
                     pseudo_gen = PseudonymGenerator(
                         prefix=prefix,
-                        seed=seed,
+                        seed=pseudo_seed_int,
                         existing_key=result_key if result_key else None,
                     )
                 replacement = pseudo_gen.get(entity.text)

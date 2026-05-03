@@ -13,9 +13,6 @@ from argus_redact.pure.replacer import VALID_STRATEGIES
 from argus_redact.pure.reserved_range_scanner import scan_for_pollution
 from argus_redact.specs.profiles import get_profile
 
-# Bytes prefix used to derive an int seed from a salt (replace() takes int seeds).
-_SALT_SEED_BYTES = 8
-_SALT_SEED_MASK = 0x7FFFFFFFFFFFFFFF
 
 
 class PseudonymPollutionError(ValueError):
@@ -138,7 +135,7 @@ def redact_pseudonym_llm(
     # so audit_text always contains [TYPE-NNNNN] placeholders.
     audit_config = {ent_type: {"strategy": "remove"} for ent_type in realistic_config}
 
-    seed = _seed_from_salt(salt)
+    seed = _salt_to_bytes(salt)
 
     resolved_lang = lang
     if resolved_lang == "auto":
@@ -206,14 +203,17 @@ def redact_pseudonym_llm(
     )
 
 
-def _seed_from_salt(salt: bytes | None) -> int | None:
-    """Derive a 63-bit non-negative int seed from a salt.
+def _salt_to_bytes(salt: bytes | None) -> bytes | None:
+    """Pass user-supplied salt through to ``replace()`` as bytes.
 
-    `random.Random(seed)` accepts arbitrary ints, but masking to 63 bits keeps
-    the seed within a machine-word range for reproducibility across platforms.
+    v0.6.0 truncated to 8 bytes + 63 bits; v0.6.1+ preserves the full salt so
+    HMAC-SHA256 inside the realistic faker path receives the entropy the caller
+    asked for. Returns ``None`` only when caller explicitly omitted salt — in
+    which case ``_resolve_salt`` (commit 3) will raise rather than silently
+    falling back to ``b""``.
     """
     if salt is None:
         return None
     if not isinstance(salt, (bytes, bytearray)):
         raise TypeError(f"salt must be bytes, got {type(salt).__name__}")
-    return int.from_bytes(salt[:_SALT_SEED_BYTES].ljust(_SALT_SEED_BYTES, b"\x00"), "big") & _SALT_SEED_MASK
+    return bytes(salt)

@@ -345,7 +345,7 @@ def _replace_and_emit(
     text: str,
     entities: list[PatternMatch],
     *,
-    seed: int | None,
+    seed: int | bytes | None,
     existing_key: dict | None,
     key_file: str | None,
     config: dict | None,
