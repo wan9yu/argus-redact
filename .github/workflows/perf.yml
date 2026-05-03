@@ -1,0 +1,56 @@
+name: Performance Budget
+
+on:
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+
+permissions:
+  contents: read
+  pull-requests: write   # for the improvement comment
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 2   # need origin/main for diff
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable @ 2026-05-03
+
+      - name: Install
+        run: |
+          pip install maturin
+          pip install -e ".[dev]"
+
+      - name: Detect baseline-touch (gate exemption)
+        id: gate
+        run: |
+          git fetch origin main
+          if git diff --name-only origin/main...HEAD | grep -q "^tests/benchmark/baseline\.json$"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Baseline file modified in PR — skipping perf gate."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Measure
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          PYTHONPATH=src python tests/benchmark/run_perf_budget.py \
+            --output current.json \
+            --platform "ubuntu-latest" \
+            --commit "${{ github.event.pull_request.head.sha }}"
+          cat current.json
+
+      - name: Compare against baseline
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          python tests/benchmark/compare_baseline.py current.json tests/benchmark/baseline.json
