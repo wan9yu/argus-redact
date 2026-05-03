@@ -4,6 +4,8 @@ Person name detection is handled separately by person.py (candidate + scoring).
 This module only contains structural PII patterns (phone, ID, bank card, etc.).
 """
 
+import re
+
 # Leading verbs/particles/questions stripped from org/school candidates before validation.
 # Matched via one-pass longest-prefix scan, so order within the tuple is irrelevant.
 _LEADING_NOISE = (
@@ -168,11 +170,12 @@ def hkid_check_digit(letters: str, digits: str) -> str:
     return "X" if check == 10 else str(check)
 
 
+_HKID_BODY_RE = re.compile(r"([A-Z]{1,2})(\d{6})\((\d|X)\)")
+
+
 def _validate_hkid(value: str) -> bool:
     """Validate HKID format L(L)NNNNNN(C). Strips parens to extract check."""
-    import re
-
-    m = re.fullmatch(r"([A-Z]{1,2})(\d{6})\((\d|X)\)", value)
+    m = _HKID_BODY_RE.fullmatch(value)
     if not m:
         return False
     letters, digits, check = m.group(1), m.group(2), m.group(3)
