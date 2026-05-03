@@ -185,3 +185,31 @@ class TestReplaceCollisionNumbering:
 
         assert len(key) == 2
         assert len(set(key.keys())) == 2
+
+
+class TestReplaceReturns3Tuple:
+    """Lockdown for v0.6.0 replace() signature: (text, key, aliases) and no aliases_out kwarg."""
+
+    def test_replace_returns_three_values(self):
+        from argus_redact._types import PatternMatch
+        from argus_redact.pure.replacer import replace
+
+        entities = [PatternMatch(text="13812345678", type="phone", start=0, end=11, layer=1)]
+        result = replace("13812345678", entities, seed=42)
+        assert len(result) == 3
+        text, key, aliases = result
+        assert isinstance(text, str)
+        assert isinstance(key, dict)
+        assert isinstance(aliases, dict)
+
+    def test_replace_no_aliases_out_kwarg(self):
+        import pytest
+        from argus_redact._types import PatternMatch
+        from argus_redact.pure.replacer import replace
+
+        with pytest.raises(TypeError, match="aliases_out"):
+            replace(
+                "x",
+                [PatternMatch(text="x", type="phone", start=0, end=1, layer=1)],
+                aliases_out={},
+            )
