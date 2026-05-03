@@ -59,7 +59,7 @@ RESERVED_ADDRESSES_EN_ALIASES: dict[str, list[str]] = {
     "1313 Mockingbird Lane, Springfield, USA": ["美国斯普林菲尔德嘲鸫巷1313号"],
     "742 Evergreen Terrace, Springfield, USA": ["美国斯普林菲尔德常青露台742号"],
     "221B Baker Street, London, UK": ["英国伦敦贝克街221B号"],
-    "12 Grimmauld Place, London, UK": ["英国伦敦古里某街12号"],
+    "12 Grimmauld Place, London, UK": ["英国伦敦格里莫广场12号"],
     "1630 Revello Drive, Sunnydale, USA": ["美国阳光镇雷维洛大道1630号"],
     "31 Spooner Street, Quahog, USA": ["美国奎霍格斯普纳街31号"],
 }

@@ -3,9 +3,10 @@
 Reserved-range fakers all share the new signature:
     (value: str, rng: random.Random) -> tuple[str, list[str]]
 
-Person fakers (zh + en) fill aliases with cross-language transliterations.
-All other fakers return (fake, []) — uniform shape, empty alias for the
-non-name types where transliteration has no semantic meaning.
+Person and address fakers (zh + en) fill aliases with cross-language
+transliterations. All other fakers return (fake, []) — uniform shape,
+empty alias for the structural-PII types where transliteration has no
+semantic meaning.
 """
 
 import random
