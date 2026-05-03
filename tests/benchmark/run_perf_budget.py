@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import subprocess
 import sys
@@ -49,14 +50,23 @@ def _measure_p50(fn, runs: int = 5) -> float:
 
 
 def _measure_import_time() -> float:
-    """Cold-start import time via subprocess (median of 5 runs)."""
+    """Cold-start import time via subprocess (median of 5 runs).
+
+    Includes process-spawn overhead (~20-50ms); useful for relative
+    regression detection, less useful as an absolute "import argus_redact"
+    cost. Inherits parent env to keep platform PATH semantics — hardcoding
+    PATH would break Windows CI (no /usr/bin) and surface env-resolution
+    differences across runners.
+    """
+    env = os.environ.copy()
+    env["PYTHONPATH"] = _REPO_SRC
     times = []
     for _ in range(5):
         start = time.perf_counter()
         subprocess.run(
             [sys.executable, "-c", "import argus_redact"],
             check=True,
-            env={"PYTHONPATH": _REPO_SRC, "PATH": "/usr/bin:/bin"},
+            env=env,
         )
         times.append((time.perf_counter() - start) * 1000)
     return statistics.median(times)
@@ -70,7 +80,7 @@ def main() -> None:
     args = parser.parse_args()
 
     sys.path.insert(0, _REPO_SRC)
-    from argus_redact import StreamingRedactor, redact, redact_pseudonym_llm, restore
+    from argus_redact import redact, redact_pseudonym_llm
 
     # Warm caches
     redact("warm-up", seed=1)
@@ -83,6 +93,9 @@ def main() -> None:
         "redact_en_fast_1kb_p50_ms": _measure_p50(
             lambda: redact(_EN_1KB, seed=42, mode="fast", lang="en")
         ),
+        # strict_input=False: _ZH_1KB contains "王五" which is in the reserved
+        # canonical-name pool. Without the bypass, redact_pseudonym_llm raises
+        # PseudonymPollutionError on first call.
         "redact_pseudonym_llm_zh_1kb_p50_ms": _measure_p50(
             lambda: redact_pseudonym_llm(
                 _ZH_1KB,
