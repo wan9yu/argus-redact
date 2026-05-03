@@ -1,7 +1,11 @@
-# Streaming incremental detection — design notes (v0.5.7+)
+# Streaming incremental detection — design notes
 
-This document explains the design behind `StreamingRedactor(incremental=True)`,
-introduced in v0.5.7 to handle entities that span chunk boundaries.
+This document explains the sentence-bounded buffering algorithm
+`StreamingRedactor` uses to handle entities that span chunk boundaries.
+
+**History**: introduced as opt-in `incremental=True` in v0.5.7, made default in
+v0.5.8 (with `incremental=False` deprecated), and made the only mode in v0.6.0
+(the kwarg was removed).
 
 ## Problem
 
@@ -73,21 +77,19 @@ The forced flush at `max_buffer=4096` is the safety valve for the 2% case.
 
 ## Public API
 
-`StreamingRedactor.__init__(..., incremental=False)`. Default off — preserves
-v0.5.6 behavior exactly.
-
-When `True`:
+`StreamingRedactor.__init__(salt=..., lang=..., mode=..., ...)`. Sentence-bounded
+buffering is the only mode in v0.6.0+.
 
 - `feed(chunk)` may return an empty `PseudonymLLMResult` (caller must check
   before using).
 - `flush()` should be called once at end-of-stream to drain a no-boundary
   tail.
 
-`existing_key` and `aggregate_key()` work identically in both modes — the
-unified key dict is built up as entities are emitted. `export_state()` /
-`from_state()` continue to round-trip correctly; the incremental buffer is
-included in `_inc_buffer` for completeness, though current schema does not
-serialize it (mid-stream resume is out of scope for v0.5.7).
+`existing_key` and `aggregate_key()` build up the unified key dict as
+entities are emitted. `export_state()` / `from_state()` continue to round-trip
+correctly; the incremental buffer is included in `_inc_buffer` for
+completeness, though the current schema does not serialize it (mid-stream
+resume remains out of scope).
 
 ## Private internals
 
