@@ -6,7 +6,7 @@ import functools
 import re as _re
 from typing import Mapping
 
-from argus_redact.pure.display_marker import strip_display_markers
+from argus_redact.pure.display_marker import PRESET_MARKER_CHARS, strip_display_markers
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS, restore_grammar_en
 from argus_redact.pure.reserved_range_scanner import scan_for_pollution
 
@@ -22,6 +22,29 @@ def _compile_alternation(keys_frozen: frozenset[str]) -> _re.Pattern:
     """
     sorted_keys = sorted(keys_frozen, key=len, reverse=True)
     return _re.compile("|".join(_re.escape(k) for k in sorted_keys))
+
+
+# Marker class compiled once at module load — same chars regardless of key dict.
+_PRESET_MARKER_CLASS = (
+    "[" + "".join(_re.escape(c) for c in PRESET_MARKER_CHARS) + "]"
+    if PRESET_MARKER_CHARS
+    else ""
+)
+
+
+@functools.lru_cache(maxsize=128)
+def _compile_decoration_pattern(keys_frozen: frozenset[str]) -> _re.Pattern | None:
+    """Cache the auto-detect decoration regex per key set.
+
+    Matches ``(key)(preset_marker_chars+)`` so ``restore()`` can substitute
+    the key→original inline while preserving the trailing marker. ``None``
+    when there are no keys or no preset markers.
+    """
+    if not keys_frozen or not _PRESET_MARKER_CLASS:
+        return None
+    sorted_keys = sorted(keys_frozen, key=len, reverse=True)
+    keys_alt = "|".join(_re.escape(k) for k in sorted_keys)
+    return _re.compile(f"({keys_alt})({_PRESET_MARKER_CLASS}+)")
 
 # Danger patterns: pseudonyms appearing near these suggest exfiltration attempts
 _DANGER_PATTERNS = _re.compile(
@@ -158,17 +181,12 @@ def restore(
     # This is conservative: stand-alone preset chars (e.g. `*` in regular
     # prose) are NOT stripped because they are not adjacent to a key.
     if display_marker is None:
-        from argus_redact.pure.display_marker import PRESET_MARKER_CHARS
-
-        if PRESET_MARKER_CHARS:
-            keys_alt = "|".join(_re.escape(k) for k in sorted(key, key=len, reverse=True))
-            if keys_alt:
-                marker_class = "[" + "".join(_re.escape(c) for c in PRESET_MARKER_CHARS) + "]"
-                decoration_pattern = _re.compile(f"({keys_alt})({marker_class}+)")
-                text = decoration_pattern.sub(
-                    lambda m: key.get(m.group(1), m.group(1)) + m.group(2),
-                    text,
-                )
+        decoration_pattern = _compile_decoration_pattern(frozenset(key))
+        if decoration_pattern is not None:
+            text = decoration_pattern.sub(
+                lambda m: key.get(m.group(1), m.group(1)) + m.group(2),
+                text,
+            )
 
     has_self_ref = any(v in SELF_REF_PRONOUNS for v in key.values())
 

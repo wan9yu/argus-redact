@@ -153,7 +153,11 @@ class StreamingRedactor:
         a boundary yet. Call ``flush()`` at end-of-stream to drain the tail.
         Cross-chunk consistency is preserved via the shared accumulated key.
         """
-        return self._feed_incremental(chunk)
+        emit_text, residual = _consume_to_boundary(self._inc_buffer, chunk)
+        self._inc_buffer = residual
+        if not emit_text:
+            return _empty_result()
+        return self._redact_and_merge(emit_text)
 
     def flush(self) -> PseudonymLLMResult:
         """End-of-stream flush — drain pending buffer.
@@ -167,13 +171,6 @@ class StreamingRedactor:
         emit = self._inc_buffer
         self._inc_buffer = ""
         return self._redact_and_merge(emit)
-
-    def _feed_incremental(self, chunk: str) -> PseudonymLLMResult:
-        emit_text, residual = _consume_to_boundary(self._inc_buffer, chunk)
-        self._inc_buffer = residual
-        if not emit_text:
-            return _empty_result()
-        return self._redact_and_merge(emit_text)
 
     def _redact_and_merge(self, text: str) -> PseudonymLLMResult:
         result = redact_pseudonym_llm(
