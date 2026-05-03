@@ -17,21 +17,21 @@ _AGE_FLOOR = 0
 _AGE_CEILING = 149
 
 
-def fake_age_noise(value: str, rng: random.Random) -> str:
+def fake_age_noise(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Shift the embedded age number by up to ±5 years, clamped to [0, 149].
 
     Returns the input unchanged if no digit is found.
     """
     m = re.search(r"\d+", value)
     if m is None:
-        return value
+        return value, []
     original = int(m.group())
     delta = rng.randint(-_AGE_BAND, _AGE_BAND)
     if delta == 0:
         # Avoid identity mapping (no-op fake exposes the original)
         delta = rng.choice((-1, 1))
     shifted = max(_AGE_FLOOR, min(_AGE_CEILING, original + delta))
-    return value[: m.start()] + str(shifted) + value[m.end() :]
+    return value[: m.start()] + str(shifted) + value[m.end() :], []
 
 
 # ±30 days: large enough to be visibly different, small enough that
@@ -51,7 +51,7 @@ _DOB_PATTERNS = (
 )
 
 
-def fake_date_of_birth_noise(value: str, rng: random.Random) -> str:
+def fake_date_of_birth_noise(value: str, rng: random.Random) -> tuple[str, list[str]]:
     """Shift the embedded date by up to ±30 days. Preserves the original format.
 
     Recognizes:
@@ -68,7 +68,7 @@ def fake_date_of_birth_noise(value: str, rng: random.Random) -> str:
         try:
             original = date(int(m.group("y")), int(m.group("m")), int(m.group("d")))
         except ValueError:
-            return value
+            return value, []
         delta = rng.randint(-_DOB_BAND_DAYS, _DOB_BAND_DAYS)
         if delta == 0:
             # Avoid identity mapping (1 week guarantees same-month bias is rare)
@@ -81,5 +81,5 @@ def fake_date_of_birth_noise(value: str, rng: random.Random) -> str:
             new_text = f"{shifted.year:04d}{sep}{shifted.month:02d}{sep}{shifted.day:02d}"
         else:  # MM/DD/YYYY
             new_text = f"{shifted.month:02d}/{shifted.day:02d}/{shifted.year:04d}"
-        return value[: m.start()] + new_text + value[m.end() :]
-    return value
+        return value[: m.start()] + new_text + value[m.end() :], []
+    return value, []

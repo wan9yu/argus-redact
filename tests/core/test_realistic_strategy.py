@@ -136,6 +136,20 @@ class TestLangAwareLookup:
         assert "(555)" in fake, f"Expected en phone shape, got {fake}"
 
 
+class TestFakerTupleEnforced:
+    """v0.6.0: faker_reserved must return tuple[str, list[str]]; bare string raises."""
+
+    def test_bare_string_faker_raises_type_error(self):
+        import pytest
+        from argus_redact.pure.replacer import _generate_unique_fake
+
+        def bad_faker(value, rng):
+            return "FAKE"  # legacy bare-string return
+
+        with pytest.raises((TypeError, ValueError)):
+            _generate_unique_fake(bad_faker, "orig", "phone", b"salt", set())
+
+
 class TestRealisticNumeric:
     def test_realistic_age_should_shift_within_band(self):
         text = "年龄32岁"

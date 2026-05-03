@@ -109,19 +109,16 @@ def _generate_unique_fake(
 ) -> tuple[str, list[str]]:
     """Call faker_reserved with HMAC-seeded RNG, re-rolling until unique within `used`.
 
-    Returns ``(fake, aliases)``. v0.5.8 fakers return a tuple; older fakers
-    that returned a bare string are still accepted (aliases default to ``[]``).
+    Returns ``(fake, aliases)``. faker_reserved must return
+    ``tuple[str, list[str]]``; bare-string returns raise TypeError on unpack.
     """
     seed_input = value
     last = None
     for attempt in range(_MAX_REROLL_ATTEMPTS):
         seed = _seed_from_value(seed_input, type_name, salt)
         rng = random.Random(seed)
-        result = faker_reserved(value, rng)
-        if isinstance(result, tuple):
-            fake, aliases = result[0], list(result[1])
-        else:
-            fake, aliases = result, []
+        fake, aliases_raw = faker_reserved(value, rng)
+        aliases = list(aliases_raw)
         if fake not in used:
             return fake, aliases
         last = fake
