@@ -36,6 +36,7 @@ from .fakers_zh_reserved import (
     fake_hkid_reserved,
     fake_id_number_reserved,
     fake_license_plate_reserved,
+    fake_macau_id_reserved,
     fake_passport_reserved,
     fake_person_reserved,
     fake_phone_landline_reserved,
@@ -241,6 +242,34 @@ register(
         faker_reserved=fake_twid_reserved,
         source="ROC household registration; Wikipedia ROC ID",
         description="Republic of China (Taiwan) national ID",
+    )
+)
+
+# ── Macau Resident Identity Card ──
+
+register(
+    PIITypeDef(
+        name="macau_id",
+        lang="zh",
+        format="N/NNNNNN/N",
+        length=10,
+        charset="digits + slashes",
+        strategy="remove",
+        label="[MACAU-ID-REDACTED]",
+        examples=("1/234567/8", "5/123456/0", "7/000001/2"),
+        counterexamples=("0/234567/8", "1/234567"),
+        _patterns=(
+            {
+                "type": "macau_id",
+                "label": "[MACAU-ID-REDACTED]",
+                "pattern": r"(?<!\d)[1-9]/\d{6}/\d(?!\d)",
+                "description": "Macau Resident ID Card — format-only (no public check-digit algorithm)",
+            },
+        ),
+        sensitivity=4,
+        faker_reserved=fake_macau_id_reserved,
+        source="Macau Identification Services Bureau",
+        description="Macau Resident ID Card — format-only validation",
     )
 )
 

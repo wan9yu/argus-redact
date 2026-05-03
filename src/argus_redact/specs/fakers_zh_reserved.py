@@ -161,3 +161,10 @@ def fake_twid_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
     letter = "W"
     digits = "".join(str(rng.randint(0, 9)) for _ in range(8))
     return f"{letter}{digits}{twid_check_digit(letter, digits)}", []
+
+
+def fake_macau_id_reserved(value: str, rng: random.Random) -> tuple[str, list[str]]:
+    """Use leading `9` (unassigned in real Macau allocations)."""
+    body = "".join(str(rng.randint(0, 9)) for _ in range(6))
+    check = str(rng.randint(0, 9))
+    return f"9/{body}/{check}", []

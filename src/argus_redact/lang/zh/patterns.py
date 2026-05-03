@@ -374,6 +374,12 @@ PATTERNS = [
         "description": "Taiwan (ROC) national ID (1 letter + 9 digits, weighted mod-10)",
     },
     {
+        "type": "macau_id",
+        "label": "[MACAU-ID-REDACTED]",
+        "pattern": r"(?<!\d)[1-9]/\d{6}/\d(?!\d)",
+        "description": "Macau Resident ID Card — format-only (no public check-digit algorithm)",
+    },
+    {
         "type": "bank_card",
         "label": "[银行卡号已脱敏]",
         "pattern": r"(?<!\d)[3-6]\d{3}(?:[\s-]?\d{4}){2,3}[\s-]?\d{1,4}(?!\d)",
