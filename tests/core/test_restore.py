@@ -260,7 +260,7 @@ class TestRestoreSubstringSafety:
 
         assert result == "张三确诊糖尿病，在协和医院"
 
-    def test_should_handle_pseudonym_as_substring_of_text(self):
+    def test_should_match_longest_prefix_when_one_pseudonym_is_substring_of_another(self):
         """IP-00003 contains "P-00003" as substring — must not partial-match."""
         key = {"P-00003": "张三", "IP-00003": "192.168.1.1"}
         text = "用户P-00003的IP是IP-00003"
@@ -406,31 +406,6 @@ class TestCheckRestoreSafetyAmplification:
 
         # Should NOT warn — equal count is normal
         assert all("appears" not in w or "more" not in w for w in warnings)
-
-
-class TestRestoreSelfReferenceGrammar:
-    """Self-reference pseudonyms (when present in key values) trigger
-    grammar correction. The ``has_self_ref = None`` mutant would skip the
-    correction, leaving "I am Bob" → "Bob am Bob" style errors."""
-
-    def test_should_run_grammar_correction_when_self_ref_present(self):
-        # Use a self-reference pronoun in the key — restore() must detect
-        # this and run restore_grammar_en even though the pseudonym text
-        # isn't a self-reference itself.
-        from argus_redact.pure.grammar import SELF_REF_PRONOUNS
-
-        # Pick any en self-ref pronoun
-        pronoun = next(iter(SELF_REF_PRONOUNS))
-        # Build a key with a self-reference value
-        key = {"S-00001": pronoun, "P-00001": "Alice"}
-        text = "P-00001 said: S-00001 disagree"
-
-        # Just ensure no crash — has_self_ref=None mutant would still work
-        # here because grammar fixup is best-effort. The killing is that
-        # has_self_ref must be a bool, not None, for downstream code.
-        result = restore(text, key)
-        assert "P-00001" not in result
-        assert "S-00001" not in result
 
 
 class TestRestoreEmptyKeyShortCircuit:

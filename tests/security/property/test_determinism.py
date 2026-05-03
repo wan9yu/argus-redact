@@ -7,20 +7,13 @@ collapsed via earlier truncation bugs (audit H1).
 
 from __future__ import annotations
 
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
+from hypothesis import assume, given, settings, strategies as st
 
 from argus_redact.pure.replacer import _ShakeRng, _seed_from_value
+from tests.security.property.conftest import PROPERTY_SETTINGS
 
 
-_HSettings = settings(
-    database=None,
-    deadline=None,
-    max_examples=200,
-    suppress_health_check=[HealthCheck.too_slow],
-)
-
-
-@_HSettings
+@settings(parent=PROPERTY_SETTINGS, max_examples=200)
 @given(
     salt=st.binary(min_size=32, max_size=32),
     type_name=st.sampled_from(["phone", "person", "id_number", "ssn", "email"]),
@@ -35,7 +28,7 @@ def test_seed_from_value_deterministic(salt, type_name, value):
     assert len(out1) == 32
 
 
-@_HSettings
+@settings(parent=PROPERTY_SETTINGS, max_examples=200)
 @given(
     salt_a=st.binary(min_size=32, max_size=32),
     salt_b=st.binary(min_size=32, max_size=32),
@@ -50,7 +43,7 @@ def test_different_salts_diverge(salt_a, salt_b, type_name, value):
     assert out_a != out_b
 
 
-@_HSettings
+@settings(parent=PROPERTY_SETTINGS, max_examples=200)
 @given(
     seed=st.binary(min_size=32, max_size=32),
     n=st.integers(min_value=2, max_value=20),

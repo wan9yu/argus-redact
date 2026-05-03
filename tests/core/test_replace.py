@@ -254,8 +254,6 @@ class TestReplaceCollisionResolution:
 
         _, key, _ = replace("13812345678 13955554444", entities, seed=42)
 
-        # First mask 138****5678 must appear unmodified (no circled-1 prefix
-        # — the dedupe path only kicks in on actual collision)
         assert "138****5678" in key
         assert "139****4444" in key
 
@@ -268,7 +266,6 @@ class TestReplaceMaskValueDefaults:
 
         _, key, _ = replace("13812345678", entities, seed=42)
 
-        # Default for phone is (3, 4) — first 3 chars + last 4 visible
         replacement = next(iter(key))
         assert replacement.startswith("138")
         assert replacement.endswith("5678")

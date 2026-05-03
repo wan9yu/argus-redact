@@ -135,7 +135,7 @@ class TestMaxPseudonymLengthInvariants:
         result = max_pseudonym_length(config)
         assert result == 11 + 1 + 5
 
-    def test_should_use_dict_value_not_dict_keys(self):
+    def test_should_skip_non_dict_config_entries_silently(self):
         from argus_redact.pure.pseudonym import max_pseudonym_length
 
         # `and` → `or` mutant on the inner check would treat any truthy

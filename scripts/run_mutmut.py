@@ -14,7 +14,6 @@ process titles aren't updated but the workers run to completion.
 from __future__ import annotations
 
 import importlib
-import sys
 
 
 def _install_noop_setproctitle() -> None:
@@ -36,13 +35,12 @@ def _install_noop_setproctitle() -> None:
     mod.setproctitle = _noop  # type: ignore[attr-defined]
 
 
-def main() -> int:
+def main() -> None:
     _install_noop_setproctitle()
     from mutmut.__main__ import cli
 
     cli()  # click dispatches based on sys.argv
-    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

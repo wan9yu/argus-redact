@@ -1,27 +1,19 @@
 """``from_state(export_state(r), salt)`` after feeding chunks preserves aggregate_key.
 
-Validates the v0.6.2 contract: salt is held out-of-band, accumulated_key
-serializes correctly, redactor identity reconstructible mid-session.
+Salt held out-of-band; accumulated_key serializes; redactor reconstructible.
 """
 
 from __future__ import annotations
 
 import json
 
-from hypothesis import HealthCheck, given, settings, strategies as st
+from hypothesis import given, settings, strategies as st
 
 from argus_redact import StreamingRedactor
+from tests.security.property.conftest import PROPERTY_SETTINGS
 
 
-_HSettings = settings(
-    database=None,
-    deadline=None,
-    max_examples=50,
-    suppress_health_check=[HealthCheck.too_slow],
-)
-
-
-@_HSettings
+@settings(parent=PROPERTY_SETTINGS, max_examples=50)
 @given(
     chunks=st.lists(
         st.text(min_size=1, max_size=80), min_size=1, max_size=5

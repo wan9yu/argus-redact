@@ -8,52 +8,42 @@ from __future__ import annotations
 
 import re
 
-from hypothesis import HealthCheck, given, settings
+from hypothesis import given
 from hypothesis import strategies as st
 
 from argus_redact.pure.replacer import _generate_unique_fake
 from argus_redact.pure.reserved_range_scanner import _RESERVED_RANGE_PATTERNS
-from argus_redact.specs.fakers_en_reserved import (
-    fake_phone_en_reserved,
-    fake_ssn_en_reserved,
-)
-from argus_redact.specs.fakers_shared_reserved import (
-    fake_email_reserved,
-    fake_ip_reserved,
-    fake_mac_reserved,
-)
-from argus_redact.specs.fakers_zh_reserved import (
-    fake_address_reserved,
-    fake_id_number_reserved,
-    fake_phone_landline_reserved,
-    fake_phone_reserved,
-)
-
-_HSettings = settings(
-    database=None,
-    deadline=None,
-    max_examples=100,
-    suppress_health_check=[HealthCheck.too_slow],
-)
+from argus_redact.specs.registry import list_types
+from tests.security.property.conftest import PROPERTY_SETTINGS
 
 
-# (faker, scanner_pattern_keys, type_name) tuples. A faker may legitimately
-# emit values matching any one of several reserved patterns (e.g. fake_ip
-# returns IPv4 or IPv6 depending on input shape).
-_FAKERS_TO_TEST = [
-    (fake_phone_reserved, ("phone_zh",), "phone"),
-    (fake_phone_landline_reserved, ("phone_landline_zh",), "phone_landline"),
-    (fake_id_number_reserved, ("id_number_zh",), "id_number"),
-    (fake_address_reserved, ("address_zh",), "address"),
-    (fake_phone_en_reserved, ("phone_en",), "phone"),
-    (fake_ssn_en_reserved, ("ssn_en",), "ssn"),
-    (fake_email_reserved, ("email_shared",), "email"),
-    (fake_ip_reserved, ("ipv4_shared", "ipv6_shared"), "ip_address"),
-    (fake_mac_reserved, ("mac_shared",), "mac_address"),
-]
+# Some types map to multiple scanner patterns or have a non-default key
+# shape (e.g. ``ip_address`` can emit ipv4 OR ipv6; ``mac_address`` is keyed
+# by ``mac_shared`` rather than ``mac_address_shared``).
+_MULTI_PATTERN_OVERRIDES: dict[str, tuple[str, ...]] = {
+    "ip_address": ("ipv4_shared", "ipv6_shared"),
+    "mac_address": ("mac_shared",),
+}
 
 
-@_HSettings
+def _build_faker_cases() -> list[tuple]:
+    cases = []
+    for td in list_types():
+        if td.faker_reserved is None:
+            continue
+        keys = _MULTI_PATTERN_OVERRIDES.get(td.name, (f"{td.name}_{td.lang}",))
+        # Only include if at least one pattern key exists in scanner registry
+        valid_keys = tuple(k for k in keys if k in _RESERVED_RANGE_PATTERNS)
+        if not valid_keys:
+            continue
+        cases.append((td.faker_reserved, valid_keys, td.name))
+    return cases
+
+
+_FAKERS_TO_TEST = _build_faker_cases()
+
+
+@PROPERTY_SETTINGS
 @given(
     seed=st.binary(min_size=32, max_size=32),
     value=st.text(min_size=1, max_size=50),

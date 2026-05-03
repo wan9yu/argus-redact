@@ -10,22 +10,15 @@ from __future__ import annotations
 
 import warnings
 
-from hypothesis import HealthCheck, assume, given, settings, strategies as st
+from hypothesis import assume, given, strategies as st
 
 from argus_redact import SecurityWarning
 from argus_redact._types import PatternMatch
 from argus_redact.pure.replacer import _KEEP_WHITELIST, replace
+from tests.security.property.conftest import PROPERTY_SETTINGS
 
 
-_HSettings = settings(
-    database=None,
-    deadline=None,
-    max_examples=100,
-    suppress_health_check=[HealthCheck.too_slow],
-)
-
-
-@_HSettings
+@PROPERTY_SETTINGS
 @given(
     text=st.text(min_size=1, max_size=80),
     entity_type=st.sampled_from(["phone", "ssn", "id_number", "email", "person"]),
@@ -58,7 +51,7 @@ def test_keep_outside_whitelist_downgrades(text, entity_type):
     ), f"no SecurityWarning emitted for keep downgrade on {entity_type}"
 
 
-@_HSettings
+@PROPERTY_SETTINGS
 @given(text=st.sampled_from(sorted(_KEEP_WHITELIST)))
 def test_keep_inside_whitelist_preserves(text):
     """Whitelisted pronouns / kinship under self_reference are preserved verbatim."""
