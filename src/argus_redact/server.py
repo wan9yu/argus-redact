@@ -17,9 +17,11 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import os
+import warnings
 from typing import TYPE_CHECKING, Any
 
 from argus_redact import __version__, redact, restore
+from argus_redact.pure.replacer import SecurityWarning
 
 try:
     from starlette.requests import Request
@@ -190,21 +192,14 @@ def create_app(*, allow_no_auth: bool = False):
     Pass ``allow_no_auth=True`` (CLI: ``--insecure``) for local development;
     a ``SecurityWarning`` is emitted in that case.
     """
-    import warnings
-
     from starlette.applications import Starlette
     from starlette.routing import Route
-
-    from argus_redact.pure.replacer import SecurityWarning
 
     api_key = os.environ.get("ARGUS_API_KEY")
     if not api_key and not allow_no_auth:
         raise RuntimeError(
-            "argus-redact server refuses to start without ARGUS_API_KEY. "
-            "Set the env var to enable Bearer-token auth, or pass "
-            "allow_no_auth=True (CLI: --insecure) to opt out for local "
-            "development. The /restore endpoint exposes PII recovery — "
-            "running it open to the network is unsafe."
+            "Set ARGUS_API_KEY for Bearer-token auth, or pass allow_no_auth=True "
+            "(CLI: --insecure) for local dev."
         )
     if not api_key and allow_no_auth:
         warnings.warn(

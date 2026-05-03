@@ -35,6 +35,30 @@ def _empty_result() -> PseudonymLLMResult:
 _STATE_SCHEMA_VERSION = 1
 
 
+def _resolve_state_salt(state: dict, salt: bytes | None) -> bytes:
+    """Resolve the effective salt for ``StreamingRedactor.from_state``.
+
+    Caller-supplied ``salt`` wins; legacy v0.6.0/v0.6.1 dumps with embedded
+    ``state["salt"]`` still load (with DeprecationWarning); raise if neither.
+    """
+    if salt is not None:
+        return salt
+    embedded = state.get("salt")
+    if embedded is None:
+        raise ValueError(
+            "from_state requires salt= kwarg (state does not contain an "
+            "embedded salt). Pass the salt held out-of-band: "
+            "StreamingRedactor.from_state(state, salt=<bytes>)."
+        )
+    warnings.warn(
+        "Loading state with embedded salt is deprecated; pass salt= kwarg "
+        "explicitly. Will be rejected in v0.7.0.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    return bytes.fromhex(embedded)
+
+
 class StreamingRestorer:
     """Buffer streaming LLM output and restore PII at boundaries.
 
@@ -255,21 +279,7 @@ class StreamingRedactor:
                 f"Unsupported state schema version {version!r}; this release "
                 f"reads schema {_STATE_SCHEMA_VERSION} only."
             )
-        if salt is None:
-            embedded = state.get("salt")
-            if embedded is None:
-                raise ValueError(
-                    "from_state requires salt= kwarg (state does not contain "
-                    "an embedded salt). Pass the salt held out-of-band: "
-                    "StreamingRedactor.from_state(state, salt=<bytes>)."
-                )
-            warnings.warn(
-                "Loading state with embedded salt is deprecated; pass salt= "
-                "kwarg explicitly. Will be rejected in v0.7.0.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            salt = bytes.fromhex(embedded)
+        salt = _resolve_state_salt(state, salt)
         reserved = state.get("reserved_names")
         instance = cls(
             salt=salt,

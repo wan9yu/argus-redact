@@ -51,8 +51,9 @@ def _create_key_token(key: dict) -> str:
     last access — see ``_resolve_key_token``.
     """
     token = secrets.token_urlsafe(16)
+    # Fresh token (token_urlsafe collisions are astronomically improbable) —
+    # OrderedDict insertion places at end automatically; no move_to_end needed.
     _TOKEN_STORE[token] = (key, _now())
-    _TOKEN_STORE.move_to_end(token)
     while len(_TOKEN_STORE) > _TOKEN_STORE_MAX:
         _TOKEN_STORE.popitem(last=False)
     return token

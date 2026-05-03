@@ -383,13 +383,13 @@ def _replace_and_emit(
         _emit_telemetry(text, timing, entities, langs, mode)
 
     if key_file is not None and result_key:
-        target = Path(key_file)
-        tmp = target.with_suffix(".tmp")
-        tmp.write_text(
+        from argus_redact._safe_io import safe_atomic_write_text
+
+        safe_atomic_write_text(
+            key_file,
             json.dumps(result_key, ensure_ascii=False, indent=2),
-            encoding="utf-8",
+            mode=0o600,
         )
-        tmp.replace(target)
 
     return redacted, result_key, aliases
 

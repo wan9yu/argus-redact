@@ -2,9 +2,11 @@
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
+
+from argus_redact._safe_io import safe_write_key as _safe_write_key
+from argus_redact._safe_io import safe_write_text as _safe_write_text
 
 
 def _read_input(input_path: str | None) -> str:
@@ -19,36 +21,6 @@ def _read_input(input_path: str | None) -> str:
     # and decode as UTF-8. Without this, Chinese stdin produces surrogate
     # characters that downstream Rust regex / json.dumps reject.
     return sys.stdin.buffer.read().decode("utf-8")
-
-
-def _safe_write_text(path: str, content: str, *, mode: int = 0o644) -> None:
-    """Write text refusing to follow symlinks.
-
-    POSIX: ``O_NOFOLLOW`` rejects writes to symlink targets at kernel level.
-    Windows: ``Path.is_symlink()`` pre-check (best-effort; NTFS reparse-point
-    semantics differ from POSIX symlinks). Defends against the
-    pre-existing-symlink class of attack where a privileged process is
-    coaxed into overwriting a sensitive file via a planted ``out.txt``.
-    """
-    if sys.platform == "win32":
-        if Path(path).is_symlink():
-            raise OSError(f"refusing to write to symbolic link: {path}")
-        Path(path).write_text(content, encoding="utf-8")
-        return
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
-    fd = os.open(path, flags, mode)
-    try:
-        os.write(fd, content.encode("utf-8"))
-    finally:
-        os.close(fd)
-
-
-def _safe_write_key(path: str, key: dict) -> None:
-    """Write a key dict (sensitive: contains plaintext originals) at mode 0600
-    on POSIX, refusing to follow symlinks. Windows falls back to 0644 + the
-    is_symlink pre-check (NTFS ACLs are out of scope for this helper)."""
-    content = json.dumps(key, ensure_ascii=False, indent=2)
-    _safe_write_text(path, content, mode=0o600)
 
 
 def _write_output(text: str, output_path: str | None):
