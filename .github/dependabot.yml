@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # GitHub Actions: keep SHAs current. We pin every `uses:` to a 40-char commit
+  # SHA (defends against upstream tag rewrites); dependabot opens PRs to bump
+  # the SHA when the upstream cuts a new release.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns:
+          - "*"
