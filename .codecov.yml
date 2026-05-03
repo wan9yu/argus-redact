@@ -1,0 +1,17 @@
+# argus-redact codecov configuration.
+# Soft gate only: PR comments show diff coverage; no merge block.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%        # tolerate 1% noise
+    patch:
+      default:
+        target: 90%          # new code coverage target
+
+comment:
+  layout: "diff, flags, files"
+  require_changes: true
+  require_base: false
+  require_head: true
