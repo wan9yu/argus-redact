@@ -1,10 +1,10 @@
-"""Chinese PII faker functions — generate realistic fake values.
+"""Real-prefix fake-data generators for benchmarks and integration tests.
 
-Each function takes a random.Random instance and returns a string.
-These are attached to PIITypeDef.faker for spec-driven data generation.
-
-This module is the SINGLE SOURCE of Chinese fake data pools.
-Generators (tests/benchmark/generators/zh.py) should import from here.
+DO NOT use these in production redaction. Production redaction uses the
+reserved-range fakers in `fakers_zh_reserved.py` whose output cannot
+collide with real PII. This module's output uses real prefixes (e.g. real
+mobile carrier prefixes) and is suitable only for benchmark fixtures
+where the data is throwaway.
 """
 
 from __future__ import annotations

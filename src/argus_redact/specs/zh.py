@@ -14,7 +14,7 @@ from argus_redact.lang.zh.patterns import (
 )
 
 from .fakers_numeric import fake_age_noise, fake_date_of_birth_noise
-from .fakers_zh import (
+from .fakers_zh_real import (
     fake_address,
     fake_bank_card,
     fake_credit_code,

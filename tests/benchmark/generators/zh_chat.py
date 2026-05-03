@@ -16,26 +16,26 @@ import random
 import sys
 from dataclasses import dataclass
 
-# Import from canonical source (specs/fakers_zh.py)
-from argus_redact.specs.fakers_zh import (
+# Import from canonical source (specs/fakers_zh_real.py)
+from argus_redact.specs.fakers_zh_real import (
     EMAIL_DOMAINS,
 )
-from argus_redact.specs.fakers_zh import (
+from argus_redact.specs.fakers_zh_real import (
     fake_bank_card as _gen_bank_card,
 )
-from argus_redact.specs.fakers_zh import (
+from argus_redact.specs.fakers_zh_real import (
     fake_id_number as _gen_id_number,
 )
-from argus_redact.specs.fakers_zh import (
+from argus_redact.specs.fakers_zh_real import (
     fake_license_plate as _gen_license_plate,
 )
-from argus_redact.specs.fakers_zh import (
+from argus_redact.specs.fakers_zh_real import (
     fake_passport as _gen_passport,
 )
-from argus_redact.specs.fakers_zh import (
+from argus_redact.specs.fakers_zh_real import (
     fake_person_name_only as _gen_name,
 )
-from argus_redact.specs.fakers_zh import (
+from argus_redact.specs.fakers_zh_real import (
     fake_phone as _gen_phone,
 )
 
