@@ -13,7 +13,7 @@ from argus_redact.pure.restore import check_restore_safety, restore, wipe_key
 from argus_redact.pure.risk import assess_risk
 from argus_redact.streaming import StreamingRedactor
 
-__version__ = "0.6.2"
+__version__ = "0.6.3"
 __all__ = [
     "redact",
     "redact_pseudonym_llm",

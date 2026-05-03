@@ -79,6 +79,10 @@ Each entry follows three lines:
 
 | Issue | Version | Fix |
 |-------|---------|-----|
+| Hypothesis property tests for security invariants | v0.6.3 | New `tests/security/property/`: 6 properties (round-trip, faker-in-reserved-range derived from registry, determinism, keep-whitelist, state round-trip, pseudonym format). Findings landed as fixes in same release. |
+| Mutation testing pass on `pure/{replacer,restore,pseudonym}.py` | v0.6.3 | One-shot mutmut audit (502 killed / 296 survived / 0 real bugs); 27 targeted unit tests added to kill survivors. Audit recorded in workspace audit doc. |
+| `SECURITY.md` + GitHub private vulnerability reporting | v0.6.3 | Canonical disclosure channel; supported-versions table; threat-model link to `docs/security.md`; SLA tiers. |
+| Codecov soft gate on PRs | v0.6.3 | `.codecov.yml`: 90% patch target, 1% project threshold; comment-only, no merge block. |
 | `StreamingRedactor.export_state()` embedded the salt in the serialized dict | v0.6.2 | Default omits salt; pass `include_salt=True` (deprecated) for back-compat. `from_state(state, *, salt=...)` now requires explicit salt kwarg; legacy embedded-salt dumps still load with `DeprecationWarning`. Caller-supplied salt always wins when both are present. |
 | HTTP server `/redact` and `/restore` open by default when `ARGUS_API_KEY` unset | v0.6.2 | `create_app(allow_no_auth=False)` raises `RuntimeError` when env var missing. CLI gains `argus-redact serve --insecure` flag for local dev opt-out (emits `SecurityWarning`). |
 | CLI write paths followed symlinks; key files mode 0644 | v0.6.2 | New `_safe_io` module: `safe_write_text` / `safe_write_key` / `safe_atomic_write_text` use `O_NOFOLLOW` on POSIX (Windows: `is_symlink` pre-check). Key files written mode 0600. `glue/redact.py:_replace_and_emit` (default redact path's key persistence) also routed through the safe path. |
