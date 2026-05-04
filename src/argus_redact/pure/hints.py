@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from argus_redact._types import Hint, PatternMatch
 from argus_redact.lang.br import hints as _br_hints
 from argus_redact.lang.de import hints as _de_hints
@@ -48,6 +50,19 @@ _COMMAND_PATTERNS = _collect("COMMAND_PATTERNS")
 _DEFAULT_PERSON_THRESHOLD = 0.8
 
 
+# Ablation hook (research-only). Set ARGUS_ABLATION_HINTS to control which
+# hint types `produce_hints()` emits. Unset / "all" = default behavior.
+# "off" = emit nothing. Comma-separated names = emit only listed types.
+# Recognized: pii_density, text_intent, self_reference_tier, near_miss_format.
+def _ablation_enabled_hints() -> set[str] | None:
+    raw = os.environ.get("ARGUS_ABLATION_HINTS")
+    if raw is None or raw == "all":
+        return None
+    if raw == "off":
+        return set()
+    return {h.strip() for h in raw.split(",") if h.strip()}
+
+
 # ══════════════════════════════════════════════════════════════
 # Producers: generate hints from detected entities
 # ══════════════════════════════════════════════════════════════
@@ -80,6 +95,11 @@ def produce_hints(
     L3 LLM, tier filter) can consume.
     """
     hints: list[Hint] = []
+    enabled = _ablation_enabled_hints()
+
+    def _emit(htype: str, **fields: object) -> None:
+        if enabled is None or htype in enabled:
+            hints.append(Hint(type=htype, **fields))  # type: ignore[arg-type]
 
     self_refs: list[PatternMatch] = []
     others: list[PatternMatch] = []
@@ -94,22 +114,20 @@ def produce_hints(
         density_level = "medium"
     else:
         density_level = "none"
-    hints.append(Hint(type="pii_density", data={"level": density_level, "count": pii_count}))
+    _emit("pii_density", data={"level": density_level, "count": pii_count})
 
     # Near-miss hints: format matched but validation failed
     if near_misses:
         for nm in near_misses:
-            hints.append(
-                Hint(
-                    type="near_miss_format",
-                    region=(nm.start, nm.end),
-                    data={"original_type": nm.type, "text": nm.text},
-                )
+            _emit(
+                "near_miss_format",
+                region=(nm.start, nm.end),
+                data={"original_type": nm.type, "text": nm.text},
             )
 
     if not self_refs:
         intent = "narrative" if others else "neutral"
-        hints.append(Hint(type="text_intent", data={"intent": intent}))
+        _emit("text_intent", data={"intent": intent})
         return hints
 
     has_kinship = any(_is_kinship(e) for e in self_refs)
@@ -124,11 +142,9 @@ def produce_hints(
     else:
         tier = 2
 
-    hints.append(
-        Hint(
-            type="self_reference_tier",
-            data={"tier": tier, "has_kinship": has_kinship},
-        )
+    _emit(
+        "self_reference_tier",
+        data={"tier": tier, "has_kinship": has_kinship},
     )
 
     # Text intent
@@ -139,7 +155,7 @@ def produce_hints(
     else:
         intent = "casual"
 
-    hints.append(Hint(type="text_intent", data={"intent": intent}))
+    _emit("text_intent", data={"intent": intent})
 
     return hints
 

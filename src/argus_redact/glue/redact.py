@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import os
 import re as _re
 import time
 from pathlib import Path
@@ -319,7 +320,8 @@ def _detect(
     t0 = time.perf_counter()
     pre_merge = entities
     entities = merge_entities(pre_merge, text=text)
-    entities = boost_cross_layer(entities, pre_merge)
+    if os.environ.get("ARGUS_ABLATION_NO_BOOST") != "1":
+        entities = boost_cross_layer(entities, pre_merge)
     entities = filter_self_reference(entities, hints)
     timing["merge_ms"] = (time.perf_counter() - t0) * 1000
 
