@@ -103,7 +103,7 @@ Unicode-hardened: NFKC normalization, zero-width stripping, Cyrillic/Greek confu
 
 Core engine (regex matching, entity merging, restore, pseudonym generation) is written in **Rust via PyO3** for maximum performance. Python handles orchestration, NER models, and LLM integration.
 
-~47 PII types across 4 levels — from phone numbers to medical diagnoses, religious beliefs, political opinions. Default is `mode="fast"` (Layer 1 only, zero deps, sub-ms). Opt in: `mode="ner"` (+ NER models) → `mode="auto"` (all three layers).
+56 PII types across 3 layers — from phone numbers to medical diagnoses, religious beliefs, political opinions. Default is `mode="fast"` (Layer 1 only, zero deps, sub-ms). Opt in: `mode="ner"` (+ NER models) → `mode="auto"` (all three layers).
 
 **Telemetry:** `ARGUS_PERF_LOG=perf.jsonl` for per-call timing breakdown. [Details →](docs/api-reference.md#performance-telemetry)
 
@@ -160,7 +160,7 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 
 | Dimension | Current (v0.6.4) | Next milestone |
 |-----------|:----------------:|:---:|
-| **Protected** | ~47 PII types, L1-L4. PII leak 0% across GPT-4o / Claude / Gemini. Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). SHAKE-256 derivation + full-salt entropy + faker identity-pass guard. State export omits salt by default; HTTP server refuses no-auth start; CLI writes O_NOFOLLOW + key files mode 0600; MCP token store TTL+LRU (v0.6.2). Windows CI + property-tested invariants + mutation-tested core (v0.6.3) + perf budget CI gate (v0.6.4) | Adversarial testing |
+| **Protected** | 56 PII types, L1-L3. PII leak 0% across GPT-4o / Claude / Gemini. Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). SHAKE-256 derivation + full-salt entropy + faker identity-pass guard. State export omits salt by default; HTTP server refuses no-auth start; CLI writes O_NOFOLLOW + key files mode 0600; MCP token store TTL+LRU (v0.6.2). Windows CI + property-tested invariants + mutation-tested core (v0.6.3) + perf budget CI gate (v0.6.4) | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (zh + en + RFC shared) + per-call strategy overrides + `keep` strategy (whitelisted) + resumable streaming sessions + incremental streaming default + cross-language alias restore (zh ↔ en) | Task-aware guidance |
 | **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design). Cross-language LLM rewrites (`张三` → `Zhang San`) auto-restored via `result.aliases` + `restore(text, key, aliases=...)` | Task-aware guidance |
 | **Compliance** | PIPL ~85%, risk assessment + profiles | PIPL/GDPR/HIPAA (byproduct) |

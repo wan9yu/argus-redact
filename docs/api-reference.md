@@ -891,8 +891,8 @@ Sentence-bounded incremental detection runs unconditionally: chunks may split en
 - `feed(chunk: str) -> PseudonymLLMResult` — redact one chunk. Cross-chunk consistency preserved via internal accumulated key.
 - `flush() -> PseudonymLLMResult` *(v0.5.7+)* — drain any text accumulated past the last sentence boundary.
 - `aggregate_key() -> dict[str, str]` — copy of the unified key across all fed chunks (for batched restore).
-- `export_state() -> dict` *(v0.5.5+)* — serialize redactor state (salt, accumulated key, all constructor options) to a JSON-friendly dict. Persist to Redis / disk to survive process restarts.
-- `from_state(state: dict) -> StreamingRedactor` *(classmethod, v0.5.5+)* — rebuild an instance from a previously exported state. Subsequent `feed()` calls reuse the same fake values for already-seen originals.
+- `export_state(*, include_salt: bool = False) -> dict` *(v0.5.5+; v0.6.2 default no longer includes salt)* — serialize redactor state (accumulated key, all constructor options) to a JSON-friendly dict. Persist to Redis / disk to survive process restarts. The salt is the cryptographic root and is held out-of-band by the caller; pass `include_salt=True` only for trusted-channel handoff (deprecated, removed in v0.7.0).
+- `from_state(state: dict, *, salt: bytes | None = None) -> StreamingRedactor` *(classmethod, v0.5.5+; v0.6.2 added `salt=` kwarg)* — rebuild an instance from a previously exported state. Pass `salt=` explicitly. Legacy v0.6.0/0.6.1 dumps with embedded salt still load (with `DeprecationWarning`). Subsequent `feed()` calls reuse the same fake values for already-seen originals.
 
 ### Incremental mode (v0.5.7 opt-in → v0.5.8 default → v0.6.0 only mode)
 
@@ -918,18 +918,19 @@ import json, redis
 from argus_redact.streaming import StreamingRedactor
 
 # Process A — start a session
-r = StreamingRedactor(salt=b"session-secret", lang="zh")
+SALT = b"session-secret-32-bytes-padding!"   # held out-of-band (vault / KMS / env)
+r = StreamingRedactor(salt=SALT, lang="zh")
 r.feed("张明今天打了13912345678。")
-redis_client.set("session:42", json.dumps(r.export_state()))
+redis_client.set("session:42", json.dumps(r.export_state()))   # state has no salt
 
 # Process B (later, different host) — resume
 state = json.loads(redis_client.get("session:42"))
-r = StreamingRedactor.from_state(state)
+r = StreamingRedactor.from_state(state, salt=SALT)             # salt passed explicitly
 result = r.feed("张明又来电话了13912345678确认。")
 # Same original phone reuses the same fake from process A
 ```
 
-State is a plain dict: `version` (integer schema version, decoupled from the package version), `salt` (hex), `accumulated_key`, plus all constructor options. `from_state()` raises `ValueError` for payloads with an unsupported `version`.
+State is a plain dict: `version` (integer schema version, decoupled from the package version), `accumulated_key`, plus all constructor options. **The salt is not in `state`** (v0.6.2+); the caller holds it out-of-band and passes it to `from_state(state, salt=...)`. `from_state()` raises `ValueError` for payloads with an unsupported `version` or when no salt is available.
 
 ### Constraints
 
