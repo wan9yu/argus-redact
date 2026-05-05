@@ -228,10 +228,10 @@ HEADER_MD = f"""
 
 **56 PII types · 8 languages · 0% PII leak across GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.5**
 
-[GitHub](https://github.com/wan9yu/argus-redact) ·
-[PyPI](https://pypi.org/project/argus-redact/) ·
-[Docs](https://github.com/wan9yu/argus-redact/tree/main/docs) ·
-[中文说明](https://github.com/wan9yu/argus-redact/blob/main/README.zh.md)
+<a href="https://github.com/wan9yu/argus-redact" target="_blank" rel="noopener">GitHub</a> ·
+<a href="https://pypi.org/project/argus-redact/" target="_blank" rel="noopener">PyPI</a> ·
+<a href="https://github.com/wan9yu/argus-redact/tree/main/docs" target="_blank" rel="noopener">Docs</a> ·
+<a href="https://github.com/wan9yu/argus-redact/blob/main/README.zh.md" target="_blank" rel="noopener">中文说明</a>
 
 `pip install argus-redact`
 """
