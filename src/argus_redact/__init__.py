@@ -1,6 +1,11 @@
 """argus-redact: Encrypt PII, not meaning. Locally."""
 
 from argus_redact import layers
+from argus_redact._metadata import (
+    GDPR_SPECIAL_CATEGORIES,
+    HIPAA_PHI_CATEGORIES,
+    PIPL_REFERENCES,
+)
 from argus_redact._types import PseudonymLLMResult, RedactReport
 from argus_redact.glue.redact import redact
 from argus_redact.glue.redact_pseudonym_llm import (
@@ -13,7 +18,7 @@ from argus_redact.pure.restore import check_restore_safety, restore, wipe_key
 from argus_redact.pure.risk import assess_risk
 from argus_redact.streaming import StreamingRedactor
 
-__version__ = "0.6.4"
+__version__ = "0.6.5"
 __all__ = [
     "redact",
     "redact_pseudonym_llm",
@@ -23,6 +28,9 @@ __all__ = [
     "assess_risk",
     "is_strategy_reversible",
     "max_pseudonym_length",
+    "GDPR_SPECIAL_CATEGORIES",
+    "HIPAA_PHI_CATEGORIES",
+    "PIPL_REFERENCES",
     "PseudonymLLMResult",
     "PseudonymPollutionError",
     "RedactReport",

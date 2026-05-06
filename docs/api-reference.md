@@ -71,6 +71,8 @@ redacted, key = redact("他在星巴克和Costa都喝了咖啡")
 
 `keep` is useful for entities the LLM should see verbatim — for example, first-person pronouns (`我`, `我的`, `my`) where redacting them produces gibberish prompts. The `self_reference` type defaults to `keep` since v0.5.7.
 
+> ℹ️ **Alias mappings:** `redact()` does NOT produce alias mappings. Cross-language alias generation (e.g., `张三` ↔ `Zhang San` for restoring after an LLM rewrites text into another language) is a `pseudonym-llm` profile feature; obtain it via `redact_pseudonym_llm()`'s result `.aliases` attribute, then pass it to `restore(text, key, aliases=...)`.
+
 ### Examples
 
 ```python
@@ -620,6 +622,8 @@ from argus_redact import redact
 redact(text, config={"phone": {"strategy": "remove"}})  # PHONE-NNNNN, reversible
 ```
 
+> ⚠️ **Error contract:** Raises `ValueError` for any input not in the valid strategy list (including `None`, empty string, and unknown names). The exception message lists all valid strategies. This is intentional fail-loud behavior — the function is meant as a safety predicate before a destructive `restore()`, where silently returning `False` for an unknown input would be unsafe. Callers should validate strategy names at config-load time, not at restore time.
+
 ---
 
 ## Layer Constants *(v0.5.9+)*
@@ -856,6 +860,44 @@ redact(text, profile="hipaa")   # HIPAA-relevant types only
 redact(text, types=["phone", "id_number"])          # only these types
 redact(text, types_exclude=["address", "email"])     # everything except these
 ```
+
+---
+
+## Compliance metadata exports *(v0.6.5+)*
+
+Three top-level `dict` exports project per-PII-type compliance metadata from the registry. Downstream audit-report and compliance tooling can consume the canonical mapping from upstream instead of hand-coding a copy.
+
+```python
+from argus_redact import (
+    PIPL_REFERENCES,           # dict[str, tuple[str, ...]]
+    GDPR_SPECIAL_CATEGORIES,   # dict[str, bool]
+    HIPAA_PHI_CATEGORIES,      # dict[str, str | None]
+)
+
+PIPL_REFERENCES["phone"]
+# ('PIPL Art.13', 'PIPL Art.28', 'PIPL Art.51', 'PIPL Art.29', 'PIPL Art.56')
+
+GDPR_SPECIAL_CATEGORIES["medical"]
+# True
+
+HIPAA_PHI_CATEGORIES["phone"]
+# 'phone_numbers'
+
+HIPAA_PHI_CATEGORIES["self_reference"]
+# None  (self_reference is not a HIPAA Safe Harbor identifier)
+```
+
+| Export | Shape | Notes |
+|---|---|---|
+| `PIPL_REFERENCES` | `dict[str, tuple[str, ...]]` | Empty tuple is treated as a defect (every registered type cites at least one article — enforced by `tests/architecture/test_compliance_metadata_export.py`). |
+| `GDPR_SPECIAL_CATEGORIES` | `dict[str, bool]` | `True` for Article 9 special-category data (health, biometric, religion, political opinion, sexual orientation, etc.). To derive specific article numbers, callers may use ``["GDPR Art.9"] if flag else ["GDPR Art.6"]`` — argus-redact does not embed these article codes itself because the lawful-basis selection is controller-context-dependent. |
+| `HIPAA_PHI_CATEGORIES` | `dict[str, str \| None]` | Safe Harbor identifier category string when the type IS a HIPAA identifier; `None` when not. |
+
+Keys are the **canonical PII type names** (e.g., `"phone"`, `"id_number"`, `"medical"`). Aliases used by downstream consumers (e.g., `"phone_number"`, `"cn_id_card"`) must be mapped to canonical names on the consumer side.
+
+When the same canonical name appears across multiple language variants (the registry has both a `zh` and `en` `phone`, etc.), variants are merged: `PIPL_REFERENCES` unions articles preserving order, `GDPR_SPECIAL_CATEGORIES` ORs flags, `HIPAA_PHI_CATEGORIES` takes the first non-`None` value (registry order is `zh` → `en` → `shared`, deterministic for a given argus-redact version).
+
+The dicts are computed once at module import. Custom types registered via `argus_redact.specs.register()` after import are not reflected — by design.
 
 ---
 

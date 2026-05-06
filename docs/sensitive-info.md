@@ -41,6 +41,8 @@ abuse, supply-chain attack). They carry `sensitivity=4` in `assess_risk()` but a
 deliberately **not** in `_SENSITIVE_PI_TYPES`, which is reserved for personal-data
 categories that trigger PIPL Art.29/51.
 
+> 💡 **Programmatic access:** v0.6.5+ exposes the per-type compliance metadata as top-level `dict` exports — `PIPL_REFERENCES`, `GDPR_SPECIAL_CATEGORIES`, `HIPAA_PHI_CATEGORIES`. Downstream audit-report tooling can `from argus_redact import PIPL_REFERENCES` instead of hand-coding a copy. See [API reference → Compliance metadata exports](api-reference.md#compliance-metadata-exports-v065).
+
 For the complete list of supported PII types, formats, and validation rules:
 - **Spec registry:** `src/argus_redact/specs/zh.py` + `src/argus_redact/specs/shared.py` (single source of truth)
 - **Test fixtures:** `tests/fixtures/zh_*.json`, `en_*.json`, `shared_*.json` (executable examples)
