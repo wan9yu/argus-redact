@@ -2,7 +2,7 @@
 
 English · [中文说明](README.zh.md)
 
-[![PRvL](https://img.shields.io/badge/PRvL-Gold-brightgreen)](docs/prvl-standard.md) [![PII Leak](https://img.shields.io/badge/PII%20Leak-0%25-brightgreen)](docs/prvl-standard.md) [![Rust](https://img.shields.io/badge/core-Rust%20%2B%20PyO3-orange)](Cargo.toml) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
+[![PRvL](https://img.shields.io/badge/PRvL-Gold-brightgreen)](docs/prvl-standard.md) [![Rust](https://img.shields.io/badge/core-Rust%20%2B%20PyO3-orange)](Cargo.toml) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
 [![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![Downloads](https://img.shields.io/pypi/dm/argus-redact)](https://pypi.org/project/argus-redact/) [![Tests](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml/badge.svg)](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact)
 
 **Encrypt PII, not meaning. Locally.**
@@ -109,6 +109,16 @@ Core engine (regex matching, entity merging, restore, pseudonym generation) is w
 
 **Telemetry:** `ARGUS_PERF_LOG=perf.jsonl` for per-call timing breakdown. [Details →](docs/api-reference.md#performance-telemetry)
 
+**Deployment fit** — modes have very different latency budgets; pick by where you sit in the request path:
+
+| Mode | Latency (per doc) | Suitable as |
+|---|:---:|---|
+| `fast` | <1ms | Inline gateway plugin / hot LLM proxy path |
+| `ner` | 10–100ms | Sidecar / pre-flight middleware |
+| `auto` | ~20s (LLM-bound) | Async batch / offline review queue |
+
+Don't put `auto` in front of an interactive LLM call. Use `fast` inline + `auto` in a parallel audit lane.
+
 ## Limitations & When NOT to Rely on This
 
 argus-redact is a PII **data minimization aid**, not an anonymization or compliance certification:
@@ -120,7 +130,7 @@ argus-redact is a PII **data minimization aid**, not an anonymization or complia
 
 **When to use argus-redact**: reversible pseudonymization for LLM pipelines where you need `redact() → LLM → restore()` with zero PII crossing the network boundary.
 
-**When to consider alternatives**: if you need one-way English PII masking with a single model call, [OpenAI Privacy Filter](https://huggingface.co/openai/privacy-filter) and similar model-based maskers may fit better. argus-redact's niche is Chinese-optimized multi-layer detection + reversibility.
+**When to consider alternatives**: if you need one-way English PII masking with a single model call, [OpenAI Privacy Filter](https://huggingface.co/openai/privacy-filter) and similar model-based maskers may fit better. argus-redact's strongest suit is **reversible** pseudonymization with **per-message keys**; Chinese has the deepest support (HanLP + native validators), the other 7 languages have regex + spaCy NER coverage. Pick by the workload, not by exclusivity.
 
 Combine argus-redact with audit logging, rate limiting, and upstream policy — no single layer is sufficient.
 
@@ -156,13 +166,23 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 × Python 3.10 / 3.11 / 3.12 / 3.13
 ```
 
-[ai4privacy benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-400k): Email P=95% R=94%. Chinese PII F1=97%. [Benchmarks →](tests/benchmark/README.md) | [Performance →](docs/performance.md)
+**Detection accuracy** — these are the headline numbers and the trade-off behind them:
+
+| Dataset | Mode | P | R | F1 |
+|---|---|:---:|:---:|:---:|
+| ai4privacy (en, 200) | `fast` (regex) | 67% | 14% | 23% |
+| ai4privacy (en, 200) | `ner` (+ spaCy) | 41% | 33% | 37% |
+| ai4privacy (en, 200) | `auto` (+ Ollama 32B) | 49% | 35% | 41% |
+| ai4privacy email subset | `fast` | 92% | 94% | 93% |
+| pii_bench_zh | `fast` | — | — | **97%** |
+
+`fast` mode is high-precision / low-recall by design — it only emits formats it can validate (Luhn, MOD11-2, etc.). Recall comes from `ner` and `auto` at the cost of latency. Pick the mode for your deployment shape (see *Deployment fit* above). [Full benchmarks →](tests/benchmark/README.md) | [Performance →](docs/performance.md)
 
 ## North Star
 
 | Dimension | Current (v0.6.4) | Next milestone |
 |-----------|:----------------:|:---:|
-| **Protected** | 56 PII types, L1-L3. PII leak 0% across GPT-4o / Claude / Gemini. Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). SHAKE-256 derivation + full-salt entropy + faker identity-pass guard. State export omits salt by default; HTTP server refuses no-auth start; CLI writes O_NOFOLLOW + key files mode 0600; MCP token store TTL+LRU (v0.6.2). Windows CI + property-tested invariants + mutation-tested core (v0.6.3) + perf budget CI gate (v0.6.4) | Adversarial testing |
+| **Protected** | 56 PII types, L1-L3. **0% PII leak in [PRvL](docs/prvl-standard.md) reference test suite** (GPT-4o / Claude / Gemini, scoped to that suite — not a guarantee against adversarial inputs). Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). SHAKE-256 derivation + full-salt entropy + faker identity-pass guard. State export omits salt by default; HTTP server refuses no-auth start; CLI writes O_NOFOLLOW + key files mode 0600; MCP token store TTL+LRU (v0.6.2). Windows CI + property-tested invariants + mutation-tested core (v0.6.3) + perf budget CI gate (v0.6.4) | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (zh + en + RFC shared) + per-call strategy overrides + `keep` strategy (whitelisted) + resumable streaming sessions + incremental streaming default + cross-language alias restore (zh ↔ en) | Task-aware guidance |
 | **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design). Cross-language LLM rewrites (`张三` → `Zhang San`) auto-restored via `result.aliases` + `restore(text, key, aliases=...)` | Task-aware guidance |
 | **Compliance** | PIPL ~85%, risk assessment + profiles | PIPL/GDPR/HIPAA (byproduct) |

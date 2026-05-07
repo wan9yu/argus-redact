@@ -2,7 +2,7 @@
 
 [English](README.md) · 中文说明
 
-[![PRvL](https://img.shields.io/badge/PRvL-Gold-brightgreen)](docs/prvl-standard.md) [![PII Leak](https://img.shields.io/badge/PII%20Leak-0%25-brightgreen)](docs/prvl-standard.md) [![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
+[![PRvL](https://img.shields.io/badge/PRvL-Gold-brightgreen)](docs/prvl-standard.md) [![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
 
 **只加密 PII，不加密含义。在你本地。**
 
@@ -88,6 +88,16 @@ Unicode 加固：NFKC 规范化、零宽字符剥离、西里尔/希腊伪装字
 
 **56 类 PII，覆盖 3 层** — 从电话号码到医疗诊断、宗教信仰、政治立场。默认 `mode="fast"`（仅 L1，零依赖，亚毫秒）；可选 `mode="ner"`（+ NER 模型）→ `mode="auto"`（全部 3 层）。
 
+**部署位置很重要** — 三种 mode 的延迟差三个数量级，按你在请求路径中的位置选：
+
+| Mode | 单文档延迟 | 适合做 |
+|---|:---:|---|
+| `fast` | <1ms | 网关 inline plugin / LLM 代理热路径 |
+| `ner` | 10–100ms | sidecar / 预检中间件 |
+| `auto` | ~20s（受 LLM 限制）| 异步批处理 / 离线审计队列 |
+
+不要把 `auto` 放在交互式 LLM 调用前面。inline 用 `fast`，并行审计 lane 跑 `auto`。
+
 ## 8 种语言
 
 | | zh | en | ja | ko | de | uk | in | br |
@@ -170,7 +180,7 @@ argus-redact 是 PII **数据最小化辅助工具**，不是匿名化或合规�
 
 **适合用 argus-redact**：LLM 流水线里需要 `redact() → LLM → restore()`，零 PII 跨过网络边界的可逆假名化。
 
-**考虑替代品**：单向英文 PII 掩码 + 单次模型调用 → [OpenAI Privacy Filter](https://huggingface.co/openai/privacy-filter) 等基于模型的方案可能更适合。argus-redact 的优势是中文优化的多层检测 + 可逆性。
+**考虑替代品**：单向英文 PII 掩码 + 单次模型调用 → [OpenAI Privacy Filter](https://huggingface.co/openai/privacy-filter) 等基于模型的方案可能更适合。argus-redact 最强的地方是**可逆假名化 + 按消息独立 key**；中文支持最深（HanLP + 本土校验器），其他 7 种语言走 regex + spaCy NER。按工作负载选，不按排他性选。
 
 ## 集成
 
