@@ -4,14 +4,16 @@
 
 | Feature | argus-redact | Presidio | AVA Protocol | Tonic Textual | anonLLM |
 |---------|:-----------:|:--------:|:------------:|:-------------:|:-------:|
-| Reversible | **Yes** (key) | Partial | Yes (vault) | No (synthesis) | Yes |
-| Per-message keys | **Yes** | No | No | No | No |
-| Chinese-native PII | **Yes** | No | No | Limited | No |
-| Fully local | **Yes** | Yes | Yes | No (SaaS) | **No** (OpenAI) |
-| Semantic detection | **Yes** (Ollama) | No | No | Yes | No |
-| Two-line API | **Yes** | No | No | No | Yes |
-| MCP Server | **Yes** | No | No | Yes (commercial) | No |
-| 7 languages | **Yes** | Configurable | No | 50+ (claimed) | 1 |
+| Reversible | Yes (per-call key) | Yes via custom operator | Yes (vault) | No (synthesis) | Yes |
+| Per-message keys (default) | **Yes** | Custom code | No (account-scoped vault) | No | No |
+| Chinese-native PII out-of-the-box | **Yes** (HanLP + native validators) | Add via spaCy zh model + custom recognizers | No | Limited | No |
+| Fully local | Yes | Yes | Yes | No (SaaS) | No (calls OpenAI) |
+| Semantic / LLM-assisted detection | Yes (local Ollama, optional) | Via custom recognizer | No | Yes | No |
+| Two-line `redact / restore` API | Yes | Multi-step (analyze → anonymize → custom restore) | No | No | Yes |
+| MCP Server | Yes (built-in) | No (community) | No | Commercial only | No |
+| Multi-language | 8 (built-in) | Many via spaCy/Stanza recognizers (configurable) | Limited | 50+ (claimed) | 1 |
+
+**Reading this table:** Presidio is a *toolkit* — most "No" cells against Presidio above mean *"not in the box"*, not *"impossible"*. With custom recognizers and a vault, Presidio can do most of what's listed here. We compare *out-of-the-box behavior for an LLM-pipeline use case* — that's the workload argus-redact is shaped for. If your team already runs a Presidio recognizer fleet, the [Presidio bridge](../docs/integration-frameworks.md) lets you keep it.
 
 ## Why Per-Message Keys Matter
 

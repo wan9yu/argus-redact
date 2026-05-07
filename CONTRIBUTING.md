@@ -176,6 +176,25 @@ Test data format:
 }
 ```
 
+## Maintenance & Governance
+
+argus-redact is currently maintained by a single author. The project is past its
+"hobby" phase (v0.6.x with downstream production users, mutation-tested core,
+perf-budget CI gate, multi-platform release pipeline) but the bus factor is **1**.
+Contributions that lower it are explicitly welcomed:
+
+- **Co-reviewers for the Rust core** (`rust/src/`) — most needed; PyO3 + fancy-regex
+  expertise is rare in the current contributor pool.
+- **Sub-area owners** — language packs, integrations, and benchmark adapters can
+  be owned end-to-end. Open an issue tagged `governance` describing the area you
+  want and we'll add you to `CODEOWNERS` for that path.
+- **Release shadow** — the release pipeline is documented above; a second person
+  who has run it once gives the project a real bus factor of 2.
+
+This is not a CLA. By contributing under the existing Apache 2.0 license you keep
+your copyright; the only ask is that you stay reachable for follow-ups on the
+code you contributed.
+
 ## Questions?
 
 Open an issue at https://github.com/wan9yu/argus-redact/issues
