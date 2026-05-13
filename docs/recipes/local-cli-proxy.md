@@ -1,5 +1,7 @@
 # Local CLI privacy proxy / 本地 CLI 隐私代理
 
+English · [中文说明](local-cli-proxy.zh.md)
+
 > A ~150-line OpenAI-compatible HTTP proxy that wraps argus-redact around any
 > upstream LLM API (DeepSeek / OpenAI / Kimi / Zhipu / Qwen / Together / ...).
 > Your local CLI tools send to `localhost`, this proxy redacts PII before
@@ -58,7 +60,7 @@ upstream LLM never saw the original PII
 - tool_use / function calling (recipe rejects these requests — see Limitations)
 - you need different PII policies per app
 
-For the ❌ list, watch [Argus Gateway](https://github.com/wan9yu/argus-redact)
+For the ❌ list, watch [Argus Gateway](https://gateway.agilist.cn/)
 roadmap or upvote this recipe (see *Graduation signals* below).
 
 ---
@@ -245,5 +247,5 @@ description of your use case. We track these.
 - **`local-cli-proxy.py`** — the runnable script (alongside this doc)
 - **[`docs/api-reference.md`](../api-reference.md)** — `redact()` / `restore()` / streaming
 - **[`docs/sensitive-info.md`](../sensitive-info.md)** — PII type taxonomy
-- **[Argus Gateway](https://github.com/wan9yu/argus-redact)** — the enterprise sibling
+- **[Argus Gateway](https://gateway.agilist.cn/)** — the enterprise sibling
   (multi-tenant, RBAC, audit, policy)
