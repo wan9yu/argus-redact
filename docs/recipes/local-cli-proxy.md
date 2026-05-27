@@ -2,6 +2,15 @@
 
 English · [中文说明](local-cli-proxy.zh.md)
 
+> **Layer note**: this recipe is an **OSS cookbook pattern** — a 150-line
+> single-machine transparent proxy for dev / hacker single-user scenarios
+> (CLI tools like `aider`, `llm`, cursor terminal). For enterprise-grade
+> multi-tenant + audit log + RBAC + full Chinese PII stack, see the sibling
+> commercial product **[Argus Gateway](https://gateway.agilist.cn/)**. The
+> two are different layers, not competitors: this recipe is cookbook code
+> (copy, modify, run); Argus Gateway is a productized SKU. Neither
+> replaces the other.
+
 > A ~150-line OpenAI-compatible HTTP proxy that wraps argus-redact around any
 > upstream LLM API (DeepSeek / OpenAI / Kimi / Zhipu / Qwen / Together / ...).
 > Your local CLI tools send to `localhost`, this proxy redacts PII before

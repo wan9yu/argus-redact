@@ -96,13 +96,39 @@ R = pseudonym tokens in LLM output / total pseudonym tokens in redacted text
 
 **Critical insight:** R depends on task type, not tool quality:
 
-| Task Type | Example | Expected R | Why |
+| Task Type | Example | Expected R (primitive layer) | Why |
 |-----------|---------|:----------:|-----|
-| **Reference** | Summarize, translate | ≥ 90% | LLM must reference original tokens |
-| **Extract** | QA, data extraction | ≥ 50% | LLM answers questions, may not quote |
-| **Creative** | Advice, writing | ~0% | LLM generates new content, doesn't quote |
+| **Reference** | Summarize, translate | ≥ 90% | LLM quotes original tokens; literal substring `restore()` catches them |
+| **Extract** | QA, data extraction | ≥ 50% | LLM partially quotes; mixed restore success |
+| **Creative** | Advice, writing | ~0% | LLM paraphrases / introduces variants (titles, pronouns, partial references); literal `restore()` cannot follow |
 
-**A tool should NOT be penalized for low R on creative tasks.** When you ask "give health advice for MED-51675", the LLM correctly says "manage your diet" without repeating MED-51675.
+**A tool should NOT be penalized for low R on creative tasks.** When you ask "give health advice for MED-51675", the LLM correctly says "manage your diet" without repeating MED-51675. This is by design.
+
+### What the numbers above measure (and what they don't)
+
+The R column above is the **primitive layer** measurement — `restore()` is a
+literal substring inverse, and its R is bounded by how often the LLM echoes
+pseudonyms verbatim. This is the **floor**, not a ceiling.
+
+A `compose` layer (see [Architecture Layers](architecture-layers.md)) can lift
+R higher via heuristic helpers:
+
+- **`compose.prompt_anchor()`** — input-side system-prompt addendum asking the
+  LLM not to abbreviate / retitle / pronoun-substitute. Reduces variant
+  generation at the source.
+- **`compose.expand_aliases()`** — output-side surname+title composite alias
+  expansion (e.g., `张先生` → `黄先生` when the key has `张三` → `黄芳`).
+  Best-effort coverage of common patterns.
+
+Compose-layer R is **best-effort and unbounded above** — depends on LLM
+compliance with the prompt anchor and on alias coverage breadth. PRvL
+standard does not certify compose-layer R; that's an empirical, version-by-
+version measurement.
+
+Full-fidelity round-trip — NLP coreference resolution, paraphrase reversal,
+multimodal — is **out of scope** for both primitive and compose layers. That
+work belongs to downstream products (e.g., a coref-aware gateway) or to
+caller-side post-processing.
 
 ---
 

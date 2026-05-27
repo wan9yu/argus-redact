@@ -15,7 +15,7 @@ redacted, key = redact("王五在协和医院做了体检，手机13812345678", 
 # "P-83811在[LOCATION]做了体检，手机138****5678"
 
 llm_output = call_llm(redacted)        # LLM 看不到任何真实身份
-restored = restore(llm_output, key)    # 一行代码原样恢复
+restored = restore(llm_output, key)    # redact() 的字符串级逆函数
 ```
 
 ```bash
@@ -28,7 +28,7 @@ pip install argus-redact
 |-|------|---------|
 | 🛡️ | **保护** — PII 永远不离开你的设备 | 三层本地检测：regex → NER → 本地 LLM |
 | 🧠 | **可用** — AI 仍然能理解你的意图 | 假名替换保留语义和上下文 |
-| 🔄 | **可逆** — 你能完整拿回原文 | 每条消息独立的 key，一行 restore |
+| 🔄 | **可逆** — 字符串级逆替换, 按消息独立 key | LLM 原样引用假名时一行 `restore()` 还原; LLM 改写 / 称谓变体由 [compose 层](docs/architecture-layers.md) best-effort 处理 |
 
 其他工具会**永久销毁** PII；argus-redact 是用一次性密钥**加密**它。[ETH Zurich 研究](https://arxiv.org/abs/2602.16800)显示，当假名固定时，LLM 可以以每人 $1-4 的成本去匿名化用户。我们**每次调用生成新随机密钥** — 云端每次看到的假名都不相关。
 

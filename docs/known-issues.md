@@ -13,6 +13,23 @@ Each entry follows three lines:
 - **Why we won't fix** — the design / external trade-off it reflects.
 - **What you should do** — caller-side mitigation.
 
+### Out of scope — NLP coref, full-fidelity round-trip, multimodal, tool_use, token streaming
+
+- **What**: argus-redact does **not** address these LLM-pipeline UX concerns:
+  - NLP coreference resolution (titles like `张先生`, pronouns, partial references)
+  - Full-fidelity semantic round-trip after LLM paraphrase / translation
+  - Multimodal redaction (vision, audio, file uploads)
+  - Tool-use / function-calling cross-turn state machines
+  - Token-by-token streaming (sentence-buffered is the upper bound; see `docs/design-streaming-incremental.md`)
+- **Why we won't fix**: each requires an NLP/LLM-mediated solution incompatible with the primitive's "small core, deterministic, audited, fast" SLA. Trying to own them would balloon the surface area beyond single-maintainer capacity. See [architecture-layers.md](architecture-layers.md) for the layered identity argus-redact has codified.
+- **What you should do**: use the `pseudonym` strategy (`P-NNNNN`-style codes; LLMs treat them opaquely, fewer variants) for higher restore fidelity; use the `compose` layer's `prompt_anchor()` and `expand_aliases()` (v0.7+) for best-effort coverage of common variants; or run a downstream coref-aware gateway (e.g., Argus Gateway) for fuller semantic round-trip.
+
+### Force-rebuild on major version pin bump
+
+- **What**: Upgrading the argus-redact pin across a major version boundary (e.g., `0.5.x` → `0.6.0`) requires a clean rebuild of any caller cache that holds pseudonym mappings.
+- **Why we won't fix**: cryptographic derivation chain changes (salt schema, KDF, pseudonym seeding) across major versions are by design — they fix security vulnerabilities or close known issues. Pseudonym tokens generated under one chain cannot be reproduced under another, so cached mapping tables become incoherent.
+- **What you should do**: when bumping a major version, force a clean rebuild of any docker image / build cache / persisted key store. Downstream R1003 lesson (cache-induced false-green on `0.5.x` → `0.6.0`): local dev had stale 0.5.x mappings, CI fresh build saw real 0.6.0 behavior → caught only because CI didn't share dev's cache. Pin to `>=0.6.4` if you saw R1003-style symptoms.
+
 ### `199-99` mobile sub-segment requires annual review
 
 - **What**: The realistic-mode `199-99-XXXXXX` mobile range relies on this

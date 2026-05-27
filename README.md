@@ -16,7 +16,7 @@ redacted, key = redact("王五在协和医院做了体检，手机13812345678", 
 # "P-83811在[LOCATION]做了体检，手机138****5678"
 
 llm_output = call_llm(redacted)     # LLM never sees real identities
-restored = restore(llm_output, key)  # one line to get everything back
+restored = restore(llm_output, key)  # literal substring inverse of redact()
 ```
 
 ```bash
@@ -29,7 +29,7 @@ pip install argus-redact
 |-|---------|-----|
 | 🛡️ | **Protected** — your PII never leaves your device | 3-layer local detection: regex → NER → local LLM |
 | 🧠 | **Usable** — AI can still understand and help you | Pseudonym replacement preserves meaning and context |
-| 🔄 | **Reversible** — you get everything back, intact | Per-message key, one-line restore |
+| 🔄 | **Reversible** — substring-level inverse via per-message key | One-line `restore()` for verbatim LLM echoes; paraphrase / coref handled by [compose layer](docs/architecture-layers.md), best-effort |
 
 Other tools shred your PII — it's gone forever. argus-redact encrypts it with a different key every time. [ETH Zurich research](https://arxiv.org/abs/2602.16800) shows LLMs can deanonymize users for $1-4/person when pseudonyms are fixed. We generate **fresh random keys per call** — the cloud sees unrelated pseudonyms every time.
 

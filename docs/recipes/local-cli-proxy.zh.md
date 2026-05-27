@@ -2,6 +2,13 @@
 
 [English](local-cli-proxy.md) · 中文说明
 
+> **Layer 说明**: 本 recipe 是 **OSS cookbook 示例** — 150 行单机透明代理,
+> 给 dev / 极客单用户场景 (`aider` / `llm` / cursor terminal 等 CLI 工具).
+> 企业级 multi-tenant + 审计日志 + RBAC + 中文 PII 全栈 = sibling 商业产品
+> **[Argus Gateway](https://gateway.agilist.cn/)**. 两者不同 layer, 不是
+> 替代关系: 本 recipe 是 cookbook 代码 (copy/改/跑); Argus Gateway 是产品化
+> SKU. 互不替代.
+
 > ~150 行 Python 写一个本地 OpenAI 兼容代理，给任意上游 LLM API (DeepSeek /
 > 通义千问 / Kimi / 智谱 GLM / OpenAI ...) 加一层 argus-redact PII 守门。
 > 本地 CLI 工具不动一行代码，发往 `localhost`，代理在 forward 之前 redact
