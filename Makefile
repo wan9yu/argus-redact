@@ -1,4 +1,4 @@
-.PHONY: install dev test cov lint build clean release catalog catalog-check perf-update perf-check
+.PHONY: install dev test cov lint build clean release catalog catalog-check perf-update perf-check sync-docs-version sync-docs-version-check
 
 install:
 	pip install -e .
@@ -54,3 +54,9 @@ perf-check:
 	@PYTHONPATH=src python tests/benchmark/run_perf_budget.py --output /tmp/argus-perf-current.json && \
 		python tests/benchmark/compare_baseline.py /tmp/argus-perf-current.json tests/benchmark/baseline.json; \
 		status=$$?; rm -f /tmp/argus-perf-current.json; exit $$status
+
+sync-docs-version:
+	python scripts/sync_docs_version.py
+
+sync-docs-version-check:
+	python scripts/sync_docs_version.py --check
