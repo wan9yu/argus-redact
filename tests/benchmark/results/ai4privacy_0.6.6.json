@@ -1,0 +1,21 @@
+{
+  "version": "0.6.6",
+  "dataset": "ai4privacy",
+  "language": "en",
+  "samples": 500,
+  "seed": 42,
+  "modes": {
+    "fast": {
+      "precision": 78.3,
+      "recall": 30.3,
+      "f1": 43.7
+    },
+    "ner": {
+      "precision": 72.8,
+      "recall": 41.4,
+      "f1": 52.8
+    }
+  },
+  "notes": "auto mode skipped — qwen2.5:32b inference exceeded 60s timeout repeatedly on the maintainer's machine; rerun on a host with adequate memory or use a smaller LLM (e.g., qwen2.5:7b).",
+  "date": "2026-05-31"
+}

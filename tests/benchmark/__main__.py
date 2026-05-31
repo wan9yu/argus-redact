@@ -10,12 +10,16 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import datetime
+import json
 import sys
 from pathlib import Path
 
+from argus_redact import __version__
+
 from .adapters import get_adapter, list_adapters
 from .evaluator import evaluate
-from .report import print_comparison, print_report, save_result
+from .report import print_comparison, print_report
 
 RESULTS_DIR = Path(__file__).parent / "results"
 
@@ -35,7 +39,12 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--match", choices=["value", "span"], default="value", help="Matching strategy"
     )
-    parser.add_argument("--save", action="store_true", help="Save results to JSON")
+    parser.add_argument(
+        "--save",
+        type=str,
+        metavar="PATH",
+        help="Write benchmark result JSON to PATH. Schema: see tests/benchmark/results/README.md.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -66,6 +75,7 @@ def main(argv: list[str] | None = None) -> None:
             )
             continue
 
+        ds_results: list = []
         for mode in modes:
             samples = adapter.load(lang=args.lang, limit=args.limit)
             result = evaluate(
@@ -76,9 +86,32 @@ def main(argv: list[str] | None = None) -> None:
             )
             print_report(result)
             all_results.append(result)
+            ds_results.append(result)
 
-            if args.save:
-                save_result(result, RESULTS_DIR)
+        if args.save and ds_results:
+            first = ds_results[0]
+            payload = {
+                "version": __version__,
+                "dataset": ds_name,
+                "language": first.lang,
+                "samples": first.n_samples,
+                "modes": {
+                    r.mode: {
+                        "precision": round(r.precision * 100, 1),
+                        "recall": round(r.recall * 100, 1),
+                        "f1": round(r.f1 * 100, 1),
+                    }
+                    for r in ds_results
+                },
+                "date": datetime.date.today().isoformat(),
+            }
+            save_path = Path(args.save)
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            save_path.write_text(
+                json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
+            print(f"  Saved: {save_path}")
 
     if len(all_results) > 1:
         print_comparison(all_results)

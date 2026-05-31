@@ -8,14 +8,16 @@
 
 夹在你和 AI 之间的隐私层。你的身份信息留在本地设备上 — AI 拿到含义，但拿不到你是谁。
 
+<!-- pin -->
 ```python
-from argus_redact import redact, restore
+from argus_redact import redact
 
-redacted, key = redact("王五在协和医院做了体检，手机13812345678", names=["王五"])
-# "P-83811在[LOCATION]做了体检，手机138****5678"
+redacted, key = redact("张三的电话是13812345678，身份证号110101199003074610", names=["张三"], lang="zh", seed=42)
+print(redacted)
+# expected: P-83811的电话是138****5678，身份证号ID-03292
 
-llm_output = call_llm(redacted)        # LLM 看不到任何真实身份
-restored = restore(llm_output, key)    # redact() 的字符串级逆函数
+print(sorted(key.items()))
+# expected: [('138****5678', '13812345678'), ('ID-03292', '110101199003074610'), ('P-83811', '张三')]
 ```
 
 ```bash

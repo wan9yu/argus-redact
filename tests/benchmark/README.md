@@ -41,8 +41,8 @@ python -m tests.benchmark ai4privacy --mode fast,ner --limit 200
 # Run all datasets
 python -m tests.benchmark all --mode fast --limit 1000
 
-# Save results as JSON snapshots
-python -m tests.benchmark nemotron --mode fast --limit 1000 --save
+# Save results as JSON snapshot to a path
+python -m tests.benchmark nemotron --mode fast --limit 1000 --save tests/benchmark/results/nemotron_fast.json
 
 # Via build.sh
 ./build.sh bench en 500

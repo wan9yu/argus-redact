@@ -9,14 +9,16 @@ English · [中文说明](README.zh.md)
 
 The privacy layer between you and AI. Your identity stays on your device — AI gets the meaning, not you.
 
+<!-- pin -->
 ```python
-from argus_redact import redact, restore
+from argus_redact import redact
 
-redacted, key = redact("王五在协和医院做了体检，手机13812345678", names=["王五"])
-# "P-83811在[LOCATION]做了体检，手机138****5678"
+redacted, key = redact("张三的电话是13812345678，身份证号110101199003074610", names=["张三"], lang="zh", seed=42)
+print(redacted)
+# expected: P-83811的电话是138****5678，身份证号ID-03292
 
-llm_output = call_llm(redacted)     # LLM never sees real identities
-restored = restore(llm_output, key)  # literal substring inverse of redact()
+print(sorted(key.items()))
+# expected: [('138****5678', '13812345678'), ('ID-03292', '110101199003074610'), ('P-83811', '张三')]
 ```
 
 ```bash
@@ -166,23 +168,23 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 × Python 3.10 / 3.11 / 3.12 / 3.13
 ```
 
-**Detection accuracy** — these are the headline numbers and the trade-off behind them:
+**Detection accuracy**
 
-| Dataset | Mode | P | R | F1 |
-|---|---|:---:|:---:|:---:|
-| ai4privacy (en, 200) | `fast` (regex) | 67% | 14% | 23% |
-| ai4privacy (en, 200) | `ner` (+ spaCy) | 41% | 33% | 37% |
-| ai4privacy (en, 200) | `auto` (+ Ollama 32B) | 49% | 35% | 41% |
-| ai4privacy email subset | `fast` | 92% | 94% | 93% |
-| pii_bench_zh | `fast` | — | — | **97%** |
+| Mode | Precision | Recall | F1 |
+|---|---|---|---|
+| fast (regex)          | 78.3% | 30.3% | 43.7% |
+| ner (+ spaCy)         | 72.8% | 41.4% | 52.8% |
+| auto (+ Ollama 32B)   | _skipped this run_ | | |
 
-`fast` mode is high-precision / low-recall by design — it only emits formats it can validate (Luhn, MOD11-2, etc.). Recall comes from `ner` and `auto` at the cost of latency. Pick the mode for your deployment shape (see *Deployment fit* above). [Full benchmarks →](tests/benchmark/README.md) | [Performance →](docs/performance.md)
+_ai4privacy en, 500 samples, v0.6.6. `auto` mode skipped on the maintainer's hardware — see [benchmark-report.md](docs/benchmark-report.md) for full matrix + reproduction commands._
+
+For context: `fast` mode is high-precision / low-recall by design — it only emits formats it can validate (Luhn, MOD11-2, etc.). Recall comes from `ner` and `auto` at the cost of latency. Pick the mode for your deployment shape (see *Deployment fit* above). [Full benchmarks →](docs/benchmark-report.md) | [Performance →](docs/performance.md)
 
 ## North Star
 
 | Dimension | Current (v0.6.4) | Next milestone |
 |-----------|:----------------:|:---:|
-| **Protected** | 56 PII types, L1-L3. **0% PII leak in [PRvL](docs/prvl-standard.md) reference test suite** (GPT-4o / Claude / Gemini, scoped to that suite — not a guarantee against adversarial inputs). Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). SHAKE-256 derivation + full-salt entropy + faker identity-pass guard. State export omits salt by default; HTTP server refuses no-auth start; CLI writes O_NOFOLLOW + key files mode 0600; MCP token store TTL+LRU (v0.6.2). Windows CI + property-tested invariants + mutation-tested core (v0.6.3) + perf budget CI gate (v0.6.4) | Adversarial testing |
+| **Protected** | 56 PII types, L1-L3. **0% PII leak on `default` profile across GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.5** in the [PRvL](docs/prvl-standard.md) reference suite. `pseudonym-llm` profile: 100% on three of four models; **96% / Bronze on Claude-Opus-4.5** (single reroll cell). Not a guarantee against adversarial inputs — see prvl-standard.md for full matrix. Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). SHAKE-256 derivation + full-salt entropy + faker identity-pass guard. State export omits salt by default; HTTP server refuses no-auth start; CLI writes O_NOFOLLOW + key files mode 0600; MCP token store TTL+LRU (v0.6.2). Windows CI + property-tested invariants + mutation-tested core (v0.6.3) + perf budget CI gate (v0.6.4) | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (zh + en + RFC shared) + per-call strategy overrides + `keep` strategy (whitelisted) + resumable streaming sessions + incremental streaming default + cross-language alias restore (zh ↔ en) | Task-aware guidance |
 | **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design). Cross-language LLM rewrites (`张三` → `Zhang San`) auto-restored via `result.aliases` + `restore(text, key, aliases=...)` | Task-aware guidance |
 | **Compliance** | PIPL ~85%, risk assessment + profiles | PIPL/GDPR/HIPAA (byproduct) |

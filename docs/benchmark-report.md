@@ -1,8 +1,11 @@
 # Benchmark Report
 
-> **Environment:** Apple M1 Max, Python 3.11, argus-redact v0.6.0, Presidio 2.2.362, spaCy 3.8 (en_core_web_sm)
->
-> **Date:** 2026-03-26
+> **Currency**: This report reflects argus-redact v0.6.6 on Apple M1 Max,
+> Python 3.11. ai4privacy 500 samples, seed=42. `auto` mode skipped on the
+> maintainer's machine (qwen2.5:32b inference exceeded 60s read timeout —
+> rerun on a host with adequate memory, or use a smaller LLM like
+> qwen2.5:7b). Reproduce: `python -m tests.benchmark ai4privacy --mode fast,ner --limit 500 --save tests/benchmark/results/ai4privacy_0.6.6.json`.
+> Pinned result JSON: `tests/benchmark/results/ai4privacy_0.6.6.json`.
 
 ## Executive Summary
 
@@ -46,10 +49,13 @@ argus-redact is the only tool that combines PII detection with **reversible encr
 
 ### argus-redact
 
-| Mode | Precision | Recall | F1 | Speed |
-|------|-----------|--------|-----|-------|
-| `fast` (regex) | 78.3% | 30.3% | 43.7% | 57 docs/s |
-| `ner` (regex + spaCy) | 77.4% | 46.1% | 57.7% | 3 docs/s |
+| Mode | Precision | Recall | F1 |
+|---|---|---|---|
+| fast (regex)          | 78.3% | 30.3% | 43.7% |
+| ner (+ spaCy)         | 72.8% | 41.4% | 52.8% |
+| auto (+ Ollama 32B)   | _skipped this run — see currency note_ | | |
+
+_Run details: 500 samples, seed=42. Result JSON: `tests/benchmark/results/ai4privacy_0.6.6.json`._
 
 ### Per-type breakdown (ner mode, 200 samples)
 
