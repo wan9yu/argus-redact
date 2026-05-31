@@ -7,6 +7,7 @@ from argus_redact._metadata import (
     PIPL_REFERENCES,
 )
 from argus_redact._types import PseudonymLLMResult, RedactReport
+from argus_redact.exceptions import SessionStateError
 from argus_redact.glue.redact import redact
 from argus_redact.glue.redact_pseudonym_llm import (
     PseudonymPollutionError,
@@ -35,6 +36,7 @@ __all__ = [
     "PseudonymPollutionError",
     "RedactReport",
     "SecurityWarning",
+    "SessionStateError",
     "StreamingRedactor",
     "layers",
     "__version__",

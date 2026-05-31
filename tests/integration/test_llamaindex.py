@@ -1,5 +1,8 @@
 """Tests for LlamaIndex integration."""
 
+import pytest
+
+from argus_redact.exceptions import SessionStateError
 from argus_redact.integrations.llamaindex import RedactTransform, RestoreTransform
 
 
@@ -49,13 +52,12 @@ class TestRestoreTransform:
         assert "13812345678" in restored
         assert "test@example.com" in restored
 
-    def test_should_return_unchanged_when_no_key(self):
+    def test_should_raise_when_no_key(self):
         redact_t = RedactTransform(mode="fast", lang="zh", seed=42)
         restore_t = RestoreTransform(redact_t)
 
-        result = restore_t("no redaction happened")
-
-        assert result == "no redaction happened"
+        with pytest.raises(SessionStateError):
+            restore_t("no redaction happened")
 
 
 class TestResetAndPipeline:
