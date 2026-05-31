@@ -94,6 +94,15 @@ Each entry follows three lines:
 
 ## Recently Fixed
 
+### v0.6.6 (2026-05-31) — Reader Contract
+
+- **Integration session-isolation** — `RestoreRunnable` / `RestoreTransform` raise `SessionStateError` when paired Redact helper has no key. Previously returned text unchanged, masking a multi-tenant cross-session leak vector. (audit HIGH-1, HIGH-2)
+- **Dead ContextVar stripped from langchain integration** — class docstring no longer claims thread-safe-via-contextvars.
+- **README hero example pinned to doctest** — every `<!-- pin -->` ```python``` block in README.md / README.zh.md exec'd in CI. (audit HIGH-3)
+- **`0% PII leak` headline rewritten** — lists actual PRvL LLMs (GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.5); discloses 96%/Bronze cell on `pseudonym-llm` + Opus-4.5. (audit HIGH-4)
+- **ai4privacy numbers regenerated on 0.6.6 baseline** — committed JSON under `tests/benchmark/results/`; `docs/benchmark-report.md` is the single source of truth, README carries compact table + link. (audit HIGH-5)
+- **Single-source version sync** — `scripts/sync_docs_version.py` + `make sync-docs-version[-check]`; CI guards against drift on every PR.
+
 | Issue | Version | Fix |
 |-------|---------|-----|
 | Compliance metadata SSOT not exposed for downstream | v0.6.5 | New top-level exports `PIPL_REFERENCES`, `GDPR_SPECIAL_CATEGORIES`, `HIPAA_PHI_CATEGORIES` projected from the PII type registry. Drift-guard test (`tests/architecture/test_compliance_metadata_export.py`) ensures every type cites ≥1 PIPL article. See [API reference → Compliance metadata exports](api-reference.md#compliance-metadata-exports-v065) for shapes and usage. |
