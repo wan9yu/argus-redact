@@ -2,7 +2,7 @@
 
 from tests.test_readme_examples import _PIN_BLOCK, _REPO_ROOT
 
-_MIN_PINNED_BLOCKS = 2  # v0.6.6: hero in README.md + hero in README.zh.md
+_MIN_PINNED_BLOCKS = 3  # v0.6.8: en hero + zh hero + zh unified_prefix example
 
 
 def test_readme_fixture_finds_minimum_pinned_blocks():

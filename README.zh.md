@@ -51,6 +51,29 @@ pip install argus-redact
 | `id_number` / `medical` / `ssn` ... | `ID-NNNNN` / `MED-NNNNN` ... | `remove` → 类型化编码 | ✓ |
 | `self_reference` | `我` / `我妈` (原样保留) | `keep` | ✓ |
 
+要将所有可逆类型**统一到一个前缀**（向 LLM 隐藏 PII 类型）：
+
+<!-- pin -->
+```python
+from argus_redact import redact
+
+text = "员工张三，身份证110101199003074610，电话13812345678"
+result, key = redact(
+    text,
+    lang="zh",
+    salt=42,
+    unified_prefix="R",
+    config={
+        "phone": {"strategy": "remove"},
+        "email": {"strategy": "remove"},
+    },
+)
+print(result)
+# expected: 员工R-83811，身份证R-03292，电话R-68060
+```
+
+`<TYPE_N>` 一位数序号风格（`R-1`、`R-2`）列入后续版本候选（无承诺时间表）。详见 [docs/configuration.md](docs/configuration.md#unified-prefix-hide-pii-type)。
+
 ## 隐私等级评估
 
 argus-redact 从**你的视角**评估文本，不是监管者视角：
@@ -124,6 +147,47 @@ Rust 核心 (PyO3) — M1 Max 上 `mode="fast"`：
 
 预编译 wheel 覆盖：Linux x86_64 (glibc + musl) / Linux aarch64 (含树莓派) / macOS (Apple Silicon + Intel) / Windows x64，Python 3.10–3.13，无需 Rust 工具链即可安装。
 
+**检测精度**
+
+| Mode | 精确率 | 召回率 | F1 |
+|---|---|---|---|
+| fast (regex)          | 78.3% | 30.3% | 43.7% |
+| ner (+ spaCy)         | 72.8% | 41.4% | 52.8% |
+| auto (+ Ollama 32B)   | _本次跳过_ | | |
+
+_ai4privacy en，500 样本，v0.6.6。`auto` 模式在维护者硬件上跳过 — 完整矩阵与复现命令见 [benchmark-report.md](docs/benchmark-report.md)。_
+
+`fast` 模式设计上高精确率 / 低召回率 — 只对能校验格式的实体（Luhn、MOD11-2 等）报出。召回率由 `ner` 和 `auto` 以延迟为代价提升。按部署形态选 mode（见上方*部署位置*）。[完整基准 →](docs/benchmark-report.md) | [性能详情 →](docs/performance.md)
+
+## 北极星
+
+| 维度 | 当前 (v0.6.7) | 下一里程碑 |
+|-----------|:----------------:|:---:|
+| **保护** | 56 类 PII，L1-L3。**在 [PRvL](docs/prvl-standard.md) 参考套件中，`default` profile 在 GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.5 上 PII 泄漏率 0%**。`pseudonym-llm` profile：四个模型中三个 100%；**Claude-Opus-4.5 上 96% / Bronze**（单格重滚）。不保证对抗性输入 — 完整矩阵见 prvl-standard.md。8 语言跨层 hints（zh/en/ja/ko/de/uk/in/br）。SHAKE-256 派生 + 全盐熵 + faker 身份通过守卫。状态导出默认省略 salt；HTTP server 拒绝无认证启动；CLI 写入 O_NOFOLLOW + key 文件 mode 0600；MCP token 存储 TTL+LRU (v0.6.2)。Windows CI + 属性测试不变量 + 变异测试核心 (v0.6.3) + 性能预算 CI 门控 (v0.6.4) + 集成层会话隔离 (v0.6.6) + README pinned-to-doctest + 版本同步 CI 守卫 (v0.6.6) + compose 命名空间 + 纯层纯净守卫 (v0.6.7) | 对抗性测试 |
+| **可用** | PRvL U=100%。假名编码 + 真实模式（zh + en + RFC 共享）+ 按调用策略覆盖 + `keep` 策略（白名单）+ 可续流式会话 + 增量流式默认 + 跨语言别名还原（zh ↔ en） | 任务感知引导 |
+| **可逆** | PRvL R 按任务：引用 100%，提取 50%，创意 0%（设计如此）。跨语言 LLM 改写（`张三` → `Zhang San`）通过 `result.aliases` + `restore(text, key, aliases=...)` 自动还原 | 任务感知引导 |
+| **合规** | PIPL ~85%，风险评估 + profiles | PIPL/GDPR/HIPAA（副产品） |
+| **覆盖** | 8 语言，4 个 LLM 基准，6 个框架 | 浏览器扩展 |
+
+## 风险评估
+
+```python
+# 发送给 AI 前先评估风险
+report = redact(text, report=True)
+report.risk.level         # "critical"
+report.risk.pipl_articles # ("PIPL Art.28", "PIPL Art.51", ...)
+report.entities           # 检测到的 PII 详情
+report.stats              # 各层计时
+```
+
+```bash
+# CLI
+argus-redact assess <<< "身份证110101199003074610"
+```
+
+合规 profiles：`redact(text, profile="pipl")` / `"gdpr"` / `"hipaa"`。
+类型过滤：`redact(text, types=["phone", "id_number"])` / `types_exclude=["address"]`。
+
 ## 真实化替换 (`pseudonym-llm` profile)
 
 默认 redact 输出占位标签（`[TEL-79329]`、`P-164`），审计清晰但下游 LLM 看不懂消息结构。`pseudonym-llm` profile 把 PII 换成**看起来真实但属于保留段**的假值（如 `19999...` 手机、`999...` 身份证、`999999...` 银行卡）。LLM 推理正常，懂规则的人也能一眼看出是合成的。
@@ -139,19 +203,43 @@ Rust 核心 (PyO3) — M1 Max 上 `mode="fast"`：
 ```python
 from argus_redact import redact_pseudonym_llm, restore
 
+# 中文
 zh = redact_pseudonym_llm("请拨打 13912345678 联系王建国", lang="zh")
-zh.downstream_text  # "请拨打 19999123456 联系张明"     → LLM
-zh.display_text     # "请拨打 19999123456ⓕ 联系张明ⓕ"  → UI
+zh.downstream_text  # "请拨打 19999123456 联系张明"           → LLM
+zh.display_text     # "请拨打 19999123456ⓕ 联系张明ⓕ"        → UI
 
-restore(zh.downstream_text, zh.key)  # → 原文
+# 英文
+en = redact_pseudonym_llm("Call (415) 555-1234, SSN 123-45-6789", lang="en")
+en.downstream_text  # "Call (555) 555-0142, SSN 999-37-2811" → LLM
+en.audit_text       # "Call [PHONE-23801], SSN [SSN-15772]"  → 合规归档
+
+# 混合（自动检测）
+mx = redact_pseudonym_llm("客户Wang at user@company.com", lang="auto")
+
+# 三种形式均可完整还原，跨语言通用
+restore(zh.downstream_text, zh.key)   # → 原文
+restore(en.downstream_text, en.key)   # → 原文
+restore(mx.downstream_text, mx.key)   # → 原文
+```
+
+```bash
+# CLI 以 JSON 输出三种形式
+echo "Call (415) 555-1234" | \
+  argus-redact redact -k key.json --profile pseudonym-llm -l en | \
+  jq .downstream_text
+# "Call (555) 555-0142"
 ```
 
 **保留段**：
 - **中文**：`199-99-XXXXXX` 手机（工信部未分配子段）、`099-` 座机（无此区号）、`999XXX` 身份证地址码（GB/T 2260 未分配）、`999999` 银联 BIN（未分配）、滨海市（虚构城市）。
-- **英文**：`(555) 555-01XX` 电话（FCC 永久虚构保留）、`999-XX-XXXX` SSN（SSA 永不分配 9XX 段）、`999999` 信用卡 BIN、John Doe / Jane Roe 人名。
+- **英文**：`(555) 555-01XX` 电话（FCC 永久虚构保留）、`999-XX-XXXX` SSN（SSA 永不分配 9XX 段）、`999999` 信用卡 BIN、John Doe / Jane Roe 人名、1313 Mockingbird Lane 地址。
 - **共享 (RFC)**：`example.com/.org/.net` 邮箱 (RFC 2606)、`192.0.2.0/24` 等 IPv4 (RFC 5737)、`2001:db8::/32` IPv6 (RFC 3849)、`00:00:5E:00:53:xx` MAC (RFC 7042)。
 
-## 流式
+**Argus Gateway 集成**：响应 header 应包含 `X-Argus-Redact-Profile: pseudonym-llm`；UI 客户端渲染 `display_text`，LLM 客户端消费 `downstream_text`。将 `downstream_text` 作为业务真值存储是不安全的 — 它本质是合成数据。
+
+**真实用户与典型假名同名**（如真实客户名为 `张三` 或 `John Doe`）：传入 `reserved_names={"person_zh": ()}` （或 `person_en`）可禁用该语种典型名污染检测，使真实用户名走正常 redact 流程。
+
+### 流式
 
 聊天会话 / 长文本分块输入用 `StreamingRedactor`（输入端）和 `StreamingRestorer`（输出端）。两者都要求**每个分块是完整的逻辑单元**（句子 / 段落 / 一轮对话）— 跨块切分的实体不处理。
 
@@ -170,6 +258,12 @@ for chunk in llm_output_stream:
         print(restored, end="")
 print(restorer.flush(), end="")
 ```
+
+真正的字节级流式（实体跨 chunk 边界）需要完整增量检测，已列入后续路线图。
+
+> ⚠️ 真实模式输出**不可二次 redact**（会损坏 key dict）。`redact_pseudonym_llm` 在已假名化输入上调用会抛出 `PseudonymPollutionError` — 请先调用 `restore()`。
+
+[完整 API →](docs/api-reference.md#redact_pseudonym_llm) · [设计约束 →](docs/known-issues.md#design-constraints)
 
 ## 局限性
 
@@ -193,7 +287,14 @@ argus-redact 是 PII **数据最小化辅助工具**，不是匿名化或合规�
 | [MCP Server](docs/cli-reference.md#mcp-server) (Claude Desktop / Cursor) | `pip install argus-redact[mcp]` |
 | [HTTP API Server](docs/cli-reference.md) | `pip install argus-redact[serve]` |
 | 结构化数据 (JSON / CSV) | 核心包 |
-| Docker | slim 157MB / full 5GB |
+| [流式还原](docs/api-reference.md) | 核心包 |
+| [Docker](Dockerfile) | slim 157MB / full 5GB |
+
+## 安全
+
+PII 永不离开你的设备。按消息独立 key 防止跨请求画像。[完整安全模型 →](docs/security-model.md)
+
+满足 **PIPL** · **GDPR** · **HIPAA** 技术要求 — 这是其隐私优先设计的副产品。[详情 →](docs/security-model.md#regulatory-context)
 
 ## 文档
 
@@ -205,9 +306,25 @@ argus-redact 是 PII **数据最小化辅助工具**，不是匿名化或合规�
 | [API Reference](docs/api-reference.md) | 所有参数、返回类型、流式、结构化数据 |
 | [CLI Reference](docs/cli-reference.md) | 命令、flags、serve、MCP server |
 | [Configuration](docs/configuration.md) | 按类型策略、企业掩码规则、误报控制 |
+| [Sensitive Info](docs/sensitive-info.md) | 敏感信息分类、隐私等级、路线图 |
+| [PII Type Catalog](docs/pii-types.md) | 全部 52 类型 — 策略、敏感度、PIPL/GDPR/HIPAA 映射（自动生成）|
 | [Architecture](docs/architecture.md) | 三层引擎、跨层 hints、pure/impure 分离 |
+| [Language Packs](docs/language-packs.md) | 新增语言包指南 |
 | [Security Model](docs/security-model.md) | 威胁模型、合规、按消息 key |
-| [PRvL Standard](docs/prvl-standard.md) | 开放评估标准：隐私 × 可逆性 × 语言 |
+| [**PRvL Standard**](docs/prvl-standard.md) | **开放评估标准：隐私 × 可逆性 × 语言** |
+| [Layer 3 Benchmark](docs/layer3-benchmark.md) | LLM 模型对比、提示词设计、法规分析 |
+| [Benchmarks](tests/benchmark/README.md) | 9 个公开 PII 数据集评估 |
+| [Performance](docs/performance.md) | 延迟、吞吐、基准结果 |
+
+## 贡献
+
+[CONTRIBUTING.md](CONTRIBUTING.md) — 语言包、测试场景、框架集成欢迎提交。
+
+## 贡献者
+
+| 贡献者 | 贡献内容 |
+|--------|---------|
+| [@aiedwardyi](https://github.com/aiedwardyi) | 巴西葡萄牙语语言包（CPF、CNPJ、电话）|
 
 ## License
 
