@@ -21,23 +21,29 @@ from argus_redact.streaming import StreamingRedactor
 
 __version__ = "0.6.6"
 __all__ = [
+    # ─── Layer 1 — primitive (frozen at 1.0) ───
     "redact",
-    "redact_pseudonym_llm",
     "restore",
+    "assess_risk",
     "check_restore_safety",
     "wipe_key",
-    "assess_risk",
     "is_strategy_reversible",
     "max_pseudonym_length",
+    "SecurityWarning",
+    "SessionStateError",
+    "PseudonymPollutionError",
+    # ─── Layer 2 — compose (best-effort; also at argus_redact.compose.*) ───
+    "redact_pseudonym_llm",
+    "StreamingRedactor",
+    # ─── Compliance metadata SSOT (re-exported from _metadata) ───
     "GDPR_SPECIAL_CATEGORIES",
     "HIPAA_PHI_CATEGORIES",
     "PIPL_REFERENCES",
+    # ─── Type aliases ───
     "PseudonymLLMResult",
-    "PseudonymPollutionError",
     "RedactReport",
-    "SecurityWarning",
-    "SessionStateError",
-    "StreamingRedactor",
+    # ─── Internal SSOT modules ───
     "layers",
+    # ─── Version ───
     "__version__",
 ]

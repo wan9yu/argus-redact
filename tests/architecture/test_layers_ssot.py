@@ -64,3 +64,22 @@ class TestPatternMatchIntegration:
         for lyr in (LAYER_REGEX, LAYER_NER, LAYER_SEMANTIC):
             m = PatternMatch(text="x", type="phone", start=0, end=1, layer=lyr)
             assert m.layer == lyr
+
+
+def test_glue_redact_uses_layer_constants_not_literals():
+    """glue/redact.py must consume layers.py SSOT, not bare integer literals.
+
+    Audit 2026-05-30 found raw `layer=1/2/3` literals at 6 sites. v0.6.7
+    replaces them with LAYER_REGEX/NER/SEMANTIC imports. This test prevents
+    regression.
+    """
+    import re
+    from pathlib import Path
+
+    src_path = Path(__file__).parents[2] / "src" / "argus_redact" / "glue" / "redact.py"
+    src = src_path.read_text(encoding="utf-8")
+    bad = re.findall(r"\blayer=([123])\b", src)
+    assert not bad, (
+        f"glue/redact.py still has integer-literal layer kwargs: {bad}\n"
+        "Use LAYER_REGEX / LAYER_NER / LAYER_SEMANTIC from argus_redact.layers."
+    )

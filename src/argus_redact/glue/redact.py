@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from argus_redact._types import PatternMatch
+from argus_redact.layers import LAYER_NER, LAYER_REGEX, LAYER_SEMANTIC
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
 from argus_redact.pure.grammar import normalize_grammar_en
 from argus_redact.pure.hints import (
@@ -221,7 +222,7 @@ def _detect(
         layer1 = layer1_raw
 
     timing["layer_1_ms"] = (time.perf_counter() - t0) * 1000
-    entities.extend(_tag_layer(layer1, 1))
+    entities.extend(_tag_layer(layer1, LAYER_REGEX))
     layer1_count = len(layer1)
 
     # Produce hints from L1a results — consumed by L1b, L2, L3, and tier filter
@@ -242,7 +243,7 @@ def _detect(
             threshold=person_threshold,
         )
         timing["layer_1b_person_ms"] = (time.perf_counter() - t0) * 1000
-        entities.extend(_tag_layer(person_names, 1))
+        entities.extend(_tag_layer(person_names, LAYER_REGEX))
         layer1_count += len(person_names)
 
     if "en" in langs:
@@ -251,7 +252,7 @@ def _detect(
         t0 = time.perf_counter()
         en_person_names = detect_en_person(text, known_names=names)
         timing["layer_1b_person_en_ms"] = (time.perf_counter() - t0) * 1000
-        entities.extend(_tag_layer(en_person_names, 1))
+        entities.extend(_tag_layer(en_person_names, LAYER_REGEX))
         layer1_count += len(en_person_names)
         # Note: en detector ignores L1 hints / threshold today (uses surname
         # list-match exclusively); kwargs simplified to known_names.
@@ -268,7 +269,7 @@ def _detect(
                         start=m.start(),
                         end=m.end(),
                         confidence=1.0,
-                        layer=1,
+                        layer=LAYER_REGEX,
                     )
                 )
                 layer1_count += 1
@@ -290,7 +291,7 @@ def _detect(
             layer2_status = "no_model"
         for adapter in adapters:
             ner_entities = detect_ner(text, adapter=adapter, min_confidence=ner_confidence)
-            layer2_matches = [e.to_pattern_match(layer=2) for e in ner_entities]
+            layer2_matches = [e.to_pattern_match(layer=LAYER_NER) for e in ner_entities]
             entities.extend(layer2_matches)
             layer2_count += len(layer2_matches)
         if adapters:
@@ -308,7 +309,7 @@ def _detect(
             t0 = time.perf_counter()
             try:
                 sem_entities = detect_semantic(text, adapter=semantic_adapter)
-                layer3_matches = [e.to_pattern_match(layer=3) for e in sem_entities]
+                layer3_matches = [e.to_pattern_match(layer=LAYER_SEMANTIC) for e in sem_entities]
                 entities.extend(layer3_matches)
                 layer3_count += len(layer3_matches)
                 layer3_status = "ok"
