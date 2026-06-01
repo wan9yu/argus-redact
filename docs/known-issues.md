@@ -94,6 +94,15 @@ Each entry follows three lines:
 
 ## Recently Fixed
 
+### v0.6.7 (2026-06-01) — Layer Codification
+
+- **`argus_redact.compose` namespace shipped** — `StreamingRedactor` / `StreamingRestorer` / `redact_pseudonym_llm` re-exported; `prompt_anchor` / `expand_aliases` stubs raising NotImplementedError with v0.6.9 roadmap hint. Top-level aliases preserved (no DeprecationWarning).
+- **`pure/` purity guard** — new `tests/architecture/test_layer_purity.py` AST-walks the primitive subtree and forbids imports of `argus_redact.glue` / `argus_redact.impure` / network / subprocess / LLM-client modules.
+- **`__init__.py` `__all__` annotated** with Layer 1 / Layer 2 / Compliance metadata / Type aliases / SSOT / Version section dividers.
+- **`glue/redact.py` consumes `layers.py` SSOT** — `LAYER_REGEX` / `LAYER_NER` / `LAYER_SEMANTIC` constants replace 6 integer literals; new test asserts no regression.
+- **Architecture doc cross-references** — `architecture.md` and `architecture-layers.md` now carry top blockquotes disambiguating Primitive/Compose/Downstream vs. Pure/Impure/Glue vs. detection L1/L1b/L2/L3.
+- **`scripts/sync_docs_version.py` py3.10 compat** — replaced `tomllib` (3.11+) with regex on pyproject.toml. (v0.6.6 CI failure on Python 3.10.)
+
 ### v0.6.6 (2026-05-31) — Reader Contract
 
 - **Integration session-isolation** — `RestoreRunnable` / `RestoreTransform` raise `SessionStateError` when paired Redact helper has no key. Previously returned text unchanged, masking a multi-tenant cross-session leak vector. (audit HIGH-1, HIGH-2)
