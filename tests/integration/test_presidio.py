@@ -22,7 +22,7 @@ class TestPresidioBridge:
     def test_should_redact_person_name(self, presidio_bridge):
         text = "John Smith went to the store"
 
-        redacted, key = presidio_bridge.redact(text, language="en", seed=42)
+        redacted, key = presidio_bridge.redact(text, language="en", salt=42)
 
         assert "John Smith" not in redacted
         assert "John Smith" in key.values()
@@ -30,14 +30,14 @@ class TestPresidioBridge:
     def test_should_redact_phone_number(self, presidio_bridge):
         text = "Call me at 555-123-4567"
 
-        redacted, key = presidio_bridge.redact(text, language="en", seed=42)
+        redacted, key = presidio_bridge.redact(text, language="en", salt=42)
 
         assert "555-123-4567" not in redacted
 
     def test_should_restore_after_redact(self, presidio_bridge):
         text = "John Smith called 555-123-4567"
 
-        redacted, key = presidio_bridge.redact(text, language="en", seed=42)
+        redacted, key = presidio_bridge.redact(text, language="en", salt=42)
         restored = presidio_bridge.restore(redacted, key)
 
         assert "John Smith" in restored
@@ -45,8 +45,8 @@ class TestPresidioBridge:
     def test_should_use_per_message_keys(self, presidio_bridge):
         text = "John Smith is here"
 
-        _, key1 = presidio_bridge.redact(text, language="en", seed=42)
-        _, key2 = presidio_bridge.redact(text, language="en", seed=99)
+        _, key1 = presidio_bridge.redact(text, language="en", salt=42)
+        _, key2 = presidio_bridge.redact(text, language="en", salt=99)
 
         assert key1 != key2
 
@@ -54,12 +54,12 @@ class TestPresidioBridge:
         _, key = presidio_bridge.redact(
             "John Smith is here",
             language="en",
-            seed=42,
+            salt=42,
         )
         redacted2, key = presidio_bridge.redact(
             "John Smith called Mary",
             language="en",
-            seed=42,
+            salt=42,
             key=key,
         )
 
@@ -70,7 +70,7 @@ class TestPresidioBridge:
     def test_should_return_empty_key_when_no_pii(self, presidio_bridge):
         text = "The weather is nice today"
 
-        redacted, key = presidio_bridge.redact(text, language="en", seed=42)
+        redacted, key = presidio_bridge.redact(text, language="en", salt=42)
 
         assert redacted == text
         assert key == {}
@@ -78,7 +78,7 @@ class TestPresidioBridge:
     def test_should_handle_multiple_entities(self, presidio_bridge):
         text = "John Smith and Mary Jane met at Google"
 
-        redacted, key = presidio_bridge.redact(text, language="en", seed=42)
+        redacted, key = presidio_bridge.redact(text, language="en", salt=42)
 
         assert "John Smith" not in redacted
         assert "Mary Jane" not in redacted
@@ -92,7 +92,7 @@ class TestPresidioBridgeRoundtrip:
         redacted, key = presidio_bridge.redact(
             original,
             language="en",
-            seed=42,
+            salt=42,
         )
 
         # Simulate LLM processing
@@ -144,7 +144,7 @@ class TestPresidioNERAdapter:
         ):
             redacted, key = redact(
                 "John Smith called 555-123-4567",
-                seed=42,
+                salt=42,
                 mode="ner",
                 lang="en",
             )

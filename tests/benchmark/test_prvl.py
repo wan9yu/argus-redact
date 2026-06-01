@@ -112,7 +112,7 @@ def _compute_prvl(texts: list[dict], mode: str = "fast"):
 
     for item in texts:
         lang = item["lang"]
-        redacted, key = redact(item["text"], mode=mode, lang=lang, seed=42)
+        redacted, key = redact(item["text"], mode=mode, lang=lang, salt=42)
 
         # P: Privacy — PII should NOT be in redacted text
         if item["pii"]:
@@ -288,7 +288,7 @@ class TestReversibilityThroughLLM:
         details = []
 
         for item in LLM_PROMPTS:
-            redacted, key = redact(item["text"], mode="fast", lang=item["lang"], seed=42)
+            redacted, key = redact(item["text"], mode="fast", lang=item["lang"], salt=42)
 
             # Build prompt with redacted text
             prompt = item["prompt_template"].format(text=redacted)
@@ -338,7 +338,7 @@ class TestReversibilityThroughLLM:
         details = []
 
         for item in LLM_PROMPTS:
-            redacted, key = redact(item["text"], mode="fast", lang=item["lang"], seed=42)
+            redacted, key = redact(item["text"], mode="fast", lang=item["lang"], salt=42)
 
             prompt = item["prompt_template"].format(text=redacted)
             llm_output = _query_llm(prompt)
@@ -377,7 +377,7 @@ class TestUsabilityThroughLLM:
         details = []
 
         for item in LLM_PROMPTS:
-            redacted, key = redact(item["text"], mode="fast", lang=item["lang"], seed=42)
+            redacted, key = redact(item["text"], mode="fast", lang=item["lang"], salt=42)
             prompt = item["prompt_template"].format(text=redacted)
             llm_output = _query_llm(prompt)
 

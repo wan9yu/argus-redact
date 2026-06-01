@@ -8,14 +8,14 @@ class TestFullwidthBypass:
 
     def test_should_detect_fullwidth_phone(self):
         text = "电话１３８００１３８０００"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         # Key stores original (fullwidth) text for correct restore
         assert len(key) >= 1, "Fullwidth phone should be detected"
 
     def test_should_detect_fullwidth_email_at(self):
         text = "邮箱zhang＠gmail.com"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Fullwidth @ email should be detected"
 
@@ -26,7 +26,7 @@ class TestZeroWidthBypass:
     def test_should_detect_phone_with_zwsp(self):
         """Zero-width space U+200B."""
         text = "电话1\u200b3\u200b8\u200b0\u200b0\u200b1\u200b3\u200b8\u200b0\u200b0\u200b0"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Phone with ZWSP should be detected"
         # Key stores original text (with ZWSP) for correct restore
@@ -36,20 +36,20 @@ class TestZeroWidthBypass:
     def test_should_detect_phone_with_zwj(self):
         """Zero-width joiner U+200D."""
         text = "电话1\u200d3\u200d8\u200d0\u200d0\u200d1\u200d3\u200d8\u200d0\u200d0\u200d0"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Phone with ZWJ should be detected"
 
     def test_should_detect_phone_with_soft_hyphen(self):
         """Soft hyphen U+00AD."""
         text = "电话1\u00ad3\u00ad8\u00ad0\u00ad0\u00ad1\u00ad3\u00ad8\u00ad0\u00ad0\u00ad0"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Phone with soft hyphen should be detected"
 
     def test_should_detect_email_with_zwsp(self):
         text = "邮箱z\u200bhang@example.com"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Email with ZWSP should be detected"
 
@@ -60,7 +60,7 @@ class TestDirectionBypass:
     def test_should_detect_phone_with_rtl_override(self):
         """RTL override: bytes are 13800138000 wrapped in direction chars."""
         text = "电话\u202e13800138000\u202c"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         # Direction chars stripped during normalization → phone detected
         assert len(key) >= 1, "Phone wrapped in RTL should be detected"
@@ -71,7 +71,7 @@ class TestRoundtripWithNormalization:
 
     def test_should_roundtrip_fullwidth_phone(self):
         text = "电话１３８００１３８０００"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
         restored = restore(redacted, key)
 
         # Original fullwidth chars recovered (key stores original text)
@@ -79,7 +79,7 @@ class TestRoundtripWithNormalization:
 
     def test_should_roundtrip_zwsp_phone(self):
         text = "电话1\u200b3\u200b8\u200b0\u200b0\u200b1\u200b3\u200b8\u200b0\u200b0\u200b0"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
         restored = restore(redacted, key)
 
         # Original chars (with ZWSP) recovered
@@ -92,19 +92,19 @@ class TestHomoglyphBypass:
     def test_should_detect_email_with_cyrillic_a(self):
         """Cyrillic а (U+0430) looks identical to Latin a."""
         text = "邮箱zh\u0430ng@gmail.com"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Email with Cyrillic а should be detected"
 
     def test_should_detect_email_with_greek_o(self):
         text = "邮箱zhang@gmail.c\u03bfm"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Email with Greek ο should be detected"
 
     def test_should_roundtrip_homoglyph_email(self):
         text = "邮箱zh\u0430ng@gmail.com"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
         restored = restore(redacted, key)
 
         assert "\u0430" in restored or "a" in restored
@@ -120,7 +120,7 @@ class TestUnifiedPrefix:
         }
         redacted, key = redact(
             "张三电话13812345678，身份证110101199003074610",
-            seed=42,
+            salt=42,
             mode="fast",
             names=["张三"],
             unified_prefix="R",
@@ -133,7 +133,7 @@ class TestUnifiedPrefix:
     def test_should_use_default_prefixes_when_not_configured(self):
         redacted, key = redact(
             "电话13812345678",
-            seed=42,
+            salt=42,
             mode="fast",
         )
 
@@ -151,7 +151,7 @@ class TestLargeTextDoS:
         text = "电话13812345678，邮箱test@example.com。" * 2500  # ~100KB
 
         start = time.perf_counter()
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
         elapsed = time.perf_counter() - start
 
         assert elapsed < 5.0, f"100KB took {elapsed:.1f}s, expected <5s"
@@ -163,7 +163,7 @@ class TestLargeTextDoS:
         text = "电话13812345678，邮箱test@example.com。" * 12500  # ~500KB
 
         start = time.perf_counter()
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
         elapsed = time.perf_counter() - start
 
         assert elapsed < 30.0, f"500KB took {elapsed:.1f}s, expected <30s"

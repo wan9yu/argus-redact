@@ -32,11 +32,11 @@ class RedactTransform:
         *,
         mode: str = "fast",
         lang: str | list[str] = "zh",
-        seed: int | None = None,
+        salt: int | bytes | None = None,
     ):
         self._mode = mode
         self._lang = lang
-        self._seed = seed
+        self._salt = salt
         self.last_key: dict | None = None
 
     def __call__(self, text: str, **kwargs) -> str:
@@ -44,7 +44,7 @@ class RedactTransform:
             text,
             mode=self._mode,
             lang=self._lang,
-            seed=self._seed,
+            salt=self._salt,
             key=self.last_key,
         )
         return redacted

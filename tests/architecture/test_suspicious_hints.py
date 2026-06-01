@@ -60,7 +60,7 @@ class TestChineseDigitEndToEnd:
         from argus_redact import redact
 
         text = "手机号一三八零零一三八零零零"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1
 
@@ -68,7 +68,7 @@ class TestChineseDigitEndToEnd:
         from argus_redact import redact
 
         text = "电话一38零零1三8零零0"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1
 
@@ -76,7 +76,7 @@ class TestChineseDigitEndToEnd:
         from argus_redact import redact, restore
 
         text = "手机号一三八零零一三八零零零"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
         restored = restore(redacted, key)
 
         assert "一三八" in restored
@@ -85,6 +85,6 @@ class TestChineseDigitEndToEnd:
         from argus_redact import redact
 
         text = "三月份去了五层楼，买了一个苹果"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert key == {}

@@ -16,13 +16,13 @@ INVALID_ARC = [
 
 @pytest.mark.parametrize("text", VALID_ARC)
 def test_arc_detected(text):
-    out, key = redact(text, lang="zh", mode="fast", seed=42)
+    out, key = redact(text, lang="zh", mode="fast", salt=42)
     assert text not in out
 
 
 @pytest.mark.parametrize("text", INVALID_ARC)
 def test_invalid_arc_not_detected(text):
-    out, key = redact(text, lang="zh", mode="fast", seed=42)
+    out, key = redact(text, lang="zh", mode="fast", salt=42)
     assert text in out, f"Invalid ARC {text!r} unexpectedly redacted: {out}"
 
 
@@ -36,7 +36,7 @@ def test_legacy_a_prefix_redacts_as_twid_not_arc():
     from argus_redact import redact
 
     redacted, _key, types = redact(
-        "A123456789", lang="zh", mode="fast", seed=42, with_types=True
+        "A123456789", lang="zh", mode="fast", salt=42, with_types=True
     )
     arc_keys = [k for k, t in types.items() if t == "taiwan_arc"]
     assert not arc_keys, (

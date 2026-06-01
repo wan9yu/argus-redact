@@ -139,7 +139,7 @@ class TestPRvLMultiLLM:
         details = []
 
         for case in TEST_CASES:
-            redacted, key = redact(case["text"], mode="fast", lang=case["lang"], seed=42)
+            redacted, key = redact(case["text"], mode="fast", lang=case["lang"], salt=42)
             prompt = case["prompt"].format(text=redacted)
 
             t0 = time.time()
@@ -193,7 +193,7 @@ class TestPRvLMultiLLM:
         details = []
 
         for case in TEST_CASES:
-            redacted, key = redact(case["text"], mode="fast", lang=case["lang"], seed=42)
+            redacted, key = redact(case["text"], mode="fast", lang=case["lang"], salt=42)
             prompt = case["prompt"].format(text=redacted)
             llm_output = _query_poe(prompt, model, poe_key)
 
@@ -218,7 +218,7 @@ class TestPRvLMultiLLM:
         details = []
 
         for case in TEST_CASES:
-            redacted, key = redact(case["text"], mode="fast", lang=case["lang"], seed=42)
+            redacted, key = redact(case["text"], mode="fast", lang=case["lang"], salt=42)
             prompt = case["prompt"].format(text=redacted)
             llm_output = _query_poe(prompt, model, poe_key)
 

@@ -58,7 +58,7 @@ def _run_benchmark(mode, n_examples=200):
             if span["label"] in DETECTABLE_LABELS:
                 expected_pii.add(span["value"])
 
-        redacted, key = redact(text, mode=mode, lang="en", seed=42)
+        redacted, key = redact(text, mode=mode, lang="en", salt=42)
         detected_pii = set(key.values())
 
         hits = expected_pii & detected_pii

@@ -5,7 +5,7 @@ from argus_redact.integrations.langchain import RedactRunnable, RestoreRunnable
 
 class TestRedactRunnable:
     def test_should_redact_text_when_invoked(self):
-        runnable = RedactRunnable(mode="fast", lang="zh", seed=42)
+        runnable = RedactRunnable(mode="fast", lang="zh", salt=42)
 
         result = runnable.invoke("电话13812345678")
 
@@ -14,7 +14,7 @@ class TestRedactRunnable:
         assert "13812345678" in runnable.last_key.values()
 
     def test_should_reuse_key_across_invocations(self):
-        runnable = RedactRunnable(mode="fast", lang="zh", seed=42)
+        runnable = RedactRunnable(mode="fast", lang="zh", salt=42)
 
         runnable.invoke("电话13812345678")
         key1 = dict(runnable.last_key)
@@ -27,7 +27,7 @@ class TestRedactRunnable:
             assert key2[k] == v
 
     def test_should_support_mixed_language(self):
-        runnable = RedactRunnable(mode="fast", lang=["zh", "en"], seed=42)
+        runnable = RedactRunnable(mode="fast", lang=["zh", "en"], salt=42)
 
         result = runnable.invoke("电话13812345678, SSN 123-45-6789")
 
@@ -37,7 +37,7 @@ class TestRedactRunnable:
 
 class TestRestoreRunnable:
     def test_should_restore_text_when_invoked(self):
-        redact_r = RedactRunnable(mode="fast", lang="zh", seed=42)
+        redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
         restore_r = RestoreRunnable(redact_r)
 
         redacted = redact_r.invoke("电话13812345678")
@@ -46,7 +46,7 @@ class TestRestoreRunnable:
         assert "13812345678" in restored
 
     def test_should_restore_multiple_pii(self):
-        redact_r = RedactRunnable(mode="fast", lang="zh", seed=42)
+        redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
         restore_r = RestoreRunnable(redact_r)
 
         redacted = redact_r.invoke("电话13812345678，邮箱test@example.com")
@@ -58,7 +58,7 @@ class TestRestoreRunnable:
 
 class TestRedactRestoreChain:
     def test_should_roundtrip_as_pipeline(self):
-        redact_r = RedactRunnable(mode="fast", lang="zh", seed=42)
+        redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
         restore_r = RestoreRunnable(redact_r)
 
         original = "张三的电话13812345678，邮箱zhang@test.com"
@@ -76,7 +76,7 @@ class TestRedactRestoreChain:
         assert "zhang@test.com" in restored
 
     def test_should_reset_key_when_requested(self):
-        runnable = RedactRunnable(mode="fast", lang="zh", seed=42)
+        runnable = RedactRunnable(mode="fast", lang="zh", salt=42)
 
         runnable.invoke("电话13812345678")
         assert runnable.last_key is not None

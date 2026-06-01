@@ -8,7 +8,7 @@ class TestNamesWhitelist:
         redacted, key = redact(
             "你好王一，今天天气不错",
             names=["王一"],
-            seed=42,
+            salt=42,
             mode="fast",
         )
 
@@ -19,7 +19,7 @@ class TestNamesWhitelist:
         redacted, key = redact(
             "王一和张三在聊天",
             names=["王一", "张三"],
-            seed=42,
+            salt=42,
             mode="fast",
         )
 
@@ -30,7 +30,7 @@ class TestNamesWhitelist:
         redacted, key = redact(
             "王一的手机号是18630303030",
             names=["王一"],
-            seed=42,
+            salt=42,
             mode="fast",
         )
 
@@ -43,7 +43,7 @@ class TestNamesWhitelist:
         redacted, key = redact(
             original,
             names=["王一"],
-            seed=42,
+            salt=42,
             mode="fast",
         )
         restored = restore(redacted, key)
@@ -55,7 +55,7 @@ class TestNamesWhitelist:
         redacted, key = redact(
             "王一在这里",
             names=["王一"],
-            seed=42,
+            salt=42,
             mode="fast",
         )
 
@@ -66,7 +66,7 @@ class TestNamesWhitelist:
         redacted, key = redact(
             "王一说王一要去",
             names=["王一"],
-            seed=42,
+            salt=42,
             mode="fast",
         )
 
@@ -75,12 +75,12 @@ class TestNamesWhitelist:
         assert redacted.count(person_entries[0]) == 2
 
     def test_should_handle_empty_names_list(self):
-        redacted, key = redact("你好王一", names=[], seed=42, mode="fast")
+        redacted, key = redact("你好王一", names=[], salt=42, mode="fast")
 
         assert redacted == "你好王一"
 
     def test_should_handle_no_names_parameter(self):
-        redacted, key = redact("你好王一", seed=42, mode="fast")
+        redacted, key = redact("你好王一", salt=42, mode="fast")
 
         assert "王一" in redacted  # not detected without names or NER
 
@@ -88,7 +88,7 @@ class TestNamesWhitelist:
         redacted, key = redact(
             "Hello John Smith, your email is john@test.com",
             names=["John Smith"],
-            seed=42,
+            salt=42,
             mode="fast",
             lang="en",
         )
@@ -100,7 +100,7 @@ class TestNamesWhitelist:
         _, key = redact(
             "王一的身份证110101199003074610",
             names=["王一"],
-            seed=42,
+            salt=42,
             mode="fast",
         )
 
@@ -133,7 +133,7 @@ class TestNamesWhitelist:
             redacted, key = redact(
                 "王一和李四的电话13812345678",
                 names=["王一"],
-                seed=42,
+                salt=42,
                 mode="ner",
             )
 

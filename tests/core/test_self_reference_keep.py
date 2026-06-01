@@ -19,7 +19,7 @@ def test_self_reference_default_strategy_is_keep():
 def test_issue_12_self_reference_verbatim_repro():
     """Issue #12 input — the pronoun part stays preserved through the full pipeline."""
     text = "我叫张伟, 手机 13800138000. 请原样复述我的姓名和手机号码"
-    redacted, _ = redact(text, mode="fast", lang="zh", seed=42)
+    redacted, _ = redact(text, mode="fast", lang="zh", salt=42)
     assert "我叫" in redacted
     assert "我的" in redacted
 

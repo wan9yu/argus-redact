@@ -29,12 +29,12 @@ def generate_pseudonym(
     *,
     prefix: str = "P",
     code_range: tuple[int, int] = (1, 99999),
-    seed: int | None = None,
+    salt: int | None = None,
 ) -> str:
     """Generate a single pseudonym code like P-037."""
     lo, hi = code_range
-    if seed is not None:
-        rng = random.Random(seed)
+    if salt is not None:
+        rng = random.Random(salt)
         num = rng.randint(lo, hi)
     else:
         num = secrets.randbelow(hi - lo + 1) + lo

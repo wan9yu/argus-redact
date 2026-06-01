@@ -33,7 +33,7 @@ class TestRedactToolReturnsOnlyToken:
     async def test_should_return_key_token(self, mcp_app):
         result = await mcp_app._tool_manager.call_tool(
             "redact",
-            {"text": "电话13812345678", "mode": "fast", "seed": 42},
+            {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
         content = result if isinstance(result, str) else result[0].text
         data = json.loads(content)
@@ -46,7 +46,7 @@ class TestRedactToolReturnsOnlyToken:
         # Regression guard: the deprecated raw `key` field was removed in v0.5.5.
         result = await mcp_app._tool_manager.call_tool(
             "redact",
-            {"text": "电话13812345678", "mode": "fast", "seed": 42},
+            {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
         content = result if isinstance(result, str) else result[0].text
         data = json.loads(content)
@@ -61,7 +61,7 @@ class TestRestoreToolViaToken:
     async def test_should_round_trip_via_key_token(self, mcp_app):
         result = await mcp_app._tool_manager.call_tool(
             "redact",
-            {"text": "电话13812345678", "mode": "fast", "seed": 42},
+            {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
         data = json.loads(result if isinstance(result, str) else result[0].text)
 
@@ -95,7 +95,7 @@ class TestTokenStoreLifecycle:
 
         result = await mcp_app._tool_manager.call_tool(
             "redact",
-            {"text": "phone 13812345678", "mode": "fast", "seed": 42},
+            {"text": "phone 13812345678", "mode": "fast", "salt": 42},
         )
         data = json.loads(result if isinstance(result, str) else result[0].text)
         assert data["key_token"] in _TOKEN_STORE

@@ -7,7 +7,7 @@ class TestBankCardMask:
     def test_should_show_first6_last4_by_default(self):
         config = {"bank_card": {"strategy": "mask", "visible_prefix": 6, "visible_suffix": 4}}
 
-        _, key = redact("卡号4111111111111111", seed=42, mode="fast", config=config)
+        _, key = redact("卡号4111111111111111", salt=42, mode="fast", config=config)
 
         replacement = list(key.keys())[0]
         assert replacement.startswith("411111")
@@ -39,7 +39,7 @@ class TestChineseNameMask:
 
 class TestEmailMask:
     def test_should_show_first_char_and_domain(self):
-        _, key = redact("邮箱test@qq.com", seed=42, mode="fast")
+        _, key = redact("邮箱test@qq.com", salt=42, mode="fast")
 
         replacement = list(key.keys())[0]
         assert replacement.startswith("t")
@@ -64,7 +64,7 @@ class TestIdNumberMask:
     def test_should_show_first4_last4(self):
         config = {"id_number": {"strategy": "mask", "visible_prefix": 4, "visible_suffix": 4}}
 
-        _, key = redact("身份证110101199003074610", seed=42, mode="fast", config=config)
+        _, key = redact("身份证110101199003074610", salt=42, mode="fast", config=config)
 
         replacement = list(key.keys())[0]
         assert replacement.startswith("1101")

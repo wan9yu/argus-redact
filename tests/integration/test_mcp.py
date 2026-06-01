@@ -48,7 +48,7 @@ class TestMCPToolExecution:
     async def test_should_redact_and_return_key_token(self, mcp_app):
         result = await mcp_app._tool_manager.call_tool(
             "redact",
-            {"text": "电话13812345678", "mode": "fast", "seed": 42},
+            {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
 
         content = result if isinstance(result, str) else result[0].text
@@ -61,7 +61,7 @@ class TestMCPToolExecution:
     async def test_should_restore_with_key_token(self, mcp_app):
         result = await mcp_app._tool_manager.call_tool(
             "redact",
-            {"text": "电话13812345678", "mode": "fast", "seed": 42},
+            {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
         content = result if isinstance(result, str) else result[0].text
         data = json.loads(content)

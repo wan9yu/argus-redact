@@ -43,14 +43,14 @@ def test_pseudonym_llm_explicit_salt_works():
 
 
 def test_realistic_with_seed_works():
-    """``seed=<int>`` is back-compat path: provides 64-bit entropy via 8-byte BE."""
+    """``salt=<int>`` is back-compat path: provides 64-bit entropy via 8-byte BE."""
     from argus_redact import redact
 
     redacted, key = redact(
         "王建国的电话13912345678",
         config={"phone": {"strategy": "realistic"}},
         lang="zh",
-        seed=42,
+        salt=42,
     )
     assert "13912345678" not in redacted
     assert key  # non-empty

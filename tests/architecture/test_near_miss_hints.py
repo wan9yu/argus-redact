@@ -60,6 +60,6 @@ class TestNearMissHintFlow:
         from argus_redact import redact
 
         text = "身份证110101199003071234"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert "110101199003071234" in redacted

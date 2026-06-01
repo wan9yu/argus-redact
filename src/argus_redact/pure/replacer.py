@@ -74,39 +74,39 @@ def _seed_from_value(value: str, type_name: str, salt: bytes) -> bytes:
     return hmac.new(salt, msg, hashlib.sha256).digest()
 
 
-def _resolve_salt(seed: int | bytes | None) -> bytes:
+def _resolve_salt(salt: int | bytes | None) -> bytes:
     """Determine effective salt for HMAC seeding.
 
     Priority: caller bytes → caller int (8-byte BE, 64-bit entropy) → env var.
     Raises ``ValueError`` if none are set; pre-v0.6.1 silently used ``b""``
     which collapsed HMAC to a public hash recoverable from one observed pair.
     """
-    if isinstance(seed, (bytes, bytearray)):
-        return bytes(seed)
-    if isinstance(seed, int):
-        signed = seed < 0
-        return seed.to_bytes(_SALT_INT_BYTES, "big", signed=signed)
+    if isinstance(salt, (bytes, bytearray)):
+        return bytes(salt)
+    if isinstance(salt, int):
+        signed = salt < 0
+        return salt.to_bytes(_SALT_INT_BYTES, "big", signed=signed)
     env = os.environ.get("ARGUS_REDACT_PSEUDONYM_SALT")
     if env:
         return env.encode("utf-8")
     raise ValueError(
-        "realistic strategy requires explicit salt: pass `seed=<int>`, "
+        "realistic strategy requires explicit salt: pass `salt=<int>`, "
         "`salt=<bytes>`, or set ARGUS_REDACT_PSEUDONYM_SALT."
     )
 
 
-def _pseudonym_seed_int(seed: int | bytes | None) -> int | None:
-    """Coerce ``seed`` to int for ``PseudonymGenerator`` (uses ``random.Random``
+def _pseudonym_seed_int(salt: int | bytes | None) -> int | None:
+    """Coerce ``salt`` to int for ``PseudonymGenerator`` (uses ``random.Random``
     to derive non-cryptographic ``P-NNNNN`` codes — int seed is sufficient;
     bytes get truncated to first 8 bytes BE)."""
-    if seed is None:
+    if salt is None:
         return None
-    if isinstance(seed, int):
-        return seed
-    if isinstance(seed, (bytes, bytearray)):
-        b = bytes(seed)[:_SALT_INT_BYTES].ljust(_SALT_INT_BYTES, b"\x00")
+    if isinstance(salt, int):
+        return salt
+    if isinstance(salt, (bytes, bytearray)):
+        b = bytes(salt)[:_SALT_INT_BYTES].ljust(_SALT_INT_BYTES, b"\x00")
         return int.from_bytes(b, "big")
-    raise TypeError(f"seed must be int, bytes, or None, got {type(seed).__name__}")
+    raise TypeError(f"salt must be int, bytes, or None, got {type(salt).__name__}")
 
 
 @functools.lru_cache(maxsize=128)
@@ -493,7 +493,7 @@ def replace(
     text: str,
     entities: list[PatternMatch],
     *,
-    seed: int | bytes | None = None,
+    salt: int | bytes | None = None,
     key: dict[str, str] | None = None,
     config: dict | None = None,
     langs: list[str] | None = None,
@@ -543,7 +543,7 @@ def replace(
         org_prefix = config.get("organization", {}).get("prefix", org_prefix)
 
     # Unified prefix mode: all types use same prefix (hides PII type from output)
-    pseudo_seed_int = _pseudonym_seed_int(seed)
+    pseudo_seed_int = _pseudonym_seed_int(salt)
     pseudo_gen = PseudonymGenerator(
         prefix=unified_prefix or person_prefix,
         seed=pseudo_seed_int,
@@ -619,9 +619,9 @@ def replace(
             faker_reserved = _find_faker_reserved(entity.type, langs)
 
             if faker_reserved is not None:
-                salt = _resolve_salt(seed)
+                resolved_salt = _resolve_salt(salt)
                 replacement, alias_list = _generate_unique_fake(
-                    faker_reserved, entity.text, entity.type, salt, used_labels
+                    faker_reserved, entity.text, entity.type, resolved_salt, used_labels
                 )
                 if alias_list:
                     aliases[replacement] = alias_list

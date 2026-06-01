@@ -90,7 +90,7 @@ class TestHanLPRealRedactIntegration:
         from argus_redact import redact
 
         text = "张三的手机号是13812345678"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         # fast mode: only phone is redacted, 张三 remains
         assert "张三" in redacted
@@ -120,7 +120,7 @@ class TestHanLPRealRedactIntegration:
         merged = merge_entities(all_entities)
 
         # Replace
-        redacted, key, _ = replace(text, merged, seed=42)
+        redacted, key, _ = replace(text, merged, salt=42)
 
         assert "张三" not in redacted
         assert "13812345678" not in redacted

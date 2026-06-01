@@ -36,7 +36,7 @@ def test_keep_outside_whitelist_downgrades(text, entity_type):
     with warnings.catch_warnings(record=True) as captured:
         warnings.simplefilter("always")
         redacted, key, _ = replace(
-            full_text, [entity], config={entity_type: {"strategy": "keep"}}, seed=42,
+            full_text, [entity], config={entity_type: {"strategy": "keep"}}, salt=42,
         )
 
     # Downgrade replaced the entity — original now lives in the reversible key

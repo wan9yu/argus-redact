@@ -23,7 +23,7 @@ class TestRealisticScenarios:
     def test_should_not_crash(self, case):
         lang = case.get("lang", "zh")
 
-        redacted, key = redact(case["input"], seed=42, mode="fast", lang=lang)
+        redacted, key = redact(case["input"], salt=42, mode="fast", lang=lang)
 
         assert isinstance(redacted, str)
         assert isinstance(key, dict)
@@ -34,7 +34,7 @@ class TestRealisticScenarios:
 
         lang = case.get("lang", "zh")
 
-        redacted, key = redact(case["input"], seed=42, mode="fast", lang=lang)
+        redacted, key = redact(case["input"], salt=42, mode="fast", lang=lang)
 
         for pii in case["pii_values"]:
             assert pii not in redacted, f"PII '{pii}' not redacted: {case['description']}"
@@ -45,7 +45,7 @@ class TestRealisticScenarios:
 
         lang = case.get("lang", "zh")
 
-        redacted, key = redact(case["input"], seed=42, mode="fast", lang=lang)
+        redacted, key = redact(case["input"], salt=42, mode="fast", lang=lang)
         restored = restore(redacted, key)
 
         for pii in case["pii_values"]:

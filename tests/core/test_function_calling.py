@@ -14,7 +14,7 @@ class TestFunctionCallingCompatibility:
     def test_should_preserve_semantic_tokens_when_redacted(self, example):
         lang = example.get("lang", "zh")
 
-        redacted, key = redact(example["input"], seed=42, mode="fast", lang=lang)
+        redacted, key = redact(example["input"], salt=42, mode="fast", lang=lang)
 
         # PII should be gone
         for pii in example["pii_values"]:
@@ -33,7 +33,7 @@ class TestFunctionCallingCompatibility:
     def test_should_roundtrip_when_function_calling(self, example):
         lang = example.get("lang", "zh")
 
-        redacted, key = redact(example["input"], seed=42, mode="fast", lang=lang)
+        redacted, key = redact(example["input"], salt=42, mode="fast", lang=lang)
         restored = restore(redacted, key)
 
         for pii in example["pii_values"]:
@@ -46,7 +46,7 @@ class TestJsonSchemaCompatibility:
     def test_should_produce_json_safe_redacted_text(self):
         text = '张三说："我的电话是13812345678"'
 
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         # Must be valid inside a JSON string
         payload = json.dumps({"content": redacted})
@@ -54,7 +54,7 @@ class TestJsonSchemaCompatibility:
         assert parsed["content"] == redacted
 
     def test_should_produce_valid_json_key(self):
-        _, key = redact("电话13812345678，邮箱test@example.com", seed=42, mode="fast")
+        _, key = redact("电话13812345678，邮箱test@example.com", salt=42, mode="fast")
 
         # Key must be JSON-serializable
         serialized = json.dumps(key, ensure_ascii=False)
@@ -64,7 +64,7 @@ class TestJsonSchemaCompatibility:
     def test_should_work_in_openai_function_call_format(self):
         text = "帮张三订明天下午3点的会议室，电话13812345678"
 
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         # Simulate OpenAI function call message
         messages = [
@@ -97,7 +97,7 @@ class TestJsonSchemaCompatibility:
     def test_should_not_break_pseudonym_in_json_value(self):
         text = "Call John at (555) 123-4567"
 
-        redacted, key = redact(text, seed=42, mode="fast", lang="en")
+        redacted, key = redact(text, salt=42, mode="fast", lang="en")
 
         # Pseudonym/mask as JSON value
         for replacement in key.keys():

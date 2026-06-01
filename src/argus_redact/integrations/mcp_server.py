@@ -81,7 +81,7 @@ async def redact_text(
     text: str,
     lang: str = "zh",
     mode: str = "fast",
-    seed: int | None = None,
+    salt: int | None = None,
 ) -> str:
     """Redact PII from text. Returns JSON with redacted text and a key_token.
 
@@ -89,7 +89,7 @@ async def redact_text(
         text: Input text containing PII to redact.
         lang: Language code(s). Use comma-separated for multiple: "zh,en".
         mode: Detection mode — "fast" (regex), "ner" (regex+NER), "auto" (all).
-        seed: Random seed for deterministic output (testing only).
+        salt: Salt for deterministic output (testing only). Accepts int (coerced to bytes) or bytes.
 
     Returns JSON with two fields:
     - ``redacted``: redacted text
@@ -104,7 +104,7 @@ async def redact_text(
         text,
         lang=lang_param,
         mode=mode,
-        seed=seed,
+        salt=salt,
     )
     token = _create_key_token(key)
     return json.dumps(

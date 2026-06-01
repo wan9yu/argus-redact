@@ -9,7 +9,7 @@ def test_unified_prefix_kwarg_works():
         "员工张三，身份证110101199003074610",
         lang="zh",
         mode="fast",
-        seed=42,
+        salt=42,
         unified_prefix="R",
     )
     assert "R-" in out

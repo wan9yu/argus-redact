@@ -17,11 +17,11 @@ INVALID_TWID = [
 
 @pytest.mark.parametrize("text", VALID_TWID)
 def test_twid_detected(text):
-    out, key = redact(text, lang="zh", mode="fast", seed=42)
+    out, key = redact(text, lang="zh", mode="fast", salt=42)
     assert text not in out
 
 
 @pytest.mark.parametrize("text", INVALID_TWID)
 def test_invalid_twid_not_detected(text):
-    out, key = redact(text, lang="zh", mode="fast", seed=42)
+    out, key = redact(text, lang="zh", mode="fast", salt=42)
     assert text in out

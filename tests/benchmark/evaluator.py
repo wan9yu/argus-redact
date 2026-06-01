@@ -93,7 +93,7 @@ def evaluate(
             sample.text,
             mode=mode,
             lang=sample.lang,
-            seed=42,
+            salt=42,
             detailed=True,
         )
 

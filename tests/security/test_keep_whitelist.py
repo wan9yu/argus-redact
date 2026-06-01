@@ -40,7 +40,7 @@ def test_keep_strategy_on_sensitive_type_downgrades_with_warning():
             "身份证110101199003074610",
             entities,
             config={"id_number": {"strategy": "keep"}},
-            seed=42,
+            salt=42,
         )
         assert "110101199003074610" not in text, "keep strategy silently leaked PII"
         assert any(
@@ -54,7 +54,7 @@ def test_l3_misclassified_ssn_as_self_reference_still_redacted():
     entities = [PatternMatch(text="123-45-6789", type="self_reference", start=12, end=23, layer=3)]
     with warnings.catch_warnings(record=True) as captured:
         warnings.simplefilter("always")
-        text, _key, _ = replace("patient SSN 123-45-6789", entities, seed=42)
+        text, _key, _ = replace("patient SSN 123-45-6789", entities, salt=42)
         assert "123-45-6789" not in text, (
             "L3 misclassification leaked SSN via keep — H6 regression"
         )

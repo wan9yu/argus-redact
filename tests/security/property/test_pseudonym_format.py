@@ -18,9 +18,9 @@ from tests.security.property.conftest import PROPERTY_SETTINGS
 @given(
     text=st.text(min_size=1, max_size=50),
     entity_type=st.sampled_from(["person", "organization"]),
-    seed=st.integers(min_value=0, max_value=2**31 - 1),
+    salt=st.integers(min_value=0, max_value=2**31 - 1),
 )
-def test_pseudonym_output_format(text, entity_type, seed):
+def test_pseudonym_output_format(text, entity_type, salt):
     """Any pseudonym replacement of any text matches the expected shape."""
     entity = PatternMatch(
         text=text, type=entity_type, start=0, end=len(text), layer=1
@@ -29,7 +29,7 @@ def test_pseudonym_output_format(text, entity_type, seed):
         f"{text} suffix",
         [entity],
         config={entity_type: {"strategy": "pseudonym"}},
-        seed=seed,
+        salt=salt,
     )
 
     fake_codes = list(key.keys())

@@ -12,7 +12,7 @@ class TestConcurrentRedact:
 
         with ThreadPoolExecutor(max_workers=8) as pool:
             futures = [
-                pool.submit(redact, t, seed=i, mode="fast", names=[t[2:4]])
+                pool.submit(redact, t, salt=i, mode="fast", names=[t[2:4]])
                 for i, t in enumerate(texts)
             ]
             results = [f.result() for f in futures]
@@ -34,7 +34,7 @@ class TestConcurrentRedact:
         texts = [f"电话138{i:08d}" for i in range(20)]
 
         def roundtrip(text, seed):
-            redacted, key = redact(text, seed=seed, mode="fast")
+            redacted, key = redact(text, salt=seed, mode="fast")
             restored = restore(redacted, key)
             return text, restored
 
@@ -50,7 +50,7 @@ class TestConcurrentRedact:
         """100 concurrent calls should complete without deadlock."""
         with ThreadPoolExecutor(max_workers=16) as pool:
             futures = [
-                pool.submit(redact, "电话13812345678", seed=i, mode="fast") for i in range(100)
+                pool.submit(redact, "电话13812345678", salt=i, mode="fast") for i in range(100)
             ]
             results = [f.result() for f in futures]
 

@@ -42,7 +42,7 @@ class TestRegexPerformance:
 
     def test_should_redact_short_text_under_1ms(self):
         avg, mn, mx = _measure(
-            lambda: redact(SHORT_TEXT, seed=42, mode="fast"),
+            lambda: redact(SHORT_TEXT, salt=42, mode="fast"),
         )
 
         _report(f"Short ({len(SHORT_TEXT)} chars)", avg, mn, mx)
@@ -50,7 +50,7 @@ class TestRegexPerformance:
 
     def test_should_redact_medium_text_under_5ms(self):
         avg, mn, mx = _measure(
-            lambda: redact(MEDIUM_TEXT, seed=42, mode="fast"),
+            lambda: redact(MEDIUM_TEXT, salt=42, mode="fast"),
         )
 
         _report(f"Medium ({len(MEDIUM_TEXT)} chars)", avg, mn, mx)
@@ -58,7 +58,7 @@ class TestRegexPerformance:
 
     def test_should_redact_long_text_under_50ms(self):
         avg, mn, mx = _measure(
-            lambda: redact(LONG_TEXT, seed=42, mode="fast"),
+            lambda: redact(LONG_TEXT, salt=42, mode="fast"),
             rounds=20,
         )
 
@@ -70,7 +70,7 @@ class TestRestorePerformance:
     """restore() should be fast — pure string replacement."""
 
     def test_should_restore_under_1ms(self):
-        redacted, key = redact(MEDIUM_TEXT, seed=42, mode="fast")
+        redacted, key = redact(MEDIUM_TEXT, salt=42, mode="fast")
 
         avg, mn, mx = _measure(lambda: restore(redacted, key))
 
@@ -86,7 +86,7 @@ class TestThroughput:
 
         start = time.perf_counter()
         for doc in docs:
-            redact(doc, seed=42, mode="fast")
+            redact(doc, salt=42, mode="fast")
         elapsed = time.perf_counter() - start
 
         throughput = len(docs) / elapsed
@@ -98,7 +98,7 @@ class TestThroughput:
 
         start = time.perf_counter()
         for doc in docs:
-            redact(doc, seed=42, mode="fast")
+            redact(doc, salt=42, mode="fast")
         elapsed = time.perf_counter() - start
 
         throughput = len(docs) / elapsed
@@ -113,12 +113,12 @@ class TestMixedLanguagePerformance:
         text = "手机13812345678, SSN 123-45-6789, 携帯090-1234-5678, 전화010-1234-5678"
 
         avg_single, _, _ = _measure(
-            lambda: redact(text, seed=42, mode="fast", lang="zh"),
+            lambda: redact(text, salt=42, mode="fast", lang="zh"),
         )
         avg_four, _, _ = _measure(
             lambda: redact(
                 text,
-                seed=42,
+                salt=42,
                 mode="fast",
                 lang=["zh", "en", "ja", "ko"],
             ),

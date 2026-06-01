@@ -13,7 +13,7 @@ The privacy layer between you and AI. Your identity stays on your device — AI 
 ```python
 from argus_redact import redact
 
-redacted, key = redact("张三的电话是13812345678，身份证号110101199003074610", names=["张三"], lang="zh", seed=42)
+redacted, key = redact("张三的电话是13812345678，身份证号110101199003074610", names=["张三"], lang="zh", salt=42)
 print(redacted)
 # expected: P-83811的电话是138****5678，身份证号ID-03292
 

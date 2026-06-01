@@ -57,37 +57,37 @@ def _mock_semantic_adapter(entity_map: dict[str, list[NEREntity]]):
 
 class TestRedactBasic:
     def test_should_remove_phone_when_text_contains_phone(self):
-        redacted, key = redact("电话13812345678", seed=42, mode="fast")
+        redacted, key = redact("电话13812345678", salt=42, mode="fast")
 
         assert "13812345678" not in redacted
         assert "13812345678" in key.values()
 
     def test_should_remove_id_when_text_contains_id(self):
-        redacted, key = redact("身份证110101199003074610", seed=42, mode="fast")
+        redacted, key = redact("身份证110101199003074610", salt=42, mode="fast")
 
         assert "110101199003074610" not in redacted
 
     def test_should_remove_email_when_text_contains_email(self):
-        redacted, key = redact("邮箱zhang@example.com", seed=42, mode="fast")
+        redacted, key = redact("邮箱zhang@example.com", salt=42, mode="fast")
 
         assert "zhang@example.com" not in redacted
 
     def test_should_return_unchanged_when_no_pii(self):
         text = "今天天气不错"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert redacted == text
         assert key == {}
 
     def test_should_return_empty_when_text_is_empty(self):
-        redacted, key = redact("", seed=42, mode="fast")
+        redacted, key = redact("", salt=42, mode="fast")
 
         assert redacted == ""
         assert key == {}
 
     def test_should_remove_all_when_multiple_pii_types(self):
         text = "电话13812345678，邮箱test@example.com"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
 
         assert "13812345678" not in redacted
         assert "test@example.com" not in redacted
@@ -96,7 +96,7 @@ class TestRedactBasic:
     def test_should_detect_en_person_in_fast_mode(self):
         """v0.5.3: English person detection now works in fast mode (no NER needed)."""
         text = "Contact John Smith via phone 415-555-1234"
-        redacted, key = redact(text, seed=42, mode="fast", lang="en")
+        redacted, key = redact(text, salt=42, mode="fast", lang="en")
 
         assert "John Smith" not in redacted
         assert "John Smith" in key.values()
@@ -104,7 +104,7 @@ class TestRedactBasic:
     def test_should_detect_en_and_zh_person_when_mixed_lang(self):
         """zh + en lang list: both person detectors fire."""
         text = "客户王建国 contacted John Smith"
-        redacted, key = redact(text, seed=42, mode="fast", lang=["zh", "en"], names=["王建国"])
+        redacted, key = redact(text, salt=42, mode="fast", lang=["zh", "en"], names=["王建国"])
 
         assert "王建国" in key.values()
         assert "John Smith" in key.values()
@@ -114,7 +114,7 @@ class TestRedactRoundtrip:
     @parametrize_examples("redact_roundtrip.json")
     def test_should_recover_pii_when_redact_then_restore(self, example):
         original = example["input"]
-        redacted, key = redact(original, seed=42, mode="fast")
+        redacted, key = redact(original, salt=42, mode="fast")
 
         if example["pii_values"]:
             for pii in example["pii_values"]:
@@ -143,19 +143,19 @@ class TestRedactSelfReference:
     """
 
     def test_should_keep_wo_when_text_contains_pii_zh(self):
-        redacted, key = redact("我确诊了糖尿病", seed=42, mode="fast")
+        redacted, key = redact("我确诊了糖尿病", salt=42, mode="fast")
         # Pronoun preserved
         assert "我" in redacted
         # And not minted as a key entry
         assert "我" not in key.values()
 
     def test_should_keep_I_when_text_contains_pii_en(self):
-        redacted, _ = redact("I was diagnosed with diabetes", seed=42, mode="fast", lang="en")
+        redacted, _ = redact("I was diagnosed with diabetes", salt=42, mode="fast", lang="en")
         assert redacted.startswith("I "), f"first-person preserved, got {redacted!r}"
 
     def test_should_roundtrip_when_self_reference_zh(self):
         original = "我在协和医院做了体检，医生说我血糖偏高"
-        redacted, key = redact(original, seed=42, mode="fast")
+        redacted, key = redact(original, salt=42, mode="fast")
         restored = restore(redacted, key)
         # 我 preserved in redacted, round-trip still recovers exactly the input
         assert "我" in redacted
@@ -163,13 +163,13 @@ class TestRedactSelfReference:
 
     def test_should_roundtrip_when_kinship_zh(self):
         original = "我妈在301医院住院"
-        redacted, key = redact(original, seed=42, mode="fast")
+        redacted, key = redact(original, salt=42, mode="fast")
         restored = restore(redacted, key)
         assert "我妈" in redacted
         assert restored == original
 
     def test_should_keep_every_wo_in_text(self):
-        redacted, key = redact("我去了医院，我很担心", seed=42, mode="fast")
+        redacted, key = redact("我去了医院，我很担心", salt=42, mode="fast")
         # Both occurrences preserved
         assert redacted.count("我") == 2
         # No self_reference entry in the key
@@ -177,46 +177,46 @@ class TestRedactSelfReference:
 
     # Tier 2: no PII → also keep (always preserved under the new default)
     def test_should_keep_wo_when_no_pii_zh(self):
-        redacted, key = redact("我觉得天气很好", seed=42, mode="fast")
+        redacted, key = redact("我觉得天气很好", salt=42, mode="fast")
         assert "我" in redacted
         assert key == {}
 
     def test_should_keep_I_when_no_pii_en(self):
-        redacted, key = redact("I think this is a good plan", seed=42, mode="fast", lang="en")
+        redacted, key = redact("I think this is a good plan", salt=42, mode="fast", lang="en")
         assert redacted.startswith("I ")
         assert key == {}
 
     def test_should_keep_women_when_no_pii_zh(self):
-        redacted, _ = redact("我们今天开会讨论一下", seed=42, mode="fast")
+        redacted, _ = redact("我们今天开会讨论一下", salt=42, mode="fast")
         assert "我们" in redacted
 
     # Tier 3: commands → also keep
     def test_should_keep_wo_in_command_zh(self):
-        redacted, key = redact("我想问一下怎么用Python", seed=42, mode="fast")
+        redacted, key = redact("我想问一下怎么用Python", salt=42, mode="fast")
         assert "我" in redacted
         assert key == {}
 
     def test_should_keep_me_in_command_en(self):
-        redacted, _ = redact("Can you help me with Python?", seed=42, mode="fast", lang="en")
+        redacted, _ = redact("Can you help me with Python?", salt=42, mode="fast", lang="en")
         assert "me" in redacted
 
     # Kinship: always preserved
     def test_should_keep_kinship_zh(self):
-        redacted, _ = redact("我妈最近身体不好", seed=42, mode="fast")
+        redacted, _ = redact("我妈最近身体不好", salt=42, mode="fast")
         assert "我妈" in redacted
 
     def test_should_preserve_I_was_grammar(self):
-        redacted, _ = redact("I was diagnosed with diabetes", seed=42, mode="fast", lang="en")
+        redacted, _ = redact("I was diagnosed with diabetes", salt=42, mode="fast", lang="en")
         assert " was " in redacted
 
     def test_should_not_change_grammar_for_zh(self):
-        redacted, _ = redact("我很开心", seed=42, mode="fast")
+        redacted, _ = redact("我很开心", salt=42, mode="fast")
         assert "很开心" in redacted
 
     def test_should_roundtrip_with_grammar_unchanged(self):
         # With keep, round-trip is by definition exact: pronoun stays, other PII restored.
         original = "I'm feeling sick. I have diabetes."
-        redacted, key = redact(original, seed=42, mode="fast", lang="en")
+        redacted, key = redact(original, salt=42, mode="fast", lang="en")
         restored = restore(redacted, key)
         assert "I have" in restored or "I'm" in restored
 
@@ -231,7 +231,7 @@ class TestRedactConfig:
     def test_should_apply_config_when_provided(self, example):
         redacted, key = redact(
             example["input"],
-            seed=42,
+            salt=42,
             mode="fast",
             config=example["config"],
         )
@@ -251,19 +251,19 @@ class TestRedactConfigValidation:
             redact("test", config={"phone": {"strategy": "invalid"}})
 
     def test_should_accept_none_config(self):
-        redacted, key = redact("电话13812345678", seed=42, mode="fast", config=None)
+        redacted, key = redact("电话13812345678", salt=42, mode="fast", config=None)
         assert "13812345678" not in redacted
 
     def test_should_accept_dict_config(self):
         config = {"phone": {"strategy": "remove", "replacement": "[PHONE]"}}
-        redacted, key = redact("电话13812345678", seed=42, mode="fast", config=config)
+        redacted, key = redact("电话13812345678", salt=42, mode="fast", config=config)
         assert "13812345678" not in redacted
         assert any("[PHONE]" in k for k in key)
 
     def test_should_roundtrip_with_config(self):
         config = {"phone": {"strategy": "remove", "replacement": "[PHONE]"}}
         text = "电话13812345678"
-        redacted, key = redact(text, seed=42, mode="fast", config=config)
+        redacted, key = redact(text, salt=42, mode="fast", config=config)
         restored = restore(redacted, key)
         assert "13812345678" in restored
 
@@ -275,54 +275,54 @@ class TestRedactConfigValidation:
 
 class TestDetailedMode:
     def test_should_return_3_tuple_when_detailed_true(self):
-        result = redact("电话13812345678", detailed=True, seed=42, mode="fast")
+        result = redact("电话13812345678", detailed=True, salt=42, mode="fast")
         assert len(result) == 3
 
     def test_should_return_2_tuple_when_detailed_false(self):
-        result = redact("电话13812345678", seed=42, mode="fast")
+        result = redact("电话13812345678", salt=42, mode="fast")
         assert len(result) == 2
 
     def test_should_include_entities_in_details(self):
-        _, _, details = redact("电话13812345678", detailed=True, seed=42, mode="fast")
+        _, _, details = redact("电话13812345678", detailed=True, salt=42, mode="fast")
         assert "entities" in details
         assert len(details["entities"]) >= 1
 
     def test_should_include_entity_fields(self):
-        _, _, details = redact("电话13812345678", detailed=True, seed=42, mode="fast")
+        _, _, details = redact("电话13812345678", detailed=True, salt=42, mode="fast")
         entity = details["entities"][0]
         for field in ("original", "replacement", "type", "layer", "start", "end", "confidence"):
             assert field in entity
 
     def test_should_tag_regex_as_layer_1(self):
-        _, _, details = redact("电话13812345678", detailed=True, seed=42, mode="fast")
+        _, _, details = redact("电话13812345678", detailed=True, salt=42, mode="fast")
         assert details["entities"][0]["layer"] == 1
 
     def test_should_include_layer_counts_in_stats(self):
-        _, _, details = redact("电话13812345678", detailed=True, seed=42, mode="fast")
+        _, _, details = redact("电话13812345678", detailed=True, salt=42, mode="fast")
         stats = details["stats"]
         assert stats["layer_1"] >= 1
         assert stats["layer_2"] == 0
         assert stats["layer_3"] == 0
 
     def test_should_include_duration_ms_in_stats(self):
-        _, _, details = redact("电话13812345678", detailed=True, seed=42, mode="fast")
+        _, _, details = redact("电话13812345678", detailed=True, salt=42, mode="fast")
         assert details["stats"]["duration_ms"] >= 0
 
     def test_should_show_correct_entity_info(self):
-        _, key, details = redact("电话13812345678", detailed=True, seed=42, mode="fast")
+        _, key, details = redact("电话13812345678", detailed=True, salt=42, mode="fast")
         entity = details["entities"][0]
         assert entity["original"] == "13812345678"
         assert entity["replacement"] in key
         assert entity["type"] == "phone"
 
     def test_should_return_empty_entities_when_no_pii(self):
-        _, _, details = redact("今天天气不错", detailed=True, seed=42, mode="fast")
+        _, _, details = redact("今天天气不错", detailed=True, salt=42, mode="fast")
         assert details["entities"] == []
         assert details["stats"]["total"] == 0
 
     def test_should_show_multiple_entities(self):
         _, _, details = redact(
-            "电话13812345678，邮箱test@example.com", detailed=True, seed=42, mode="fast"
+            "电话13812345678，邮箱test@example.com", detailed=True, salt=42, mode="fast"
         )
         assert len(details["entities"]) == 2
         types = {e["type"] for e in details["entities"]}
@@ -339,7 +339,7 @@ class TestMultiLanguageRedact:
     def test_should_redact_and_restore_when_mixed_language(self, example):
         original = example["input"]
         lang = example.get("lang", ["zh", "en"])
-        redacted, key = redact(original, seed=42, mode="fast", lang=lang)
+        redacted, key = redact(original, salt=42, mode="fast", lang=lang)
 
         if example["pii_values"]:
             for pii in example["pii_values"]:
@@ -358,7 +358,7 @@ class TestMixedLanguageSensitive:
     @parametrize_examples("mixed_zh_en_sensitive.json")
     def test_should_detect_in_mixed_text(self, example):
         text = example["input"]
-        report = redact(text, lang=["zh", "en"], mode="fast", seed=42, report=True)
+        report = redact(text, lang=["zh", "en"], mode="fast", salt=42, report=True)
         detected_types = {e["type"] for e in report.entities}
 
         if example["should_match"]:
@@ -375,7 +375,7 @@ class TestMixedLanguageSensitive:
         if not example["should_match"]:
             return
         text = example["input"]
-        redacted, key = redact(text, lang=["zh", "en"], mode="fast", seed=42)
+        redacted, key = redact(text, lang=["zh", "en"], mode="fast", salt=42)
         restored = restore(redacted, key)
         assert isinstance(restored, str)
 
@@ -389,27 +389,27 @@ class TestRedactWithNER:
     def test_should_detect_person_name_when_ner_mode(self):
         adapter = _mock_ner_adapter({"张三": [NEREntity("张三", "person", 0, 2, 0.95)]})
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
-            redacted, key = redact("张三去了北京", seed=42, mode="ner", lang="zh")
+            redacted, key = redact("张三去了北京", salt=42, mode="ner", lang="zh")
         assert "张三" not in redacted
         assert "张三" in key.values()
 
     def test_should_detect_person_name_when_auto_mode(self):
         adapter = _mock_ner_adapter({"张三": [NEREntity("张三", "person", 0, 2, 0.95)]})
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
-            redacted, key = redact("张三去了北京", seed=42, mode="auto", lang="zh")
+            redacted, key = redact("张三去了北京", salt=42, mode="auto", lang="zh")
         assert "张三" not in redacted
 
     def test_should_skip_ner_when_fast_mode(self):
         adapter = _mock_ner_adapter({"张三": [NEREntity("张三", "person", 0, 2, 0.95)]})
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
-            redacted, key = redact("张三去了北京", seed=42, mode="fast", lang="zh")
+            redacted, key = redact("张三去了北京", salt=42, mode="fast", lang="zh")
         assert "张三" in redacted
         adapter.detect.assert_not_called()
 
     def test_should_merge_ner_and_regex(self):
         adapter = _mock_ner_adapter({"张三": [NEREntity("张三", "person", 0, 2, 0.95)]})
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
-            redacted, key = redact("张三的手机号是13812345678", seed=42, mode="ner", lang="zh")
+            redacted, key = redact("张三的手机号是13812345678", salt=42, mode="ner", lang="zh")
         assert "张三" not in redacted
         assert "13812345678" not in redacted
         assert len(key) == 2
@@ -417,7 +417,7 @@ class TestRedactWithNER:
     def test_should_roundtrip_with_ner(self):
         adapter = _mock_ner_adapter({"张三": [NEREntity("张三", "person", 0, 2, 0.95)]})
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
-            redacted, key = redact("张三说了话", seed=42, mode="ner", lang="zh")
+            redacted, key = redact("张三说了话", salt=42, mode="ner", lang="zh")
         restored = restore(redacted, key)
         assert "张三" in restored
 
@@ -426,7 +426,7 @@ class TestMultiLanguageNER:
     def test_should_redact_chinese_name(self):
         adapter = _mock_ner_adapter({"张三": [NEREntity("张三", "person", 0, 2, 0.95)]})
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
-            redacted, key = redact("张三在北京工作", seed=42, mode="ner", lang="zh")
+            redacted, key = redact("张三在北京工作", salt=42, mode="ner", lang="zh")
         assert "张三" not in redacted
         assert restore(redacted, key) == "张三在北京工作"
 
@@ -440,7 +440,7 @@ class TestMultiLanguageNER:
             }
         )
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
-            redacted, key = redact("张三和John在星巴克聊天", seed=42, mode="ner", lang=["zh", "en"])
+            redacted, key = redact("张三和John在星巴克聊天", salt=42, mode="ner", lang=["zh", "en"])
         assert "张三" not in redacted
         assert "John" not in redacted
         restored = restore(redacted, key)
@@ -458,7 +458,7 @@ class TestMultiLanguageNER:
         )
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact(
-                "张三和田中和김철수开会", seed=42, mode="ner", lang=["zh", "ja", "ko"]
+                "张三和田中和김철수开会", salt=42, mode="ner", lang=["zh", "ja", "ko"]
             )
         for name in ("张三", "田中", "김철수"):
             assert name not in redacted
@@ -469,7 +469,7 @@ class TestMultiLanguageNER:
     def test_should_keep_names_when_fast_mode(self):
         adapter = _mock_ner_adapter({"张三": [NEREntity("张三", "person", 0, 2, 0.95)]})
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
-            redacted, key = redact("张三在北京工作", seed=42, mode="fast", lang="zh")
+            redacted, key = redact("张三在北京工作", salt=42, mode="fast", lang="zh")
         assert "张三" in redacted
         adapter.detect.assert_not_called()
 
@@ -485,7 +485,7 @@ class TestRedactWithSemantic:
             {"那个地方": [NEREntity("那个地方", "location", 8, 12, 0.7)]}
         )
         with patch("argus_redact.glue.redact._get_semantic_adapter", return_value=adapter):
-            redacted, key = redact("老王说他上周在那个地方见了人", seed=42, mode="auto", lang="zh")
+            redacted, key = redact("老王说他上周在那个地方见了人", salt=42, mode="auto", lang="zh")
         assert "那个地方" not in redacted
 
     def test_should_skip_semantic_when_ner_mode(self):
@@ -493,7 +493,7 @@ class TestRedactWithSemantic:
             {"那个地方": [NEREntity("那个地方", "location", 8, 12, 0.7)]}
         )
         with patch("argus_redact.glue.redact._get_semantic_adapter", return_value=adapter):
-            redacted, key = redact("老王说他上周在那个地方见了人", seed=42, mode="ner", lang="zh")
+            redacted, key = redact("老王说他上周在那个地方见了人", salt=42, mode="ner", lang="zh")
         assert "那个地方" in redacted
         adapter.detect.assert_not_called()
 
@@ -502,7 +502,7 @@ class TestRedactWithSemantic:
             {"那个地方": [NEREntity("那个地方", "location", 8, 12, 0.7)]}
         )
         with patch("argus_redact.glue.redact._get_semantic_adapter", return_value=adapter):
-            redacted, key = redact("老王说他上周在那个地方见了人", seed=42, mode="fast", lang="zh")
+            redacted, key = redact("老王说他上周在那个地方见了人", salt=42, mode="fast", lang="zh")
         assert "那个地方" in redacted
 
     def test_should_merge_all_three_layers_when_auto(self):
@@ -514,7 +514,7 @@ class TestRedactWithSemantic:
             patch("argus_redact.glue.redact._get_semantic_adapter", return_value=sem),
         ):
             text = "老王说他上周在那个地方见了人，电话13812345678"
-            redacted, key = redact(text, seed=42, mode="auto", lang="zh")
+            redacted, key = redact(text, salt=42, mode="auto", lang="zh")
         for pii in ("老王", "那个地方", "13812345678"):
             assert pii not in redacted
         restored = restore(redacted, key)
@@ -525,7 +525,7 @@ class TestRedactWithSemantic:
         adapter = MagicMock()
         adapter.detect.side_effect = Exception("LLM timeout")
         with patch("argus_redact.glue.redact._get_semantic_adapter", return_value=adapter):
-            redacted, key = redact("电话13812345678", seed=42, mode="auto", lang="zh")
+            redacted, key = redact("电话13812345678", salt=42, mode="auto", lang="zh")
         assert "13812345678" not in redacted
 
 
@@ -537,21 +537,21 @@ class TestRedactWithSemantic:
 class TestRedactSeedDeterminism:
     def test_should_produce_same_output_when_same_seed(self):
         text = "电话13812345678"
-        r1 = redact(text, seed=42, mode="fast")
-        r2 = redact(text, seed=42, mode="fast")
+        r1 = redact(text, salt=42, mode="fast")
+        r2 = redact(text, salt=42, mode="fast")
         assert r1 == r2
 
 
 class TestRedactKeyReuse:
     def test_should_grow_key_when_new_entity(self):
-        _, key = redact("电话13812345678", seed=42, mode="fast")
+        _, key = redact("电话13812345678", salt=42, mode="fast")
         size1 = len(key)
-        _, key = redact("邮箱test@example.com", seed=42, mode="fast", key=key)
+        _, key = redact("邮箱test@example.com", salt=42, mode="fast", key=key)
         assert len(key) > size1
 
     def test_should_keep_same_size_when_same_entity(self):
-        _, key1 = redact("电话13812345678", seed=42, mode="fast")
-        _, key2 = redact("再说一次13812345678", seed=42, mode="fast", key=key1)
+        _, key1 = redact("电话13812345678", salt=42, mode="fast")
+        _, key2 = redact("再说一次13812345678", salt=42, mode="fast", key=key1)
         assert len(key2) == len(key1)
 
 
@@ -561,14 +561,14 @@ class TestRedactMode:
             redact("text", mode="invalid")
 
     def test_should_redact_when_fast_mode(self):
-        redacted, key = redact("13812345678", seed=42, mode="fast")
+        redacted, key = redact("13812345678", salt=42, mode="fast")
         assert "13812345678" not in redacted
 
     def test_should_default_to_fast_mode(self):
         # Default mode is fast; verify by using a long-tail name NOT in the
         # top-N surname list so it stays untouched (would only be caught by NER).
         # Smith is in v0.5.3's surname list — Xeoplux deliberately is not.
-        redacted, key = redact("Quincy Xeoplux called me", seed=42, lang="en")
+        redacted, key = redact("Quincy Xeoplux called me", salt=42, lang="en")
         assert "Quincy Xeoplux" in redacted
         assert key == {}
 
@@ -578,34 +578,34 @@ class TestRedactLangAuto:
 
     def test_should_redact_chinese_when_auto_on_zh_text(self):
         # Pure zh text: auto detects zh, regex matches Chinese phone
-        redacted, key = redact("客户的手机号是13812345678", seed=42, mode="fast", lang="auto")
+        redacted, key = redact("客户的手机号是13812345678", salt=42, mode="fast", lang="auto")
         assert "13812345678" not in redacted
 
     def test_should_redact_shared_types_regardless_of_lang(self):
         # IBAN is a shared pattern, must be caught under lang="auto" (routes to en)
         text = "Transfer from DE89370400440532013000 received"
-        redacted, key = redact(text, seed=42, mode="fast", lang="auto")
+        redacted, key = redact(text, salt=42, mode="fast", lang="auto")
         assert "DE89370400440532013000" not in redacted
 
     def test_should_redact_both_when_mixed_zh_en(self):
         # Mixed text: phone (shared regex) + US passport-style would need specific langs
         text = "客户Apple公司的电话13812345678"
-        redacted, key = redact(text, seed=42, mode="fast", lang="auto")
+        redacted, key = redact(text, salt=42, mode="fast", lang="auto")
         assert "13812345678" not in redacted
 
     def test_should_not_crash_on_empty_text(self):
-        redacted, key = redact("", seed=42, mode="fast", lang="auto")
+        redacted, key = redact("", salt=42, mode="fast", lang="auto")
         assert redacted == ""
         assert key == {}
 
     def test_should_not_crash_on_symbols_only(self):
-        redacted, key = redact("!@#$%^&*()", seed=42, mode="fast", lang="auto")
+        redacted, key = redact("!@#$%^&*()", salt=42, mode="fast", lang="auto")
         assert key == {}
 
     def test_should_detect_credentials_under_auto(self):
         # Credentials are shared types, auto must route properly regardless of lang
         text = "API_KEY=sk-ant-api03-FAKE0000000000000000000000000000abcdefghij"
-        redacted, key = redact(text, seed=42, mode="fast", lang="auto")
+        redacted, key = redact(text, salt=42, mode="fast", lang="auto")
         assert "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij" not in redacted
 
 
@@ -615,12 +615,12 @@ class TestRedactCredentialOverlap:
 
     def test_should_not_leak_openai_key_inside_url(self):
         text = "curl https://api.example.com/v1/data?api_key=sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
         assert "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ" not in redacted
 
     def test_should_not_leak_bare_openai_key(self):
         text = "export OPENAI_API_KEY=sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ"
-        redacted, key = redact(text, seed=42, mode="fast")
+        redacted, key = redact(text, salt=42, mode="fast")
         assert "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ" not in redacted
 
 

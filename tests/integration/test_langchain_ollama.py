@@ -37,7 +37,7 @@ def _check_ollama():
 
 class TestLangChainOllamaChain:
     def test_should_roundtrip_through_llm(self, _check_ollama):
-        redact_r = RedactRunnable(mode="fast", lang="zh", seed=42)
+        redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
         restore_r = RestoreRunnable(redact_r)
 
         original = "张三的电话是13812345678，他住在北京市朝阳区"
@@ -53,7 +53,7 @@ class TestLangChainOllamaChain:
         assert len(redact_r.last_key) >= 1
 
     def test_should_preserve_key_across_multi_turn(self, _check_ollama):
-        redact_r = RedactRunnable(mode="fast", lang="zh", seed=42)
+        redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
         restore_r = RestoreRunnable(redact_r)
 
         r1 = redact_r.invoke("电话13812345678")
@@ -73,7 +73,7 @@ class TestLangChainOllamaChain:
         redact_r = RedactRunnable(
             mode="fast",
             lang=["zh", "en"],
-            seed=42,
+            salt=42,
         )
         restore_r = RestoreRunnable(redact_r)
 

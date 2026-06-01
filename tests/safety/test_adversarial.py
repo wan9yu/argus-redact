@@ -28,7 +28,7 @@ class TestAdversarial:
         """redact() must never crash, regardless of input."""
         lang = case.get("lang", "zh")
 
-        redacted, key = redact(case["input"], seed=42, mode="fast", lang=lang)
+        redacted, key = redact(case["input"], salt=42, mode="fast", lang=lang)
 
         assert isinstance(redacted, str)
         assert isinstance(key, dict)
@@ -37,7 +37,7 @@ class TestAdversarial:
         """restore(redact(text)) must recover all detected PII."""
         lang = case.get("lang", "zh")
 
-        redacted, key = redact(case["input"], seed=42, mode="fast", lang=lang)
+        redacted, key = redact(case["input"], salt=42, mode="fast", lang=lang)
         restored = restore(redacted, key)
 
         for original in key.values():
@@ -52,7 +52,7 @@ class TestAdversarial:
 
         lang = case.get("lang", "zh")
 
-        _, key = redact(case["input"], seed=42, mode="fast", lang=lang)
+        _, key = redact(case["input"], salt=42, mode="fast", lang=lang)
 
         expected = case["expected_pii_count"]
         actual = len(key)

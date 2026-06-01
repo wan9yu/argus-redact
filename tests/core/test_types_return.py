@@ -8,7 +8,7 @@ class TestWithTypes:
         redacted, key, types = redact(
             "手机13812345678，身份证110101199003074610",
             mode="fast",
-            seed=42,
+            salt=42,
             with_types=True,
         )
         assert isinstance(types, dict)
@@ -20,7 +20,7 @@ class TestWithTypes:
         _, key, types = redact(
             "手机13812345678，身份证110101199003074610",
             mode="fast",
-            seed=42,
+            salt=42,
             with_types=True,
         )
         type_values = set(types.values())
@@ -28,7 +28,7 @@ class TestWithTypes:
         assert "id_number" in type_values
 
     def test_should_return_2tuple_when_no_with_types(self):
-        result = redact("手机13812345678", mode="fast", seed=42)
+        result = redact("手机13812345678", mode="fast", salt=42)
         assert isinstance(result, tuple)
         assert len(result) == 2
 
@@ -41,7 +41,7 @@ class TestWithTypes:
         _, key, types = redact(
             "手机13812345678和13998765432",
             mode="fast",
-            seed=42,
+            salt=42,
             with_types=True,
         )
         phone_types = [t for t in types.values() if t == "phone"]

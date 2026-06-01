@@ -8,7 +8,7 @@ from argus_redact.integrations.llamaindex import RedactTransform, RestoreTransfo
 
 class TestRedactTransform:
     def test_should_redact_when_called(self):
-        t = RedactTransform(mode="fast", lang="zh", seed=42)
+        t = RedactTransform(mode="fast", lang="zh", salt=42)
 
         result = t("电话13812345678")
 
@@ -16,7 +16,7 @@ class TestRedactTransform:
         assert t.last_key is not None
 
     def test_should_reuse_key_across_calls(self):
-        t = RedactTransform(mode="fast", lang="zh", seed=42)
+        t = RedactTransform(mode="fast", lang="zh", salt=42)
 
         t("电话13812345678")
         t("邮箱test@example.com")
@@ -24,7 +24,7 @@ class TestRedactTransform:
         assert len(t.last_key) >= 2
 
     def test_should_support_mixed_language(self):
-        t = RedactTransform(mode="fast", lang=["zh", "en"], seed=42)
+        t = RedactTransform(mode="fast", lang=["zh", "en"], salt=42)
 
         result = t("电话13812345678, SSN 123-45-6789")
 
@@ -34,7 +34,7 @@ class TestRedactTransform:
 
 class TestRestoreTransform:
     def test_should_restore_when_called(self):
-        redact_t = RedactTransform(mode="fast", lang="zh", seed=42)
+        redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
         restore_t = RestoreTransform(redact_t)
 
         redacted = redact_t("电话13812345678")
@@ -43,7 +43,7 @@ class TestRestoreTransform:
         assert "13812345678" in restored
 
     def test_should_roundtrip_multiple_pii(self):
-        redact_t = RedactTransform(mode="fast", lang="zh", seed=42)
+        redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
         restore_t = RestoreTransform(redact_t)
 
         redacted = redact_t("电话13812345678，邮箱test@example.com")
@@ -53,7 +53,7 @@ class TestRestoreTransform:
         assert "test@example.com" in restored
 
     def test_should_raise_when_no_key(self):
-        redact_t = RedactTransform(mode="fast", lang="zh", seed=42)
+        redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
         restore_t = RestoreTransform(redact_t)
 
         with pytest.raises(SessionStateError):
@@ -62,7 +62,7 @@ class TestRestoreTransform:
 
 class TestResetAndPipeline:
     def test_should_reset_key(self):
-        t = RedactTransform(mode="fast", lang="zh", seed=42)
+        t = RedactTransform(mode="fast", lang="zh", salt=42)
         t("电话13812345678")
         assert t.last_key is not None
 
@@ -70,7 +70,7 @@ class TestResetAndPipeline:
         assert t.last_key is None
 
     def test_should_simulate_pipeline(self):
-        redact_t = RedactTransform(mode="fast", lang="zh", seed=42)
+        redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
         restore_t = RestoreTransform(redact_t)
 
         original = "张三电话13812345678"

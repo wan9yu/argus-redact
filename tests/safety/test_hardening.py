@@ -18,7 +18,7 @@ class TestPseudonymAutoExpand:
         assert len(codes) == 10
 
     def test_should_use_5_digit_format(self):
-        code = generate_pseudonym(seed=42)
+        code = generate_pseudonym(salt=42)
 
         parts = code.split("-")
         assert len(parts[1]) == 5
@@ -34,7 +34,7 @@ class TestConfigFilePath:
 
         redacted, key = redact(
             "电话13812345678",
-            seed=42,
+            salt=42,
             mode="fast",
             config=str(config_file),
         )
@@ -57,7 +57,7 @@ class TestConfigFilePath:
 
         redacted, key = redact(
             "电话13812345678",
-            seed=42,
+            salt=42,
             mode="fast",
             config=str(config_file),
         )

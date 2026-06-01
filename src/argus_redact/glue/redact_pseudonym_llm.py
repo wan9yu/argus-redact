@@ -45,7 +45,7 @@ def redact_pseudonym_llm(
     text: str,
     *,
     display_marker: str | None = None,
-    salt: bytes | None = None,
+    salt: int | bytes | None = None,
     lang: str | list[str] = "zh",
     mode: str = "fast",
     names: list[str] | None = None,
@@ -135,7 +135,7 @@ def redact_pseudonym_llm(
     # so audit_text always contains [TYPE-NNNNN] placeholders.
     audit_config = {ent_type: {"strategy": "remove"} for ent_type in realistic_config}
 
-    seed = _salt_to_bytes(salt)
+    resolved_salt = _salt_to_bytes(salt)
 
     resolved_lang = lang
     if resolved_lang == "auto":
@@ -155,7 +155,7 @@ def redact_pseudonym_llm(
     downstream_text, key, realistic_aliases = _redact_module._replace_and_emit(
         text,
         entities,
-        seed=seed,
+        salt=resolved_salt,
         existing_key=existing_key,
         key_file=None,
         config=realistic_config,
@@ -168,7 +168,7 @@ def redact_pseudonym_llm(
     audit_text, audit_key, _audit_aliases = _redact_module._replace_and_emit(
         text,
         entities,
-        seed=seed,
+        salt=resolved_salt,
         existing_key=None,
         key_file=None,
         config=audit_config,
@@ -203,17 +203,18 @@ def redact_pseudonym_llm(
     )
 
 
-def _salt_to_bytes(salt: bytes | None) -> bytes | None:
-    """Pass user-supplied salt through to ``replace()`` as bytes.
+def _salt_to_bytes(salt: int | bytes | None) -> bytes | None:
+    """Coerce user-supplied salt to bytes for ``replace()``.
 
-    v0.6.0 truncated to 8 bytes + 63 bits; v0.6.1+ preserves the full salt so
-    HMAC-SHA256 inside the realistic faker path receives the entropy the caller
-    asked for. Returns ``None`` only when caller explicitly omitted salt — in
-    which case ``_resolve_salt`` (commit 3) will raise rather than silently
-    falling back to ``b""``.
+    Accepts int (coerced to 8-byte big-endian) or bytes (passed through).
+    Returns ``None`` only when caller explicitly omitted salt — in which case
+    ``_resolve_salt`` will raise rather than silently falling back to ``b""``.
     """
     if salt is None:
         return None
-    if not isinstance(salt, (bytes, bytearray)):
-        raise TypeError(f"salt must be bytes, got {type(salt).__name__}")
-    return bytes(salt)
+    if isinstance(salt, int):
+        signed = salt < 0
+        return salt.to_bytes(8, "big", signed=signed)
+    if isinstance(salt, (bytes, bytearray)):
+        return bytes(salt)
+    raise TypeError(f"salt must be int, bytes, or None, got {type(salt).__name__}")

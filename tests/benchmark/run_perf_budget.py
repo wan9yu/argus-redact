@@ -83,15 +83,15 @@ def main() -> None:
     from argus_redact import redact, redact_pseudonym_llm
 
     # Warm caches
-    redact("warm-up", seed=1)
+    redact("warm-up", salt=1)
 
     measurements = {
         "import_time_ms": _measure_import_time(),
         "redact_zh_fast_1kb_p50_ms": _measure_p50(
-            lambda: redact(_ZH_1KB, seed=42, mode="fast", lang="zh")
+            lambda: redact(_ZH_1KB, salt=42, mode="fast", lang="zh")
         ),
         "redact_en_fast_1kb_p50_ms": _measure_p50(
-            lambda: redact(_EN_1KB, seed=42, mode="fast", lang="en")
+            lambda: redact(_EN_1KB, salt=42, mode="fast", lang="en")
         ),
         # strict_input=False: _ZH_1KB contains "王五" which is in the reserved
         # canonical-name pool. Without the bypass, redact_pseudonym_llm raises
@@ -126,7 +126,7 @@ def main() -> None:
 def _restore_workload() -> None:
     from argus_redact import redact, restore
 
-    redacted, key = redact(_ZH_1KB, seed=42, mode="fast", lang="zh")
+    redacted, key = redact(_ZH_1KB, salt=42, mode="fast", lang="zh")
     restore(redacted, key)
 
 

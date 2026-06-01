@@ -9,8 +9,8 @@ from argus_redact.streaming import StreamingRedactor, StreamingRestorer
 
 class TestStreamingRestorer:
     def test_should_restore_at_sentence_boundary(self):
-        _, key = redact("电话13812345678", seed=42, mode="fast")
-        redacted, _ = redact("电话13812345678", seed=42, mode="fast")
+        _, key = redact("电话13812345678", salt=42, mode="fast")
+        redacted, _ = redact("电话13812345678", salt=42, mode="fast")
 
         restorer = StreamingRestorer(key)
         result = restorer.feed(f"结果是{redacted}。下一句")
@@ -18,8 +18,8 @@ class TestStreamingRestorer:
         assert "13812345678" in result
 
     def test_should_buffer_incomplete_sentence(self):
-        _, key = redact("电话13812345678", seed=42, mode="fast")
-        redacted, _ = redact("电话13812345678", seed=42, mode="fast")
+        _, key = redact("电话13812345678", salt=42, mode="fast")
+        redacted, _ = redact("电话13812345678", salt=42, mode="fast")
 
         restorer = StreamingRestorer(key)
         result = restorer.feed(f"结果是{redacted}")
@@ -27,8 +27,8 @@ class TestStreamingRestorer:
         assert result == ""  # no boundary, buffered
 
     def test_should_flush_remaining(self):
-        _, key = redact("电话13812345678", seed=42, mode="fast")
-        redacted, _ = redact("电话13812345678", seed=42, mode="fast")
+        _, key = redact("电话13812345678", salt=42, mode="fast")
+        redacted, _ = redact("电话13812345678", salt=42, mode="fast")
 
         restorer = StreamingRestorer(key)
         restorer.feed(f"结果是{redacted}")
@@ -37,8 +37,8 @@ class TestStreamingRestorer:
         assert "13812345678" in result
 
     def test_should_handle_chunk_by_chunk(self):
-        _, key = redact("电话13812345678", seed=42, mode="fast")
-        redacted, _ = redact("电话13812345678", seed=42, mode="fast")
+        _, key = redact("电话13812345678", salt=42, mode="fast")
+        redacted, _ = redact("电话13812345678", salt=42, mode="fast")
 
         restorer = StreamingRestorer(key)
         full_text = f"第一句话{redacted}。第二句话。"
@@ -65,8 +65,8 @@ class TestStreamingRestorer:
         assert result == "hello world。"
 
     def test_should_restore_immediately_with_none_strategy(self):
-        _, key = redact("电话13812345678", seed=42, mode="fast")
-        redacted, _ = redact("电话13812345678", seed=42, mode="fast")
+        _, key = redact("电话13812345678", salt=42, mode="fast")
+        redacted, _ = redact("电话13812345678", salt=42, mode="fast")
 
         restorer = StreamingRestorer(key, strategy="none")
         result = restorer.feed(f"结果是{redacted}")

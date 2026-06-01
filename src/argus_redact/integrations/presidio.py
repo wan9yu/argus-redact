@@ -60,7 +60,7 @@ class PresidioBridge:
         text: str,
         *,
         language: str = "en",
-        seed: int | None = None,
+        salt: int | bytes | None = None,
         key: dict | None = None,
         config: dict | None = None,
     ) -> tuple[str, dict]:
@@ -89,7 +89,7 @@ class PresidioBridge:
 
         entities = merge_entities(entities)
         redacted, result_key, _aliases = replace(
-            text, entities, seed=seed, key=key, config=config
+            text, entities, salt=salt, key=key, config=config
         )
         return redacted, result_key
 

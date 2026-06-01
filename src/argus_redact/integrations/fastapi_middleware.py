@@ -30,7 +30,7 @@ def redact_body(
     field: str = "text",
     mode: str = "fast",
     lang: str | list[str] = "zh",
-    seed: int | None = None,
+    salt: int | bytes | None = None,
 ) -> tuple[dict, dict]:
     """Redact PII in a request body dict.
 
@@ -49,7 +49,7 @@ def redact_body(
                     msg["content"],
                     mode=mode,
                     lang=lang,
-                    seed=seed,
+                    salt=salt,
                     key=combined_key if combined_key else None,
                 )
                 new_msg["content"] = redacted_text
@@ -62,7 +62,7 @@ def redact_body(
             body[field],
             mode=mode,
             lang=lang,
-            seed=seed,
+            salt=salt,
         )
         result[field] = redacted_text
     else:

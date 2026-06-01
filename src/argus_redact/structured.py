@@ -42,7 +42,7 @@ def redact_json(
     *,
     mode: str = "fast",
     lang: str | list[str] = "zh",
-    seed: int | None = None,
+    salt: int | bytes | None = None,
     config: dict | None = None,
     key: dict | None = None,
     paths: list[str] | None = None,
@@ -74,7 +74,7 @@ def redact_json(
                 obj,
                 mode=mode,
                 lang=lang,
-                seed=seed,
+                salt=salt,
                 config=config,
                 key=combined_key if combined_key else None,
                 with_types=with_types,
@@ -117,7 +117,7 @@ def redact_csv(
     *,
     mode: str = "fast",
     lang: str | list[str] = "zh",
-    seed: int | None = None,
+    salt: int | bytes | None = None,
     config: dict | None = None,
 ) -> tuple[str, dict]:
     """Redact PII in a CSV string. Header row preserved, each cell redacted."""
@@ -137,7 +137,7 @@ def redact_csv(
                 cell,
                 mode=mode,
                 lang=lang,
-                seed=seed,
+                salt=salt,
                 config=config,
                 key=combined_key if combined_key else None,
             )

@@ -86,12 +86,11 @@ def cmd_redact(args):
     unified_prefix = getattr(args, "unified_prefix", None)
 
     if profile == "pseudonym-llm":
-        salt = seed.to_bytes(8, "big", signed=False) if seed is not None and seed >= 0 else None
         result = redact_pseudonym_llm(
             text,
             lang=lang,
             mode=args.mode,
-            salt=salt,
+            salt=seed,
             strategy_overrides=strategy_overrides,
             unified_prefix=unified_prefix,
         )
@@ -116,7 +115,7 @@ def cmd_redact(args):
 
     redacted, key = redact(
         text,
-        seed=seed,
+        salt=seed,
         mode=args.mode,
         lang=lang,
         key=existing_key,

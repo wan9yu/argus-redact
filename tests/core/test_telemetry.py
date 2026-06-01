@@ -71,7 +71,7 @@ class TestPerfHook:
         records = []
         set_perf_hook(lambda r: records.append(r))
 
-        redact("电话13812345678", seed=42, mode="fast")
+        redact("电话13812345678", salt=42, mode="fast")
 
         set_perf_hook(None)
         assert len(records) == 1
@@ -82,13 +82,13 @@ class TestPerfHook:
         set_perf_hook(None)
 
         # Should not raise
-        redact("电话13812345678", seed=42, mode="fast")
+        redact("电话13812345678", salt=42, mode="fast")
 
     def test_should_include_timing_breakdown(self):
         records = []
         set_perf_hook(lambda r: records.append(r))
 
-        redact("电话13812345678，身份证110101199003074610", seed=42, mode="fast")
+        redact("电话13812345678，身份证110101199003074610", salt=42, mode="fast")
 
         set_perf_hook(None)
         r = records[0]
@@ -101,7 +101,7 @@ class TestPerfHook:
         set_perf_hook(lambda r: records.append(r))
 
         # Small text = fast, should not be marked slow
-        redact("电话13812345678", seed=42, mode="fast")
+        redact("电话13812345678", salt=42, mode="fast")
 
         set_perf_hook(None)
         # Can't guarantee it's fast on all hardware, just check field exists
@@ -120,7 +120,7 @@ class TestPerfLogFile:
 
             _init_file_hook()
 
-            redact("电话13812345678", seed=42, mode="fast")
+            redact("电话13812345678", salt=42, mode="fast")
 
             from argus_redact.telemetry import set_perf_hook
 

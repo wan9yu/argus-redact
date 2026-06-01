@@ -30,7 +30,7 @@ class TestServerRedact:
     def test_should_redact_text(self, client):
         resp = client.post(
             "/redact",
-            json={"text": "电话13812345678", "mode": "fast", "seed": 42},
+            json={"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
 
         assert resp.status_code == 200
@@ -41,7 +41,7 @@ class TestServerRedact:
     def test_should_redact_with_lang(self, client):
         resp = client.post(
             "/redact",
-            json={"text": "SSN 123-45-6789", "mode": "fast", "lang": "en", "seed": 42},
+            json={"text": "SSN 123-45-6789", "mode": "fast", "lang": "en", "salt": 42},
         )
 
         assert resp.status_code == 200
@@ -54,7 +54,7 @@ class TestServerRedact:
                 "text": "电话13812345678, SSN 123-45-6789",
                 "mode": "fast",
                 "lang": ["zh", "en"],
-                "seed": 42,
+                "salt": 42,
             },
         )
 
@@ -65,7 +65,7 @@ class TestServerRedact:
     def test_should_return_detailed_when_requested(self, client):
         resp = client.post(
             "/redact",
-            json={"text": "电话13812345678", "mode": "fast", "seed": 42, "detailed": True},
+            json={"text": "电话13812345678", "mode": "fast", "salt": 42, "detailed": True},
         )
 
         data = resp.json()
@@ -78,7 +78,7 @@ class TestServerRedact:
             json={
                 "text": "身份证110101199003074610",
                 "mode": "fast",
-                "seed": 42,
+                "salt": 42,
                 "report": True,
             },
         )
@@ -93,7 +93,7 @@ class TestServerRedact:
     def test_should_filter_by_profile(self, client):
         resp = client.post(
             "/redact",
-            json={"text": "电话13812345678", "mode": "fast", "seed": 42, "profile": "pipl"},
+            json={"text": "电话13812345678", "mode": "fast", "salt": 42, "profile": "pipl"},
         )
 
         assert resp.status_code == 200
@@ -105,7 +105,7 @@ class TestServerRedact:
             json={
                 "text": "电话13812345678，身份证110101199003074610",
                 "mode": "fast",
-                "seed": 42,
+                "salt": 42,
                 "types": ["phone"],
             },
         )
@@ -120,7 +120,7 @@ class TestServerRedact:
             json={
                 "text": "电话13812345678，身份证110101199003074610",
                 "mode": "fast",
-                "seed": 42,
+                "salt": 42,
                 "types_exclude": ["phone"],
             },
         )
@@ -151,7 +151,7 @@ class TestServerRestore:
     def test_should_restore_text(self, client):
         r1 = client.post(
             "/redact",
-            json={"text": "电话13812345678", "mode": "fast", "seed": 42},
+            json={"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
         data = r1.json()
 
@@ -219,7 +219,7 @@ class TestServerAuth:
     def test_should_accept_when_correct_key(self, auth_client):
         resp = auth_client.post(
             "/redact",
-            json={"text": "电话13812345678", "mode": "fast", "seed": 42},
+            json={"text": "电话13812345678", "mode": "fast", "salt": 42},
             headers={"Authorization": "Bearer test-secret-key"},
         )
 

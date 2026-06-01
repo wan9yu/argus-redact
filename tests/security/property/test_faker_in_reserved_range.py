@@ -45,10 +45,10 @@ _FAKERS_TO_TEST = _build_faker_cases()
 
 @PROPERTY_SETTINGS
 @given(
-    seed=st.binary(min_size=32, max_size=32),
+    salt=st.binary(min_size=32, max_size=32),
     value=st.text(min_size=1, max_size=50),
 )
-def test_each_faker_emits_reserved_range(seed, value):
+def test_each_faker_emits_reserved_range(salt, value):
     """Every faker, called via the wrapper, emits a string matching its
     reserved-range scanner pattern."""
     for faker_fn, pattern_keys, type_name in _FAKERS_TO_TEST:
@@ -56,7 +56,7 @@ def test_each_faker_emits_reserved_range(seed, value):
             faker_fn,
             value=value,
             type_name=type_name,
-            salt=seed,
+            salt=salt,
             used=set(),
         )
         matched = any(

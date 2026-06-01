@@ -81,7 +81,7 @@ class TestOllamaFullPipeline:
         text = "老王说他在那个地方见了老李，电话13812345678"
 
         with patch("argus_redact.glue.redact._get_semantic_adapter", return_value=adapter):
-            redacted, key = redact(text, seed=42, mode="auto", lang="zh")
+            redacted, key = redact(text, salt=42, mode="auto", lang="zh")
 
         assert "13812345678" not in redacted
 

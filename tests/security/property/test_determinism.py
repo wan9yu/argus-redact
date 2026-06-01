@@ -45,13 +45,13 @@ def test_different_salts_diverge(salt_a, salt_b, type_name, value):
 
 @settings(parent=PROPERTY_SETTINGS, max_examples=200)
 @given(
-    seed=st.binary(min_size=32, max_size=32),
+    salt=st.binary(min_size=32, max_size=32),
     n=st.integers(min_value=2, max_value=20),
 )
-def test_shake_rng_deterministic(seed, n):
+def test_shake_rng_deterministic(salt, n):
     """_ShakeRng with the same seed produces the same randint sequence."""
-    rng_a = _ShakeRng(seed)
-    rng_b = _ShakeRng(seed)
+    rng_a = _ShakeRng(salt)
+    rng_b = _ShakeRng(salt)
     seq_a = [rng_a.randint(0, 999) for _ in range(n)]
     seq_b = [rng_b.randint(0, 999) for _ in range(n)]
     assert seq_a == seq_b

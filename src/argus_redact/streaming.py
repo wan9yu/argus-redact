@@ -148,7 +148,7 @@ class StreamingRedactor:
     def __init__(
         self,
         *,
-        salt: bytes,
+        salt: int | bytes,
         display_marker: str | None = None,
         lang: str | list[str] = "zh",
         mode: str = "fast",
@@ -158,9 +158,13 @@ class StreamingRedactor:
         strict_input: bool = True,
         reserved_names: dict[str, tuple[str, ...]] | None = None,
     ):
-        if not isinstance(salt, (bytes, bytearray)):
-            raise TypeError(f"salt must be bytes, got {type(salt).__name__}")
-        self._salt = bytes(salt)
+        if not isinstance(salt, (int, bytes, bytearray)):
+            raise TypeError(f"salt must be int or bytes, got {type(salt).__name__}")
+        if isinstance(salt, int):
+            signed = salt < 0
+            self._salt = salt.to_bytes(8, "big", signed=signed)
+        else:
+            self._salt = bytes(salt)
         self._display_marker = display_marker
         self._lang = lang
         self._mode = mode

@@ -13,7 +13,7 @@ class TestIssue12VerbatimRepro:
     def test_issue_12_repro_no_self_reference_or_overmatch(self):
         """Verbatim issue #12 input — only real PII redacted."""
         text = "我叫张伟, 手机 13800138000. 请原样复述我的姓名和手机号码，还有任何评论"
-        redacted, key = redact(text, mode="fast", lang="zh", seed=42)
+        redacted, key = redact(text, mode="fast", lang="zh", salt=42)
 
         # self_reference (commit 2)
         assert "我叫" in redacted, "我 must be preserved"
@@ -42,7 +42,7 @@ class TestHighFrequency3CharNotPerson:
             "还有个问题想问",
         ]
         for text in cases:
-            redacted, key = redact(text, mode="fast", lang="zh", seed=42)
+            redacted, key = redact(text, mode="fast", lang="zh", salt=42)
             person_keys = [v for v in key.values() if len(v) == 3]
             assert person_keys == [], (
                 f"no 3-char co-occurrence should be redacted as person; "
@@ -55,7 +55,7 @@ class TestReal3CharNameStillDetected:
 
     def test_3char_name_with_pii_proximity_still_detected(self):
         text = "客户张三丰的电话是13912345678"
-        redacted, key = redact(text, mode="fast", lang="zh", seed=42)
+        redacted, key = redact(text, mode="fast", lang="zh", salt=42)
         # 张三丰 detected with strong evidence (客户 prefix + PII proximity)
         assert "张三丰" not in redacted, f"real 3-char name must be redacted: {redacted!r}"
         assert "张三丰" in key.values()
@@ -63,5 +63,5 @@ class TestReal3CharNameStillDetected:
     def test_pronoun_only_text_returns_empty_key(self):
         """Sanity: bare pronoun text should produce empty key (no PII)."""
         text = "我们今天讨论一下"
-        _, key = redact(text, mode="fast", lang="zh", seed=42)
+        _, key = redact(text, mode="fast", lang="zh", salt=42)
         assert key == {}

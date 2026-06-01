@@ -7,30 +7,30 @@ class TestGeneratePseudonym:
     """Single pseudonym code generation."""
 
     def test_should_use_default_prefix_when_none_specified(self):
-        code = generate_pseudonym(seed=42)
+        code = generate_pseudonym(salt=42)
 
         assert code.startswith("P-")
 
     def test_should_use_custom_prefix_when_specified(self):
-        code = generate_pseudonym(prefix="O", seed=42)
+        code = generate_pseudonym(prefix="O", salt=42)
 
         assert code.startswith("O-")
 
     def test_should_stay_in_range_when_range_specified(self):
-        code = generate_pseudonym(seed=42, code_range=(1, 999))
+        code = generate_pseudonym(salt=42, code_range=(1, 999))
 
         num = int(code.split("-")[1])
         assert 1 <= num <= 999
 
     def test_should_produce_same_code_when_same_seed(self):
-        a = generate_pseudonym(seed=42)
-        b = generate_pseudonym(seed=42)
+        a = generate_pseudonym(salt=42)
+        b = generate_pseudonym(salt=42)
 
         assert a == b
 
     def test_should_produce_different_codes_when_different_seeds(self):
-        a = generate_pseudonym(seed=42)
-        b = generate_pseudonym(seed=99)
+        a = generate_pseudonym(salt=42)
+        b = generate_pseudonym(salt=99)
 
         assert a != b
 
@@ -154,11 +154,11 @@ class TestGeneratePseudonymRange:
         # code_range=(7, 7) — only one valid number. Kills `+ lo` → `- lo`
         # arith mutants which would produce a negative number for non-zero lo.
         for seed in range(20):
-            code = generate_pseudonym(seed=seed, code_range=(7, 7))
+            code = generate_pseudonym(salt=seed, code_range=(7, 7))
             num = int(code.split("-")[1])
-            assert num == 7, f"seed={seed} produced {code}"
+            assert num == 7, f"salt={seed} produced {code}"
 
     def test_should_use_5_digit_zero_padding(self):
         # f"{num:05d}" — kills width mutants (5 → 4 / 6).
-        code = generate_pseudonym(seed=1, code_range=(1, 1))
+        code = generate_pseudonym(salt=1, code_range=(1, 1))
         assert code == "P-00001"

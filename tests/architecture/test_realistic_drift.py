@@ -89,7 +89,7 @@ class TestRealisticDrift:
             for seed in range(_DRIFT_SEED_COUNT):
                 fake, _aliases = faker("orig", random.Random(seed))
                 assert scanner_pattern.search(fake), (
-                    f"Faker for ({lang}, {type_name}) seed={seed} produced {fake!r} "
+                    f"Faker for ({lang}, {type_name}) salt={seed} produced {fake!r} "
                     f"which does not match scanner {scanner_key}: {_RESERVED_RANGE_PATTERNS[scanner_key]}"
                 )
 
@@ -100,4 +100,4 @@ class TestRealisticDrift:
         v6_pattern = re.compile(_RESERVED_RANGE_PATTERNS["ipv6_shared"])
         for seed in range(_DRIFT_SEED_COUNT):
             fake, _ = fake_ip_reserved("fe80::1", random.Random(seed))
-            assert v6_pattern.search(fake), f"v6 faker seed={seed} → {fake!r}"
+            assert v6_pattern.search(fake), f"v6 faker salt={seed} → {fake!r}"

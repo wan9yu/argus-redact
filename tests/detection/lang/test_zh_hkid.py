@@ -27,11 +27,11 @@ INVALID_HKID = [
 
 @pytest.mark.parametrize("text", VALID_HKID)
 def test_hkid_detected(text):
-    out, key = redact(text, lang="zh", mode="fast", seed=42)
+    out, key = redact(text, lang="zh", mode="fast", salt=42)
     assert text not in out, f"HKID {text} not redacted: {out}"
 
 
 @pytest.mark.parametrize("text", INVALID_HKID)
 def test_invalid_hkid_not_detected(text):
-    out, key = redact(text, lang="zh", mode="fast", seed=42)
+    out, key = redact(text, lang="zh", mode="fast", salt=42)
     assert text in out, f"Invalid HKID {text} unexpectedly redacted: {out}"

@@ -476,7 +476,7 @@ def main():
     parser.add_argument("--output", default="-", help="Output file (- for stdout)")
     args = parser.parse_args()
 
-    samples = generate(count=args.count, seed=args.seed)
+    samples = generate(count=args.count, salt=args.seed)
 
     out = sys.stdout if args.output == "-" else open(args.output, "w", encoding="utf-8")
     try:

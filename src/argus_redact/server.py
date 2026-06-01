@@ -37,7 +37,7 @@ async def handle_redact(request: Request) -> JSONResponse:
     text = body.get("text", "")
     lang = body.get("lang", "zh")
     mode = body.get("mode", "fast")
-    seed = body.get("seed")
+    salt = body.get("salt")
     config = body.get("config")
     # Security: reject config as file path string (only dicts allowed via HTTP)
     if isinstance(config, str):
@@ -57,7 +57,7 @@ async def handle_redact(request: Request) -> JSONResponse:
             text,
             lang=lang,
             mode=mode,
-            seed=seed,
+            salt=salt,
             config=config,
             key=key,
             detailed=detailed,

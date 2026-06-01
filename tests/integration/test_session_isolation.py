@@ -21,7 +21,7 @@ from argus_redact.integrations.llamaindex import RedactTransform, RestoreTransfo
 
 def test_langchain_happy_path_roundtrip():
     """Single session: redact → restore returns original verbatim."""
-    redact_r = RedactRunnable(mode="fast", lang="zh", seed=42)
+    redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
     restore_r = RestoreRunnable(redact_r)
     redacted = redact_r.invoke("张三的电话13812345678")
     # Sanity: PII is masked
@@ -36,7 +36,7 @@ def test_langchain_multi_invoke_accumulates_within_session():
     """Within ONE logical session, repeated invoke() accumulates the key.
     This is documented behavior, not a bug — keys merge for round-trip.
     """
-    redact_r = RedactRunnable(mode="fast", lang="zh", seed=42)
+    redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
     redact_r.invoke("黄芳的电话13912345678")
     redact_r.invoke("王建国的身份证110101199003074610")
     assert redact_r.last_key is not None
@@ -47,7 +47,7 @@ def test_langchain_multi_invoke_accumulates_within_session():
 
 def test_langchain_restore_without_key_raises():
     """RestoreRunnable raises SessionStateError if redact never ran."""
-    redact_r = RedactRunnable(mode="fast", lang="zh", seed=42)
+    redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
     restore_r = RestoreRunnable(redact_r)
     with pytest.raises(SessionStateError, match="before paired RedactRunnable"):
         restore_r.invoke("some redacted text")
@@ -55,7 +55,7 @@ def test_langchain_restore_without_key_raises():
 
 def test_langchain_restore_after_reset_raises():
     """After .reset(), subsequent restore must raise (state was deliberately cleared)."""
-    redact_r = RedactRunnable(mode="fast", lang="zh", seed=42)
+    redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
     restore_r = RestoreRunnable(redact_r)
     redact_r.invoke("张三的电话13812345678")
     redact_r.reset()
@@ -92,7 +92,7 @@ def test_langchain_no_dead_contextvar_code():
 # ---------- LlamaIndex ----------
 
 def test_llamaindex_happy_path_roundtrip():
-    redact_t = RedactTransform(mode="fast", lang="zh", seed=42)
+    redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
     restore_t = RestoreTransform(redact_t)
     redacted = redact_t("张三的电话13812345678")
     assert "13812345678" not in redacted
@@ -101,14 +101,14 @@ def test_llamaindex_happy_path_roundtrip():
 
 
 def test_llamaindex_restore_without_key_raises():
-    redact_t = RedactTransform(mode="fast", lang="zh", seed=42)
+    redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
     restore_t = RestoreTransform(redact_t)
     with pytest.raises(SessionStateError, match="before paired RedactTransform"):
         restore_t("some redacted text")
 
 
 def test_llamaindex_restore_after_reset_raises():
-    redact_t = RedactTransform(mode="fast", lang="zh", seed=42)
+    redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
     restore_t = RestoreTransform(redact_t)
     redact_t("张三的电话13812345678")
     redact_t.reset()

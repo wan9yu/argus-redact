@@ -13,7 +13,7 @@ class TestReplaceBasic:
         entities = [make_match("13812345678", "phone", 3)]
         text = "电话是13812345678"
 
-        redacted, key, _ = replace(text, entities, seed=42)
+        redacted, key, _ = replace(text, entities, salt=42)
 
         assert "13812345678" not in redacted
         assert len(key) == 1
@@ -22,7 +22,7 @@ class TestReplaceBasic:
     def test_should_use_pseudonym_when_entity_is_person(self):
         entities = [make_match("张三", "person", 0)]
 
-        redacted, key, _ = replace("张三说了话", entities, seed=42)
+        redacted, key, _ = replace("张三说了话", entities, salt=42)
 
         assert "张三" not in redacted
         assert redacted.endswith("说了话")
@@ -34,7 +34,7 @@ class TestReplaceBasic:
             make_match("13812345678", "phone", 6),
         ]
 
-        redacted, key, _ = replace("张三的电话是13812345678", entities, seed=42)
+        redacted, key, _ = replace("张三的电话是13812345678", entities, salt=42)
 
         assert "张三" not in redacted
         assert "13812345678" not in redacted
@@ -46,7 +46,7 @@ class TestReplaceBasic:
             make_match("张三", "person", 3),
         ]
 
-        redacted, key, _ = replace("张三和张三", entities, seed=42)
+        redacted, key, _ = replace("张三和张三", entities, salt=42)
 
         person_entries = {k: v for k, v in key.items() if v == "张三"}
         assert len(person_entries) == 1
@@ -58,14 +58,14 @@ class TestReplaceStrategies:
     def test_should_use_pseudonym_prefix_when_person(self):
         entities = [make_match("张三", "person", 0)]
 
-        _, key, _ = replace("张三", entities, seed=42)
+        _, key, _ = replace("张三", entities, salt=42)
 
         assert list(key.keys())[0].startswith("P-")
 
     def test_should_mask_with_stars_when_phone(self):
         entities = [make_match("13812345678", "phone", 0)]
 
-        _, key, _ = replace("13812345678", entities, seed=42)
+        _, key, _ = replace("13812345678", entities, salt=42)
 
         replacement = list(key.keys())[0]
         assert "138" in replacement
@@ -75,7 +75,7 @@ class TestReplaceStrategies:
     def test_should_use_remove_label_when_id_number(self):
         entities = [make_match("110101199003074610", "id_number", 0)]
 
-        _, key, _ = replace("110101199003074610", entities, seed=42)
+        _, key, _ = replace("110101199003074610", entities, salt=42)
 
         replacement = list(key.keys())[0]
         assert replacement.startswith("ID-")  # pseudonym-style for LLM survival
@@ -83,7 +83,7 @@ class TestReplaceStrategies:
     def test_should_mask_with_domain_when_email(self):
         entities = [make_match("zhang@example.com", "email", 0)]
 
-        _, key, _ = replace("zhang@example.com", entities, seed=42)
+        _, key, _ = replace("zhang@example.com", entities, salt=42)
 
         replacement = list(key.keys())[0]
         assert "@" in replacement or "*" in replacement
@@ -91,7 +91,7 @@ class TestReplaceStrategies:
     def test_should_mask_prefix_suffix_when_bank_card(self):
         entities = [make_match("4111111111111111", "bank_card", 0)]
 
-        _, key, _ = replace("4111111111111111", entities, seed=42)
+        _, key, _ = replace("4111111111111111", entities, salt=42)
 
         replacement = list(key.keys())[0]
         assert replacement.startswith("411")
@@ -108,7 +108,7 @@ class TestReplaceRightToLeft:
             make_match("李四", "person", 4),
         ]
 
-        redacted, key, _ = replace("A张三B李四C", entities, seed=42)
+        redacted, key, _ = replace("A张三B李四C", entities, salt=42)
 
         assert "张三" not in redacted
         assert "李四" not in redacted
@@ -122,16 +122,16 @@ class TestReplaceSeedDeterminism:
     def test_should_produce_same_output_when_same_seed(self):
         entities = [make_match("张三", "person", 0)]
 
-        r1 = replace("张三说话", entities, seed=42)
-        r2 = replace("张三说话", entities, seed=42)
+        r1 = replace("张三说话", entities, salt=42)
+        r2 = replace("张三说话", entities, salt=42)
 
         assert r1 == r2
 
     def test_should_produce_different_output_when_different_seeds(self):
         entities = [make_match("张三", "person", 0)]
 
-        r1 = replace("张三说话", entities, seed=42)
-        r2 = replace("张三说话", entities, seed=99)
+        r1 = replace("张三说话", entities, salt=42)
+        r2 = replace("张三说话", entities, salt=99)
 
         assert r1[0] != r2[0]
         assert r1[1] != r2[1]
@@ -141,13 +141,13 @@ class TestReplaceEdgeCases:
     """Edge cases."""
 
     def test_should_return_original_when_no_entities(self):
-        redacted, key, _ = replace("普通文本", [], seed=42)
+        redacted, key, _ = replace("普通文本", [], salt=42)
 
         assert redacted == "普通文本"
         assert key == {}
 
     def test_should_return_empty_when_text_is_empty(self):
-        redacted, key, _ = replace("", [], seed=42)
+        redacted, key, _ = replace("", [], salt=42)
 
         assert redacted == ""
         assert key == {}
@@ -155,7 +155,7 @@ class TestReplaceEdgeCases:
     def test_should_redact_when_entity_spans_entire_text(self):
         entities = [make_match("AB", "person", 0)]
 
-        redacted, key, _ = replace("AB", entities, seed=42)
+        redacted, key, _ = replace("AB", entities, salt=42)
 
         assert "AB" not in redacted
         assert len(key) == 1
@@ -167,7 +167,7 @@ class TestReplaceEdgeCases:
             make_match("李四", "person", 3),
         ]
 
-        redacted, key, _ = replace("张三和李四", entities, seed=42, key=existing_key)
+        redacted, key, _ = replace("张三和李四", entities, salt=42, key=existing_key)
 
         assert "P-037" in redacted
         assert key["P-037"] == "张三"
@@ -183,7 +183,7 @@ class TestReplaceCollisionNumbering:
             make_match("220102198805061234", "id_number", 19),
         ]
 
-        _, key, _ = replace("110101199003074610,220102198805061234", entities, seed=42)
+        _, key, _ = replace("110101199003074610,220102198805061234", entities, salt=42)
 
         assert len(key) == 2
         assert len(set(key.keys())) == 2
@@ -197,7 +197,7 @@ class TestReplaceReturns3Tuple:
         from argus_redact.pure.replacer import replace
 
         entities = [PatternMatch(text="13812345678", type="phone", start=0, end=11, layer=1)]
-        result = replace("13812345678", entities, seed=42)
+        result = replace("13812345678", entities, salt=42)
         assert len(result) == 3
         text, key, aliases = result
         assert isinstance(text, str)
@@ -239,7 +239,7 @@ class TestReplaceCollisionResolution:
             make_match("13899995678", "phone", 12),
         ]
 
-        _, key, _ = replace("13812345678 13899995678", entities, seed=42)
+        _, key, _ = replace("13812345678 13899995678", entities, salt=42)
 
         # Two distinct keys (no overwrite); originals preserved
         assert len(key) == 2
@@ -252,7 +252,7 @@ class TestReplaceCollisionResolution:
             make_match("13955554444", "phone", 12),
         ]
 
-        _, key, _ = replace("13812345678 13955554444", entities, seed=42)
+        _, key, _ = replace("13812345678 13955554444", entities, salt=42)
 
         assert "138****5678" in key
         assert "139****4444" in key
@@ -264,7 +264,7 @@ class TestReplaceMaskValueDefaults:
     def test_should_show_3_prefix_4_suffix_when_phone_mask(self):
         entities = [make_match("13812345678", "phone", 0)]
 
-        _, key, _ = replace("13812345678", entities, seed=42)
+        _, key, _ = replace("13812345678", entities, salt=42)
 
         replacement = next(iter(key))
         assert replacement.startswith("138")
@@ -276,7 +276,7 @@ class TestReplaceMaskValueDefaults:
     def test_should_show_6_prefix_4_suffix_when_bank_card_mask(self):
         entities = [make_match("4111111111111234", "bank_card", 0)]
 
-        _, key, _ = replace("4111111111111234", entities, seed=42)
+        _, key, _ = replace("4111111111111234", entities, salt=42)
 
         replacement = next(iter(key))
         assert replacement.startswith("411111")
@@ -288,7 +288,7 @@ class TestReplaceMaskValueDefaults:
         # 5 chars total, default phone window is 3+4=7 → fully masked
         entities = [make_match("12345", "phone", 0)]
 
-        _, key, _ = replace("12345", entities, seed=42)
+        _, key, _ = replace("12345", entities, salt=42)
 
         replacement = next(iter(key))
         assert replacement == "*****"
@@ -300,7 +300,7 @@ class TestReplaceMaskEmail:
     def test_should_keep_first_letter_of_local_part_when_email_masked(self):
         entities = [make_match("alice@example.com", "email", 0)]
 
-        _, key, _ = replace("alice@example.com", entities, seed=42)
+        _, key, _ = replace("alice@example.com", entities, salt=42)
 
         replacement = next(iter(key))
         assert replacement.startswith("a")
@@ -311,7 +311,7 @@ class TestReplaceMaskEmail:
         # local-part length 1 → max(0, 3) = 3 stars
         entities = [make_match("a@example.com", "email", 0)]
 
-        _, key, _ = replace("a@example.com", entities, seed=42)
+        _, key, _ = replace("a@example.com", entities, salt=42)
 
         replacement = next(iter(key))
         # Exactly "a***@example.com" — kills `max(len(local) - 1, 3)` mutants
@@ -332,7 +332,7 @@ class TestReplaceConfigValidation:
         entities = [make_match("13812345678", "phone", 0)]
 
         with pytest.raises(ValueError, match="totally-bogus"):
-            replace("13812345678", entities, seed=42, config=config)
+            replace("13812345678", entities, salt=42, config=config)
 
 
 class TestReplaceTypeSeedDerivation:
@@ -349,7 +349,7 @@ class TestReplaceTypeSeedDerivation:
             make_match("b@x.com", "medical", 10),
         ]
 
-        _, key, _ = replace("a@x.com   b@x.com", entities, seed=42)
+        _, key, _ = replace("a@x.com   b@x.com", entities, salt=42)
 
         replacements = list(key.keys())
         assert any(r.startswith("CRIM-") for r in replacements)
@@ -367,7 +367,7 @@ class TestReplaceOrgPseudonymSeedOffset:
             make_match("阿里巴巴", "organization", 4),
         ]
 
-        _, key, _ = replace("张三 在 阿里巴巴", entities, seed=42)
+        _, key, _ = replace("张三 在 阿里巴巴", entities, salt=42)
 
         # P-N for person, O-N for organization — different prefixes
         assert any(k.startswith("P-") for k in key)
@@ -391,7 +391,7 @@ class TestReplaceReuseExistingKey:
         existing = {"P-99999": "张三"}
         entities = [make_match("张三", "person", 0)]
 
-        _, key, _ = replace("张三说话", entities, seed=42, key=existing)
+        _, key, _ = replace("张三说话", entities, salt=42, key=existing)
 
         assert key.get("P-99999") == "张三"
 
@@ -404,7 +404,7 @@ class TestReplaceMaskNameCJK:
         entities = [make_match("张三", "person", 0)]
         config = {"person": {"strategy": "name_mask"}}
 
-        _, key, _ = replace("张三", entities, seed=42, config=config)
+        _, key, _ = replace("张三", entities, salt=42, config=config)
 
         replacement = next(iter(key))
         assert replacement == "张*"
@@ -413,7 +413,7 @@ class TestReplaceMaskNameCJK:
         entities = [make_match("欧阳锋", "person", 0)]
         config = {"person": {"strategy": "name_mask"}}
 
-        _, key, _ = replace("欧阳锋", entities, seed=42, config=config)
+        _, key, _ = replace("欧阳锋", entities, salt=42, config=config)
 
         replacement = next(iter(key))
         # Kills `length - 1` mutants — must equal exactly "欧**"
@@ -423,7 +423,7 @@ class TestReplaceMaskNameCJK:
         entities = [make_match("司马相如", "person", 0)]
         config = {"person": {"strategy": "name_mask"}}
 
-        _, key, _ = replace("司马相如", entities, seed=42, config=config)
+        _, key, _ = replace("司马相如", entities, salt=42, config=config)
 
         # 4+ char names: first 2 visible, rest stars
         replacement = next(iter(key))
@@ -438,7 +438,7 @@ class TestReplaceLandlineMask:
         entities = [make_match("010-12345678", "phone", 0)]
         config = {"phone": {"strategy": "landline_mask"}}
 
-        _, key, _ = replace("010-12345678", entities, seed=42, config=config)
+        _, key, _ = replace("010-12345678", entities, salt=42, config=config)
 
         replacement = next(iter(key))
         assert replacement.startswith("010-")
@@ -451,7 +451,7 @@ class TestReplaceLandlineMask:
         entities = [make_match("01012345678", "phone", 0)]
         config = {"phone": {"strategy": "landline_mask"}}
 
-        _, key, _ = replace("01012345678", entities, seed=42, config=config)
+        _, key, _ = replace("01012345678", entities, salt=42, config=config)
 
         replacement = next(iter(key))
         assert replacement.startswith("010")

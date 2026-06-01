@@ -95,7 +95,7 @@ class TestJaKoFullPipeline:
             "argus_redact.glue.redact._get_ner_adapters",
             return_value=[ja_adapter],
         ):
-            redacted, key = redact(text, seed=42, mode="ner", lang="ja")
+            redacted, key = redact(text, salt=42, mode="ner", lang="ja")
 
         assert "090-1234-5678" not in redacted
         restored = restore(redacted, key)
@@ -112,7 +112,7 @@ class TestJaKoFullPipeline:
             "argus_redact.glue.redact._get_ner_adapters",
             return_value=[ko_adapter],
         ):
-            redacted, key = redact(text, seed=42, mode="ner", lang="ko")
+            redacted, key = redact(text, salt=42, mode="ner", lang="ko")
 
         assert "010-1234-5678" not in redacted
         restored = restore(redacted, key)
