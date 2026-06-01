@@ -2,12 +2,12 @@
   "schema_version": 1,
   "platform": "ubuntu-latest",
   "python": "3.12",
-  "commit": "refresh-2026-05-24-runner-drift",
+  "commit": "refresh-2026-06-01-runner-drift",
   "measurements": {
     "import_time_ms": 80.09,
     "redact_zh_fast_1kb_p50_ms": 2.78,
     "redact_en_fast_1kb_p50_ms": 1.28,
-    "redact_pseudonym_llm_zh_1kb_p50_ms": 3.09,
+    "redact_pseudonym_llm_zh_1kb_p50_ms": 3.60,
     "restore_1kb_p50_ms": 2.90,
     "streaming_feed_per_chunk_p50_ms": 1.41
   }
