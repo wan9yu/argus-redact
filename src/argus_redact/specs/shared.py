@@ -270,3 +270,63 @@ register(
         description="MAC address — detection in lang/shared/patterns.py; realistic faker uses RFC 7042 doc block",
     )
 )
+
+
+# ── Cross-language quasi-identifiers (no format-based detection; NER / downstream) ──
+
+register(
+    PIITypeDef(
+        name="phone_landline",
+        lang="shared",
+        format="varies by region",
+        charset="digits + separators",
+        strategy="mask",
+        label="[PHONE REDACTED]",
+        examples=(),
+        counterexamples=(),
+        _patterns=(),
+        sensitivity=2,
+        description=(
+            "Landline phone number — detected via NER or Presidio; "
+            "prefix LL avoids collision with mobile phone prefix"
+        ),
+    )
+)
+
+register(
+    PIITypeDef(
+        name="date",
+        lang="shared",
+        format="varies (ISO 8601, locale-specific, etc.)",
+        charset="digits + separators",
+        strategy="remove",
+        label="[DATE REDACTED]",
+        examples=(),
+        counterexamples=(),
+        _patterns=(),
+        sensitivity=1,
+        description=(
+            "Date / temporal identifier — detected via NER or Presidio; "
+            "HIPAA shift-by-N is a v0.7+ candidate"
+        ),
+    )
+)
+
+register(
+    PIITypeDef(
+        name="url",
+        lang="shared",
+        format="scheme://host/path[?query]",
+        charset="ASCII URL characters",
+        strategy="remove",
+        label="[URL REDACTED]",
+        examples=(),
+        counterexamples=(),
+        _patterns=(),
+        sensitivity=1,
+        description=(
+            "URL / web address — detected via NER or Presidio; "
+            "removed because query parameters may carry PII"
+        ),
+    )
+)

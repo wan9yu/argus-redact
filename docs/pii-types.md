@@ -3,7 +3,7 @@
 Auto-generated from `argus_redact.specs.list_types()`. Do not hand-edit.
 Regenerate via: `make catalog`
 
-Total: 56 types (32 zh / 15 en / 9 shared)
+Total: 59 types (32 zh / 15 en / 12 shared)
 
 ## Chinese (zh) — 32 types
 
@@ -661,7 +661,7 @@ US Social Security Number — realistic faker uses 999-XX
 
 US passport — keyword-triggered, letter + 8 digits
 
-## Shared (cross-lang) — 9 types
+## Shared (cross-lang) — 12 types
 
 ### `anthropic_api_key`
 
@@ -688,6 +688,17 @@ Anthropic API key (sk-ant- prefix)
 | Source | AWS IAM access key ID format |
 
 AWS IAM access key ID (does not cover the secret access key — that needs keyword context)
+
+### `date`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 1 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+
+Date / temporal identifier — detected via NER or Presidio; HIPAA shift-by-N is a v0.7+ candidate
 
 ### `email`
 
@@ -771,6 +782,18 @@ MAC address — detection in lang/shared/patterns.py; realistic faker uses RFC 7
 
 OpenAI API key (legacy sk- and project sk-proj- prefixes)
 
+### `phone_landline`
+
+| Field | Value |
+|---|---|
+| Default strategy | `mask` |
+| Sensitivity | 2 |
+| Reversible | ✗ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| HIPAA Safe Harbor | `phone_numbers` |
+
+Landline phone number — detected via NER or Presidio; prefix LL avoids collision with mobile phone prefix
+
 ### `ssh_private_key`
 
 | Field | Value |
@@ -783,4 +806,15 @@ OpenAI API key (legacy sk- and project sk-proj- prefixes)
 | Source | PEM format (RFC 7468) for SSH / TLS private keys |
 
 SSH private key PEM block (RSA, OPENSSH, DSA, EC variants)
+
+### `url`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 1 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+
+URL / web address — detected via NER or Presidio; removed because query parameters may carry PII
 

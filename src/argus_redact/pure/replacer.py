@@ -288,6 +288,10 @@ DEFAULT_STRATEGIES = {
     "social_security": "remove",
     "credit_code": "remove",
     "us_passport": "remove",
+    # Quasi-identifiers referenced by integrations (Presidio, profiles)
+    "phone_landline": "mask",
+    "date": "remove",
+    "url": "remove",
     # Credentials / secrets (cross-language)
     "openai_api_key": "remove",
     "anthropic_api_key": "remove",
@@ -329,6 +333,10 @@ DEFAULT_PREFIXES = {
     "age": "AGE",
     "gender": "GEN",
     "self_reference": "S",
+    # Quasi-identifiers referenced by integrations (Presidio, profiles)
+    "phone_landline": "LL",
+    "date": "DATE",
+    "url": "URL",
     # Credentials / secrets
     "openai_api_key": "OAI-KEY",
     "anthropic_api_key": "ANT-KEY",

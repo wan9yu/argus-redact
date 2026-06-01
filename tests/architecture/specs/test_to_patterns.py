@@ -173,7 +173,8 @@ class TestToPatternsShared:
 
     # Shared types whose detection regex lives in lang/shared/patterns.py rather
     # than the spec _patterns (mirrors zh's _PATTERNS_IN_SOURCE convention).
-    _PATTERNS_IN_SOURCE = {"email", "ip_address", "mac_address"}
+    # phone_landline / date / url are NER/Presidio-sourced; no spec-level _patterns.
+    _PATTERNS_IN_SOURCE = {"email", "ip_address", "mac_address", "phone_landline", "date", "url"}
 
     def test_spec_patterns_should_exist(self):
         """Every shared spec should produce at least one pattern."""
