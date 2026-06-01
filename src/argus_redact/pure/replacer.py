@@ -236,70 +236,18 @@ def _generate_unique_fake(
         f"after {_MAX_REROLL_ATTEMPTS} attempts (last: {last!r})"
     )
 
-# Default strategies per entity type
-DEFAULT_STRATEGIES = {
-    "person": "pseudonym",
-    "organization": "pseudonym",
-    "location": "category",
-    "phone": "mask",
-    "id_number": "remove",
-    "email": "mask",
-    "bank_card": "mask",
-    "passport": "remove",
-    "license_plate": "remove",
-    "address": "remove",
-    "ssn": "remove",
-    "credit_card": "mask",
-    "my_number": "remove",
-    "rrn": "remove",
-    "tax_id": "remove",
-    "iban": "remove",
-    "postcode": "remove",
-    "nino": "remove",
-    "nhs_number": "remove",
-    "aadhaar": "remove",
-    "pan": "remove",
-    # Level 2
-    "job_title": "remove",
-    "school": "pseudonym",
-    "ethnicity": "remove",
-    "workplace": "remove",
-    # Level 3
-    "criminal_record": "remove",
-    "financial": "remove",
-    "biometric": "remove",
-    "medical": "remove",
-    "religion": "remove",
-    "political": "remove",
-    "sexual_orientation": "remove",
-    # Self-reference: preserve pronouns / kinship verbatim so the LLM gets
-    # an intelligible prompt. Detection still runs (feeds the
-    # self_reference_tier hint); only the replacement is skipped.
-    "self_reference": "keep",
-    # Level 4
-    "ip_address": "remove",
-    "mac_address": "remove",
-    "imei": "remove",
-    "url_token": "remove",
-    "age": "remove",
-    "gender": "remove",
-    "date_of_birth": "remove",
-    "military_id": "remove",
-    "social_security": "remove",
-    "credit_code": "remove",
-    "us_passport": "remove",
-    # Quasi-identifiers referenced by integrations (Presidio, profiles)
-    "phone_landline": "mask",
-    "date": "remove",
-    "url": "remove",
-    # Credentials / secrets (cross-language)
-    "openai_api_key": "remove",
-    "anthropic_api_key": "remove",
-    "aws_access_key": "remove",
-    "github_token": "remove",
-    "jwt": "remove",
-    "ssh_private_key": "remove",
-}
+def _resolve_default_strategy(entity_type: str) -> str:
+    """Look up the type's declared strategy from the typedef registry.
+
+    v0.6.8: single source of truth = specs/{zh,en,shared}.py PIITypeDef.strategy.
+    """
+    # Lazy import to avoid circular: registry imports types, types reference replacer
+    from argus_redact.specs.registry import lookup
+    typedef_list = lookup(entity_type)
+    if typedef_list:
+        return typedef_list[0].strategy
+    return "remove"  # fallback for unknown types
+
 
 DEFAULT_PREFIXES = {
     "person": "P",
@@ -577,7 +525,7 @@ def replace(
             continue
 
         ec = _get_entity_config(entity.type, config)
-        strategy = ec.get("strategy", DEFAULT_STRATEGIES.get(entity.type, "remove"))
+        strategy = ec.get("strategy") or _resolve_default_strategy(entity.type)
 
         if strategy == "keep":
             # ``keep`` is for pronouns / kinship phrases the LLM needs in the
@@ -594,7 +542,7 @@ def replace(
                 SecurityWarning,
                 stacklevel=3,
             )
-            strategy = DEFAULT_STRATEGIES.get(entity.type, "remove")
+            strategy = _resolve_default_strategy(entity.type)
             # fall through to the strategy dispatch below
 
         if strategy == "pseudonym":
