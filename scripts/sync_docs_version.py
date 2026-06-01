@@ -9,8 +9,6 @@ import re
 import sys
 from pathlib import Path
 
-import tomllib
-
 _REPO = Path(__file__).parent.parent
 
 _TARGETS = [
@@ -37,10 +35,15 @@ _TARGETS = [
     ),
 ]
 
+_PYPROJECT_VERSION = re.compile(r'^version = "([0-9.]+)"', re.MULTILINE)
+
 
 def _read_version() -> str:
-    with (_REPO / "pyproject.toml").open("rb") as f:
-        return tomllib.load(f)["project"]["version"]
+    text = (_REPO / "pyproject.toml").read_text(encoding="utf-8")
+    m = _PYPROJECT_VERSION.search(text)
+    if m is None:
+        raise RuntimeError('Could not find version = "X.Y.Z" in pyproject.toml')
+    return m.group(1)
 
 
 def _sync(check_only: bool) -> int:

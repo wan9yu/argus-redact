@@ -64,3 +64,16 @@ def test_check_passes_after_sync(fake_repo: Path):
     _run_script(cwd=fake_repo)
     result = _run_script("--check", cwd=fake_repo)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_script_imports_under_python_3_10():
+    """Regression guard for v0.6.6 CI failure (tomllib was 3.11+).
+
+    The script must import successfully on Python >= 3.10 without depending
+    on any version-conditional stdlib module.
+    """
+    import importlib.util
+    assert sys.version_info >= (3, 10), "argus-redact requires Python 3.10+"
+    spec = importlib.util.spec_from_file_location("sync_docs_version", _SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # must not raise ModuleNotFoundError
