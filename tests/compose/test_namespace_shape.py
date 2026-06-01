@@ -30,10 +30,12 @@ def test_compose_exports_redact_pseudonym_llm():
     assert redact_pseudonym_llm is top_alias
 
 
-def test_prompt_anchor_stub_raises_with_roadmap_hint():
+def test_prompt_anchor_real_returns_addendum():
+    """v0.6.9: prompt_anchor ships real implementation (was stub in v0.6.7-0.6.8)."""
     from argus_redact.compose import prompt_anchor
-    with pytest.raises(NotImplementedError, match="v0.6.9"):
-        prompt_anchor({"P-001": "黄芳"}, lang="zh")
+    result = prompt_anchor({"P-001": "黄芳"}, lang="zh")
+    assert result  # non-empty
+    assert "P-001" in result
 
 
 def test_expand_aliases_stub_raises_with_roadmap_hint():
