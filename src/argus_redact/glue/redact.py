@@ -413,6 +413,7 @@ def redact(
     types: list[str] | None = None,
     types_exclude: list[str] | None = None,
     unified_prefix: str | None = None,
+    _pre_detected: "list[PatternMatch] | None" = None,
 ):
     """Detect and replace PII in text.
 
@@ -491,14 +492,26 @@ def redact(
     if lang == "auto":
         lang = detect_languages(text)
 
-    entities, langs, timing, layer_stats = _detect(
-        text,
-        lang=lang,
-        mode=mode,
-        names=names,
-        types=types,
-        types_exclude=types_exclude,
-    )
+    if _pre_detected is not None:
+        entities = _pre_detected
+        langs = [lang] if isinstance(lang, str) else list(lang)
+        timing: dict[str, float] = {}
+        layer_stats = {
+            "layer1_count": 0,
+            "layer2_count": 0,
+            "layer2_status": "skipped",
+            "layer3_count": 0,
+            "layer3_status": "skipped",
+        }
+    else:
+        entities, langs, timing, layer_stats = _detect(
+            text,
+            lang=lang,
+            mode=mode,
+            names=names,
+            types=types,
+            types_exclude=types_exclude,
+        )
 
     redacted, result_key, _aliases = _replace_and_emit(
         text,

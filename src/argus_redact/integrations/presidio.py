@@ -15,8 +15,6 @@ from __future__ import annotations
 
 from argus_redact._types import NEREntity, PatternMatch
 from argus_redact.impure.ner import NERAdapter
-from argus_redact.pure.merger import merge_entities
-from argus_redact.pure.replacer import replace
 from argus_redact.pure.restore import restore
 
 # Map Presidio entity types to argus-redact types
@@ -66,8 +64,29 @@ class PresidioBridge:
     ) -> tuple[str, dict]:
         """Detect PII with Presidio, replace with argus-redact.
 
+        Routes through public argus_redact.redact() via the _pre_detected
+        private kwarg, inheriting:
+        - MAX_INPUT_SIZE guard
+        - isinstance(text, str) check
+        - Profile resolution
+        - English grammar normalization
+        - types / types_exclude filter
+        - Telemetry emission
+        - Key file persistence
+
         Returns (redacted_text, key) — same interface as argus_redact.redact().
         """
+        # Mirror argus_redact.redact() guards so they fire before Presidio analysis
+        if not isinstance(text, str):
+            raise TypeError(f"text must be a string, got {type(text).__name__}")
+
+        from argus_redact.pure.normalize import MAX_INPUT_SIZE
+        if len(text) > MAX_INPUT_SIZE:
+            raise ValueError(
+                f"Input text ({len(text)} chars) exceeds maximum allowed size "
+                f"({MAX_INPUT_SIZE} chars). Split into smaller chunks."
+            )
+
         analyzer = self._get_analyzer()
         results = analyzer.analyze(text=text, language=language)
 
@@ -87,9 +106,15 @@ class PresidioBridge:
                 )
             )
 
-        entities = merge_entities(entities)
-        redacted, result_key, _aliases = replace(
-            text, entities, salt=salt, key=key, config=config
+        # Route through public redact() — inherits all pipeline guarantees
+        import argus_redact
+        redacted, result_key = argus_redact.redact(
+            text,
+            lang=language,
+            salt=salt,
+            config=config,
+            key=key,
+            _pre_detected=entities,
         )
         return redacted, result_key
 
