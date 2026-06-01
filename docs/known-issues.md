@@ -22,7 +22,7 @@ Each entry follows three lines:
   - Tool-use / function-calling cross-turn state machines
   - Token-by-token streaming (sentence-buffered is the upper bound; see `docs/design-streaming-incremental.md`)
 - **Why we won't fix**: each requires an NLP/LLM-mediated solution incompatible with the primitive's "small core, deterministic, audited, fast" SLA. Trying to own them would balloon the surface area beyond single-maintainer capacity. See [architecture-layers.md](architecture-layers.md) for the layered identity argus-redact has codified.
-- **What you should do**: use the `pseudonym` strategy (`P-NNNNN`-style codes; LLMs treat them opaquely, fewer variants) for higher restore fidelity; use the `compose` layer's `prompt_anchor()` and `expand_aliases()` (v0.7+) for best-effort coverage of common variants; or run a downstream coref-aware gateway (e.g., Argus Gateway) for fuller semantic round-trip.
+- **What you should do**: use the `pseudonym` strategy (`P-NNNNN`-style codes; LLMs treat them opaquely, fewer variants) for higher restore fidelity; use the `compose` layer's `prompt_anchor()` and `expand_aliases()` (namespace stubs since v0.6.7; helpers ship v0.6.9) for best-effort coverage of common variants; or run a downstream coref-aware gateway (e.g., Argus Gateway) for fuller semantic round-trip.
 
 ### Force-rebuild on major version pin bump
 

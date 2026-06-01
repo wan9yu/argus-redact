@@ -1,5 +1,17 @@
 # Architecture
 
+> **Two layer taxonomies coexist in this codebase.** Don't be surprised:
+>
+> | Where | Taxonomy | Meaning |
+> |---|---|---|
+> | this doc Purity Architecture | Pure / Impure / Glue | **internal mechanics** — which subdirectories under `src/argus_redact/` may do I/O |
+> | [`docs/architecture-layers.md`](architecture-layers.md) | Primitive / Compose / Downstream | **public stability contract** for the API surface |
+> | `src/argus_redact/layers.py` `LAYER_REGEX/NER/SEMANTIC` | L1 / L1b / L2 / L3 | **detection pipeline stages** — orthogonal to the other two |
+>
+> Mapping: Pure ≈ Layer 1 primitive minus the `redact/restore/assess_risk` entry points. Impure = where I/O is allowed. Glue = orchestrators that combine Pure + Impure.
+
+---
+
 ## Layer naming SSOT
 
 This document and the rest of the project — including downstream consumers

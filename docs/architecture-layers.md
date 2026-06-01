@@ -15,6 +15,18 @@ trustworthy. UX/integration concerns live downstream.
 
 ---
 
+> **Two layer taxonomies coexist in this codebase.** Don't be surprised:
+>
+> | Where | Taxonomy | Meaning |
+> |---|---|---|
+> | this doc | Primitive / Compose / Downstream | **public stability contract** for the API surface |
+> | [`docs/architecture.md`](architecture.md) Purity Architecture | Pure / Impure / Glue | **internal mechanics** — which subdirectories under `src/argus_redact/` may do I/O |
+> | [`src/argus_redact/layers.py`](../src/argus_redact/layers.py) `LAYER_REGEX/NER/SEMANTIC` | L1 / L1b / L2 / L3 | **detection pipeline stages** — orthogonal to the other two |
+>
+> Mapping: Layer 1 primitive ≈ `pure/` + the `redact / restore / assess_risk` entry points in `glue/`. Layer 2 compose ≈ in-tree `streaming.py` + the `compose/` subpackage (v0.6.7+). Layer 3 downstream is out-of-tree.
+
+---
+
 ## The three layers
 
 ```
