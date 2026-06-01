@@ -2,6 +2,59 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.6.8 — 2026-06-01 — API Surface SSOT
+
+### Breaking changes
+
+- **`seed=` keyword removed from all 9 public entry points.** Use `salt=` instead.
+  Canonical type: `salt: int | bytes | None` (int coerced internally to 8-byte BE).
+  Affects: `redact`, `redact_pseudonym_llm`, `StreamingRedactor`, `redact_json`,
+  `redact_csv`, `RedactRunnable`, `RedactTransform`, `PresidioBridge.redact`,
+  `redact_body`. CLI `--seed N` flag unchanged.
+
+  Migration: `grep -rn "seed=" your_code/ | xargs sed -i 's/seed=/salt=/g'`
+
+### Features
+
+- 3 new PII types registered with default strategies: `phone_landline`
+  (`mask`, prefix `LL`), `date` (`remove`, prefix `DATE`), `url` (`remove`,
+  prefix `URL`).
+- `PIITypeDef.strategy` is now the runtime single source of truth. The
+  parallel `DEFAULT_STRATEGIES` dict in `pure/replacer.py` is removed;
+  `replace()` reads strategy directly from the type registry via a new
+  `_resolve_default_strategy()` helper. Per-language test (zh + en + shared)
+  replaces the previous zh-only drift guard.
+- Public `redact()` gains a new private kwarg
+  `_pre_detected: list[PatternMatch] | None = None`. Integration adapters
+  (e.g., `PresidioBridge`) pass pre-detected entities through this hook,
+  inheriting all pipeline guarantees (MAX_INPUT_SIZE / `isinstance(text, str)` /
+  profile / telemetry / normalization / `types` filter / key persistence).
+  The kwarg is underscore-prefixed and NOT part of the public stability
+  contract.
+- `PresidioBridge.redact()` refactored to call `argus_redact.redact()` via
+  the new hook — no longer reaches into `pure.merger` / `pure.replacer`.
+
+### Docs
+
+- `README.zh.md` brought to 1:1 parity with `README.md` — 5+ previously
+  missing sections added (North Star, Detection accuracy, Risk Assessment
+  CLI, Security, Contributors, plus full Documentation table). Pinned code
+  blocks in zh README are enforced by `tests/test_readme_examples.py`.
+- `README.md` link "All 52 types" → "All PII types" (drops drift-prone
+  count).
+- `README.md` "PIPL ~85%" → "Meets PIPL Art.28 sensitive PII categories"
+  (qualitative wording aligned with README.md:305 existing claim).
+
+### Compatibility
+
+- **Breaking**: `seed=` keyword. Migrate to `salt=`.
+- No public symbol additions to `argus_redact.*` top-level.
+- `_pre_detected` is private (underscore-prefixed). Not documented in
+  api-reference.md. May evolve.
+- `DEFAULT_STRATEGIES` dict removed — was an internal `pure/replacer.py`
+  module attribute; downstream code reading it directly will break.
+  Use `argus_redact.specs.registry.lookup(type)[0].strategy` instead.
+
 ## v0.6.7 — 2026-06-01 — Layer Codification
 
 ### Features

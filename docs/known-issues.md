@@ -94,6 +94,15 @@ Each entry follows three lines:
 
 ## Recently Fixed
 
+### v0.6.8 (2026-06-01) — API Surface SSOT
+
+- **`seed=` keyword removed from 9 public entry points** — use `salt=` (accepts `int | bytes | None`). Hard break, no DeprecationWarning alias. CLI `--seed N` flag unchanged at the argparse level. (audit MEDIUM "API parameter naming chaos")
+- **`PIITypeDef.strategy` is now runtime SSOT** — `DEFAULT_STRATEGIES` dict deleted; `replace()` reads `lookup(type)[0].strategy`. Per-language test (zh+en+shared) replaces zh-only drift guard. (audit MEDIUM)
+- **Presidio bridge routes through public `redact()`** via new `_pre_detected=` private kwarg, inheriting MAX_INPUT_SIZE / profile / telemetry / normalization. (audit MEDIUM)
+- **3 new PII types registered**: `phone_landline` (mask, prefix `LL`), `date` (remove, prefix `DATE`), `url` (remove, prefix `URL`). (audit LOW)
+- **README.zh.md sync to en parity** — added 5+ missing sections (North Star, Detection accuracy, Risk Assessment CLI, Security, Contributors). Pinned code blocks enforced in CI. (audit MEDIUM)
+- **README "All 52 types" → "All PII types"**; "PIPL ~85%" → "Meets PIPL Art.28 sensitive PII categories". (audit LOW + LOW)
+
 ### v0.6.7 (2026-06-01) — Layer Codification
 
 - **`argus_redact.compose` namespace shipped** — `StreamingRedactor` / `StreamingRestorer` / `redact_pseudonym_llm` re-exported; `prompt_anchor` / `expand_aliases` stubs raising NotImplementedError with v0.6.9 roadmap hint. Top-level aliases preserved (no DeprecationWarning).
