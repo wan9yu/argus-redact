@@ -38,10 +38,12 @@ def test_prompt_anchor_real_returns_addendum():
     assert "P-001" in result
 
 
-def test_expand_aliases_stub_raises_with_roadmap_hint():
+def test_expand_aliases_real_returns_expanded_dict():
+    """v0.6.9: expand_aliases ships real implementation (was stub in v0.6.7-0.6.8)."""
     from argus_redact.compose import expand_aliases
-    with pytest.raises(NotImplementedError, match="v0.6.9"):
-        expand_aliases({"P-001": "黄芳"}, lang="zh")
+    result = expand_aliases({"P-001": "黄芳"}, lang="zh")
+    assert "P-001" in result and result["P-001"] == "黄芳"
+    assert "黄先生" in result and result["黄先生"] == "黄芳"
 
 
 def test_compose_dunder_all_is_exactly_five():
