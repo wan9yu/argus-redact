@@ -8,11 +8,8 @@ import pytest
 
 def test_presidio_respects_max_input_size():
     """MAX_INPUT_SIZE guard inherited via public redact()."""
-    try:
-        from argus_redact.integrations.presidio import PresidioBridge
-    except ImportError:
-        pytest.skip("Presidio not installed")
-
+    pytest.importorskip("presidio_analyzer")
+    from argus_redact.integrations.presidio import PresidioBridge
     from argus_redact.pure.normalize import MAX_INPUT_SIZE
 
     bridge = PresidioBridge()
@@ -24,10 +21,8 @@ def test_presidio_respects_max_input_size():
 
 def test_presidio_rejects_non_string_input():
     """isinstance(text, str) check inherited."""
-    try:
-        from argus_redact.integrations.presidio import PresidioBridge
-    except ImportError:
-        pytest.skip("Presidio not installed")
+    pytest.importorskip("presidio_analyzer")
+    from argus_redact.integrations.presidio import PresidioBridge
 
     bridge = PresidioBridge()
     with pytest.raises(TypeError):
@@ -36,10 +31,8 @@ def test_presidio_rejects_non_string_input():
 
 def test_presidio_returns_redacted_and_key():
     """End-to-end smoke: Presidio detects, argus-redact replaces."""
-    try:
-        from argus_redact.integrations.presidio import PresidioBridge
-    except ImportError:
-        pytest.skip("Presidio not installed")
+    pytest.importorskip("presidio_analyzer")
+    from argus_redact.integrations.presidio import PresidioBridge
 
     bridge = PresidioBridge()
     text = "Contact Mr. John Smith at john@example.com"
