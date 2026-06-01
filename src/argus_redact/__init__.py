@@ -19,7 +19,7 @@ from argus_redact.pure.restore import check_restore_safety, restore, wipe_key
 from argus_redact.pure.risk import assess_risk
 from argus_redact.streaming import StreamingRedactor
 
-__version__ = "0.6.8"
+__version__ = "0.6.9"
 __all__ = [
     # ─── Layer 1 — primitive (frozen at 1.0) ───
     "redact",

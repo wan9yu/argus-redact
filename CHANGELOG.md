@@ -2,6 +2,36 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.6.9 — 2026-06-01 — Compose Helpers Ship for Real
+
+### Features
+
+- `compose.prompt_anchor(key, lang) -> str` — real implementation. Returns a
+  multi-line system-prompt addendum (detailed 3-rule template, zh + en)
+  asking the LLM to preserve redaction placeholders verbatim. Empty key
+  returns empty string. Snapshot-tested.
+- `compose.expand_aliases(key, lang) -> dict` — real implementation. Returns
+  a copy of `key` with surname+title composite aliases added for each
+  Person entry (P-NNNNN prefix). 5 zh titles (先生/女士/总/老师/医生),
+  5 en titles (Mr./Mrs./Ms./Dr./Prof.). Handles compound zh surnames
+  (欧阳/司马/...) and multi-token en names with trailing initials. Original
+  dict not mutated. Alias direction: alias → original (single-pass restore).
+- New recipes: `docs/recipes/compose-prompt-anchor.md`,
+  `docs/recipes/compose-expand-aliases.md`.
+
+### Chores
+
+- Refreshed `tests/benchmark/baseline.json` (ubuntu-latest runner image
+  20260525.161.1 drift). PR #16 perf gate unblocked.
+- Merged dependabot PR #16: `docker/setup-qemu-action` bumped from 4.0.0
+  to 4.1.0 SHA pin in `.github/workflows/release.yml`.
+
+### Compatibility
+
+- No breaking changes.
+- Both compose helpers replace v0.6.7 stubs (NotImplementedError → real).
+  Signatures unchanged.
+
 ## v0.6.8 — 2026-06-01 — API Surface SSOT
 
 ### Breaking changes

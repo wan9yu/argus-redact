@@ -94,6 +94,14 @@ Each entry follows three lines:
 
 ## Recently Fixed
 
+### v0.6.9 (2026-06-01) — Compose Helpers Ship for Real
+
+- **`compose.prompt_anchor(key, lang) -> str` real implementation** — replaces v0.6.7 NotImplementedError stub. Returns multi-line detailed-3-rule system-prompt addendum (zh + en). Snapshot-tested.
+- **`compose.expand_aliases(key, lang) -> dict` real implementation** — replaces v0.6.7 stub. Generates surname+title composite aliases for Person entries; 5 zh titles + 5 en titles; alias → original directionality; handles compound zh surnames + multi-token en names. Round-trip tested.
+- **`docs/recipes/compose-{prompt-anchor,expand-aliases}.md`** — two new usage recipes covering when-to-use, combining the two helpers, limitations.
+- **Perf baseline refreshed** for ubuntu-latest runner image 20260525.161.1 drift. Same pattern as v0.6.6 PR #15 refresh.
+- **Dependabot PR #16 merged**: `docker/setup-qemu-action` bumped from 4.0.0 to 4.1.0 SHA pin in `.github/workflows/release.yml`.
+
 ### v0.6.8 (2026-06-01) — API Surface SSOT
 
 - **`seed=` keyword removed from 9 public entry points** — use `salt=` (accepts `int | bytes | None`). Hard break, no DeprecationWarning alias. CLI `--seed N` flag unchanged at the argparse level. (audit MEDIUM "API parameter naming chaos")
