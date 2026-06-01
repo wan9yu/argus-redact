@@ -187,7 +187,7 @@ For context: `fast` mode is high-precision / low-recall by design — it only em
 | **Protected** | 56 PII types, L1-L3. **0% PII leak on `default` profile across GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.5** in the [PRvL](docs/prvl-standard.md) reference suite. `pseudonym-llm` profile: 100% on three of four models; **96% / Bronze on Claude-Opus-4.5** (single reroll cell). Not a guarantee against adversarial inputs — see prvl-standard.md for full matrix. Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). SHAKE-256 derivation + full-salt entropy + faker identity-pass guard. State export omits salt by default; HTTP server refuses no-auth start; CLI writes O_NOFOLLOW + key files mode 0600; MCP token store TTL+LRU (v0.6.2). Windows CI + property-tested invariants + mutation-tested core (v0.6.3) + perf budget CI gate (v0.6.4) + session-isolation in integrations (v0.6.6) + README pinned-to-doctest + version-sync CI guard (v0.6.6) + compose namespace + pure-layer purity guard (v0.6.7) | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (zh + en + RFC shared) + per-call strategy overrides + `keep` strategy (whitelisted) + resumable streaming sessions + incremental streaming default + cross-language alias restore (zh ↔ en) | Task-aware guidance |
 | **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design). Cross-language LLM rewrites (`张三` → `Zhang San`) auto-restored via `result.aliases` + `restore(text, key, aliases=...)` | Task-aware guidance |
-| **Compliance** | PIPL ~85%, risk assessment + profiles | PIPL/GDPR/HIPAA (byproduct) |
+| **Compliance** | Meets PIPL Art.28 sensitive PII categories, risk assessment + profiles | PIPL/GDPR/HIPAA (byproduct) |
 | **Coverage** | 8 langs, 4 LLMs benchmarked, 6 frameworks | Browser extension |
 
 ## Risk Assessment
@@ -315,7 +315,7 @@ Meets **PIPL** · **GDPR** · **HIPAA** technical requirements as a byproduct of
 | [CLI Reference](docs/cli-reference.md) | Commands, flags, serve, MCP server |
 | [Configuration](docs/configuration.md) | Per-type strategies, enterprise mask rules, false positive reduction |
 | [Sensitive Info](docs/sensitive-info.md) | Taxonomy, privacy levels, roadmap |
-| [PII Type Catalog](docs/pii-types.md) | All 52 types — strategy, sensitivity, PIPL/GDPR/HIPAA mapping (auto-generated) |
+| [PII Type Catalog](docs/pii-types.md) | All PII types — strategy, sensitivity, PIPL/GDPR/HIPAA mapping (auto-generated) |
 | [Architecture](docs/architecture.md) | Three-layer engine, cross-layer hints, pure/impure separation |
 | [Language Packs](docs/language-packs.md) | Adding new languages |
 | [Security Model](docs/security-model.md) | Threat model, compliance, per-message keys |

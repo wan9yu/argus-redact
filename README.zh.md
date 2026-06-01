@@ -166,7 +166,7 @@ _ai4privacy en，500 样本，v0.6.6。`auto` 模式在维护者硬件上跳过 
 | **保护** | 56 类 PII，L1-L3。**在 [PRvL](docs/prvl-standard.md) 参考套件中，`default` profile 在 GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.5 上 PII 泄漏率 0%**。`pseudonym-llm` profile：四个模型中三个 100%；**Claude-Opus-4.5 上 96% / Bronze**（单格重滚）。不保证对抗性输入 — 完整矩阵见 prvl-standard.md。8 语言跨层 hints（zh/en/ja/ko/de/uk/in/br）。SHAKE-256 派生 + 全盐熵 + faker 身份通过守卫。状态导出默认省略 salt；HTTP server 拒绝无认证启动；CLI 写入 O_NOFOLLOW + key 文件 mode 0600；MCP token 存储 TTL+LRU (v0.6.2)。Windows CI + 属性测试不变量 + 变异测试核心 (v0.6.3) + 性能预算 CI 门控 (v0.6.4) + 集成层会话隔离 (v0.6.6) + README pinned-to-doctest + 版本同步 CI 守卫 (v0.6.6) + compose 命名空间 + 纯层纯净守卫 (v0.6.7) | 对抗性测试 |
 | **可用** | PRvL U=100%。假名编码 + 真实模式（zh + en + RFC 共享）+ 按调用策略覆盖 + `keep` 策略（白名单）+ 可续流式会话 + 增量流式默认 + 跨语言别名还原（zh ↔ en） | 任务感知引导 |
 | **可逆** | PRvL R 按任务：引用 100%，提取 50%，创意 0%（设计如此）。跨语言 LLM 改写（`张三` → `Zhang San`）通过 `result.aliases` + `restore(text, key, aliases=...)` 自动还原 | 任务感知引导 |
-| **合规** | PIPL ~85%，风险评估 + profiles | PIPL/GDPR/HIPAA（副产品） |
+| **合规** | 满足 PIPL Art.28 敏感 PII 范畴，风险评估 + profiles | PIPL/GDPR/HIPAA（副产品） |
 | **覆盖** | 8 语言，4 个 LLM 基准，6 个框架 | 浏览器扩展 |
 
 ## 风险评估
@@ -307,7 +307,7 @@ PII 永不离开你的设备。按消息独立 key 防止跨请求画像。[完�
 | [CLI Reference](docs/cli-reference.md) | 命令、flags、serve、MCP server |
 | [Configuration](docs/configuration.md) | 按类型策略、企业掩码规则、误报控制 |
 | [Sensitive Info](docs/sensitive-info.md) | 敏感信息分类、隐私等级、路线图 |
-| [PII Type Catalog](docs/pii-types.md) | 全部 52 类型 — 策略、敏感度、PIPL/GDPR/HIPAA 映射（自动生成）|
+| [PII Type Catalog](docs/pii-types.md) | 全部 PII 类型 — 策略、敏感度、PIPL/GDPR/HIPAA 映射（自动生成）|
 | [Architecture](docs/architecture.md) | 三层引擎、跨层 hints、pure/impure 分离 |
 | [Language Packs](docs/language-packs.md) | 新增语言包指南 |
 | [Security Model](docs/security-model.md) | 威胁模型、合规、按消息 key |
