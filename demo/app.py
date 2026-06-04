@@ -15,6 +15,9 @@ from argus_redact import __version__, redact, redact_pseudonym_llm, restore
 PRVL_CACHE = json.loads(
     (Path(__file__).resolve().parent / "prvl_cache.json").read_text(encoding="utf-8")
 )
+# ⚠️ Hardcoded for a public HF demo — anyone with this salt can derive all
+# fakes from observed input. For production, generate per-deployment via
+# `secrets.token_bytes(32)` and store out-of-band (env / KMS / secret manager).
 DEMO_SALT = b"argus-redact-hf-demo-32byte-salt!"
 
 

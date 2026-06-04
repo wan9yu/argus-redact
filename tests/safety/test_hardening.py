@@ -95,3 +95,19 @@ def test_server_bearer_uses_compare_digest():
     assert "compare_digest" in auth_section, (
         "server bearer comparison still uses raw != — must use secrets.compare_digest"
     )
+
+
+def test_demo_salt_carries_security_warning():
+    """v0.6.10: DEMO_SALT must be marked clearly as HF-demo-only.
+
+    Without this guard, a copy-paste of the demo's hardcoded salt into a
+    production setup would silently make all fakes derivable from observed
+    input. The comment is the only signal a copying developer would see.
+    """
+    src = (Path(__file__).resolve().parents[2] / "demo/app.py").read_text()
+    assert "Hardcoded for a public HF demo" in src, (
+        "demo/app.py DEMO_SALT must carry explicit public-demo warning comment"
+    )
+    assert "secrets.token_bytes" in src, (
+        "warning comment must point at the production-grade alternative"
+    )
