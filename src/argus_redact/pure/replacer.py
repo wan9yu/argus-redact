@@ -128,6 +128,17 @@ def _type_seed_offset(entity_type: str) -> int:
     return int.from_bytes(digest[:4], "big") % _TYPE_SEED_OFFSET_MOD
 
 
+def _offset_seed(seed: int | None, offset: int) -> int | None:
+    """Add ``offset`` to a packed-bytes seed, clamped to u64.
+
+    The Rust ``_core.PseudonymGenerator`` takes a u64 seed via PyO3. A full-FF
+    salt produces ``pseudo_seed_int == 2**64 - 1``; any positive offset would
+    overflow the conversion. Modular arithmetic keeps the result in u64 without
+    changing values for non-saturated salts (where ``seed + offset < 2**64``).
+    """
+    return None if seed is None else (seed + offset) % (2**64)
+
+
 class _ShakeRng:
     """Cryptographically-keyed PRNG replacing ``random.Random`` on the realistic path.
 
@@ -505,8 +516,7 @@ def replace(
     )
     org_gen = PseudonymGenerator(
         prefix=unified_prefix or org_prefix,
-        # keep within u64 for the Rust _core.PseudonymGenerator seed conversion (full-FF salts otherwise overflow)
-        seed=((pseudo_seed_int + 1) % (2**64)) if pseudo_seed_int is not None else None,
+        seed=_offset_seed(pseudo_seed_int, 1),
         existing_key=result_key if result_key else None,
     )
     # Per-type pseudonym generators for remove strategy (improves LLM survival)
@@ -517,8 +527,7 @@ def replace(
             prefix = unified_prefix or DEFAULT_PREFIXES.get(entity_type, entity_type.upper()[:4])
             _type_gens[entity_type] = PseudonymGenerator(
                 prefix=prefix,
-                # keep within u64 for the Rust _core.PseudonymGenerator seed conversion (full-FF salts otherwise overflow)
-                seed=((pseudo_seed_int + _type_seed_offset(entity_type)) % (2**64)) if pseudo_seed_int is not None else None,
+                seed=_offset_seed(pseudo_seed_int, _type_seed_offset(entity_type)),
                 existing_key=result_key if result_key else None,
             )
         return _type_gens[entity_type]
@@ -559,8 +568,7 @@ def replace(
                 if "prefix" in ec:
                     org_gen = PseudonymGenerator(
                         prefix=prefix,
-                        # keep within u64 for the Rust _core.PseudonymGenerator seed conversion (full-FF salts otherwise overflow)
-                        seed=((pseudo_seed_int + 1) % (2**64)) if pseudo_seed_int is not None else None,
+                        seed=_offset_seed(pseudo_seed_int, 1),
                         existing_key=result_key if result_key else None,
                     )
                 replacement = org_gen.get(entity.text)
