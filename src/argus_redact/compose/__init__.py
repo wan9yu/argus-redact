@@ -7,9 +7,8 @@ docs/architecture-layers.md §Layer 2:
   (re-exported from argus_redact.streaming)
 - redact_pseudonym_llm — three-form output (audit / downstream / display)
   (re-exported from argus_redact.glue.redact_pseudonym_llm)
-- prompt_anchor — input-side system-prompt addendum (stub; ships in v0.6.9)
+- prompt_anchor — input-side system-prompt addendum
 - expand_aliases — output-side surname+title alias expansion
-  (stub; ships in v0.6.9)
 
 The top-level argus_redact.{StreamingRedactor, redact_pseudonym_llm} aliases
 remain functional. StreamingRestorer was never top-level — argus_redact.compose

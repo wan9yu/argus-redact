@@ -94,6 +94,32 @@ Each entry follows three lines:
 
 ## Recently Fixed
 
+### v0.6.10 (2026-06-04) — Pre-1.0 Subtract + Hardening
+
+- **Layer 1 signature lock** (`tests/architecture/test_frozen_api.py`) — 7
+  public functions + 3 exception-class parent chains pinned for v1.0 freeze.
+  Any future drift requires a major version bump.
+- **KDF replay vectors** (`tests/security/test_pseudonym_chain_replay.py`) —
+  12 vectors lock the SHAKE-256 / HMAC pseudonym derivation chain. Rust and
+  Python-fallback paths verified bit-identical.
+- **Top-level `StreamingRedactor` DeprecationWarning** — soft migration to
+  the canonical `argus_redact.compose.StreamingRedactor` import path. Full
+  removal in v1.0.
+- **Defense-in-depth**: server bearer comparison now constant-time
+  (`secrets.compare_digest`); new symmetric `safe_read_text` with POSIX
+  `O_NOFOLLOW` on key-file + config-file reads; `DEMO_SALT` warning comment
+  pointing at `secrets.token_bytes(32)`.
+- **CI hardening**: manylinux + musllinux x86_64 release containers pinned
+  to digests (no more `:latest` resolution on quay.io). aarch64 rows
+  unchanged (already GHCR cross-images).
+- **Dead code subtracted**: `RedactMiddleware` (no-op stub),
+  `_StreamingBuffer` (replaced in v0.5.x), `generate_pseudonym()` standalone
+  function (duplicated class API). Private symbols, zero blast radius.
+- **Internal cleanup**: `_core_loader.py` consolidates 4 duplicated Rust
+  extension try-imports; `replacer.py` magic numbers extracted to module
+  constants; `layer_1b_person_en_ms` telemetry merged into
+  `layer_1b_person_ms`.
+
 ### v0.6.9 (2026-06-01) — Compose Helpers Ship for Real
 
 - **`compose.prompt_anchor(key, lang) -> str` real implementation** — replaces v0.6.7 NotImplementedError stub. Returns multi-line detailed-3-rule system-prompt addendum (zh + en). Snapshot-tested.

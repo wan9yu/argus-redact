@@ -2,6 +2,70 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.6.10 — 2026-06-04 — Pre-1.0 Subtract + Hardening
+
+### Removed
+
+- `RedactMiddleware` (was a no-op stub — `__init__` only, no `__call__`).
+  Use `redact_body` endpoint helper from
+  `argus_redact.integrations.fastapi_middleware` (already the recommended
+  path; see module docstring).
+- `argus_redact.glue._streaming_buffer` and its `_StreamingBuffer` class
+  (private; replaced by StreamingRestorer buffer logic in v0.5.x).
+- `argus_redact.pure.pseudonym.generate_pseudonym()` standalone function
+  (private; duplicated `PseudonymGenerator` class API). The class is
+  unchanged.
+
+### Deprecated
+
+- `from argus_redact import StreamingRedactor` now emits `DeprecationWarning`.
+  Canonical path: `from argus_redact.compose import StreamingRedactor`. The
+  top-level symbol still resolves (lazy via PEP 562 `__getattr__`); removal
+  deferred to v1.0.
+
+### Hardened
+
+- Server `/restore` bearer comparison now uses `secrets.compare_digest`
+  (constant-time, closes the timing side-channel).
+- New `argus_redact._safe_io.safe_read_text` mirrors `safe_write_text` —
+  POSIX `O_NOFOLLOW` on key-file + config-file read paths
+  (`cli/main.py`, `glue/redact.py`, `pure/restore.py`).
+- `demo/app.py` `DEMO_SALT` now carries an explicit warning comment
+  pointing at `secrets.token_bytes(32)` for production deployments.
+- `.github/workflows/release.yml` manylinux + musllinux x86_64 containers
+  pinned to digests (replacing `:latest`) — closes the quay.io
+  `manifests/latest` resolution endpoint as a release-blocking surface.
+  aarch64 rows continue using maturin-action's default GHCR cross-images.
+
+### Added (CI guards)
+
+- `tests/architecture/test_frozen_api.py` — Layer 1 signature lock for
+  v1.0 freeze. 7 function signatures + 3 exception-class parent chains;
+  drift requires a major version (v2.0+).
+- `tests/security/test_pseudonym_chain_replay.py` — KDF replay vectors.
+  Locks the SHAKE-256 / HMAC derivation chain across releases (12
+  vectors covering all 8 PII types + zh/en edges).
+
+### Internal
+
+- `argus_redact._core_loader.py` consolidates 4 duplicated
+  `try: from argus_redact import _core` blocks across pure/glue modules.
+- `pure/replacer.py` magic numbers extracted to module constants
+  (`_CIRCLED_DIGITS`, `_MAX_NUMERIC_COLLISION_SUFFIX`,
+  `_TYPE_SEED_OFFSET_MOD`, `_DEFAULT_REDACT_LABEL`).
+- `glue/redact.py` telemetry: `layer_1b_person_en_ms` merged into
+  `layer_1b_person_ms` (layer-level aggregation only; lang-suffix variant
+  removed).
+
+### Compatibility
+
+- Top-level `StreamingRedactor` symbol still resolves; warning only. No
+  caller code stops working in v0.6.10. Removal scheduled for v1.0.
+- Internal-only removals (`_StreamingBuffer`, `generate_pseudonym`):
+  blast radius zero (private symbols, never in `__init__.py`).
+- `RedactMiddleware`: callers using it got no redaction anyway (no-op
+  stub); `redact_body` endpoint helper is the working path.
+
 ## v0.6.9 — 2026-06-01 — Compose Helpers Ship for Real
 
 ### Features
