@@ -1,7 +1,9 @@
 """Namespace shape contract for argus_redact.compose.
 
 Pinned in v0.6.7 so the architecture-layers.md §Layer 2 promise — that
-this namespace exists and exports these 5 names — cannot drift silently.
+this namespace exists and exports a known set of names — cannot drift
+silently. Extended in v0.6.11 with the adapter-author surface
+(register_pii_type / PIITypeDef / PatternMatch).
 """
 from __future__ import annotations
 
@@ -52,8 +54,12 @@ def test_expand_aliases_real_returns_expanded_dict():
     assert "黄先生" in result and result["黄先生"] == "黄芳"
 
 
-def test_compose_dunder_all_is_exactly_five():
-    """Lock the namespace surface — any addition is intentional, not accidental."""
+def test_compose_dunder_all_is_exactly_eight():
+    """Lock the namespace surface — any addition is intentional, not accidental.
+
+    v0.6.7 baseline: 5 names. v0.6.11 added the adapter-author trio
+    (register_pii_type / PIITypeDef / PatternMatch).
+    """
     import argus_redact.compose as mod
     expected = {
         "StreamingRedactor",
@@ -61,5 +67,9 @@ def test_compose_dunder_all_is_exactly_five():
         "redact_pseudonym_llm",
         "prompt_anchor",
         "expand_aliases",
+        # v0.6.11 adapter surface
+        "register_pii_type",
+        "PIITypeDef",
+        "PatternMatch",
     }
     assert set(mod.__all__) == expected

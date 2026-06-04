@@ -23,10 +23,22 @@ from argus_redact.compose.anchor import prompt_anchor
 from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
 from argus_redact.streaming import StreamingRedactor, StreamingRestorer
 
+# ─── v0.6.11: adapter-author Layer 2 surface ─────────────────────────────
+# Re-exports of internal primitives, now part of the documented Layer 2 SLA.
+# Stable since v0.6.6 (register) / v0.6.5 (PIITypeDef) / v0.6.8 (PatternMatch);
+# Layer 2 best-effort means signatures may evolve in minor releases with a
+# deprecation cycle.
+from argus_redact._types import PatternMatch
+from argus_redact.specs.registry import PIITypeDef, register as register_pii_type
+
 __all__ = [
     "StreamingRedactor",
     "StreamingRestorer",
     "redact_pseudonym_llm",
     "prompt_anchor",
     "expand_aliases",
+    # ─── v0.6.11 adapter surface ───
+    "register_pii_type",
+    "PIITypeDef",
+    "PatternMatch",
 ]
