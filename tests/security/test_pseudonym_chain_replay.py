@@ -37,6 +37,9 @@ REPLAY_VECTORS = [
     (b"address-salt!!!!!!!!!!!!!!!!!!!!", "北京市朝阳区建国路100号", "北京市朝阳区建国路100号", "zh", "address", "ADDR-25695"),
     (b"compound-3char!!!!!!!!!!!!!!!!!!", "客户司马懿来访", "司马懿", "zh", "person", "P-07038"),
     (b"edge-mid-initial!!!!!!!!!!!!!!!!", "John F. Smith", "John F. Smith", "en", "person", "P-67822"),
+    # v0.6.11 edge vectors: full-FF salt (formerly OverflowError) + 10KB single-entity input (locks HMAC-input-length stability)
+    (b"\xff" * 32, "user@acme.io", "user@acme.io", "en", "email", "EMAI-54564"),
+    (b"long-input-salt-32-byte-padding!", "a" * 9992 + "@acme.io", "a" * 9992 + "@acme.io", "en", "email", "EMAI-62284"),
 ]
 
 
@@ -60,3 +63,19 @@ def test_kdf_chain_replay(salt, input_text, target_value, lang, etype, expected)
         f"If intentional: this is a major version (v2.0+) change - all "
         f"downstream caches need rebuilding."
     )
+
+
+def test_full_ff_salt_no_longer_overflows():
+    """v0.6.11: full-FF salt (32 bytes 0xFF) was OverflowError before — must work now.
+
+    Root cause: pseudo_seed_int packs first 8 bytes BE → 0xFFFFFFFFFFFFFFFF
+    (max u64). When _type_seed_offset (up to 9999) was added, the sum
+    exceeded u64 and the Rust _core.PseudonymGenerator's PyO3 conversion
+    raised. Fix: modular arithmetic on the sum keeps it in u64.
+    """
+    from argus_redact import redact_pseudonym_llm
+    result = redact_pseudonym_llm("user@acme.io", salt=b"\xff" * 32, lang="en")
+    assert result.key, "should produce a non-empty key dict"
+    # Confirm the entity was detected and got a placeholder
+    found = any(v == "user@acme.io" for v in result.key.values())
+    assert found, "user@acme.io should appear in the key dict"

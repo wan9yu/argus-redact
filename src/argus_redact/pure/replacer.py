@@ -505,7 +505,8 @@ def replace(
     )
     org_gen = PseudonymGenerator(
         prefix=unified_prefix or org_prefix,
-        seed=(pseudo_seed_int + 1) if pseudo_seed_int is not None else None,
+        # keep within u64 for the Rust _core.PseudonymGenerator seed conversion (full-FF salts otherwise overflow)
+        seed=((pseudo_seed_int + 1) % (2**64)) if pseudo_seed_int is not None else None,
         existing_key=result_key if result_key else None,
     )
     # Per-type pseudonym generators for remove strategy (improves LLM survival)
@@ -516,7 +517,8 @@ def replace(
             prefix = unified_prefix or DEFAULT_PREFIXES.get(entity_type, entity_type.upper()[:4])
             _type_gens[entity_type] = PseudonymGenerator(
                 prefix=prefix,
-                seed=(pseudo_seed_int + _type_seed_offset(entity_type)) if pseudo_seed_int is not None else None,
+                # keep within u64 for the Rust _core.PseudonymGenerator seed conversion (full-FF salts otherwise overflow)
+                seed=((pseudo_seed_int + _type_seed_offset(entity_type)) % (2**64)) if pseudo_seed_int is not None else None,
                 existing_key=result_key if result_key else None,
             )
         return _type_gens[entity_type]
@@ -557,7 +559,8 @@ def replace(
                 if "prefix" in ec:
                     org_gen = PseudonymGenerator(
                         prefix=prefix,
-                        seed=(pseudo_seed_int + 1) if pseudo_seed_int is not None else None,
+                        # keep within u64 for the Rust _core.PseudonymGenerator seed conversion (full-FF salts otherwise overflow)
+                        seed=((pseudo_seed_int + 1) % (2**64)) if pseudo_seed_int is not None else None,
                         existing_key=result_key if result_key else None,
                     )
                 replacement = org_gen.get(entity.text)
