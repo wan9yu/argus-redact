@@ -2,6 +2,70 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.6.11 — 2026-06-04 — Adapter Surface
+
+### Added
+
+- `argus_redact.compose.register_pii_type` — public re-export of
+  `argus_redact.specs.registry.register`. Adapter authors can register
+  custom PII types at runtime; the type then flows through `redact()` /
+  `restore()` round-trip with stable pseudonyms.
+- `argus_redact.compose.PIITypeDef` — public re-export of the type-definition
+  dataclass.
+- `argus_redact.compose.PatternMatch` — public re-export of the entity-result
+  dataclass used by the `_pre_detected=` adapter hook.
+
+  All three primitives were already importable from internal locations
+  (`argus_redact.specs.registry`, `argus_redact._types`) and stable since
+  v0.6.5 / v0.6.6 / v0.6.8 respectively. v0.6.11 attaches Layer 2 best-effort
+  SLA — signatures may evolve in minor releases with a deprecation cycle.
+- `tests/architecture/test_compose_signatures.py` — Layer 2 best-effort
+  signature snapshot. Drift = update snapshot + note Layer 2 evolution
+  in next release's CHANGELOG (not a major-version requirement).
+- `tests/core/test_redact_return_shapes.py` — locks `redact()` return-shape
+  precedence: `report > detailed > with_types > default`.
+- `docs/recipes/writing-an-adapter.md` — full PresidioBridge-style adapter
+  tutorial, including the `_pre_detected=` stability promise.
+
+### Fixed
+
+- Full-FF salt (`b"\xff" * 32`) no longer raises `OverflowError`. Modular
+  arithmetic on the `(pseudo_seed_int + _type_seed_offset)` sum (applied
+  at all three `PseudonymGenerator` construction sites) keeps the u64
+  conversion safe. No observable behavior change for non-saturated salts.
+- `redact()` return-shape precedence locked across `with_types` / `detailed`
+  / `report` flag combinations. Dispatch refactored to a single ordered
+  if/elif chain. Observed precedence already matched the spec; refactor
+  is non-behavioral.
+- `tests/security/property/test_state_round_trip.py` hypothesis flake
+  resolved by filtering the chunks strategy through `scan_for_pollution()`
+  (the same check `StreamingRedactor` enforces in `strict_input=True`
+  mode). The bit-equality assertion is preserved; only the input domain
+  was narrowed to match the production contract.
+
+### Internal
+
+- 2 new KDF replay vectors covering full-FF salt and 10KB single-entity
+  input (`tests/security/test_pseudonym_chain_replay.py`).
+- `glue/redact.py` return-shape dispatch refactored to a clean if/elif
+  chain (one branch per precedence level, each commented with its flag
+  combination).
+
+### Stability promise
+
+- `_pre_detected=` kwarg on `redact()` remains private but **stable through
+  v0.6.x and v1.0** (no rename, no removal). If a public `pre_detected`
+  (no underscore) ships in v1.1+, it will land with a deprecation cycle.
+  Adapter authors using `_pre_detected=` today are safe through the v1.0
+  freeze.
+
+### Compatibility
+
+- No breaking changes. All adapter primitives are pure re-exports; the
+  underlying APIs at `argus_redact.specs.registry` and `argus_redact._types`
+  remain importable.
+- Test count: 1936 (v0.6.10) → 1958 (+22 across the 6 commits).
+
 ## v0.6.10 — 2026-06-04 — Pre-1.0 Subtract + Hardening
 
 ### Removed

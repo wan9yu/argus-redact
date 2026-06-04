@@ -94,6 +94,26 @@ Each entry follows three lines:
 
 ## Recently Fixed
 
+### v0.6.11 (2026-06-04) — Adapter Surface
+
+- **Layer 2 adapter authoring primitives** (`compose.register_pii_type` /
+  `PIITypeDef` / `PatternMatch`) — three re-exports of stable internal APIs.
+  Adapter authors can now build PresidioBridge-style integrations against
+  a documented Layer 2 contract.
+- **Layer 2 signature snapshot** (`tests/architecture/test_compose_signatures.py`) —
+  best-effort drift guard. Layer 2 SLA: evolution allowed with CHANGELOG note.
+- **Full-FF salt OverflowError fixed** — `b"\xff" * 32` salt no longer crashes
+  on `PseudonymGenerator` seed conversion. Modular arithmetic keeps the sum
+  in u64.
+- **`redact()` return-shape precedence locked** — `report > detailed >
+  with_types > default`. Multi-flag combinations now have defined shapes
+  and a clean dispatch.
+- **Hypothesis flake resolved** — `test_state_round_trip_preserves_aggregate_key`
+  strategy now filters polluted inputs via `scan_for_pollution()`, matching
+  the production contract.
+- **Adapter authoring recipe** (`docs/recipes/writing-an-adapter.md`) —
+  with the `_pre_detected=` stability promise spelled out.
+
 ### v0.6.10 (2026-06-04) — Pre-1.0 Subtract + Hardening
 
 - **Layer 1 signature lock** (`tests/architecture/test_frozen_api.py`) — 7
