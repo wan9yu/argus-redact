@@ -57,8 +57,12 @@ def _merge_priority(
     return final
 
 
-try:
-    from argus_redact._core import merge_entities as _rust_merge
+from argus_redact._core_loader import _core, HAS_CORE
+
+_rust_merge = _core.merge_entities if HAS_CORE else None
+
+
+if HAS_CORE:
 
     def merge_entities(
         entities: list[PatternMatch],
@@ -116,7 +120,7 @@ try:
 
         return _merge_priority(merged_others, priority, text)
 
-except ImportError:
+else:
 
     def _overlaps(a: PatternMatch, b: PatternMatch) -> bool:
         return a.start < b.end and b.start < a.end

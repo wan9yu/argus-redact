@@ -18,6 +18,13 @@ from argus_redact.pure.pseudonym import PseudonymGenerator
 class SecurityWarning(UserWarning):
     """Emitted when a misconfiguration would silently weaken redaction."""
 
+
+_CIRCLED_DIGITS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+_MAX_NUMERIC_COLLISION_SUFFIX = 10_000
+_TYPE_SEED_OFFSET_MOD = 10_000
+_DEFAULT_REDACT_LABEL = "[REDACTED]"
+
+
 VALID_STRATEGIES = (
     "pseudonym",
     "realistic",
@@ -118,7 +125,7 @@ def _type_seed_offset(entity_type: str) -> int:
     deployments. SHA-256 of the UTF-8 type name is stable everywhere.
     """
     digest = hashlib.sha256(entity_type.encode("utf-8")).digest()
-    return int.from_bytes(digest[:4], "big") % 10000
+    return int.from_bytes(digest[:4], "big") % _TYPE_SEED_OFFSET_MOD
 
 
 class _ShakeRng:
@@ -424,13 +431,12 @@ def _resolve_collision(label: str, used_labels: set[str]) -> str:
     """Append circled number on collision."""
     if label not in used_labels:
         return label
-    circled = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
-    for c in circled:
+    for c in _CIRCLED_DIGITS:
         candidate = f"{label}{c}"
         if candidate not in used_labels:
             return candidate
     # Fallback to numeric suffix beyond ⑳
-    for i in range(21, 10000):
+    for i in range(21, _MAX_NUMERIC_COLLISION_SUFFIX):
         candidate = f"{label}({i})"
         if candidate not in used_labels:
             return candidate
@@ -605,7 +611,7 @@ def replace(
             )
             replacement = _resolve_collision(label, used_labels)
         else:
-            replacement = _resolve_collision("[REDACTED]", used_labels)
+            replacement = _resolve_collision(_DEFAULT_REDACT_LABEL, used_labels)
 
         entity_replacements[entity.text] = replacement
         used_labels.add(replacement)

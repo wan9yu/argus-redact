@@ -32,12 +32,7 @@ from argus_redact.telemetry import PerfRecord, emit, get_perf_hook
 logger = logging.getLogger(__name__)
 
 # Cached telemetry constants (resolved once at import, not per-call)
-try:
-    from argus_redact._core import merge_entities as _unused  # noqa: F401
-
-    _RUST_CORE = True
-except ImportError:
-    _RUST_CORE = False
+from argus_redact._core_loader import HAS_CORE as _RUST_CORE
 
 
 def _telemetry_hook_active() -> bool:
@@ -251,7 +246,9 @@ def _detect(
 
         t0 = time.perf_counter()
         en_person_names = detect_en_person(text, known_names=names)
-        timing["layer_1b_person_en_ms"] = (time.perf_counter() - t0) * 1000
+        timing["layer_1b_person_ms"] = timing.get("layer_1b_person_ms", 0) + (
+            time.perf_counter() - t0
+        ) * 1000
         entities.extend(_tag_layer(en_person_names, LAYER_REGEX))
         layer1_count += len(en_person_names)
         # Note: en detector ignores L1 hints / threshold today (uses surname

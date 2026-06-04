@@ -69,8 +69,12 @@ def _looks_like_false_positive(text: str, start: int, end: int) -> bool:
     return bool(_FALSE_POSITIVE_PREFIX.search(before) or _FALSE_POSITIVE_SUFFIX.match(after))
 
 
-try:
-    from argus_redact._core import match_patterns as _rust_match_patterns
+from argus_redact._core_loader import _core, HAS_CORE
+
+_rust_match_patterns = _core.match_patterns if HAS_CORE else None
+
+
+if HAS_CORE:
 
     def match_patterns(
         text: str, patterns: list[dict]
@@ -102,7 +106,7 @@ try:
         results.sort(key=lambda r: r.start)
         return results, near_misses
 
-except ImportError:
+else:
 
     def match_patterns(
         text: str, patterns: list[dict]
