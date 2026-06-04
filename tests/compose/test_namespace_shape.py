@@ -5,6 +5,8 @@ this namespace exists and exports these 5 names — cannot drift silently.
 """
 from __future__ import annotations
 
+import warnings
+
 import pytest
 
 
@@ -19,8 +21,12 @@ def test_compose_exports_streaming_classes():
     # Sanity: compose re-exports the same objects, no rebinding
     assert StreamingRedactor is SrcRedactor
     assert StreamingRestorer is SrcRestorer
-    # StreamingRedactor (only) is also top-level for backwards compat
-    from argus_redact import StreamingRedactor as TopRedactor
+    # StreamingRedactor (only) is also top-level for backwards compat (v0.6.10
+    # emits DeprecationWarning here; removal deferred to v1.0). The warning
+    # contract itself is exercised in tests/test_top_level_deprecation.py.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        from argus_redact import StreamingRedactor as TopRedactor
     assert StreamingRedactor is TopRedactor
 
 

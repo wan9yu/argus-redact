@@ -9,7 +9,7 @@ import json
 
 from hypothesis import given, settings, strategies as st
 
-from argus_redact import StreamingRedactor
+from argus_redact.compose import StreamingRedactor
 from tests.security.property.conftest import PROPERTY_SETTINGS
 
 

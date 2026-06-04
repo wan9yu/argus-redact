@@ -131,7 +131,7 @@ def _restore_workload() -> None:
 
 
 def _streaming_workload() -> None:
-    from argus_redact import StreamingRedactor
+    from argus_redact.compose import StreamingRedactor
 
     r = StreamingRedactor(salt=_SALT_FOR_PSEUDONYM_LLM, strict_input=False)
     chunk = _ZH_1KB[:256]

@@ -17,7 +17,6 @@ from argus_redact.pure.pseudonym import max_pseudonym_length
 from argus_redact.pure.replacer import SecurityWarning, is_strategy_reversible
 from argus_redact.pure.restore import check_restore_safety, restore, wipe_key
 from argus_redact.pure.risk import assess_risk
-from argus_redact.streaming import StreamingRedactor
 
 __version__ = "0.6.9"
 __all__ = [
@@ -34,7 +33,7 @@ __all__ = [
     "PseudonymPollutionError",
     # ─── Layer 2 — compose (best-effort; also at argus_redact.compose.*) ───
     "redact_pseudonym_llm",
-    "StreamingRedactor",
+    "StreamingRedactor",  # deprecated top-level alias — use argus_redact.compose.StreamingRedactor
     # ─── Compliance metadata SSOT (re-exported from _metadata) ───
     "GDPR_SPECIAL_CATEGORIES",
     "HIPAA_PHI_CATEGORIES",
@@ -47,3 +46,25 @@ __all__ = [
     # ─── Version ───
     "__version__",
 ]
+
+
+# ─── PEP 562 module-level __getattr__ — deprecation warnings ───
+# Top-level `argus_redact.StreamingRedactor` is the legacy import path
+# (pre-v0.6.7). The canonical home is `argus_redact.compose.StreamingRedactor`.
+# The symbol still resolves (lazy import) so existing callers keep working;
+# removal deferred to v1.0.
+_DEPRECATED_TOP_LEVEL = {"StreamingRedactor"}
+
+
+def __getattr__(name):
+    if name in _DEPRECATED_TOP_LEVEL:
+        import warnings
+        warnings.warn(
+            f"argus_redact.{name} top-level import is deprecated and will be "
+            f"removed in v1.0. Use `from argus_redact.compose import {name}` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from argus_redact.compose import StreamingRedactor
+        return StreamingRedactor
+    raise AttributeError(f"module 'argus_redact' has no attribute {name!r}")

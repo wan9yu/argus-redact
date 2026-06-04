@@ -10,10 +10,10 @@ import inspect
 import pytest
 
 from argus_redact import (
-    StreamingRedactor,
     redact,
     redact_pseudonym_llm,
 )
+from argus_redact.compose import StreamingRedactor
 from argus_redact.integrations.fastapi_middleware import redact_body
 from argus_redact.integrations.langchain import RedactRunnable
 from argus_redact.integrations.llamaindex import RedactTransform

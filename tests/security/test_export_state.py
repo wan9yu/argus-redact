@@ -21,7 +21,7 @@ def salt() -> bytes:
 
 
 def test_export_state_default_excludes_salt(salt):
-    from argus_redact import StreamingRedactor
+    from argus_redact.compose import StreamingRedactor
 
     r = StreamingRedactor(salt=salt)
     state = r.export_state()
@@ -30,7 +30,7 @@ def test_export_state_default_excludes_salt(salt):
 
 def test_export_state_with_include_salt_kwarg_warns(salt):
     """Back-compat path emits DeprecationWarning."""
-    from argus_redact import StreamingRedactor
+    from argus_redact.compose import StreamingRedactor
 
     r = StreamingRedactor(salt=salt)
     with warnings.catch_warnings(record=True) as captured:
@@ -44,7 +44,7 @@ def test_export_state_with_include_salt_kwarg_warns(salt):
 
 
 def test_from_state_with_explicit_salt_kwarg_round_trips(salt):
-    from argus_redact import StreamingRedactor
+    from argus_redact.compose import StreamingRedactor
 
     r1 = StreamingRedactor(salt=salt)
     r1.feed("请拨打 13912345678 联系王建国")
@@ -57,7 +57,7 @@ def test_from_state_with_explicit_salt_kwarg_round_trips(salt):
 
 def test_from_state_legacy_dump_with_embedded_salt_loads_with_warning(salt):
     """v0.6.0/v0.6.1 dumps that have salt embedded still load — but warn."""
-    from argus_redact import StreamingRedactor
+    from argus_redact.compose import StreamingRedactor
 
     r1 = StreamingRedactor(salt=salt)
     legacy_state = r1.export_state(include_salt=True)  # legacy shape
@@ -74,7 +74,7 @@ def test_from_state_legacy_dump_with_embedded_salt_loads_with_warning(salt):
 
 def test_from_state_no_salt_anywhere_raises():
     """No kwarg AND no embedded salt → raise ValueError."""
-    from argus_redact import StreamingRedactor
+    from argus_redact.compose import StreamingRedactor
 
     state_without_salt = {
         "version": 1,
@@ -94,7 +94,7 @@ def test_from_state_no_salt_anywhere_raises():
 
 def test_from_state_explicit_salt_overrides_legacy_embedded(salt):
     """If both kwarg and embedded salt exist, kwarg wins (caller-explicit principle)."""
-    from argus_redact import StreamingRedactor
+    from argus_redact.compose import StreamingRedactor
 
     r1 = StreamingRedactor(salt=salt)
     legacy_state = r1.export_state(include_salt=True)
