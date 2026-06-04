@@ -93,17 +93,12 @@ resume remains out of scope).
 
 ## Private internals
 
-Two private modules in `glue/`:
+One private module in `glue/`:
 
 - `_detect_partial.py` — pure helper: `(text, prev_buffer) → (entities, residual)`.
   Includes `_last_boundary_index()` (used by both `_detect_partial` and the
   redactor's incremental branch) and a `force_flush=True` switch for
   end-of-stream cases.
-- `_streaming_buffer.py` — `_StreamingBuffer` class wrapping the helper.
-  Provides a stateful detect-only interface: `feed(chunk) → list[PatternMatch]`
-  and `flush() → list[PatternMatch]`. Not used by `StreamingRedactor`
-  directly (which inlines its own buffering for access to emit-text), but
-  available for callers that want raw entities without replacement.
 
 ## Limitations & roadmap
 

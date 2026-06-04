@@ -472,7 +472,7 @@ Not all parts of argus-redact are equal. The codebase is structured into three l
 │  restore(text, key) → plaintext                             │
 │  merge_entities(layer_results) → deduplicated_entities      │
 │  normalize_grammar_en / restore_grammar_en                  │
-│  generate_pseudonym(prefix, range, seed) → code             │
+│  PseudonymGenerator(prefix, range, seed).get(entity) → code │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -542,7 +542,7 @@ The Impure layer stays in Python because model loading (HanLP, spaCy, llama.cpp 
 ```
 redact(text, seed=42)
   │
-  ├── seed=42 passed to generate_pseudonym()
+  ├── seed=42 passed to PseudonymGenerator
   │   └── RNG initialized with seed=42 → deterministic codes
   │
   ├── seed=42 does NOT affect:

@@ -3,7 +3,7 @@
 import json
 
 from argus_redact import redact
-from argus_redact.pure.pseudonym import PseudonymGenerator, generate_pseudonym
+from argus_redact.pure.pseudonym import PseudonymGenerator
 
 
 class TestPseudonymAutoExpand:
@@ -16,12 +16,6 @@ class TestPseudonymAutoExpand:
             codes.add(code)
 
         assert len(codes) == 10
-
-    def test_should_use_5_digit_format(self):
-        code = generate_pseudonym(salt=42)
-
-        parts = code.split("-")
-        assert len(parts[1]) == 5
 
 
 class TestConfigFilePath:
@@ -73,3 +67,19 @@ def test_redact_middleware_no_longer_exists():
     assert not hasattr(m, "RedactMiddleware"), (
         "RedactMiddleware was a no-op (__init__ only); use redact_body endpoint helper instead"
     )
+
+
+def test_streaming_buffer_module_gone():
+    """v0.6.10: _StreamingBuffer was private; replaced by StreamingRestorer logic in v0.5.x."""
+    import pytest
+
+    with pytest.raises(ImportError):
+        from argus_redact.glue import _streaming_buffer  # noqa
+
+
+def test_generate_pseudonym_function_gone_but_class_stays():
+    """v0.6.10: standalone function duplicated PseudonymGenerator class API; deleted."""
+    import argus_redact.pure.pseudonym as p
+
+    assert not hasattr(p, "generate_pseudonym"), "function should be deleted"
+    assert hasattr(p, "PseudonymGenerator"), "class must stay"

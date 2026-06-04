@@ -3,12 +3,11 @@
 `_detect_partial(text, prev_buffer="")` accumulates `text` into the buffer
 and emits entities up to the last sentence boundary; the unconsumed tail
 is returned as the new buffer state. `force_flush=True` emits everything
-regardless of boundary state — used by ``_StreamingBuffer.flush()`` at
-end-of-stream.
+regardless of boundary state — used by ``StreamingRedactor`` /
+``StreamingRestorer`` internally at end-of-stream.
 
-Used by ``_StreamingBuffer`` and ``StreamingRedactor`` (which since v0.6.0
-runs incremental detection unconditionally). See
-``docs/design-streaming-incremental.md``.
+Used by ``StreamingRedactor`` (which since v0.6.0 runs incremental
+detection unconditionally). See ``docs/design-streaming-incremental.md``.
 """
 
 from __future__ import annotations

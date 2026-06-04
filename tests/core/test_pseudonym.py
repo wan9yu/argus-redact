@@ -1,43 +1,6 @@
 """Tests for pseudonym generation."""
 
-from argus_redact.pure.pseudonym import PseudonymGenerator, generate_pseudonym
-
-
-class TestGeneratePseudonym:
-    """Single pseudonym code generation."""
-
-    def test_should_use_default_prefix_when_none_specified(self):
-        code = generate_pseudonym(salt=42)
-
-        assert code.startswith("P-")
-
-    def test_should_use_custom_prefix_when_specified(self):
-        code = generate_pseudonym(prefix="O", salt=42)
-
-        assert code.startswith("O-")
-
-    def test_should_stay_in_range_when_range_specified(self):
-        code = generate_pseudonym(salt=42, code_range=(1, 999))
-
-        num = int(code.split("-")[1])
-        assert 1 <= num <= 999
-
-    def test_should_produce_same_code_when_same_seed(self):
-        a = generate_pseudonym(salt=42)
-        b = generate_pseudonym(salt=42)
-
-        assert a == b
-
-    def test_should_produce_different_codes_when_different_seeds(self):
-        a = generate_pseudonym(salt=42)
-        b = generate_pseudonym(salt=99)
-
-        assert a != b
-
-    def test_should_vary_when_no_seed(self):
-        codes = {generate_pseudonym() for _ in range(20)}
-
-        assert len(codes) > 1
+from argus_redact.pure.pseudonym import PseudonymGenerator
 
 
 class TestPseudonymGenerator:
@@ -109,6 +72,15 @@ class TestPseudonymGenerator:
         # Should have generated 10 unique codes by expanding range
         assert len(codes) == 10
 
+    def test_should_emit_5_digit_zero_padded_suffix(self):
+        """Generator output layout is ``<prefix>-NNNNN`` with zero-padded 5-digit suffix."""
+        gen = PseudonymGenerator(seed=42, code_range=(1, 1))
+        code = gen.get("x")
+        prefix, num = code.split("-")
+        assert prefix == "P"
+        assert len(num) == 5
+        assert num.isdigit()
+
 
 # ─── Mutation-testing-killers ──────────────────────────────────────────
 
@@ -145,20 +117,3 @@ class TestMaxPseudonymLengthInvariants:
         # Should silently skip non-dict entries
         result = max_pseudonym_length(config)
         assert result == 14  # baseline DEFAULT_PREFIXES result
-
-
-class TestGeneratePseudonymRange:
-    """``generate_pseudonym`` must produce numbers strictly inside ``code_range``."""
-
-    def test_should_stay_at_lower_bound_when_range_is_singleton(self):
-        # code_range=(7, 7) — only one valid number. Kills `+ lo` → `- lo`
-        # arith mutants which would produce a negative number for non-zero lo.
-        for seed in range(20):
-            code = generate_pseudonym(salt=seed, code_range=(7, 7))
-            num = int(code.split("-")[1])
-            assert num == 7, f"salt={seed} produced {code}"
-
-    def test_should_use_5_digit_zero_padding(self):
-        # f"{num:05d}" — kills width mutants (5 → 4 / 6).
-        code = generate_pseudonym(salt=1, code_range=(1, 1))
-        assert code == "P-00001"
