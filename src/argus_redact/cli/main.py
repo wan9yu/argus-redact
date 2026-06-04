@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from argus_redact._safe_io import safe_read_text as _safe_read_text
 from argus_redact._safe_io import safe_write_key as _safe_write_key
 from argus_redact._safe_io import safe_write_text as _safe_write_text
 
@@ -108,7 +109,7 @@ def cmd_redact(args):
     existing_key = None
     if key_path.exists():
         try:
-            existing_key = json.loads(key_path.read_text(encoding="utf-8"))
+            existing_key = json.loads(_safe_read_text(key_path))
         except json.JSONDecodeError:
             print(f"Error: invalid key file: {args.key}", file=sys.stderr)
             sys.exit(5)
@@ -137,7 +138,7 @@ def cmd_restore(args):
         sys.exit(4)
 
     try:
-        key = json.loads(key_path.read_text(encoding="utf-8"))
+        key = json.loads(_safe_read_text(key_path))
     except json.JSONDecodeError:
         print(f"Error: invalid key file: {args.key}", file=sys.stderr)
         sys.exit(5)

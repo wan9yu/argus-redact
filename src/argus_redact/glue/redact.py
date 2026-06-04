@@ -10,6 +10,7 @@ import re as _re
 import time
 from pathlib import Path
 
+from argus_redact._safe_io import safe_read_text as _safe_read_text
 from argus_redact._types import PatternMatch
 from argus_redact.layers import LAYER_NER, LAYER_REGEX, LAYER_SEMANTIC
 from argus_redact.lang.shared.patterns import PATTERNS as SHARED_PATTERNS
@@ -470,9 +471,9 @@ def redact(
         if config_path.suffix in (".yaml", ".yml"):
             import yaml
 
-            config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+            config = yaml.safe_load(_safe_read_text(config_path))
         else:
-            config = json.loads(config_path.read_text(encoding="utf-8"))
+            config = json.loads(_safe_read_text(config_path))
 
     # Resolve key
     existing_key: dict | None = None
@@ -481,7 +482,7 @@ def redact(
         key_file = key
         path = Path(key_file)
         existing_key = (
-            json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+            json.loads(_safe_read_text(path)) if path.exists() else {}
         )
     elif isinstance(key, dict):
         existing_key = dict(key)

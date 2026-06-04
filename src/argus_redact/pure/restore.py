@@ -147,8 +147,9 @@ def restore(
     if isinstance(key, str):
         import json
 
-        with open(key, encoding="utf-8") as f:
-            key = json.load(f)
+        from argus_redact._safe_io import safe_read_text
+
+        key = json.loads(safe_read_text(key))
 
     if not isinstance(key, Mapping):
         raise TypeError(f"key must be a Mapping or str (file path), got {type(key).__name__}")

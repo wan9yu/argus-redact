@@ -53,6 +53,39 @@ def safe_write_key(path: str, key: dict) -> None:
     safe_write_text(path, json.dumps(key, ensure_ascii=False, indent=2), mode=0o600)
 
 
+def safe_read_text(path: str | Path) -> str:
+    """Read a text file, refusing to follow symlinks on POSIX.
+
+    Symmetric to ``safe_write_text`` / ``safe_write_key``. Use for paths read
+    from untrusted sources (CLI args, server inputs) where a malicious symlink
+    could redirect to ``/etc/passwd``, ``~/.ssh/id_rsa``, etc.
+
+    POSIX: uses ``O_NOFOLLOW`` — read fails with ``OSError`` if the path itself
+    is a symlink. (Symlinked path components above the target are still
+    followed by the kernel; ``O_NOFOLLOW`` guards only the final component.)
+
+    Windows: best-effort ``Path.is_symlink()`` check before reading. NTFS
+    junctions and reparse points are not detected.
+    """
+    p = Path(path)
+    if not _IS_WIN:
+        flags = os.O_RDONLY | os.O_NOFOLLOW
+        fd = os.open(str(p), flags)
+        try:
+            with os.fdopen(fd, "r", encoding="utf-8", closefd=True) as f:
+                return f.read()
+        except Exception:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            raise
+    else:
+        if p.is_symlink():
+            raise OSError(f"refusing to read symbolic link: {p}")
+        return p.read_text(encoding="utf-8")
+
+
 def safe_atomic_write_text(target: str, content: str, *, mode: int = 0o644) -> None:
     """Write atomically via ``<target>.tmp`` + rename. Both tmp and target
     are protected against symlink follows. Used by callers that need to

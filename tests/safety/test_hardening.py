@@ -1,6 +1,7 @@
 """Tests for hardening: collision auto-expand, config file, pseudonym format."""
 
 import json
+from pathlib import Path
 
 from argus_redact import redact
 from argus_redact.pure.pseudonym import PseudonymGenerator
@@ -83,3 +84,14 @@ def test_generate_pseudonym_function_gone_but_class_stays():
 
     assert not hasattr(p, "generate_pseudonym"), "function should be deleted"
     assert hasattr(p, "PseudonymGenerator"), "class must stay"
+
+
+def test_server_bearer_uses_compare_digest():
+    """v0.6.10: constant-time comparison closes the timing side-channel."""
+    src = (Path(__file__).resolve().parents[2] / "src/argus_redact/server.py").read_text()
+    auth_idx = src.find("authorization")
+    assert auth_idx != -1, "could not locate auth check in server.py"
+    auth_section = src[auth_idx:auth_idx + 800]
+    assert "compare_digest" in auth_section, (
+        "server bearer comparison still uses raw != — must use secrets.compare_digest"
+    )

@@ -17,6 +17,7 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import os
+import secrets
 import warnings
 from typing import TYPE_CHECKING, Any
 
@@ -172,7 +173,9 @@ def _auth_middleware(app):
 
             request = Request(scope, receive)
             auth = request.headers.get("authorization", "")
-            if auth != f"Bearer {api_key}":
+            expected = f"Bearer {api_key}".encode("utf-8")
+            provided = auth.encode("utf-8") if auth else b""
+            if not secrets.compare_digest(provided, expected):
                 response = JSONResponse(
                     {"error": "Unauthorized. Set Authorization: Bearer <ARGUS_API_KEY>"},
                     status_code=401,
