@@ -64,3 +64,12 @@ class TestConfigFilePath:
 
         assert "13812345678" not in redacted
         assert any("[TEL]" in k for k in key)
+
+
+def test_redact_middleware_no_longer_exists():
+    """v0.6.10: RedactMiddleware was a no-op stub (no __call__); deleted in favor of redact_body."""
+    import argus_redact.integrations.fastapi_middleware as m
+
+    assert not hasattr(m, "RedactMiddleware"), (
+        "RedactMiddleware was a no-op (__init__ only); use redact_body endpoint helper instead"
+    )

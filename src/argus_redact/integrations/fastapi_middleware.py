@@ -1,6 +1,11 @@
-"""FastAPI integration — redact_body / restore_body helpers and optional middleware.
+"""FastAPI / Starlette integration helpers.
 
 No FastAPI dependency required for the helper functions.
+
+Recommended pattern: call ``redact_body()`` at the endpoint boundary
+(POST/PUT handlers that accept user-submitted text). This gives explicit
+control over which fields are redacted and which are passed through, and
+surfaces the key dict to the caller for later ``restore_body()``.
 
 Usage (endpoint-level):
     from argus_redact.integrations.fastapi_middleware import redact_body, restore_body
@@ -12,11 +17,6 @@ Usage (endpoint-level):
         llm_output = call_llm(redacted["text"])
         restored = restore_body({"result": llm_output}, key, field="result")
         return restored
-
-Usage (middleware):
-    from argus_redact.integrations.fastapi_middleware import RedactMiddleware
-
-    app.add_middleware(RedactMiddleware, lang="zh", mode="fast")
 """
 
 from __future__ import annotations
@@ -95,16 +95,3 @@ def restore_body(
         return result
 
     return response
-
-
-class RedactMiddleware:
-    """ASGI middleware placeholder for FastAPI.
-
-    For production use, implement as proper Starlette BaseHTTPMiddleware.
-    See docstring at module level for endpoint-level usage (recommended).
-    """
-
-    def __init__(self, app, *, lang="zh", mode="fast"):
-        self.app = app
-        self.lang = lang
-        self.mode = mode

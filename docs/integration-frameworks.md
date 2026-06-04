@@ -136,7 +136,7 @@ import json
 
 app = FastAPI()
 
-class RedactMiddleware(BaseHTTPMiddleware):
+class RedactBodyMiddleware(BaseHTTPMiddleware):
     """Redact PII in request body, restore in response body."""
 
     async def dispatch(self, request: Request, call_next):
@@ -158,7 +158,7 @@ class RedactMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         return response
 
-app.add_middleware(RedactMiddleware)
+app.add_middleware(RedactBodyMiddleware)
 ```
 
 ### Endpoint-level (simpler)
