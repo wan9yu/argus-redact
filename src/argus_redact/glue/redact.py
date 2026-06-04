@@ -525,17 +525,15 @@ def redact(
         unified_prefix=unified_prefix,
     )
 
-    if with_types and not detailed and not report:
-        # Build replacement → PII type mapping
-        reverse_key = {v: k for k, v in result_key.items()}
-        type_map = {}
-        for e in entities:
-            replacement = reverse_key.get(e.text, "")
-            if replacement:
-                type_map[replacement] = e.type
-        return redacted, result_key, type_map
+    # Return-shape dispatch — precedence (locked by tests/core/test_redact_return_shapes.py):
+    #   1. report=True    → RedactReport object (richest; supersedes everything)
+    #   2. detailed=True  → 3-tuple (redacted, key, details_dict)
+    #   3. with_types=True → 3-tuple (redacted, key, types_dict)
+    #   4. default        → 2-tuple (redacted, key)
+    # When both `detailed` and `with_types` are set, `detailed` wins (its
+    # details_dict already carries per-entity type info, so no caller-visible loss).
 
-    if detailed or report:
+    if report or detailed:
         reverse_key = {v: k for k, v in result_key.items()}
         entity_details = [
             {
@@ -562,6 +560,7 @@ def redact(
         }
 
         if report:
+            # Precedence 1: report wins over everything
             from argus_redact._types import RedactReport
             from argus_redact.pure.risk import assess_risk
             from argus_redact.specs import lookup
@@ -585,6 +584,18 @@ def redact(
                 risk=risk,
             )
 
+        # Precedence 2: detailed (no report) — wins over with_types
         return redacted, result_key, {"entities": entity_details, "stats": stats}
 
+    if with_types:
+        # Precedence 3: with_types only — build replacement → PII type mapping
+        reverse_key = {v: k for k, v in result_key.items()}
+        type_map = {}
+        for e in entities:
+            replacement = reverse_key.get(e.text, "")
+            if replacement:
+                type_map[replacement] = e.type
+        return redacted, result_key, type_map
+
+    # Precedence 4: default
     return redacted, result_key
