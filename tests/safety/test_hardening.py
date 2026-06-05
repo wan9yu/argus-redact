@@ -88,7 +88,7 @@ def test_generate_pseudonym_function_gone_but_class_stays():
 
 def test_server_bearer_uses_compare_digest():
     """v0.6.10: constant-time comparison closes the timing side-channel."""
-    src = (Path(__file__).resolve().parents[2] / "src/argus_redact/server.py").read_text()
+    src = (Path(__file__).resolve().parents[2] / "src/argus_redact/server.py").read_text(encoding="utf-8")
     auth_idx = src.find("authorization")
     assert auth_idx != -1, "could not locate auth check in server.py"
     auth_section = src[auth_idx:auth_idx + 800]
@@ -104,7 +104,7 @@ def test_demo_salt_carries_security_warning():
     production setup would silently make all fakes derivable from observed
     input. The comment is the only signal a copying developer would see.
     """
-    src = (Path(__file__).resolve().parents[2] / "demo/app.py").read_text()
+    src = (Path(__file__).resolve().parents[2] / "demo/app.py").read_text(encoding="utf-8")
     assert "Hardcoded for a public HF demo" in src, (
         "demo/app.py DEMO_SALT must carry explicit public-demo warning comment"
     )

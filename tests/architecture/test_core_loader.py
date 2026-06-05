@@ -31,7 +31,7 @@ def test_no_module_level_core_import_in_consumers():
         "src/argus_redact/glue/redact.py",
     ]
     for rel in consumers:
-        src = (REPO_ROOT / rel).read_text()
+        src = (REPO_ROOT / rel).read_text(encoding="utf-8")
         assert "\ntry:\n    from argus_redact._core" not in src, (
             f"{rel} still has its own module-level _core try-import; should "
             f"use _core_loader"
