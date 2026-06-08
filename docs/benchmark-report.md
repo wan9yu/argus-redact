@@ -132,7 +132,7 @@ argus-redact in `fast` mode is **~1000x faster** than Presidio for regex-detecta
 | **Streaming restore** | **Yes** | No | No | No |
 | **MCP Server** | **Yes** | No | Yes (commercial) | No |
 | Regex speed | 36K docs/s | ~5 docs/s | N/A | N/A |
-| Open source | MIT | Apache 2.0 | Proprietary | MIT |
+| Open source | Apache 2.0 | Apache 2.0 | Proprietary | MIT |
 
 ---
 
