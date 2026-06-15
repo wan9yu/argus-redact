@@ -33,9 +33,32 @@ brew install rust        # macOS
 pip install maturin
 pip install -e ".[dev]"
 
-# Run tests
-pytest -m "not ner and not semantic and not slow"
+# Run tests (PYTHONPATH=src so CLI subprocess tests import the in-tree package)
+PYTHONPATH=src pytest -m "not ner and not semantic and not slow" -p no:recording
+
+# Pure-Rust core unit tests:
+cargo test -p argus-redact-core
 ```
+
+### Workspace layout & build notes
+
+argus-redact is a Cargo workspace with two crates:
+
+- `crates/argus-redact-core/` — pure Rust algorithms (no PyO3). Published to crates.io.
+- `crates/argus-redact-py/` — the PyO3 binding (`_core` extension → the wheel).
+  `publish = false`.
+
+The core and binding share one version (lockstep) declared in the workspace
+`Cargo.toml`. `maturin develop` (with the `python-source = "src"` layout) rebuilds
+`src/argus_redact/_core.*.so` in place.
+
+> **Do NOT** run `cargo build --workspace` / `cargo test --workspace` — on macOS
+> they fail with unresolved libpython symbols (the binding needs the link env
+> `maturin develop` provides). Use `cargo test -p argus-redact-core` for pure
+> tests; `pytest` for everything else.
+
+> Both `cargo` and `maturin develop` use the workspace-root `target/`. Don't pass
+> `--target-dir` — it splits the build cache.
 
 ## Good First Issues
 
@@ -128,13 +151,20 @@ make release
 ## Code Structure
 
 ```
-rust/src/           # Rust core (PyO3) — hot-path functions
-├── lib.rs              # Module entry point
+crates/argus-redact-core/src/   # pure Rust core — hot-path algorithms, no PyO3
+├── lib.rs              # crate root + re-exports
 ├── types.rs            # PatternMatch struct
-├── patterns.rs         # match_patterns() — regex engine
+├── patterns.rs         # match_patterns() + PatternConfig — regex engine
 ├── merger.rs           # merge_entities()
 ├── restore.rs          # restore()
-└── pseudonym.rs        # PseudonymGenerator
+└── pseudonym.rs        # PseudonymGenerator<R: RandomSource>
+
+crates/argus-redact-py/src/     # PyO3 binding — thin wrappers, the _core module
+├── lib.rs              # #[pymodule] _core registration
+├── types.rs            # PyPatternMatch (wraps core PatternMatch)
+├── patterns.rs         # PyDict -> PatternConfig + match_patterns
+├── merger.rs restore.rs
+└── pseudonym.rs        # PyRandomSource (Python random.Random) + PyPseudonymGenerator
 
 src/argus_redact/
 ├── pure/           # Python wrappers (delegate to Rust, fallback to Python)
@@ -183,8 +213,8 @@ argus-redact is currently maintained by a single author. The project is past its
 perf-budget CI gate, multi-platform release pipeline) but the bus factor is **1**.
 Contributions that lower it are explicitly welcomed:
 
-- **Co-reviewers for the Rust core** (`rust/src/`) — most needed; PyO3 + fancy-regex
-  expertise is rare in the current contributor pool.
+- **Co-reviewers for the Rust core** (`crates/argus-redact-core/`) — most needed;
+  PyO3 + fancy-regex expertise is rare in the current contributor pool.
 - **Sub-area owners** — language packs, integrations, and benchmark adapters can
   be owned end-to-end. Open an issue tagged `governance` describing the area you
   want and we'll add you to `CODEOWNERS` for that path.
