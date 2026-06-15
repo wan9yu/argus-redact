@@ -55,6 +55,11 @@ python-source = "src"
 module-name   = "argus_redact._core"
 bindings      = "pyo3"
 features      = ["pyo3/extension-module"]
+# LICENSE lives at the repo root; with manifest-path pointing into crates/,
+# maturin's license auto-discovery misses it, so PKG-INFO declares
+# `License-File: LICENSE` but the sdist omitted the file → PyPI 400. Bundle it
+# explicitly so the sdist's declared License-File actually exists.
+include = ["LICENSE"]
 
 [tool.ruff]
 line-length = 100

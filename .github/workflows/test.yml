@@ -96,6 +96,12 @@ jobs:
       - name: Build sdist
         run: pip install maturin && maturin sdist --out dist
 
+      - name: Validate sdist metadata (twine check)
+        # Catches PyPI-upload-blocking metadata issues that `pip install` does not,
+        # e.g. a declared `License-File` missing from the distribution (v0.7.0 hit
+        # this — the LICENSE file wasn't bundled, PyPI 400'd on upload).
+        run: pip install twine && twine check dist/*
+
       - name: Install from sdist (fresh venv) + smoke test
         shell: bash
         run: |
