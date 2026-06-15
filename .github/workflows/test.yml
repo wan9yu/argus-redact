@@ -29,6 +29,14 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Guard against member-level Cargo.lock
+        shell: bash
+        run: |
+          if ls crates/*/Cargo.lock 2>/dev/null; then
+            echo "::error::member-level Cargo.lock shadows the workspace lock — remove it"
+            exit 1
+          fi
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
@@ -45,6 +53,9 @@ jobs:
             ~/.cargo/git
             target
           key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Rust core unit tests
+        run: cargo test -p argus-redact-core
 
       - name: Install dependencies
         run: |
@@ -65,3 +76,29 @@ jobs:
           fail_ci_if_not_found: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Build the sdist and install it in a fresh venv. The binding crate depends on
+  # the core crate via a path dep (../argus-redact-core); wheel-only CI would not
+  # catch a path-dependency that fails to vendor into the sdist. This job compiles
+  # the Rust from source on install, then smoke-tests redact().
+  sdist-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable @ 2026-05-03
+
+      - name: Build sdist
+        run: pip install maturin && maturin sdist --out dist
+
+      - name: Install from sdist (fresh venv) + smoke test
+        shell: bash
+        run: |
+          python -m venv /tmp/sdist-venv
+          /tmp/sdist-venv/bin/pip install dist/*.tar.gz
+          /tmp/sdist-venv/bin/python -c "from argus_redact import redact; out, key = redact('Alice 13800138000', mode='fast', lang='zh'); assert '13800138000' not in out, out; print('sdist OK')"
