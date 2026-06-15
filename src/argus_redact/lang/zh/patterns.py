@@ -538,6 +538,47 @@ PATTERNS = [
         "description": "Chinese social security number (18-digit ID or city-specific format, keyword-triggered)",
     },
     {
+        "type": "eep",
+        "label": "[往来港澳通行证已脱敏]",
+        "pattern": (
+            r"(?:(?:中华人民共和国)?(?:电子)?往来港澳通行证(?:号码?)?"
+            r"|港澳通行证(?:号码?)?|双程证(?:号码?)?|EEP)"
+            r"\s*(?:[:：是为]?\s*)"
+            r"(?P<eep>C(?:[0-9]{8}|[A-HJ-NP-Z][0-9]{7}))"
+            r"(?!\w)"
+        ),
+        "group": "eep",
+        "check_context": True,
+        "description": "EEP (往来港澳通行证) — C-prefix, 9 chars, no public checksum, anchor-required",
+    },
+    {
+        "type": "hrp",
+        "label": "[回乡证已脱敏]",
+        "pattern": (
+            r"(?:港澳居民来往内地通行证(?:号码?)?|来往内地通行证(?:号码?)?"
+            r"|回乡证(?:号码?)?|回乡卡|Home\s*Return\s*Permit)"
+            r"\s*(?:[:：是为]?\s*)"
+            r"(?P<hrp>[HM]\d{8}(?:\d{2})?)"
+            r"(?!\d)"
+        ),
+        "group": "hrp",
+        "check_context": True,
+        "description": "HRP (港澳居民来往内地通行证/回乡证) — H/M-prefix, 9(+2) digits, no public checksum, anchor-required",
+    },
+    {
+        "type": "housing_fund",
+        "label": "[公积金账号已脱敏]",
+        "pattern": (
+            r"(?:住房公积金|公积金)(?:账号码?|账户|帐号码?|帐户)"
+            r"\s*(?:[:：是为]?\s*)"
+            r"(?P<housing_fund>[0-9]{6,20})"
+            r"(?!\d)"
+        ),
+        "group": "housing_fund",
+        "check_context": True,
+        "description": "Housing provident fund account — no national format, anchor-required, digits only",
+    },
+    {
         "type": "job_title",
         "label": "[职务已脱敏]",
         "pattern": (

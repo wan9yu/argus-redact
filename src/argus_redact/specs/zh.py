@@ -302,6 +302,160 @@ register(
     )
 )
 
+# ── Exit-Entry Permit for Travelling to/from HK and Macao (EEP, 往来港澳通行证, 双程证) ──
+# Mainland residents -> HK/Macao. C-prefix. Paired with hrp (回乡证), which is the
+# DIRECTION-OPPOSITE permit; the prefix letter (C vs H/M) is the only discriminator,
+# so the two stay as separate defs with separate regexes — never one alternation.
+
+register(
+    PIITypeDef(
+        name="eep",
+        lang="zh",
+        format="C[0-9]{8} 或 C[A-HJ-NP-Z][0-9]{7}",
+        length=9,
+        charset="alnum",
+        structure={
+            "prefix": "C — 固定前缀",
+            "body": "旧号段=8位数字；新号段(2018-12-03起)=1字母(排除I/O)+7位数字",
+        },
+        checksum=None,  # 无公开校验算法（官方文档未列校验位）
+        prefixes=("往来港澳通行证", "电子往来港澳通行证", "港澳通行证", "双程证", "通行证号码", "证件号码", "EEP"),
+        strategy="remove",
+        label="[往来港澳通行证已脱敏]",
+        examples=(
+            "往来港澳通行证C12345678",
+            "电子往来港澳通行证CA0000001",
+            "港澳通行证号码：CB1234567",
+            "双程证 C87654321",
+        ),
+        counterexamples=(
+            "C12345678",            # 无锚点裸格式 -> 不应命中
+            "往来港澳通行证CI1234567",  # 第二位 I 非法
+            "往来港澳通行证CO1234567",  # 第二位 O 非法
+            "往来港澳通行证C1234567",   # 总长不足 9
+            "回乡证H12345678",         # H 前缀属于另一类型，绝不能命中此类型
+            "订单号C12345678",         # 干扰前缀
+        ),
+        _patterns=(
+            {
+                "type": "eep",
+                "label": "[往来港澳通行证已脱敏]",
+                "pattern": (
+                    r"(?:(?:中华人民共和国)?(?:电子)?往来港澳通行证(?:号码?)?"
+                    r"|港澳通行证(?:号码?)?|双程证(?:号码?)?|EEP)"
+                    r"\s*(?:[:：是为]?\s*)"
+                    r"(?P<eep>C(?:[0-9]{8}|[A-HJ-NP-Z][0-9]{7}))"
+                    r"(?!\w)"
+                ),
+                "group": "eep",
+                "check_context": True,
+                "description": "EEP (往来港澳通行证) — C-prefix, 9 chars, no public checksum, anchor-required",
+            },
+        ),
+        sensitivity=4,
+        source="国家移民管理局《出入境证件简明手册》; 电子往来港澳通行证号码编制规则调整公告(2018)",
+        description="往来港澳通行证 (Exit-Entry Permit for Travelling to/from HK and Macao, EEP) — 大陆居民赴港澳；C 前缀；无公开校验；须上下文锚点",
+    )
+)
+
+# ── Mainland Travel Permit for HK/Macao Residents (HRP, 港澳居民来往内地通行证, 回乡证) ──
+# HK/Macao residents -> mainland. H/M-prefix. Direction-opposite of eep; the prefix
+# letter is the only discriminator, so it stays a separate def with its own regex.
+
+register(
+    PIITypeDef(
+        name="hrp",
+        lang="zh",
+        format="[HM][0-9]{8}（可带2位换证次数后缀）",
+        length=(9, 11),
+        charset="alnum",
+        structure={
+            "prefix": "H=首次申请地香港 / M=澳门",
+            "body": "8 位数字（终身不变身份号）",
+            "renewal": "可选 2 位换证次数（卡面独立字段 / 1999版原生末2位）",
+        },
+        checksum=None,  # 无公开校验算法（官方文档未列校验位）
+        prefixes=("港澳居民来往内地通行证", "来往内地通行证", "回乡证", "回乡卡", "港澳居民", "Home Return Permit"),
+        strategy="remove",
+        label="[回乡证已脱敏]",
+        examples=(
+            "港澳居民来往内地通行证H12345678",
+            "回乡证 M87654321",
+            "回乡卡H1234567801",        # 9位号 + 2位换证次数
+            "Home Return Permit H00000001",
+        ),
+        counterexamples=(
+            "H12345678",              # 无锚点裸格式 -> 不应命中
+            "回乡证H1234567",          # 位数不足
+            "往来港澳通行证C12345678",  # C 前缀属于另一类型，绝不能命中此类型
+            "型号H12345678",          # 干扰前缀
+        ),
+        _patterns=(
+            {
+                "type": "hrp",
+                "label": "[回乡证已脱敏]",
+                "pattern": (
+                    r"(?:港澳居民来往内地通行证(?:号码?)?|来往内地通行证(?:号码?)?"
+                    r"|回乡证(?:号码?)?|回乡卡|Home\s*Return\s*Permit)"
+                    r"\s*(?:[:：是为]?\s*)"
+                    r"(?P<hrp>[HM]\d{8}(?:\d{2})?)"
+                    r"(?!\d)"
+                ),
+                "group": "hrp",
+                "check_context": True,
+                "description": "HRP (港澳居民来往内地通行证/回乡证) — H/M-prefix, 9(+2) digits, no public checksum, anchor-required",
+            },
+        ),
+        sensitivity=4,
+        source="公安部《关于启用新版港澳居民来往内地通行证的公告》; 国家移民管理局《出入境证件简明手册》",
+        description="港澳居民来往内地通行证 (Mainland Travel Permit for HK/Macao Residents / Home Return Permit / 回乡证) — 港澳居民来大陆；H/M 前缀；无公开校验；须上下文锚点",
+    )
+)
+
+# ── Housing Provident Fund Account (住房公积金账号) ──
+# No national format standard (varies by city) -> anchor-required. The anchor must
+# include 账号/账户 (not bare "公积金") so it does not match 公积金余额/amounts.
+
+register(
+    PIITypeDef(
+        name="housing_fund",
+        lang="zh",
+        format="公积金账号（各城市格式不一，无全国标准）",
+        charset="digits",
+        checksum=None,  # 无公开校验算法
+        prefixes=("住房公积金账号", "公积金账号", "住房公积金账户", "公积金账户"),
+        strategy="remove",
+        label="[公积金账号已脱敏]",
+        examples=(
+            "公积金账号：110123456789",
+            "住房公积金账户 123456789012",
+            "公积金账号 6001234567",
+        ),
+        counterexamples=(
+            "110123456789",   # 无锚点裸数字 -> 不应命中
+            "公积金余额12000",  # 余额/金额，不是账号
+        ),
+        _patterns=(
+            {
+                "type": "housing_fund",
+                "label": "[公积金账号已脱敏]",
+                "pattern": (
+                    r"(?:住房公积金|公积金)(?:账号码?|账户|帐号码?|帐户)"
+                    r"\s*(?:[:：是为]?\s*)"
+                    r"(?P<housing_fund>[0-9]{6,20})"
+                    r"(?!\d)"
+                ),
+                "group": "housing_fund",
+                "check_context": True,
+                "description": "Housing provident fund account — no national format, anchor-required, digits only",
+            },
+        ),
+        sensitivity=3,
+        source="《住房公积金管理条例》（国务院令第350号）— 账号格式由各地公积金管理中心自定，无全国统一标准",
+        description="住房公积金账号 (housing provident fund account) — 各城市格式不统一，无全国标准，无公开校验；须上下文锚点。理由是格式无全国标准，不是因为未来归集身份证号。",
+    )
+)
+
 # ── Bank Card ──
 
 register(

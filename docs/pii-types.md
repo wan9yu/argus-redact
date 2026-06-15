@@ -3,9 +3,9 @@
 Auto-generated from `argus_redact.specs.list_types()`. Do not hand-edit.
 Regenerate via: `make catalog`
 
-Total: 59 types (32 zh / 15 en / 12 shared)
+Total: 62 types (35 zh / 15 en / 12 shared)
 
-## Chinese (zh) — 32 types
+## Chinese (zh) — 35 types
 
 ### `address`
 
@@ -106,6 +106,19 @@ Criminal record (explicit keywords)
 
 Chinese date of birth (keyword-triggered, multiple formats)
 
+### `eep`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Examples | `往来港澳通行证C12345678`, `电子往来港澳通行证CA0000001`, `港澳通行证号码：CB1234567` |
+| Source | 国家移民管理局《出入境证件简明手册》; 电子往来港澳通行证号码编制规则调整公告(2018) |
+
+往来港澳通行证 (Exit-Entry Permit for Travelling to/from HK and Macao, EEP) — 大陆居民赴港澳；C 前缀；无公开校验；须上下文锚点
+
 ### `ethnicity`
 
 | Field | Value |
@@ -147,6 +160,32 @@ Financial info (salary/debt/credit score with amounts)
 | Source | Hong Kong Immigration Department; Wikipedia HKID |
 
 Hong Kong Identity Card — 1-2 letter + 6 digit + parenthesized check
+
+### `housing_fund`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 3 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Examples | `公积金账号：110123456789`, `住房公积金账户 123456789012`, `公积金账号 6001234567` |
+| Source | 《住房公积金管理条例》（国务院令第350号）— 账号格式由各地公积金管理中心自定，无全国统一标准 |
+
+住房公积金账号 (housing provident fund account) — 各城市格式不统一，无全国标准，无公开校验；须上下文锚点。理由是格式无全国标准，不是因为未来归集身份证号。
+
+### `hrp`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Examples | `港澳居民来往内地通行证H12345678`, `回乡证 M87654321`, `回乡卡H1234567801` |
+| Source | 公安部《关于启用新版港澳居民来往内地通行证的公告》; 国家移民管理局《出入境证件简明手册》 |
+
+港澳居民来往内地通行证 (Mainland Travel Permit for HK/Macao Residents / Home Return Permit / 回乡证) — 港澳居民来大陆；H/M 前缀；无公开校验；须上下文锚点
 
 ### `id_number`
 
