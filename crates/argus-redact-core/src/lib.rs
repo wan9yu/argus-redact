@@ -1,1 +1,8 @@
-// populated in C2-C4
+//! argus-redact core — pure-Rust PII detection/redaction primitives.
+pub mod types;
+pub mod merger;
+pub mod restore;
+
+pub use types::PatternMatch;
+pub use merger::merge_entities;
+pub use restore::{restore, RestoreError};
