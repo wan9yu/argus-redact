@@ -2,6 +2,40 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.7.0 — 2026-06-15 — Core Split
+
+### Changed
+
+- The Rust core is now a **Cargo workspace** with two crates:
+  - `argus-redact-core` — pure-Rust algorithms (regex matching, entity merging,
+    restore, pseudonym derivation), no PyO3. **Published to crates.io.**
+  - `argus-redact-py` — the PyO3 binding (`_core` extension module), the wheel
+    artifact (`publish = false`).
+  The pseudonym RNG is bridged via a `RandomSource` trait so the core stays
+  PyO3-free; the binding implements it over Python's `random.Random` / `secrets`.
+  Output is **bit-for-bit identical** to v0.6.12 (locked by golden-vector + KDF
+  replay tests).
+
+### Added
+
+- `argus-redact-core` on crates.io — the detection/redaction primitives are now
+  consumable from any Rust project (and the foundation for future iOS / Android /
+  WASM builds). Lockstep-versioned with the Python package.
+- `docs/security.md` — new "Cloud-LLM pipeline" threat-model section: what
+  pseudonymization does and does not buy you against an adversarial LLM provider,
+  with explicit wording constraints (pseudonymization ≠ anonymization under
+  GDPR / PIPL).
+- CI: sdist install gate (builds + installs from sdist in a fresh venv, catches
+  workspace path-dependency vendoring bugs), pure-Rust `cargo test -p
+  argus-redact-core`, and a member-level `Cargo.lock` shadow guard.
+
+### Compatibility
+
+- **No Python API change. Python users: zero migration — `pip install -U`.**
+  The `_core` module name and `.so` filename are preserved; the public API is
+  frozen at v0.6.10 and unchanged.
+- New: Rust consumers can depend on `argus-redact-core` from crates.io.
+
 ## v0.6.12 — 2026-06-15 — zh L1 Coverage (HK/Macao permits + housing fund)
 
 ### Added

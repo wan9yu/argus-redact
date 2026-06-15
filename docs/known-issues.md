@@ -94,6 +94,16 @@ Each entry follows three lines:
 
 ## Recently Fixed
 
+### v0.7.0 (2026-06-15) — Core Split
+
+- Rust core split into a Cargo workspace: pure-Rust `argus-redact-core` (now on
+  crates.io) + `argus-redact-py` PyO3 binding (the wheel). Pseudonym RNG bridged
+  via a `RandomSource` trait; output is bit-for-bit identical to v0.6.12 (locked
+  by golden-vector + KDF replay tests). **No Python API change.**
+- `docs/security.md` gained a "Cloud-LLM pipeline" threat-model section
+  (adversarial-provider framing; pseudonymization ≠ anonymization wording).
+- CI: sdist install gate + pure-Rust core tests + Cargo.lock shadow guard.
+
 ### v0.6.12 (2026-06-15) — zh L1 Coverage (HK/Macao permits + housing fund)
 
 - **往来港澳通行证 (`eep`)** and **港澳居民来往内地通行证 / 回乡证 (`hrp`)**
