@@ -1,0 +1,17 @@
+[package]
+name    = "argus-redact-py"
+publish = false
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+
+[lib]
+name       = "_core"
+crate-type = ["cdylib"]
+path       = "src/lib.rs"
+
+[dependencies]
+pyo3.workspace        = true
+fancy-regex.workspace = true
+argus-redact-core     = { path = "../argus-redact-core", version = "0.6.12" }

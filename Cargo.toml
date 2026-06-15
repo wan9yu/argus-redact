@@ -1,13 +1,19 @@
-[package]
-name = "argus-redact-core"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members  = ["crates/argus-redact-core", "crates/argus-redact-py"]
+resolver = "2"
 
-[lib]
-name = "_core"
-crate-type = ["cdylib"]
-path = "rust/src/lib.rs"
+[workspace.package]
+version      = "0.6.12"
+edition      = "2024"
+rust-version = "1.85"
+license      = "Apache-2.0"
+repository   = "https://github.com/wan9yu/argus-redact"
 
-[dependencies]
-pyo3 = { version = "0.28", features = ["extension-module"] }
+[workspace.dependencies]
 fancy-regex = "0.17"
+pyo3        = { version = "0.28", features = ["extension-module"] }
+
+[profile.release]
+lto           = "thin"
+codegen-units = 1
+strip         = true

@@ -1,0 +1,15 @@
+[package]
+name             = "argus-redact-core"
+description      = "PII detection and redaction primitives — pure Rust core"
+keywords         = ["pii", "redaction", "privacy"]
+categories       = ["text-processing"]
+version.workspace      = true
+edition.workspace      = true
+rust-version.workspace = true
+license.workspace      = true
+repository.workspace   = true
+
+# No [lib] crate-type — defaults to rlib. Deliberately NOT a hybrid.
+
+[dependencies]
+fancy-regex.workspace = true

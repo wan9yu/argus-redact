@@ -14,6 +14,10 @@ tests/benchmark/data/
 .claude/
 _core*.so
 target/
+.venv/
+
+# member-level lock files would shadow the workspace-root lock
+crates/*/Cargo.lock
 
 # Workspace-only design / planning artifacts (per convention — not committed)
 docs/design-pseudonym-llm.md
