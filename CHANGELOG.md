@@ -2,6 +2,46 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.6.12 — 2026-06-15 — zh L1 Coverage (HK/Macao permits + housing fund)
+
+### Added
+
+Three new zh PII types closing L1 fast-mode coverage gaps reported by a
+downstream privacy-gateway consumer:
+
+- `eep` — **往来港澳通行证** (Exit-Entry Permit for Travelling to/from HK and
+  Macao; mainland residents → HK/Macao). `C` + 8 digits, or (since
+  2018-12-03) `C` + 1 letter (I/O excluded) + 7 digits. `sensitivity=4`,
+  `strategy=remove`.
+- `hrp` — **港澳居民来往内地通行证 / 回乡证** (Mainland Travel Permit for
+  HK/Macao Residents; HK/Macao residents → mainland). `[HM]` + 8 digits,
+  with an optional 2-digit renewal-count suffix. `sensitivity=4`.
+- `housing_fund` — **公积金账号** (housing provident fund account).
+  Context-anchored only (`公积金账号/账户` + digit run) because account
+  formats vary by city with no national standard. `sensitivity=3`.
+
+All three are **context-anchored** (the keyword is baked into the regex with
+a named capture group) because none carries a public checksum — the anchor,
+not a check digit, controls false positives. Bare formats (e.g. a stray
+`C12345678` with no permit keyword nearby) are deliberately **not** matched.
+The two permits are direction-opposite documents with distinct prefixes
+(`C` vs `[HM]`) and are kept as separate types — a `C`-prefixed string is
+never typed as `hrp`, and vice versa.
+
+### Notes
+
+- Detection lives in both `lang/zh/patterns.py` (runtime fast-mode list) and
+  the `specs/zh.py` registry (catalog/fixtures/metadata); the two regexes
+  are byte-identical.
+- `mode="ner"` does not add coverage for these types (HanLP MSRA is PER/LOC/ORG
+  only) — they are L1-regex types.
+- For PII with no national format (e.g. housing fund in cities argus does not
+  cover), tenants can add custom patterns downstream.
+
+### Compatibility
+
+- No breaking changes. Purely additive detection. No Python API change.
+
 ## v0.6.11 — 2026-06-04 — Adapter Surface
 
 ### Added

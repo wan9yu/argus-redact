@@ -94,6 +94,20 @@ Each entry follows three lines:
 
 ## Recently Fixed
 
+### v0.6.12 (2026-06-15) — zh L1 Coverage (HK/Macao permits + housing fund)
+
+- **往来港澳通行证 (`eep`)** and **港澳居民来往内地通行证 / 回乡证 (`hrp`)**
+  now have L1 fast-mode patterns. Both are context-anchored (no public
+  checksum exists for either, so the keyword anchor controls false
+  positives). The two are distinct direction-opposite documents (`C` vs
+  `[HM]` prefix) and never cross-type.
+- **公积金账号 (`housing_fund`)** has a context-anchored pattern
+  (`公积金账号/账户` + digit run). Housing-fund account formats vary by
+  city with no national standard, so coverage is anchor-gated; cities/formats
+  not covered can be handled with downstream tenant custom patterns.
+- These are L1-regex types; `mode="ner"` (HanLP MSRA = PER/LOC/ORG) does not
+  add coverage for structured permit/account numbers.
+
 ### v0.6.11 (2026-06-04) — Adapter Surface
 
 - **Layer 2 adapter authoring primitives** (`compose.register_pii_type` /
