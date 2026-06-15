@@ -12,6 +12,5 @@ crate-type = ["cdylib"]
 path       = "src/lib.rs"
 
 [dependencies]
-pyo3.workspace        = true
-fancy-regex.workspace = true
-argus-redact-core     = { path = "../argus-redact-core", version = "0.6.12" }
+pyo3.workspace    = true
+argus-redact-core = { path = "../argus-redact-core", version = "0.6.12" }

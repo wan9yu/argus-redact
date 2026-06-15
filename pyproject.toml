@@ -50,8 +50,11 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.21", "pytest-cov>=5.0", "ruff>=0.8", "b
 argus-redact = "argus_redact.cli.main:main"
 
 [tool.maturin]
+manifest-path = "crates/argus-redact-py/Cargo.toml"
 python-source = "src"
-module-name = "argus_redact._core"
+module-name   = "argus_redact._core"
+bindings      = "pyo3"
+features      = ["pyo3/extension-module"]
 
 [tool.ruff]
 line-length = 100
