@@ -27,6 +27,58 @@ argus-redact does NOT defend against:
   (e.g. `mask` strategy keeping 7 of 11 phone digits visible). Use compliance
   profiles (`profile="pipl"` / `"hipaa"`) to harden these defaults.
 - Side channels (timing, memory, logs the caller writes themselves).
+- Re-identification by a cloud LLM provider from residual signal (writing
+  style, accumulated content, rare attributes) — see "Cloud-LLM pipeline" below.
+
+## Cloud-LLM pipeline: what redaction does and does not buy you
+
+The threat model above covers whether the redaction itself is cryptographically
+sound. This section covers a different question: when you send redacted text to a
+**cloud LLM provider**, what does the provider learn?
+
+### Wording we use (and avoid)
+
+Under GDPR (Recital 26) and China PIPL (Art. 4, 73), pseudonymized data is still
+personal data — pseudonymization is NOT anonymization. So argus-redact does not
+claim, and downstream products built on it should not claim:
+
+- ❌ "anonymous" / "匿名"
+- ❌ "trust no one" (as a guarantee of un-identifiability)
+- ❌ "no personal data is sent to the LLM"
+
+What is accurate:
+
+- ✅ pseudonymization is a technical safeguard
+- ✅ re-identification keys (salt + key dict) stay on the device
+- ✅ structural / explicit identifiers (names, phones, IDs, addresses) are removed
+  from what leaves the device in the clear
+
+### Design goal
+
+argus-redact minimizes the trust you must place in the provider: real names,
+locations, and IDs never leave the device in the clear, and the keys to restore
+them stay local. It does NOT make you anonymous — accumulated content, writing
+style, and rare attributes can still enable inference. Route the most sensitive
+content to an on-device model.
+
+### What the provider can and cannot learn
+
+| Threat | Defended? | Note |
+|---|---|---|
+| Provider stores conversations | ✅ | stores placeholders; structural PII pseudonymized |
+| Provider trains on conversations | ✅ | training data is placeholders |
+| Provider insider / breach reads logs | ✅ | sees placeholders |
+| Regulatory data seizure | ✅ | seized data is placeholders (salt + key stay local) |
+| Naive lookup linkage (plaintext name → DB) | ✅ | plaintext identifiers never leave the device |
+| Cross-session identity linkage | ⚠️ | use per-session salt; accumulated corpus can still be re-segmented by stylometry |
+| Quasi-identifier inference (age + occupation + city → narrow cohort) | ⚠️ | partially mitigated by quasi-identifier types + generalization; not eliminated |
+| Stylometry / authorship fingerprint | ❌ | not defended; salt rotation does not touch this channel |
+| Semantic content leakage ("P-12345 mentions diabetes") | ❌ | retained by design (it is the utility); use an on-device model |
+| Rare-attribute single-out (rare condition + city + age band) | ❌ | population size is the anonymity source; rare attributes remove it |
+| LLM active inference (provider runs a model to re-identify) | ❌ | raises cost, does not prevent |
+
+See the **Threat model** section above for the cryptographic guarantees on the
+redaction itself.
 
 ## Salt handling (v0.6.1+)
 
