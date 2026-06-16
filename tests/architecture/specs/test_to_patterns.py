@@ -151,12 +151,34 @@ class TestToPatternsEn:
                 assert pat["type"] == typedef.name
 
     def test_build_patterns_provides_drop_in_for_lang_module(self):
-        """specs/en.py:build_patterns() output equals lang/en/patterns.py:PATTERNS."""
+        """specs/en.py:build_patterns() detects identically to lang/en/patterns.py:PATTERNS.
+
+        Since v0.7.1 ``lang/en/patterns.py`` reads from the Rust core SSOT rather
+        than re-exporting the spec, so the dict SHAPES differ (the core emits a
+        ``validator`` name string where the spec carries a ``validate`` callable).
+        The contract that survives the migration is BEHAVIORAL: both pattern lists
+        produce the same detections. Equivalent type counts also guard against a
+        spec/core skew.
+        """
         from argus_redact.lang.en.patterns import PATTERNS as EN_PATTERNS
         from argus_redact.specs.en import build_patterns
 
         built = build_patterns()
-        assert built == EN_PATTERNS, "lang/en/patterns.py must re-export the spec output"
+        assert len(built) == len(EN_PATTERNS), (
+            "spec and core must expose the same number of en patterns"
+        )
+        for typedef in list_types("en"):
+            for text in typedef.examples:
+                spec = {
+                    (r.type, r.text) for r in match_patterns(text, built)[0]
+                }
+                core = {
+                    (r.type, r.text) for r in match_patterns(text, EN_PATTERNS)[0]
+                }
+                assert spec == core, (
+                    f"detection drift on '{text[:40]}...': "
+                    f"spec-only={spec - core} core-only={core - spec}"
+                )
 
 
 from tests.conftest import load_examples
