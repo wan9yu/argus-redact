@@ -1,8 +1,9 @@
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyList};
 
 use crate::types::PyPatternMatch;
 use argus_redact_core::{match_patterns as core_match, PatternConfig};
+use argus_redact_core::builtin_patterns as core_builtin;
 
 /// Run all regex patterns against text, return sorted matches.
 ///
@@ -44,4 +45,22 @@ pub fn match_patterns(text: &str, patterns: Vec<Bound<'_, PyDict>>) -> PyResult<
     let out = core_match(text, &configs)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     Ok(out.into_iter().map(PyPatternMatch::from).collect())
+}
+
+/// Return built-in pattern dicts for a language (SSOT in the core crate).
+#[pyfunction]
+pub fn builtin_patterns(py: Python<'_>, lang: &str) -> PyResult<Py<PyList>> {
+    let list = PyList::empty(py);
+    for p in core_builtin(lang) {
+        let d = PyDict::new(py);
+        d.set_item("type", &p.type_)?;
+        d.set_item("label", &p.label)?;
+        d.set_item("pattern", &p.pattern)?;
+        d.set_item("description", &p.description)?;
+        if p.check_context { d.set_item("check_context", true)?; }
+        if let Some(g) = &p.group { d.set_item("group", g)?; }
+        if let Some(v) = &p.validator { d.set_item("validator", v)?; }
+        list.append(d)?;
+    }
+    Ok(list.into())
 }
