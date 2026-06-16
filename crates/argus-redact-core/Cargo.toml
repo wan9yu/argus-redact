@@ -14,3 +14,5 @@ repository.workspace   = true
 
 [dependencies]
 fancy-regex.workspace = true
+serde.workspace = true
+ron.workspace = true
