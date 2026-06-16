@@ -1,1 +1,24 @@
-[]
+// Brazilian Portuguese pattern data (SSOT). Mirrors lang/br/patterns.py PATTERNS.
+[
+    PatternData(
+        type_: r"cpf",
+        label: r"[CPF]",
+        pattern: r"(?<!\d)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?!\d)",
+        validator: Some(r"cpf"),
+        description: r"Brazilian CPF (Cadastro de Pessoas Físicas)",
+    ),
+    PatternData(
+        type_: r"cnpj",
+        label: r"[CNPJ]",
+        pattern: r"(?<!\d)\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}(?!\d)",
+        validator: Some(r"cnpj"),
+        description: r"Brazilian CNPJ (Cadastro Nacional da Pessoa Jurídica)",
+    ),
+    PatternData(
+        type_: r"phone",
+        label: r"[Telefone]",
+        pattern: r"(?:\+55\s?)?\(?\d{2}\)?\s?\d{4,5}-?\d{4}(?!\d)",
+        check_context: true,
+        description: r"Brazilian phone number",
+    ),
+]
