@@ -10,7 +10,7 @@
     PatternData(
         type_: "email",
         label: "[邮箱已脱敏]",
-        pattern: r"[一-鿿぀-ヿ가-힯]{1,10}@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
+        pattern: r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]{1,10}@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}",
         validator: Some("email"),
         description: "Email address (CJK-only local-part, RFC 6531 internationalized)",
     ),
