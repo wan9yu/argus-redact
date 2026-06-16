@@ -10,6 +10,20 @@ coverage:
       default:
         target: 90%          # new code coverage target
 
+# Two coverage sources merged into one project number:
+#   python → pytest --cov (src/),  rust → cargo-llvm-cov (crates/).
+# carryforward keeps a flag's last value on commits whose job didn't run it
+# (e.g. a docs-only push doesn't zero out rust coverage).
+flags:
+  python:
+    paths:
+      - src/
+    carryforward: true
+  rust:
+    paths:
+      - crates/
+    carryforward: true
+
 comment:
   layout: "diff, flags, files"
   require_changes: true

@@ -68,11 +68,12 @@ jobs:
       - name: Run tests with coverage
         run: pytest --cov=argus_redact --cov-report=xml --cov-report=term -p no:recording -m "not ner and not semantic and not slow"
 
-      - name: Upload coverage to Codecov
+      - name: Upload Python coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: coverage.xml
+          flags: python
           fail_ci_if_not_found: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -108,3 +109,36 @@ jobs:
           python -m venv /tmp/sdist-venv
           /tmp/sdist-venv/bin/pip install dist/*.tar.gz
           /tmp/sdist-venv/bin/python -c "from argus_redact import redact; out, key = redact('Alice 13800138000', mode='fast', lang='zh'); assert '13800138000' not in out, out; print('sdist OK')"
+
+  # Rust coverage for the pure core crate (argus-redact-core), uploaded to Codecov
+  # under the `rust` flag. Python (`pytest --cov`) only measures the Python surface;
+  # as Layer-1 logic moves into the core (validators, normalize, lang_detect, …),
+  # this keeps the load-bearing Rust visible in the coverage metric. The binding
+  # crate (argus-redact-py) needs Python linking and is exercised via pytest, so it
+  # is intentionally out of scope here — `-p argus-redact-core` covers the pure core.
+  rust-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable @ 2026-05-03
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@15449e3094499af05d8d964a1c884208e4b8b595 # v2.81.11
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Generate Rust coverage (codecov format)
+        run: cargo llvm-cov -p argus-redact-core --codecov --output-path rust-cov.json
+
+      - name: Upload Rust coverage to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: rust-cov.json
+          flags: rust
+          fail_ci_if_not_found: true
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
