@@ -95,10 +95,17 @@ if HAS_CORE:
         results = []
         near_misses = []
 
-        # Rust handles patterns without validate
+        # Rust handles patterns without a Python `validate` callable (incl. named
+        # validators). A named validator that fails comes back with confidence < 1.0
+        # → route it to near-misses; a clean match (confidence 1.0) is a result.
         if rust_patterns:
             for r in _rust_match_patterns(text, rust_patterns):
-                results.append(PatternMatch(text=r.text, type=r.type, start=r.start, end=r.end))
+                if r.confidence < 1.0:
+                    near_misses.append(
+                        PatternMatch(text=r.text, type=r.type, start=r.start, end=r.end, confidence=0.3)
+                    )
+                else:
+                    results.append(PatternMatch(text=r.text, type=r.type, start=r.start, end=r.end))
 
         if python_patterns:
             _match_python_patterns(text, python_patterns, results, near_misses)

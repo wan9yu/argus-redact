@@ -99,15 +99,66 @@ _pattern_cache: dict[tuple[str, ...], list[dict]] = {}
 
 
 def _load_patterns(lang: str | list[str]) -> list[dict]:
-    """Load regex patterns for the given language(s). Cached per language combo."""
+    """Load regex patterns for the given language(s). Cached per language combo.
+
+    Pattern DATA is the SSOT in argus-redact-core (RON), read via
+    ``_core.builtin_patterns``. The 3 deferred validators
+    (organization/school/jwt) are re-attached here as Python ``validate``
+    callables so they route through the Python validate path; everything else
+    (named ``validator`` strings) is validated inline in Rust.
+
+    When the compiled core is unavailable, fall back to the pure-Python
+    ``PATTERNS`` lists shipped with each language pack.
+    """
+    from argus_redact._core_loader import HAS_CORE, _core
+
     langs = tuple(lang) if isinstance(lang, list) else (lang,)
     if langs in _pattern_cache:
         return _pattern_cache[langs]
 
-    all_patterns = list(SHARED_PATTERNS)
+    # Validate language codes up front so the unknown-lang ValueError holds for
+    # both the core and the fallback path. "shared" is not a requestable lang on
+    # its own (it is always merged in below); requesting it raises, which the
+    # parity test relies on to skip the synthetic "shared" corpus.
     for code in langs:
         if code not in _LANG_PATTERNS:
             raise ValueError(f"Unknown language '{code}'. Available: {list(_LANG_PATTERNS.keys())}")
+
+    if not HAS_CORE:
+        return _load_patterns_python_fallback(langs)
+
+    from argus_redact.lang.shared.patterns import _validate_jwt
+    from argus_redact.lang.zh.patterns import _validate_organization, _validate_school
+
+    deferred = {
+        "jwt": _validate_jwt,
+        "organization": _validate_organization,
+        "school": _validate_school,
+    }
+
+    def hydrate(p: dict) -> dict:
+        d = dict(p)
+        t = d.get("type")
+        if t in deferred and not d.get("validator"):
+            d["validate"] = deferred[t]
+        return d
+
+    all_patterns = [hydrate(p) for p in _core.builtin_patterns("shared")]
+    for code in langs:
+        if code == "shared":
+            continue
+        all_patterns.extend(hydrate(p) for p in _core.builtin_patterns(code))
+
+    _pattern_cache[langs] = all_patterns
+    return all_patterns
+
+
+def _load_patterns_python_fallback(langs: tuple[str, ...]) -> list[dict]:
+    """Pure-Python pattern source used when the compiled core is unavailable."""
+    all_patterns = list(SHARED_PATTERNS)
+    for code in langs:
+        if code == "shared":
+            continue
         try:
             mod = importlib.import_module(_LANG_PATTERNS[code])
             all_patterns.extend(mod.PATTERNS)

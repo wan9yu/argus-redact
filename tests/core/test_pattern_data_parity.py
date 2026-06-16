@@ -70,3 +70,9 @@ def test_freeze_or_compare_detection_snapshot():
     assert not missing, f"frozen langs absent from this env, cannot verify parity: {missing}"
     for lang in frozen:
         assert current[lang] == frozen[lang], f"detection drift in lang={lang}"
+
+
+def test_named_validator_near_miss_via_rust():
+    results, near = match_patterns("ssn 000-12-3456", _load_patterns("en"))
+    assert any(n.type == "ssn" for n in near)
+    assert not any(r.type == "ssn" for r in results)
