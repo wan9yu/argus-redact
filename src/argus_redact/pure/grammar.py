@@ -1,56 +1,29 @@
-"""English grammar normalization/de-normalization for first-person replacement."""
+"""English grammar normalization/de-normalization for first-person replacement.
+
+Thin wrapper — logic lives in the Rust core.
+"""
 
 from __future__ import annotations
 
-import re
+import argus_redact._core as _core
 
-SELF_REF_PRONOUNS = frozenset(
+# Re-exported for importers (pure/replacer.py, pure/restore.py). Mirrors the Rust
+# `grammar::SELF_REF_PRONOUNS` const — kept in sync by hand for now.
+# TODO(v0.7.4 cleanup): vestigial once replacer/restore move to Rust; remove this
+# Python copy then and source the set from `_core`.
+SELF_REF_PRONOUNS: frozenset[str] = frozenset(
     {
-        "I",
-        "me",
-        "my",
-        "mine",
-        "myself",
-        "we",
-        "us",
-        "our",
-        "ours",
-        "ourselves",
+        "I", "me", "my", "mine", "myself",
+        "we", "us", "our", "ours", "ourselves",
     }
 )
-
-# Verb pairs: (first-person form, third-person form)
-_VERB_PAIRS = [
-    ("am", "is"),
-    ("have", "has"),
-    ("do", "does"),
-    ("don't", "doesn't"),
-]
-
-# Forward: pseudonym + first-person verb → third-person verb
-GRAMMAR_RULES_EN = [
-    (re.compile(rf"(\b[A-Z]+-\d+) {first}\b"), rf"\1 {third}") for first, third in _VERB_PAIRS
-] + [
-    # Contractions: I'm → is, I've → has
-    (re.compile(r"(\b[A-Z]+-\d+)'m\b"), r"\1 is"),
-    (re.compile(r"(\b[A-Z]+-\d+)'ve\b"), r"\1 has"),
-]
-
-# Reverse: restored pronoun + third-person verb → first-person verb
-GRAMMAR_RESTORE_EN = [(re.compile(rf"\bI {third}\b"), f"I {first}") for first, third in _VERB_PAIRS]
 
 
 def normalize_grammar_en(text: str, key: dict[str, str]) -> str:
     """Fix English verb forms after first-person pronoun replacement."""
-    if not any(v in SELF_REF_PRONOUNS for v in key.values()):
-        return text
-    for pattern, replacement in GRAMMAR_RULES_EN:
-        text = pattern.sub(replacement, text)
-    return text
+    return _core.normalize_grammar_en(text, list(key.values()))
 
 
 def restore_grammar_en(text: str) -> str:
     """Reverse grammar normalization after restore."""
-    for pattern, replacement in GRAMMAR_RESTORE_EN:
-        text = pattern.sub(replacement, text)
-    return text
+    return _core.restore_grammar_en(text)
