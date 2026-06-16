@@ -2,18 +2,24 @@
 
 Used by the pseudonym-llm profile's `display_text` to make synthetic values
 recognizable when shown directly to humans (without restore).
+
+This module is a thin wrapper around `argus_redact._core` (Rust).
 """
 
 from __future__ import annotations
 
-import re
-
+from argus_redact._core import (
+    mark_for_display as _core_mark,
+    strip_display_markers as _core_strip,
+    resolve_marker as _core_resolve,
+    preset_marker_chars as _core_preset_chars,
+)
 
 DEFAULT_DISPLAY_MARKER = "ⓕ"  # U+24D5
 
-DISPLAY_MARKER_PRESETS = {
-    "circled_f": "ⓕ",  # default, U+24D5
-    "superscript_s": "ˢ",  # U+02E2
+DISPLAY_MARKER_PRESETS: dict[str, str] = {
+    "circled_f": "ⓕ",       # default, U+24D5
+    "superscript_s": "ˢ",   # U+02E2
     "asterisk": "*",
     "chinese": "(假)",
     "none": "",
@@ -23,18 +29,12 @@ DISPLAY_MARKER_PRESETS = {
 # auto-detect and strip known preset markers attached to keys when the caller
 # omitted `display_marker=`. Custom markers (not in DISPLAY_MARKER_PRESETS) are
 # NOT included — those still require explicit pass-through.
-PRESET_MARKER_CHARS: frozenset[str] = frozenset(
-    ch for label in DISPLAY_MARKER_PRESETS.values() for ch in label if ch
-)
+PRESET_MARKER_CHARS: frozenset[str] = frozenset(_core_preset_chars())
 
 
 def resolve_marker(marker: str | None) -> str:
     """Resolve a marker preset name or literal string. None -> default."""
-    if marker is None:
-        return DEFAULT_DISPLAY_MARKER
-    if marker in DISPLAY_MARKER_PRESETS:
-        return DISPLAY_MARKER_PRESETS[marker]
-    return marker
+    return _core_resolve(marker)
 
 
 def mark_for_display(text: str, key: dict[str, str], *, marker: str | None = None) -> str:
@@ -42,24 +42,9 @@ def mark_for_display(text: str, key: dict[str, str], *, marker: str | None = Non
 
     Idempotent — values already followed by the marker are not double-marked.
     """
-    m = resolve_marker(marker)
-    if not m or not key:
-        return text
-    # Sort longest-first to avoid prefix collisions ("张" matching inside "张明").
-    sorted_fakes = sorted(key.keys(), key=len, reverse=True)
-    pattern = re.compile("|".join(re.escape(f) for f in sorted_fakes))
-
-    def _append(match: re.Match[str]) -> str:
-        if text.startswith(m, match.end()):
-            return match.group()
-        return match.group() + m
-
-    return pattern.sub(_append, text)
+    return _core_mark(text, list(key.keys()), marker)
 
 
 def strip_display_markers(text: str, *, marker: str | None = None) -> str:
     """Remove `marker` from `text`."""
-    m = resolve_marker(marker)
-    if not m:
-        return text
-    return text.replace(m, "")
+    return _core_strip(text, marker)
