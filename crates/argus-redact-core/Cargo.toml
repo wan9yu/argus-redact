@@ -16,3 +16,4 @@ repository.workspace   = true
 fancy-regex.workspace = true
 serde.workspace = true
 ron.workspace = true
+unicode-normalization.workspace = true

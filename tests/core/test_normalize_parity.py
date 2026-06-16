@@ -25,6 +25,7 @@ NORMALIZE_CORPUS = [
     "一三八零零一三八零零零",                # Chinese-digit phone (11)
     "电话一三八 零零一 三八零零零",          # Chinese digits with separators
     "三月三日",                              # short CN — must NOT convert
+    "一二三٤五六七",                     # Arabic-Indic digit in a CN run (isdigit, not ascii)
     "zero​width‍join",            # invisible chars
     "ＡＢＣ-１２３-４５６７",                  # fullwidth alnum + digits
     "日本語ですよ",                          # ja

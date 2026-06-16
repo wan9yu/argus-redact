@@ -7,6 +7,7 @@ pub mod pseudonym;
 pub mod validators;
 pub mod data;
 pub mod lang_detect;
+pub mod normalize;
 
 pub use types::PatternMatch;
 pub use merger::merge_entities;
@@ -16,3 +17,4 @@ pub use pseudonym::{PseudonymGenerator, RandomSource};
 pub use validators::resolve_validator;
 pub use data::{builtin_patterns, PatternData};
 pub use lang_detect::detect_languages;
+pub use normalize::{map_spans_to_original, normalize_text};
