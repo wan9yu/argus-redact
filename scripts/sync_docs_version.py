@@ -23,6 +23,18 @@ _TARGETS = [
         r"Current \(v([0-9.]+)\)",
         "Current (v{v})",
     ),
+    # Static crates.io version badge (shields' dynamic crates/v endpoint is
+    # intermittently "invalid"; a static badge is reliable, bumped here).
+    (
+        _REPO / "README.md",
+        r"crates\.io-v([0-9.]+)-orange",
+        "crates.io-v{v}-orange",
+    ),
+    (
+        _REPO / "README.zh.md",
+        r"crates\.io-v([0-9.]+)-orange",
+        "crates.io-v{v}-orange",
+    ),
     (
         _REPO / "docs/cli-reference.md",
         r"argus-redact v([0-9.]+)",

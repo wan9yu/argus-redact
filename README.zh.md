@@ -2,11 +2,13 @@
 
 [English](README.md) · 中文说明
 
-[![PRvL](https://img.shields.io/badge/PRvL-Gold-brightgreen)](docs/prvl-standard.md) [![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![crates.io](https://img.shields.io/crates/v/argus-redact-core?label=crates.io)](https://crates.io/crates/argus-redact-core) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
+[![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![crates.io](https://img.shields.io/badge/crates.io-v0.7.2-orange)](https://crates.io/crates/argus-redact-core) [![Tests](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml/badge.svg)](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
 
 **只加密 PII，不加密含义。在你本地。**
 
 夹在你和 AI 之间的隐私层。你的身份信息留在本地设备上 — AI 拿到含义，但拿不到你是谁。
+
+在 PRvL 参考测试集上评为 **[PRvL-Gold](docs/prvl-standard.md)** — 具体衡量范围见规范文档。
 
 <!-- pin -->
 ```python

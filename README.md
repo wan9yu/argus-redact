@@ -2,12 +2,13 @@
 
 English · [中文说明](README.zh.md)
 
-[![PRvL](https://img.shields.io/badge/PRvL-Gold-brightgreen)](docs/prvl-standard.md) [![Rust](https://img.shields.io/badge/core-Rust%20%2B%20PyO3-orange)](Cargo.toml) [![crates.io](https://img.shields.io/crates/v/argus-redact-core?label=crates.io)](https://crates.io/crates/argus-redact-core) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
-[![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![Downloads](https://img.shields.io/pypi/dm/argus-redact)](https://pypi.org/project/argus-redact/) [![Tests](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml/badge.svg)](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact)
+[![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![crates.io](https://img.shields.io/badge/crates.io-v0.7.2-orange)](https://crates.io/crates/argus-redact-core) [![Tests](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml/badge.svg)](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
 
 **Encrypt PII, not meaning. Locally.**
 
 The privacy layer between you and AI. Your identity stays on your device — AI gets the meaning, not you.
+
+Rated **[PRvL-Gold](docs/prvl-standard.md)** on the PRvL reference suite — see the spec for what it measures.
 
 <!-- pin -->
 ```python
