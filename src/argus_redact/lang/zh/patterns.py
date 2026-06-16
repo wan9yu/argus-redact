@@ -6,8 +6,6 @@ This module only contains structural PII patterns (phone, ID, bank card, etc.).
 
 import re
 
-from argus_redact.lang.shared.patterns import validate_luhn as _validate_luhn
-
 # Leading verbs/particles/questions stripped from org/school candidates before validation.
 # Matched via one-pass longest-prefix scan, so order within the tuple is irrelevant.
 _LEADING_NOISE = (
@@ -117,25 +115,6 @@ def _validate_school(value: str) -> bool:
     return _has_name_before_suffix(value, _SCHOOL_SUFFIXES)
 
 
-def _validate_id_number(value: str) -> bool:
-    """MOD 11-2 checksum for 18-digit Chinese national ID.
-
-    Strict: rejects invalid checksums to avoid false positives on 18-digit
-    order numbers, serial numbers, etc. Trade-off: a user who types one wrong
-    digit in their ID number will not have it detected.
-    """
-    value = value.replace(" ", "").replace("-", "").upper()
-    if len(value) != 18:
-        return False
-    if not value[:17].isdigit():
-        return False
-    if value[17] not in "0123456789X":
-        return False
-    if value[0] == "0":
-        return False
-    return gb11643_check_char(value[:17]) == value[17]
-
-
 GB11643_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
 GB11643_CHECK_CHARS = "10X98765432"
 
@@ -175,15 +154,6 @@ def hkid_check_digit(letters: str, digits: str) -> str:
 _HKID_BODY_RE = re.compile(r"([A-Z]{1,2})(\d{6})\((\d|X)\)")
 
 
-def _validate_hkid(value: str) -> bool:
-    """Validate HKID format L(L)NNNNNN(C). Strips parens to extract check."""
-    m = _HKID_BODY_RE.fullmatch(value)
-    if not m:
-        return False
-    letters, digits, check = m.group(1), m.group(2), m.group(3)
-    return hkid_check_digit(letters, digits) == check
-
-
 _TWID_LETTER_TO_CODE = {
     "A": 10, "B": 11, "C": 12, "D": 13, "E": 14, "F": 15, "G": 16,
     "H": 17, "I": 34, "J": 18, "K": 19, "L": 20, "M": 21, "N": 22,
@@ -207,15 +177,6 @@ def twid_check_digit(letter: str, digits: str) -> str:
         total += int(d) * w
     rem = total % 10
     return str((10 - rem) % 10)
-
-
-def _validate_twid(value: str) -> bool:
-    """Validate Republic of China (Taiwan) national ID card number."""
-    if len(value) != 10 or not value[0].isalpha() or not value[1:].isdigit():
-        return False
-    if value[0] not in _TWID_LETTER_TO_CODE:
-        return False
-    return twid_check_digit(value[0], value[1:9]) == value[9]
 
 
 # Known Chinese bank BIN prefixes (6 digits)
@@ -279,30 +240,6 @@ _BANK_BINS = {
 _CREDIT_CODE_CHARSET = "0123456789ABCDEFGHJKLMNPQRTUWXY"
 _CREDIT_CODE_CHAR_TO_VAL = {c: i for i, c in enumerate(_CREDIT_CODE_CHARSET)}
 _CREDIT_CODE_WEIGHTS = (1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28)
-
-
-def _validate_credit_code(value: str) -> bool:
-    """MOD 31 checksum for 18-char Unified Social Credit Code (GB 32100-2015)."""
-    value = value.upper()
-    if len(value) != 18:
-        return False
-    if any(c not in _CREDIT_CODE_CHAR_TO_VAL for c in value):
-        return False
-    total = sum(_CREDIT_CODE_CHAR_TO_VAL[value[i]] * _CREDIT_CODE_WEIGHTS[i] for i in range(17))
-    check = (31 - total % 31) % 31
-    return _CREDIT_CODE_CHAR_TO_VAL[value[17]] == check
-
-
-def _validate_bank_card(value: str) -> bool:
-    """Validate bank card: Luhn OR known BIN prefix."""
-    digits = "".join(d for d in value if d.isdigit())
-    if len(digits) < 16:
-        return False
-    # Pass if Luhn valid
-    if _validate_luhn(value):
-        return True
-    # Fallback: accept if starts with a known Chinese bank BIN
-    return digits[:6] in _BANK_BINS
 
 
 # Pattern DATA is the SSOT in the Rust core (RON); read it here. The deferred

@@ -85,19 +85,29 @@ class TestFaker:
             assert v1 == v2, f"{typedef.name} faker not deterministic"
 
     def test_id_number_faker_should_pass_checksum(self):
-        from argus_redact.lang.zh.patterns import _validate_id_number
-
+        # Checksum validation now lives in Rust; verify via detection behaviour.
+        all_patterns = ZH_PATTERNS + SHARED
         rng = random.Random(42)
         id_def = get("zh", "id_number")
         for _ in range(20):
             value = id_def.faker(rng)
-            assert _validate_id_number(value), f"Invalid ID: {value}"
+            results, _ = match_patterns(value, all_patterns)
+            matched_types = {r.type for r in results}
+            assert "id_number" in matched_types, (
+                f"Faker-generated ID '{value}' not detected as id_number "
+                f"(checksum check lives in Rust core). Got: {matched_types}"
+            )
 
     def test_bank_card_faker_should_pass_validation(self):
-        from argus_redact.lang.zh.patterns import _validate_bank_card
-
+        # Luhn / BIN validation now lives in Rust; verify via detection behaviour.
+        all_patterns = ZH_PATTERNS + SHARED
         rng = random.Random(42)
         card_def = get("zh", "bank_card")
         for _ in range(20):
             value = card_def.faker(rng)
-            assert _validate_bank_card(value), f"Invalid card: {value}"
+            results, _ = match_patterns(value, all_patterns)
+            matched_types = {r.type for r in results}
+            assert "bank_card" in matched_types, (
+                f"Faker-generated card '{value}' not detected as bank_card "
+                f"(Luhn/BIN check lives in Rust core). Got: {matched_types}"
+            )
