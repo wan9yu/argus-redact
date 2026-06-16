@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use pyo3::prelude::*;
 
+use argus_redact_core::check_restore_safety as core_check_safety;
 use argus_redact_core::restore as core_restore;
 use argus_redact_core::restore_full as core_restore_full;
 
@@ -31,4 +32,18 @@ pub fn restore(
 #[pyo3(name = "restore_core", signature = (text, key))]
 pub fn restore_core(text: &str, key: HashMap<String, String>) -> PyResult<String> {
     core_restore(text, &key).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
+/// Check whether LLM output has suspicious pseudonym usage (possible injection).
+///
+/// Returns a list of warning strings. Empty list = safe.
+/// Mirrors `pure/restore.check_restore_safety`.
+#[pyfunction]
+#[pyo3(signature = (redacted, llm_output, key))]
+pub fn check_restore_safety(
+    redacted: &str,
+    llm_output: &str,
+    key: HashMap<String, String>,
+) -> Vec<String> {
+    core_check_safety(redacted, llm_output, &key)
 }

@@ -9,6 +9,7 @@ mod lang_detect;
 mod normalize;
 mod grammar;
 mod display_marker;
+mod reserved_range;
 
 /// argus-redact Rust core — high-performance pure functions over argus-redact-core.
 #[pymodule]
@@ -19,6 +20,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(merger::merge_entities, m)?)?;
     m.add_function(wrap_pyfunction!(restore::restore, m)?)?;
     m.add_function(wrap_pyfunction!(restore::restore_core, m)?)?;
+    m.add_function(wrap_pyfunction!(restore::check_restore_safety, m)?)?;
     m.add_class::<pseudonym::PyPseudonymGenerator>()?;
     m.add_function(wrap_pyfunction!(lang_detect::detect_languages, m)?)?;
     m.add_function(wrap_pyfunction!(normalize::normalize_text, m)?)?;
@@ -29,5 +31,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(display_marker::strip_display_markers, m)?)?;
     m.add_function(wrap_pyfunction!(display_marker::resolve_marker, m)?)?;
     m.add_function(wrap_pyfunction!(display_marker::preset_marker_chars, m)?)?;
+    m.add_function(wrap_pyfunction!(reserved_range::scan_for_pollution, m)?)?;
     Ok(())
 }

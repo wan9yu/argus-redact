@@ -8,7 +8,6 @@ from typing import Mapping
 
 from argus_redact.pure.display_marker import PRESET_MARKER_CHARS, strip_display_markers
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS, restore_grammar_en
-from argus_redact.pure.reserved_range_scanner import scan_for_pollution
 
 
 @functools.lru_cache(maxsize=128)
@@ -46,15 +45,6 @@ def _compile_decoration_pattern(keys_frozen: frozenset[str]) -> _re.Pattern | No
     keys_alt = "|".join(_re.escape(k) for k in sorted_keys)
     return _re.compile(f"({keys_alt})({_PRESET_MARKER_CLASS}+)")
 
-# Danger patterns: pseudonyms appearing near these suggest exfiltration attempts
-_DANGER_PATTERNS = _re.compile(
-    r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}"  # email address
-    r"|https?://"  # URL
-    r"|(?:send|share|forward|发送|转发|分享|泄露|传给|发给)"  # exfil verbs
-)
-_DANGER_WINDOW = 100  # chars before/after pseudonym to scan
-
-
 def check_restore_safety(
     redacted: str,
     llm_output: str,
@@ -67,45 +57,11 @@ def check_restore_safety(
     1. Pseudonym frequency amplification (appears more than in original)
     2. Pseudonym near danger patterns (email, URL, exfiltration verbs)
     3. Reserved-range value amplification (realistic mode hallucinations)
+
+    Delegated to the Rust core (``_core.check_restore_safety``).
     """
-    warnings = []
-    for code in key:
-        count_original = redacted.count(code)
-        count_llm = llm_output.count(code)
-
-        # Check 1: frequency amplification
-        if count_llm > count_original:
-            warnings.append(
-                f"Pseudonym '{code}' appears {count_llm}x in LLM output "
-                f"but only {count_original}x in redacted input — possible injection"
-            )
-
-        # Check 2: pseudonym near danger patterns
-        if count_llm > 0:
-            for m in _re.finditer(_re.escape(code), llm_output):
-                start = max(0, m.start() - _DANGER_WINDOW)
-                end = min(len(llm_output), m.end() + _DANGER_WINDOW)
-                context = llm_output[start:end]
-                danger = _DANGER_PATTERNS.search(context)
-                if danger:
-                    warnings.append(
-                        f"Pseudonym '{code}' near danger pattern "
-                        f"'{danger.group()}' — possible exfiltration"
-                    )
-                    break  # one warning per pseudonym is enough
-
-    # Check 3: reserved-range amplification (realistic mode). Counts only —
-    # specific values are not enumerated to keep this O(n) over text length.
-    redacted_hits = scan_for_pollution(redacted)
-    output_hits = scan_for_pollution(llm_output)
-    if len(output_hits) > len(redacted_hits):
-        delta = len(output_hits) - len(redacted_hits)
-        warnings.append(
-            f"LLM output contains {delta} additional reserved-range value(s) not in input — "
-            f"possible hallucination or fabrication"
-        )
-
-    return warnings
+    from argus_redact._core import check_restore_safety as _rust_check
+    return _rust_check(redacted, llm_output, key)
 
 
 def wipe_key(key: dict) -> None:

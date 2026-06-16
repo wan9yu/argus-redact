@@ -86,6 +86,48 @@ fn shared_data() -> &'static SharedFakerData {
     })
 }
 
+// ── Public pool accessors (used by reserved_range.rs scanner) ───────────────
+
+/// Reserved zh person names pool (order-preserving).
+pub fn reserved_person_names_zh() -> &'static [String] {
+    &zh_data().reserved_person_names
+}
+
+/// Reserved en person names pool.
+pub fn reserved_person_names_en() -> &'static [String] {
+    &en_data().reserved_person_names_en
+}
+
+/// Reserved en addresses pool.
+pub fn reserved_addresses_en() -> &'static [String] {
+    &en_data().reserved_addresses_en
+}
+
+/// Reserved city/district tuples: `(city, district, streets)`.
+pub fn reserved_cities_zh() -> &'static [(String, String, Vec<String>)] {
+    &zh_data().reserved_cities
+}
+
+/// HKID reserved letter (single char, e.g. `"Z"`).
+pub fn hkid_reserved_letter() -> &'static str {
+    &zh_data().hkid_reserved_letter
+}
+
+/// TWID reserved letter (single char, e.g. `"W"`).
+pub fn twid_reserved_letter() -> &'static str {
+    &zh_data().twid_reserved_letter
+}
+
+/// Macau ID reserved lead digit (single char, e.g. `"9"`).
+pub fn macau_reserved_lead() -> &'static str {
+    &zh_data().macau_reserved_lead
+}
+
+/// Taiwan ARC reserved prefix (e.g. `"WW"`).
+pub fn twarc_reserved_prefix() -> &'static str {
+    &zh_data().twarc_reserved_prefix
+}
+
 /// The faker function signature: `(original_value, rng) -> (fake, aliases)`.
 pub type FakerFn = fn(&str, &mut ShakeRng) -> (String, Vec<String>);
 

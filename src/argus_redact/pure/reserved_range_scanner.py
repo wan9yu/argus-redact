@@ -8,11 +8,15 @@ The categorical patterns (person, address) are derived from the canonical
 fake-data tables in ``specs/fakers_zh_reserved`` so that a new entry there
 cannot drift out of the scanner. The numeric patterns (phone/id/bank/...)
 encode the documented reserved sub-ranges directly.
+
+Implementation note: ``scan_for_pollution`` is implemented in Rust
+(``argus-redact-core``) and exposed via the ``_core`` extension module. This
+module is a thin wrapper that preserves the original public API, including the
+``_RESERVED_RANGE_PATTERNS`` dict used by architecture drift tests.
 """
 
 from __future__ import annotations
 
-import functools
 import re
 
 from argus_redact.specs.fakers_en_reserved import (
@@ -34,6 +38,8 @@ _RESERVED_ADDRESS_DISTRICTS = sorted({district for _, district, _ in RESERVED_CI
 
 # Patterns for each reserved-range value type. Names are used as group labels
 # and exposed via ``scan_for_pollution()`` return values.
+# Also exported for use by architecture drift tests (test_realistic_drift.py,
+# test_faker_in_reserved_range.py) which inspect raw pattern strings.
 _RESERVED_RANGE_PATTERNS = {
     # zh
     "phone_zh": r"(?<!\d)19999\d{6}(?!\d)",
@@ -61,27 +67,6 @@ _RESERVED_RANGE_PATTERNS = {
     "mac_shared": r"(?<![0-9A-Fa-f:])00:00:5E:00:53:[0-9A-Fa-f]{2}(?![0-9A-Fa-f:])",
 }
 
-_COMBINED = re.compile("|".join(f"(?P<{k}>{v})" for k, v in _RESERVED_RANGE_PATTERNS.items()))
-
-
-@functools.lru_cache(maxsize=32)
-def _build_combined_with_overrides(overrides: tuple[tuple[str, tuple[str, ...]], ...]) -> re.Pattern:
-    """Build the combined regex with per-type overrides; cached on hashable input.
-
-    Empty tuple for a type means "drop that type entirely from the alternation".
-    """
-    overrides_dict = dict(overrides)
-    patterns = {}
-    for type_name, default_pattern in _RESERVED_RANGE_PATTERNS.items():
-        if type_name in overrides_dict:
-            names = overrides_dict[type_name]
-            if not names:
-                continue  # disabled — drop from alternation
-            patterns[type_name] = "|".join(re.escape(n) for n in names)
-        else:
-            patterns[type_name] = default_pattern
-    return re.compile("|".join(f"(?P<{k}>{v})" for k, v in patterns.items()))
-
 
 def scan_for_pollution(
     text: str,
@@ -95,9 +80,11 @@ def scan_for_pollution(
     legitimately contain names like 张三 / John Doe that match the defaults).
     The default singleton regex is bypassed only when this argument is provided.
     """
-    if reserved_names is None:
-        return [(m.start(), m.end(), m.lastgroup) for m in _COMBINED.finditer(text)]
-    # Convert to hashable form; cache per unique override shape.
-    overrides = tuple(sorted((k, tuple(v)) for k, v in reserved_names.items()))
-    combined = _build_combined_with_overrides(overrides)
-    return [(m.start(), m.end(), m.lastgroup) for m in combined.finditer(text)]
+    from argus_redact._core import scan_for_pollution as _rust_scan
+
+    # Convert tuple values to lists for Rust (Vec<String>).
+    overrides: dict[str, list[str]] | None = None
+    if reserved_names is not None:
+        overrides = {k: list(v) for k, v in reserved_names.items()}
+
+    return _rust_scan(text, overrides)
