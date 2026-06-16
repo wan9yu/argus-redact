@@ -3,6 +3,7 @@ name             = "argus-redact-core"
 description      = "PII detection and redaction primitives — pure Rust core"
 keywords         = ["pii", "redaction", "privacy"]
 categories       = ["text-processing"]
+readme           = "README.md"
 version.workspace      = true
 edition.workspace      = true
 rust-version.workspace = true
