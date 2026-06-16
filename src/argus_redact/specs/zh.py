@@ -1,17 +1,11 @@
 """Chinese PII type definitions.
 
-Each register() call defines a PII type AND attaches its regex pattern(s)
-via the _patterns field. build_patterns() collects all of them into a single
-list that can replace the hand-written PATTERNS in lang/zh/patterns.py.
+Each register() call defines a PII type with its rich metadata (format,
+checksum prose, sensitivity, examples, fakers, ...). The Layer-1 regex and
+validators live in the Rust core (SSOT); PIITypeDef.to_patterns() derives the
+pattern dict(s) from there. build_patterns() collects all of them into a single
+list mirroring the runtime pattern set.
 """
-
-from argus_redact.lang.zh.patterns import (
-    _validate_bank_card,
-    _validate_credit_code,
-    _validate_hkid,
-    _validate_id_number,
-    _validate_twid,
-)
 
 from .fakers_numeric import fake_age_noise, fake_date_of_birth_noise
 from .fakers_zh_real import (
@@ -76,15 +70,6 @@ register(
             "1381234567",
             "138123456789",
         ),
-        _patterns=(
-            {
-                "type": "phone",
-                "label": "[手机号已脱敏]",
-                "pattern": r"(?<!\d)(?:\+86)?1[3-9]\d(?:[\s-]?\d){8}(?!\d)",
-                "check_context": True,
-                "description": "Chinese mobile phone number (with optional spaces/dashes)",
-            },
-        ),
         sensitivity=3,
         faker=fake_phone,
         faker_reserved=fake_phone_reserved,
@@ -116,14 +101,6 @@ register(
             "075512345678",
         ),
         counterexamples=(),
-        _patterns=(
-            {
-                "type": "phone",
-                "label": "[电话号已脱敏]",
-                "pattern": r"(?<!\d)0[1-9]\d{1,2}-?\d{7,8}(?!\d)",
-                "description": "Chinese landline phone number",
-            },
-        ),
         sensitivity=3,
         faker=fake_phone_landline,
         faker_reserved=fake_phone_landline_reserved,
@@ -148,7 +125,6 @@ register(
             "check": "1 char — MOD 11-2 checksum, 0-9 or X",
         },
         checksum="MOD 11-2",
-        validate=_validate_id_number,
         prefixes=("身份证", "证件号", "身份证号", "身份证号码", "证件号码"),
         separators=("", " "),
         strategy="remove",
@@ -162,19 +138,6 @@ register(
             "110101199003071235",  # checksum invalid
             "110101199013074610",  # month 13 invalid
             "000000199003074610",  # region 000000 invalid
-        ),
-        _patterns=(
-            {
-                "type": "id_number",
-                "label": "[身份证号已脱敏]",
-                "pattern": (
-                    r"(?<!\d)[1-9]\d{5}\s?(?:19|20)\d{2}"
-                    r"(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])"
-                    r"\s?\d{3}[\dXx](?!\d)"
-                ),
-                "validate": _validate_id_number,
-                "description": "Chinese 18-digit national ID (MOD 11-2, optional spaces)",
-            },
         ),
         sensitivity=4,
         faker=fake_id_number,
@@ -194,20 +157,10 @@ register(
         length=(9, 11),
         charset="alpha + digits + parens",
         checksum="HKID mod-11",
-        validate=_validate_hkid,
         strategy="remove",
         label="[HKID-REDACTED]",
         examples=("A123456(9)", "Z684325(1)", "WX123456(8)"),
         counterexamples=("A123456(0)", "A12345(7)", "1A12345(7)"),
-        _patterns=(
-            {
-                "type": "hk_id",
-                "label": "[HKID-REDACTED]",
-                "pattern": r"(?<![A-Z])[A-Z]{1,2}\d{6}\((?:\d|X)\)",
-                "validate": _validate_hkid,
-                "description": "Hong Kong Identity Card (1-2 letter + 6 digit + parenthesized check, mod-11)",
-            },
-        ),
         sensitivity=4,
         faker_reserved=fake_hkid_reserved,
         source="Hong Kong Immigration Department; Wikipedia HKID",
@@ -225,20 +178,10 @@ register(
         length=10,
         charset="alpha + digits",
         checksum="TWID weighted mod-10",
-        validate=_validate_twid,
         strategy="remove",
         label="[TWID-REDACTED]",
         examples=("A123456789", "B142536472", "F131011128"),
         counterexamples=("A123456780", "A12345678", "1A12345678"),
-        _patterns=(
-            {
-                "type": "tw_id",
-                "label": "[TWID-REDACTED]",
-                "pattern": r"(?<![A-Za-z0-9])[A-Z]\d{9}(?!\d)",
-                "validate": _validate_twid,
-                "description": "Taiwan (ROC) national ID (1 letter + 9 digits, weighted mod-10)",
-            },
-        ),
         sensitivity=4,
         faker_reserved=fake_twid_reserved,
         source="ROC household registration; Wikipedia ROC ID",
@@ -259,14 +202,6 @@ register(
         label="[MACAU-ID-REDACTED]",
         examples=("1/234567/8", "5/123456/0", "7/000001/2"),
         counterexamples=("0/234567/8", "1/234567"),
-        _patterns=(
-            {
-                "type": "macau_id",
-                "label": "[MACAU-ID-REDACTED]",
-                "pattern": r"(?<!\d)[1-9]/\d{6}/\d(?!\d)",
-                "description": "Macau Resident ID Card — format-only (no public check-digit algorithm)",
-            },
-        ),
         sensitivity=4,
         faker_reserved=fake_macau_id_reserved,
         source="Macau Identification Services Bureau",
@@ -287,14 +222,6 @@ register(
         label="[ARC-REDACTED]",
         examples=("AB12345678", "AC98765432", "WX00000001"),
         counterexamples=("A123456789", "AB1234567"),
-        _patterns=(
-            {
-                "type": "taiwan_arc",
-                "label": "[ARC-REDACTED]",
-                "pattern": r"(?<![A-Za-z0-9])[A-Z]{2}\d{8}(?!\d)",
-                "description": "Taiwan Alien Resident Certificate (post-2020 LL+8-digit format)",
-            },
-        ),
         sensitivity=4,
         faker_reserved=fake_taiwan_arc_reserved,
         source="ROC National Immigration Agency",
@@ -336,22 +263,6 @@ register(
             "回乡证H12345678",         # H 前缀属于另一类型，绝不能命中此类型
             "订单号C12345678",         # 干扰前缀
         ),
-        _patterns=(
-            {
-                "type": "eep",
-                "label": "[往来港澳通行证已脱敏]",
-                "pattern": (
-                    r"(?:(?:中华人民共和国)?(?:电子)?往来港澳通行证(?:号码?)?"
-                    r"|港澳通行证(?:号码?)?|双程证(?:号码?)?|EEP)"
-                    r"\s*(?:[:：是为]?\s*)"
-                    r"(?P<eep>C(?:[0-9]{8}|[A-HJ-NP-Z][0-9]{7}))"
-                    r"(?!\w)"
-                ),
-                "group": "eep",
-                "check_context": True,
-                "description": "EEP (往来港澳通行证) — C-prefix, 9 chars, no public checksum, anchor-required",
-            },
-        ),
         sensitivity=4,
         source="国家移民管理局《出入境证件简明手册》; 电子往来港澳通行证号码编制规则调整公告(2018)",
         description="往来港澳通行证 (Exit-Entry Permit for Travelling to/from HK and Macao, EEP) — 大陆居民赴港澳；C 前缀；无公开校验；须上下文锚点",
@@ -390,22 +301,6 @@ register(
             "往来港澳通行证C12345678",  # C 前缀属于另一类型，绝不能命中此类型
             "型号H12345678",          # 干扰前缀
         ),
-        _patterns=(
-            {
-                "type": "hrp",
-                "label": "[回乡证已脱敏]",
-                "pattern": (
-                    r"(?:港澳居民来往内地通行证(?:号码?)?|来往内地通行证(?:号码?)?"
-                    r"|回乡证(?:号码?)?|回乡卡|Home\s*Return\s*Permit)"
-                    r"\s*(?:[:：是为]?\s*)"
-                    r"(?P<hrp>[HM]\d{8}(?:\d{2})?)"
-                    r"(?!\d)"
-                ),
-                "group": "hrp",
-                "check_context": True,
-                "description": "HRP (港澳居民来往内地通行证/回乡证) — H/M-prefix, 9(+2) digits, no public checksum, anchor-required",
-            },
-        ),
         sensitivity=4,
         source="公安部《关于启用新版港澳居民来往内地通行证的公告》; 国家移民管理局《出入境证件简明手册》",
         description="港澳居民来往内地通行证 (Mainland Travel Permit for HK/Macao Residents / Home Return Permit / 回乡证) — 港澳居民来大陆；H/M 前缀；无公开校验；须上下文锚点",
@@ -435,21 +330,6 @@ register(
             "110123456789",   # 无锚点裸数字 -> 不应命中
             "公积金余额12000",  # 余额/金额，不是账号
         ),
-        _patterns=(
-            {
-                "type": "housing_fund",
-                "label": "[公积金账号已脱敏]",
-                "pattern": (
-                    r"(?:住房公积金|公积金)(?:账号码?|账户|帐号码?|帐户)"
-                    r"\s*(?:[:：是为]?\s*)"
-                    r"(?P<housing_fund>[0-9]{6,20})"
-                    r"(?!\d)"
-                ),
-                "group": "housing_fund",
-                "check_context": True,
-                "description": "Housing provident fund account — no national format, anchor-required, digits only",
-            },
-        ),
         sensitivity=3,
         source="《住房公积金管理条例》（国务院令第350号）— 账号格式由各地公积金管理中心自定，无全国统一标准",
         description="住房公积金账号 (housing provident fund account) — 各城市格式不统一，无全国标准，无公开校验；须上下文锚点。理由是格式无全国标准，不是因为未来归集身份证号。",
@@ -471,7 +351,6 @@ register(
             "check": "1 digit — Luhn checksum (not always enforced by all issuers)",
         },
         checksum="Luhn (or BIN prefix)",
-        validate=_validate_bank_card,
         prefixes=("银行卡", "卡号", "银行卡号", "转账", "打钱"),
         separators=("", " "),
         strategy="mask",
@@ -483,16 +362,6 @@ register(
             "4111111111111111",
         ),
         counterexamples=("1234567890123456",),
-        _patterns=(
-            {
-                "type": "bank_card",
-                "label": "[银行卡号已脱敏]",
-                "pattern": r"(?<!\d)[3-6]\d{15,18}(?!\d)",
-                "validate": _validate_bank_card,
-                "check_context": True,
-                "description": "Bank card number (16-19 digits, Luhn or BIN prefix)",
-            },
-        ),
         sensitivity=4,
         faker=fake_bank_card,
         faker_reserved=fake_bank_card_reserved,
@@ -523,7 +392,6 @@ register(
             "护照G87654321",
         ),
         counterexamples=("编号G12345678的订单",),
-        _patterns=(),
         sensitivity=3,
         faker=fake_passport,
         faker_reserved=fake_passport_reserved,
@@ -557,19 +425,6 @@ register(
             "沪A12345F",
         ),
         counterexamples=(),
-        _patterns=(
-            {
-                "type": "license_plate",
-                "label": "[车牌号已脱敏]",
-                "pattern": (
-                    r"[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼宁]"
-                    r"[A-Z]"
-                    r"[·.]?"
-                    r"[A-Z0-9]{5,6}"
-                ),
-                "description": "Chinese license plate (normal + new energy)",
-            },
-        ),
         sensitivity=2,
         faker=fake_license_plate,
         faker_reserved=fake_license_plate_reserved,
@@ -607,47 +462,6 @@ register(
             "北京",
             "今天天气不错",
         ),
-        _patterns=(
-            {
-                "type": "address",
-                "label": "[地址已脱敏]",
-                "pattern": (
-                    r"(?:"
-                    r"(?:(?:河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|"
-                    r"河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海|台湾)省|"
-                    r"(?:内蒙古|广西|西藏|宁夏|新疆)(?:自治区)?)"
-                    r"[\u4e00-\u9fff]{2,6}(?:市|州)"
-                    r"|"
-                    r"(?:(?<![一-龥])(?:北京市|天津市|上海市|重庆市|[\u4e00-\u9fff]{2,5}(?:市|州)))"
-                    r")"
-                    r"[\u4e00-\u9fff]{1,8}(?:区|县|市|旗|新区)"
-                    r"[\u4e00-\u9fff]{1,20}(?:路|街|道|巷|里|弄|村)"
-                    r"(?:\d{1,5}(?:号|弄))?"
-                    r"(?:\d{1,3}(?:栋|幢|楼|座))?"
-                    r"(?:\d{1,4}(?:室|房))?"
-                ),
-                "description": "Chinese structured address (city+district+street+number)",
-            },
-            {
-                "type": "address",
-                "label": "[地址已脱敏]",
-                "pattern": (
-                    r"(?:朝阳|海淀|东城|西城|丰台|通州|大兴|昌平|顺义|房山|"
-                    r"浦东|黄浦|徐汇|静安|长宁|虹口|杨浦|闵行|宝山|嘉定|"
-                    r"天河|越秀|海珠|白云|番禺|荔湾|黄埔|花都|增城|从化|"
-                    r"南山|福田|罗湖|宝安|龙岗|龙华|盐田|坪山|光明|"
-                    r"西湖|上城|拱墅|滨江|萧山|余杭|临平|钱塘|富阳|"
-                    r"武侯|锦江|青羊|金牛|成华|龙泉驿|新都|温江|双流|"
-                    r"鼓楼|玄武|建邺|秦淮|栖霞|江宁|雨花台|浦口|六合|"
-                    r"武昌|洪山|江汉|汉阳|青山|江岸|硚口|东西湖|蔡甸)"
-                    r"[\u4e00-\u9fff]{1,20}(?:路|街|道|大道|大街)"
-                    r"(?:\d{1,5}(?:号|弄))?"
-                    r"(?:\d{1,3}(?:栋|幢|楼|座))?"
-                    r"(?:\d{1,4}(?:室|房))?"
-                ),
-                "description": "Informal Chinese address (district+street, no city prefix)",
-            },
-        ),
         sensitivity=2,
         faker=fake_address,
         faker_reserved=fake_address_reserved,
@@ -672,7 +486,6 @@ register(
             "check": "1 char — MOD 31 checksum",
         },
         checksum="MOD 31",
-        validate=_validate_credit_code,
         prefixes=("统一社会信用代码", "信用代码", "营业执照", "企业代码", "组织机构代码"),
         strategy="remove",
         label="[信用代码已脱敏]",
@@ -681,15 +494,6 @@ register(
             "52100000500000784G",
         ),
         counterexamples=("91110108MA01YBNX6A",),
-        _patterns=(
-            {
-                "type": "credit_code",
-                "label": "[信用代码已脱敏]",
-                "pattern": r"(?<![A-Za-z0-9])[0-9A-HJ-NP-RTUW-Ya-hj-np-rtuw-y]{2}\d{6}[0-9A-HJ-NP-RTUW-Ya-hj-np-rtuw-y]{10}(?![A-Za-z0-9])",
-                "validate": _validate_credit_code,
-                "description": "Unified Social Credit Code (GB 32100-2015, MOD 31)",
-            },
-        ),
         sensitivity=3,
         faker=fake_credit_code,
         source="GB 32100-2015《法人和其他组织统一社会信用代码编码规则》",
@@ -722,15 +526,6 @@ register(
             "1234",
             "0123456",
         ),
-        _patterns=(
-            {
-                "type": "qq",
-                "label": "[QQ号已脱敏]",
-                "pattern": r"[Qq]{2}\s*(?:[:：是]?\s*)(?P<qq>[1-9]\d{4,11})(?!\d)",
-                "group": "qq",
-                "description": "QQ number (5-12 digits, requires QQ keyword context)",
-            },
-        ),
         sensitivity=2,
         faker=fake_qq,
         source="腾讯QQ号码规则",
@@ -761,18 +556,6 @@ register(
         counterexamples=(
             "123abc",
             "abcde",
-        ),
-        _patterns=(
-            {
-                "type": "wechat",
-                "label": "[微信号已脱敏]",
-                "pattern": (
-                    r"(?:微信|wx|WeChat|wechat)\s*(?:号)?\s*[:：]?\s*"
-                    r"(?P<wechat>[a-zA-Z][a-zA-Z0-9_\-]{5,19})"
-                ),
-                "group": "wechat",
-                "description": "WeChat ID (letter-start, 6-20 chars, requires keyword context)",
-            },
         ),
         sensitivity=2,
         faker=fake_wechat,
@@ -809,26 +592,6 @@ register(
             "2024年3月7日开会",
             "会议时间2024-03-07",
         ),
-        _patterns=(
-            {
-                "type": "date_of_birth",
-                "label": "[出生日期已脱敏]",
-                "pattern": (
-                    r"(?:出生日期|出生|生日|生于|born)\s*(?:[:：是]?\s*)"
-                    r"(?P<date_of_birth>"
-                    r"(?:(?:19|20)\d{2}|[0-9]{2})年(?:0?[1-9]|1[0-2])月(?:(?:0?[1-9]|[12]\d|3[01])(?:日|号))?"
-                    r"|"
-                    r"(?:十[一二]|[一二三四五六七八九十])月(?:(?:二?十)?[一二三四五六七八九](?:日|号))?"
-                    r"|"
-                    r"(?:19|20)\d{2}[-/.](?:0[1-9]|1[0-2])[-/.](?:0[1-9]|[12]\d|3[01])"
-                    r"|"
-                    r"(?:0[1-9]|1[0-2])/(?:0[1-9]|[12]\d|3[01])/(?:19|20)\d{2}"
-                    r")"
-                ),
-                "group": "date_of_birth",
-                "description": "Chinese date of birth (keyword-triggered, multiple formats)",
-            },
-        ),
         sensitivity=2,
         faker=fake_date_of_birth,
         faker_reserved=fake_date_of_birth_noise,
@@ -860,19 +623,6 @@ register(
             "士兵证号12345678",
         ),
         counterexamples=("军字第1234567号",),
-        _patterns=(
-            {
-                "type": "military_id",
-                "label": "[军官证号已脱敏]",
-                "pattern": (
-                    r"(?:军字第|武字第|士兵证号?|义务兵证号?)\s*"
-                    r"(?P<military_id>\d{8})"
-                    r"(?:号)?"
-                ),
-                "group": "military_id",
-                "description": "Chinese military ID number (keyword-triggered, 8 digits)",
-            },
-        ),
         sensitivity=3,
         faker=fake_military_id,
         source="中国人民解放军军官证管理规定",
@@ -902,21 +652,6 @@ register(
             "社保卡号：A12345678",
         ),
         counterexamples=("110101199003074610",),
-        _patterns=(
-            {
-                "type": "social_security",
-                "label": "[社保号已脱敏]",
-                "pattern": (
-                    r"(?:社保号|社保卡号|社会保障号)\s*(?:[:：]?\s*)"
-                    r"(?P<social_security>"
-                    r"[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]"
-                    r"|[A-Z]\d{8,12}"
-                    r")"
-                ),
-                "group": "social_security",
-                "description": "Chinese social security number (18-digit ID or city-specific format, keyword-triggered)",
-            },
-        ),
         sensitivity=4,
         faker=fake_social_security,
         source="人力资源和社会保障部社保卡管理规定",
@@ -938,7 +673,6 @@ register(
         label="[职务已脱敏]",
         examples=("项目经理说", "骨科医生建议", "张董事长出席"),
         counterexamples=("今天天气不错",),
-        _patterns=(),
         sensitivity=2,
         source="常用中文职务名称",
         description="Chinese job title (suffix-based detection)",
@@ -957,7 +691,6 @@ register(
         label="[机构已脱敏]",
         examples=("腾讯计算机系统有限公司", "阿里巴巴集团", "北京协和医院"),
         counterexamples=("去公司上班",),
-        _patterns=(),
         sensitivity=2,
         source="中国法人组织命名规则",
         description="Chinese organization name (CJK prefix + legal/industry suffix)",
@@ -976,7 +709,6 @@ register(
         label="[学校已脱敏]",
         examples=("计算机学院很好", "人大附中的学生", "实验小学报名"),
         counterexamples=("上大学很重要",),
-        _patterns=(),
         sensitivity=2,
         source="中国教育机构命名规则",
         description="Chinese school name (CJK prefix + educational suffix)",
@@ -995,7 +727,6 @@ register(
         label="[民族已脱敏]",
         examples=("民族：汉族", "他是藏族"),
         counterexamples=("家族企业",),
-        _patterns=(),
         sensitivity=3,
         source="中华人民共和国民族区域自治法",
         description="Chinese ethnicity (56 ethnic groups)",
@@ -1014,7 +745,6 @@ register(
         label="[工作单位已脱敏]",
         examples=("工作单位：中国电信", "就职于华为技术"),
         counterexamples=("在华为工作",),
-        _patterns=(),
         sensitivity=2,
         source="个人信息登记表常见字段",
         description="Chinese workplace (keyword-triggered)",
@@ -1035,7 +765,6 @@ register(
         label="[犯罪记录已脱敏]",
         examples=("此人有前科", "被判刑三年", "他有犯罪记录"),
         counterexamples=("今天天气不错",),
-        _patterns=(),
         sensitivity=4,
         source="PIPL Art.28/51 敏感个人信息",
         description="Criminal record (explicit keywords)",
@@ -1054,7 +783,6 @@ register(
         label="[财务信息已脱敏]",
         examples=("月薪2万元", "年收入50万", "信用评分680分"),
         counterexamples=("这个项目投资500万",),
-        _patterns=(),
         sensitivity=3,
         source="PIPL Art.28/51 敏感个人信息",
         description="Financial info (salary/debt/credit score with amounts)",
@@ -1073,7 +801,6 @@ register(
         label="[生物特征已脱敏]",
         examples=("已采集指纹信息", "DNA检测结果", "人脸识别通过"),
         counterexamples=("今天天气不错",),
-        _patterns=(),
         sensitivity=4,
         source="PIPL Art.28/51, GB/T 45574-2025",
         description="Biometric data (fingerprint/DNA/face/iris/voiceprint)",
@@ -1092,7 +819,6 @@ register(
         label="[医疗信息已脱敏]",
         examples=("确诊糖尿病", "患有高血压", "服用阿莫西林"),
         counterexamples=("今天天气不错",),
-        _patterns=(),
         sensitivity=4,
         source="PIPL Art.28/51, HIPAA PHI",
         description="Medical/health info (diagnosis/medication/disease/surgery)",
@@ -1111,7 +837,6 @@ register(
         label="[宗教信仰已脱敏]",
         examples=("他是基督徒", "她是穆斯林", "每周做礼拜"),
         counterexamples=("今天天气不错",),
-        _patterns=(),
         sensitivity=4,
         source="PIPL Art.28/51 敏感个人信息",
         description="Religious belief (believer types/practices/declarations)",
@@ -1130,7 +855,6 @@ register(
         label="[政治观点已脱敏]",
         examples=("他是党员", "政治面貌：群众", "参加了抗议游行"),
         counterexamples=("今天天气不错",),
-        _patterns=(),
         sensitivity=4,
         source="PIPL Art.28/51 敏感个人信息",
         description="Political opinion (party membership/voting/protest)",
@@ -1149,7 +873,6 @@ register(
         label="[性取向已脱敏]",
         examples=("他是同性恋", "她是双性恋", "他已经出柜"),
         counterexamples=("各位同志们好",),
-        _patterns=(),
         sensitivity=4,
         source="PIPL Art.28/51 敏感个人信息",
         description="Sexual orientation (explicit terms)",
@@ -1170,7 +893,6 @@ register(
         label="[自称已脱敏]",
         examples=("我确诊了糖尿病", "我妈住院了", "我们公司裁员了"),
         counterexamples=("他确诊了糖尿病", "你住院了"),
-        _patterns=(),
         sensitivity=2,
         source="Privacy-by-design: first-person binds all PII to user identity",
         description="Self-reference (first-person pronouns and kinship, links PII to user)",
@@ -1261,7 +983,7 @@ register(
             "华为公司发布",
             "唐朝是中国历史",
         ),
-        _patterns=(),  # Person names are detected by lang/zh/person.py, not by regex PATTERNS
+          # Person names are detected by lang/zh/person.py, not by regex PATTERNS
         sensitivity=3,
         faker=fake_person,
         faker_reserved=fake_person_reserved,
@@ -1283,7 +1005,6 @@ register(
         label="[年龄已脱敏]",
         examples=("32岁", "年龄: 32", "32 years old"),
         counterexamples=("999岁",),
-        _patterns=(),
         sensitivity=2,
         faker_reserved=fake_age_noise,
         source="GB/T 2261.1《个人基本信息分类与代码》",

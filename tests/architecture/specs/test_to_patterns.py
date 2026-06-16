@@ -45,23 +45,21 @@ TEST_INPUTS = [
 
 
 class TestToPatterns:
-    # Types whose patterns are managed directly in zh/patterns.py, not via _patterns
+    # Since v0.7.1, PIITypeDef.to_patterns() derives from the Rust core (SSOT),
+    # filtered to the typedef's own `name`. A zh typedef therefore produces no
+    # pattern only when the core emits nothing under that name:
+    #   - person  : NER-only, no Layer-1 regex
+    #   - age     : zh has no core `age` pattern (age is a shared/core type)
+    #   - phone_landline : its core pattern is keyed under type="phone", not
+    #                      "phone_landline", so filtering by its own name is empty
+    _NO_CORE_PATTERN = {"person", "age", "phone_landline"}
+
+    # Types whose detection is exercised at the `phone`/shared level rather than
+    # under their own typedef name — excluded from the cross-pattern parity check
+    # below to keep its set arithmetic stable across the core migration.
     _PATTERNS_IN_SOURCE = {
         "person",
-        "passport",
-        "job_title",
-        "organization",
-        "school",
-        "ethnicity",
-        "workplace",
-        "criminal_record",
-        "financial",
-        "biometric",
-        "medical",
-        "religion",
-        "political",
-        "sexual_orientation",
-        "self_reference",
+        "phone_landline",
         "age",
         "email",
         "ip_address",
@@ -69,9 +67,10 @@ class TestToPatterns:
     }
 
     def test_spec_patterns_should_exist(self):
-        """Every zh spec with _patterns should produce at least one pattern."""
+        """Every zh spec that maps to a core pattern under its own name should
+        derive at least one pattern from the core."""
         for typedef in list_types("zh"):
-            if typedef.name in self._PATTERNS_IN_SOURCE:
+            if typedef.name in self._NO_CORE_PATTERN:
                 continue
             patterns = typedef.to_patterns()
             assert len(patterns) >= 1, f"{typedef.name} produced no patterns"
@@ -125,11 +124,12 @@ class TestToPatterns:
 
 
 class TestToPatternsEn:
-    """Parity test for specs/en.py — every en spec's _patterns drives detection.
+    """Parity test for specs/en.py — every en typedef derives its pattern(s)
+    from the Rust core (SSOT) via PIITypeDef.to_patterns().
 
-    Unlike zh, en has no `_PATTERNS_IN_SOURCE` allowlist: all en regex now lives
-    in specs/en.py:_patterns (v0.5.6 migration). The exception is `person`,
-    which is NER-only and intentionally has _patterns=().
+    Unlike zh, en has no `_NO_CORE_PATTERN` allowlist beyond `person`: every en
+    typedef maps to a core pattern under its own name. The exception is `person`,
+    which is NER-only and produces no core pattern.
     """
 
     _NER_ONLY = {"person"}

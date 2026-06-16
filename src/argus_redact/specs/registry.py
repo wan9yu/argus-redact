@@ -65,14 +65,14 @@ class PIITypeDef:
     description: str = ""
 
     def to_patterns(self) -> list[dict]:
-        """Return pattern dict(s) for use with match_patterns().
+        """Return the core-sourced pattern dict(s) for this type (SSOT = Rust core).
 
-        If _patterns is set, returns those directly.
-        Otherwise, returns an empty list (type needs NER or manual patterns).
+        Derived from argus_redact.lang._loader.core_patterns(self.lang), filtered to
+        this typedef's `name`. Deferred validators (jwt/organization/school) arrive
+        with their `validate` callable already re-attached by the loader.
         """
-        if self._patterns:
-            return list(self._patterns)
-        return []
+        from argus_redact.lang._loader import core_patterns
+        return [dict(p) for p in core_patterns(self.lang) if p.get("type") == self.name]
 
     @property
     def is_reversible(self) -> bool:
