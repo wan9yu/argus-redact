@@ -1,0 +1,3123 @@
+{
+  "br": {
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEDATA without closing marker": [],
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----": [
+      {
+        "end": 81,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----": [
+      {
+        "end": 69,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "192.168.1.1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "192.168.1.1",
+        "type": "ip_address"
+      }
+    ],
+    "2001:db8::1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "2001:db8::1",
+        "type": "ip_address"
+      }
+    ],
+    "999.999.999.999": [],
+    "AKIA0000TEST1234": [],
+    "AKIA0000TEST1234FAKE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIA0000TEST1234FAKE",
+        "type": "aws_access_key"
+      }
+    ],
+    "AKIAIOSFODNN7EXAMPLE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIAIOSFODNN7EXAMPLE",
+        "type": "aws_access_key"
+      }
+    ],
+    "aa:bb:cc:dd:ee:ff": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "aa:bb:cc:dd:ee:ff",
+        "type": "mac_address"
+      }
+    ],
+    "abc.def.ghi": [],
+    "akiaIOSFODNN7EXAMPLE": [],
+    "alice@example.com": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "alice@example.com",
+        "type": "email"
+      }
+    ],
+    "eyJABC.eyJDEF.GHIJKL": [
+      {
+        "end": 20,
+        "kind": "near",
+        "start": 0,
+        "text": "eyJABC.eyJDEF.GHIJKL",
+        "type": "jwt"
+      }
+    ],
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef": [
+      {
+        "end": 75,
+        "kind": "hit",
+        "start": 0,
+        "text": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef",
+        "type": "jwt"
+      }
+    ],
+    "gho_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "gho_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      },
+      {
+        "end": 38,
+        "kind": "hit",
+        "start": 27,
+        "text": "00000000000",
+        "type": "phone"
+      }
+    ],
+    "ghp_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "ghp_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      },
+      {
+        "end": 38,
+        "kind": "hit",
+        "start": 27,
+        "text": "00000000000",
+        "type": "phone"
+      }
+    ],
+    "ghp_tooshort": [],
+    "ghx_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 38,
+        "kind": "hit",
+        "start": 27,
+        "text": "00000000000",
+        "type": "phone"
+      }
+    ],
+    "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde": [
+      {
+        "end": 53,
+        "kind": "hit",
+        "start": 0,
+        "text": "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde",
+        "type": "github_token"
+      },
+      {
+        "end": 33,
+        "kind": "hit",
+        "start": 22,
+        "text": "00000000000",
+        "type": "phone"
+      }
+    ],
+    "not-a-mac": [],
+    "not-an-email": [],
+    "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ": [
+      {
+        "end": 47,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ",
+        "type": "openai_api_key"
+      },
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 7,
+        "text": "1234567890",
+        "type": "phone"
+      },
+      {
+        "end": 37,
+        "kind": "hit",
+        "start": 27,
+        "text": "1234567890",
+        "type": "phone"
+      }
+    ],
+    "sk-ant-TEST0000000000000000000000000000000000fakekey": [
+      {
+        "end": 52,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-TEST0000000000000000000000000000000000fakekey",
+        "type": "anthropic_api_key"
+      },
+      {
+        "end": 45,
+        "kind": "hit",
+        "start": 34,
+        "text": "00000000000",
+        "type": "phone"
+      }
+    ],
+    "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij": [
+      {
+        "end": 55,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij",
+        "type": "anthropic_api_key"
+      },
+      {
+        "end": 45,
+        "kind": "hit",
+        "start": 34,
+        "text": "00000000000",
+        "type": "phone"
+      }
+    ],
+    "sk-ant-shortone": [],
+    "sk-anthropic-TEST000000000000000000000000000": [
+      {
+        "end": 44,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-anthropic-TEST000000000000000000000000000",
+        "type": "openai_api_key"
+      },
+      {
+        "end": 44,
+        "kind": "hit",
+        "start": 33,
+        "text": "00000000000",
+        "type": "phone"
+      }
+    ],
+    "sk-proj-FAKE00000000000000000000000000000000000001test": [
+      {
+        "end": 54,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-proj-FAKE00000000000000000000000000000000000001test",
+        "type": "openai_api_key"
+      },
+      {
+        "end": 50,
+        "kind": "hit",
+        "start": 39,
+        "text": "00000000001",
+        "type": "phone"
+      }
+    ],
+    "sk-short123": [],
+    "用户@example.org": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 0,
+        "text": "用户@example.org",
+        "type": "email"
+      }
+    ]
+  },
+  "de": {
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEDATA without closing marker": [],
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----": [
+      {
+        "end": 81,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----": [
+      {
+        "end": 69,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "192.168.1.1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "192.168.1.1",
+        "type": "ip_address"
+      }
+    ],
+    "2001:db8::1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "2001:db8::1",
+        "type": "ip_address"
+      }
+    ],
+    "999.999.999.999": [],
+    "AKIA0000TEST1234": [],
+    "AKIA0000TEST1234FAKE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIA0000TEST1234FAKE",
+        "type": "aws_access_key"
+      }
+    ],
+    "AKIAIOSFODNN7EXAMPLE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIAIOSFODNN7EXAMPLE",
+        "type": "aws_access_key"
+      }
+    ],
+    "aa:bb:cc:dd:ee:ff": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "aa:bb:cc:dd:ee:ff",
+        "type": "mac_address"
+      }
+    ],
+    "abc.def.ghi": [],
+    "akiaIOSFODNN7EXAMPLE": [],
+    "alice@example.com": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "alice@example.com",
+        "type": "email"
+      }
+    ],
+    "eyJABC.eyJDEF.GHIJKL": [
+      {
+        "end": 20,
+        "kind": "near",
+        "start": 0,
+        "text": "eyJABC.eyJDEF.GHIJKL",
+        "type": "jwt"
+      }
+    ],
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef": [
+      {
+        "end": 75,
+        "kind": "hit",
+        "start": 0,
+        "text": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef",
+        "type": "jwt"
+      }
+    ],
+    "gho_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "gho_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      }
+    ],
+    "ghp_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "ghp_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      }
+    ],
+    "ghp_tooshort": [],
+    "ghx_0000000000000000000000000000000000FAKE": [],
+    "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde": [
+      {
+        "end": 53,
+        "kind": "hit",
+        "start": 0,
+        "text": "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde",
+        "type": "github_token"
+      }
+    ],
+    "not-a-mac": [],
+    "not-an-email": [],
+    "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ": [
+      {
+        "end": 47,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-ant-TEST0000000000000000000000000000000000fakekey": [
+      {
+        "end": 52,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-TEST0000000000000000000000000000000000fakekey",
+        "type": "anthropic_api_key"
+      }
+    ],
+    "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij": [
+      {
+        "end": 55,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij",
+        "type": "anthropic_api_key"
+      }
+    ],
+    "sk-ant-shortone": [],
+    "sk-anthropic-TEST000000000000000000000000000": [
+      {
+        "end": 44,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-anthropic-TEST000000000000000000000000000",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-proj-FAKE00000000000000000000000000000000000001test": [
+      {
+        "end": 54,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-proj-FAKE00000000000000000000000000000000000001test",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-short123": [],
+    "用户@example.org": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 0,
+        "text": "用户@example.org",
+        "type": "email"
+      }
+    ]
+  },
+  "en": {
+    "$5 coffee": [],
+    "(415) 555-1234": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 0,
+        "text": "(415) 555-1234",
+        "type": "phone"
+      }
+    ],
+    "+1-415-555-1234": [
+      {
+        "end": 15,
+        "kind": "hit",
+        "start": 0,
+        "text": "+1-415-555-1234",
+        "type": "phone"
+      }
+    ],
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEDATA without closing marker": [],
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----": [
+      {
+        "end": 81,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----": [
+      {
+        "end": 69,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "000-12-3456": [
+      {
+        "end": 11,
+        "kind": "near",
+        "start": 0,
+        "text": "000-12-3456",
+        "type": "ssn"
+      }
+    ],
+    "123-45-6789": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "123-45-6789",
+        "type": "ssn"
+      }
+    ],
+    "1234 Main St, Anytown, USA": [
+      {
+        "end": 12,
+        "kind": "hit",
+        "start": 0,
+        "text": "1234 Main St",
+        "type": "address"
+      }
+    ],
+    "1234567890123456": [],
+    "192.168.1.1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "192.168.1.1",
+        "type": "ip_address"
+      }
+    ],
+    "2001:db8::1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "2001:db8::1",
+        "type": "ip_address"
+      }
+    ],
+    "4111111111111111": [
+      {
+        "end": 16,
+        "kind": "hit",
+        "start": 0,
+        "text": "4111111111111111",
+        "type": "credit_card"
+      }
+    ],
+    "666-12-3456": [
+      {
+        "end": 11,
+        "kind": "near",
+        "start": 0,
+        "text": "666-12-3456",
+        "type": "ssn"
+      }
+    ],
+    "999-12-3456": [
+      {
+        "end": 11,
+        "kind": "near",
+        "start": 0,
+        "text": "999-12-3456",
+        "type": "ssn"
+      }
+    ],
+    "999.999.999.999": [],
+    "AKIA0000TEST1234": [],
+    "AKIA0000TEST1234FAKE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIA0000TEST1234FAKE",
+        "type": "aws_access_key"
+      }
+    ],
+    "AKIAIOSFODNN7EXAMPLE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIAIOSFODNN7EXAMPLE",
+        "type": "aws_access_key"
+      }
+    ],
+    "Born on March 5, 1985": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 8,
+        "text": "March ",
+        "type": "political"
+      }
+    ],
+    "Catholic": [
+      {
+        "end": 8,
+        "kind": "hit",
+        "start": 0,
+        "text": "Catholic",
+        "type": "religion"
+      }
+    ],
+    "Christian Bale": [
+      {
+        "end": 9,
+        "kind": "hit",
+        "start": 0,
+        "text": "Christian",
+        "type": "religion"
+      }
+    ],
+    "DNA sample": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "DNA sample",
+        "type": "biometric"
+      }
+    ],
+    "DOB: 01/15/1990": [
+      {
+        "end": 15,
+        "kind": "hit",
+        "start": 5,
+        "text": "01/15/1990",
+        "type": "date_of_birth"
+      }
+    ],
+    "HIV positive": [
+      {
+        "end": 12,
+        "kind": "hit",
+        "start": 0,
+        "text": "HIV positive",
+        "type": "medical"
+      }
+    ],
+    "I": [
+      {
+        "end": 1,
+        "kind": "hit",
+        "start": 0,
+        "text": "I",
+        "type": "self_reference"
+      }
+    ],
+    "John Smith": [],
+    "Mary Johnson": [],
+    "Passport: A12345678": [
+      {
+        "end": 19,
+        "kind": "hit",
+        "start": 10,
+        "text": "A12345678",
+        "type": "us_passport"
+      }
+    ],
+    "aa:bb:cc:dd:ee:ff": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "aa:bb:cc:dd:ee:ff",
+        "type": "mac_address"
+      }
+    ],
+    "abc.def.ghi": [],
+    "akiaIOSFODNN7EXAMPLE": [],
+    "alice@example.com": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "alice@example.com",
+        "type": "email"
+      }
+    ],
+    "biometric class": [],
+    "came out": [
+      {
+        "end": 8,
+        "kind": "hit",
+        "start": 0,
+        "text": "came out",
+        "type": "sexual_orientation"
+      }
+    ],
+    "convicted of fraud": [
+      {
+        "end": 18,
+        "kind": "hit",
+        "start": 0,
+        "text": "convicted of fraud",
+        "type": "criminal_record"
+      }
+    ],
+    "credit score 720": [
+      {
+        "end": 16,
+        "kind": "hit",
+        "start": 0,
+        "text": "credit score 720",
+        "type": "financial"
+      }
+    ],
+    "criminal justice major": [],
+    "diagnosed with diabetes": [
+      {
+        "end": 23,
+        "kind": "hit",
+        "start": 15,
+        "text": "diabetes",
+        "type": "medical"
+      },
+      {
+        "end": 23,
+        "kind": "hit",
+        "start": 15,
+        "text": "diabetes",
+        "type": "medical"
+      }
+    ],
+    "eyJABC.eyJDEF.GHIJKL": [
+      {
+        "end": 20,
+        "kind": "near",
+        "start": 0,
+        "text": "eyJABC.eyJDEF.GHIJKL",
+        "type": "jwt"
+      }
+    ],
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef": [
+      {
+        "end": 75,
+        "kind": "hit",
+        "start": 0,
+        "text": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef",
+        "type": "jwt"
+      }
+    ],
+    "felony record": [
+      {
+        "end": 13,
+        "kind": "hit",
+        "start": 0,
+        "text": "felony record",
+        "type": "criminal_record"
+      }
+    ],
+    "fingerprints collected": [
+      {
+        "end": 22,
+        "kind": "hit",
+        "start": 0,
+        "text": "fingerprints collected",
+        "type": "biometric"
+      }
+    ],
+    "gay": [
+      {
+        "end": 3,
+        "kind": "hit",
+        "start": 0,
+        "text": "gay",
+        "type": "sexual_orientation"
+      }
+    ],
+    "gho_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "gho_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      }
+    ],
+    "ghp_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "ghp_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      }
+    ],
+    "ghp_tooshort": [],
+    "ghx_0000000000000000000000000000000000FAKE": [],
+    "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde": [
+      {
+        "end": 53,
+        "kind": "hit",
+        "start": 0,
+        "text": "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde",
+        "type": "github_token"
+      }
+    ],
+    "halal": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 0,
+        "text": "halal",
+        "type": "religion"
+      }
+    ],
+    "just A12345678": [],
+    "just plain text": [],
+    "lesbian": [
+      {
+        "end": 7,
+        "kind": "hit",
+        "start": 0,
+        "text": "lesbian",
+        "type": "sexual_orientation"
+      }
+    ],
+    "medical school": [],
+    "my book": [
+      {
+        "end": 2,
+        "kind": "hit",
+        "start": 0,
+        "text": "my",
+        "type": "self_reference"
+      }
+    ],
+    "my husband": [
+      {
+        "end": 2,
+        "kind": "hit",
+        "start": 0,
+        "text": "my",
+        "type": "self_reference"
+      },
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "my husband",
+        "type": "self_reference"
+      }
+    ],
+    "my mother": [
+      {
+        "end": 2,
+        "kind": "hit",
+        "start": 0,
+        "text": "my",
+        "type": "self_reference"
+      },
+      {
+        "end": 9,
+        "kind": "hit",
+        "start": 0,
+        "text": "my mother",
+        "type": "self_reference"
+      }
+    ],
+    "not-a-mac": [],
+    "not-an-email": [],
+    "notaphone": [],
+    "political science": [],
+    "queer studies": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 0,
+        "text": "queer",
+        "type": "sexual_orientation"
+      }
+    ],
+    "registered Democrat": [
+      {
+        "end": 19,
+        "kind": "hit",
+        "start": 0,
+        "text": "registered Democrat",
+        "type": "political"
+      }
+    ],
+    "salary of $75,000": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 10,
+        "text": "$75,000",
+        "type": "financial"
+      }
+    ],
+    "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ": [
+      {
+        "end": 47,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ",
+        "type": "openai_api_key"
+      },
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 7,
+        "text": "1234567890",
+        "type": "phone"
+      },
+      {
+        "end": 37,
+        "kind": "hit",
+        "start": 27,
+        "text": "1234567890",
+        "type": "phone"
+      }
+    ],
+    "sk-ant-TEST0000000000000000000000000000000000fakekey": [
+      {
+        "end": 52,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-TEST0000000000000000000000000000000000fakekey",
+        "type": "anthropic_api_key"
+      }
+    ],
+    "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij": [
+      {
+        "end": 55,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij",
+        "type": "anthropic_api_key"
+      }
+    ],
+    "sk-ant-shortone": [],
+    "sk-anthropic-TEST000000000000000000000000000": [
+      {
+        "end": 44,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-anthropic-TEST000000000000000000000000000",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-proj-FAKE00000000000000000000000000000000000001test": [
+      {
+        "end": 54,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-proj-FAKE00000000000000000000000000000000000001test",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-short123": [],
+    "the cat": [],
+    "voted for Republican": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "voted for Republican",
+        "type": "political"
+      }
+    ],
+    "we": [
+      {
+        "end": 2,
+        "kind": "hit",
+        "start": 0,
+        "text": "we",
+        "type": "self_reference"
+      }
+    ],
+    "year 1990": [],
+    "用户@example.org": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 0,
+        "text": "用户@example.org",
+        "type": "email"
+      }
+    ]
+  },
+  "in": {
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEDATA without closing marker": [],
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----": [
+      {
+        "end": 81,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----": [
+      {
+        "end": 69,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "192.168.1.1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "192.168.1.1",
+        "type": "ip_address"
+      }
+    ],
+    "2001:db8::1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "2001:db8::1",
+        "type": "ip_address"
+      }
+    ],
+    "999.999.999.999": [],
+    "AKIA0000TEST1234": [],
+    "AKIA0000TEST1234FAKE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIA0000TEST1234FAKE",
+        "type": "aws_access_key"
+      }
+    ],
+    "AKIAIOSFODNN7EXAMPLE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIAIOSFODNN7EXAMPLE",
+        "type": "aws_access_key"
+      }
+    ],
+    "aa:bb:cc:dd:ee:ff": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "aa:bb:cc:dd:ee:ff",
+        "type": "mac_address"
+      }
+    ],
+    "abc.def.ghi": [],
+    "akiaIOSFODNN7EXAMPLE": [],
+    "alice@example.com": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "alice@example.com",
+        "type": "email"
+      }
+    ],
+    "eyJABC.eyJDEF.GHIJKL": [
+      {
+        "end": 20,
+        "kind": "near",
+        "start": 0,
+        "text": "eyJABC.eyJDEF.GHIJKL",
+        "type": "jwt"
+      }
+    ],
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef": [
+      {
+        "end": 75,
+        "kind": "hit",
+        "start": 0,
+        "text": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef",
+        "type": "jwt"
+      }
+    ],
+    "gho_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "gho_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      }
+    ],
+    "ghp_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "ghp_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      }
+    ],
+    "ghp_tooshort": [],
+    "ghx_0000000000000000000000000000000000FAKE": [],
+    "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde": [
+      {
+        "end": 53,
+        "kind": "hit",
+        "start": 0,
+        "text": "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde",
+        "type": "github_token"
+      }
+    ],
+    "not-a-mac": [],
+    "not-an-email": [],
+    "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ": [
+      {
+        "end": 47,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-ant-TEST0000000000000000000000000000000000fakekey": [
+      {
+        "end": 52,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-TEST0000000000000000000000000000000000fakekey",
+        "type": "anthropic_api_key"
+      }
+    ],
+    "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij": [
+      {
+        "end": 55,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij",
+        "type": "anthropic_api_key"
+      }
+    ],
+    "sk-ant-shortone": [],
+    "sk-anthropic-TEST000000000000000000000000000": [
+      {
+        "end": 44,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-anthropic-TEST000000000000000000000000000",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-proj-FAKE00000000000000000000000000000000000001test": [
+      {
+        "end": 54,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-proj-FAKE00000000000000000000000000000000000001test",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-short123": [],
+    "用户@example.org": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 0,
+        "text": "用户@example.org",
+        "type": "email"
+      }
+    ]
+  },
+  "ja": {
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEDATA without closing marker": [],
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----": [
+      {
+        "end": 81,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----": [
+      {
+        "end": 69,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "192.168.1.1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "192.168.1.1",
+        "type": "ip_address"
+      }
+    ],
+    "2001:db8::1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "2001:db8::1",
+        "type": "ip_address"
+      }
+    ],
+    "999.999.999.999": [],
+    "AKIA0000TEST1234": [],
+    "AKIA0000TEST1234FAKE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIA0000TEST1234FAKE",
+        "type": "aws_access_key"
+      }
+    ],
+    "AKIAIOSFODNN7EXAMPLE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIAIOSFODNN7EXAMPLE",
+        "type": "aws_access_key"
+      }
+    ],
+    "aa:bb:cc:dd:ee:ff": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "aa:bb:cc:dd:ee:ff",
+        "type": "mac_address"
+      }
+    ],
+    "abc.def.ghi": [],
+    "akiaIOSFODNN7EXAMPLE": [],
+    "alice@example.com": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "alice@example.com",
+        "type": "email"
+      }
+    ],
+    "eyJABC.eyJDEF.GHIJKL": [
+      {
+        "end": 20,
+        "kind": "near",
+        "start": 0,
+        "text": "eyJABC.eyJDEF.GHIJKL",
+        "type": "jwt"
+      }
+    ],
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef": [
+      {
+        "end": 75,
+        "kind": "hit",
+        "start": 0,
+        "text": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef",
+        "type": "jwt"
+      }
+    ],
+    "gho_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "gho_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      }
+    ],
+    "ghp_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "ghp_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      }
+    ],
+    "ghp_tooshort": [],
+    "ghx_0000000000000000000000000000000000FAKE": [],
+    "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde": [
+      {
+        "end": 53,
+        "kind": "hit",
+        "start": 0,
+        "text": "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde",
+        "type": "github_token"
+      }
+    ],
+    "not-a-mac": [],
+    "not-an-email": [],
+    "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ": [
+      {
+        "end": 47,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-ant-TEST0000000000000000000000000000000000fakekey": [
+      {
+        "end": 52,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-TEST0000000000000000000000000000000000fakekey",
+        "type": "anthropic_api_key"
+      }
+    ],
+    "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij": [
+      {
+        "end": 55,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij",
+        "type": "anthropic_api_key"
+      }
+    ],
+    "sk-ant-shortone": [],
+    "sk-anthropic-TEST000000000000000000000000000": [
+      {
+        "end": 44,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-anthropic-TEST000000000000000000000000000",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-proj-FAKE00000000000000000000000000000000000001test": [
+      {
+        "end": 54,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-proj-FAKE00000000000000000000000000000000000001test",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-short123": [],
+    "用户@example.org": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 0,
+        "text": "用户@example.org",
+        "type": "email"
+      }
+    ]
+  },
+  "ko": {
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEDATA without closing marker": [],
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----": [
+      {
+        "end": 81,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----": [
+      {
+        "end": 69,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "192.168.1.1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "192.168.1.1",
+        "type": "ip_address"
+      }
+    ],
+    "2001:db8::1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "2001:db8::1",
+        "type": "ip_address"
+      }
+    ],
+    "999.999.999.999": [],
+    "AKIA0000TEST1234": [],
+    "AKIA0000TEST1234FAKE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIA0000TEST1234FAKE",
+        "type": "aws_access_key"
+      }
+    ],
+    "AKIAIOSFODNN7EXAMPLE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIAIOSFODNN7EXAMPLE",
+        "type": "aws_access_key"
+      }
+    ],
+    "aa:bb:cc:dd:ee:ff": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "aa:bb:cc:dd:ee:ff",
+        "type": "mac_address"
+      }
+    ],
+    "abc.def.ghi": [],
+    "akiaIOSFODNN7EXAMPLE": [],
+    "alice@example.com": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "alice@example.com",
+        "type": "email"
+      }
+    ],
+    "eyJABC.eyJDEF.GHIJKL": [
+      {
+        "end": 20,
+        "kind": "near",
+        "start": 0,
+        "text": "eyJABC.eyJDEF.GHIJKL",
+        "type": "jwt"
+      }
+    ],
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef": [
+      {
+        "end": 75,
+        "kind": "hit",
+        "start": 0,
+        "text": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef",
+        "type": "jwt"
+      }
+    ],
+    "gho_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "gho_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      }
+    ],
+    "ghp_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "ghp_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      }
+    ],
+    "ghp_tooshort": [],
+    "ghx_0000000000000000000000000000000000FAKE": [],
+    "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde": [
+      {
+        "end": 53,
+        "kind": "hit",
+        "start": 0,
+        "text": "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde",
+        "type": "github_token"
+      }
+    ],
+    "not-a-mac": [],
+    "not-an-email": [],
+    "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ": [
+      {
+        "end": 47,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-ant-TEST0000000000000000000000000000000000fakekey": [
+      {
+        "end": 52,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-TEST0000000000000000000000000000000000fakekey",
+        "type": "anthropic_api_key"
+      }
+    ],
+    "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij": [
+      {
+        "end": 55,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij",
+        "type": "anthropic_api_key"
+      }
+    ],
+    "sk-ant-shortone": [],
+    "sk-anthropic-TEST000000000000000000000000000": [
+      {
+        "end": 44,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-anthropic-TEST000000000000000000000000000",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-proj-FAKE00000000000000000000000000000000000001test": [
+      {
+        "end": 54,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-proj-FAKE00000000000000000000000000000000000001test",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-short123": [],
+    "用户@example.org": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 0,
+        "text": "用户@example.org",
+        "type": "email"
+      }
+    ]
+  },
+  "uk": {
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEDATA without closing marker": [],
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----": [
+      {
+        "end": 81,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----": [
+      {
+        "end": 69,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "192.168.1.1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "192.168.1.1",
+        "type": "ip_address"
+      }
+    ],
+    "2001:db8::1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "2001:db8::1",
+        "type": "ip_address"
+      }
+    ],
+    "999.999.999.999": [],
+    "AKIA0000TEST1234": [],
+    "AKIA0000TEST1234FAKE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIA0000TEST1234FAKE",
+        "type": "aws_access_key"
+      }
+    ],
+    "AKIAIOSFODNN7EXAMPLE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIAIOSFODNN7EXAMPLE",
+        "type": "aws_access_key"
+      }
+    ],
+    "aa:bb:cc:dd:ee:ff": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "aa:bb:cc:dd:ee:ff",
+        "type": "mac_address"
+      }
+    ],
+    "abc.def.ghi": [],
+    "akiaIOSFODNN7EXAMPLE": [],
+    "alice@example.com": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "alice@example.com",
+        "type": "email"
+      }
+    ],
+    "eyJABC.eyJDEF.GHIJKL": [
+      {
+        "end": 20,
+        "kind": "near",
+        "start": 0,
+        "text": "eyJABC.eyJDEF.GHIJKL",
+        "type": "jwt"
+      }
+    ],
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef": [
+      {
+        "end": 75,
+        "kind": "hit",
+        "start": 0,
+        "text": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef",
+        "type": "jwt"
+      }
+    ],
+    "gho_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "gho_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      },
+      {
+        "end": 38,
+        "kind": "hit",
+        "start": 25,
+        "text": "0000000000000",
+        "type": "phone"
+      }
+    ],
+    "ghp_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "ghp_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      },
+      {
+        "end": 38,
+        "kind": "hit",
+        "start": 25,
+        "text": "0000000000000",
+        "type": "phone"
+      }
+    ],
+    "ghp_tooshort": [],
+    "ghx_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 38,
+        "kind": "hit",
+        "start": 25,
+        "text": "0000000000000",
+        "type": "phone"
+      }
+    ],
+    "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde": [
+      {
+        "end": 53,
+        "kind": "hit",
+        "start": 0,
+        "text": "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde",
+        "type": "github_token"
+      },
+      {
+        "end": 33,
+        "kind": "hit",
+        "start": 20,
+        "text": "0000000000000",
+        "type": "phone"
+      }
+    ],
+    "not-a-mac": [],
+    "not-an-email": [],
+    "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ": [
+      {
+        "end": 47,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ",
+        "type": "openai_api_key"
+      },
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 7,
+        "text": "1234567890",
+        "type": "nhs_number"
+      },
+      {
+        "end": 37,
+        "kind": "hit",
+        "start": 27,
+        "text": "1234567890",
+        "type": "nhs_number"
+      }
+    ],
+    "sk-ant-TEST0000000000000000000000000000000000fakekey": [
+      {
+        "end": 52,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-TEST0000000000000000000000000000000000fakekey",
+        "type": "anthropic_api_key"
+      },
+      {
+        "end": 45,
+        "kind": "hit",
+        "start": 32,
+        "text": "0000000000000",
+        "type": "phone"
+      }
+    ],
+    "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij": [
+      {
+        "end": 55,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij",
+        "type": "anthropic_api_key"
+      },
+      {
+        "end": 45,
+        "kind": "hit",
+        "start": 32,
+        "text": "0000000000000",
+        "type": "phone"
+      }
+    ],
+    "sk-ant-shortone": [],
+    "sk-anthropic-TEST000000000000000000000000000": [
+      {
+        "end": 44,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-anthropic-TEST000000000000000000000000000",
+        "type": "openai_api_key"
+      },
+      {
+        "end": 44,
+        "kind": "hit",
+        "start": 31,
+        "text": "0000000000000",
+        "type": "phone"
+      }
+    ],
+    "sk-proj-FAKE00000000000000000000000000000000000001test": [
+      {
+        "end": 54,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-proj-FAKE00000000000000000000000000000000000001test",
+        "type": "openai_api_key"
+      },
+      {
+        "end": 50,
+        "kind": "hit",
+        "start": 37,
+        "text": "0000000000001",
+        "type": "phone"
+      }
+    ],
+    "sk-short123": [],
+    "用户@example.org": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 0,
+        "text": "用户@example.org",
+        "type": "email"
+      }
+    ]
+  },
+  "zh": {
+    "+8613812345678": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 0,
+        "text": "+8613812345678",
+        "type": "phone"
+      }
+    ],
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEDATA without closing marker": [],
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----": [
+      {
+        "end": 81,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA\n-----END OPENSSH PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----": [
+      {
+        "end": 69,
+        "kind": "hit",
+        "start": 0,
+        "text": "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA\n-----END RSA PRIVATE KEY-----",
+        "type": "ssh_private_key"
+      }
+    ],
+    "0/234567/8": [],
+    "000000199003074610": [
+      {
+        "end": 18,
+        "kind": "near",
+        "start": 0,
+        "text": "000000199003074610",
+        "type": "credit_code"
+      }
+    ],
+    "010-12345678": [
+      {
+        "end": 12,
+        "kind": "hit",
+        "start": 0,
+        "text": "010-12345678",
+        "type": "phone"
+      }
+    ],
+    "0123456": [],
+    "021-87654321": [
+      {
+        "end": 12,
+        "kind": "hit",
+        "start": 0,
+        "text": "021-87654321",
+        "type": "phone"
+      }
+    ],
+    "0755-12345678": [
+      {
+        "end": 13,
+        "kind": "hit",
+        "start": 0,
+        "text": "0755-12345678",
+        "type": "phone"
+      }
+    ],
+    "075512345678": [
+      {
+        "end": 12,
+        "kind": "hit",
+        "start": 0,
+        "text": "075512345678",
+        "type": "phone"
+      }
+    ],
+    "1/234567": [],
+    "1/234567/8": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "1/234567/8",
+        "type": "macau_id"
+      }
+    ],
+    "110101 19900307 4610": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "110101 19900307 4610",
+        "type": "id_number"
+      }
+    ],
+    "11010119900307002X": [
+      {
+        "end": 18,
+        "kind": "near",
+        "start": 0,
+        "text": "11010119900307002X",
+        "type": "credit_code"
+      },
+      {
+        "end": 18,
+        "kind": "hit",
+        "start": 0,
+        "text": "11010119900307002X",
+        "type": "id_number"
+      }
+    ],
+    "110101199003071235": [
+      {
+        "end": 18,
+        "kind": "near",
+        "start": 0,
+        "text": "110101199003071235",
+        "type": "credit_code"
+      },
+      {
+        "end": 18,
+        "kind": "near",
+        "start": 0,
+        "text": "110101199003071235",
+        "type": "id_number"
+      }
+    ],
+    "110101199003074610": [
+      {
+        "end": 18,
+        "kind": "near",
+        "start": 0,
+        "text": "110101199003074610",
+        "type": "credit_code"
+      },
+      {
+        "end": 18,
+        "kind": "hit",
+        "start": 0,
+        "text": "110101199003074610",
+        "type": "id_number"
+      }
+    ],
+    "110101199013074610": [
+      {
+        "end": 18,
+        "kind": "near",
+        "start": 0,
+        "text": "110101199013074610",
+        "type": "credit_code"
+      }
+    ],
+    "110123456789": [],
+    "12012345678": [],
+    "1234": [],
+    "1234567890123456": [],
+    "123abc": [],
+    "138 1234 5678": [
+      {
+        "end": 13,
+        "kind": "hit",
+        "start": 0,
+        "text": "138 1234 5678",
+        "type": "phone"
+      }
+    ],
+    "138-1234-5678": [
+      {
+        "end": 13,
+        "kind": "hit",
+        "start": 0,
+        "text": "138-1234-5678",
+        "type": "phone"
+      }
+    ],
+    "1381234567": [],
+    "13812345678": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "13812345678",
+        "type": "phone"
+      }
+    ],
+    "138123456789": [],
+    "192.168.1.1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "192.168.1.1",
+        "type": "ip_address"
+      }
+    ],
+    "1A12345(7)": [],
+    "1A12345678": [],
+    "2001:db8::1": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "2001:db8::1",
+        "type": "ip_address"
+      }
+    ],
+    "2024年3月7日开会": [],
+    "32 years old": [
+      {
+        "end": 12,
+        "kind": "hit",
+        "start": 0,
+        "text": "32 years old",
+        "type": "age"
+      }
+    ],
+    "32岁": [
+      {
+        "end": 3,
+        "kind": "hit",
+        "start": 0,
+        "text": "32岁",
+        "type": "age"
+      }
+    ],
+    "4111111111111111": [
+      {
+        "end": 16,
+        "kind": "hit",
+        "start": 0,
+        "text": "4111111111111111",
+        "type": "bank_card"
+      }
+    ],
+    "5/123456/0": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "5/123456/0",
+        "type": "macau_id"
+      }
+    ],
+    "52100000500000784G": [
+      {
+        "end": 17,
+        "kind": "near",
+        "start": 0,
+        "text": "52100000500000784",
+        "type": "bank_card"
+      },
+      {
+        "end": 18,
+        "kind": "hit",
+        "start": 0,
+        "text": "52100000500000784G",
+        "type": "credit_code"
+      }
+    ],
+    "6217001234567890": [
+      {
+        "end": 16,
+        "kind": "hit",
+        "start": 0,
+        "text": "6217001234567890",
+        "type": "bank_card"
+      }
+    ],
+    "6222021234567890": [
+      {
+        "end": 16,
+        "kind": "hit",
+        "start": 0,
+        "text": "6222021234567890",
+        "type": "bank_card"
+      }
+    ],
+    "7/000001/2": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "7/000001/2",
+        "type": "macau_id"
+      }
+    ],
+    "91110108MA01YBNX62": [
+      {
+        "end": 18,
+        "kind": "hit",
+        "start": 0,
+        "text": "91110108MA01YBNX62",
+        "type": "credit_code"
+      }
+    ],
+    "91110108MA01YBNX6A": [
+      {
+        "end": 18,
+        "kind": "near",
+        "start": 0,
+        "text": "91110108MA01YBNX6A",
+        "type": "credit_code"
+      }
+    ],
+    "999.999.999.999": [],
+    "999岁": [
+      {
+        "end": 4,
+        "kind": "near",
+        "start": 0,
+        "text": "999岁",
+        "type": "age"
+      }
+    ],
+    "A12345(7)": [],
+    "A123456(0)": [
+      {
+        "end": 10,
+        "kind": "near",
+        "start": 0,
+        "text": "A123456(0)",
+        "type": "hk_id"
+      }
+    ],
+    "A123456(9)": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "A123456(9)",
+        "type": "hk_id"
+      }
+    ],
+    "A12345678": [],
+    "A123456780": [
+      {
+        "end": 10,
+        "kind": "near",
+        "start": 0,
+        "text": "A123456780",
+        "type": "tw_id"
+      }
+    ],
+    "A123456789": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "A123456789",
+        "type": "tw_id"
+      }
+    ],
+    "AB1234567": [],
+    "AB12345678": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "AB12345678",
+        "type": "taiwan_arc"
+      }
+    ],
+    "AC98765432": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "AC98765432",
+        "type": "taiwan_arc"
+      }
+    ],
+    "AKIA0000TEST1234": [],
+    "AKIA0000TEST1234FAKE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIA0000TEST1234FAKE",
+        "type": "aws_access_key"
+      }
+    ],
+    "AKIAIOSFODNN7EXAMPLE": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 0,
+        "text": "AKIAIOSFODNN7EXAMPLE",
+        "type": "aws_access_key"
+      }
+    ],
+    "B142536472": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "B142536472",
+        "type": "tw_id"
+      }
+    ],
+    "C12345678": [],
+    "DNA检测结果": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 0,
+        "text": "DNA检测",
+        "type": "biometric"
+      }
+    ],
+    "F131011128": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "F131011128",
+        "type": "tw_id"
+      }
+    ],
+    "H12345678": [],
+    "Home Return Permit H00000001": [
+      {
+        "end": 28,
+        "kind": "hit",
+        "start": 19,
+        "text": "H00000001",
+        "type": "hrp"
+      }
+    ],
+    "QQ 987654321": [
+      {
+        "end": 12,
+        "kind": "hit",
+        "start": 3,
+        "text": "987654321",
+        "type": "qq"
+      }
+    ],
+    "QQ12345678": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "QQ12345678",
+        "type": "taiwan_arc"
+      },
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 2,
+        "text": "12345678",
+        "type": "qq"
+      }
+    ],
+    "WX00000001": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "WX00000001",
+        "type": "taiwan_arc"
+      }
+    ],
+    "WX123456(8)": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "WX123456(8)",
+        "type": "hk_id"
+      }
+    ],
+    "Z684325(1)": [
+      {
+        "end": 10,
+        "kind": "hit",
+        "start": 0,
+        "text": "Z684325(1)",
+        "type": "hk_id"
+      }
+    ],
+    "aa:bb:cc:dd:ee:ff": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "aa:bb:cc:dd:ee:ff",
+        "type": "mac_address"
+      }
+    ],
+    "abc.def.ghi": [],
+    "abcde": [],
+    "akiaIOSFODNN7EXAMPLE": [],
+    "alice@example.com": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 0,
+        "text": "alice@example.com",
+        "type": "email"
+      }
+    ],
+    "eyJABC.eyJDEF.GHIJKL": [
+      {
+        "end": 20,
+        "kind": "near",
+        "start": 0,
+        "text": "eyJABC.eyJDEF.GHIJKL",
+        "type": "jwt"
+      }
+    ],
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef": [
+      {
+        "end": 75,
+        "kind": "hit",
+        "start": 0,
+        "text": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef",
+        "type": "jwt"
+      }
+    ],
+    "gho_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "gho_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      }
+    ],
+    "ghp_0000000000000000000000000000000000FAKE": [
+      {
+        "end": 42,
+        "kind": "hit",
+        "start": 0,
+        "text": "ghp_0000000000000000000000000000000000FAKE",
+        "type": "github_token"
+      }
+    ],
+    "ghp_tooshort": [],
+    "ghx_0000000000000000000000000000000000FAKE": [],
+    "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde": [
+      {
+        "end": 53,
+        "kind": "hit",
+        "start": 0,
+        "text": "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde",
+        "type": "github_token"
+      }
+    ],
+    "not-a-mac": [],
+    "not-an-email": [],
+    "qq:10001": [
+      {
+        "end": 8,
+        "kind": "hit",
+        "start": 3,
+        "text": "10001",
+        "type": "qq"
+      }
+    ],
+    "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ": [
+      {
+        "end": 47,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-ant-TEST0000000000000000000000000000000000fakekey": [
+      {
+        "end": 52,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-TEST0000000000000000000000000000000000fakekey",
+        "type": "anthropic_api_key"
+      }
+    ],
+    "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij": [
+      {
+        "end": 55,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij",
+        "type": "anthropic_api_key"
+      }
+    ],
+    "sk-ant-shortone": [],
+    "sk-anthropic-TEST000000000000000000000000000": [
+      {
+        "end": 44,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-anthropic-TEST000000000000000000000000000",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-proj-FAKE00000000000000000000000000000000000001test": [
+      {
+        "end": 54,
+        "kind": "hit",
+        "start": 0,
+        "text": "sk-proj-FAKE00000000000000000000000000000000000001test",
+        "type": "openai_api_key"
+      }
+    ],
+    "sk-short123": [],
+    "上大学很重要": [],
+    "京A12345": [
+      {
+        "end": 7,
+        "kind": "hit",
+        "start": 0,
+        "text": "京A12345",
+        "type": "license_plate"
+      }
+    ],
+    "人大附中的学生": [
+      {
+        "end": 4,
+        "kind": "hit",
+        "start": 0,
+        "text": "人大附中",
+        "type": "school"
+      }
+    ],
+    "人脸识别通过": [
+      {
+        "end": 4,
+        "kind": "hit",
+        "start": 0,
+        "text": "人脸识别",
+        "type": "biometric"
+      }
+    ],
+    "今天天气不错": [],
+    "他已经出柜": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 3,
+        "text": "出柜",
+        "type": "sexual_orientation"
+      }
+    ],
+    "他是党员": [
+      {
+        "end": 4,
+        "kind": "hit",
+        "start": 2,
+        "text": "党员",
+        "type": "political"
+      }
+    ],
+    "他是同性恋": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 2,
+        "text": "同性恋",
+        "type": "sexual_orientation"
+      }
+    ],
+    "他是基督徒": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 2,
+        "text": "基督徒",
+        "type": "religion"
+      }
+    ],
+    "他是藏族": [
+      {
+        "end": 4,
+        "kind": "hit",
+        "start": 2,
+        "text": "藏族",
+        "type": "ethnicity"
+      }
+    ],
+    "他有犯罪记录": [
+      {
+        "end": 6,
+        "kind": "hit",
+        "start": 2,
+        "text": "犯罪记录",
+        "type": "criminal_record"
+      }
+    ],
+    "他确诊了糖尿病": [
+      {
+        "end": 7,
+        "kind": "hit",
+        "start": 3,
+        "text": "了糖尿病",
+        "type": "medical"
+      },
+      {
+        "end": 7,
+        "kind": "hit",
+        "start": 4,
+        "text": "糖尿病",
+        "type": "medical"
+      }
+    ],
+    "会议时间2024-03-07": [],
+    "住房公积金账户 123456789012": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 8,
+        "text": "123456789012",
+        "type": "housing_fund"
+      }
+    ],
+    "你住院了": [],
+    "信用评分680分": [
+      {
+        "end": 8,
+        "kind": "hit",
+        "start": 0,
+        "text": "信用评分680分",
+        "type": "financial"
+      }
+    ],
+    "公积金余额12000": [],
+    "公积金账号 6001234567": [
+      {
+        "end": 16,
+        "kind": "hit",
+        "start": 6,
+        "text": "6001234567",
+        "type": "housing_fund"
+      }
+    ],
+    "公积金账号：110123456789": [
+      {
+        "end": 18,
+        "kind": "hit",
+        "start": 6,
+        "text": "110123456789",
+        "type": "housing_fund"
+      }
+    ],
+    "军字第12345678号": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 3,
+        "text": "12345678",
+        "type": "military_id"
+      }
+    ],
+    "军字第1234567号": [],
+    "出生三月七号": [
+      {
+        "end": 6,
+        "kind": "hit",
+        "start": 2,
+        "text": "三月七号",
+        "type": "date_of_birth"
+      }
+    ],
+    "出生日期1990年3月7日": [
+      {
+        "end": 13,
+        "kind": "hit",
+        "start": 4,
+        "text": "1990年3月7日",
+        "type": "date_of_birth"
+      }
+    ],
+    "出生日期：1990-03-07": [
+      {
+        "end": 15,
+        "kind": "hit",
+        "start": 5,
+        "text": "1990-03-07",
+        "type": "date_of_birth"
+      }
+    ],
+    "北京": [],
+    "北京协和医院": [
+      {
+        "end": 6,
+        "kind": "hit",
+        "start": 0,
+        "text": "北京协和医院",
+        "type": "organization"
+      }
+    ],
+    "北京市朝阳区建国路100号": [
+      {
+        "end": 13,
+        "kind": "hit",
+        "start": 0,
+        "text": "北京市朝阳区建国路100号",
+        "type": "address"
+      },
+      {
+        "end": 13,
+        "kind": "hit",
+        "start": 3,
+        "text": "朝阳区建国路100号",
+        "type": "address"
+      }
+    ],
+    "华为公司发布": [
+      {
+        "end": 4,
+        "kind": "hit",
+        "start": 0,
+        "text": "华为公司",
+        "type": "organization"
+      }
+    ],
+    "去公司上班": [],
+    "参加了抗议游行": [
+      {
+        "end": 7,
+        "kind": "hit",
+        "start": 3,
+        "text": "抗议游行",
+        "type": "political"
+      }
+    ],
+    "双程证 C87654321": [
+      {
+        "end": 13,
+        "kind": "hit",
+        "start": 4,
+        "text": "C87654321",
+        "type": "eep"
+      }
+    ],
+    "各位同志们好": [],
+    "唐朝是中国历史": [],
+    "回乡卡H1234567801": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 3,
+        "text": "H1234567801",
+        "type": "hrp"
+      }
+    ],
+    "回乡证 M87654321": [
+      {
+        "end": 13,
+        "kind": "hit",
+        "start": 4,
+        "text": "M87654321",
+        "type": "hrp"
+      }
+    ],
+    "回乡证H1234567": [],
+    "回乡证H12345678": [
+      {
+        "end": 12,
+        "kind": "hit",
+        "start": 3,
+        "text": "H12345678",
+        "type": "hrp"
+      }
+    ],
+    "在华为工作": [],
+    "型号H12345678": [],
+    "士兵证号12345678": [
+      {
+        "end": 12,
+        "kind": "hit",
+        "start": 4,
+        "text": "12345678",
+        "type": "military_id"
+      }
+    ],
+    "她是双性恋": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 2,
+        "text": "双性恋",
+        "type": "sexual_orientation"
+      }
+    ],
+    "她是穆斯林": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 2,
+        "text": "穆斯林",
+        "type": "religion"
+      }
+    ],
+    "实验小学报名": [
+      {
+        "end": 4,
+        "kind": "hit",
+        "start": 0,
+        "text": "实验小学",
+        "type": "school"
+      }
+    ],
+    "客户张三": [],
+    "家族企业": [
+      {
+        "end": 4,
+        "kind": "hit",
+        "start": 0,
+        "text": "家族企业",
+        "type": "organization"
+      }
+    ],
+    "就职于华为技术": [
+      {
+        "end": 7,
+        "kind": "hit",
+        "start": 3,
+        "text": "华为技术",
+        "type": "workplace"
+      }
+    ],
+    "工作单位：中国电信": [
+      {
+        "end": 9,
+        "kind": "hit",
+        "start": 5,
+        "text": "中国电信",
+        "type": "workplace"
+      }
+    ],
+    "已采集指纹信息": [
+      {
+        "end": 7,
+        "kind": "hit",
+        "start": 3,
+        "text": "指纹信息",
+        "type": "biometric"
+      }
+    ],
+    "年收入50万": [
+      {
+        "end": 6,
+        "kind": "hit",
+        "start": 0,
+        "text": "年收入50万",
+        "type": "financial"
+      }
+    ],
+    "年龄: 32": [
+      {
+        "end": 6,
+        "kind": "hit",
+        "start": 0,
+        "text": "年龄: 32",
+        "type": "age"
+      }
+    ],
+    "广东省深圳市南山区科技路1号": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 0,
+        "text": "广东省深圳市南山区科技路1号",
+        "type": "address"
+      },
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 6,
+        "text": "南山区科技路1号",
+        "type": "address"
+      }
+    ],
+    "张董事长出席": [
+      {
+        "end": 4,
+        "kind": "hit",
+        "start": 0,
+        "text": "张董事长",
+        "type": "job_title"
+      }
+    ],
+    "往来港澳通行证C1234567": [],
+    "往来港澳通行证C12345678": [
+      {
+        "end": 16,
+        "kind": "hit",
+        "start": 7,
+        "text": "C12345678",
+        "type": "eep"
+      }
+    ],
+    "往来港澳通行证CI1234567": [],
+    "往来港澳通行证CO1234567": [],
+    "微信wxid_abc123": [
+      {
+        "end": 13,
+        "kind": "hit",
+        "start": 2,
+        "text": "wxid_abc123",
+        "type": "wechat"
+      }
+    ],
+    "微信号zhangsan_2024": [
+      {
+        "end": 16,
+        "kind": "hit",
+        "start": 3,
+        "text": "zhangsan_2024",
+        "type": "wechat"
+      }
+    ],
+    "患有高血压": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 2,
+        "text": "高血压",
+        "type": "medical"
+      },
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 2,
+        "text": "高血压",
+        "type": "medical"
+      }
+    ],
+    "我们公司裁员了": [
+      {
+        "end": 2,
+        "kind": "hit",
+        "start": 0,
+        "text": "我们",
+        "type": "self_reference"
+      },
+      {
+        "end": 4,
+        "kind": "hit",
+        "start": 0,
+        "text": "我们公司",
+        "type": "organization"
+      }
+    ],
+    "我妈住院了": [
+      {
+        "end": 1,
+        "kind": "hit",
+        "start": 0,
+        "text": "我",
+        "type": "self_reference"
+      },
+      {
+        "end": 2,
+        "kind": "hit",
+        "start": 0,
+        "text": "我妈",
+        "type": "self_reference"
+      }
+    ],
+    "我确诊了糖尿病": [
+      {
+        "end": 1,
+        "kind": "hit",
+        "start": 0,
+        "text": "我",
+        "type": "self_reference"
+      },
+      {
+        "end": 7,
+        "kind": "hit",
+        "start": 3,
+        "text": "了糖尿病",
+        "type": "medical"
+      },
+      {
+        "end": 7,
+        "kind": "hit",
+        "start": 4,
+        "text": "糖尿病",
+        "type": "medical"
+      }
+    ],
+    "护照G87654321": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 2,
+        "text": "G87654321",
+        "type": "passport"
+      }
+    ],
+    "护照号E12345678": [
+      {
+        "end": 12,
+        "kind": "hit",
+        "start": 3,
+        "text": "E12345678",
+        "type": "passport"
+      }
+    ],
+    "政治面貌：群众": [
+      {
+        "end": 7,
+        "kind": "hit",
+        "start": 0,
+        "text": "政治面貌：群众",
+        "type": "political"
+      }
+    ],
+    "月薪2万元": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 0,
+        "text": "月薪2万元",
+        "type": "financial"
+      }
+    ],
+    "服用阿莫西林": [
+      {
+        "end": 6,
+        "kind": "hit",
+        "start": 2,
+        "text": "阿莫西林",
+        "type": "medical"
+      }
+    ],
+    "朝阳建国路100号": [
+      {
+        "end": 9,
+        "kind": "hit",
+        "start": 0,
+        "text": "朝阳建国路100号",
+        "type": "address"
+      }
+    ],
+    "此人有前科": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 2,
+        "text": "有前科",
+        "type": "criminal_record"
+      }
+    ],
+    "武字第87654321号": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 3,
+        "text": "87654321",
+        "type": "military_id"
+      }
+    ],
+    "每周做礼拜": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 2,
+        "text": "做礼拜",
+        "type": "religion"
+      }
+    ],
+    "民族：汉族": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 0,
+        "text": "民族：汉族",
+        "type": "ethnicity"
+      }
+    ],
+    "沪A12345F": [
+      {
+        "end": 8,
+        "kind": "hit",
+        "start": 0,
+        "text": "沪A12345F",
+        "type": "license_plate"
+      }
+    ],
+    "港澳居民来往内地通行证H12345678": [
+      {
+        "end": 20,
+        "kind": "hit",
+        "start": 11,
+        "text": "H12345678",
+        "type": "hrp"
+      }
+    ],
+    "港澳通行证号码：CB1234567": [
+      {
+        "end": 17,
+        "kind": "hit",
+        "start": 8,
+        "text": "CB1234567",
+        "type": "eep"
+      }
+    ],
+    "生日是90年3月": [
+      {
+        "end": 8,
+        "kind": "hit",
+        "start": 3,
+        "text": "90年3月",
+        "type": "date_of_birth"
+      }
+    ],
+    "用户@example.org": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 0,
+        "text": "用户@example.org",
+        "type": "email"
+      }
+    ],
+    "电子往来港澳通行证CA0000001": [
+      {
+        "end": 18,
+        "kind": "hit",
+        "start": 9,
+        "text": "CA0000001",
+        "type": "eep"
+      }
+    ],
+    "确诊糖尿病": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 2,
+        "text": "糖尿病",
+        "type": "medical"
+      },
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 2,
+        "text": "糖尿病",
+        "type": "medical"
+      }
+    ],
+    "社保卡号：A12345678": [
+      {
+        "end": 14,
+        "kind": "hit",
+        "start": 5,
+        "text": "A12345678",
+        "type": "social_security"
+      }
+    ],
+    "社保号110101199003074610": [
+      {
+        "end": 21,
+        "kind": "near",
+        "start": 3,
+        "text": "110101199003074610",
+        "type": "credit_code"
+      },
+      {
+        "end": 21,
+        "kind": "hit",
+        "start": 3,
+        "text": "110101199003074610",
+        "type": "id_number"
+      },
+      {
+        "end": 21,
+        "kind": "hit",
+        "start": 3,
+        "text": "110101199003074610",
+        "type": "social_security"
+      }
+    ],
+    "粤B·12345": [
+      {
+        "end": 8,
+        "kind": "hit",
+        "start": 0,
+        "text": "粤B·12345",
+        "type": "license_plate"
+      }
+    ],
+    "编号G12345678的订单": [],
+    "联系人王小明": [],
+    "腾讯计算机系统有限公司": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "腾讯计算机系统有限公司",
+        "type": "organization"
+      }
+    ],
+    "被判刑三年": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 1,
+        "text": "判刑三年",
+        "type": "criminal_record"
+      }
+    ],
+    "计算机学院很好": [
+      {
+        "end": 5,
+        "kind": "hit",
+        "start": 0,
+        "text": "计算机学院",
+        "type": "school"
+      }
+    ],
+    "订单号C12345678": [],
+    "赵敏女士": [],
+    "这个项目投资500万": [],
+    "阿里巴巴集团": [
+      {
+        "end": 6,
+        "kind": "hit",
+        "start": 0,
+        "text": "阿里巴巴集团",
+        "type": "organization"
+      }
+    ],
+    "项目经理说": [
+      {
+        "end": 4,
+        "kind": "hit",
+        "start": 0,
+        "text": "项目经理",
+        "type": "job_title"
+      }
+    ],
+    "骨科医生建议": [
+      {
+        "end": 4,
+        "kind": "hit",
+        "start": 0,
+        "text": "骨科医生",
+        "type": "job_title"
+      }
+    ],
+    "黄山风景区很漂亮": []
+  }
+}
