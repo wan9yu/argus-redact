@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, LazyLock};
 use fancy_regex::Regex;
 
 use crate::types::PatternMatch;
+use crate::validators::resolve_validator;
 
 /// A regex pattern config (binding converts PyDict -> this).
 pub struct PatternConfig {
@@ -11,6 +12,7 @@ pub struct PatternConfig {
     pub pattern: String,
     pub check_context: bool,
     pub group: Option<String>,
+    pub validator: Option<String>,
 }
 
 #[derive(Debug)]
@@ -81,8 +83,10 @@ fn looks_like_false_positive(text: &str, start: usize, end: usize) -> bool {
 /// Run all regex patterns against text, return sorted matches.
 ///
 /// Each pattern config has: type_, pattern.
-/// Optional: check_context (bool), group (str).
-/// Note: validate callbacks are NOT run here — caller must filter.
+/// Optional: check_context (bool), group (str), validator (str).
+/// If `validator` names a known validator, it runs inline: a failing value is
+/// still returned but tagged `confidence = 0.3` (a near-miss) for the caller to
+/// route. Unknown validator names are a no-op (handled by the Python path).
 pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<PatternMatch>, PatternError> {
     if text.is_empty() || patterns.is_empty() {
         return Ok(vec![]);
@@ -126,12 +130,20 @@ pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<Patt
             let char_start = text[..start].chars().count();
             let char_end = text[..end].chars().count();
 
+            let confidence = match pat.validator {
+                Some(ref name) => match resolve_validator(name) {
+                    Some(f) if !f(&matched) => 0.3, // validator failed → near-miss
+                    _ => 1.0,                        // passed, or unknown name (no-op)
+                },
+                None => 1.0,
+            };
+
             results.push(PatternMatch {
                 text: matched,
                 type_: pat.type_.clone(),
                 start: char_start,
                 end: char_end,
-                confidence: 1.0,
+                confidence,
                 layer: 0,
             });
         }
@@ -146,7 +158,7 @@ mod tests {
     use super::*;
     #[test]
     fn matches_and_char_offsets() {
-        let cfg = PatternConfig { type_: "phone".into(), pattern: r"\d{3}".into(), check_context: false, group: None };
+        let cfg = PatternConfig { type_: "phone".into(), pattern: r"\d{3}".into(), check_context: false, group: None, validator: None };
         let out = match_patterns("ab 123 cd", &[cfg]).unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].text, "123");
@@ -155,8 +167,29 @@ mod tests {
     #[test]
     fn check_context_suppresses_fp() {
         // "订单号123" — 订单号 is a FALSE_POSITIVE_PREFIX trigger
-        let cfg = PatternConfig { type_: "phone".into(), pattern: r"\d{3}".into(), check_context: true, group: None };
+        let cfg = PatternConfig { type_: "phone".into(), pattern: r"\d{3}".into(), check_context: true, group: None, validator: None };
         let out = match_patterns("订单号123", &[cfg]).unwrap();
         assert_eq!(out.len(), 0, "订单号 prefix should suppress the match");
+    }
+    #[test]
+    fn validator_failure_becomes_near_miss() {
+        // ssn validator: 000 area is invalid → confidence 0.3, still returned
+        let cfg = PatternConfig {
+            type_: "ssn".into(), pattern: r"\d{3}-\d{2}-\d{4}".into(),
+            check_context: false, group: None, validator: Some("ssn".into()),
+        };
+        let out = match_patterns("x 000-12-3456 y", &[cfg]).unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].confidence, 0.3);
+    }
+    #[test]
+    fn validator_pass_keeps_confidence_one() {
+        let cfg = PatternConfig {
+            type_: "ssn".into(), pattern: r"\d{3}-\d{2}-\d{4}".into(),
+            check_context: false, group: None, validator: Some("ssn".into()),
+        };
+        let out = match_patterns("x 123-45-6789 y", &[cfg]).unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].confidence, 1.0);
     }
 }

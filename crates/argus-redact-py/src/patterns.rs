@@ -33,7 +33,12 @@ pub fn match_patterns(text: &str, patterns: Vec<Bound<'_, PyDict>>) -> PyResult<
             .ok()
             .flatten()
             .and_then(|v| v.extract().ok());
-        configs.push(PatternConfig { type_, pattern, check_context, group });
+        let validator: Option<String> = pat
+            .get_item("validator")
+            .ok()
+            .flatten()
+            .and_then(|v| v.extract().ok());
+        configs.push(PatternConfig { type_, pattern, check_context, group, validator });
     }
 
     let out = core_match(text, &configs)
