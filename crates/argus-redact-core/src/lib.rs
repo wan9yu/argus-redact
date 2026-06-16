@@ -13,6 +13,7 @@ pub mod display_marker;
 pub mod seed;
 pub mod masks;
 pub mod shake_rng;
+pub mod fakers;
 
 pub use types::PatternMatch;
 pub use merger::merge_entities;
@@ -26,3 +27,4 @@ pub use normalize::{map_spans_to_original, normalize_text};
 pub use grammar::{normalize_grammar_en, restore_grammar_en, is_self_ref};
 pub use display_marker::{resolve_marker, mark_for_display, strip_display_markers, preset_marker_chars};
 pub use shake_rng::{seed_from_value, ShakeRng};
+pub use fakers::{generate_unique_fake, resolve_faker, FakerFn};
