@@ -5,6 +5,7 @@ mod patterns;
 mod merger;
 mod restore;
 mod pseudonym;
+mod lang_detect;
 
 /// argus-redact Rust core — high-performance pure functions over argus-redact-core.
 #[pymodule]
@@ -15,5 +16,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(merger::merge_entities, m)?)?;
     m.add_function(wrap_pyfunction!(restore::restore, m)?)?;
     m.add_class::<pseudonym::PyPseudonymGenerator>()?;
+    m.add_function(wrap_pyfunction!(lang_detect::detect_languages, m)?)?;
     Ok(())
 }
