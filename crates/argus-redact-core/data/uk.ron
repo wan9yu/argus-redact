@@ -1,1 +1,27 @@
-[]
+// UK English pattern data (SSOT). Mirrors lang/uk/patterns.py PATTERNS.
+[
+    PatternData(
+        type_: r"postcode",
+        label: r"[POSTCODE]",
+        pattern: r"(?<![A-Za-z])[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}(?![A-Za-z])",
+        description: r"UK postcode (e.g. SW1A 1AA, EC1A 1BB)",
+    ),
+    PatternData(
+        type_: r"nino",
+        label: r"[NINO]",
+        pattern: r"(?<![A-Za-z])[A-CEGHJ-PR-TW-Z]{2}\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-D](?![A-Za-z])",
+        description: r"UK National Insurance Number (NINO)",
+    ),
+    PatternData(
+        type_: r"phone",
+        label: r"[PHONE]",
+        pattern: r"(?:\+44|0044|0)[-\s]?\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}(?!\d)",
+        description: r"UK phone number",
+    ),
+    PatternData(
+        type_: r"nhs_number",
+        label: r"[NHS NUMBER]",
+        pattern: r"(?<!\d)\d{3}\s?\d{3}\s?\d{4}(?!\d)",
+        description: r"UK NHS number (10 digits)",
+    ),
+]
