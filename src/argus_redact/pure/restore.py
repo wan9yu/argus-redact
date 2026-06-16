@@ -141,9 +141,7 @@ def restore(
     pass-through. See `PRESET_MARKER_CHARS` in `pure/display_marker.py` for
     the canonical preset character set.
     """
-    if display_marker is not None:
-        text = strip_display_markers(text, marker=display_marker)
-
+    # JSON-key-from-path load stays in Python (I/O boundary; T8 is unaffected).
     if isinstance(key, str):
         import json
 
@@ -155,11 +153,33 @@ def restore(
         raise TypeError(f"key must be a Mapping or str (file path), got {type(key).__name__}")
 
     if not key:
+        # Even with an empty key, an explicit display_marker should be stripped.
+        if display_marker is not None:
+            return strip_display_markers(text, marker=display_marker)
         return text
 
-    # Merge aliases into the lookup if provided. Each alias points at the same
-    # original as its canonical fake — the alternation matches both forms and
-    # maps them back. Aliases for fakes not in `key` are ignored.
+    if not isinstance(key, dict):
+        key = dict(key)
+
+    # Delegate substitution + alias merge + decoration markers + grammar to Rust.
+    # check_restore_safety and wipe_key remain Python (T8 scope).
+    try:
+        from argus_redact._core import restore as _rust_restore
+
+        # Convert aliases values to lists (Rust expects Vec<String>, not tuples).
+        rust_aliases: dict[str, list[str]] | None = None
+        if aliases:
+            rust_aliases = {k: list(v) for k, v in aliases.items()}
+
+        return _rust_restore(text, key, aliases=rust_aliases, display_marker=display_marker)
+    except ImportError:
+        pass
+
+    # ── Python fallback (HAS_CORE False) ─────────────────────────────────
+    if display_marker is not None:
+        text = strip_display_markers(text, marker=display_marker)
+
+    # Merge aliases into the lookup if provided.
     if aliases:
         flat: dict[str, str] = dict(key)
         for fake, alias_tuple in aliases.items():
@@ -170,17 +190,8 @@ def restore(
                 flat[alias] = original
         key = flat
 
-    if not isinstance(key, dict):
-        key = dict(key)
-
     # Auto-detect known preset display markers when caller didn't pass
-    # display_marker=. For each occurrence of `key + preset_marker_chars+` in
-    # text, replace inline with `value + same_marker_chars` so the marker stays
-    # attached to the restored value. Custom markers (not in the preset set)
-    # are left alone — caller must pass `display_marker=` for those.
-    #
-    # This is conservative: stand-alone preset chars (e.g. `*` in regular
-    # prose) are NOT stripped because they are not adjacent to a key.
+    # display_marker=.
     if display_marker is None:
         decoration_pattern = _compile_decoration_pattern(frozenset(key))
         if decoration_pattern is not None:
@@ -191,13 +202,8 @@ def restore(
 
     has_self_ref = any(v in SELF_REF_PRONOUNS for v in key.values())
 
-    try:
-        from argus_redact._core import restore as _rust_restore
-
-        result = _rust_restore(text, key)
-    except ImportError:
-        regex = _compile_alternation(frozenset(key.keys()))
-        result = regex.sub(lambda m: key[m.group()], text)
+    regex = _compile_alternation(frozenset(key.keys()))
+    result = regex.sub(lambda m: key[m.group()], text)
 
     if has_self_ref:
         result = restore_grammar_en(result)
