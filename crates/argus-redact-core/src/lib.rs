@@ -10,6 +10,8 @@ pub mod lang_detect;
 pub mod normalize;
 pub mod grammar;
 pub mod display_marker;
+pub mod seed;
+pub mod masks;
 
 pub use types::PatternMatch;
 pub use merger::merge_entities;

@@ -17,3 +17,6 @@ fancy-regex.workspace = true
 serde.workspace = true
 ron.workspace = true
 unicode-normalization.workspace = true
+sha2.workspace = true
+sha3.workspace = true
+hmac.workspace = true
