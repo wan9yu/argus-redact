@@ -62,29 +62,20 @@ struct SharedFakerData {
     rfc7042_mac_prefix: String,
 }
 
-fn zh_data() -> &'static ZhFakerData {
-    static DATA: OnceLock<ZhFakerData> = OnceLock::new();
-    DATA.get_or_init(|| {
-        ron::from_str(include_str!("../data/fakers/zh.ron"))
-            .unwrap_or_else(|e| panic!("RON parse error in fakers/zh.ron: {e}"))
-    })
+macro_rules! embed_ron {
+    ($fn_name:ident, $ty:ty, $path:literal) => {
+        fn $fn_name() -> &'static $ty {
+            static CELL: std::sync::OnceLock<$ty> = std::sync::OnceLock::new();
+            CELL.get_or_init(|| {
+                ron::from_str(include_str!($path))
+                    .unwrap_or_else(|e| panic!(concat!("RON parse error in ", $path, ": {}"), e))
+            })
+        }
+    };
 }
-
-fn en_data() -> &'static EnFakerData {
-    static DATA: OnceLock<EnFakerData> = OnceLock::new();
-    DATA.get_or_init(|| {
-        ron::from_str(include_str!("../data/fakers/en.ron"))
-            .unwrap_or_else(|e| panic!("RON parse error in fakers/en.ron: {e}"))
-    })
-}
-
-fn shared_data() -> &'static SharedFakerData {
-    static DATA: OnceLock<SharedFakerData> = OnceLock::new();
-    DATA.get_or_init(|| {
-        ron::from_str(include_str!("../data/fakers/shared.ron"))
-            .unwrap_or_else(|e| panic!("RON parse error in fakers/shared.ron: {e}"))
-    })
-}
+embed_ron!(zh_data, ZhFakerData, "../data/fakers/zh.ron");
+embed_ron!(en_data, EnFakerData, "../data/fakers/en.ron");
+embed_ron!(shared_data, SharedFakerData, "../data/fakers/shared.ron");
 
 // ── Public pool accessors (used by reserved_range.rs scanner) ───────────────
 
