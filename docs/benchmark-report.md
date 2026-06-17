@@ -1,6 +1,6 @@
 # Benchmark Report
 
-> **Currency**: This report reflects argus-redact v0.7.3 on Apple M1 Max,
+> **Currency**: This report reflects argus-redact v0.7.4 on Apple M1 Max,
 > Python 3.11. ai4privacy 500 samples, seed=42. `auto` mode skipped on the
 > maintainer's machine (qwen2.5:32b inference exceeded 60s read timeout —
 > rerun on a host with adequate memory, or use a smaller LLM like
