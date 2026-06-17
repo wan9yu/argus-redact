@@ -295,14 +295,14 @@ pub fn replace<F: PseudoFactory>(
                 // Custom Python `faker_reserved` (no built-in faker_name). Route
                 // through the FakerFactory callback, reusing the shared re-roll
                 // loop so seeding/collision is identical to the built-in path.
-                let factory = faker_factory.ok_or_else(|| format!(
+                let ff = faker_factory.ok_or_else(|| format!(
                     "realistic strategy: custom faker for '{}' but no FakerFactory provided", entity.type_))?;
                 if resolved_salt.is_none() {
                     resolved_salt = Some(resolve_salt(salt)?);
                 }
                 let salt_bytes = resolved_salt.as_deref().expect("resolved_salt set above");
                 let (fake, alias_list) = crate::fakers::generate_unique_fake_with(
-                    |mk| factory.call_faker(&entity.type_, &entity.text, mk),
+                    |mk| ff.call_faker(&entity.type_, &entity.text, mk),
                     &entity.text, &entity.type_, salt_bytes, &used_labels,
                 )?;
                 if !alias_list.is_empty() {
