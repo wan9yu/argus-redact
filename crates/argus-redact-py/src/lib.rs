@@ -15,6 +15,7 @@ mod shake_rng;
 mod seed;
 mod masks;
 mod fakers;
+mod pools;
 
 /// argus-redact Rust core — high-performance pure functions over argus-redact-core.
 #[pymodule]
@@ -48,5 +49,25 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(masks::mask_landline, m)?)?;
     m.add_function(wrap_pyfunction!(masks::resolve_collision, m)?)?;
     m.add_function(wrap_pyfunction!(fakers::generate_unique_fake, m)?)?;
+    // ── pool accessors (zh) ──
+    m.add_function(wrap_pyfunction!(pools::reserved_person_names_zh, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::reserved_person_names_aliases_zh, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::reserved_cities_zh, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::reserved_addresses_zh_aliases, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::passport_prefixes_zh, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::plate_special_prefixes_zh, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::hkid_reserved_letter, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::twid_reserved_letter, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::macau_reserved_lead, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::twarc_reserved_prefix, m)?)?;
+    // ── pool accessors (en) ──
+    m.add_function(wrap_pyfunction!(pools::reserved_person_names_en, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::reserved_person_names_aliases_en, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::reserved_addresses_en, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::reserved_addresses_en_aliases, m)?)?;
+    // ── pool accessors (shared) ──
+    m.add_function(wrap_pyfunction!(pools::rfc2606_domains, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::rfc5737_prefixes, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::rfc7042_mac_prefix, m)?)?;
     Ok(())
 }

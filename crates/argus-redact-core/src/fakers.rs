@@ -119,6 +119,88 @@ pub fn twarc_reserved_prefix() -> &'static str {
     &zh_data().twarc_reserved_prefix
 }
 
+/// Zh person-name aliases as an ordered `Vec<(name, aliases)>`.
+/// Order matches `reserved_person_names` (guaranteed by construction in RON).
+pub fn reserved_person_names_aliases_zh_ordered() -> Vec<(String, Vec<String>)> {
+    let data = zh_data();
+    data.reserved_person_names
+        .iter()
+        .map(|name| {
+            let aliases = data
+                .reserved_person_names_aliases
+                .get(name)
+                .cloned()
+                .unwrap_or_default();
+            (name.clone(), aliases)
+        })
+        .collect()
+}
+
+/// Zh address aliases as an ordered `Vec<((city, district, street), aliases)>`.
+/// Order matches `reserved_addresses_zh_aliases` in the RON (Vec, insertion-ordered).
+pub fn reserved_addresses_zh_aliases() -> &'static [((String, String, String), Vec<String>)] {
+    &zh_data().reserved_addresses_zh_aliases
+}
+
+/// Passport prefixes pool (e.g. `["E", "G"]`).
+pub fn passport_prefixes_zh() -> &'static [String] {
+    &zh_data().passport_prefixes
+}
+
+/// Plate special prefixes pool (e.g. `["测", "领"]`).
+pub fn plate_special_prefixes_zh() -> &'static [String] {
+    &zh_data().plate_special_prefixes
+}
+
+/// En person-name aliases as an ordered `Vec<(name, aliases)>`.
+/// Order matches `reserved_person_names_en`.
+pub fn reserved_person_names_aliases_en_ordered() -> Vec<(String, Vec<String>)> {
+    let data = en_data();
+    data.reserved_person_names_en
+        .iter()
+        .map(|name| {
+            let aliases = data
+                .reserved_person_names_en_aliases
+                .get(name)
+                .cloned()
+                .unwrap_or_default();
+            (name.clone(), aliases)
+        })
+        .collect()
+}
+
+/// En address aliases as an ordered `Vec<(address, aliases)>`.
+/// Order matches `reserved_addresses_en`.
+pub fn reserved_addresses_en_aliases() -> Vec<(String, Vec<String>)> {
+    let data = en_data();
+    data.reserved_addresses_en
+        .iter()
+        .map(|addr| {
+            let aliases = data
+                .reserved_addresses_en_aliases
+                .get(addr)
+                .cloned()
+                .unwrap_or_default();
+            (addr.clone(), aliases)
+        })
+        .collect()
+}
+
+/// RFC 2606 reserved email domains pool.
+pub fn rfc2606_domains() -> &'static [String] {
+    &shared_data().rfc2606_domains
+}
+
+/// RFC 5737 TEST-NET IPv4 prefix pool.
+pub fn rfc5737_prefixes() -> &'static [String] {
+    &shared_data().rfc5737_prefixes
+}
+
+/// RFC 7042 documentation MAC prefix (e.g. `"00:00:5E:00:53"`).
+pub fn rfc7042_mac_prefix() -> &'static str {
+    &shared_data().rfc7042_mac_prefix
+}
+
 /// The faker function signature: `(original_value, rng) -> (fake, aliases)`.
 pub type FakerFn = fn(&str, &mut ShakeRng) -> (String, Vec<String>);
 
