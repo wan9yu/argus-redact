@@ -57,10 +57,10 @@ def _merge_priority(
     return final
 
 
-from argus_redact._core_loader import _core, HAS_CORE
+from argus_redact._core_loader import _core
 
-_rust_merge = _core.merge_entities if HAS_CORE else None
-_RustPM = _core.PatternMatch if HAS_CORE else None
+_rust_merge = _core.merge_entities
+_RustPM = _core.PatternMatch
 
 
 def merge_entities(

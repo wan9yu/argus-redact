@@ -6,22 +6,20 @@ import functools
 import warnings
 from typing import Callable
 
-from argus_redact._core_loader import _core, HAS_CORE
+from argus_redact._core_loader import _core
 from argus_redact._types import PatternMatch
 from argus_redact.lang.zh.hints import KINSHIP as _ZH_KINSHIP
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS
 
 # Rust PatternMatch class, resolved once at import (same idiom as pure/merger.py).
-# The Rust core is mandatory; HAS_CORE is kept for the ternary guard only so the
-# module doesn't crash at import time when _core is absent (broken install).
-_RustPM = _core.PatternMatch if HAS_CORE else None
+_RustPM = _core.PatternMatch
 
 # Function names of the built-in reserved-range fakers, owned by the Rust core's
 # (type, lang)→faker_name association (``_core.builtin_faker_name``). A custom
 # ``register_pii_type(faker_reserved=...)`` callable's ``__name__`` is absent
 # here → it is flagged a custom faker and invoked via the Rust ``PyFakerFactory``
 # callback. Resolved once at import; matches the Rust faker dispatch key set.
-_core_builtin_names = frozenset(_core.builtin_faker_names()) if HAS_CORE else frozenset()
+_core_builtin_names = frozenset(_core.builtin_faker_names())
 
 
 class SecurityWarning(UserWarning):

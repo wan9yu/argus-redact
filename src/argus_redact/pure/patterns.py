@@ -69,9 +69,9 @@ def _looks_like_false_positive(text: str, start: int, end: int) -> bool:
     return bool(_FALSE_POSITIVE_PREFIX.search(before) or _FALSE_POSITIVE_SUFFIX.match(after))
 
 
-from argus_redact._core_loader import _core, HAS_CORE
+from argus_redact._core_loader import _core
 
-_rust_match_patterns = _core.match_patterns if HAS_CORE else None
+_rust_match_patterns = _core.match_patterns
 
 
 def match_patterns(
