@@ -27,6 +27,7 @@ use fancy_regex::Regex;
 
 use crate::person_data::{compound_surnames_zh, not_names_zh_set, surnames_zh};
 use crate::reserved_range::byte_to_char_offset;
+use crate::types::PatternMatch;
 
 /// CJK unified ideographs range — the character class body used by both
 /// `_SINGLE_PAT` and `_COMPOUND_PAT`. Mirrors Python `_CJK = r"一-鿿"`.
@@ -242,6 +243,186 @@ pub(crate) fn generate_candidates(text: &str) -> Vec<NameCandidate> {
     candidates
 }
 
+// ── Evidence scoring ──
+//
+// Direct port of `score_candidate` (+ its constants) from `lang/zh/person.py`.
+//
+// ## Bit-identity
+//
+// The scores must match Python's f64 EXACTLY (the golden corpus locks values
+// like `0.8999999999999999`). IEEE-754 addition is commutative but not
+// associative, so the accumulation structure is mirrored line-for-line:
+//   - `evidence` starts at `0.0` and each fired signal does `evidence += w`
+//     in the SAME order as Python (context-prefix, honorific, PII-suffix,
+//     paren-phone, then the single proximity bucket).
+//   - the zero-evidence short-circuit (`evidence == 0.0 → 0.0`) runs BEFORE the
+//     base is chosen, exactly as in Python.
+//   - the final value is `(score + evidence).min(1.0)` — base first, evidence
+//     second, then the cap — matching Python `min(score + evidence, 1.0)`.
+
+/// `_CONTEXT_PREFIX` — context words immediately before the name (a strong
+/// signal). Python applies this with `re.search` (unanchored); the pattern is
+/// `$`-anchored at the end so it only matches at the tail of the `before`
+/// window. fancy_regex `is_match` is a search, matching `re.search`.
+static CONTEXT_PREFIX: LazyLock<Regex> = LazyLock::new(|| {
+    let pat = concat!(
+        r"(?:",
+        // Formal role words
+        r"客户|患者|用户|旅客|车主|联系人|收件人|寄件人|",
+        r"登记人|开户人|申请人|报案人|委托人|当事人|嫌疑人|",
+        r"负责人|经办人|签收人|担保人|受益人|借款人|",
+        r"持卡人|被保险人|投保人|参会人员|",
+        r"主治医生|医生|护士|教授|老板|同事|朋友|同学|",
+        r"姓名|乘客|住户|业主|租户|房东|",
+        // Conversational / intro phrases
+        r"我是|我叫|这是|那是|找|叫做|叫作|本人|",
+        r"通知|转告|联系|致电|询问",
+        r")[：:\s]?$"
+    );
+    Regex::new(pat)
+        .unwrap_or_else(|e| panic!("person_zh: _CONTEXT_PREFIX compile failed: {e}"))
+});
+
+/// `_PII_SUFFIX` — possessive + PII-type keyword right after the name. Python
+/// applies this with `re.match` (anchored at start); the pattern is also
+/// `^`-anchored, so search ≡ match here.
+static PII_SUFFIX: LazyLock<Regex> = LazyLock::new(|| {
+    let pat = concat!(
+        r"^(?:的(?:手机|电话|身份证|银行卡|账[户号]|地址|邮[箱件]|护照|车牌)|",
+        r"[，,](?:身份证|电话|手机|银行卡))"
+    );
+    Regex::new(pat).unwrap_or_else(|e| panic!("person_zh: _PII_SUFFIX compile failed: {e}"))
+});
+
+/// `_PAREN_PHONE` — a parenthesized mobile number right after the name. Python
+/// applies this with `re.match` (anchored); pattern is `^`-anchored.
+static PAREN_PHONE: LazyLock<Regex> = LazyLock::new(|| {
+    let pat = r"^[（(]\s*1[3-9]\d{9}";
+    Regex::new(pat).unwrap_or_else(|e| panic!("person_zh: _PAREN_PHONE compile failed: {e}"))
+});
+
+/// `_CONTEXT_WINDOW` = 20 — number of **chars** (not bytes) of context examined
+/// on each side of the candidate.
+const CONTEXT_WINDOW: usize = 20;
+
+// Signal weights — transcribed from `score_candidate`. Kept as named f64 consts
+// so the `+=` order is auditable against the Python source.
+const W_CONTEXT_PREFIX: f64 = 0.6;
+const W_HONORIFIC_SUFFIX: f64 = 0.5;
+const W_PII_SUFFIX: f64 = 0.5;
+const W_PAREN_PHONE: f64 = 0.5;
+const W_PROXIMITY_NEAR: f64 = 0.5; // distance <= 50
+const W_PROXIMITY_MID: f64 = 0.3; // distance <= 150
+const PROXIMITY_NEAR: usize = 50;
+const PROXIMITY_MID: usize = 150;
+
+// Base score by candidate length (in chars).
+const BASE_LEN_4PLUS: f64 = 0.5;
+const BASE_LEN_3: f64 = 0.4;
+const BASE_LEN_2: f64 = 0.3;
+
+/// Score a name candidate against multiple evidence signals.
+///
+/// Direct port of `score_candidate(candidate, text, *, pii_entities)`. Returns a
+/// bit-identical f64 to the Python reference.
+///
+/// `text` / `candidate` offsets are **char** offsets; `pii_entities[i].start` /
+/// `.end` are also char offsets (Python uses `pii.start` / `pii.end` directly).
+/// Only `start`/`end` are read off each entity — the `type != "self_reference"`
+/// filter lives in `detect_person_names` (T5), not here.
+pub(crate) fn score_candidate(
+    candidate: &NameCandidate,
+    text: &str,
+    pii_entities: &[PatternMatch],
+) -> f64 {
+    // before = text[max(0, candidate.start - _CONTEXT_WINDOW) : candidate.start]
+    // after  = text[candidate.end : candidate.end + _CONTEXT_WINDOW]
+    // These are CHAR slices in Python; compute them in char-space so a
+    // multi-byte CJK window is never byte-sliced.
+    let text_chars: Vec<char> = text.chars().collect();
+    let n = text_chars.len();
+
+    let before_start = candidate.start.saturating_sub(CONTEXT_WINDOW);
+    let before_end = candidate.start.min(n);
+    let before: String = if before_start <= before_end {
+        text_chars[before_start..before_end].iter().collect()
+    } else {
+        String::new()
+    };
+
+    let after_start = candidate.end.min(n);
+    let after_end = (candidate.end + CONTEXT_WINDOW).min(n);
+    let after: String = if after_start <= after_end {
+        text_chars[after_start..after_end].iter().collect()
+    } else {
+        String::new()
+    };
+
+    // Collect evidence signals — same order as Python:
+    //   evidence = 0.0
+    //   if _CONTEXT_PREFIX.search(before):   evidence += 0.6
+    //   if _HONORIFIC_SUFFIX.match(after):   evidence += 0.5
+    //   if _PII_SUFFIX.match(after):         evidence += 0.5
+    //   if _PAREN_PHONE.match(after):        evidence += 0.5
+    let mut evidence = 0.0_f64;
+    if CONTEXT_PREFIX.is_match(&before).unwrap_or(false) {
+        evidence += W_CONTEXT_PREFIX;
+    }
+    if HONORIFIC_SUFFIX.is_match(&after).unwrap_or(false) {
+        evidence += W_HONORIFIC_SUFFIX;
+    }
+    if PII_SUFFIX.is_match(&after).unwrap_or(false) {
+        evidence += W_PII_SUFFIX;
+    }
+    if PAREN_PHONE.is_match(&after).unwrap_or(false) {
+        evidence += W_PAREN_PHONE;
+    }
+
+    // Proximity to structural PII — first entity within a bucket wins (break).
+    //   for pii in pii_entities:
+    //       distance = min(abs(candidate.start - pii.end), abs(pii.start - candidate.end))
+    //       if distance <= 50:    evidence += 0.5; break
+    //       elif distance <= 150: evidence += 0.3; break
+    //
+    // `abs(...)` over usize char offsets — use abs_diff so subtraction never
+    // underflows; abs_diff(a, b) == |a - b| matches Python's abs() on ints.
+    for pii in pii_entities {
+        let distance = candidate
+            .start
+            .abs_diff(pii.end)
+            .min(pii.start.abs_diff(candidate.end));
+        if distance <= PROXIMITY_NEAR {
+            evidence += W_PROXIMITY_NEAR;
+            break;
+        } else if distance <= PROXIMITY_MID {
+            evidence += W_PROXIMITY_MID;
+            break;
+        }
+    }
+
+    // No evidence signal → don't match at L1b (leave to L2 NER).
+    //   if evidence == 0.0: return 0.0
+    if evidence == 0.0_f64 {
+        return 0.0;
+    }
+
+    // Base score by name length (chars) + evidence.
+    //   if len(candidate.text) >= 4: score = 0.5
+    //   elif len(candidate.text) == 3: score = 0.4
+    //   else: score = 0.3
+    let name_len = candidate.text.chars().count();
+    let score = if name_len >= 4 {
+        BASE_LEN_4PLUS
+    } else if name_len == 3 {
+        BASE_LEN_3
+    } else {
+        BASE_LEN_2
+    };
+
+    // return min(score + evidence, 1.0)
+    (score + evidence).min(1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -358,5 +539,227 @@ mod tests {
     #[test]
     fn empty_input() {
         assert_candidates("", &[]);
+    }
+
+    // ── score_candidate — bit-identity golden tests ──
+    //
+    // EVERY expected f64 below was CAPTURED FROM LIVE PYTHON and is asserted with
+    // EXACT `==` (not approx). IEEE-754 addition is not associative, so the float
+    // values (e.g. `0.8999999999999999`) pin the accumulation order. Capture
+    // command (pyenv 3.11.3):
+    //   python3 - <<'PY'
+    //   from argus_redact.lang.zh.person import score_candidate, NameCandidate
+    //   from argus_redact._types import PatternMatch
+    //   def find(text, sub):
+    //       i = text.index(sub); return NameCandidate(sub, i, i+len(sub))
+    //   print(repr(score_candidate(find("客户张三","张三"), "客户张三",
+    //                              pii_entities=None)))
+    //   PY
+    // (proximity cases build a NameCandidate at a known char offset over a neutral
+    // filler text and a PatternMatch at a computed start/end — see comments).
+
+    fn cand(text: &str, start: usize, end: usize) -> NameCandidate {
+        NameCandidate { text: text.to_string(), start, end }
+    }
+
+    fn pii(start: usize, end: usize) -> PatternMatch {
+        PatternMatch {
+            text: "x".to_string(),
+            type_: "phone".to_string(),
+            start,
+            end,
+            confidence: 1.0,
+            layer: 1,
+        }
+    }
+
+    // ── Base-by-length (each carries a context-prefix signal so it doesn't zero
+    //    out). These also exercise the cap at 1.0 for len 3/4. ──
+
+    #[test]
+    fn base_len2_context_prefix() {
+        // "我的客户张三你好" — 张三 at chars 4..6; before window ends with "客户"
+        // → context-prefix fires. base 0.3 + 0.6 = 0.8999999999999999 (the
+        // classic non-associative float — locks accumulation order).
+        // Python: 0.8999999999999999
+        let s = score_candidate(&cand("张三", 4, 6), "我的客户张三你好", &[]);
+        assert_eq!(s, 0.8999999999999999);
+    }
+
+    #[test]
+    fn base_len3_context_prefix_caps() {
+        // "我的客户何秀珍来电" — 何秀珍 at 4..7. base 0.4 + 0.6 = 1.0.
+        // Python: 1.0
+        let s = score_candidate(&cand("何秀珍", 4, 7), "我的客户何秀珍来电", &[]);
+        assert_eq!(s, 1.0);
+    }
+
+    #[test]
+    fn base_len4_context_prefix_caps() {
+        // "我的客户欧阳娜娜来电" — 欧阳娜娜 (compound) at 4..8. base 0.5 + 0.6 = 1.1
+        // → capped to 1.0.
+        // Python: 1.0
+        let s = score_candidate(&cand("欧阳娜娜", 4, 8), "我的客户欧阳娜娜来电", &[]);
+        assert_eq!(s, 1.0);
+    }
+
+    // ── Each signal in isolation (2-char base 0.3). ──
+
+    #[test]
+    fn signal_context_prefix_only() {
+        // "客户张三" — before="客户" → context-prefix. base 0.3 + 0.6.
+        // Python: 0.8999999999999999
+        let s = score_candidate(&cand("张三", 2, 4), "客户张三", &[]);
+        assert_eq!(s, 0.8999999999999999);
+    }
+
+    #[test]
+    fn signal_honorific_suffix_only() {
+        // "张三先生你好" — after="先生你好...", honorific 先生 matches. 0.3 + 0.5.
+        // Python: 0.8
+        let s = score_candidate(&cand("张三", 0, 2), "张三先生你好", &[]);
+        assert_eq!(s, 0.8);
+    }
+
+    #[test]
+    fn signal_pii_suffix_only() {
+        // "张三的手机号码" — after="的手机号码" → PII-suffix 的手机. 0.3 + 0.5.
+        // Python: 0.8
+        let s = score_candidate(&cand("张三", 0, 2), "张三的手机号码", &[]);
+        assert_eq!(s, 0.8);
+    }
+
+    #[test]
+    fn signal_paren_phone_only() {
+        // "张三（13812345678）" — after starts with （138... → paren-phone. 0.3+0.5.
+        // Python: 0.8
+        let s = score_candidate(&cand("张三", 0, 2), "张三（13812345678）", &[]);
+        assert_eq!(s, 0.8);
+    }
+
+    // ── Proximity buckets — boundary cases 49/50/51 and 149/150/151.
+    //    Candidate "甲甲" at chars 200..202 over a 400-char neutral filler (no
+    //    regex signal fires). The PII entity is placed AFTER the candidate so
+    //    distance = pii.start - candidate.end. base 0.3 + bucket weight. ──
+
+    fn prox_after(distance: usize) -> f64 {
+        let text: String = "甲".repeat(400);
+        let c = cand("甲甲", 200, 202);
+        let ps = 202 + distance; // pii.start - candidate.end == distance
+        let p = pii(ps, ps + 5);
+        score_candidate(&c, &text, &[p])
+    }
+
+    fn prox_before(distance: usize) -> f64 {
+        let text: String = "甲".repeat(400);
+        let c = cand("甲甲", 200, 202);
+        let pe = 200 - distance; // candidate.start - pii.end == distance
+        let p = pii(pe - 5, pe);
+        score_candidate(&c, &text, &[p])
+    }
+
+    #[test]
+    fn proximity_after_boundaries() {
+        // <= 50 → +0.5 (0.8); 51..=150 → +0.3 (0.6); > 150 → 0.0 (zero evidence).
+        // Python: 49→0.8, 50→0.8, 51→0.6, 149→0.6, 150→0.6, 151→0.0
+        assert_eq!(prox_after(49), 0.8);
+        assert_eq!(prox_after(50), 0.8);
+        assert_eq!(prox_after(51), 0.6);
+        assert_eq!(prox_after(149), 0.6);
+        assert_eq!(prox_after(150), 0.6);
+        assert_eq!(prox_after(151), 0.0);
+    }
+
+    #[test]
+    fn proximity_before_boundaries() {
+        // Same buckets measured on the entity-before gap.
+        // Python: 49→0.8, 50→0.8, 51→0.6, 149→0.6, 150→0.6, 151→0.0
+        assert_eq!(prox_before(49), 0.8);
+        assert_eq!(prox_before(50), 0.8);
+        assert_eq!(prox_before(51), 0.6);
+        assert_eq!(prox_before(149), 0.6);
+        assert_eq!(prox_before(150), 0.6);
+        assert_eq!(prox_before(151), 0.0);
+    }
+
+    // ── Zero-evidence short-circuit → 0.0. ──
+
+    #[test]
+    fn zero_evidence_no_signals() {
+        // Neutral filler, no PII → evidence == 0.0 → 0.0.
+        // Python: 0.0
+        let text: String = "甲".repeat(400);
+        let s = score_candidate(&cand("甲甲", 200, 202), &text, &[]);
+        assert_eq!(s, 0.0);
+    }
+
+    #[test]
+    fn zero_evidence_far_pii() {
+        // PII far beyond the 150 bucket → no proximity signal → 0.0.
+        // Python: 0.0
+        assert_eq!(prox_after(200), 0.0);
+    }
+
+    // ── Below-cap base + single signal (clean stacking witnesses). ──
+
+    #[test]
+    fn len3_proximity_mid_bucket() {
+        // 何秀珍 (3 chars) at 200..203 + PII at distance 150 → base 0.4 + 0.3 = 0.7.
+        // Python: 0.7
+        let text: String = "甲".repeat(400);
+        let c = cand("何秀珍", 200, 203);
+        let p = pii(203 + 150, 203 + 155);
+        assert_eq!(score_candidate(&c, &text, &[p]), 0.7);
+    }
+
+    #[test]
+    fn len4_proximity_mid_bucket() {
+        // 欧阳娜娜 (4 chars) at 200..204 + PII at distance 150 → base 0.5 + 0.3 = 0.8.
+        // Python: 0.8
+        let text: String = "甲".repeat(400);
+        let c = cand("欧阳娜娜", 200, 204);
+        let p = pii(204 + 150, 204 + 155);
+        assert_eq!(score_candidate(&c, &text, &[p]), 0.8);
+    }
+
+    #[test]
+    fn len3_honorific() {
+        // 何秀珍 + 先生 → base 0.4 + 0.5 = 0.9.
+        // Python: 0.9
+        let s = score_candidate(&cand("何秀珍", 0, 3), "何秀珍先生你好", &[]);
+        assert_eq!(s, 0.9);
+    }
+
+    #[test]
+    fn len3_pii_suffix() {
+        // 何秀珍 + 的手机 → base 0.4 + 0.5 = 0.9.
+        // Python: 0.9
+        let s = score_candidate(&cand("何秀珍", 0, 3), "何秀珍的手机号码", &[]);
+        assert_eq!(s, 0.9);
+    }
+
+    // ── MULTIPLE signals stacking — exercise multi-term f64 accumulation order
+    //    AND the cap at 1.0. ──
+
+    #[test]
+    fn multi_signal_context_prefix_plus_honorific_caps() {
+        // "客户何秀珍先生你好" — 何秀珍 at 2..5. before="客户" (context-prefix +0.6),
+        // after="先生你好..." (honorific +0.5). evidence accumulates 0.6 then 0.5;
+        // base 0.4 + 1.1 = 1.5 → capped 1.0.
+        // Python: 1.0
+        let s = score_candidate(&cand("何秀珍", 2, 5), "客户何秀珍先生你好", &[]);
+        assert_eq!(s, 1.0);
+    }
+
+    #[test]
+    fn multi_signal_context_prefix_plus_pii_suffix_plus_proximity_caps() {
+        // "请联系客户张三的手机号码" — 张三 at 5..7. before ends "客户" (+0.6),
+        // after="的手机号码" (PII-suffix +0.5), plus a nearby PII entity (+0.5).
+        // Three evidence terms accumulate (0.6, 0.5, 0.5); base 0.3 + 1.6 → cap 1.0.
+        // Python: 1.0
+        let text = "请联系客户张三的手机号码";
+        let c = cand("张三", 5, 7);
+        let p = pii(9, 20); // within 50 chars of the candidate
+        assert_eq!(score_candidate(&c, text, &[p]), 1.0);
     }
 }
