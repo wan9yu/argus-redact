@@ -13,6 +13,7 @@ mod reserved_range;
 mod replace;
 mod shake_rng;
 mod seed;
+mod masks;
 
 /// argus-redact Rust core — high-performance pure functions over argus-redact-core.
 #[pymodule]
@@ -41,5 +42,9 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(shake_rng::seed_from_value, m)?)?;
     m.add_function(wrap_pyfunction!(seed::resolve_salt, m)?)?;
     m.add_function(wrap_pyfunction!(seed::type_seed_offset, m)?)?;
+    m.add_function(wrap_pyfunction!(masks::mask_value, m)?)?;
+    m.add_function(wrap_pyfunction!(masks::mask_name, m)?)?;
+    m.add_function(wrap_pyfunction!(masks::mask_landline, m)?)?;
+    m.add_function(wrap_pyfunction!(masks::resolve_collision, m)?)?;
     Ok(())
 }
