@@ -34,7 +34,6 @@ import pytest
 from argus_redact._types import PatternMatch
 from argus_redact.lang.en.person import detect_person_names as detect_en
 from argus_redact.lang.zh.person import detect_person_names as detect_zh
-from argus_redact.lang.zh.surnames import SURNAMES
 
 _FIXTURE_DIR = Path(__file__).resolve().parents[2] / "core" / "fixtures"
 _ZH_FIXTURE = _FIXTURE_DIR / "zh_person_detection_v076.json"
@@ -78,7 +77,7 @@ def _dict_to_pm(d: dict) -> PatternMatch:
 
 
 def _existing_zh_fixture_cases() -> list[dict]:
-    """The 25 cases from tests/fixtures/zh_person.json, replayed with no PII."""
+    """The 24 cases from tests/fixtures/zh_person.json, replayed with no PII."""
     src = Path(__file__).resolve().parents[2] / "fixtures" / "zh_person.json"
     raw = json.loads(src.read_text(encoding="utf-8"))
     cases = []
@@ -202,6 +201,11 @@ def _zh_edge_cases() -> list[dict]:
 
 def _zh_surname_sweep_cases() -> list[dict]:
     """Each single surname once in minimal positive context — locks the pool."""
+    # Local import: only the regeneration (__main__) path builds the sweep
+    # corpus, so the replay+assert path never needs surnames.py. Keeping it
+    # lazy lets this test keep collecting if surnames.py is later removed.
+    from argus_redact.lang.zh.surnames import SURNAMES
+
     cases = []
     for s in SURNAMES:
         cases.append(
@@ -313,6 +317,13 @@ def _load(fixture: Path) -> list[dict]:
 
 _ZH_FROZEN = _load(_ZH_FIXTURE) if _ZH_FIXTURE.exists() else []
 _EN_FROZEN = _load(_EN_FIXTURE) if _EN_FIXTURE.exists() else []
+
+
+def test_fixtures_present():
+    # Guard the soft spot: an emptied/missing fixture would make the
+    # parametrize([]) tests silently skip (green). Fail loudly instead.
+    assert _ZH_FIXTURE.exists() and len(_ZH_FROZEN) > 0
+    assert _EN_FIXTURE.exists() and len(_EN_FROZEN) > 0
 
 
 @pytest.mark.parametrize("case", _ZH_FROZEN, ids=[c["id"] for c in _ZH_FROZEN])
