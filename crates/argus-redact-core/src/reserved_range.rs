@@ -71,37 +71,24 @@ fn build_patterns(overrides: Option<&HashMap<String, Vec<String>>>) -> Vec<(Stri
     let person_en_pat = escaped_alternation(reserved_person_names_en());
     let address_en_pat = escaped_alternation(reserved_addresses_en());
 
-    // Shared (RFC documentation ranges).
-    let shared_patterns: &[(&str, String)] = &[
-        // en
-        (
-            "phone_en",
-            r"\(555\)\s*555-01\d{2}".to_string(),
-        ),
-        (
-            "ssn_en",
-            r"(?<!\d)999-\d{2}-\d{4}(?!\d)".to_string(),
-        ),
-        (
-            "credit_card_en",
-            r"(?<!\d)999999\d{10}(?!\d)".to_string(),
-        ),
-        // shared
-        (
-            "email_shared",
-            r"@example\.(?:com|org|net)\b".to_string(),
-        ),
+    // EN-only numeric / structural patterns (RFC 5737 / Hollywood phone range).
+    let en_numeric_patterns: &[(&str, &str)] = &[
+        ("phone_en", r"\(555\)\s*555-01\d{2}"),
+        ("ssn_en", r"(?<!\d)999-\d{2}-\d{4}(?!\d)"),
+        ("credit_card_en", r"(?<!\d)999999\d{10}(?!\d)"),
+    ];
+
+    // Truly shared patterns (RFC documentation ranges, protocol-level).
+    let truly_shared_patterns: &[(&str, &str)] = &[
+        ("email_shared", r"@example\.(?:com|org|net)\b"),
         (
             "ipv4_shared",
-            r"(?<!\d)(?:192\.0\.2|198\.51\.100|203\.0\.113)\.\d{1,3}(?!\d)".to_string(),
+            r"(?<!\d)(?:192\.0\.2|198\.51\.100|203\.0\.113)\.\d{1,3}(?!\d)",
         ),
-        (
-            "ipv6_shared",
-            r"\b2001:db8::[0-9a-fA-F]{1,4}\b".to_string(),
-        ),
+        ("ipv6_shared", r"\b2001:db8::[0-9a-fA-F]{1,4}\b"),
         (
             "mac_shared",
-            r"(?<![0-9A-Fa-f:])00:00:5E:00:53:[0-9A-Fa-f]{2}(?![0-9A-Fa-f:])".to_string(),
+            r"(?<![0-9A-Fa-f:])00:00:5E:00:53:[0-9A-Fa-f]{2}(?![0-9A-Fa-f:])",
         ),
     ];
 
@@ -109,53 +96,31 @@ fn build_patterns(overrides: Option<&HashMap<String, Vec<String>>>) -> Vec<(Stri
     let mut result: Vec<(String, String)> = Vec::new();
 
     for (name, pat) in numeric_patterns {
-        push_with_override(&mut result, name, pat.clone(), overrides);
+        push_with_override(&mut result, name, pat, overrides);
     }
 
     // person_zh (may be overridden to an alternation of specific names)
-    push_pool_with_override_raw(&mut result, "person_zh", &person_zh_pat, overrides);
+    push_with_override(&mut result, "person_zh", &person_zh_pat, overrides);
     // address_zh
-    push_pool_with_override_raw(&mut result, "address_zh", &address_zh_pat, overrides);
+    push_with_override(&mut result, "address_zh", &address_zh_pat, overrides);
 
-    for (name, pat) in &[
-        ("phone_en", shared_patterns[0].1.clone()),
-        ("ssn_en", shared_patterns[1].1.clone()),
-        ("credit_card_en", shared_patterns[2].1.clone()),
-    ] {
-        push_with_override(&mut result, name, pat.clone(), overrides);
+    for (name, pat) in en_numeric_patterns {
+        push_with_override(&mut result, name, pat, overrides);
     }
 
     // person_en
-    push_pool_with_override_raw(&mut result, "person_en", &person_en_pat, overrides);
+    push_with_override(&mut result, "person_en", &person_en_pat, overrides);
     // address_en
-    push_pool_with_override_raw(&mut result, "address_en", &address_en_pat, overrides);
+    push_with_override(&mut result, "address_en", &address_en_pat, overrides);
 
-    for (name, pat) in shared_patterns.iter().skip(3) {
-        push_with_override(&mut result, name, pat.clone(), overrides);
+    for (name, pat) in truly_shared_patterns {
+        push_with_override(&mut result, name, pat, overrides);
     }
 
     result
 }
 
 fn push_with_override(
-    out: &mut Vec<(String, String)>,
-    name: &str,
-    default_pat: String,
-    overrides: Option<&HashMap<String, Vec<String>>>,
-) {
-    if let Some(ov) = overrides {
-        if let Some(names) = ov.get(name) {
-            if names.is_empty() {
-                return; // disabled
-            }
-            out.push((name.to_string(), escaped_alternation(names)));
-            return;
-        }
-    }
-    out.push((name.to_string(), default_pat));
-}
-
-fn push_pool_with_override_raw(
     out: &mut Vec<(String, String)>,
     name: &str,
     default_pat: &str,
