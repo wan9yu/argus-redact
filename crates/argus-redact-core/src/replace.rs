@@ -181,6 +181,12 @@ pub fn replace<F: PseudoFactory>(
     // Per-type pseudonym generators for the remove strategy (LLM survival).
     let mut type_gens: HashMap<String, PseudonymGenerator<F::Source>> = HashMap::new();
 
+    // Salt is immutable for the whole call; resolve it once, lazily — only when
+    // a built-in realistic faker actually needs it. Deferring the resolve keeps
+    // the original error surface (a `None` salt with no env var errors only when
+    // a realistic faker is reached, not for calls without any realistic entity).
+    let mut resolved_salt: Option<Vec<u8>> = None;
+
     let mut entity_replacements: HashMap<String, String> = HashMap::new();
 
     for entity in entities {
@@ -209,8 +215,13 @@ pub fn replace<F: PseudoFactory>(
                 continue;
             }
             keep_downgraded = true;
+            // The Python original calls `_resolve_default_strategy(type)` again
+            // here — the registry default. We carry it explicitly in
+            // `default_strategy` so a user config of `{strategy: "keep"}`
+            // downgrades to the registry default (not back to "keep"). Fallback
+            // "remove" matches the unknown-type case.
             strategy = info
-                .map(|i| i.strategy_default_for_downgrade())
+                .map(|i| i.default_strategy.clone())
                 .unwrap_or_else(|| "remove".to_string());
             // fall through to strategy dispatch
         }
@@ -223,12 +234,12 @@ pub fn replace<F: PseudoFactory>(
                     // redraws the first number, but the up-to-date key forces a
                     // fresh code on collision. (replacer.py:578–583)
                     let prefix = info.map(|i| i.prefix.as_str()).unwrap_or("O");
-                    let live = if result_key.is_empty() { None } else { Some(result_key.clone()) };
+                    let live = if result_key.is_empty() { None } else { Some(&result_key) };
                     org_gen = PseudonymGenerator::new(
                         prefix,
                         PSEUDONYM_CODE_RANGE,
                         factory.make(offset_seed(pseudo_seed_int, 1)),
-                        live.as_ref(),
+                        live,
                     );
                 }
                 org_gen.get(&entity.text)
@@ -237,12 +248,12 @@ pub fn replace<F: PseudoFactory>(
                     // Same rebuild semantics for the person generator
                     // (replacer.py:586–591): config prefix + live result_key.
                     let prefix = info.map(|i| i.prefix.as_str()).unwrap_or("P");
-                    let live = if result_key.is_empty() { None } else { Some(result_key.clone()) };
+                    let live = if result_key.is_empty() { None } else { Some(&result_key) };
                     pseudo_gen = PseudonymGenerator::new(
                         prefix,
                         PSEUDONYM_CODE_RANGE,
                         factory.make(pseudo_seed_int),
-                        live.as_ref(),
+                        live,
                     );
                 }
                 pseudo_gen.get(&entity.text)
@@ -255,9 +266,12 @@ pub fn replace<F: PseudoFactory>(
                 let faker = resolve_faker(name).ok_or_else(|| {
                     format!("realistic strategy: unknown faker '{name}' for type '{}'", entity.type_)
                 })?;
-                let resolved_salt = resolve_salt(salt)?;
+                if resolved_salt.is_none() {
+                    resolved_salt = Some(resolve_salt(salt)?);
+                }
+                let salt_bytes = resolved_salt.as_deref().expect("resolved_salt set above");
                 let (fake, alias_list) =
-                    generate_unique_fake(faker, &entity.text, &entity.type_, &resolved_salt, &used_labels)?;
+                    generate_unique_fake(faker, &entity.text, &entity.type_, salt_bytes, &used_labels)?;
                 if !alias_list.is_empty() {
                     aliases.insert(fake.clone(), alias_list);
                 }
@@ -358,18 +372,6 @@ pub fn replace<F: PseudoFactory>(
         aliases,
         keep_downgraded,
     })
-}
-
-impl TypeInfo {
-    /// The strategy a `keep` entity downgrades to. The Python original calls
-    /// `_resolve_default_strategy(type)` again here — which is the registry
-    /// default, i.e. the SAME value `strategy` was seeded from when no user
-    /// config overrode it. We carry the registry default explicitly so a user
-    /// config of `{strategy: "keep"}` downgrades to the registry default (not
-    /// back to "keep"). `default_strategy` holds that registry value.
-    fn strategy_default_for_downgrade(&self) -> String {
-        self.default_strategy.clone()
-    }
 }
 
 /// Lazily build (or fetch) the per-type pseudonym generator for the remove /

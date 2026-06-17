@@ -74,10 +74,10 @@ fn build_patterns(overrides: Option<&HashMap<String, Vec<String>>>) -> Vec<(Stri
     ];
 
     // Pool-derived patterns.
-    let person_zh_pat = build_name_alternation(reserved_person_names_zh());
+    let person_zh_pat = escaped_alternation(reserved_person_names_zh());
     let address_zh_pat = build_address_zh_alternation(cities);
-    let person_en_pat = build_name_alternation(reserved_person_names_en());
-    let address_en_pat = build_name_alternation(reserved_addresses_en());
+    let person_en_pat = escaped_alternation(reserved_person_names_en());
+    let address_en_pat = escaped_alternation(reserved_addresses_en());
 
     // Shared (RFC documentation ranges).
     let shared_patterns: &[(&str, String)] = &[
@@ -121,7 +121,7 @@ fn build_patterns(overrides: Option<&HashMap<String, Vec<String>>>) -> Vec<(Stri
     }
 
     // person_zh (may be overridden to an alternation of specific names)
-    push_pool_with_override(&mut result, "person_zh", &person_zh_pat, overrides, reserved_person_names_zh());
+    push_pool_with_override_raw(&mut result, "person_zh", &person_zh_pat, overrides);
     // address_zh
     push_pool_with_override_raw(&mut result, "address_zh", &address_zh_pat, overrides);
 
@@ -134,9 +134,9 @@ fn build_patterns(overrides: Option<&HashMap<String, Vec<String>>>) -> Vec<(Stri
     }
 
     // person_en
-    push_pool_with_override(&mut result, "person_en", &person_en_pat, overrides, reserved_person_names_en());
+    push_pool_with_override_raw(&mut result, "person_en", &person_en_pat, overrides);
     // address_en
-    push_pool_with_override(&mut result, "address_en", &address_en_pat, overrides, reserved_addresses_en());
+    push_pool_with_override_raw(&mut result, "address_en", &address_en_pat, overrides);
 
     for (name, pat) in shared_patterns.iter().skip(3) {
         push_with_override(&mut result, name, pat.clone(), overrides);
@@ -156,21 +156,11 @@ fn push_with_override(
             if names.is_empty() {
                 return; // disabled
             }
-            out.push((name.to_string(), build_name_alternation(names)));
+            out.push((name.to_string(), escaped_alternation(names)));
             return;
         }
     }
     out.push((name.to_string(), default_pat));
-}
-
-fn push_pool_with_override(
-    out: &mut Vec<(String, String)>,
-    name: &str,
-    default_pat: &str,
-    overrides: Option<&HashMap<String, Vec<String>>>,
-    _pool: &[String],
-) {
-    push_pool_with_override_raw(out, name, default_pat, overrides);
 }
 
 fn push_pool_with_override_raw(
@@ -184,18 +174,23 @@ fn push_pool_with_override_raw(
             if names.is_empty() {
                 return; // disabled
             }
-            out.push((name.to_string(), build_name_alternation(names)));
+            out.push((name.to_string(), escaped_alternation(names)));
             return;
         }
     }
     out.push((name.to_string(), default_pat.to_string()));
 }
 
-/// Build `name1|name2|...` from a name pool (escaped, insertion order).
-fn build_name_alternation(names: &[impl AsRef<str>]) -> String {
-    names
+/// Build `key1|key2|...` from already-ordered keys (escape each + join `|`).
+///
+/// Does ONLY escape + join — callers must establish their own ordering (e.g.
+/// longest-first, insertion order) BEFORE calling, so the produced regex string
+/// stays byte-identical. Shared by the reserved-range, restore, and
+/// display-marker alternation builders.
+pub(crate) fn escaped_alternation<S: AsRef<str>>(ordered_keys: &[S]) -> String {
+    ordered_keys
         .iter()
-        .map(|n| fancy_regex::escape(n.as_ref()).into_owned())
+        .map(|k| fancy_regex::escape(k.as_ref()).into_owned())
         .collect::<Vec<_>>()
         .join("|")
 }
@@ -241,7 +236,7 @@ fn default_combined() -> &'static Regex {
 /// `fancy_regex` (like the Rust `regex` crate) returns byte offsets; Python
 /// returns char offsets. For ASCII-only text they're identical. For text with
 /// multi-byte chars (e.g. `张三`) we must convert.
-fn byte_to_char_offset(text: &str, byte_pos: usize) -> usize {
+pub(crate) fn byte_to_char_offset(text: &str, byte_pos: usize) -> usize {
     text[..byte_pos].chars().count()
 }
 

@@ -3,7 +3,7 @@ use fancy_regex::Regex;
 
 use crate::display_marker::{preset_marker_chars, strip_display_markers};
 use crate::grammar::{is_self_ref, restore_grammar_en};
-use crate::reserved_range::scan_for_pollution;
+use crate::reserved_range::{byte_to_char_offset, escaped_alternation, scan_for_pollution};
 
 #[derive(Debug)]
 pub struct RestoreError(pub String);
@@ -24,8 +24,7 @@ pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, Rest
     keys.sort_by(|a, b| b.len().cmp(&a.len()));
 
     // Build alternation pattern from escaped keys
-    let escaped: Vec<String> = keys.iter().map(|k| fancy_regex::escape(k).into_owned()).collect();
-    let pattern_str = escaped.join("|");
+    let pattern_str = escaped_alternation(&keys);
 
     let re = Regex::new(&pattern_str)
         .map_err(|e| RestoreError(format!("Invalid restore pattern: {e}")))?;
@@ -116,11 +115,7 @@ pub fn restore_full(
             // Build longest-first alternation of all flat keys.
             let mut sorted_keys: Vec<&String> = flat.keys().collect();
             sorted_keys.sort_by(|a, b| b.len().cmp(&a.len()));
-            let keys_alt = sorted_keys
-                .iter()
-                .map(|k| fancy_regex::escape(k).into_owned())
-                .collect::<Vec<_>>()
-                .join("|");
+            let keys_alt = escaped_alternation(&sorted_keys);
 
             let pattern_str = format!("({})([{}]+)", keys_alt, char_class);
             match Regex::new(&pattern_str) {
@@ -239,8 +234,8 @@ but only {count_original}x in redacted input — possible injection"
                         Ok(Some(m)) => {
                             // ±DANGER_WINDOW in CHAR space (matches Python
                             // `llm_output[max(0,start-100):min(len,end+100)]`).
-                            let char_start = llm_output[..m.start()].chars().count();
-                            let char_end = llm_output[..m.end()].chars().count();
+                            let char_start = byte_to_char_offset(llm_output, m.start());
+                            let char_end = byte_to_char_offset(llm_output, m.end());
                             let cs = char_start.saturating_sub(DANGER_WINDOW);
                             let ce = (char_end + DANGER_WINDOW).min(llm_chars.len());
                             let context: String = llm_chars[cs..ce].iter().collect();

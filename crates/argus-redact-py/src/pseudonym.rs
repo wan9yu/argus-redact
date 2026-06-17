@@ -15,10 +15,29 @@ use argus_redact_core::{PseudonymGenerator, RandomSource};
 /// normal `PyErr`. In practice these are stdlib calls on validated `u32` inputs
 /// that do not fail; the difference is the exception *type* on the theoretical
 /// error path, not behavior on the happy path.
-struct PyRandomSource {
+pub(crate) struct PyRandomSource {
     /// random.Random instance (seeded), or None (secrets/unseeded).
     rng: Option<Py<PyAny>>,
     use_secrets: bool,
+}
+
+impl PyRandomSource {
+    /// Mint a source for an optional `u64` seed: `random.Random(seed)` when
+    /// `Some` (seeded), `secrets` when `None` (unseeded). Same construction the
+    /// `replace` orchestrator's `PseudoFactory` relies on, so seeded bit streams
+    /// reproduce identically across the standalone generator and the orchestrator.
+    pub(crate) fn for_seed(seed: Option<u64>) -> Self {
+        match seed {
+            Some(s) => Python::attach(|py| {
+                let random_mod = py.import("random").expect("import random failed");
+                let rng_obj = random_mod
+                    .call_method1("Random", (s,))
+                    .expect("random.Random(seed) failed");
+                PyRandomSource { rng: Some(rng_obj.unbind()), use_secrets: false }
+            }),
+            None => PyRandomSource { rng: None, use_secrets: true },
+        }
+    }
 }
 
 impl RandomSource for PyRandomSource {

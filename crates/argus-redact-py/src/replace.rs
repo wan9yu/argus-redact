@@ -3,71 +3,25 @@ use std::collections::{HashMap, HashSet};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 
-use argus_redact_core::pseudonym::RandomSource;
 use argus_redact_core::replace::{
     replace as core_replace, PseudoFactory, ReplaceArgs, TypeInfo,
 };
 use argus_redact_core::seed::Salt;
 use argus_redact_core::PatternMatch as CorePM;
 
+use crate::pseudonym::PyRandomSource;
 use crate::types::PyPatternMatch;
 
-/// RandomSource backed by Python: `random.Random(seed).randint` (seeded) or
-/// `secrets.randbelow` (unseeded). Identical to `pseudonym::PyRandomSource` —
-/// duplicated here so the `replace` orchestrator's pseudonym generators
-/// reproduce the exact same Mersenne-Twister stream as the standalone
-/// `PseudonymGenerator`, preserving the frozen `P-NNNNN` codes.
-struct PyRandomSource {
-    rng: Option<Py<PyAny>>,
-    use_secrets: bool,
-}
-
-impl RandomSource for PyRandomSource {
-    fn randint(&mut self, lo: u32, hi: u32) -> u32 {
-        Python::attach(|py| {
-            self.rng
-                .as_ref()
-                .expect("randint called without a seeded rng")
-                .call_method1(py, "randint", (lo, hi))
-                .expect("random.Random.randint failed")
-                .extract(py)
-                .expect("randint result not u32")
-        })
-    }
-
-    fn randbelow(&mut self, range: u32) -> u32 {
-        Python::attach(|py| {
-            let secrets = py.import("secrets").expect("import secrets failed");
-            secrets
-                .call_method1("randbelow", (range,))
-                .expect("secrets.randbelow failed")
-                .extract()
-                .expect("randbelow result not u32")
-        })
-    }
-
-    fn use_secrets(&self) -> bool {
-        self.use_secrets
-    }
-}
-
-/// Factory minting `PyRandomSource` per (prefix, seed). Mirrors how
-/// `PyPseudonymGenerator::new` builds its source.
+/// Factory minting [`PyRandomSource`] per (prefix, seed). Mirrors how
+/// `PyPseudonymGenerator::new` builds its source so the `replace` orchestrator's
+/// pseudonym generators reproduce the exact same Mersenne-Twister stream,
+/// preserving the frozen `P-NNNNN` codes.
 struct PyPseudoFactory;
 
 impl PseudoFactory for PyPseudoFactory {
     type Source = PyRandomSource;
     fn make(&self, seed: Option<u64>) -> PyRandomSource {
-        match seed {
-            Some(s) => Python::attach(|py| {
-                let random_mod = py.import("random").expect("import random failed");
-                let rng_obj = random_mod
-                    .call_method1("Random", (s,))
-                    .expect("random.Random(seed) failed");
-                PyRandomSource { rng: Some(rng_obj.unbind()), use_secrets: false }
-            }),
-            None => PyRandomSource { rng: None, use_secrets: true },
-        }
+        PyRandomSource::for_seed(seed)
     }
 }
 

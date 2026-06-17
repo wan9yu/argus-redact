@@ -4,6 +4,8 @@
 
 use fancy_regex::Regex;
 
+use crate::reserved_range::escaped_alternation;
+
 /// Default display marker (U+24D5 CIRCLED LATIN SMALL LETTER F).
 pub const DEFAULT_DISPLAY_MARKER: &str = "ⓕ";
 
@@ -62,11 +64,7 @@ pub fn mark_for_display(text: &str, key_fakes: &[String], marker: Option<&str>) 
     let mut sorted_fakes: Vec<&str> = key_fakes.iter().map(|s| s.as_str()).collect();
     sorted_fakes.sort_by(|a, b| b.len().cmp(&a.len()));
 
-    let pattern_str = sorted_fakes
-        .iter()
-        .map(|f| fancy_regex::escape(f))
-        .collect::<Vec<_>>()
-        .join("|");
+    let pattern_str = escaped_alternation(&sorted_fakes);
 
     let re = Regex::new(&pattern_str).expect("display_marker: invalid regex");
     let m_clone = m.clone();

@@ -15,6 +15,10 @@ from argus_redact.lang.zh.hints import KINSHIP as _ZH_KINSHIP
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS
 from argus_redact.pure.pseudonym import PseudonymGenerator
 
+# Rust PatternMatch class, resolved once at import (same idiom as pure/merger.py).
+# Only dereferenced on the Rust path, which is gated on HAS_CORE.
+_RustPM = _core.PatternMatch if HAS_CORE else None
+
 
 class SecurityWarning(UserWarning):
     """Emitted when a misconfiguration would silently weaken redaction."""
@@ -691,59 +695,30 @@ def _builtin_faker_names() -> frozenset[str]:
     return frozenset(names)
 
 
-def _builtin_faker_name(entity_type: str, langs: list[str] | None) -> str | None:
-    """Return the built-in faker's function name for ``entity_type`` (lang-aware),
-    or ``None`` when no built-in faker resolves (custom callable, or none)."""
-    faker = _find_faker_reserved(entity_type, langs)
-    if faker is None:
-        return None
-    name = getattr(faker, "__name__", None)
-    return name if name in _builtin_faker_names() else None
-
-
-def _has_custom_realistic_faker(
-    entities: list[PatternMatch],
-    config: dict | None,
-    langs: list[str] | None,
-) -> bool:
-    """True if any entity's effective strategy is ``realistic`` AND its type has
-    a ``faker_reserved`` callable the Rust core cannot resolve (a custom faker).
-
-    Such a call must run the pure-Python path (Rust cannot invoke an arbitrary
-    Python faker mid-loop). Built-in realistic fakers resolve in Rust; types
-    with no faker fall through to a pseudonym in either path.
-    """
-    seen: set[str] = set()
-    for entity in entities:
-        etype = entity.type
-        if etype in seen:
-            continue
-        seen.add(etype)
-        ec = _get_entity_config(etype, config)
-        strategy = ec.get("strategy") or _resolve_default_strategy(etype)
-        if strategy != "realistic":
-            continue
-        faker = _find_faker_reserved(etype, langs)
-        if faker is None:
-            continue  # no faker → pseudonym fallback in both paths
-        name = getattr(faker, "__name__", None)
-        if name not in _builtin_faker_names():
-            return True
-    return False
-
-
 def _build_type_info(
     entities: list[PatternMatch],
     config: dict | None,
     langs: list[str] | None,
-) -> dict[str, dict]:
-    """Resolve the per-type replacement info the Rust ``replace`` needs.
+) -> tuple[dict[str, dict], bool]:
+    """Resolve the per-type replacement info the Rust ``replace`` needs, and the
+    dispatch flag for whether a **custom** realistic faker forces the Python path.
 
     For every entity type present, folds the registry default + user config +
     ``DEFAULT_PREFIXES`` / ``DEFAULT_CATEGORY_LABEL`` + the built-in faker name
-    into a flat dict matching the Rust ``TypeInfo`` struct.
+    into a flat dict matching the Rust ``TypeInfo`` struct. The faker is resolved
+    once per type and reused for both the ``faker_name`` field and the custom-faker
+    detection.
+
+    Returns ``(info, has_custom_realistic_faker)``. ``has_custom_realistic_faker``
+    is True when any type's effective strategy is ``realistic`` AND its type has a
+    ``faker_reserved`` callable the Rust core cannot resolve (a custom faker) — such
+    a call must run the pure-Python path (Rust cannot invoke an arbitrary Python
+    faker mid-loop). Built-in realistic fakers resolve in Rust; types with no faker
+    fall through to a pseudonym in either path.
     """
     info: dict[str, dict] = {}
+    has_custom = False
+    builtin_names = _builtin_faker_names()
     for entity in entities:
         etype = entity.type
         if etype in info:
@@ -753,21 +728,32 @@ def _build_type_info(
         strategy = ec.get("strategy") or default_strategy
         prefix_overridden = "prefix" in ec
         prefix = ec.get("prefix", DEFAULT_PREFIXES.get(etype, etype.upper()[:4]))
+
+        # Resolve the faker once; derive both the built-in name (for Rust) and the
+        # custom-faker flag (for dispatch). A non-realistic type needs neither.
+        faker_name = None
+        if strategy == "realistic":
+            faker = _find_faker_reserved(etype, langs)
+            if faker is not None:
+                name = getattr(faker, "__name__", None)
+                if name in builtin_names:
+                    faker_name = name
+                else:
+                    has_custom = True  # custom faker → Python path
+
         info[etype] = {
             "strategy": strategy,
             "default_strategy": default_strategy,
             "prefix": prefix,
             "prefix_overridden": prefix_overridden,
-            "faker_name": _builtin_faker_name(etype, langs)
-            if strategy == "realistic"
-            else None,
+            "faker_name": faker_name,
             "replacement": ec.get("replacement"),
             "label": ec.get("label"),
             "default_category_label": DEFAULT_CATEGORY_LABEL.get(etype, f"[{etype}]"),
             "visible_prefix": int(ec.get("visible_prefix", 0) or 0),
             "visible_suffix": int(ec.get("visible_suffix", 0) or 0),
         }
-    return info
+    return info, has_custom
 
 
 def replace(
@@ -812,7 +798,13 @@ def replace(
         )
 
     # Fallbacks to the pure-Python path: no Rust core, or a custom Python faker.
-    if not HAS_CORE or _has_custom_realistic_faker(entities, config, langs):
+    # Build the per-type info once and derive the custom-faker dispatch flag from
+    # the same pass (no separate scan). type_info is only built when a core exists.
+    if HAS_CORE:
+        type_info, has_custom_faker = _build_type_info(entities, config, langs)
+    else:
+        type_info, has_custom_faker = {}, False
+    if not HAS_CORE or has_custom_faker:
         return _replace_python(
             text,
             entities,
@@ -830,12 +822,8 @@ def replace(
         person_prefix = config.get("person", {}).get("prefix", person_prefix)
         org_prefix = config.get("organization", {}).get("prefix", org_prefix)
 
-    type_info = _build_type_info(entities, config, langs)
-
     # Convert the dataclass entities into the Rust PatternMatch the binding
-    # expects (same idiom as pure/merger.py).
-    from argus_redact._core import PatternMatch as _RustPM
-
+    # expects (same idiom as pure/merger.py). `_RustPM` is resolved at import.
     rust_entities = [
         _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer)
         for e in entities
