@@ -2,7 +2,7 @@
 
 English · [中文说明](README.zh.md)
 
-[![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![crates.io](https://img.shields.io/badge/crates.io-v0.7.2-orange)](https://crates.io/crates/argus-redact-core) [![Tests](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml/badge.svg)](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
+[![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![crates.io](https://img.shields.io/badge/crates.io-v0.7.3-orange)](https://crates.io/crates/argus-redact-core) [![Tests](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml/badge.svg)](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
 
 **Encrypt PII, not meaning. Locally.**
 
@@ -183,7 +183,7 @@ For context: `fast` mode is high-precision / low-recall by design — it only em
 
 ## North Star
 
-| Dimension | Current (v0.7.2) | Next milestone |
+| Dimension | Current (v0.7.3) | Next milestone |
 |-----------|:----------------:|:---:|
 | **Protected** | 60+ PII types, L1-L3. **0% PII leak on `default` profile across GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.5** in the [PRvL](docs/prvl-standard.md) reference suite. `pseudonym-llm` profile: 100% on three of four models; **96% / Bronze on Claude-Opus-4.5** (single reroll cell). Not a guarantee against adversarial inputs — see prvl-standard.md for full matrix. Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). SHAKE-256 derivation + full-salt entropy + faker identity-pass guard. State export omits salt by default; HTTP server refuses no-auth start; CLI writes O_NOFOLLOW + key files mode 0600; MCP token store TTL+LRU (v0.6.2). Windows CI + property-tested invariants + mutation-tested core (v0.6.3) + perf budget CI gate (v0.6.4) + session-isolation in integrations (v0.6.6) + README pinned-to-doctest + version-sync CI guard (v0.6.6) + compose namespace + pure-layer purity guard (v0.6.7) + seed→salt API rename + PIITypeDef SSOT + Presidio bridge through public redact + 3 new types (v0.6.8) + compose helpers shipped (v0.6.9) + Layer 1 freeze guards + KDF replay vectors + dead code subtract + manylinux digest pin (v0.6.10) + Adapter authoring surface (compose.register_pii_type / PIITypeDef / PatternMatch) + KDF replay edge cases (full-FF salt fix) + Layer 2 signature snapshot (v0.6.11) + HK/Macao travel permits + housing-fund zh L1 coverage (v0.6.12) | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (zh + en + RFC shared) + per-call strategy overrides + `keep` strategy (whitelisted) + resumable streaming sessions + incremental streaming default + cross-language alias restore (zh ↔ en) | Task-aware guidance |
