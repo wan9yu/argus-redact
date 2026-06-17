@@ -48,7 +48,11 @@ class PIITypeDef:
     _patterns: tuple[dict, ...] = ()  # pre-built pattern dicts (override auto-generation)
 
     # ── Faker ──
-    faker_reserved: Callable | None = None  # (value: str, rng: random.Random) -> str — reserved-range or range-noise faker for realistic strategy
+    # Sole faker consumed on the redact path (v0.7.4+: `faker` field removed).
+    # Built-in callables are resolved in Rust by function name; a custom callable
+    # is invoked mid-loop via the Rust PyFakerFactory callback (receives a
+    # _core.ShakeRng) and must be deterministic from that rng.
+    faker_reserved: Callable | None = None  # (value: str, rng: _core.ShakeRng) -> tuple[str, list[str]]
 
     # ── Risk / Compliance ──
     sensitivity: int = 2  # 1=low, 2=medium, 3=high, 4=critical

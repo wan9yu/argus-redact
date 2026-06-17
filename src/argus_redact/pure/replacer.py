@@ -15,7 +15,8 @@ from argus_redact.lang.zh.hints import KINSHIP as _ZH_KINSHIP
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS
 
 # Rust PatternMatch class, resolved once at import (same idiom as pure/merger.py).
-# Only dereferenced on the Rust path, which is gated on HAS_CORE.
+# The Rust core is mandatory; HAS_CORE is kept for the ternary guard only so the
+# module doesn't crash at import time when _core is absent (broken install).
 _RustPM = _core.PatternMatch if HAS_CORE else None
 
 
@@ -577,8 +578,8 @@ def replace(
 
     # Build the per-type info once; the custom_fakers dict is passed to _core.replace
     # so Rust can invoke Python callables via PyFakerFactory. The Rust core is
-    # mandatory (HAS_CORE is asserted at import); replace() always takes the Rust
-    # path and the historical pure-Python orchestrator has been removed.
+    # required (lang/_loader raises ImportError without it); replace() always runs
+    # in Rust and the historical pure-Python orchestrator has been removed.
     type_info, custom_fakers = _build_type_info(entities, config, langs)
 
     # Person / organization pseudonym prefixes (config can override).

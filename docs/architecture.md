@@ -570,7 +570,8 @@ PIITypeDef (specs/zh.py)
     │
     ├── to_patterns()   → regex patterns for match_patterns()
     ├── to_fixtures()   → test case entries from examples/counterexamples
-    ├── faker()         → generate fake values for smoke tests
+    ├── faker_reserved  → realistic-strategy faker (reserved-range fake generator);
+    │                     invoked mid-loop by the Rust orchestrator via PyFakerFactory
     │
     ├── structure       — format, length, charset, segment descriptions
     ├── validation      — checksum algorithm + validator function
@@ -583,7 +584,7 @@ PIITypeDef (specs/zh.py)
 
 Before the registry, knowledge about each PII type was scattered across patterns, generators, fixtures, and replacer config. Changing one required manually updating the others. Now:
 
-- **Change a separator** → `to_patterns()` reflects it, faker generates it, fixtures test it
+- **Change a separator** → `to_patterns()` reflects it, `faker_reserved` generates it, fixtures test it
 - **Add a context word** → the person name pattern picks it up
 - **Add a new PII type** → one `register()` call, everything derives from it
 

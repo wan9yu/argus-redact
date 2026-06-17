@@ -61,7 +61,7 @@ redacted, key = redact("他在星巴克和Costa都喝了咖啡")
 | Strategy | Effect | Key entry? |
 |----------|--------|------------|
 | `pseudonym` | Replace with `P-NNNNN` (or per-type prefix) | yes |
-| `realistic` | Replace with reserved-range fake (e.g., `19999...`) | yes |
+| `realistic` | Replace with reserved-range fake (e.g., `19999...`); fakers run in Rust (built-in) or via a Rust per-entity callback (custom `faker_reserved`) | yes |
 | `mask` | Replace with prefix + `***` + suffix (`138****5678`) | yes |
 | `name_mask` | Chinese name mask (`张*`, `李**`) | yes |
 | `landline_mask` | Area code + `***` + last 3 (`010****567`) | yes |
