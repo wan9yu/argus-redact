@@ -9,7 +9,9 @@ Ensures that:
 import random
 import re
 
-from argus_redact.pure.reserved_range_scanner import _RESERVED_RANGE_PATTERNS
+import argus_redact._core as _core
+
+_RESERVED_RANGE_PATTERNS = dict(_core.reserved_range_patterns())
 from argus_redact.specs import en as _en  # noqa: F401  ensure en registry loaded
 from argus_redact.specs import shared as _shared  # noqa: F401
 from argus_redact.specs import zh as _zh  # noqa: F401
@@ -72,9 +74,9 @@ class TestRealisticDrift:
         """If _TYPE_LANG_TO_SCANNER points at a renamed/missing scanner key, fail loudly."""
         missing = set(_TYPE_LANG_TO_SCANNER.values()) - set(_RESERVED_RANGE_PATTERNS)
         assert not missing, (
-            f"Scanner keys missing from _RESERVED_RANGE_PATTERNS: {missing}. "
-            f"Either add the patterns to reserved_range_scanner.py or remove these "
-            f"entries from _TYPE_LANG_TO_SCANNER."
+            f"Scanner keys missing from _core.reserved_range_patterns(): {missing}. "
+            f"Either add the patterns to the Rust reserved_range module or remove "
+            f"these entries from _TYPE_LANG_TO_SCANNER."
         )
 
     def test_every_faker_output_should_match_scanner_pattern(self):

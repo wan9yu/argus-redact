@@ -2,7 +2,19 @@ use std::collections::HashMap;
 
 use pyo3::prelude::*;
 
+use argus_redact_core::reserved_range_patterns as core_reserved_range_patterns;
 use argus_redact_core::scan_for_pollution as core_scan;
+
+/// Return the canonical `(name, regex)` pattern list used by the reserved-range scanner.
+///
+/// This is the Rust SSOT for all reserved-range patterns. Python consumers should
+/// call this instead of maintaining a duplicate `_RESERVED_RANGE_PATTERNS` dict.
+///
+/// Returns a list of `(name, regex)` tuples in canonical insertion order.
+#[pyfunction]
+pub fn reserved_range_patterns() -> Vec<(String, String)> {
+    core_reserved_range_patterns()
+}
 
 /// Scan `text` for reserved-range PII values.
 ///

@@ -30,5 +30,5 @@ pub use grammar::{normalize_grammar_en, restore_grammar_en, is_self_ref, SELF_RE
 pub use display_marker::{resolve_marker, mark_for_display, strip_display_markers, PRESET_MARKER_CHARS};
 pub use shake_rng::{seed_from_value, ShakeRng};
 pub use fakers::{generate_unique_fake, resolve_faker, FakerFn};
-pub use reserved_range::scan_for_pollution;
+pub use reserved_range::{scan_for_pollution, reserved_range_patterns};
 pub use replace::{replace, FakerFactory, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};

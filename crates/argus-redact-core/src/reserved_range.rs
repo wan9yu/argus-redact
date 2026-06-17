@@ -199,6 +199,15 @@ pub(crate) fn byte_to_char_offset(text: &str, byte_pos: usize) -> usize {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
+/// Return the canonical `(name, regex)` pattern list — the same set that
+/// `scan_for_pollution` uses when called with no overrides.
+///
+/// This is the single source of truth for all reserved-range patterns; Python
+/// consumers should call this instead of maintaining a duplicate dict.
+pub fn reserved_range_patterns() -> Vec<(String, String)> {
+    build_patterns(None)
+}
+
 /// Scan `text` for reserved-range PII values.
 ///
 /// Returns `Vec<(start_char, end_char, type_name)>`, where offsets are

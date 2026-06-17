@@ -33,6 +33,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(display_marker::strip_display_markers, m)?)?;
     m.add_function(wrap_pyfunction!(display_marker::resolve_marker, m)?)?;
     m.add_function(wrap_pyfunction!(display_marker::preset_marker_chars, m)?)?;
+    m.add_function(wrap_pyfunction!(reserved_range::reserved_range_patterns, m)?)?;
     m.add_function(wrap_pyfunction!(reserved_range::scan_for_pollution, m)?)?;
     m.add_function(wrap_pyfunction!(replace::replace, m)?)?;
     m.add_class::<crate::shake_rng::PyShakeRng>()?;

@@ -85,7 +85,8 @@ class TestEnglishProfile:
         # MAC has no such requirement — bare format match.
         import re
 
-        from argus_redact.pure.reserved_range_scanner import _RESERVED_RANGE_PATTERNS
+        import argus_redact._core as _core
+        _RESERVED_RANGE_PATTERNS = dict(_core.reserved_range_patterns())
 
         text = "Server IP 10.0.0.5 with MAC aa:bb:cc:dd:ee:ff"
         result = redact_pseudonym_llm(text, lang="en", salt=b"fixed-salt-for-test")

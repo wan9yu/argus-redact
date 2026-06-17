@@ -12,7 +12,9 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from argus_redact.pure.replacer import _generate_unique_fake
-from argus_redact.pure.reserved_range_scanner import _RESERVED_RANGE_PATTERNS
+import argus_redact._core as _core
+
+_RESERVED_RANGE_PATTERNS = dict(_core.reserved_range_patterns())
 from argus_redact.specs.registry import list_types
 from tests.security.property.conftest import PROPERTY_SETTINGS
 
