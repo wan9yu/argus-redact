@@ -124,7 +124,7 @@ _SCENARIOS: list[tuple[str, list]] = [
     # phone — middle of sentence
     (
         f"Call me at {_PHONE_VALUE} tomorrow.",
-        [make_match(_PHONE_VALUE, "test_parity_phone", 10)],
+        [make_match(_PHONE_VALUE, "test_parity_phone", 11)],
     ),
     # phone — at sentence start
     (
@@ -167,11 +167,11 @@ _SCENARIOS: list[tuple[str, list]] = [
         f"{_PERSON_VALUE} has {_MRN_VALUE} and phone {_PHONE_VALUE}.",
         [
             make_match(_PERSON_VALUE, "test_parity_person", 0),
-            make_match(_MRN_VALUE, "test_parity_mrn", len(_PERSON_VALUE) + 4),
+            make_match(_MRN_VALUE, "test_parity_mrn", len(_PERSON_VALUE) + 5),
             make_match(
                 _PHONE_VALUE,
                 "test_parity_phone",
-                len(_PERSON_VALUE) + 4 + len(_MRN_VALUE) + 10,
+                len(_PERSON_VALUE) + 5 + len(_MRN_VALUE) + 11,
             ),
         ],
     ),
@@ -213,6 +213,15 @@ def test_custom_faker_old_vs_new_parity(salt: bytes, lang: list[str], scenario_i
     - Collision-prone 3-name pool → re-roll logic must be identical
     """
     text, entities = _SCENARIOS[scenario_idx]
+
+    # Invariant: every curated entity span must slice to its own .text value.
+    # A bad offset causes cosmetically corrupted redactions; catch it loudly here.
+    for ent in entities:
+        assert text[ent.start : ent.end] == ent.text, (
+            f"Scenario {scenario_idx}: entity {ent.type!r} span [{ent.start}:{ent.end}] "
+            f"→ {text[ent.start:ent.end]!r} != {ent.text!r} in {text!r}"
+        )
+
     config = {name: {"strategy": "realistic"} for name in _CUSTOM_NAMES}
 
     old = _replace_python(text, entities, salt=salt, langs=lang, config=config)
