@@ -1,0 +1,151 @@
+[
+  {
+    "id": "en_known_names_exact",
+    "lang": "en",
+    "input": "O'Brien filed the report.",
+    "pii_entities": null,
+    "known_names": [
+      "O'Brien"
+    ],
+    "threshold": null,
+    "output": [
+      {
+        "text": "O'Brien",
+        "type": "person",
+        "start": 0,
+        "end": 7,
+        "confidence": 1.0
+      }
+    ]
+  },
+  {
+    "id": "en_surname_plus_known_given",
+    "lang": "en",
+    "input": "Email John Smith today.",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": [
+      {
+        "text": "John Smith",
+        "type": "person",
+        "start": 6,
+        "end": 16,
+        "confidence": 1.0
+      }
+    ]
+  },
+  {
+    "id": "en_surname_plus_unknown_given",
+    "lang": "en",
+    "input": "Quincy Smith arrived.",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": [
+      {
+        "text": "Quincy Smith",
+        "type": "person",
+        "start": 0,
+        "end": 12,
+        "confidence": 0.9
+      }
+    ]
+  },
+  {
+    "id": "en_single_surname_alone",
+    "lang": "en",
+    "input": "Smith arrived.",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": []
+  },
+  {
+    "id": "en_initial_form",
+    "lang": "en",
+    "input": "J. Smith joined.",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": [
+      {
+        "text": "J. Smith",
+        "type": "person",
+        "start": 0,
+        "end": 8,
+        "confidence": 0.9
+      }
+    ]
+  },
+  {
+    "id": "en_adjacency_gap_negative",
+    "lang": "en",
+    "input": "John, Smith arrived.",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": []
+  },
+  {
+    "id": "en_middle_initial",
+    "lang": "en",
+    "input": "John A. Smith joined.",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": [
+      {
+        "text": "John A. Smith",
+        "type": "person",
+        "start": 0,
+        "end": 13,
+        "confidence": 1.0
+      }
+    ]
+  },
+  {
+    "id": "en_first_middle_last",
+    "lang": "en",
+    "input": "Mary Ann Johnson called.",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": [
+      {
+        "text": "Mary Ann Johnson",
+        "type": "person",
+        "start": 0,
+        "end": 16,
+        "confidence": 1.0
+      }
+    ]
+  },
+  {
+    "id": "en_lowercase_surname_negative",
+    "lang": "en",
+    "input": "john smith called.",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": []
+  },
+  {
+    "id": "en_unknown_surname_negative",
+    "lang": "en",
+    "input": "John Xeoplux arrived.",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": []
+  },
+  {
+    "id": "en_no_capitalized_pattern",
+    "lang": "en",
+    "input": "call them later",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": []
+  }
+]
