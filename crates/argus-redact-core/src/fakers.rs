@@ -589,6 +589,78 @@ pub fn resolve_faker(name: &str) -> Option<FakerFn> {
     })
 }
 
+/// `(type, lang)` → built-in faker function name. SSOT for built-in faker
+/// resolution: transcribed verbatim from the `register(PIITypeDef(name=…,
+/// lang=…, faker_reserved=…))` calls in `specs/{zh,en,shared}.py`. The returned
+/// name is a key into [`resolve_faker`].
+///
+/// Custom (`register_pii_type(faker_reserved=…)`) fakers are NOT here — their
+/// callable lives outside the four built-in modules and is invoked via the
+/// `PyFakerFactory` callback. A `(type, lang)` with no built-in faker → `None`.
+pub fn builtin_faker_name(type_: &str, lang: &str) -> Option<&'static str> {
+    Some(match (type_, lang) {
+        // zh (specs/zh.py)
+        ("phone", "zh") => "fake_phone_reserved",
+        ("phone_landline", "zh") => "fake_phone_landline_reserved",
+        ("id_number", "zh") => "fake_id_number_reserved",
+        ("hk_id", "zh") => "fake_hkid_reserved",
+        ("tw_id", "zh") => "fake_twid_reserved",
+        ("macau_id", "zh") => "fake_macau_id_reserved",
+        ("taiwan_arc", "zh") => "fake_taiwan_arc_reserved",
+        ("bank_card", "zh") => "fake_bank_card_reserved",
+        ("passport", "zh") => "fake_passport_reserved",
+        ("license_plate", "zh") => "fake_license_plate_reserved",
+        ("address", "zh") => "fake_address_reserved",
+        ("date_of_birth", "zh") => "fake_date_of_birth_noise",
+        ("person", "zh") => "fake_person_reserved",
+        ("age", "zh") => "fake_age_noise",
+        // en (specs/en.py)
+        ("phone", "en") => "fake_phone_en_reserved",
+        ("ssn", "en") => "fake_ssn_en_reserved",
+        ("credit_card", "en") => "fake_credit_card_en_reserved",
+        ("address", "en") => "fake_address_en_reserved",
+        ("person", "en") => "fake_person_en_reserved",
+        // shared (specs/shared.py)
+        ("email", "shared") => "fake_email_reserved",
+        ("ip_address", "shared") => "fake_ip_reserved",
+        ("mac_address", "shared") => "fake_mac_reserved",
+        _ => return None,
+    })
+}
+
+/// The set of built-in faker function names (the 22 unique values produced by
+/// [`builtin_faker_name`]). Phase C uses this to flag a registered
+/// `faker_reserved` as built-in (resolvable in Rust) vs custom (Python callback).
+pub fn builtin_faker_names() -> &'static [&'static str] {
+    &[
+        // zh
+        "fake_phone_reserved",
+        "fake_phone_landline_reserved",
+        "fake_id_number_reserved",
+        "fake_hkid_reserved",
+        "fake_twid_reserved",
+        "fake_macau_id_reserved",
+        "fake_taiwan_arc_reserved",
+        "fake_bank_card_reserved",
+        "fake_passport_reserved",
+        "fake_license_plate_reserved",
+        "fake_address_reserved",
+        "fake_date_of_birth_noise",
+        "fake_person_reserved",
+        "fake_age_noise",
+        // en
+        "fake_phone_en_reserved",
+        "fake_ssn_en_reserved",
+        "fake_credit_card_en_reserved",
+        "fake_address_en_reserved",
+        "fake_person_en_reserved",
+        // shared
+        "fake_email_reserved",
+        "fake_ip_reserved",
+        "fake_mac_reserved",
+    ]
+}
+
 /// Re-roll a fake until it is unique within `used ∪ {value}`, mirroring
 /// the Python `_generate_unique_fake` re-roll loop.
 ///
@@ -784,6 +856,56 @@ mod tests {
         assert_eq!(s.rfc2606_domains.len(), 3);
         assert_eq!(s.rfc5737_prefixes.len(), 3);
         assert_eq!(s.rfc7042_mac_prefix, "00:00:5E:00:53");
+    }
+
+    #[test]
+    fn builtin_faker_association_self_consistent() {
+        // The (type,lang) table and the name-set must agree, and every value
+        // must be a resolvable faker. (The Python golden pins this against the
+        // live registry; this guards the Rust side standalone.)
+        let pairs: &[(&str, &str)] = &[
+            ("phone", "zh"),
+            ("phone_landline", "zh"),
+            ("id_number", "zh"),
+            ("hk_id", "zh"),
+            ("tw_id", "zh"),
+            ("macau_id", "zh"),
+            ("taiwan_arc", "zh"),
+            ("bank_card", "zh"),
+            ("passport", "zh"),
+            ("license_plate", "zh"),
+            ("address", "zh"),
+            ("date_of_birth", "zh"),
+            ("person", "zh"),
+            ("age", "zh"),
+            ("phone", "en"),
+            ("ssn", "en"),
+            ("credit_card", "en"),
+            ("address", "en"),
+            ("person", "en"),
+            ("email", "shared"),
+            ("ip_address", "shared"),
+            ("mac_address", "shared"),
+        ];
+        assert_eq!(pairs.len(), 22, "expected 22 built-in (type,lang) pairs");
+
+        let names: std::collections::HashSet<&str> = builtin_faker_names().iter().copied().collect();
+        assert_eq!(names.len(), 22, "name-set must have 22 unique entries");
+
+        let mut from_table: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for (type_, lang) in pairs {
+            let name = builtin_faker_name(type_, lang)
+                .unwrap_or_else(|| panic!("no built-in faker for ({type_}, {lang})"));
+            assert!(resolve_faker(name).is_some(), "{name} must resolve");
+            assert!(names.contains(name), "{name} must be in builtin_faker_names()");
+            from_table.insert(name);
+        }
+        // Every value in the name-set is reachable from some (type,lang) pair.
+        assert_eq!(from_table, names, "table values and name-set must match exactly");
+
+        // Unknown pair → None.
+        assert!(builtin_faker_name("nonexistent_type", "zh").is_none());
+        assert!(builtin_faker_name("phone", "fr").is_none());
     }
 
     #[test]

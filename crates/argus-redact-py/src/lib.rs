@@ -49,6 +49,8 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(masks::mask_landline, m)?)?;
     m.add_function(wrap_pyfunction!(masks::resolve_collision, m)?)?;
     m.add_function(wrap_pyfunction!(fakers::generate_unique_fake, m)?)?;
+    m.add_function(wrap_pyfunction!(fakers::builtin_faker_name, m)?)?;
+    m.add_function(wrap_pyfunction!(fakers::builtin_faker_names, m)?)?;
     // ── pool accessors (zh) ──
     m.add_function(wrap_pyfunction!(pools::reserved_person_names_zh, m)?)?;
     m.add_function(wrap_pyfunction!(pools::reserved_person_names_aliases_zh, m)?)?;

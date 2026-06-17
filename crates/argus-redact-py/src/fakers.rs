@@ -31,3 +31,22 @@ pub fn generate_unique_fake(
     argus_redact_core::fakers::generate_unique_fake(faker, value, type_, salt.as_bytes(), &used)
         .map_err(PyValueError::new_err)
 }
+
+/// `_core.builtin_faker_name` — resolve the built-in faker name for a
+/// `(type, lang)` pair, or `None` if no built-in faker is registered for it.
+///
+/// SSOT for built-in faker resolution (transcribed from the
+/// `register(PIITypeDef(...))` calls in `specs/{zh,en,shared}.py`). Custom
+/// fakers are NOT covered — they are invoked via the `PyFakerFactory` callback.
+#[pyfunction]
+pub fn builtin_faker_name(type_: &str, lang: &str) -> Option<&'static str> {
+    argus_redact_core::fakers::builtin_faker_name(type_, lang)
+}
+
+/// `_core.builtin_faker_names` — the set of built-in faker function names (the
+/// values produced by [`builtin_faker_name`]) as a Python list. Mirrors the
+/// Python `_builtin_faker_names()` name-set.
+#[pyfunction]
+pub fn builtin_faker_names() -> Vec<&'static str> {
+    argus_redact_core::fakers::builtin_faker_names().to_vec()
+}
