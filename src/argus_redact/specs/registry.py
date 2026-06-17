@@ -49,9 +49,12 @@ class PIITypeDef:
 
     # ── Faker ──
     # Sole faker consumed on the redact path (v0.7.4+: `faker` field removed).
-    # Built-in callables are resolved in Rust by function name; a custom callable
-    # is invoked mid-loop via the Rust PyFakerFactory callback (receives a
-    # _core.ShakeRng) and must be deterministic from that rng.
+    # Built-in types leave this None — faker resolution is handled entirely in
+    # Rust via the (type, lang) → faker_name SSOT (FakerResolution::Builtin);
+    # reserved pools are Rust SSOT (RON data files).  A custom callable set
+    # here is invoked mid-loop via the Rust PyFakerFactory callback (receives a
+    # _core.ShakeRng, FakerResolution::Custom) and must be deterministic from
+    # that rng.  Set faker_reserved only for adapter-defined (custom) types.
     faker_reserved: Callable | None = None  # (value: str, rng: _core.ShakeRng) -> tuple[str, list[str]]
 
     # ── Risk / Compliance ──

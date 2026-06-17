@@ -70,7 +70,7 @@ commonly touch:
 | `sensitivity` | no (defaults `2`) | Int 1-4 |
 | `label` | no | Placeholder label override |
 | `description` | no | Free-form |
-| `faker_reserved` | no | Custom `realistic`-strategy faker: `(value: str, rng: _core.ShakeRng) -> tuple[str, list[str]]`. Invoked mid-loop via the Rust orchestrator's `PyFakerFactory` callback — must be deterministic from the rng. Does **not** force a pure-Python fallback. |
+| `faker_reserved` | no | Custom `realistic`-strategy faker: `(value: str, rng: _core.ShakeRng) -> tuple[str, list[str]]`. Invoked mid-loop via the Rust orchestrator's `PyFakerFactory` callback — must be deterministic from the rng. Does **not** force a pure-Python fallback. **Set this only for custom (adapter-defined) types.** Built-in types are Rust-resolved via the `(type, lang) → faker_name` association (`FakerResolution::Builtin`); their reserved pools are Rust SSOT (RON data). |
 
 Compliance fields (`pipl_articles`, `gdpr_special_category`,
 `hipaa_phi_category`) are auto-derived from `name + sensitivity` via
