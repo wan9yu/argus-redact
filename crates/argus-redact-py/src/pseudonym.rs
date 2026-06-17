@@ -80,19 +80,14 @@ impl PyPseudonymGenerator {
     #[new]
     #[pyo3(signature = (*, prefix="P", code_range=(1, 99999), seed=None, existing_key=None))]
     fn new(
-        py: Python<'_>,
         prefix: &str,
         code_range: (u32, u32),
         seed: Option<u64>,
         existing_key: Option<HashMap<String, String>>,
     ) -> PyResult<Self> {
-        let src = if let Some(s) = seed {
-            let random_mod = py.import("random")?;
-            let rng_obj = random_mod.call_method1("Random", (s,))?;
-            PyRandomSource { rng: Some(rng_obj.unbind()), use_secrets: false }
-        } else {
-            PyRandomSource { rng: None, use_secrets: true }
-        };
+        // Same seeded construction the `replace` orchestrator uses (`for_seed`),
+        // so the standalone generator and the orchestrator share one bit stream.
+        let src = PyRandomSource::for_seed(seed);
         let inner = PseudonymGenerator::new(prefix, code_range, src, existing_key.as_ref());
         Ok(Self { inner })
     }

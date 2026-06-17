@@ -60,6 +60,7 @@ def _merge_priority(
 from argus_redact._core_loader import _core, HAS_CORE
 
 _rust_merge = _core.merge_entities if HAS_CORE else None
+_RustPM = _core.PatternMatch if HAS_CORE else None
 
 
 if HAS_CORE:
@@ -75,10 +76,8 @@ if HAS_CORE:
         # Short-circuit: no priority entities → pure Rust path
         has_priority = any(e.type in _PRIORITY_TYPES for e in entities)
         if not has_priority:
-            from argus_redact._core import PatternMatch as RustPM
-
             rust_entities = [
-                RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
+                _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
             ]
             rust_results = _rust_merge(rust_entities)
             return [
@@ -94,14 +93,12 @@ if HAS_CORE:
             ]
 
         # Has priority entities: merge others with Rust, then priority-split in Python
-        from argus_redact._core import PatternMatch as RustPM
-
         others = [e for e in entities if e.type not in _PRIORITY_TYPES]
         priority = [e for e in entities if e.type in _PRIORITY_TYPES]
 
         if others:
             rust_entities = [
-                RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in others
+                _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in others
             ]
             rust_results = _rust_merge(rust_entities)
             merged_others = [

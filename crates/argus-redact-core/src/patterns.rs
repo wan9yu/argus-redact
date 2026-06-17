@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex, LazyLock};
 
 use fancy_regex::Regex;
 
+use crate::reserved_range::byte_to_char_offset;
 use crate::types::PatternMatch;
 use crate::validators::resolve_validator;
 
@@ -50,6 +51,8 @@ static FALSE_POSITIVE_SUFFIX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^\s*[/\*\+\-=%\^](?:\s*\d)").unwrap()
 });
 
+// Context window in characters. Call sites multiply by 3 — the max UTF-8 byte
+// length of a char — when widening byte ranges, so the slice covers ≥15 chars.
 const CONTEXT_WINDOW: usize = 15;
 
 /// Find the nearest char boundary at or before `pos`.
@@ -127,8 +130,8 @@ pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<Patt
             }
 
             // Convert byte offsets to char offsets (Python uses char positions)
-            let char_start = text[..start].chars().count();
-            let char_end = text[..end].chars().count();
+            let char_start = byte_to_char_offset(text, start);
+            let char_end = byte_to_char_offset(text, end);
 
             let confidence = match pat.validator {
                 Some(ref name) => match resolve_validator(name) {

@@ -29,17 +29,9 @@ use crate::fakers::{
 ///
 /// `overrides`: optional per-type alternation override. Empty slice → drop that type.
 fn build_patterns(overrides: Option<&HashMap<String, Vec<String>>>) -> Vec<(String, String)> {
-    // Derive district set from RESERVED_CITIES (mirrors Python).
+    // RESERVED_CITIES feeds the zh-address alternation, which derives its own
+    // sorted district set (see build_address_zh_alternation).
     let cities = reserved_cities_zh();
-    let mut districts: Vec<&str> = cities
-        .iter()
-        .map(|(_, district, _)| district.as_str())
-        .collect::<std::collections::BTreeSet<_>>() // sorted (Python sorts for _RESERVED_ADDRESS_DISTRICTS)
-        .into_iter()
-        .collect();
-    // Python uses `sorted({...})` on the districts set — BTreeSet gives sorted order.
-    // Keep as Vec to build the alternation.
-    let _ = &mut districts; // already sorted via BTreeSet above
 
     let hkid_letter = hkid_reserved_letter();
     let twid_letter = twid_reserved_letter();
