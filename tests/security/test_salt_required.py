@@ -72,14 +72,14 @@ def test_env_var_salt_works(monkeypatch):
 def test_resolve_salt_raises_with_no_inputs(monkeypatch):
     """Unit test: ``_resolve_salt`` raises when both seed and env are absent."""
     monkeypatch.delenv("ARGUS_REDACT_PSEUDONYM_SALT", raising=False)
-    from argus_redact.pure.replacer import _resolve_salt
+    import argus_redact._core as _core
 
     with pytest.raises(ValueError, match="salt"):
-        _resolve_salt(None)
+        _core.resolve_salt(None)
 
 
 def test_resolve_salt_returns_bytes_when_provided():
-    from argus_redact.pure.replacer import _resolve_salt
+    import argus_redact._core as _core
 
-    assert _resolve_salt(b"\x42" * 32) == b"\x42" * 32
-    assert _resolve_salt(42) == (42).to_bytes(8, "big")
+    assert _core.resolve_salt(b"\x42" * 32) == b"\x42" * 32
+    assert _core.resolve_salt(42) == (42).to_bytes(8, "big")

@@ -20,20 +20,20 @@ def test_full_salt_bytes_used_in_hmac():
 
     Pre-fix, only salt[:8] flowed into the HMAC (the rest was silently dropped).
     """
-    from argus_redact.pure.replacer import _seed_from_value
+    import argus_redact._core as _core
 
     s1 = b"x" * 8 + b"A" * 24
     s2 = b"x" * 8 + b"B" * 24
-    out1 = _seed_from_value("v", "phone", s1)
-    out2 = _seed_from_value("v", "phone", s2)
+    out1 = _core.seed_from_value("v", "phone", s1)
+    out2 = _core.seed_from_value("v", "phone", s2)
     assert out1 != out2, "salt bytes after position 8 are ignored — entropy collapsed"
 
 
 def test_seed_from_value_returns_bytes_not_int():
     """Pre-fix returned int (8-byte truncation); post-fix returns full SHA-256 digest."""
-    from argus_redact.pure.replacer import _seed_from_value
+    import argus_redact._core as _core
 
-    out = _seed_from_value("v", "phone", b"k" * 32)
+    out = _core.seed_from_value("v", "phone", b"k" * 32)
     assert isinstance(out, bytes), f"expected bytes, got {type(out).__name__}"
     assert len(out) == 32, f"expected 32-byte HMAC-SHA256 digest, got {len(out)} bytes"
 
@@ -44,8 +44,8 @@ def test_entity_type_seed_offset_stable_across_processes(tmp_path):
 
     repo_src = os.path.join(os.path.dirname(__file__), "..", "..", "src")
     code = (
-        "from argus_redact.pure.replacer import _type_seed_offset; "
-        "print(_type_seed_offset('phone'))"
+        "import argus_redact._core as _core; "
+        "print(_core.type_seed_offset('phone'))"
     )
     base_env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
@@ -78,12 +78,12 @@ def test_shake_rng_replaces_random_in_generate_unique_fake():
 
 def test_shake_rng_randint_uniform():
     """ShakeRng.randint(a, b) must produce uniform output (chi-square sanity check)."""
-    from argus_redact.pure.replacer import _ShakeRng
+    import argus_redact._core as _core
 
     counts = {i: 0 for i in range(10)}
     # Use distinct seeds so we sample many independent streams
     for s in range(2000):
-        rng = _ShakeRng(seed=s.to_bytes(32, "big"))
+        rng = _core.ShakeRng(seed=s.to_bytes(32, "big"))
         counts[rng.randint(0, 9)] += 1
     # 2000 samples / 10 buckets = 200 expected; allow generous slack
     for k, v in counts.items():
@@ -92,21 +92,21 @@ def test_shake_rng_randint_uniform():
 
 def test_shake_rng_choice_deterministic_for_same_seed():
     """Same seed → same choice (determinism is required for reproducibility)."""
-    from argus_redact.pure.replacer import _ShakeRng
+    import argus_redact._core as _core
 
     seq = ("a", "b", "c", "d", "e", "f", "g", "h", "i", "j")
     seed = b"deterministic-seed-32-bytes-pad!"
-    r1 = _ShakeRng(seed=seed)
-    r2 = _ShakeRng(seed=seed)
+    r1 = _core.ShakeRng(seed=seed)
+    r2 = _core.ShakeRng(seed=seed)
     assert r1.choice(seq) == r2.choice(seq)
     assert r1.choice(seq) == r2.choice(seq)
 
 
 def test_shake_rng_compat_with_random_random_api():
     """The RNG must expose the subset of random.Random's API used by faker code."""
-    from argus_redact.pure.replacer import _ShakeRng
+    import argus_redact._core as _core
 
-    rng = _ShakeRng(seed=b"\x00" * 32)
+    rng = _core.ShakeRng(seed=b"\x00" * 32)
     # randint
     n = rng.randint(1, 99)
     assert 1 <= n <= 99

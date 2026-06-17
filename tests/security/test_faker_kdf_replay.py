@@ -17,7 +17,10 @@ Mirror of ``test_pseudonym_chain_replay.py`` (the pseudonym KDF), for the
 realistic-faker KDF.
 """
 
-from argus_redact.pure.replacer import _ShakeRng, _seed_from_value
+import argus_redact._core as _core
+
+_seed_from_value = _core.seed_from_value
+_ShakeRng = _core.ShakeRng
 
 # ── Seed 1: _seed_from_value("Alice", "person", b"\x00" * 8) ────────────────
 SEED1_HEX = "a2e1895de10e12dc452f7e3bde7d98219e1e0ed794726117688a80cbd8b5aff6"

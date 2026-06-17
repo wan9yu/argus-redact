@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from hypothesis import assume, given, settings, strategies as st
 
-from argus_redact.pure.replacer import _ShakeRng, _seed_from_value
+import argus_redact._core as _core
+
+_seed_from_value = _core.seed_from_value
+_ShakeRng = _core.ShakeRng
 from tests.security.property.conftest import PROPERTY_SETTINGS
 
 
