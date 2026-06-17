@@ -15,6 +15,7 @@ pub mod masks;
 pub mod shake_rng;
 pub mod fakers;
 pub mod reserved_range;
+pub mod replace;
 
 pub use types::PatternMatch;
 pub use merger::merge_entities;
@@ -30,3 +31,4 @@ pub use display_marker::{resolve_marker, mark_for_display, strip_display_markers
 pub use shake_rng::{seed_from_value, ShakeRng};
 pub use fakers::{generate_unique_fake, resolve_faker, FakerFn};
 pub use reserved_range::scan_for_pollution;
+pub use replace::{replace, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};

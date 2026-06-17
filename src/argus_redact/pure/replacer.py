@@ -9,6 +9,7 @@ import os
 import warnings
 from typing import Callable
 
+from argus_redact._core_loader import _core, HAS_CORE
 from argus_redact._types import PatternMatch
 from argus_redact.lang.zh.hints import KINSHIP as _ZH_KINSHIP
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS
@@ -454,7 +455,7 @@ def _resolve_collision(label: str, used_labels: set[str]) -> str:
     raise RuntimeError(f"Too many collisions for label: {label}")
 
 
-def replace(
+def _replace_python(
     text: str,
     entities: list[PatternMatch],
     *,
@@ -464,7 +465,16 @@ def replace(
     langs: list[str] | None = None,
     unified_prefix: str | None = None,
 ) -> tuple[str, dict[str, str], dict[str, list[str]]]:
-    """Replace detected entities in text, producing ``(redacted_text, key, aliases)``.
+    """Pure-Python single-pass replace orchestrator (kept as the Rust fallback).
+
+    Identical to the historical ``replace()`` body. Two callers route here:
+
+    1. The public ``replace()`` wrapper when ``_core`` is unavailable.
+    2. The public ``replace()`` wrapper when any ``realistic``-strategy entity's
+       type carries a **custom** ``faker_reserved`` callable (one not resolvable
+       by the Rust core's by-function-name faker dispatch) — Rust cannot call
+       back into an arbitrary Python faker mid-loop, so the whole call falls
+       back here, preserving the v0.6.11 adapter surface.
 
     config overrides default strategies per entity type. Example:
         {"phone": {"strategy": "remove", "replacement": "[TEL]"}}
@@ -642,3 +652,231 @@ def replace(
         result = result[: entity.start] + replacement + result[entity.end :]
 
     return result, result_key, aliases
+
+
+@functools.lru_cache(maxsize=1)
+def _builtin_faker_names() -> frozenset[str]:
+    """Function names of the built-in reserved-range fakers.
+
+    These resolve in the Rust core's by-function-name faker dispatch
+    (``_core.resolve_faker``). Computed by introspecting the four built-in faker
+    modules so a newly-added built-in is auto-discovered (no parallel list to
+    drift). A custom ``register_pii_type(faker_reserved=...)`` callable lives in
+    a different module, so its ``__name__`` is absent here → it triggers the
+    Python fallback. Matches the Rust ``resolve_faker`` key set exactly.
+    """
+    import inspect
+
+    from argus_redact.specs import (
+        fakers_en_reserved,
+        fakers_numeric,
+        fakers_shared_reserved,
+        fakers_zh_reserved,
+    )
+
+    names: set[str] = set()
+    for mod in (
+        fakers_zh_reserved,
+        fakers_en_reserved,
+        fakers_shared_reserved,
+        fakers_numeric,
+    ):
+        for nm, obj in vars(mod).items():
+            if (
+                inspect.isfunction(obj)
+                and obj.__module__ == mod.__name__
+                and nm.startswith("fake_")
+            ):
+                names.add(nm)
+    return frozenset(names)
+
+
+def _builtin_faker_name(entity_type: str, langs: list[str] | None) -> str | None:
+    """Return the built-in faker's function name for ``entity_type`` (lang-aware),
+    or ``None`` when no built-in faker resolves (custom callable, or none)."""
+    faker = _find_faker_reserved(entity_type, langs)
+    if faker is None:
+        return None
+    name = getattr(faker, "__name__", None)
+    return name if name in _builtin_faker_names() else None
+
+
+def _has_custom_realistic_faker(
+    entities: list[PatternMatch],
+    config: dict | None,
+    langs: list[str] | None,
+) -> bool:
+    """True if any entity's effective strategy is ``realistic`` AND its type has
+    a ``faker_reserved`` callable the Rust core cannot resolve (a custom faker).
+
+    Such a call must run the pure-Python path (Rust cannot invoke an arbitrary
+    Python faker mid-loop). Built-in realistic fakers resolve in Rust; types
+    with no faker fall through to a pseudonym in either path.
+    """
+    seen: set[str] = set()
+    for entity in entities:
+        etype = entity.type
+        if etype in seen:
+            continue
+        seen.add(etype)
+        ec = _get_entity_config(etype, config)
+        strategy = ec.get("strategy") or _resolve_default_strategy(etype)
+        if strategy != "realistic":
+            continue
+        faker = _find_faker_reserved(etype, langs)
+        if faker is None:
+            continue  # no faker → pseudonym fallback in both paths
+        name = getattr(faker, "__name__", None)
+        if name not in _builtin_faker_names():
+            return True
+    return False
+
+
+def _build_type_info(
+    entities: list[PatternMatch],
+    config: dict | None,
+    langs: list[str] | None,
+) -> dict[str, dict]:
+    """Resolve the per-type replacement info the Rust ``replace`` needs.
+
+    For every entity type present, folds the registry default + user config +
+    ``DEFAULT_PREFIXES`` / ``DEFAULT_CATEGORY_LABEL`` + the built-in faker name
+    into a flat dict matching the Rust ``TypeInfo`` struct.
+    """
+    info: dict[str, dict] = {}
+    for entity in entities:
+        etype = entity.type
+        if etype in info:
+            continue
+        ec = _get_entity_config(etype, config)
+        default_strategy = _resolve_default_strategy(etype)
+        strategy = ec.get("strategy") or default_strategy
+        prefix_overridden = "prefix" in ec
+        prefix = ec.get("prefix", DEFAULT_PREFIXES.get(etype, etype.upper()[:4]))
+        info[etype] = {
+            "strategy": strategy,
+            "default_strategy": default_strategy,
+            "prefix": prefix,
+            "prefix_overridden": prefix_overridden,
+            "faker_name": _builtin_faker_name(etype, langs)
+            if strategy == "realistic"
+            else None,
+            "replacement": ec.get("replacement"),
+            "label": ec.get("label"),
+            "default_category_label": DEFAULT_CATEGORY_LABEL.get(etype, f"[{etype}]"),
+            "visible_prefix": int(ec.get("visible_prefix", 0) or 0),
+            "visible_suffix": int(ec.get("visible_suffix", 0) or 0),
+        }
+    return info
+
+
+def replace(
+    text: str,
+    entities: list[PatternMatch],
+    *,
+    salt: int | bytes | None = None,
+    key: dict[str, str] | None = None,
+    config: dict | None = None,
+    langs: list[str] | None = None,
+    unified_prefix: str | None = None,
+) -> tuple[str, dict[str, str], dict[str, list[str]]]:
+    """Replace detected entities in text, producing ``(redacted_text, key, aliases)``.
+
+    Single-pass orchestrator. When the Rust ``_core`` extension is available and
+    no entity needs a **custom** Python ``faker_reserved`` (realistic strategy),
+    the whole pass runs in Rust (``_core.replace``); otherwise it falls back to
+    the pure-Python :func:`_replace_python`. Output is byte-identical either way.
+
+    config overrides default strategies per entity type. Example:
+        {"phone": {"strategy": "remove", "replacement": "[TEL]"}}
+
+    `langs` provides language preference for the realistic strategy's
+    faker_reserved lookup (e.g., en text prefers en/phone over zh/phone).
+
+    `unified_prefix` (v0.6.0+): if provided, all reversible-strategy types
+    collapse to a single ``<prefix>-NNNNN`` form, hiding PII type information
+    from the output. Replaces the legacy ``config["_unified_prefix"]`` sentinel.
+
+    Returns ``(redacted_text, key, aliases)`` where ``aliases`` is
+    ``{fake: list_of_aliases}`` for entries whose realistic-strategy fakers
+    emitted aliases (empty dict when no realistic-strategy fakers ran).
+    """
+    # Validate + reject the removed _unified_prefix sentinel up front so both
+    # paths raise identically (the Rust path would otherwise silently accept it).
+    _validate_config(config)
+    if config and "_unified_prefix" in config:
+        raise ValueError(
+            "_unified_prefix is no longer accepted as a config key in v0.6.0. "
+            "Use the top-level `unified_prefix=` kwarg on redact() / "
+            "redact_pseudonym_llm() instead."
+        )
+
+    # Fallbacks to the pure-Python path: no Rust core, or a custom Python faker.
+    if not HAS_CORE or _has_custom_realistic_faker(entities, config, langs):
+        return _replace_python(
+            text,
+            entities,
+            salt=salt,
+            key=key,
+            config=config,
+            langs=langs,
+            unified_prefix=unified_prefix,
+        )
+
+    # Person / organization pseudonym prefixes (config can override).
+    person_prefix = DEFAULT_PREFIXES["person"]
+    org_prefix = DEFAULT_PREFIXES["organization"]
+    if config:
+        person_prefix = config.get("person", {}).get("prefix", person_prefix)
+        org_prefix = config.get("organization", {}).get("prefix", org_prefix)
+
+    type_info = _build_type_info(entities, config, langs)
+
+    # Convert the dataclass entities into the Rust PatternMatch the binding
+    # expects (same idiom as pure/merger.py).
+    from argus_redact._core import PatternMatch as _RustPM
+
+    rust_entities = [
+        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer)
+        for e in entities
+    ]
+
+    redacted, result_key, aliases, keep_downgraded = _core.replace(
+        text,
+        rust_entities,
+        salt=salt,
+        key=key,
+        type_info=type_info,
+        person_prefix=person_prefix,
+        org_prefix=org_prefix,
+        unified_prefix=unified_prefix,
+        keep_whitelist=_KEEP_WHITELIST,
+    )
+
+    if keep_downgraded:
+        # Mirror the Python path's per-entity SecurityWarning. The Rust core
+        # only signals THAT a downgrade happened; reconstruct the per-entity
+        # messages here so the warning surface is unchanged. The Python loop
+        # processes each distinct entity.text once (dedup via entity_replacements
+        # / reverse_index), warning only on a keep entity that is NOT a
+        # whitelisted self_reference. We replay that same dedup + guard.
+        warned: set[str] = set()
+        for entity in entities:
+            if entity.text in warned:
+                continue
+            ec = _get_entity_config(entity.type, config)
+            strategy = ec.get("strategy") or _resolve_default_strategy(entity.type)
+            if strategy != "keep":
+                continue
+            warned.add(entity.text)
+            if entity.type == "self_reference" and entity.text in _KEEP_WHITELIST:
+                continue  # whitelisted → kept verbatim, no warning
+            warnings.warn(
+                f"strategy='keep' is only supported for self_reference "
+                f"pronouns and kinship phrases; downgrading to default for "
+                f"type={entity.type!r}, text={entity.text[:40]!r}.",
+                SecurityWarning,
+                stacklevel=2,
+            )
+
+    return redacted, result_key, aliases
