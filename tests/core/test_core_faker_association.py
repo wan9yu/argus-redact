@@ -5,7 +5,7 @@ discovered by introspecting the registered Python `faker_reserved` callable's
 `__name__`. Phase C (Task 11) made built-ins callable-less: the registry no
 longer carries those callables, so the SSOT for the association is now the
 `_core` table itself, cross-checked against the per-(type,lang) `register()`
-calls in `specs/{zh,en,shared}.py` via the resolver `_builtin_faker_name_for`.
+calls in `specs/{zh,en,shared}.py` via the resolver `_resolve_realistic_faker`.
 
 `_core.builtin_faker_name(type, lang)` and `_core.builtin_faker_names()` are the
 read surface the callable-less built-in resolution dispatches through.
@@ -13,13 +13,13 @@ read surface the callable-less built-in resolution dispatches through.
 
 import argus_redact._core as _core
 
-from argus_redact.pure.replacer import _builtin_faker_name_for, _core_builtin_names
+from argus_redact.pure.replacer import _resolve_realistic_faker
 from argus_redact.specs import registry
 
 # The 22 built-in (type, lang) pairs, transcribed from the per-lang `register()`
 # calls in specs/{zh,en,shared}.py (the SSOT for which built-in faker each
 # type+lang resolves to). The `_core` association is golden-locked against this
-# list, and the resolver `_builtin_faker_name_for` is checked to agree.
+# list, and the resolver `_resolve_realistic_faker` is checked to agree.
 _BUILTIN_PAIRS = {
     # zh
     ("phone", "zh"): "fake_phone_reserved",
@@ -64,16 +64,19 @@ def test_builtin_faker_name_matches_registry():
 
 
 def test_resolver_agrees_with_core_association():
-    """`_builtin_faker_name_for` (the lang-pref resolver) returns the associated
-    faker name when its single detected lang is the type's registered lang."""
+    """`_resolve_realistic_faker` (the lang-pref resolver the redact path uses)
+    resolves to the associated built-in faker name when its single detected lang
+    is the type's registered lang."""
     for (type_, lang), expected in _BUILTIN_PAIRS.items():
-        assert _builtin_faker_name_for(type_, [lang]) == expected, (type_, lang)
+        resolved = _resolve_realistic_faker(type_, [lang])
+        assert resolved is not None, (type_, lang)
+        kind, ref = resolved
+        assert kind == "builtin", (type_, lang, kind)
+        assert ref == expected, (type_, lang)
 
 
 def test_builtin_faker_names_matches_pairs():
     assert set(_core.builtin_faker_names()) == set(_BUILTIN_PAIRS.values())
-    # The module-level name-set used by `_build_type_info` is the same set.
-    assert _core_builtin_names == set(_core.builtin_faker_names())
 
 
 def test_builtin_faker_name_unknown_returns_none():

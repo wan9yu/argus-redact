@@ -14,13 +14,6 @@ from argus_redact.pure.grammar import SELF_REF_PRONOUNS
 # Rust PatternMatch class, resolved once at import (same idiom as pure/merger.py).
 _RustPM = _core.PatternMatch
 
-# Function names of the built-in reserved-range fakers, owned by the Rust core's
-# (type, lang)→faker_name association (``_core.builtin_faker_name``). A custom
-# ``register_pii_type(faker_reserved=...)`` callable's ``__name__`` is absent
-# here → it is flagged a custom faker and invoked via the Rust ``PyFakerFactory``
-# callback. Resolved once at import; matches the Rust faker dispatch key set.
-_core_builtin_names = frozenset(_core.builtin_faker_names())
-
 
 class SecurityWarning(UserWarning):
     """Emitted when a misconfiguration would silently weaken redaction."""
@@ -211,44 +204,6 @@ def _mask_phone_regional(value: str, *, region: str = "cn") -> str:
     return digits[:p] + "*" * masked_len + digits[-s:]
 
 
-def _builtin_faker_name_for(name: str, langs: list[str] | None) -> str | None:
-    """Resolve the built-in faker NAME for a type via the `_core` association,
-    preferring detected langs, then 'shared', then any registered lang.
-
-    Bit-identity critical: this iterates the SAME order the old
-    ``_faker_reserved_cached`` used (detected langs → 'shared' → any registered,
-    each in registry order) so the realistic strategy runs the right-language
-    faker. Where ``_faker_reserved_cached`` consulted ``by_lang[lang].faker_reserved``,
-    this consults ``_core.builtin_faker_name(name, lang)`` — the SSOT association
-    Task 5 exposed. A built-in type carries no Python callable now; its faker
-    name lives only in the Rust core.
-
-    Cached on (name, lang_tuple) — registry is built at import and frozen.
-    """
-    return _builtin_faker_name_cached(name, tuple(langs or ()))
-
-
-@functools.lru_cache(maxsize=256)
-def _builtin_faker_name_cached(name: str, langs: tuple[str, ...]) -> str | None:
-    from argus_redact.specs.registry import lookup
-
-    # 1. detected langs, in caller order
-    for lang in langs:
-        resolved = _core.builtin_faker_name(name, lang)
-        if resolved is not None:
-            return resolved
-    # 2. cross-language 'shared' fallback
-    resolved = _core.builtin_faker_name(name, "shared")
-    if resolved is not None:
-        return resolved
-    # 3. any registered lang, in registry order (mirrors by_lang.values())
-    for td in lookup(name):
-        resolved = _core.builtin_faker_name(name, td.lang)
-        if resolved is not None:
-            return resolved
-    return None
-
-
 def _resolve_realistic_faker(
     name: str, langs: list[str] | None
 ) -> tuple[str, str | Callable] | None:
@@ -312,7 +267,6 @@ def _resolve_realistic_faker_cached(
 def _clear_faker_caches() -> None:
     _faker_reserved_cached_clear()
     _resolve_realistic_faker_cached.cache_clear()
-    _builtin_faker_name_cached.cache_clear()
 
 
 _faker_reserved_cached_clear = _faker_reserved_cached.cache_clear
@@ -335,7 +289,7 @@ def _build_type_info(
 
     Returns ``(info, custom_fakers)`` where ``custom_fakers`` maps each type whose
     effective strategy is ``realistic`` and whose ``faker_reserved`` callable is NOT
-    a built-in (i.e. not resolvable by Rust's by-function-name faker dispatch) to
+    a built-in (i.e. has no ``_core.builtin_faker_name(type, lang)`` association) to
     that callable. The Rust core receives this map and invokes the callable via
     ``PyFakerFactory`` when ``TypeInfo.custom_faker`` is true. Built-in realistic
     fakers resolve in Rust by name; types with no faker fall through to a pseudonym.
