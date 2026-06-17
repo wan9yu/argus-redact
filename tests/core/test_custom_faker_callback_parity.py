@@ -1,40 +1,42 @@
-"""Bit-identity gate: custom faker_reserved — old (_replace_python) vs new (replace) path.
+"""Frozen golden: custom faker_reserved through the Rust-callback redact path.
 
-Task 10 of v0.7.4: 840-case differential fuzz proving that the Rust-callback path
-(``replace()``) and the pure-Python path (``_replace_python()``) produce
-byte-identical ``(redacted, key, aliases)`` tuples for every custom faker type,
-salt, and lang combination.
+A custom ``faker_reserved`` callable (one not resolvable by the Rust core's
+by-function-name faker dispatch) is invoked mid-loop via the Rust
+``PyFakerFactory`` callback. The differential fuzz that once proved this path
+byte-identical to the (now-deleted) pure-Python orchestrator has been frozen
+into a fixed-corpus golden: a deterministic set of (scenario, salt, lang) cases
+whose ``replace()`` output — ``(redacted, key, aliases)`` — is pinned here.
 
-A divergence here = a real bit-identity bug in Tasks 6–9. The assertion is NOT
-weakened; if ANY case diverges the failing test reports the minimal repro and the
-suite fails.
+A divergence means the custom-faker callback path changed shape; the golden is
+deliberately reviewable (regenerate only when the change is intended). The
+custom fakers below genuinely fire (phone digits, alias-emitting person, MRN
+hex), and the entity-span guard from the original fuzz is preserved.
 """
 
 from __future__ import annotations
 
 import pytest
-from hypothesis import HealthCheck, given, settings, strategies as st
 
 from argus_redact._core_loader import HAS_CORE
-from argus_redact.pure.replacer import _faker_reserved_cached, _replace_python, replace
+from argus_redact.pure.replacer import _faker_reserved_cached, replace
 from argus_redact.pure.restore import restore
 from argus_redact.specs.registry import PIITypeDef, register, unregister
 from tests.conftest import make_match
 
 # ---------------------------------------------------------------------------
-# Custom faker definitions
+# Custom faker definitions (deterministic from the seeded RNG)
 # ---------------------------------------------------------------------------
-# 1. Phone-ish: no aliases, format "555-XXX-XXXX" — uses randint only.
-# 2. Person-ish: EMITS ALIASES (cross-name variant), uses choice from a small pool
+# 1. Phone-ish: no aliases, format "PFX-NNN-NNNN" — choice + randint.
+# 2. Person-ish: EMITS ALIASES (cross-name variant), choice from a tiny pool
 #    → collision-prone with a pool of 3.
-# 3. Medical-ish: record ID "MRN-XXXXXXXX", no aliases, purely deterministic.
+# 3. Medical-ish: record ID "MRN-XXXXXXXX" (hex), no aliases.
 
 _PHONE_POOL_PREFIX = ("555", "800", "888")  # small prefix pool → collision-prone
 _PERSON_POOL = ("Alice", "Bob", "Charlie")  # intentionally tiny → collision-prone
 
 
 def _phone_faker(value: str, rng) -> tuple[str, list[str]]:
-    """Fake phone: 555-NNN-NNNN. No aliases, uses randint only."""
+    """Fake phone: PFX-NNN-NNNN. No aliases, uses choice + randint."""
     prefix = rng.choice(_PHONE_POOL_PREFIX)
     mid = "".join(str(rng.randint(0, 9)) for _ in range(3))
     tail = "".join(str(rng.randint(0, 9)) for _ in range(4))
@@ -42,10 +44,10 @@ def _phone_faker(value: str, rng) -> tuple[str, list[str]]:
 
 
 def _person_faker(value: str, rng) -> tuple[str, list[str]]:
-    """Fake person: chosen from a tiny pool, with a pinyin-style alias.
+    """Fake person: chosen from a tiny pool, with a lowercase alias.
 
-    The pool has only 3 names → deliberate collision risk that exercises
-    the re-roll logic when the first choice is already in ``used``.
+    The pool has only 3 names → deliberate collision risk that exercises the
+    re-roll logic when the first choice is already in ``used``.
     """
     name = rng.choice(_PERSON_POOL)
     alias = name.lower() + "_alias"
@@ -105,15 +107,10 @@ def _register_custom_types():
 # ---------------------------------------------------------------------------
 # Curated (text, entities) scenarios
 #
-# Fuzz axes: salt (32 random bytes) × lang (zh / en / zh+en).
-# Scenario axis: curated, covering:
-#   - single entity per custom type
-#   - multi-entity (same type twice → dedup)
-#   - multiple types in one text
-#   - entity at start / end / middle
-#   - alias-emitting type (person)
-#   - collision-prone type (person, 3-name pool)
-#   - medical type with no aliases
+# Covers: single entity per custom type; multi-entity (same value twice →
+# dedup); multiple types in one text; entity at start / end / middle; the
+# alias-emitting type (person); the collision-prone 3-name pool; and the
+# empty-entity-list base case.
 # ---------------------------------------------------------------------------
 
 _PHONE_VALUE = "415-555-9876"
@@ -121,27 +118,27 @@ _PERSON_VALUE = "Wang Fang"
 _MRN_VALUE = "MRN-ORIG0001"
 
 _SCENARIOS: list[tuple[str, list]] = [
-    # phone — middle of sentence
+    # 0: phone — middle of sentence
     (
         f"Call me at {_PHONE_VALUE} tomorrow.",
         [make_match(_PHONE_VALUE, "test_parity_phone", 11)],
     ),
-    # phone — at sentence start
+    # 1: phone — at sentence start
     (
         f"{_PHONE_VALUE} is my number.",
         [make_match(_PHONE_VALUE, "test_parity_phone", 0)],
     ),
-    # phone — at sentence end (no trailing punctuation)
+    # 2: phone — at sentence end (no trailing punctuation)
     (
         f"number is {_PHONE_VALUE}",
         [make_match(_PHONE_VALUE, "test_parity_phone", 10)],
     ),
-    # person — alias-emitting type
+    # 3: person — alias-emitting type
     (
         f"Contact {_PERSON_VALUE} for details.",
         [make_match(_PERSON_VALUE, "test_parity_person", 8)],
     ),
-    # person — two occurrences of same value (dedup path)
+    # 4: person — two occurrences of same value (dedup path)
     (
         f"{_PERSON_VALUE} called {_PERSON_VALUE} again.",
         [
@@ -149,12 +146,12 @@ _SCENARIOS: list[tuple[str, list]] = [
             make_match(_PERSON_VALUE, "test_parity_person", len(_PERSON_VALUE) + 8),
         ],
     ),
-    # medical — no aliases, pure hex output
+    # 5: medical — no aliases, pure hex output
     (
         f"Patient record: {_MRN_VALUE}.",
         [make_match(_MRN_VALUE, "test_parity_mrn", 16)],
     ),
-    # mixed: phone + person in same text
+    # 6: mixed: phone + person in same text
     (
         f"Call {_PERSON_VALUE} at {_PHONE_VALUE}.",
         [
@@ -162,7 +159,7 @@ _SCENARIOS: list[tuple[str, list]] = [
             make_match(_PHONE_VALUE, "test_parity_phone", 5 + len(_PERSON_VALUE) + 4),
         ],
     ),
-    # mixed: all three types
+    # 7: mixed: all three types
     (
         f"{_PERSON_VALUE} has {_MRN_VALUE} and phone {_PHONE_VALUE}.",
         [
@@ -175,82 +172,143 @@ _SCENARIOS: list[tuple[str, list]] = [
             ),
         ],
     ),
-    # empty entity list (both paths must return (text, {}, {}) with no error)
+    # 8: empty entity list → (text, {}, {}) with no error
     (
         "No PII here.",
         [],
     ),
 ]
 
+# Fixed salts (named so the golden table is readable). Two distinct non-zero
+# salts plus all-zero exercise full HMAC entropy without a fuzz loop.
+_SALTS: dict[str, bytes] = {
+    "00": b"\x00" * 32,
+    "42": b"\x42" * 32,
+    "ab": bytes.fromhex("ab") * 32,
+}
+# Two lang vectors: en-only and zh+en (lang-preference lookup).
+_LANGS: dict[str, list[str]] = {
+    "en": ["en"],
+    "zhen": ["zh", "en"],
+}
 
 # ---------------------------------------------------------------------------
-# 840-case differential fuzz
+# Frozen goldens — captured from replace() (Rust-callback path), src build.
+# Key: (scenario_idx, salt_name, lang_name) → (redacted, key, aliases).
+# Dict equality is order-insensitive, so key-dict insertion order is irrelevant.
 # ---------------------------------------------------------------------------
 
-_FUZZ_SETTINGS = settings(
-    max_examples=840,
-    deadline=None,
-    suppress_health_check=[HealthCheck.too_slow],
-    database=None,
-)
+_GOLDEN: dict[tuple[int, str, str], tuple] = {
+    (0, "00", "en"): ("Call me at 800-146-9612 tomorrow.", {"800-146-9612": _PHONE_VALUE}, {}),
+    (0, "00", "zhen"): ("Call me at 800-146-9612 tomorrow.", {"800-146-9612": _PHONE_VALUE}, {}),
+    (0, "42", "en"): ("Call me at 800-815-6779 tomorrow.", {"800-815-6779": _PHONE_VALUE}, {}),
+    (0, "42", "zhen"): ("Call me at 800-815-6779 tomorrow.", {"800-815-6779": _PHONE_VALUE}, {}),
+    (0, "ab", "en"): ("Call me at 888-613-7820 tomorrow.", {"888-613-7820": _PHONE_VALUE}, {}),
+    (0, "ab", "zhen"): ("Call me at 888-613-7820 tomorrow.", {"888-613-7820": _PHONE_VALUE}, {}),
+    (1, "00", "en"): ("800-146-9612 is my number.", {"800-146-9612": _PHONE_VALUE}, {}),
+    (1, "00", "zhen"): ("800-146-9612 is my number.", {"800-146-9612": _PHONE_VALUE}, {}),
+    (1, "42", "en"): ("800-815-6779 is my number.", {"800-815-6779": _PHONE_VALUE}, {}),
+    (1, "42", "zhen"): ("800-815-6779 is my number.", {"800-815-6779": _PHONE_VALUE}, {}),
+    (1, "ab", "en"): ("888-613-7820 is my number.", {"888-613-7820": _PHONE_VALUE}, {}),
+    (1, "ab", "zhen"): ("888-613-7820 is my number.", {"888-613-7820": _PHONE_VALUE}, {}),
+    (2, "00", "en"): ("number is 800-146-9612", {"800-146-9612": _PHONE_VALUE}, {}),
+    (2, "00", "zhen"): ("number is 800-146-9612", {"800-146-9612": _PHONE_VALUE}, {}),
+    (2, "42", "en"): ("number is 800-815-6779", {"800-815-6779": _PHONE_VALUE}, {}),
+    (2, "42", "zhen"): ("number is 800-815-6779", {"800-815-6779": _PHONE_VALUE}, {}),
+    (2, "ab", "en"): ("number is 888-613-7820", {"888-613-7820": _PHONE_VALUE}, {}),
+    (2, "ab", "zhen"): ("number is 888-613-7820", {"888-613-7820": _PHONE_VALUE}, {}),
+    (3, "00", "en"): ("Contact Alice for details.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (3, "00", "zhen"): ("Contact Alice for details.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (3, "42", "en"): ("Contact Alice for details.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (3, "42", "zhen"): ("Contact Alice for details.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (3, "ab", "en"): ("Contact Alice for details.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (3, "ab", "zhen"): ("Contact Alice for details.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (4, "00", "en"): ("Alice called Alice again.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (4, "00", "zhen"): ("Alice called Alice again.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (4, "42", "en"): ("Alice called Alice again.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (4, "42", "zhen"): ("Alice called Alice again.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (4, "ab", "en"): ("Alice called Alice again.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (4, "ab", "zhen"): ("Alice called Alice again.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (5, "00", "en"): ("Patient record: MRN-BE472253.", {"MRN-BE472253": _MRN_VALUE}, {}),
+    (5, "00", "zhen"): ("Patient record: MRN-BE472253.", {"MRN-BE472253": _MRN_VALUE}, {}),
+    (5, "42", "en"): ("Patient record: MRN-6F7045CE.", {"MRN-6F7045CE": _MRN_VALUE}, {}),
+    (5, "42", "zhen"): ("Patient record: MRN-6F7045CE.", {"MRN-6F7045CE": _MRN_VALUE}, {}),
+    (5, "ab", "en"): ("Patient record: MRN-CBEFABEC.", {"MRN-CBEFABEC": _MRN_VALUE}, {}),
+    (5, "ab", "zhen"): ("Patient record: MRN-CBEFABEC.", {"MRN-CBEFABEC": _MRN_VALUE}, {}),
+    (6, "00", "en"): ("Call Alice at 800-146-9612.", {"Alice": _PERSON_VALUE, "800-146-9612": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (6, "00", "zhen"): ("Call Alice at 800-146-9612.", {"Alice": _PERSON_VALUE, "800-146-9612": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (6, "42", "en"): ("Call Alice at 800-815-6779.", {"Alice": _PERSON_VALUE, "800-815-6779": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (6, "42", "zhen"): ("Call Alice at 800-815-6779.", {"Alice": _PERSON_VALUE, "800-815-6779": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (6, "ab", "en"): ("Call Alice at 888-613-7820.", {"Alice": _PERSON_VALUE, "888-613-7820": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (6, "ab", "zhen"): ("Call Alice at 888-613-7820.", {"Alice": _PERSON_VALUE, "888-613-7820": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (7, "00", "en"): ("Alice has MRN-BE472253 and phone 800-146-9612.", {"Alice": _PERSON_VALUE, "MRN-BE472253": _MRN_VALUE, "800-146-9612": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (7, "00", "zhen"): ("Alice has MRN-BE472253 and phone 800-146-9612.", {"Alice": _PERSON_VALUE, "MRN-BE472253": _MRN_VALUE, "800-146-9612": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (7, "42", "en"): ("Alice has MRN-6F7045CE and phone 800-815-6779.", {"Alice": _PERSON_VALUE, "MRN-6F7045CE": _MRN_VALUE, "800-815-6779": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (7, "42", "zhen"): ("Alice has MRN-6F7045CE and phone 800-815-6779.", {"Alice": _PERSON_VALUE, "MRN-6F7045CE": _MRN_VALUE, "800-815-6779": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (7, "ab", "en"): ("Alice has MRN-CBEFABEC and phone 888-613-7820.", {"Alice": _PERSON_VALUE, "MRN-CBEFABEC": _MRN_VALUE, "888-613-7820": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (7, "ab", "zhen"): ("Alice has MRN-CBEFABEC and phone 888-613-7820.", {"Alice": _PERSON_VALUE, "MRN-CBEFABEC": _MRN_VALUE, "888-613-7820": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (8, "00", "en"): ("No PII here.", {}, {}),
+    (8, "00", "zhen"): ("No PII here.", {}, {}),
+    (8, "42", "en"): ("No PII here.", {}, {}),
+    (8, "42", "zhen"): ("No PII here.", {}, {}),
+    (8, "ab", "en"): ("No PII here.", {}, {}),
+    (8, "ab", "zhen"): ("No PII here.", {}, {}),
+}
 
 
-@pytest.mark.skipif(not HAS_CORE, reason="Rust core not available — parity requires both paths")
-@_FUZZ_SETTINGS
-@given(
-    salt=st.binary(min_size=32, max_size=32),
-    lang=st.sampled_from([["zh"], ["en"], ["zh", "en"]]),
-    scenario_idx=st.integers(min_value=0, max_value=len(_SCENARIOS) - 1),
-)
-def test_custom_faker_old_vs_new_parity(salt: bytes, lang: list[str], scenario_idx: int):
-    """840-case differential fuzz: _replace_python == replace for every custom faker.
+# ---------------------------------------------------------------------------
+# Fixed-corpus golden (replaces the 840-case differential fuzz)
+# ---------------------------------------------------------------------------
 
-    Exercises:
-    - All 9 curated scenarios (phone / person / medical / multi / dedup / empty)
-    - 32-byte fuzzed salt → covers full HMAC entropy space
-    - All three lang vectors (zh, en, zh+en) → tests lang-preference lookup
-    - Alias-emitting person faker → aliases dict must match exactly
-    - Collision-prone 3-name pool → re-roll logic must be identical
+
+@pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
+@pytest.mark.parametrize("salt_name", list(_SALTS))
+@pytest.mark.parametrize("lang_name", list(_LANGS))
+@pytest.mark.parametrize("scenario_idx", range(len(_SCENARIOS)))
+def test_custom_faker_callback_golden(scenario_idx: int, salt_name: str, lang_name: str):
+    """replace() output through the custom-faker callback path is frozen.
+
+    Exercises all curated scenarios (phone / person+aliases / MRN / multi /
+    dedup / empty) across fixed salts and lang vectors. The custom fakers fire
+    (phone digits, alias-emitting person, MRN hex) and the result must equal the
+    pinned ``(redacted, key, aliases)`` golden.
     """
     text, entities = _SCENARIOS[scenario_idx]
 
-    # Invariant: every curated entity span must slice to its own .text value.
-    # A bad offset causes cosmetically corrupted redactions; catch it loudly here.
+    # Invariant from the original fuzz: every entity span must slice to its
+    # own .text value. A bad offset corrupts redactions; catch it loudly.
     for ent in entities:
         assert text[ent.start : ent.end] == ent.text, (
-            f"Scenario {scenario_idx}: entity {ent.type!r} span [{ent.start}:{ent.end}] "
-            f"→ {text[ent.start:ent.end]!r} != {ent.text!r} in {text!r}"
+            f"Scenario {scenario_idx}: entity {ent.type!r} span "
+            f"[{ent.start}:{ent.end}] → {text[ent.start:ent.end]!r} != "
+            f"{ent.text!r} in {text!r}"
         )
 
     config = {name: {"strategy": "realistic"} for name in _CUSTOM_NAMES}
+    salt = _SALTS[salt_name]
+    lang = _LANGS[lang_name]
 
-    old = _replace_python(text, entities, salt=salt, langs=lang, config=config)
-    new = replace(text, entities, salt=salt, langs=lang, config=config)
+    got = replace(text, entities, salt=salt, langs=lang, config=config)
+    expected = _GOLDEN[(scenario_idx, salt_name, lang_name)]
 
-    assert old == new, (
-        f"BIT-IDENTITY DIVERGENCE detected!\n"
-        f"  scenario_idx={scenario_idx}\n"
+    assert got == expected, (
+        f"GOLDEN MISMATCH\n"
+        f"  scenario_idx={scenario_idx} salt={salt_name} lang={lang_name}\n"
         f"  text={text!r}\n"
-        f"  entities={entities!r}\n"
-        f"  salt={salt.hex()}\n"
-        f"  lang={lang!r}\n"
-        f"  old (Python) = {old!r}\n"
-        f"  new (Rust+cb) = {new!r}\n"
-        f"This is a real bug in Tasks 6–9, not a test issue."
+        f"  got      = {got!r}\n"
+        f"  expected = {expected!r}\n"
+        f"Regenerate the golden only if this change is intentional."
     )
 
 
 # ---------------------------------------------------------------------------
-# Targeted tests
+# Targeted tests (new-path only)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
 def test_custom_faker_tuple_enforcement():
-    """A faker that returns a bare string (not tuple) must raise on BOTH paths.
-
-    Both _replace_python and replace must enforce the tuple contract uniformly.
-    """
+    """A faker that returns a bare string (not a tuple) must raise through replace()."""
 
     def _bad_faker(value: str, rng) -> str:
         return "FLAT-STRING"
@@ -271,9 +329,6 @@ def test_custom_faker_tuple_enforcement():
 
     try:
         with pytest.raises((TypeError, ValueError)):
-            _replace_python(text, entities, salt=b"x" * 32, config=config)
-
-        with pytest.raises((TypeError, ValueError)):
             replace(text, entities, salt=b"x" * 32, config=config)
     finally:
         unregister("shared", "test_parity_bad_faker")
@@ -282,10 +337,10 @@ def test_custom_faker_tuple_enforcement():
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
 def test_custom_faker_multi_lang_preference():
-    """zh+en same-named type → correct lang-preferred variant on BOTH paths.
+    """zh+en same-named type → replace() picks the lang-preferred variant.
 
-    Register test_parity_person for both zh and en with different fakers.
-    With langs=["zh"], zh variant must win on both paths.
+    Register test_parity_lang_person for both zh and en with different fakers.
+    With langs=["zh"] the zh variant must win; with langs=["en"], the en variant.
     """
 
     def _zh_person_faker(value: str, rng) -> tuple[str, list[str]]:
@@ -318,23 +373,14 @@ def test_custom_faker_multi_lang_preference():
     salt = b"\x00" * 32
 
     try:
-        old_zh = _replace_python(text, entities, salt=salt, langs=["zh"], config=config)
-        new_zh = replace(text, entities, salt=salt, langs=["zh"], config=config)
-        assert old_zh == new_zh, (
-            f"zh-lang parity failed: old={old_zh!r} new={new_zh!r}"
-        )
-        # zh faker should produce ZH-FAKE, not EN-FAKE
-        assert "ZH-FAKE" in old_zh[0], (
-            f"Expected ZH-FAKE in redacted text, got {old_zh[0]!r}"
+        redacted_zh, _, _ = replace(text, entities, salt=salt, langs=["zh"], config=config)
+        assert "ZH-FAKE" in redacted_zh, (
+            f"Expected ZH-FAKE in redacted text, got {redacted_zh!r}"
         )
 
-        old_en = _replace_python(text, entities, salt=salt, langs=["en"], config=config)
-        new_en = replace(text, entities, salt=salt, langs=["en"], config=config)
-        assert old_en == new_en, (
-            f"en-lang parity failed: old={old_en!r} new={new_en!r}"
-        )
-        assert "EN-FAKE" in old_en[0], (
-            f"Expected EN-FAKE in redacted text, got {old_en[0]!r}"
+        redacted_en, _, _ = replace(text, entities, salt=salt, langs=["en"], config=config)
+        assert "EN-FAKE" in redacted_en, (
+            f"Expected EN-FAKE in redacted text, got {redacted_en!r}"
         )
     finally:
         unregister("zh", "test_parity_lang_person")
@@ -344,13 +390,10 @@ def test_custom_faker_multi_lang_preference():
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
 def test_custom_faker_collision_reroll():
-    """Pre-seeding key with the faker's first output forces a re-roll.
+    """Pre-seeding the key with the faker's first output forces a re-roll.
 
-    Both paths must re-roll to the SAME unique fake when the first-attempt
-    fake is already in the key (simulating a prior entity with same output).
-
-    Strategy: use _phone_faker's first output for a given (salt, value) as a
-    pre-existing key entry, then verify both paths produce the same second fake.
+    Compute the faker's attempt-0 output from the HMAC seed, pre-populate the
+    key with it, then verify replace() re-rolls to a different unique fake.
     """
     from argus_redact.pure.replacer import _ShakeRng, _seed_from_value
 
@@ -359,41 +402,36 @@ def test_custom_faker_collision_reroll():
     etype = "test_parity_phone"
     config = {etype: {"strategy": "realistic"}}
 
-    # Compute the first fake from the HMAC seed (same as _generate_unique_fake attempt 0)
+    # Attempt-0 output (same derivation _generate_unique_fake uses internally).
     seed = _seed_from_value(value, etype, salt)
     rng = _ShakeRng(seed=seed)
     first_fake, _ = _phone_faker(value, rng)
 
-    # Pre-populate key with first_fake → forces re-roll on both paths
+    # Pre-populate the key with first_fake → forces a re-roll.
     pre_key = {first_fake: "some_other_original"}
 
     text = f"Call {value} please."
     entities = [make_match(value, etype, 5)]
 
-    old = _replace_python(text, entities, salt=salt, key=pre_key.copy(), config=config)
-    new = replace(text, entities, salt=salt, key=pre_key.copy(), config=config)
-
-    assert old == new, (
-        f"Collision re-roll parity failed:\n  old={old!r}\n  new={new!r}"
+    redacted, key, _ = replace(
+        text, entities, salt=salt, key=pre_key.copy(), config=config
     )
 
-    # Sanity: the re-rolled fake should NOT be the first_fake
-    old_redacted, old_key, _ = old
-    assert first_fake not in old_redacted or old_key.get(first_fake) != value, (
+    # The pre-seeded fake must still map to its original (untouched), and the
+    # entity must have re-rolled to a *different* unique fake.
+    assert key[first_fake] == "some_other_original"
+    rerolled = next(k for k, v in key.items() if v == value)
+    assert rerolled != first_fake, (
         f"Re-roll must produce a different fake than {first_fake!r}"
+    )
+    assert value not in redacted, (
+        f"Original must not appear in redacted text: {redacted!r}"
     )
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
 def test_no_custom_uses_builtin_rust_path():
-    """Built-in-only entities must produce empty custom_fakers → Rust path taken.
-
-    Use a built-in type (phone / zh) without any custom faker to verify:
-    1. The call succeeds (no regression).
-    2. The output is a valid (redacted, key, aliases) triple.
-    3. The fake is NOT the original value (it was redacted).
-    """
-    # Use a built-in zh phone value that the zh phone faker covers.
+    """Built-in-only entities → empty custom_fakers → Rust path produces a valid triple."""
     builtin_value = "13912345678"
     text = f"Phone: {builtin_value}"
     entities = [make_match(builtin_value, "phone", 7)]
@@ -409,17 +447,12 @@ def test_no_custom_uses_builtin_rust_path():
         f"Built-in phone must be redacted, found original in: {redacted!r}"
     )
     assert len(key) >= 1, f"Expected at least one key entry, got {key!r}"
-    # aliases may be empty for phone (no cross-language alias expected)
     assert isinstance(aliases, dict)
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
 def test_custom_faker_roundtrip():
-    """restore() on a custom-faker-redacted text must return the original.
-
-    Uses the medical type (no aliases, deterministic). Verifies that the key
-    produced by replace() can be fed to restore() to recover the original text.
-    """
+    """restore() on a custom-faker-redacted text must return the original."""
     text = f"Patient {_MRN_VALUE} needs review."
     entities = [make_match(_MRN_VALUE, "test_parity_mrn", 8)]
     config = {"test_parity_mrn": {"strategy": "realistic"}}
@@ -438,7 +471,6 @@ def test_custom_faker_roundtrip():
     )
     assert len(key) == 1, f"Expected 1 key entry, got {key!r}"
 
-    # Restore using the key
     restored = restore(redacted, key)
     assert restored == text, (
         f"restore() failed: expected {text!r}, got {restored!r}"

@@ -1,8 +1,9 @@
 """Verify that a custom faker_reserved callable routes through the Rust callback.
 
 Task 9 of v0.7.4: wires custom_fakers={type: callable} into _core.replace() so
-custom realistic-strategy fakers run in Rust's re-roll loop rather than falling
-back to _replace_python.
+custom realistic-strategy fakers run in Rust's re-roll loop. The historical
+pure-Python orchestrator has since been deleted (Rust owns the redact path), so
+these tests assert the callback path's observable result directly.
 """
 
 from __future__ import annotations
@@ -52,17 +53,13 @@ def _register_test_account(monkeypatch):
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_custom_faker_routes_through_rust_callback(monkeypatch):
-    """Custom faker_reserved must invoke the Rust callback, NOT _replace_python.
+def test_custom_faker_routes_through_rust_callback():
+    """Custom faker_reserved must run via the Rust callback (the only redact path).
 
-    Proof: monkeypatch _replace_python to raise — if the call succeeds, it went
-    through Rust+callback.
+    With the pure-Python orchestrator deleted, ``replace()`` always takes the
+    Rust path; a custom faker fires via the ``PyFakerFactory`` callback. The
+    deterministic golden below proves the callback actually ran.
     """
-
-    def _boom(*a, **k):
-        raise AssertionError("_replace_python must NOT be called for custom faker")
-
-    monkeypatch.setattr("argus_redact.pure.replacer._replace_python", _boom)
 
     text = f"Account number {_INPUT_VALUE}"
     entities = [make_match(_INPUT_VALUE, _ENTITY_TYPE, text.index(_INPUT_VALUE))]
@@ -93,13 +90,8 @@ def test_custom_faker_routes_through_rust_callback(monkeypatch):
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_custom_faker_key_maps_fake_to_original(monkeypatch):
+def test_custom_faker_key_maps_fake_to_original():
     """The key dict must contain fake→original after the Rust callback path."""
-
-    def _boom(*a, **k):
-        raise AssertionError("_replace_python must NOT be called")
-
-    monkeypatch.setattr("argus_redact.pure.replacer._replace_python", _boom)
 
     text = f"ref {_INPUT_VALUE} end"
     entities = [make_match(_INPUT_VALUE, _ENTITY_TYPE, text.index(_INPUT_VALUE))]
