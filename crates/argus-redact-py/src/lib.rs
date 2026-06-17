@@ -11,6 +11,7 @@ mod grammar;
 mod display_marker;
 mod reserved_range;
 mod replace;
+mod shake_rng;
 
 /// argus-redact Rust core — high-performance pure functions over argus-redact-core.
 #[pymodule]
@@ -33,5 +34,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(display_marker::preset_marker_chars, m)?)?;
     m.add_function(wrap_pyfunction!(reserved_range::scan_for_pollution, m)?)?;
     m.add_function(wrap_pyfunction!(replace::replace, m)?)?;
+    m.add_class::<crate::shake_rng::PyShakeRng>()?;
     Ok(())
 }
