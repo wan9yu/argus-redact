@@ -63,101 +63,54 @@ _rust_merge = _core.merge_entities if HAS_CORE else None
 _RustPM = _core.PatternMatch if HAS_CORE else None
 
 
-if HAS_CORE:
+def merge_entities(
+    entities: list[PatternMatch],
+    text: str = "",
+) -> list[PatternMatch]:
+    """Deduplicate overlapping entity spans (Rust accelerated + priority split)."""
+    if not entities:
+        return []
 
-    def merge_entities(
-        entities: list[PatternMatch],
-        text: str = "",
-    ) -> list[PatternMatch]:
-        """Deduplicate overlapping entity spans (Rust accelerated + priority split)."""
-        if not entities:
-            return []
+    # Short-circuit: no priority entities → pure Rust path
+    has_priority = any(e.type in _PRIORITY_TYPES for e in entities)
+    if not has_priority:
+        rust_entities = [
+            _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
+        ]
+        rust_results = _rust_merge(rust_entities)
+        return [
+            PatternMatch(
+                text=r.text,
+                type=r.type,
+                start=r.start,
+                end=r.end,
+                confidence=r.confidence,
+                layer=r.layer,
+            )
+            for r in rust_results
+        ]
 
-        # Short-circuit: no priority entities → pure Rust path
-        has_priority = any(e.type in _PRIORITY_TYPES for e in entities)
-        if not has_priority:
-            rust_entities = [
-                _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
-            ]
-            rust_results = _rust_merge(rust_entities)
-            return [
-                PatternMatch(
-                    text=r.text,
-                    type=r.type,
-                    start=r.start,
-                    end=r.end,
-                    confidence=r.confidence,
-                    layer=r.layer,
-                )
-                for r in rust_results
-            ]
+    # Has priority entities: merge others with Rust, then priority-split in Python
+    others = [e for e in entities if e.type not in _PRIORITY_TYPES]
+    priority = [e for e in entities if e.type in _PRIORITY_TYPES]
 
-        # Has priority entities: merge others with Rust, then priority-split in Python
-        others = [e for e in entities if e.type not in _PRIORITY_TYPES]
-        priority = [e for e in entities if e.type in _PRIORITY_TYPES]
+    if others:
+        rust_entities = [
+            _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in others
+        ]
+        rust_results = _rust_merge(rust_entities)
+        merged_others = [
+            PatternMatch(
+                text=r.text,
+                type=r.type,
+                start=r.start,
+                end=r.end,
+                confidence=r.confidence,
+                layer=r.layer,
+            )
+            for r in rust_results
+        ]
+    else:
+        merged_others = []
 
-        if others:
-            rust_entities = [
-                _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in others
-            ]
-            rust_results = _rust_merge(rust_entities)
-            merged_others = [
-                PatternMatch(
-                    text=r.text,
-                    type=r.type,
-                    start=r.start,
-                    end=r.end,
-                    confidence=r.confidence,
-                    layer=r.layer,
-                )
-                for r in rust_results
-            ]
-        else:
-            merged_others = []
-
-        return _merge_priority(merged_others, priority, text)
-
-else:
-
-    def _overlaps(a: PatternMatch, b: PatternMatch) -> bool:
-        return a.start < b.end and b.start < a.end
-
-    def _span_length(e: PatternMatch) -> int:
-        return e.end - e.start
-
-    def _pick_winner(a: PatternMatch, b: PatternMatch) -> PatternMatch:
-        len_a = _span_length(a)
-        len_b = _span_length(b)
-        if len_a != len_b:
-            return a if len_a > len_b else b
-        return a if a.confidence >= b.confidence else b
-
-    def merge_entities(
-        entities: list[PatternMatch],
-        text: str = "",
-    ) -> list[PatternMatch]:
-        """Deduplicate overlapping entity spans (Python fallback)."""
-        if not entities:
-            return []
-        sorted_entities = sorted(entities, key=lambda e: (e.start, -_span_length(e)))
-        merged: list[PatternMatch] = [sorted_entities[0]]
-        for current in sorted_entities[1:]:
-            last = merged[-1]
-            if not _overlaps(last, current):
-                merged.append(current)
-                continue
-
-            if current.type in _PRIORITY_TYPES and last.type not in _PRIORITY_TYPES:
-                trimmed = _trim_entity(last, current.end, text) if text else None
-                merged[-1] = current
-                if trimmed:
-                    merged.append(trimmed)
-                continue
-            if last.type in _PRIORITY_TYPES and current.type not in _PRIORITY_TYPES:
-                trimmed = _trim_entity(current, last.end, text) if text else None
-                if trimmed:
-                    merged.append(trimmed)
-                continue
-
-            merged[-1] = _pick_winner(last, current)
-        return merged
+    return _merge_priority(merged_others, priority, text)

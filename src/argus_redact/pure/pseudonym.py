@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import random
-import secrets
+# Re-exported: stateful pseudonym code generator (Rust core). _core is mandatory
+# for Layer-1 (since v0.7.1), so the former Python fallback class is gone.
+from argus_redact._core import PseudonymGenerator  # noqa: F401
 
 
 def max_pseudonym_length(config: dict | None = None) -> int:
@@ -23,58 +24,3 @@ def max_pseudonym_length(config: dict | None = None) -> int:
         return 7  # "P-00000"
     longest_prefix = max(len(p) for p in prefixes)
     return longest_prefix + 1 + 5  # prefix + "-" + 5 digits
-
-
-from argus_redact._core_loader import _core, HAS_CORE
-
-
-class PseudonymGenerator:
-    """Stateful generator (Python fallback)."""
-
-    def __init__(
-        self,
-        *,
-        prefix: str = "P",
-        code_range: tuple[int, int] = (1, 99999),
-        seed: int | None = None,
-        existing_key: dict[str, str] | None = None,
-    ):
-        self._prefix = prefix
-        self._code_range = code_range
-        self._rng = random.Random(seed) if seed is not None else None
-        self._entity_to_code: dict[str, str] = {}
-        self._used_codes: set[str] = set()
-
-        if existing_key:
-            for code, entity in existing_key.items():
-                if code.startswith(f"{prefix}-"):
-                    self._entity_to_code[entity] = code
-                    self._used_codes.add(code)
-
-    def get(self, entity: str) -> str:
-        if entity in self._entity_to_code:
-            return self._entity_to_code[entity]
-        code = self._generate_unique()
-        self._entity_to_code[entity] = code
-        self._used_codes.add(code)
-        return code
-
-    def _generate_unique(self) -> str:
-        lo, hi = self._code_range
-        while True:
-            for _ in range(1000):
-                if self._rng is not None:
-                    num = self._rng.randint(lo, hi)
-                else:
-                    num = secrets.randbelow(hi - lo + 1) + lo
-                code = f"{self._prefix}-{num:05d}"
-                if code not in self._used_codes:
-                    return code
-            # Expand range and retry
-            hi *= 10
-            self._code_range = (lo, hi)
-
-
-if HAS_CORE:
-    PseudonymGenerator = _core.PseudonymGenerator  # type: ignore[misc,assignment]
-# else: Python PseudonymGenerator class defined above is used

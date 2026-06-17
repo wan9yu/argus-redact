@@ -6,8 +6,7 @@ import functools
 import re as _re
 from typing import Mapping
 
-from argus_redact.pure.display_marker import PRESET_MARKER_CHARS, strip_display_markers
-from argus_redact.pure.grammar import SELF_REF_PRONOUNS, restore_grammar_en
+from argus_redact.pure.display_marker import strip_display_markers
 
 
 @functools.lru_cache(maxsize=128)
@@ -22,28 +21,6 @@ def _compile_alternation(keys_frozen: frozenset[str]) -> _re.Pattern:
     sorted_keys = sorted(keys_frozen, key=len, reverse=True)
     return _re.compile("|".join(_re.escape(k) for k in sorted_keys))
 
-
-# Marker class compiled once at module load — same chars regardless of key dict.
-_PRESET_MARKER_CLASS = (
-    "[" + "".join(_re.escape(c) for c in PRESET_MARKER_CHARS) + "]"
-    if PRESET_MARKER_CHARS
-    else ""
-)
-
-
-@functools.lru_cache(maxsize=128)
-def _compile_decoration_pattern(keys_frozen: frozenset[str]) -> _re.Pattern | None:
-    """Cache the auto-detect decoration regex per key set.
-
-    Matches ``(key)(preset_marker_chars+)`` so ``restore()`` can substitute
-    the key→original inline while preserving the trailing marker. ``None``
-    when there are no keys or no preset markers.
-    """
-    if not keys_frozen or not _PRESET_MARKER_CLASS:
-        return None
-    sorted_keys = sorted(keys_frozen, key=len, reverse=True)
-    keys_alt = "|".join(_re.escape(k) for k in sorted_keys)
-    return _re.compile(f"({keys_alt})({_PRESET_MARKER_CLASS}+)")
 
 def check_restore_safety(
     redacted: str,
@@ -119,49 +96,11 @@ def restore(
 
     # Delegate substitution + alias merge + decoration markers + grammar to Rust.
     # check_restore_safety and wipe_key remain Python (T8 scope).
-    try:
-        from argus_redact._core import restore as _rust_restore
+    from argus_redact._core import restore as _rust_restore
 
-        # Convert aliases values to lists (Rust expects Vec<String>, not tuples).
-        rust_aliases: dict[str, list[str]] | None = None
-        if aliases:
-            rust_aliases = {k: list(v) for k, v in aliases.items()}
-
-        return _rust_restore(text, key, aliases=rust_aliases, display_marker=display_marker)
-    except ImportError:
-        pass
-
-    # ── Python fallback (HAS_CORE False) ─────────────────────────────────
-    if display_marker is not None:
-        text = strip_display_markers(text, marker=display_marker)
-
-    # Merge aliases into the lookup if provided.
+    # Convert aliases values to lists (Rust expects Vec<String>, not tuples).
+    rust_aliases: dict[str, list[str]] | None = None
     if aliases:
-        flat: dict[str, str] = dict(key)
-        for fake, alias_tuple in aliases.items():
-            original = key.get(fake)
-            if original is None:
-                continue
-            for alias in alias_tuple:
-                flat[alias] = original
-        key = flat
+        rust_aliases = {k: list(v) for k, v in aliases.items()}
 
-    # Auto-detect known preset display markers when caller didn't pass
-    # display_marker=.
-    if display_marker is None:
-        decoration_pattern = _compile_decoration_pattern(frozenset(key))
-        if decoration_pattern is not None:
-            text = decoration_pattern.sub(
-                lambda m: key.get(m.group(1), m.group(1)) + m.group(2),
-                text,
-            )
-
-    has_self_ref = any(v in SELF_REF_PRONOUNS for v in key.values())
-
-    regex = _compile_alternation(frozenset(key.keys()))
-    result = regex.sub(lambda m: key[m.group()], text)
-
-    if has_self_ref:
-        result = restore_grammar_en(result)
-
-    return result
+    return _rust_restore(text, key, aliases=rust_aliases, display_marker=display_marker)

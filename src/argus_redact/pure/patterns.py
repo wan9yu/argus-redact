@@ -74,56 +74,39 @@ from argus_redact._core_loader import _core, HAS_CORE
 _rust_match_patterns = _core.match_patterns if HAS_CORE else None
 
 
-if HAS_CORE:
+def match_patterns(
+    text: str, patterns: list[dict]
+) -> tuple[list[PatternMatch], list[PatternMatch]]:
+    """Run all regex patterns against text, return sorted matches."""
+    if not text or not patterns:
+        return [], []
 
-    def match_patterns(
-        text: str, patterns: list[dict]
-    ) -> tuple[list[PatternMatch], list[PatternMatch]]:
-        """Run all regex patterns against text, return sorted matches."""
-        if not text or not patterns:
-            return [], []
+    # Split patterns: those with validate stay in Python, rest go to Rust
+    rust_patterns = []
+    python_patterns = []
+    for pat in patterns:
+        if pat.get("validate"):
+            python_patterns.append(pat)
+        else:
+            rust_patterns.append(pat)
 
-        # Split patterns: those with validate stay in Python, rest go to Rust
-        rust_patterns = []
-        python_patterns = []
-        for pat in patterns:
-            if pat.get("validate"):
-                python_patterns.append(pat)
+    results = []
+    near_misses = []
+
+    # Rust handles patterns without a Python `validate` callable (incl. named
+    # validators). A named validator that fails comes back with confidence < 1.0
+    # → route it to near-misses; a clean match (confidence 1.0) is a result.
+    if rust_patterns:
+        for r in _rust_match_patterns(text, rust_patterns):
+            if r.confidence < 1.0:
+                near_misses.append(
+                    PatternMatch(text=r.text, type=r.type, start=r.start, end=r.end, confidence=0.3)
+                )
             else:
-                rust_patterns.append(pat)
+                results.append(PatternMatch(text=r.text, type=r.type, start=r.start, end=r.end))
 
-        results = []
-        near_misses = []
+    if python_patterns:
+        _match_python_patterns(text, python_patterns, results, near_misses)
 
-        # Rust handles patterns without a Python `validate` callable (incl. named
-        # validators). A named validator that fails comes back with confidence < 1.0
-        # → route it to near-misses; a clean match (confidence 1.0) is a result.
-        if rust_patterns:
-            for r in _rust_match_patterns(text, rust_patterns):
-                if r.confidence < 1.0:
-                    near_misses.append(
-                        PatternMatch(text=r.text, type=r.type, start=r.start, end=r.end, confidence=0.3)
-                    )
-                else:
-                    results.append(PatternMatch(text=r.text, type=r.type, start=r.start, end=r.end))
-
-        if python_patterns:
-            _match_python_patterns(text, python_patterns, results, near_misses)
-
-        results.sort(key=lambda r: r.start)
-        return results, near_misses
-
-else:
-
-    def match_patterns(
-        text: str, patterns: list[dict]
-    ) -> tuple[list[PatternMatch], list[PatternMatch]]:
-        """Run all regex patterns against text, return sorted matches (Python fallback)."""
-        if not text or not patterns:
-            return [], []
-
-        results: list[PatternMatch] = []
-        near_misses: list[PatternMatch] = []
-        _match_python_patterns(text, patterns, results, near_misses)
-        results.sort(key=lambda r: r.start)
-        return results, near_misses
+    results.sort(key=lambda r: r.start)
+    return results, near_misses
