@@ -28,6 +28,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(normalize::map_spans_to_original, m)?)?;
     m.add_function(wrap_pyfunction!(grammar::normalize_grammar_en, m)?)?;
     m.add_function(wrap_pyfunction!(grammar::restore_grammar_en, m)?)?;
+    m.add_function(wrap_pyfunction!(grammar::self_ref_pronouns, m)?)?;
     m.add_function(wrap_pyfunction!(display_marker::mark_for_display, m)?)?;
     m.add_function(wrap_pyfunction!(display_marker::strip_display_markers, m)?)?;
     m.add_function(wrap_pyfunction!(display_marker::resolve_marker, m)?)?;

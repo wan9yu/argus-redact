@@ -7,16 +7,8 @@ from __future__ import annotations
 
 import argus_redact._core as _core
 
-# Re-exported for importers (pure/replacer.py, pure/restore.py). Mirrors the Rust
-# `grammar::SELF_REF_PRONOUNS` const — kept in sync by hand for now.
-# TODO(v0.7.4 cleanup): vestigial once replacer/restore move to Rust; remove this
-# Python copy then and source the set from `_core`.
-SELF_REF_PRONOUNS: frozenset[str] = frozenset(
-    {
-        "I", "me", "my", "mine", "myself",
-        "we", "us", "our", "ours", "ourselves",
-    }
-)
+# SSOT: sourced from the Rust core — not a hand-maintained copy.
+SELF_REF_PRONOUNS: frozenset[str] = frozenset(_core.self_ref_pronouns())
 
 
 def normalize_grammar_en(text: str, key: dict[str, str]) -> str:
