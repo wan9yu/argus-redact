@@ -14,7 +14,7 @@ def test_every_zh_reserved_name_has_alias():
     missing = [n for n in names if not aliases_dict.get(n)]
     assert not missing, (
         f"Reserved zh names missing pinyin aliases: {missing}. "
-        f"Add an entry to the zh aliases table in fakers_zh_reserved.py."
+        f"Add an entry to the zh aliases table in crates/argus-redact-core/data/fakers/zh.ron."
     )
 
 
@@ -24,7 +24,7 @@ def test_every_en_reserved_name_has_alias():
     missing = [n for n in names if not aliases_dict.get(n)]
     assert not missing, (
         f"Reserved en names missing zh transliteration aliases: {missing}. "
-        f"Add an entry to the en aliases table in fakers_en_reserved.py."
+        f"Add an entry to the en aliases table in crates/argus-redact-core/data/fakers/en.ron."
     )
 
 
@@ -39,7 +39,7 @@ def test_every_zh_reserved_address_has_alias():
     ]
     assert not missing, (
         f"Reserved zh addresses missing en transliteration aliases: {missing}. "
-        f"Add to RESERVED_ADDRESSES_ZH_ALIASES in fakers_zh_reserved.py."
+        f"Add to the zh addresses aliases table in crates/argus-redact-core/data/fakers/zh.ron."
     )
 
 
