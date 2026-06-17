@@ -3,6 +3,8 @@
 import random
 import re
 
+import pytest
+
 from argus_redact.pure.replacer import (
     VALID_STRATEGIES,
     _faker_reserved_cached,
@@ -140,14 +142,27 @@ class TestFakerTupleEnforced:
     """v0.6.0: faker_reserved must return tuple[str, list[str]]; bare string raises."""
 
     def test_bare_string_faker_raises_type_error(self):
-        import pytest
-        from argus_redact.pure.replacer import _generate_unique_fake
-
         def bad_faker(value, rng):
             return "FAKE"  # legacy bare-string return
 
-        with pytest.raises((TypeError, ValueError)):
-            _generate_unique_fake(bad_faker, "orig", "phone", b"salt", set())
+        register(
+            PIITypeDef(
+                name="bad_faker_test_type",
+                lang="shared",
+                format="test",
+                faker_reserved=bad_faker,
+            )
+        )
+        try:
+            with pytest.raises((TypeError, ValueError)):
+                replace(
+                    "orig value",
+                    [make_match("orig", "bad_faker_test_type", 0)],
+                    config={"bad_faker_test_type": {"strategy": "realistic"}},
+                    salt=b"saltsaltsaltsaltsaltsaltsaltsalt",
+                )
+        finally:
+            unregister("shared", "bad_faker_test_type")
 
 
 class TestRealisticNumeric:

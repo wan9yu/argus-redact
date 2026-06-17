@@ -11,7 +11,6 @@ import re
 from hypothesis import given
 from hypothesis import strategies as st
 
-from argus_redact.pure.replacer import _generate_unique_fake
 import argus_redact._core as _core
 
 _RESERVED_RANGE_PATTERNS = dict(_core.reserved_range_patterns())
@@ -38,7 +37,8 @@ def _build_faker_cases() -> list[tuple]:
         valid_keys = tuple(k for k in keys if k in _RESERVED_RANGE_PATTERNS)
         if not valid_keys:
             continue
-        cases.append((td.faker_reserved, valid_keys, td.name))
+        # Store faker name (str) for _core.generate_unique_fake instead of callable
+        cases.append((td.faker_reserved.__name__, valid_keys, td.name))
     return cases
 
 
@@ -53,11 +53,11 @@ _FAKERS_TO_TEST = _build_faker_cases()
 def test_each_faker_emits_reserved_range(salt, value):
     """Every faker, called via the wrapper, emits a string matching its
     reserved-range scanner pattern."""
-    for faker_fn, pattern_keys, type_name in _FAKERS_TO_TEST:
-        fake, _aliases = _generate_unique_fake(
-            faker_fn,
+    for faker_name, pattern_keys, type_name in _FAKERS_TO_TEST:
+        fake, _aliases = _core.generate_unique_fake(
+            faker_name,
             value=value,
-            type_name=type_name,
+            type_=type_name,
             salt=salt,
             used=set(),
         )
@@ -65,6 +65,6 @@ def test_each_faker_emits_reserved_range(salt, value):
             re.search(_RESERVED_RANGE_PATTERNS[key], fake) for key in pattern_keys
         )
         assert matched, (
-            f"{faker_fn.__name__} emitted {fake!r} which does not match any of "
+            f"{faker_name} emitted {fake!r} which does not match any of "
             f"reserved-range patterns {pattern_keys}"
         )

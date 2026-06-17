@@ -12,19 +12,15 @@ from __future__ import annotations
 
 import pytest
 
+import argus_redact._core as _core
 from argus_redact.pure import replacer as r
 from argus_redact.specs import en as _en  # noqa: F401  registry side-effect import
-from argus_redact.specs.fakers_en_reserved import (
-    RESERVED_PERSON_NAMES_EN,
-    fake_person_en_reserved,
-)
-from argus_redact.specs.fakers_zh_reserved import (
-    RESERVED_PERSON_NAMES,
-    fake_person_reserved as fake_person_zh_reserved,
-)
+from argus_redact.specs.fakers_en_reserved import RESERVED_PERSON_NAMES_EN
+from argus_redact.specs.fakers_zh_reserved import RESERVED_PERSON_NAMES
 
 
 _SALT = b"identity-pass-test-salt-32-byte!"
+_SALT_BYTES = _core.resolve_salt(_SALT)
 
 
 def test_generate_unique_fake_rejects_value_equal_fake():
@@ -70,11 +66,11 @@ def test_generate_unique_fake_raises_when_only_identity_available():
 def test_en_reserved_pool_member_never_self_maps_through_wrapper(name):
     """For every name in the EN pool, the wrapper produces a different fake
     even when the input itself is a pool member."""
-    fake, _ = r._generate_unique_fake(
-        fake_person_en_reserved,
+    fake, _ = _core.generate_unique_fake(
+        "fake_person_en_reserved",
         value=name,
-        type_name="person",
-        salt=_SALT,
+        type_=("person"),
+        salt=_SALT_BYTES,
         used=set(),
     )
     assert fake != name, f"identity-pass: {name!r} mapped to itself"
@@ -84,11 +80,11 @@ def test_en_reserved_pool_member_never_self_maps_through_wrapper(name):
 @pytest.mark.parametrize("name", RESERVED_PERSON_NAMES)
 def test_zh_reserved_pool_member_never_self_maps_through_wrapper(name):
     """Same identity-pass guard for the zh cultural-placeholder pool."""
-    fake, _ = r._generate_unique_fake(
-        fake_person_zh_reserved,
+    fake, _ = _core.generate_unique_fake(
+        "fake_person_reserved",
         value=name,
-        type_name="person",
-        salt=_SALT,
+        type_=("person"),
+        salt=_SALT_BYTES,
         used=set(),
     )
     assert fake != name, f"identity-pass: {name!r} mapped to itself"
