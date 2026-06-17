@@ -822,12 +822,19 @@ mod tests {
         // Chinese numeral months are unmatched → unchanged
         let mut rng = ShakeRng::new(&seed_from_value("三月七号", "date_of_birth", &[0u8; 8]));
         assert_eq!(fake_date_of_birth_noise("三月七号", &mut rng), ("三月七号".into(), vec![]));
+        // Matched pattern but invalid calendar date (month 13) → identity passthrough
+        // (end-to-end at the faker level, not just the ymd_to_ordinal helper)
+        let mut rng = ShakeRng::new(&seed_from_value("1990-13-45", "date_of_birth", &[0u8; 8]));
+        assert_eq!(fake_date_of_birth_noise("1990-13-45", &mut rng), ("1990-13-45".into(), vec![]));
     }
 
     #[test]
     fn age_identity_when_no_digit() {
         let mut rng = ShakeRng::new(&seed_from_value("no age here", "age", &[0u8; 8]));
         assert_eq!(fake_age_noise("no age here", &mut rng), ("no age here".into(), vec![]));
+        // Empty string → identity (no digits to extract)
+        let mut rng = ShakeRng::new(&seed_from_value("", "age", &[0u8; 8]));
+        assert_eq!(fake_age_noise("", &mut rng), ("".to_string(), vec![]));
     }
 
     #[test]

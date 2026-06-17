@@ -7,10 +7,12 @@ plausible range. The exact mapping is recorded in the key dict (by the caller).
 Passthrough / identity cases (no digits, unrecognized format, invalid date
 components, empty string) are golden-locked in Rust unit tests in
 `crates/argus-redact-core/src/fakers.rs`:
-  - `age_identity_when_no_digit` — covers no-digit and empty string inputs
+  - `age_identity_when_no_digit` — covers no-digit and empty-string inputs
   - `dob_identity_on_invalid_or_no_match` — covers unrecognized/numeral formats
-  - `date_roundtrip_and_known_offsets` — asserts `ymd_to_ordinal(1990, 13, 1).is_none()`
-    (invalid month/day → unchanged passthrough)
+    AND the matched-but-invalid-calendar-date path (e.g. "1990-13-45"), asserting
+    end-to-end identity at the faker level (not just the ymd_to_ordinal helper)
+  - `date_roundtrip_and_known_offsets` — locks the ymd_to_ordinal/ordinal_to_ymd
+    helpers and confirms invalid inputs return None
 """
 
 import re
