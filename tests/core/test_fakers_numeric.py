@@ -3,21 +3,31 @@
 These differ from categorical reserved-range fakers: they take the original
 value, parse the embedded number, and emit a noise-shifted variant within a
 plausible range. The exact mapping is recorded in the key dict (by the caller).
+
+Passthrough / identity cases (no digits, unrecognized format, invalid date
+components, empty string) are golden-locked in Rust unit tests in
+`crates/argus-redact-core/src/fakers.rs`:
+  - `age_identity_when_no_digit` — covers no-digit and empty string inputs
+  - `dob_identity_on_invalid_or_no_match` — covers unrecognized/numeral formats
+  - `date_roundtrip_and_known_offsets` — asserts `ymd_to_ordinal(1990, 13, 1).is_none()`
+    (invalid month/day → unchanged passthrough)
 """
 
-import random
 import re
 from datetime import date
 
-from argus_redact.specs.fakers_numeric import (
-    fake_age_noise,
-    fake_date_of_birth_noise,
-)
+import argus_redact._core as _core
+
+_SALT = _core.resolve_salt(b"test-fakers-numeric-salt-here!!")
+
+
+def _fake(faker_name: str, value: str, type_: str) -> tuple[str, list]:
+    return _core.generate_unique_fake(faker_name, value, type_, _SALT, set())
 
 
 class TestFakeAgeNoise:
     def test_should_extract_number_and_shift_within_band(self):
-        result, aliases = fake_age_noise("32岁", random.Random(1))
+        result, aliases = _fake("fake_age_noise", "32岁", "age")
         assert aliases == []
         m = re.search(r"\d+", result)
         assert m is not None
@@ -26,34 +36,28 @@ class TestFakeAgeNoise:
         assert "岁" in result, "Should preserve 岁 unit"
 
     def test_should_clamp_to_zero_floor(self):
-        result, _ = fake_age_noise("3岁", random.Random(1))
+        result, _ = _fake("fake_age_noise", "3岁", "age")
         n = int(re.search(r"\d+", result).group())
         assert n >= 0
 
     def test_should_clamp_to_149_ceiling(self):
-        result, _ = fake_age_noise("148岁", random.Random(1))
+        result, _ = _fake("fake_age_noise", "148岁", "age")
         n = int(re.search(r"\d+", result).group())
         assert n <= 149
 
     def test_should_preserve_keyword_format(self):
-        result, _ = fake_age_noise("年龄: 32", random.Random(1))
+        result, _ = _fake("fake_age_noise", "年龄: 32", "age")
         assert "年龄" in result
 
     def test_should_be_deterministic(self):
-        a = fake_age_noise("32岁", random.Random(7))
-        b = fake_age_noise("32岁", random.Random(7))
+        a, _ = _fake("fake_age_noise", "32岁", "age")
+        b, _ = _fake("fake_age_noise", "32岁", "age")
         assert a == b
-
-    def test_should_return_unchanged_when_no_digits(self):
-        assert fake_age_noise("年龄未知", random.Random(1)) == ("年龄未知", [])
-
-    def test_should_return_empty_string_unchanged(self):
-        assert fake_age_noise("", random.Random(1)) == ("", [])
 
 
 class TestFakeDateOfBirthNoise:
     def test_should_shift_dash_format_within_30_days(self):
-        result, aliases = fake_date_of_birth_noise("出生日期1990-03-15", random.Random(1))
+        result, aliases = _fake("fake_date_of_birth_noise", "出生日期1990-03-15", "date_of_birth")
         assert aliases == []
         m = re.search(r"(\d{4})-(\d{2})-(\d{2})", result)
         assert m is not None
@@ -65,7 +69,7 @@ class TestFakeDateOfBirthNoise:
         assert result != "出生日期1990-03-15", "Identity mapping not avoided"
 
     def test_should_shift_slash_format(self):
-        result, _ = fake_date_of_birth_noise("出生日期1990/03/15", random.Random(1))
+        result, _ = _fake("fake_date_of_birth_noise", "出生日期1990/03/15", "date_of_birth")
         # Same separator preserved
         m = re.search(r"(\d{4})/(\d{2})/(\d{2})", result)
         assert m is not None
@@ -74,12 +78,12 @@ class TestFakeDateOfBirthNoise:
         assert abs((shifted - original).days) <= 30
 
     def test_should_shift_dot_format(self):
-        result, _ = fake_date_of_birth_noise("出生日期1990.03.15", random.Random(1))
+        result, _ = _fake("fake_date_of_birth_noise", "出生日期1990.03.15", "date_of_birth")
         m = re.search(r"(\d{4})\.(\d{2})\.(\d{2})", result)
         assert m is not None
 
     def test_should_shift_chinese_year_month_day(self):
-        result, _ = fake_date_of_birth_noise("出生日期1990年3月15日", random.Random(1))
+        result, _ = _fake("fake_date_of_birth_noise", "出生日期1990年3月15日", "date_of_birth")
         m = re.search(r"(\d{4})年(\d{1,2})月(\d{1,2})(日|号)", result)
         assert m is not None, f"Expected 年月日 format preserved, got {result}"
         original = date(1990, 3, 15)
@@ -88,7 +92,7 @@ class TestFakeDateOfBirthNoise:
         assert m.group(4) == "日", "Should preserve 日/号 suffix"
 
     def test_should_shift_us_format(self):
-        result, _ = fake_date_of_birth_noise("DOB 03/15/1990", random.Random(1))
+        result, _ = _fake("fake_date_of_birth_noise", "DOB 03/15/1990", "date_of_birth")
         m = re.search(r"(\d{2})/(\d{2})/(\d{4})", result)
         assert m is not None
         original = date(1990, 3, 15)
@@ -96,13 +100,5 @@ class TestFakeDateOfBirthNoise:
         assert abs((shifted - original).days) <= 30
 
     def test_should_keep_keyword(self):
-        result, _ = fake_date_of_birth_noise("出生日期1990-03-15", random.Random(1))
+        result, _ = _fake("fake_date_of_birth_noise", "出生日期1990-03-15", "date_of_birth")
         assert "出生" in result
-
-    def test_should_return_unchanged_when_unrecognized_format(self):
-        # Chinese numeral format is an explicit limitation
-        assert fake_date_of_birth_noise("出生三月七号", random.Random(1)) == ("出生三月七号", [])
-
-    def test_should_return_unchanged_when_invalid_date_components(self):
-        # Month=13 fails date() construction → return unchanged
-        assert fake_date_of_birth_noise("1990-13-45", random.Random(1)) == ("1990-13-45", [])

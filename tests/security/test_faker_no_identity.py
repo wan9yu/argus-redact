@@ -15,8 +15,6 @@ import pytest
 import argus_redact._core as _core
 from argus_redact.pure.replacer import _faker_reserved_cached, replace
 from argus_redact.specs import en as _en  # noqa: F401  registry side-effect import
-from argus_redact.specs.fakers_en_reserved import RESERVED_PERSON_NAMES_EN
-from argus_redact.specs.fakers_zh_reserved import RESERVED_PERSON_NAMES
 from argus_redact.specs.registry import PIITypeDef, register, unregister
 from tests.conftest import make_match
 
@@ -91,7 +89,7 @@ def test_generate_unique_fake_raises_when_only_identity_available():
         _faker_reserved_cached.cache_clear()
 
 
-@pytest.mark.parametrize("name", RESERVED_PERSON_NAMES_EN)
+@pytest.mark.parametrize("name", _core.reserved_person_names_en())
 def test_en_reserved_pool_member_never_self_maps_through_wrapper(name):
     """For every name in the EN pool, the wrapper produces a different fake
     even when the input itself is a pool member."""
@@ -103,10 +101,10 @@ def test_en_reserved_pool_member_never_self_maps_through_wrapper(name):
         used=set(),
     )
     assert fake != name, f"identity-pass: {name!r} mapped to itself"
-    assert fake in RESERVED_PERSON_NAMES_EN, f"fake {fake!r} not in reserved pool"
+    assert fake in _core.reserved_person_names_en(), f"fake {fake!r} not in reserved pool"
 
 
-@pytest.mark.parametrize("name", RESERVED_PERSON_NAMES)
+@pytest.mark.parametrize("name", _core.reserved_person_names_zh())
 def test_zh_reserved_pool_member_never_self_maps_through_wrapper(name):
     """Same identity-pass guard for the zh cultural-placeholder pool."""
     fake, _ = _core.generate_unique_fake(
@@ -117,18 +115,20 @@ def test_zh_reserved_pool_member_never_self_maps_through_wrapper(name):
         used=set(),
     )
     assert fake != name, f"identity-pass: {name!r} mapped to itself"
-    assert fake in RESERVED_PERSON_NAMES, f"fake {fake!r} not in reserved pool"
+    assert fake in _core.reserved_person_names_zh(), f"fake {fake!r} not in reserved pool"
 
 
 def test_james_smith_removed_from_en_reserved():
     """v0.6.1: ``James Smith`` (statistically the most common US first+last)
     and ``Bob Loblaw`` (real name + sitcom reference) removed."""
-    assert "James Smith" not in RESERVED_PERSON_NAMES_EN
-    assert "Bob Loblaw" not in RESERVED_PERSON_NAMES_EN
+    en_pool = _core.reserved_person_names_en()
+    assert "James Smith" not in en_pool
+    assert "Bob Loblaw" not in en_pool
 
 
 def test_en_reserved_pool_has_at_least_ten_names():
     """Pool size guard: must remain ≥ 10 to satisfy the reroll budget."""
-    assert len(RESERVED_PERSON_NAMES_EN) >= 10, (
-        f"pool shrunk to {len(RESERVED_PERSON_NAMES_EN)} — under reroll budget"
+    en_pool = _core.reserved_person_names_en()
+    assert len(en_pool) >= 10, (
+        f"pool shrunk to {len(en_pool)} — under reroll budget"
     )

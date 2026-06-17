@@ -9,50 +9,27 @@ empty alias for the structural-PII types where transliteration has no
 semantic meaning.
 """
 
-import random
+import argus_redact._core as _core
 
-from argus_redact.specs.fakers_en_reserved import (
-    RESERVED_PERSON_NAMES_EN,
-    fake_address_en_reserved,
-    fake_credit_card_en_reserved,
-    fake_person_en_reserved,
-    fake_phone_en_reserved,
-    fake_ssn_en_reserved,
-)
-from argus_redact.specs.fakers_shared_reserved import (
-    fake_email_reserved,
-    fake_ip_reserved,
-    fake_mac_reserved,
-)
-from argus_redact.specs.fakers_zh_reserved import (
-    RESERVED_PERSON_NAMES,
-    fake_address_reserved,
-    fake_bank_card_reserved,
-    fake_id_number_reserved,
-    fake_license_plate_reserved,
-    fake_passport_reserved,
-    fake_person_reserved,
-    fake_phone_landline_reserved,
-    fake_phone_reserved,
-)
+_SALT = _core.resolve_salt(b"test-faker-aliases-salt-32!!!!!")
 
 
-def _rng():
-    return random.Random(42)
+def _fake(faker_name: str, value: str, type_: str) -> tuple[str, list]:
+    return _core.generate_unique_fake(faker_name, value, type_, _SALT, set())
 
 
 class TestPersonAliases:
     def test_zh_person_returns_pinyin_alias(self):
-        fake, aliases = fake_person_reserved("王建国", _rng())
-        assert fake in RESERVED_PERSON_NAMES
+        fake, aliases = _fake("fake_person_reserved", "王建国", "person")
+        assert fake in _core.reserved_person_names_zh()
         assert isinstance(aliases, list)
         assert aliases, f"zh person fake {fake!r} should have at least one alias"
         # The alias is a pinyin/Latin form of the fake name
         assert all(any(c.isalpha() and c.isascii() for c in a) for a in aliases)
 
     def test_en_person_returns_zh_alias(self):
-        fake, aliases = fake_person_en_reserved("John Smith", _rng())
-        assert fake in RESERVED_PERSON_NAMES_EN
+        fake, aliases = _fake("fake_person_en_reserved", "John Smith", "person")
+        assert fake in _core.reserved_person_names_en()
         assert isinstance(aliases, list)
         assert aliases, f"en person fake {fake!r} should have at least one zh alias"
         # The alias is a CJK transliteration
@@ -61,53 +38,52 @@ class TestPersonAliases:
 
 class TestNonPersonFakersReturnEmptyAliases:
     def test_zh_phone_empty_aliases(self):
-        fake, aliases = fake_phone_reserved("13912345678", _rng())
+        fake, aliases = _fake("fake_phone_reserved", "13912345678", "phone")
         assert fake.startswith("19999")
         assert aliases == []
 
     def test_zh_phone_landline_empty_aliases(self):
-        _, aliases = fake_phone_landline_reserved("010-12345678", _rng())
+        _, aliases = _fake("fake_phone_landline_reserved", "010-12345678", "phone_landline")
         assert aliases == []
 
     def test_zh_id_number_empty_aliases(self):
-        _, aliases = fake_id_number_reserved("110101199001011234", _rng())
+        _, aliases = _fake("fake_id_number_reserved", "110101199001011234", "id_number")
         assert aliases == []
 
     def test_zh_bank_card_empty_aliases(self):
-        _, aliases = fake_bank_card_reserved("4111111111111111", _rng())
+        _, aliases = _fake("fake_bank_card_reserved", "4111111111111111", "bank_card")
         assert aliases == []
 
     def test_zh_passport_empty_aliases(self):
-        _, aliases = fake_passport_reserved("E12345678", _rng())
+        _, aliases = _fake("fake_passport_reserved", "E12345678", "passport")
         assert aliases == []
 
     def test_zh_license_plate_empty_aliases(self):
-        _, aliases = fake_license_plate_reserved("京A12345", _rng())
+        _, aliases = _fake("fake_license_plate_reserved", "京A12345", "license_plate")
         assert aliases == []
 
-
     def test_en_phone_empty_aliases(self):
-        _, aliases = fake_phone_en_reserved("(415) 555-1234", _rng())
+        _, aliases = _fake("fake_phone_en_reserved", "(415) 555-1234", "phone")
         assert aliases == []
 
     def test_en_ssn_empty_aliases(self):
-        _, aliases = fake_ssn_en_reserved("123-45-6789", _rng())
+        _, aliases = _fake("fake_ssn_en_reserved", "123-45-6789", "ssn")
         assert aliases == []
 
     def test_en_credit_card_empty_aliases(self):
-        _, aliases = fake_credit_card_en_reserved("4111111111111111", _rng())
+        _, aliases = _fake("fake_credit_card_en_reserved", "4111111111111111", "credit_card")
         assert aliases == []
 
     def test_email_empty_aliases(self):
-        _, aliases = fake_email_reserved("user@example.com", _rng())
+        _, aliases = _fake("fake_email_reserved", "user@example.com", "email")
         assert aliases == []
 
     def test_ip_empty_aliases(self):
-        _, aliases = fake_ip_reserved("192.168.1.1", _rng())
+        _, aliases = _fake("fake_ip_reserved", "192.168.1.1", "ip_address")
         assert aliases == []
 
     def test_mac_empty_aliases(self):
-        _, aliases = fake_mac_reserved("aa:bb:cc:dd:ee:ff", _rng())
+        _, aliases = _fake("fake_mac_reserved", "aa:bb:cc:dd:ee:ff", "mac_address")
         assert aliases == []
 
 
@@ -115,7 +91,7 @@ class TestAddressAliases:
     """v0.5.10: address fakers now emit cross-language transliteration aliases."""
 
     def test_zh_address_returns_en_alias_with_number(self):
-        fake, aliases = fake_address_reserved("北京市朝阳区某路1号", _rng())
+        fake, aliases = _fake("fake_address_reserved", "北京市朝阳区某路1号", "address")
         assert fake.startswith("滨海市")
         assert aliases, f"zh address fake {fake!r} should have at least one en alias"
         # The fake ends in "<num>号"; the alias prepends that same number
@@ -125,7 +101,7 @@ class TestAddressAliases:
             assert any(c.isalpha() and c.isascii() for c in alias)
 
     def test_en_address_returns_zh_alias(self):
-        fake, aliases = fake_address_en_reserved("1234 Main St", _rng())
+        fake, aliases = _fake("fake_address_en_reserved", "1234 Main St", "address")
         assert "," in fake  # Sanity: picked from the table
         assert aliases, f"en address fake {fake!r} should have at least one zh alias"
         # Alias should contain CJK characters
