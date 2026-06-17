@@ -541,7 +541,7 @@ pub fn generate_unique_fake(
 /// `_generate_unique_fake` (replacer.py:229–260): same seed derivation, same
 /// `fake != value && !used.contains(&fake)` predicate, same `#{attempt}` suffix,
 /// same [`MAX_REROLL_ATTEMPTS`] cap, same exhaustion error.
-pub fn generate_unique_fake_with<P>(
+pub(crate) fn generate_unique_fake_with<P>(
     mut produce: P,
     value: &str,
     type_: &str,

@@ -41,6 +41,14 @@ pub trait PseudoFactory {
     fn make(&self, seed: Option<u64>) -> Self::Source;
 }
 
+/// Invoke a custom (Python) `faker_reserved` for one entity, given the HMAC
+/// `master_key` for this attempt. The re-roll loop lives in core
+/// (`generate_unique_fake_with`); this only produces one `(fake, aliases)`.
+pub trait FakerFactory {
+    fn call_faker(&self, type_: &str, value: &str, master_key: &[u8])
+        -> Result<(String, Vec<String>), String>;
+}
+
 /// Per-type resolved replacement info, built in Python from the registry +
 /// user config and passed into `replace()`. Mirrors the data
 /// `pure/replacer.py` reaches for via `_resolve_default_strategy`,
@@ -62,6 +70,11 @@ pub struct TypeInfo {
     /// Resolved built-in faker function name (e.g. `"fake_phone_reserved"`),
     /// or `None` when no built-in faker resolves for this `(type, langs)`.
     pub faker_name: Option<String>,
+    /// `true` when this type's realistic strategy uses a custom Python
+    /// `faker_reserved` callable (no built-in `faker_name`). The realistic
+    /// branch then routes through the supplied [`FakerFactory`] instead of
+    /// [`resolve_faker`]. `derive(Default)` makes this `false` by default.
+    pub custom_faker: bool,
     /// `config[type]["replacement"]` for the `remove` strategy, if set.
     pub replacement: Option<String>,
     /// `config[type]["label"]` for the `category` strategy, if set.
@@ -117,12 +130,14 @@ pub struct ReplaceArgs<'a> {
 /// the Python-backed RNG for pseudonym generators (see [`PseudoFactory`]).
 ///
 /// The `realistic` strategy resolves built-in fakers by `faker_name` via
-/// [`resolve_faker`]; a type whose `faker_name` is `None` (a custom Python
-/// `faker_reserved` callable) is NOT handled here — the Python wrapper detects
-/// that case up front and routes the whole call to `_replace_python` instead.
+/// [`resolve_faker`]; a type whose `faker_name` is `None` but with
+/// `custom_faker` set (a custom Python `faker_reserved` callable) is routed
+/// through `faker_factory` (a [`FakerFactory`] callback) using the same core
+/// re-roll loop as the built-in path.
 pub fn replace<F: PseudoFactory>(
     args: ReplaceArgs<'_>,
     factory: &F,
+    faker_factory: Option<&dyn FakerFactory>,
 ) -> Result<ReplaceResult, String> {
     let ReplaceArgs {
         text,
@@ -272,6 +287,24 @@ pub fn replace<F: PseudoFactory>(
                 let salt_bytes = resolved_salt.as_deref().expect("resolved_salt set above");
                 let (fake, alias_list) =
                     generate_unique_fake(faker, &entity.text, &entity.type_, salt_bytes, &used_labels)?;
+                if !alias_list.is_empty() {
+                    aliases.insert(fake.clone(), alias_list);
+                }
+                fake
+            } else if info.map(|i| i.custom_faker).unwrap_or(false) {
+                // Custom Python `faker_reserved` (no built-in faker_name). Route
+                // through the FakerFactory callback, reusing the shared re-roll
+                // loop so seeding/collision is identical to the built-in path.
+                let factory = faker_factory.ok_or_else(|| format!(
+                    "realistic strategy: custom faker for '{}' but no FakerFactory provided", entity.type_))?;
+                if resolved_salt.is_none() {
+                    resolved_salt = Some(resolve_salt(salt)?);
+                }
+                let salt_bytes = resolved_salt.as_deref().expect("resolved_salt set above");
+                let (fake, alias_list) = crate::fakers::generate_unique_fake_with(
+                    |mk| factory.call_faker(&entity.type_, &entity.text, mk),
+                    &entity.text, &entity.type_, salt_bytes, &used_labels,
+                )?;
                 if !alias_list.is_empty() {
                     aliases.insert(fake.clone(), alias_list);
                 }
@@ -473,6 +506,7 @@ mod tests {
                 keep_whitelist: &wl,
             },
             &SeqFactory,
+            None,
         )
         .unwrap();
         assert_eq!(r.redacted, "hello world");
@@ -501,6 +535,7 @@ mod tests {
                 keep_whitelist: &wl,
             },
             &SeqFactory,
+            None,
         )
         .unwrap();
         assert_eq!(r.redacted, "电话138****5678");
@@ -532,6 +567,7 @@ mod tests {
                 keep_whitelist: &wl,
             },
             &SeqFactory,
+            None,
         )
         .unwrap();
         assert_eq!(r.redacted, "我是张三");
@@ -566,11 +602,42 @@ mod tests {
                 keep_whitelist: &wl,
             },
             &SeqFactory,
+            None,
         )
         .unwrap();
         assert!(r.keep_downgraded);
         // Downgraded to "remove" → a per-type pseudonym code, not "我".
         assert_ne!(r.redacted, "我");
+    }
+
+    struct StubFakerFactory;
+    impl FakerFactory for StubFakerFactory {
+        fn call_faker(&self, _type_: &str, value: &str, master_key: &[u8])
+            -> Result<(String, Vec<String>), String> {
+            let mut rng = crate::shake_rng::ShakeRng::new(master_key);
+            let n = rng.randint(0, 9999);
+            Ok((format!("CUST-{value}-{n}"), vec![]))
+        }
+    }
+
+    #[test]
+    fn realistic_custom_faker_routes_to_factory() {
+        let mut info_map = HashMap::new();
+        info_map.insert("widget".to_string(), {
+            let mut i = info("realistic", "W");
+            i.custom_faker = true; // no faker_name → custom
+            i
+        });
+        let wl = empty_whitelist();
+        let ents = vec![pm("acme", "widget", 0, 4)];
+        let r = replace(
+            ReplaceArgs { text: "acme", entities: &ents, salt: Some(&Salt::Int(42)),
+                key: None, type_info: &info_map, person_prefix: "P", org_prefix: "O",
+                unified_prefix: None, keep_whitelist: &wl },
+            &SeqFactory, Some(&StubFakerFactory),
+        ).unwrap();
+        assert!(r.redacted.starts_with("CUST-acme-"));
+        assert_eq!(r.key.get(&r.redacted), Some(&"acme".to_string()));
     }
 
     #[test]
@@ -597,6 +664,7 @@ mod tests {
                 keep_whitelist: &wl,
             },
             &SeqFactory,
+            None,
         )
         .unwrap();
         assert_eq!(r.redacted, "a 138****5678 b 139****0000");
