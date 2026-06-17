@@ -14,6 +14,7 @@ mod replace;
 mod shake_rng;
 mod seed;
 mod masks;
+mod fakers;
 
 /// argus-redact Rust core — high-performance pure functions over argus-redact-core.
 #[pymodule]
@@ -46,5 +47,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(masks::mask_name, m)?)?;
     m.add_function(wrap_pyfunction!(masks::mask_landline, m)?)?;
     m.add_function(wrap_pyfunction!(masks::resolve_collision, m)?)?;
+    m.add_function(wrap_pyfunction!(fakers::generate_unique_fake, m)?)?;
     Ok(())
 }
