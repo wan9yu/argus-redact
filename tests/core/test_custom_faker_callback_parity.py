@@ -395,16 +395,16 @@ def test_custom_faker_collision_reroll():
     Compute the faker's attempt-0 output from the HMAC seed, pre-populate the
     key with it, then verify replace() re-rolls to a different unique fake.
     """
-    from argus_redact.pure.replacer import _ShakeRng, _seed_from_value
+    import argus_redact._core as _core
 
     salt = b"\x42" * 32
     value = _PHONE_VALUE
     etype = "test_parity_phone"
     config = {etype: {"strategy": "realistic"}}
 
-    # Attempt-0 output (same derivation _generate_unique_fake uses internally).
-    seed = _seed_from_value(value, etype, salt)
-    rng = _ShakeRng(seed=seed)
+    # Attempt-0 output (same derivation the Rust re-roll loop uses internally).
+    seed = _core.seed_from_value(value, etype, salt)
+    rng = _core.ShakeRng(seed=seed)
     first_fake, _ = _phone_faker(value, rng)
 
     # Pre-populate the key with first_fake → forces a re-roll.

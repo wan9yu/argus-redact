@@ -13,10 +13,12 @@ from __future__ import annotations
 import pytest
 
 import argus_redact._core as _core
-from argus_redact.pure import replacer as r
+from argus_redact.pure.replacer import _faker_reserved_cached, replace
 from argus_redact.specs import en as _en  # noqa: F401  registry side-effect import
 from argus_redact.specs.fakers_en_reserved import RESERVED_PERSON_NAMES_EN
 from argus_redact.specs.fakers_zh_reserved import RESERVED_PERSON_NAMES
+from argus_redact.specs.registry import PIITypeDef, register, unregister
+from tests.conftest import make_match
 
 
 _SALT = b"identity-pass-test-salt-32-byte!"
@@ -24,7 +26,9 @@ _SALT_BYTES = _core.resolve_salt(_SALT)
 
 
 def test_generate_unique_fake_rejects_value_equal_fake():
-    """Wrapper guarantee: even if the faker returns the input, the wrapper rerolls."""
+    """Re-roll guarantee through the public custom-faker path: even if the faker
+    returns the input, the Rust re-roll loop rejects the identity-pass and rolls
+    again until it gets a non-identity fake."""
     call_count = {"n": 0}
 
     def stubborn_faker(value, rng):
@@ -34,32 +38,57 @@ def test_generate_unique_fake_rejects_value_equal_fake():
             return value, []
         return f"FAKE-{call_count['n']}", []
 
-    fake, _ = r._generate_unique_fake(
-        stubborn_faker,
-        value="John Doe",
-        type_name="person",
-        salt=_SALT,
-        used=set(),
+    register(
+        PIITypeDef(
+            name="stubborn_faker_type",
+            lang="shared",
+            format="test",
+            faker_reserved=stubborn_faker,
+        )
     )
-    assert fake != "John Doe"
-    assert fake.startswith("FAKE-")
-    assert call_count["n"] >= 3, "wrapper should have re-rolled past identity outputs"
+    try:
+        _, key, _ = replace(
+            "John Doe",
+            [make_match("John Doe", "stubborn_faker_type", 0)],
+            config={"stubborn_faker_type": {"strategy": "realistic"}},
+            salt=_SALT,
+        )
+        fake = next(iter(key))
+        assert fake != "John Doe"
+        assert fake.startswith("FAKE-")
+        assert call_count["n"] >= 3, "should have re-rolled past identity outputs"
+    finally:
+        unregister("shared", "stubborn_faker_type")
+        _faker_reserved_cached.cache_clear()
 
 
 def test_generate_unique_fake_raises_when_only_identity_available():
-    """If the faker cannot produce anything other than the input, the wrapper raises."""
+    """If the faker can only ever return the input, the Rust re-roll loop
+    exhausts its attempts and surfaces the exhaustion error (ValueError on the
+    Rust-callback path)."""
 
     def identity_faker(value, rng):
         return value, []
 
-    with pytest.raises(RuntimeError, match="unique fake"):
-        r._generate_unique_fake(
-            identity_faker,
-            value="John Doe",
-            type_name="person",
-            salt=_SALT,
-            used=set(),
+    register(
+        PIITypeDef(
+            name="identity_faker_type",
+            lang="shared",
+            format="test",
+            faker_reserved=identity_faker,
         )
+    )
+    try:
+        with pytest.raises(ValueError, match="unique fake"):
+            replace(
+                "John Doe",
+                [make_match("John Doe", "identity_faker_type", 0)],
+                config={"identity_faker_type": {"strategy": "realistic"}},
+                salt=_SALT,
+            )
+    finally:
+        unregister("shared", "identity_faker_type")
+        _faker_reserved_cached.cache_clear()
 
 
 @pytest.mark.parametrize("name", RESERVED_PERSON_NAMES_EN)

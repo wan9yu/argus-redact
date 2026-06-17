@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import functools
-import hashlib
-import hmac
-import os
 import warnings
 from typing import Callable
 
@@ -22,11 +19,6 @@ _RustPM = _core.PatternMatch if HAS_CORE else None
 
 class SecurityWarning(UserWarning):
     """Emitted when a misconfiguration would silently weaken redaction."""
-
-
-_CIRCLED_DIGITS = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
-_MAX_NUMERIC_COLLISION_SUFFIX = 10_000
-_TYPE_SEED_OFFSET_MOD = 10_000
 
 
 VALID_STRATEGIES = (
@@ -63,9 +55,6 @@ def is_strategy_reversible(strategy: str) -> bool:
     return strategy in _REVERSIBLE_STRATEGIES
 
 
-_MAX_REROLL_ATTEMPTS = 10  # well above expected HMAC collision rate for practical batch sizes
-
-
 # ``keep`` strategy preserves these verbatim; anything else downgrades to the
 # type's default with SecurityWarning. Guards against H6 where Layer-3 could
 # misclassify sensitive PII (e.g. SSN strings) as ``self_reference``.
@@ -73,103 +62,6 @@ _MAX_REROLL_ATTEMPTS = 10  # well above expected HMAC collision rate for practic
 # same SSOT consumed by hints.kinship_tier (no parallel list to drift).
 _ZH_PRONOUNS = frozenset({"我", "我的", "我们", "我们的"})
 _KEEP_WHITELIST = SELF_REF_PRONOUNS | _ZH_PRONOUNS | _ZH_KINSHIP
-
-
-_SALT_INT_BYTES = 8  # int↔bytes boundary for back-compat seed encoding
-
-
-def _seed_from_value(value: str, type_name: str, salt: bytes) -> bytes:
-    """32-byte HMAC-SHA256 master key for ``(type, value)`` under ``salt``,
-    consumed by ``_ShakeRng`` to derive realistic-strategy fakes."""
-    msg = f"{type_name}:{value}".encode("utf-8")
-    return hmac.new(salt, msg, hashlib.sha256).digest()
-
-
-def _resolve_salt(salt: int | bytes | None) -> bytes:
-    """Determine effective salt for HMAC seeding.
-
-    Priority: caller bytes → caller int (8-byte BE, 64-bit entropy) → env var.
-    Raises ``ValueError`` if none are set; pre-v0.6.1 silently used ``b""``
-    which collapsed HMAC to a public hash recoverable from one observed pair.
-    """
-    if isinstance(salt, (bytes, bytearray)):
-        return bytes(salt)
-    if isinstance(salt, int):
-        signed = salt < 0
-        return salt.to_bytes(_SALT_INT_BYTES, "big", signed=signed)
-    env = os.environ.get("ARGUS_REDACT_PSEUDONYM_SALT")
-    if env:
-        return env.encode("utf-8")
-    raise ValueError(
-        "realistic strategy requires explicit salt: pass `salt=<int>`, "
-        "`salt=<bytes>`, or set ARGUS_REDACT_PSEUDONYM_SALT."
-    )
-
-
-@functools.lru_cache(maxsize=128)
-def _type_seed_offset(entity_type: str) -> int:
-    """Stable per-type integer offset for PseudonymGenerator seed derivation.
-
-    Replaces ``hash(entity_type) % 10000`` whose output varies across processes
-    via PYTHONHASHSEED — that broke "same salt → same fake" across multi-worker
-    deployments. SHA-256 of the UTF-8 type name is stable everywhere.
-    """
-    digest = hashlib.sha256(entity_type.encode("utf-8")).digest()
-    return int.from_bytes(digest[:4], "big") % _TYPE_SEED_OFFSET_MOD
-
-
-class _ShakeRng:
-    """Cryptographically-keyed PRNG replacing ``random.Random`` on the realistic path.
-
-    Drives reserved-range fakers from a SHAKE-256 stream keyed by an HMAC-SHA256
-    master derived from (salt, type, value). Exposes only the subset of
-    ``random.Random`` used by ``specs/fakers_*.py``: ``randint`` and ``choice``.
-    Output is uniform via rejection sampling (no modulo bias).
-    """
-
-    # Pre-compute bytes lazily; 256 is a safe ceiling for any current faker
-    # (worst case: ~30 randint calls each consuming ≤ 4 bytes).
-    _PRECOMPUTE_BYTES = 256
-
-    __slots__ = ("_seed", "_buf", "_pos")
-
-    def __init__(self, seed: bytes) -> None:
-        if not isinstance(seed, (bytes, bytearray)):
-            raise TypeError(f"_ShakeRng seed must be bytes, got {type(seed).__name__}")
-        self._seed = bytes(seed)
-        self._buf = hashlib.shake_256(self._seed).digest(self._PRECOMPUTE_BYTES)
-        self._pos = 0
-
-    def _take(self, n: int) -> bytes:
-        end = self._pos + n
-        if end > len(self._buf):
-            # Extend: re-derive the digest at the new (larger) length.
-            # SHAKE-256.digest(N) is deterministic in N — bytes [0:M] of
-            # digest(N) for N>M equal digest(M).
-            new_len = max(end + self._PRECOMPUTE_BYTES, len(self._buf) * 2)
-            self._buf = hashlib.shake_256(self._seed).digest(new_len)
-        chunk = self._buf[self._pos : end]
-        self._pos = end
-        return chunk
-
-    def randint(self, a: int, b: int) -> int:
-        """Uniform integer in ``[a, b]``. Uses rejection sampling to avoid
-        modulo bias when ``b - a + 1`` is not a power of 256."""
-        if b < a:
-            raise ValueError(f"randint: empty range [{a}, {b}]")
-        rng = b - a + 1
-        bytes_needed = max(1, ((rng - 1).bit_length() + 7) // 8)
-        max_unbiased = (1 << (bytes_needed * 8)) - ((1 << (bytes_needed * 8)) % rng)
-        while True:
-            n = int.from_bytes(self._take(bytes_needed), "big")
-            if n < max_unbiased:
-                return a + (n % rng)
-
-    def choice(self, seq):
-        """Uniformly pick one element of ``seq``. Empty seq raises IndexError."""
-        if len(seq) == 0:
-            raise IndexError("Cannot choose from an empty sequence")
-        return seq[self.randint(0, len(seq) - 1)]
 
 
 def _find_faker_reserved(name: str, langs: list[str] | None) -> Callable | None:
@@ -199,39 +91,6 @@ def _faker_reserved_cached(name: str, langs: tuple[str, ...]) -> Callable | None
             return td.faker_reserved
     return None
 
-
-def _generate_unique_fake(
-    faker_reserved: Callable,
-    value: str,
-    type_name: str,
-    salt: bytes,
-    used: set[str],
-) -> tuple[str, list[str]]:
-    """Call faker_reserved with HMAC-seeded RNG, re-rolling until unique within `used`.
-
-    Returns ``(fake, aliases)``. faker_reserved must return
-    ``tuple[str, list[str]]``; bare-string returns raise TypeError on unpack.
-    """
-    seed_input = value
-    last = None
-    # Reject identity-pass: faker must never return the input value as the fake.
-    # Pre-fix only checked ``fake not in used``; with small reserved-name pools,
-    # the HMAC-seeded RNG could pick the input back with non-trivial probability,
-    # producing a "redacted" output bit-identical to the input.
-    used_with_input = used | {value}
-    for attempt in range(_MAX_REROLL_ATTEMPTS):
-        master_key = _seed_from_value(seed_input, type_name, salt)
-        rng = _ShakeRng(seed=master_key)
-        fake, aliases_raw = faker_reserved(value, rng)
-        aliases = list(aliases_raw)
-        if fake not in used_with_input:
-            return fake, aliases
-        last = fake
-        seed_input = f"{seed_input}#{attempt}"
-    raise RuntimeError(
-        f"Could not generate unique fake for {type_name} "
-        f"after {_MAX_REROLL_ATTEMPTS} attempts (last: {last!r})"
-    )
 
 def _resolve_default_strategy(entity_type: str) -> str:
     """Look up the type's declared strategy from the typedef registry.
@@ -322,76 +181,6 @@ def _validate_config(config: dict | None) -> None:
             )
 
 
-def _mask_value(
-    value: str,
-    entity_type: str,
-    *,
-    visible_prefix: int = 0,
-    visible_suffix: int = 0,
-) -> str:
-    """Apply mask strategy: show prefix + suffix, mask middle.
-
-    If visible_prefix/suffix are given via config, use those.
-    Otherwise use per-type defaults.
-    """
-    if entity_type == "email":
-        at = value.find("@")
-        if at > 0:
-            local = value[:at]
-            domain = value[at:]
-            visible = local[0] if local else ""
-            return f"{visible}{'*' * max(len(local) - 1, 3)}{domain}"
-        return value
-
-    # Per-type defaults
-    defaults = {
-        "phone": (3, 4),
-        "bank_card": (6, 4),
-        "credit_card": (6, 4),
-        "id_number": (4, 4),
-    }
-    prefix_len = visible_prefix or defaults.get(entity_type, (3, 4))[0]
-    suffix_len = visible_suffix or defaults.get(entity_type, (3, 4))[1]
-
-    if len(value) <= prefix_len + suffix_len:
-        return "*" * len(value)
-    masked_len = len(value) - prefix_len - suffix_len
-    return f"{value[:prefix_len]}{'*' * masked_len}{value[-suffix_len:]}"
-
-
-def _mask_name(value: str) -> str:
-    """Chinese name mask: 张* / 李** / 欧阳**."""
-    length = len(value)
-    if length <= 1:
-        return "*"
-    if length <= 3:
-        return value[0] + "*" * (length - 1)
-    # 4+ chars: show first 2
-    return value[:2] + "*" * (length - 2)
-
-
-def _mask_landline(value: str) -> str:
-    """Landline mask: keep area code + last 3, mask middle."""
-    # Split area code (0xx or 0xxx) from number
-    dash_pos = value.find("-")
-    if dash_pos > 0:
-        area = value[: dash_pos + 1]
-        number = value[dash_pos + 1 :]
-    elif value.startswith("0"):
-        # Guess area code length: 3 for 010/02x, 4 for 0xxx
-        area_len = 3 if value[1] in "12" else 4
-        area = value[:area_len]
-        number = value[area_len:]
-    else:
-        area = ""
-        number = value
-
-    if len(number) <= 3:
-        return area + number
-    masked = "*" * (len(number) - 3) + number[-3:]
-    return area + masked
-
-
 def _mask_phone_regional(value: str, *, region: str = "cn") -> str:
     """Phone mask with regional rules.
 
@@ -415,22 +204,6 @@ def _mask_phone_regional(value: str, *, region: str = "cn") -> str:
         return "*" * len(digits)
     masked_len = len(digits) - p - s
     return digits[:p] + "*" * masked_len + digits[-s:]
-
-
-def _resolve_collision(label: str, used_labels: set[str]) -> str:
-    """Append circled number on collision."""
-    if label not in used_labels:
-        return label
-    for c in _CIRCLED_DIGITS:
-        candidate = f"{label}{c}"
-        if candidate not in used_labels:
-            return candidate
-    # Fallback to numeric suffix beyond ⑳
-    for i in range(21, _MAX_NUMERIC_COLLISION_SUFFIX):
-        candidate = f"{label}({i})"
-        if candidate not in used_labels:
-            return candidate
-    raise RuntimeError(f"Too many collisions for label: {label}")
 
 
 @functools.lru_cache(maxsize=1)

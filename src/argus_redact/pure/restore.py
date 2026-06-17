@@ -2,24 +2,9 @@
 
 from __future__ import annotations
 
-import functools
-import re as _re
 from typing import Mapping
 
 from argus_redact.pure.display_marker import strip_display_markers
-
-
-@functools.lru_cache(maxsize=128)
-def _compile_alternation(keys_frozen: frozenset[str]) -> _re.Pattern:
-    """Cache compiled alternation regex; key by frozenset of replacement strings.
-
-    Streaming hot path: ``StreamingRestorer.feed`` calls ``restore`` once per
-    sentence boundary on the same key dict — caching avoids re-sorting and
-    re-compiling the alternation each call. Keyed by frozenset because dict
-    insertion order doesn't change matching behavior.
-    """
-    sorted_keys = sorted(keys_frozen, key=len, reverse=True)
-    return _re.compile("|".join(_re.escape(k) for k in sorted_keys))
 
 
 def check_restore_safety(

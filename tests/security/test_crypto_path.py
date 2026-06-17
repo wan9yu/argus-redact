@@ -61,17 +61,17 @@ def test_entity_type_seed_offset_stable_across_processes(tmp_path):
 
 
 def test_shake_rng_replaces_random_in_generate_unique_fake():
-    """Faker output must derive from a SHAKE-256 stream, not Mersenne Twister."""
+    """Faker output must derive from a SHAKE-256 stream, not Mersenne Twister.
+
+    The realistic-faker re-roll loop is owned by the Rust ``_core`` (the
+    SHAKE-256-keyed ``ShakeRng``); the Python ``replacer`` only orchestrates.
+    Guard that no Mersenne Twister (``random.Random``) leaks back into the
+    replacer module on the realistic path.
+    """
     import argus_redact.pure.replacer as r
 
     src = open(r.__file__, encoding="utf-8").read()
-    fn_start = src.find("def _generate_unique_fake")
-    assert fn_start != -1
-    # Find end of function (next def at column 0)
-    after = src[fn_start:]
-    next_def = after.find("\ndef ", 1)
-    fn_body = after[: next_def if next_def != -1 else len(after)]
-    assert "random.Random" not in fn_body, (
+    assert "random.Random" not in src, (
         "v0.6.1+ must not use random.Random (Mersenne Twister) in the realistic faker path"
     )
 
