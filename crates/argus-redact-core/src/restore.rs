@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use fancy_regex::Regex;
 
-use crate::display_marker::{preset_marker_chars, strip_display_markers};
+use crate::display_marker::{PRESET_MARKER_CHARS, strip_display_markers};
 use crate::grammar::{is_self_ref, restore_grammar_en};
 use crate::reserved_range::{byte_to_char_offset, escaped_alternation, scan_for_pollution};
 
@@ -103,7 +103,7 @@ pub fn restore_full(
     // Step 4: auto-detect decoration markers (only when display_marker is None).
     let text_owned2: String;
     let text: &str = if display_marker.is_none() {
-        let chars = preset_marker_chars();
+        let chars = &*PRESET_MARKER_CHARS;
         if !chars.is_empty() && !flat.is_empty() {
             // Build character class string for preset marker chars.
             let char_class: String = chars

@@ -2,6 +2,8 @@
 //!
 //! Mirrors `pure/display_marker.py` verbatim.
 
+use std::sync::LazyLock;
+
 use fancy_regex::Regex;
 
 use crate::reserved_range::escaped_alternation;
@@ -22,18 +24,14 @@ pub const DISPLAY_MARKER_PRESETS: &[(&str, &str)] = &[
 ///
 /// Used by `restore()` to auto-detect and strip known preset markers attached
 /// to keys when the caller omitted `display_marker=`. Custom markers (not in
-/// DISPLAY_MARKER_PRESETS) are NOT included.
-pub fn preset_marker_chars() -> Vec<char> {
+/// DISPLAY_MARKER_PRESETS) are NOT included. Computed once at first access.
+pub static PRESET_MARKER_CHARS: LazyLock<Vec<char>> = LazyLock::new(|| {
     let mut chars: Vec<char> = DISPLAY_MARKER_PRESETS
-        .iter()
-        .flat_map(|(_, v)| v.chars())
-        .filter(|c| *c != '\0')
-        .collect();
-    // Deduplicate while preserving order.
+        .iter().flat_map(|(_, v)| v.chars()).filter(|c| *c != '\0').collect();
     let mut seen = std::collections::HashSet::new();
     chars.retain(|c| seen.insert(*c));
     chars
-}
+});
 
 /// Resolve a marker preset name or literal string. `None` → default.
 pub fn resolve_marker(marker: Option<&str>) -> String {
@@ -137,13 +135,13 @@ mod tests {
 
     #[test]
     fn test_preset_marker_chars_contains_default() {
-        let chars = preset_marker_chars();
+        let chars = &*PRESET_MARKER_CHARS;
         assert!(chars.contains(&'ⓕ'));
     }
 
     #[test]
     fn test_preset_marker_chars_contains_all_non_empty() {
-        let chars = preset_marker_chars();
+        let chars = &*PRESET_MARKER_CHARS;
         // "ⓕ", "ˢ", "*", "(", "假", ")" — all chars from non-empty presets
         assert!(chars.contains(&'ⓕ'));
         assert!(chars.contains(&'ˢ'));
