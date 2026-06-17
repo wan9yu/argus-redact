@@ -521,12 +521,41 @@ pub fn generate_unique_fake(
     salt: &[u8],
     used: &std::collections::HashSet<String>,
 ) -> Result<(String, Vec<String>), String> {
+    generate_unique_fake_with(
+        |master_key| {
+            let mut rng = ShakeRng::new(master_key);
+            Ok(faker(value, &mut rng))
+        },
+        value,
+        type_,
+        salt,
+        used,
+    )
+}
+
+/// Generic re-roll loop shared by the built-in [`generate_unique_fake`] and a
+/// custom-faker callback. `produce` receives the per-attempt `master_key` and
+/// returns `(fake, aliases)` (or an error string, propagated unchanged).
+///
+/// The collision/re-roll sequence is bit-identity-critical and mirrors
+/// `_generate_unique_fake` (replacer.py:229–260): same seed derivation, same
+/// `fake != value && !used.contains(&fake)` predicate, same `#{attempt}` suffix,
+/// same [`MAX_REROLL_ATTEMPTS`] cap, same exhaustion error.
+pub fn generate_unique_fake_with<P>(
+    mut produce: P,
+    value: &str,
+    type_: &str,
+    salt: &[u8],
+    used: &std::collections::HashSet<String>,
+) -> Result<(String, Vec<String>), String>
+where
+    P: FnMut(&[u8]) -> Result<(String, Vec<String>), String>,
+{
     let mut seed_input = value.to_string();
     let mut last: Option<String> = None;
     for attempt in 0..MAX_REROLL_ATTEMPTS {
         let master_key = seed_from_value(&seed_input, type_, salt);
-        let mut rng = ShakeRng::new(&master_key);
-        let (fake, aliases) = faker(value, &mut rng);
+        let (fake, aliases) = produce(&master_key)?;
         // Reject identity-pass (fake == value) AND any already-used fake.
         if fake != value && !used.contains(&fake) {
             return Ok((fake, aliases));
