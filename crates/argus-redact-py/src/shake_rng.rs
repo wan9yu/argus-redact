@@ -19,7 +19,6 @@ impl PyShakeRng {
     /// Construct directly from seed bytes — used by the engine to hand custom
     /// `faker_reserved` callables the same seeded stream (Task 8). Kept
     /// `pub(crate)` so only the binding crate can mint instances off-band.
-    #[allow(dead_code)]
     pub(crate) fn new_from_bytes(seed: &[u8]) -> PyShakeRng {
         PyShakeRng { inner: ShakeRng::new(seed) }
     }

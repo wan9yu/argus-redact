@@ -4,12 +4,13 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 
 use argus_redact_core::replace::{
-    replace as core_replace, PseudoFactory, ReplaceArgs, TypeInfo,
+    replace as core_replace, FakerFactory, PseudoFactory, ReplaceArgs, TypeInfo,
 };
 use argus_redact_core::seed::Salt;
 use argus_redact_core::PatternMatch as CorePM;
 
 use crate::pseudonym::PyRandomSource;
+use crate::shake_rng::PyShakeRng;
 use crate::types::PyPatternMatch;
 
 /// Factory minting [`PyRandomSource`] per (prefix, seed). Mirrors how
@@ -22,6 +23,44 @@ impl PseudoFactory for PyPseudoFactory {
     type Source = PyRandomSource;
     fn make(&self, seed: Option<u64>) -> PyRandomSource {
         PyRandomSource::for_seed(seed)
+    }
+}
+
+/// Looks up the registered custom Python `faker_reserved` callable by type and
+/// invokes it with a `_core.ShakeRng` built from the attempt's master_key. The
+/// re-roll loop lives in core; this produces one `(fake, aliases)` per call.
+///
+/// Matches the Python signature `faker_reserved(value, rng) -> (str, list[str])`
+/// (`pure/replacer.py`), so the `_core.ShakeRng` hands the callable the same
+/// deterministic SHAKE stream the Rust engine uses for built-in fakers.
+struct PyFakerFactory {
+    /// type name -> Python callable.
+    fakers: HashMap<String, Py<PyAny>>,
+}
+
+impl FakerFactory for PyFakerFactory {
+    fn call_faker(
+        &self,
+        type_: &str,
+        value: &str,
+        master_key: &[u8],
+    ) -> Result<(String, Vec<String>), String> {
+        let faker = self
+            .fakers
+            .get(type_)
+            .ok_or_else(|| format!("no custom faker registered for type '{type_}'"))?;
+        Python::attach(|py| {
+            let rng = Bound::new(py, PyShakeRng::new_from_bytes(master_key))
+                .map_err(|e| e.to_string())?;
+            let res = faker
+                .bind(py)
+                .call1((value, rng))
+                .map_err(|e| e.to_string())?;
+            let (fake, aliases): (String, Vec<String>) = res
+                .extract()
+                .map_err(|e| format!("faker_reserved must return (str, list[str]): {e}"))?;
+            Ok((fake, aliases))
+        })
     }
 }
 
@@ -79,6 +118,7 @@ fn parse_type_info(d: &Bound<'_, PyDict>) -> PyResult<TypeInfo> {
         prefix: get_str("prefix").unwrap_or_default(),
         prefix_overridden: get_bool("prefix_overridden"),
         faker_name: get_str("faker_name"),
+        custom_faker: get_bool("custom_faker"),
         replacement: get_str("replacement"),
         label: get_str("label"),
         default_category_label: get_str("default_category_label").unwrap_or_default(),
@@ -100,7 +140,8 @@ type ReplaceOut = (String, HashMap<String, String>, HashMap<String, Vec<String>>
 #[pyfunction]
 #[pyo3(signature = (
     text, entities, *, salt=None, key=None, type_info,
-    person_prefix="P", org_prefix="O", unified_prefix=None, keep_whitelist
+    person_prefix="P", org_prefix="O", unified_prefix=None, keep_whitelist,
+    custom_fakers=None
 ))]
 #[allow(clippy::too_many_arguments)]
 pub fn replace(
@@ -113,6 +154,7 @@ pub fn replace(
     org_prefix: &str,
     unified_prefix: Option<&str>,
     keep_whitelist: HashSet<String>,
+    custom_fakers: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<ReplaceOut> {
     let salt = parse_salt(salt)?;
 
@@ -130,6 +172,22 @@ pub fn replace(
         info_map.insert(type_name, parse_type_info(d)?);
     }
 
+    // Build the custom-faker map: {type_name: callable}. Empty when no custom
+    // fakers are registered (the common path), so we pass `None` to core.
+    let mut fakers: HashMap<String, Py<PyAny>> = HashMap::new();
+    if let Some(d) = custom_fakers {
+        for (k, v) in d.iter() {
+            let type_name: String = k.extract()?;
+            fakers.insert(type_name, v.unbind());
+        }
+    }
+    let py_faker_factory = PyFakerFactory { fakers };
+    let faker_arg: Option<&dyn FakerFactory> = if py_faker_factory.fakers.is_empty() {
+        None
+    } else {
+        Some(&py_faker_factory)
+    };
+
     let factory = PyPseudoFactory;
     let result = core_replace(
         ReplaceArgs {
@@ -144,6 +202,7 @@ pub fn replace(
             keep_whitelist: &keep_whitelist,
         },
         &factory,
+        faker_arg,
     )
     .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
