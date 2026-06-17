@@ -255,7 +255,7 @@ pub fn validate_email(value: &str) -> bool {
     !(local.contains("..") || local.starts_with('.') || local.ends_with('.'))
 }
 
-static AGE_DIGITS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\d+").unwrap());
+pub(crate) static AGE_DIGITS_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\d+").unwrap());
 pub fn validate_age(value: &str) -> bool {
     match AGE_DIGITS_RE.find(value) {
         Ok(Some(m)) => match m.as_str().parse::<u64>() {

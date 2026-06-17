@@ -26,7 +26,7 @@ use fancy_regex::Regex;
 use serde::Deserialize;
 
 use crate::shake_rng::{seed_from_value, ShakeRng};
-use crate::validators::{gb11643_check_char, hkid_check_digit, luhn_check_digit, twid_check_digit};
+use crate::validators::{gb11643_check_char, hkid_check_digit, luhn_check_digit, twid_check_digit, AGE_DIGITS_RE};
 
 /// Max re-roll attempts in [`generate_unique_fake`] (mirrors `_MAX_REROLL_ATTEMPTS`).
 pub const MAX_REROLL_ATTEMPTS: usize = 10;
@@ -328,17 +328,12 @@ const AGE_FLOOR: i64 = 0;
 const AGE_CEILING: i64 = 149;
 const DOB_BAND_DAYS: i64 = 30;
 
-static AGE_DIGITS_RE: OnceLock<Regex> = OnceLock::new();
-fn age_digits_re() -> &'static Regex {
-    AGE_DIGITS_RE.get_or_init(|| Regex::new(r"\d+").unwrap())
-}
-
 /// `fake_age_noise` — shift the first embedded integer by `randint(-5, 5)` (re-rolled
 /// to ±1 when zero), clamped to `[0, 149]`. Returns the input unchanged if no digit.
 ///
 /// `delta == 0 -> choice((-1, 1))` = `(-1, 1)[choice_index(2)]`, matching `_ShakeRng.choice`.
 pub fn fake_age_noise(value: &str, rng: &mut ShakeRng) -> (String, Vec<String>) {
-    let m = match age_digits_re().find(value) {
+    let m = match AGE_DIGITS_RE.find(value) {
         Ok(Some(m)) => m,
         _ => return (value.to_string(), vec![]),
     };
