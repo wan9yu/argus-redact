@@ -508,7 +508,7 @@ pub fn resolve_faker(name: &str) -> Option<FakerFn> {
 }
 
 /// Re-roll a fake until it is unique within `used ∪ {value}`, mirroring
-/// `_generate_unique_fake` (replacer.py:224–255).
+/// the Python `_generate_unique_fake` re-roll loop.
 ///
 /// Each attempt re-seeds with `seed_from_value(seed_input, type_, salt)` → a fresh
 /// [`ShakeRng`] → the faker. On collision the seed input is suffixed `#{attempt}`.
@@ -538,7 +538,7 @@ pub fn generate_unique_fake(
 /// returns `(fake, aliases)` (or an error string, propagated unchanged).
 ///
 /// The collision/re-roll sequence is bit-identity-critical and mirrors
-/// `_generate_unique_fake` (replacer.py:229–260): same seed derivation, same
+/// the Python `_generate_unique_fake` re-roll loop: same seed derivation, same
 /// `fake != value && !used.contains(&fake)` predicate, same `#{attempt}` suffix,
 /// same [`MAX_REROLL_ATTEMPTS`] cap, same exhaustion error.
 pub(crate) fn generate_unique_fake_with<P>(

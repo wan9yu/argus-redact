@@ -277,7 +277,7 @@ pub fn replace<F: PseudoFactory>(
             let faker_name = info.and_then(|i| i.faker_name.as_deref());
             if let Some(name) = faker_name {
                 // Built-in faker resolvable in Rust. (A custom faker_reserved
-                // has no faker_name and would have routed to _replace_python.)
+                // has no faker_name and routes through the FakerFactory callback.)
                 let faker = resolve_faker(name).ok_or_else(|| {
                     format!("realistic strategy: unknown faker '{name}' for type '{}'", entity.type_)
                 })?;

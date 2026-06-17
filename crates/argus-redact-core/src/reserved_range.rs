@@ -1,5 +1,5 @@
-//! Reserved-range PII scanner, ported 1:1 from
-//! `src/argus_redact/pure/reserved_range_scanner.py`.
+//! Reserved-range PII scanner. Single source of truth for the reserved-range
+//! patterns; Python consumers read them via `_core.reserved_range_patterns()`.
 //!
 //! Detects values that fall within the "reserved sub-ranges" used by the
 //! realistic faker strategy, so that re-redacting LLM output (which already
@@ -25,7 +25,7 @@ use crate::fakers::{
 
 // ── Pattern builders ─────────────────────────────────────────────────────────
 
-/// Build all `_RESERVED_RANGE_PATTERNS` entries in insertion order (mirrors the Python dict).
+/// Build all reserved-range pattern entries in insertion order (the SSOT).
 ///
 /// `overrides`: optional per-type alternation override. Empty slice → drop that type.
 fn build_patterns(overrides: Option<&HashMap<String, Vec<String>>>) -> Vec<(String, String)> {

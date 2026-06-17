@@ -35,4 +35,3 @@ class TestToFixtures:
         for typedef in list_types("zh"):
             fixtures = typedef.to_fixtures()
             assert len(fixtures) >= 1, f"{typedef.name} produced no fixtures"
-
