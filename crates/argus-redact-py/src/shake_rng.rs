@@ -2,6 +2,23 @@ use argus_redact_core::shake_rng::ShakeRng;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
+/// `_core.seed_from_value` — `HMAC-SHA256(salt, "{type}:{value}")` → 32 bytes.
+///
+/// Additive `_core` export of the single KDF SSOT
+/// (`argus_redact_core::shake_rng::seed_from_value`), the master key the
+/// realistic strategy derives fakes from. Mirrors `pure/replacer._seed_from_value`
+/// so the Python copy can migrate onto this and later be deleted.
+#[pyfunction]
+pub fn seed_from_value<'py>(
+    py: Python<'py>,
+    value: &str,
+    type_: &str,
+    salt: &Bound<'py, PyBytes>,
+) -> Bound<'py, PyBytes> {
+    let digest = argus_redact_core::shake_rng::seed_from_value(value, type_, salt.as_bytes());
+    PyBytes::new(py, &digest)
+}
+
 /// `_core.ShakeRng` — PyO3 wrapper over the Rust SHAKE-256 RNG, so custom
 /// `faker_reserved` callables receive the SAME deterministic stream the Rust
 /// engine uses (single KDF SSOT; the Python `_ShakeRng` is retired in v0.7.4).

@@ -12,6 +12,7 @@ mod display_marker;
 mod reserved_range;
 mod replace;
 mod shake_rng;
+mod seed;
 
 /// argus-redact Rust core — high-performance pure functions over argus-redact-core.
 #[pymodule]
@@ -37,5 +38,8 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(reserved_range::scan_for_pollution, m)?)?;
     m.add_function(wrap_pyfunction!(replace::replace, m)?)?;
     m.add_class::<crate::shake_rng::PyShakeRng>()?;
+    m.add_function(wrap_pyfunction!(shake_rng::seed_from_value, m)?)?;
+    m.add_function(wrap_pyfunction!(seed::resolve_salt, m)?)?;
+    m.add_function(wrap_pyfunction!(seed::type_seed_offset, m)?)?;
     Ok(())
 }

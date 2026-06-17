@@ -65,7 +65,7 @@ impl FakerFactory for PyFakerFactory {
 }
 
 /// Parse the Python salt object (`int | bytes | None`) into a core [`Salt`].
-fn parse_salt(salt: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Salt>> {
+pub(crate) fn parse_salt(salt: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Salt>> {
     match salt {
         None => Ok(None),
         Some(obj) => {
