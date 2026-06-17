@@ -16,6 +16,10 @@
 //! loop operates entirely in char-space (a `Vec<char>` over the matched word),
 //! so a multi-byte CJK word is never byte-sliced.
 
+// TEMPORARY: candidate-gen lands before its consumers; detect_person_names
+// (Task 5) wires this chain into the crate. Remove this allow at Task 5.
+#![allow(dead_code)]
+
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
@@ -29,7 +33,7 @@ use crate::reserved_range::byte_to_char_offset;
 const CJK: &str = r"\u{4e00}-\u{9fff}";
 
 /// Particles / function words that cannot be the last char of a given name.
-/// Mirrors Python `_NOT_NAME_CHARS` (43 chars).
+/// Mirrors Python `_NOT_NAME_CHARS` (45 chars).
 const NOT_NAME_CHARS: &str =
     "的了在是有和与把被让从到给向因为而又也都就才会能要可将已完开做吗呢吧啊哦呀嘛啦哈嗯着过去来";
 
