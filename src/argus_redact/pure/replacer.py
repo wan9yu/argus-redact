@@ -699,9 +699,9 @@ def _build_type_info(
     entities: list[PatternMatch],
     config: dict | None,
     langs: list[str] | None,
-) -> tuple[dict[str, dict], bool]:
-    """Resolve the per-type replacement info the Rust ``replace`` needs, and the
-    dispatch flag for whether a **custom** realistic faker forces the Python path.
+) -> tuple[dict[str, dict], dict[str, Callable]]:
+    """Resolve the per-type replacement info the Rust ``replace`` needs, plus any
+    custom Python ``faker_reserved`` callables to pass as the Rust callback map.
 
     For every entity type present, folds the registry default + user config +
     ``DEFAULT_PREFIXES`` / ``DEFAULT_CATEGORY_LABEL`` + the built-in faker name
@@ -709,15 +709,15 @@ def _build_type_info(
     once per type and reused for both the ``faker_name`` field and the custom-faker
     detection.
 
-    Returns ``(info, has_custom_realistic_faker)``. ``has_custom_realistic_faker``
-    is True when any type's effective strategy is ``realistic`` AND its type has a
-    ``faker_reserved`` callable the Rust core cannot resolve (a custom faker) — such
-    a call must run the pure-Python path (Rust cannot invoke an arbitrary Python
-    faker mid-loop). Built-in realistic fakers resolve in Rust; types with no faker
-    fall through to a pseudonym in either path.
+    Returns ``(info, custom_fakers)`` where ``custom_fakers`` maps each type whose
+    effective strategy is ``realistic`` and whose ``faker_reserved`` callable is NOT
+    a built-in (i.e. not resolvable by Rust's by-function-name faker dispatch) to
+    that callable. The Rust core receives this map and invokes the callable via
+    ``PyFakerFactory`` when ``TypeInfo.custom_faker`` is true. Built-in realistic
+    fakers resolve in Rust by name; types with no faker fall through to a pseudonym.
     """
     info: dict[str, dict] = {}
-    has_custom = False
+    custom_fakers: dict[str, Callable] = {}
     builtin_names = _builtin_faker_names()
     for entity in entities:
         etype = entity.type
@@ -732,6 +732,7 @@ def _build_type_info(
         # Resolve the faker once; derive both the built-in name (for Rust) and the
         # custom-faker flag (for dispatch). A non-realistic type needs neither.
         faker_name = None
+        is_custom_faker = False
         if strategy == "realistic":
             faker = _find_faker_reserved(etype, langs)
             if faker is not None:
@@ -739,7 +740,8 @@ def _build_type_info(
                 if name in builtin_names:
                     faker_name = name
                 else:
-                    has_custom = True  # custom faker → Python path
+                    is_custom_faker = True  # custom faker → Rust callback
+                    custom_fakers[etype] = faker
 
         info[etype] = {
             "strategy": strategy,
@@ -747,13 +749,14 @@ def _build_type_info(
             "prefix": prefix,
             "prefix_overridden": prefix_overridden,
             "faker_name": faker_name,
+            "custom_faker": is_custom_faker,
             "replacement": ec.get("replacement"),
             "label": ec.get("label"),
             "default_category_label": DEFAULT_CATEGORY_LABEL.get(etype, f"[{etype}]"),
             "visible_prefix": int(ec.get("visible_prefix", 0) or 0),
             "visible_suffix": int(ec.get("visible_suffix", 0) or 0),
         }
-    return info, has_custom
+    return info, custom_fakers
 
 
 def replace(
@@ -797,14 +800,15 @@ def replace(
             "redact_pseudonym_llm() instead."
         )
 
-    # Fallbacks to the pure-Python path: no Rust core, or a custom Python faker.
-    # Build the per-type info once and derive the custom-faker dispatch flag from
-    # the same pass (no separate scan). type_info is only built when a core exists.
+    # Fallback to the pure-Python path when no Rust core is available.
+    # Build the per-type info once; the custom_fakers dict is passed to _core.replace
+    # so Rust can invoke Python callables via PyFakerFactory. type_info is only
+    # built when a core exists.
     if HAS_CORE:
-        type_info, has_custom_faker = _build_type_info(entities, config, langs)
+        type_info, custom_fakers = _build_type_info(entities, config, langs)
     else:
-        type_info, has_custom_faker = {}, False
-    if not HAS_CORE or has_custom_faker:
+        type_info, custom_fakers = {}, {}
+    if not HAS_CORE:
         return _replace_python(
             text,
             entities,
@@ -839,6 +843,7 @@ def replace(
         org_prefix=org_prefix,
         unified_prefix=unified_prefix,
         keep_whitelist=_KEEP_WHITELIST,
+        custom_fakers=custom_fakers if custom_fakers else None,
     )
 
     if keep_downgraded:
