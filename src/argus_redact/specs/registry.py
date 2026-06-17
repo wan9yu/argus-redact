@@ -48,7 +48,6 @@ class PIITypeDef:
     _patterns: tuple[dict, ...] = ()  # pre-built pattern dicts (override auto-generation)
 
     # ── Faker ──
-    faker: Callable | None = None  # (rng: random.Random) -> str
     faker_reserved: Callable | None = None  # (value: str, rng: random.Random) -> str — reserved-range or range-noise faker for realistic strategy
 
     # ── Risk / Compliance ──

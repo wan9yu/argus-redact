@@ -40,7 +40,6 @@ PIITYPEDEF_FIELDS = frozenset({
     'counterexamples',
     'description',
     'examples',
-    'faker',
     'faker_reserved',
     'format',
     'gdpr_special_category',

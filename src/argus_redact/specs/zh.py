@@ -8,22 +8,6 @@ list mirroring the runtime pattern set.
 """
 
 from .fakers_numeric import fake_age_noise, fake_date_of_birth_noise
-from .fakers_zh_real import (
-    fake_address,
-    fake_bank_card,
-    fake_credit_code,
-    fake_date_of_birth,
-    fake_id_number,
-    fake_license_plate,
-    fake_military_id,
-    fake_passport,
-    fake_person,
-    fake_phone,
-    fake_phone_landline,
-    fake_qq,
-    fake_social_security,
-    fake_wechat,
-)
 from .fakers_zh_reserved import (
     fake_address_reserved,
     fake_bank_card_reserved,
@@ -71,7 +55,6 @@ register(
             "138123456789",
         ),
         sensitivity=3,
-        faker=fake_phone,
         faker_reserved=fake_phone_reserved,
         source="工信部《电信网编号计划》(2017)",
         description="Chinese mobile phone number",
@@ -102,7 +85,6 @@ register(
         ),
         counterexamples=(),
         sensitivity=3,
-        faker=fake_phone_landline,
         faker_reserved=fake_phone_landline_reserved,
         source="工信部《电信网编号计划》(2017)",
         description="Chinese landline phone number",
@@ -140,7 +122,6 @@ register(
             "000000199003074610",  # region 000000 invalid
         ),
         sensitivity=4,
-        faker=fake_id_number,
         faker_reserved=fake_id_number_reserved,
         source="GB 11643-1999《公民身份号码》",
         description="Chinese 18-digit national ID",
@@ -363,7 +344,6 @@ register(
         ),
         counterexamples=("1234567890123456",),
         sensitivity=4,
-        faker=fake_bank_card,
         faker_reserved=fake_bank_card_reserved,
         source="ISO/IEC 7812, 中国银联BIN分配表",
         description="Chinese bank card number",
@@ -393,7 +373,6 @@ register(
         ),
         counterexamples=("编号G12345678的订单",),
         sensitivity=3,
-        faker=fake_passport,
         faker_reserved=fake_passport_reserved,
         source="中华人民共和国护照法",
         description="Chinese passport number",
@@ -426,7 +405,6 @@ register(
         ),
         counterexamples=(),
         sensitivity=2,
-        faker=fake_license_plate,
         faker_reserved=fake_license_plate_reserved,
         source="GA 36-2018《中华人民共和国机动车号牌》",
         description="Chinese license plate",
@@ -463,7 +441,6 @@ register(
             "今天天气不错",
         ),
         sensitivity=2,
-        faker=fake_address,
         faker_reserved=fake_address_reserved,
         source="GB/T 2260《中华人民共和国行政区划代码》",
         description="Chinese structured address",
@@ -495,7 +472,6 @@ register(
         ),
         counterexamples=("91110108MA01YBNX6A",),
         sensitivity=3,
-        faker=fake_credit_code,
         source="GB 32100-2015《法人和其他组织统一社会信用代码编码规则》",
         description="Unified Social Credit Code for enterprises and organizations",
     )
@@ -527,7 +503,6 @@ register(
             "0123456",
         ),
         sensitivity=2,
-        faker=fake_qq,
         source="腾讯QQ号码规则",
         description="Tencent QQ number",
     )
@@ -558,7 +533,6 @@ register(
             "abcde",
         ),
         sensitivity=2,
-        faker=fake_wechat,
         source="微信号命名规则",
         description="WeChat ID",
     )
@@ -593,7 +567,6 @@ register(
             "会议时间2024-03-07",
         ),
         sensitivity=2,
-        faker=fake_date_of_birth,
         faker_reserved=fake_date_of_birth_noise,
         source="GB/T 2261.1《个人基本信息分类与代码》",
         description="Chinese date of birth (keyword-triggered, multiple formats)",
@@ -624,7 +597,6 @@ register(
         ),
         counterexamples=("军字第1234567号",),
         sensitivity=3,
-        faker=fake_military_id,
         source="中国人民解放军军官证管理规定",
         description="Chinese military ID number",
     )
@@ -653,7 +625,6 @@ register(
         ),
         counterexamples=("110101199003074610",),
         sensitivity=4,
-        faker=fake_social_security,
         source="人力资源和社会保障部社保卡管理规定",
         description="Chinese social security number (keyword-triggered)",
     )
@@ -985,7 +956,6 @@ register(
         ),
           # Person names are detected by lang/zh/person.py, not by regex PATTERNS
         sensitivity=3,
-        faker=fake_person,
         faker_reserved=fake_person_reserved,
         source="公安部全国姓名统计, 百家姓",
         description="Chinese person name (candidate generation + evidence scoring, see person.py)",
