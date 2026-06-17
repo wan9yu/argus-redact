@@ -12,13 +12,6 @@ when `mode="ner"` or higher.
 
 from __future__ import annotations
 
-from .fakers_en_reserved import (
-    fake_address_en_reserved,
-    fake_credit_card_en_reserved,
-    fake_person_en_reserved,
-    fake_phone_en_reserved,
-    fake_ssn_en_reserved,
-)
 from .registry import PIITypeDef, list_types, register
 
 
@@ -34,7 +27,6 @@ register(
         label="[PHONE REDACTED]",
         examples=("(415) 555-1234", "+1-415-555-1234"),
         counterexamples=("notaphone",),
-        faker_reserved=fake_phone_en_reserved,
         sensitivity=2,
         source="NANP; faker uses NANP 555-0100..0199 (FCC 47 CFR § 52.15(f)(1)(ii))",
         description="North American phone — realistic faker uses 555-01XX",
@@ -52,7 +44,6 @@ register(
         label="[SSN REDACTED]",
         examples=("123-45-6789",),
         counterexamples=("000-12-3456", "666-12-3456", "999-12-3456"),
-        faker_reserved=fake_ssn_en_reserved,
         sensitivity=4,
         source="SSA SSN format; faker uses 999-XX-XXXX (SSA never assigns 9XX area)",
         description="US Social Security Number — realistic faker uses 999-XX",
@@ -71,7 +62,6 @@ register(
         label="[CARD REDACTED]",
         examples=("4111111111111111",),
         counterexamples=("1234567890123456",),
-        faker_reserved=fake_credit_card_en_reserved,
         sensitivity=3,
         source="ISO/IEC 7812; faker uses 999999 BIN (unassigned globally) + Luhn",
         description="Credit card — realistic faker uses 999999 BIN",
@@ -88,7 +78,6 @@ register(
         label="[ADDRESS REDACTED]",
         examples=("1234 Main St, Anytown, USA",),
         counterexamples=("just plain text",),
-        faker_reserved=fake_address_en_reserved,
         sensitivity=2,
         source="US/UK address conventions; faker uses fictional pop-culture addresses",
         description="Street address — realistic faker uses fictional table",
@@ -105,7 +94,6 @@ register(
         label="[NAME REDACTED]",
         examples=("John Smith", "Mary Johnson"),
         counterexamples=("the cat",),
-        faker_reserved=fake_person_en_reserved,
         sensitivity=2,
         source=(
             "Detection requires NER (spaCy en_core_web_sm). No fast-mode list "

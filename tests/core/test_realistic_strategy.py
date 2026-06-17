@@ -9,6 +9,7 @@ from argus_redact.pure.replacer import (
     VALID_STRATEGIES,
     _faker_reserved_cached,
     _find_faker_reserved,
+    _resolve_realistic_faker,
     replace,
 )
 from argus_redact.specs import zh as _zh  # noqa: F401  ensure registration
@@ -109,14 +110,19 @@ class TestLangAwareLookup:
         _faker_reserved_cached.cache_clear()
 
     def test_should_prefer_detected_lang(self):
-        # zh detected → zh fake_phone_reserved (199-99 prefix)
-        zh_faker = _find_faker_reserved("phone", ["zh"])
-        result, _ = zh_faker("13912345678", random.Random(1))
-        assert result.startswith("19999"), f"Expected zh phone, got {result}"
+        # v0.7.5: built-in zh/phone is callable-less; lang preference resolves
+        # through `_resolve_realistic_faker` (built-in zh association vs. the
+        # custom en callable registered in setup). The detected lang must win.
 
-        # en detected → en _en_phone_faker (555 prefix)
-        en_faker = _find_faker_reserved("phone", ["en"])
-        result, _ = en_faker("415-555-1234", random.Random(1))
+        # zh detected → built-in zh fake_phone_reserved (199-99 prefix)
+        kind, ref = _resolve_realistic_faker("phone", ["zh"])
+        assert kind == "builtin", f"Expected zh built-in, got {kind}:{ref}"
+        assert ref == "fake_phone_reserved", f"Expected zh faker name, got {ref}"
+
+        # en detected → custom _en_phone_faker (555 prefix), via the callback path
+        kind, ref = _resolve_realistic_faker("phone", ["en"])
+        assert kind == "custom", f"Expected en custom, got {kind}:{ref}"
+        result, _ = ref("415-555-1234", random.Random(1))
         assert "(555)" in result, f"Expected en phone, got {result}"
 
     def test_should_fall_through_to_shared_when_lang_not_registered(self):

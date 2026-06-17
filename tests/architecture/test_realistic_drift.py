@@ -1,12 +1,14 @@
 """Architecture drift tests for the pseudonym-llm profile.
 
 Ensures that:
-1. Every type listed in the pseudonym-llm profile has a faker_reserved on its PIITypeDef
-2. Every faker_reserved produces values that match the corresponding scanner pattern
-3. Removing a profile entry without removing the faker (or vice versa) fails CI
+1. Every type listed in the pseudonym-llm profile has a RESOLVABLE faker —
+   built-in types resolve via the `_core` (type, lang)→faker_name association
+   (v0.7.5: built-ins are callable-less); a custom type keeps its `faker_reserved`.
+2. Every built-in faker produces values that match the corresponding scanner
+   pattern (driven through `_core.generate_unique_fake` by faker name).
+3. Removing a profile entry without removing the faker (or vice versa) fails CI.
 """
 
-import random
 import re
 
 import argus_redact._core as _core
@@ -17,6 +19,8 @@ from argus_redact.specs import shared as _shared  # noqa: F401
 from argus_redact.specs import zh as _zh  # noqa: F401
 from argus_redact.specs.profiles import get_profile
 from argus_redact.specs.registry import lookup
+
+_BUILTIN_FAKER_NAMES = frozenset(_core.builtin_faker_names())
 
 
 def _find_typedef(name: str, *langs: str):
@@ -61,13 +65,18 @@ _DRIFT_SEED_COUNT = 20
 
 
 class TestRealisticDrift:
-    def test_every_profile_type_should_have_faker_reserved(self):
+    def test_every_profile_type_should_have_resolvable_faker(self):
+        """Every pseudonym-llm profile type must resolve to a faker. Built-ins
+        resolve callable-less via the `_core` association; a custom type keeps a
+        real `faker_reserved`. (v0.7.5: built-ins dropped `faker_reserved=`.)"""
         config = get_profile("pseudonym-llm")["config"]
         for type_name in config:
             typedef = _find_typedef(type_name, "zh", "en", "shared")
             assert typedef is not None, f"No PIITypeDef for {type_name}"
-            assert typedef.faker_reserved is not None, (
-                f"{type_name} is in pseudonym-llm profile but has no faker_reserved"
+            builtin_name = _core.builtin_faker_name(typedef.name, typedef.lang)
+            assert builtin_name is not None or typedef.faker_reserved is not None, (
+                f"{type_name} is in pseudonym-llm profile but has neither a built-in "
+                f"_core faker association nor a custom faker_reserved"
             )
 
     def test_scanner_keys_referenced_by_drift_table_must_exist(self):
@@ -80,16 +89,28 @@ class TestRealisticDrift:
         )
 
     def test_every_faker_output_should_match_scanner_pattern(self):
-        """For each (type, lang) with a scanner pattern, faker output must match it."""
+        """For each (type, lang) with a scanner pattern, the built-in faker (resolved
+        by name via the `_core` association and run through `_core.generate_unique_fake`)
+        must emit values matching the scanner pattern."""
         for (type_name, lang), scanner_key in _TYPE_LANG_TO_SCANNER.items():
             typedef = _find_typedef(type_name, lang)
             assert typedef is not None, f"No PIITypeDef for ({lang}, {type_name})"
-            faker = typedef.faker_reserved
-            assert faker is not None, f"({lang}, {type_name}) has no faker_reserved"
+            faker_name = _core.builtin_faker_name(typedef.name, typedef.lang)
+            assert faker_name is not None, (
+                f"({lang}, {type_name}) has no built-in faker association in _core"
+            )
+            assert faker_name in _BUILTIN_FAKER_NAMES, faker_name
 
             scanner_pattern = re.compile(_RESERVED_RANGE_PATTERNS[scanner_key])
             for seed in range(_DRIFT_SEED_COUNT):
-                fake, _aliases = faker("orig", random.Random(seed))
+                salt = _core.resolve_salt(seed)
+                fake, _aliases = _core.generate_unique_fake(
+                    faker_name,
+                    value="orig",
+                    type_=type_name,
+                    salt=salt,
+                    used=set(),
+                )
                 assert scanner_pattern.search(fake), (
                     f"Faker for ({lang}, {type_name}) salt={seed} produced {fake!r} "
                     f"which does not match scanner {scanner_key}: {_RESERVED_RANGE_PATTERNS[scanner_key]}"
@@ -97,9 +118,17 @@ class TestRealisticDrift:
 
     def test_ipv6_faker_should_match_v6_scanner(self):
         """ip_address faker switches on input shape; v6 path uses 2001:db8 prefix."""
-        from argus_redact.specs.fakers_shared_reserved import fake_ip_reserved
+        faker_name = _core.builtin_faker_name("ip_address", "shared")
+        assert faker_name is not None
 
         v6_pattern = re.compile(_RESERVED_RANGE_PATTERNS["ipv6_shared"])
         for seed in range(_DRIFT_SEED_COUNT):
-            fake, _ = fake_ip_reserved("fe80::1", random.Random(seed))
+            salt = _core.resolve_salt(seed)
+            fake, _ = _core.generate_unique_fake(
+                faker_name,
+                value="fe80::1",
+                type_="ip_address",
+                salt=salt,
+                used=set(),
+            )
             assert v6_pattern.search(fake), f"v6 faker salt={seed} → {fake!r}"

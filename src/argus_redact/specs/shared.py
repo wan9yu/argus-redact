@@ -12,11 +12,6 @@ tokens. High risk, but distinct compliance category from medical/financial/etc.
 
 from __future__ import annotations
 
-from .fakers_shared_reserved import (
-    fake_email_reserved,
-    fake_ip_reserved,
-    fake_mac_reserved,
-)
 from .registry import PIITypeDef, register
 
 # ── OpenAI API key ──
@@ -172,7 +167,6 @@ register(
         label="[邮箱已脱敏]",
         examples=("alice@example.com", "用户@example.org"),
         counterexamples=("not-an-email",),
-        faker_reserved=fake_email_reserved,
         sensitivity=2,
         source="RFC 5321 + RFC 6531 (faker uses RFC 2606 reserved domains)",
         description="Email address — detection in lang/shared/patterns.py; realistic faker uses example.{com,org,net}",
@@ -189,7 +183,6 @@ register(
         label="[IP已脱敏]",
         examples=("192.168.1.1", "2001:db8::1"),
         counterexamples=("999.999.999.999",),
-        faker_reserved=fake_ip_reserved,
         sensitivity=2,
         source="RFC 791 (v4) / RFC 4291 (v6); faker uses RFC 5737 / RFC 3849 documentation ranges",
         description="IPv4 or IPv6 address — detection in lang/shared/patterns.py; realistic faker uses doc ranges",
@@ -206,7 +199,6 @@ register(
         label="[MAC已脱敏]",
         examples=("aa:bb:cc:dd:ee:ff",),
         counterexamples=("not-a-mac",),
-        faker_reserved=fake_mac_reserved,
         sensitivity=2,
         source="IEEE 802 OUI; faker uses RFC 7042 documentation block 00:00:5E:00:53:xx",
         description="MAC address — detection in lang/shared/patterns.py; realistic faker uses RFC 7042 doc block",

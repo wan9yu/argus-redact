@@ -7,21 +7,6 @@ pattern dict(s) from there. build_patterns() collects all of them into a single
 list mirroring the runtime pattern set.
 """
 
-from .fakers_numeric import fake_age_noise, fake_date_of_birth_noise
-from .fakers_zh_reserved import (
-    fake_address_reserved,
-    fake_bank_card_reserved,
-    fake_hkid_reserved,
-    fake_id_number_reserved,
-    fake_license_plate_reserved,
-    fake_macau_id_reserved,
-    fake_passport_reserved,
-    fake_person_reserved,
-    fake_phone_landline_reserved,
-    fake_phone_reserved,
-    fake_taiwan_arc_reserved,
-    fake_twid_reserved,
-)
 from .registry import PIITypeDef, list_types, register
 
 # ── Phone ──
@@ -55,7 +40,6 @@ register(
             "138123456789",
         ),
         sensitivity=3,
-        faker_reserved=fake_phone_reserved,
         source="工信部《电信网编号计划》(2017)",
         description="Chinese mobile phone number",
     )
@@ -85,7 +69,6 @@ register(
         ),
         counterexamples=(),
         sensitivity=3,
-        faker_reserved=fake_phone_landline_reserved,
         source="工信部《电信网编号计划》(2017)",
         description="Chinese landline phone number",
     )
@@ -122,7 +105,6 @@ register(
             "000000199003074610",  # region 000000 invalid
         ),
         sensitivity=4,
-        faker_reserved=fake_id_number_reserved,
         source="GB 11643-1999《公民身份号码》",
         description="Chinese 18-digit national ID",
     )
@@ -143,7 +125,6 @@ register(
         examples=("A123456(9)", "Z684325(1)", "WX123456(8)"),
         counterexamples=("A123456(0)", "A12345(7)", "1A12345(7)"),
         sensitivity=4,
-        faker_reserved=fake_hkid_reserved,
         source="Hong Kong Immigration Department; Wikipedia HKID",
         description="Hong Kong Identity Card — 1-2 letter + 6 digit + parenthesized check",
     )
@@ -164,7 +145,6 @@ register(
         examples=("A123456789", "B142536472", "F131011128"),
         counterexamples=("A123456780", "A12345678", "1A12345678"),
         sensitivity=4,
-        faker_reserved=fake_twid_reserved,
         source="ROC household registration; Wikipedia ROC ID",
         description="Republic of China (Taiwan) national ID",
     )
@@ -184,7 +164,6 @@ register(
         examples=("1/234567/8", "5/123456/0", "7/000001/2"),
         counterexamples=("0/234567/8", "1/234567"),
         sensitivity=4,
-        faker_reserved=fake_macau_id_reserved,
         source="Macau Identification Services Bureau",
         description="Macau Resident ID Card — format-only validation",
     )
@@ -204,7 +183,6 @@ register(
         examples=("AB12345678", "AC98765432", "WX00000001"),
         counterexamples=("A123456789", "AB1234567"),
         sensitivity=4,
-        faker_reserved=fake_taiwan_arc_reserved,
         source="ROC National Immigration Agency",
         description="Taiwan Alien Resident Certificate (post-2020)",
     )
@@ -344,7 +322,6 @@ register(
         ),
         counterexamples=("1234567890123456",),
         sensitivity=4,
-        faker_reserved=fake_bank_card_reserved,
         source="ISO/IEC 7812, 中国银联BIN分配表",
         description="Chinese bank card number",
     )
@@ -373,7 +350,6 @@ register(
         ),
         counterexamples=("编号G12345678的订单",),
         sensitivity=3,
-        faker_reserved=fake_passport_reserved,
         source="中华人民共和国护照法",
         description="Chinese passport number",
     )
@@ -405,7 +381,6 @@ register(
         ),
         counterexamples=(),
         sensitivity=2,
-        faker_reserved=fake_license_plate_reserved,
         source="GA 36-2018《中华人民共和国机动车号牌》",
         description="Chinese license plate",
     )
@@ -441,7 +416,6 @@ register(
             "今天天气不错",
         ),
         sensitivity=2,
-        faker_reserved=fake_address_reserved,
         source="GB/T 2260《中华人民共和国行政区划代码》",
         description="Chinese structured address",
     )
@@ -567,7 +541,6 @@ register(
             "会议时间2024-03-07",
         ),
         sensitivity=2,
-        faker_reserved=fake_date_of_birth_noise,
         source="GB/T 2261.1《个人基本信息分类与代码》",
         description="Chinese date of birth (keyword-triggered, multiple formats)",
     )
@@ -956,7 +929,6 @@ register(
         ),
           # Person names are detected by lang/zh/person.py, not by regex PATTERNS
         sensitivity=3,
-        faker_reserved=fake_person_reserved,
         source="公安部全国姓名统计, 百家姓",
         description="Chinese person name (candidate generation + evidence scoring, see person.py)",
     )
@@ -976,7 +948,6 @@ register(
         examples=("32岁", "年龄: 32", "32 years old"),
         counterexamples=("999岁",),
         sensitivity=2,
-        faker_reserved=fake_age_noise,
         source="GB/T 2261.1《个人基本信息分类与代码》",
         description="Age (Chinese 岁/年龄/周岁 + English years old/aged)",
     )
