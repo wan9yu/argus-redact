@@ -4,7 +4,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 
 use argus_redact_core::replace::{
-    replace as core_replace, FakerFactory, PseudoFactory, ReplaceArgs, TypeInfo,
+    replace as core_replace, FakerFactory, FakerResolution, PseudoFactory, ReplaceArgs, TypeInfo,
 };
 use argus_redact_core::seed::Salt;
 use argus_redact_core::PatternMatch as CorePM;
@@ -112,13 +112,22 @@ fn parse_type_info(d: &Bound<'_, PyDict>) -> PyResult<TypeInfo> {
             .and_then(|v| v.extract::<usize>().ok())
             .unwrap_or(0)
     };
+    // Fold the existing dict fields into FakerResolution, preserving the old
+    // dispatch precedence: faker_name (built-in) wins, then custom_faker, then
+    // none. The Python dict shape is unchanged (still `faker_name`/`custom_faker`).
+    let faker_resolution = if let Some(name) = get_str("faker_name") {
+        FakerResolution::Builtin(name)
+    } else if get_bool("custom_faker") {
+        FakerResolution::Custom
+    } else {
+        FakerResolution::None
+    };
     Ok(TypeInfo {
         strategy: get_str("strategy").unwrap_or_else(|| "remove".to_string()),
         default_strategy: get_str("default_strategy").unwrap_or_else(|| "remove".to_string()),
         prefix: get_str("prefix").unwrap_or_default(),
         prefix_overridden: get_bool("prefix_overridden"),
-        faker_name: get_str("faker_name"),
-        custom_faker: get_bool("custom_faker"),
+        faker_resolution,
         replacement: get_str("replacement"),
         label: get_str("label"),
         default_category_label: get_str("default_category_label").unwrap_or_default(),

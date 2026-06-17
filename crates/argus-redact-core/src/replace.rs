@@ -49,6 +49,29 @@ pub trait FakerFactory {
         -> Result<(String, Vec<String>), String>;
 }
 
+/// How the realistic strategy resolves a faker for a type.
+///
+/// Unifies the old `faker_name: Option<String>` + `custom_faker: bool` pair into
+/// a single closed set, so the realistic branch is a `match` instead of an
+/// if/else chain. The Python binding folds the existing `faker_name` /
+/// `custom_faker` dict fields into this enum (`faker_name` wins, then
+/// `custom_faker`, then `None`) — the Python dict shape is unchanged.
+#[derive(Debug, Clone)]
+pub enum FakerResolution {
+    /// Built-in faker function name (resolved via [`resolve_faker`]).
+    Builtin(String),
+    /// Custom Python callable, invoked through the [`FakerFactory`] callback.
+    Custom,
+    /// No faker → pseudonym fallback (organization → org_gen, else per-type gen).
+    None,
+}
+
+impl Default for FakerResolution {
+    fn default() -> Self {
+        FakerResolution::None
+    }
+}
+
 /// Per-type resolved replacement info, built in Python from the registry +
 /// user config and passed into `replace()`. Mirrors the data
 /// `pure/replacer.py` reaches for via `_resolve_default_strategy`,
@@ -67,14 +90,11 @@ pub struct TypeInfo {
     /// Whether the user explicitly set `prefix` in config (drives the per-call
     /// person/org generator rebuild in the Python original).
     pub prefix_overridden: bool,
-    /// Resolved built-in faker function name (e.g. `"fake_phone_reserved"`),
-    /// or `None` when no built-in faker resolves for this `(type, langs)`.
-    pub faker_name: Option<String>,
-    /// `true` when this type's realistic strategy uses a custom Python
-    /// `faker_reserved` callable (no built-in `faker_name`). The realistic
-    /// branch then routes through the supplied [`FakerFactory`] instead of
-    /// [`resolve_faker`]. `derive(Default)` makes this `false` by default.
-    pub custom_faker: bool,
+    /// How the realistic strategy resolves a faker for this type: a built-in
+    /// faker name (→ [`resolve_faker`]), a custom Python callable (→ the
+    /// supplied [`FakerFactory`]), or none (→ pseudonym fallback). Defaults to
+    /// [`FakerResolution::None`].
+    pub faker_resolution: FakerResolution,
     /// `config[type]["replacement"]` for the `remove` strategy, if set.
     pub replacement: Option<String>,
     /// `config[type]["label"]` for the `category` strategy, if set.
@@ -129,11 +149,12 @@ pub struct ReplaceArgs<'a> {
 /// Faithful port of `replace()` (`pure/replacer.py:483–644`). `factory` mints
 /// the Python-backed RNG for pseudonym generators (see [`PseudoFactory`]).
 ///
-/// The `realistic` strategy resolves built-in fakers by `faker_name` via
-/// [`resolve_faker`]; a type whose `faker_name` is `None` but with
-/// `custom_faker` set (a custom Python `faker_reserved` callable) is routed
+/// The `realistic` strategy dispatches on the type's [`FakerResolution`]:
+/// [`FakerResolution::Builtin`] resolves a built-in faker via [`resolve_faker`];
+/// [`FakerResolution::Custom`] (a custom Python `faker_reserved` callable) routes
 /// through `faker_factory` (a [`FakerFactory`] callback) using the same core
-/// re-roll loop as the built-in path.
+/// re-roll loop as the built-in path; [`FakerResolution::None`] falls back to a
+/// pseudonym code (organization → org_gen, else the per-type generator).
 pub fn replace<F: PseudoFactory>(
     args: ReplaceArgs<'_>,
     factory: &F,
@@ -274,54 +295,64 @@ pub fn replace<F: PseudoFactory>(
                 pseudo_gen.get(&entity.text)
             }
         } else if strategy == "realistic" {
-            let faker_name = info.and_then(|i| i.faker_name.as_deref());
-            if let Some(name) = faker_name {
-                // Built-in faker resolvable in Rust. (A custom faker_reserved
-                // has no faker_name and routes through the FakerFactory callback.)
-                let faker = resolve_faker(name).ok_or_else(|| {
-                    format!("realistic strategy: unknown faker '{name}' for type '{}'", entity.type_)
-                })?;
-                if resolved_salt.is_none() {
-                    resolved_salt = Some(resolve_salt(salt)?);
+            // Default to None when info is absent (no TypeInfo for this type).
+            let resolution = info
+                .map(|i| &i.faker_resolution)
+                .unwrap_or(&FakerResolution::None);
+            match resolution {
+                FakerResolution::Builtin(name) => {
+                    // Built-in faker resolvable in Rust.
+                    let faker = resolve_faker(name).ok_or_else(|| {
+                        format!("realistic strategy: unknown faker '{name}' for type '{}'", entity.type_)
+                    })?;
+                    if resolved_salt.is_none() {
+                        resolved_salt = Some(resolve_salt(salt)?);
+                    }
+                    let salt_bytes = resolved_salt.as_deref().expect("resolved_salt set above");
+                    let (fake, alias_list) =
+                        generate_unique_fake(faker, &entity.text, &entity.type_, salt_bytes, &used_labels)?;
+                    if !alias_list.is_empty() {
+                        aliases.insert(fake.clone(), alias_list);
+                    }
+                    fake
                 }
-                let salt_bytes = resolved_salt.as_deref().expect("resolved_salt set above");
-                let (fake, alias_list) =
-                    generate_unique_fake(faker, &entity.text, &entity.type_, salt_bytes, &used_labels)?;
-                if !alias_list.is_empty() {
-                    aliases.insert(fake.clone(), alias_list);
+                FakerResolution::Custom => {
+                    // Custom Python `faker_reserved`. Route through the
+                    // FakerFactory callback, reusing the shared re-roll loop so
+                    // seeding/collision is identical to the built-in path.
+                    let ff = faker_factory.ok_or_else(|| format!(
+                        "realistic strategy: custom faker for '{}' but no FakerFactory provided", entity.type_))?;
+                    if resolved_salt.is_none() {
+                        resolved_salt = Some(resolve_salt(salt)?);
+                    }
+                    let salt_bytes = resolved_salt.as_deref().expect("resolved_salt set above");
+                    let (fake, alias_list) = crate::fakers::generate_unique_fake_with(
+                        |mk| ff.call_faker(&entity.type_, &entity.text, mk),
+                        &entity.text, &entity.type_, salt_bytes, &used_labels,
+                    )?;
+                    if !alias_list.is_empty() {
+                        aliases.insert(fake.clone(), alias_list);
+                    }
+                    fake
                 }
-                fake
-            } else if info.map(|i| i.custom_faker).unwrap_or(false) {
-                // Custom Python `faker_reserved` (no built-in faker_name). Route
-                // through the FakerFactory callback, reusing the shared re-roll
-                // loop so seeding/collision is identical to the built-in path.
-                let ff = faker_factory.ok_or_else(|| format!(
-                    "realistic strategy: custom faker for '{}' but no FakerFactory provided", entity.type_))?;
-                if resolved_salt.is_none() {
-                    resolved_salt = Some(resolve_salt(salt)?);
+                FakerResolution::None => {
+                    // No faker → pseudonym fallback (organization → org_gen,
+                    // else the per-type generator).
+                    if entity.type_ == "organization" {
+                        org_gen.get(&entity.text)
+                    } else {
+                        let type_gen = get_type_gen(
+                            &mut type_gens,
+                            &entity.type_,
+                            info,
+                            unified_prefix,
+                            pseudo_seed_int,
+                            existing_for_gen.as_ref(),
+                            factory,
+                        );
+                        type_gen.get(&entity.text)
+                    }
                 }
-                let salt_bytes = resolved_salt.as_deref().expect("resolved_salt set above");
-                let (fake, alias_list) = crate::fakers::generate_unique_fake_with(
-                    |mk| ff.call_faker(&entity.type_, &entity.text, mk),
-                    &entity.text, &entity.type_, salt_bytes, &used_labels,
-                )?;
-                if !alias_list.is_empty() {
-                    aliases.insert(fake.clone(), alias_list);
-                }
-                fake
-            } else if entity.type_ == "organization" {
-                org_gen.get(&entity.text)
-            } else {
-                let type_gen = get_type_gen(
-                    &mut type_gens,
-                    &entity.type_,
-                    info,
-                    unified_prefix,
-                    pseudo_seed_int,
-                    existing_for_gen.as_ref(),
-                    factory,
-                );
-                type_gen.get(&entity.text)
             }
         } else if strategy == "mask" {
             let (vp, vs) = info.map(|i| (i.visible_prefix, i.visible_suffix)).unwrap_or((0, 0));
@@ -625,7 +656,7 @@ mod tests {
         let mut info_map = HashMap::new();
         info_map.insert("widget".to_string(), {
             let mut i = info("realistic", "W");
-            i.custom_faker = true; // no faker_name → custom
+            i.faker_resolution = FakerResolution::Custom; // no built-in → custom
             i
         });
         let wl = empty_whitelist();
@@ -637,6 +668,65 @@ mod tests {
             &SeqFactory, Some(&StubFakerFactory),
         ).unwrap();
         assert!(r.redacted.starts_with("CUST-acme-"));
+        assert_eq!(r.key.get(&r.redacted), Some(&"acme".to_string()));
+    }
+
+    #[test]
+    fn realistic_builtin_faker_routes_to_resolve_faker() {
+        // Builtin(name) → resolve_faker(name) + generate_unique_fake. Uses a real
+        // built-in faker name so resolve_faker resolves it (not the pseudonym
+        // fallback, not the custom FakerFactory path).
+        let mut info_map = HashMap::new();
+        info_map.insert("phone".to_string(), {
+            let mut i = info("realistic", "P");
+            i.faker_resolution = FakerResolution::Builtin("fake_phone_reserved".to_string());
+            i
+        });
+        let wl = empty_whitelist();
+        let text = "call 13812345678";
+        let ents = vec![pm("13812345678", "phone", 5, 16)];
+        let r = replace(
+            ReplaceArgs { text, entities: &ents, salt: Some(&Salt::Int(42)),
+                key: None, type_info: &info_map, person_prefix: "P", org_prefix: "O",
+                unified_prefix: None, keep_whitelist: &wl },
+            &SeqFactory, None,
+        )
+        .unwrap();
+        // A built-in fake phone replaces the original (not a P-/pseudonym code,
+        // not a CUST- factory string). The value maps back in the key.
+        let fake = r.key.iter().find(|(_, v)| *v == "13812345678").map(|(k, _)| k.clone());
+        assert!(fake.is_some(), "built-in faker should emit a replacement keyed to the original");
+        let fake = fake.unwrap();
+        assert_ne!(fake, "13812345678");
+        assert!(!fake.starts_with("CUST-"));
+        assert!(r.redacted.contains(&fake));
+    }
+
+    #[test]
+    fn realistic_none_falls_back_to_pseudonym() {
+        // FakerResolution::None (no built-in name, no custom flag) → pseudonym
+        // fallback (organization → org_gen, else per-type gen). A non-org type
+        // routes through the per-type pseudonym generator.
+        let mut info_map = HashMap::new();
+        info_map.insert("widget".to_string(), {
+            let i = info("realistic", "W");
+            // default faker_resolution == None (no built-in, no custom)
+            assert!(matches!(i.faker_resolution, FakerResolution::None));
+            i
+        });
+        let wl = empty_whitelist();
+        let ents = vec![pm("acme", "widget", 0, 4)];
+        let r = replace(
+            ReplaceArgs { text: "acme", entities: &ents, salt: Some(&Salt::Int(42)),
+                key: None, type_info: &info_map, person_prefix: "P", org_prefix: "O",
+                unified_prefix: None, keep_whitelist: &wl },
+            &SeqFactory, None,
+        )
+        .unwrap();
+        // Per-type pseudonym code with the "W" prefix, not a built-in fake or a
+        // CUST- factory string.
+        assert!(r.redacted.starts_with("W-"));
+        assert!(!r.redacted.starts_with("CUST-"));
         assert_eq!(r.key.get(&r.redacted), Some(&"acme".to_string()));
     }
 
