@@ -67,6 +67,14 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pools::reserved_person_names_aliases_en, m)?)?;
     m.add_function(wrap_pyfunction!(pools::reserved_addresses_en, m)?)?;
     m.add_function(wrap_pyfunction!(pools::reserved_addresses_en_aliases, m)?)?;
+    // ── person-name pool accessors (zh) ──
+    m.add_function(wrap_pyfunction!(pools::person_surnames_zh, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::person_compound_surnames_zh, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::person_not_names_zh, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::person_common_words_zh, m)?)?;
+    // ── person-name pool accessors (en) ──
+    m.add_function(wrap_pyfunction!(pools::person_given_names_en, m)?)?;
+    m.add_function(wrap_pyfunction!(pools::person_surnames_en, m)?)?;
     // ── pool accessors (shared) ──
     m.add_function(wrap_pyfunction!(pools::rfc2606_domains, m)?)?;
     m.add_function(wrap_pyfunction!(pools::rfc5737_prefixes, m)?)?;

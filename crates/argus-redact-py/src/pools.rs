@@ -98,6 +98,46 @@ pub fn reserved_addresses_en_aliases() -> Vec<(String, Vec<String>)> {
     argus_redact_core::fakers::reserved_addresses_en_aliases()
 }
 
+// ── person-name pool accessors (zh, RON-backed) ──────────────────────────────
+
+/// Single-char zh surnames as the exact `SURNAMES` string (matches `lang.zh.surnames.SURNAMES`).
+#[pyfunction]
+pub fn person_surnames_zh() -> String {
+    argus_redact_core::person_data::surnames_zh().to_string()
+}
+
+/// Zh compound (2-char) surnames pool (matches `lang.zh.surnames.COMPOUND_SURNAMES` as a set).
+#[pyfunction]
+pub fn person_compound_surnames_zh() -> Vec<String> {
+    argus_redact_core::person_data::compound_surnames_zh().to_vec()
+}
+
+/// Zh negative dict pool (matches `lang.zh.person._load_negative_dict()` as a set).
+#[pyfunction]
+pub fn person_not_names_zh() -> Vec<String> {
+    argus_redact_core::person_data::not_names_zh().to_vec()
+}
+
+/// Zh common-words pool (matches `lang.zh.person._load_common_words()` as a set).
+#[pyfunction]
+pub fn person_common_words_zh() -> Vec<String> {
+    argus_redact_core::person_data::common_words_zh().to_vec()
+}
+
+// ── person-name pool accessors (en, RON-backed) ──────────────────────────────
+
+/// En given-names pool (matches `lang.en.given_names.GIVEN_NAME_SET` as a set).
+#[pyfunction]
+pub fn person_given_names_en() -> Vec<String> {
+    argus_redact_core::person_data::given_names_en().to_vec()
+}
+
+/// En surnames pool (matches `lang.en.surnames.SURNAME_SET` as a set).
+#[pyfunction]
+pub fn person_surnames_en() -> Vec<String> {
+    argus_redact_core::person_data::surnames_en().to_vec()
+}
+
 // ── shared pool accessors ────────────────────────────────────────────────────
 
 /// RFC 2606 reserved email domains pool (matches `RFC2606_DOMAINS`).
