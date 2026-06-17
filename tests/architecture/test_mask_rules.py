@@ -1,5 +1,6 @@
 """Tests for enterprise mask rules — configurable per-type masking."""
 
+import argus_redact._core as _core
 from argus_redact import redact
 
 
@@ -17,24 +18,16 @@ class TestBankCardMask:
 
 class TestChineseNameMask:
     def test_should_mask_2char_name(self):
-        from argus_redact.pure.replacer import _mask_name
-
-        assert _mask_name("张三") == "张*"
+        assert _core.mask_name("张三") == "张*"
 
     def test_should_mask_3char_name(self):
-        from argus_redact.pure.replacer import _mask_name
-
-        assert _mask_name("李小明") == "李**"
+        assert _core.mask_name("李小明") == "李**"
 
     def test_should_mask_4char_name_show_first2(self):
-        from argus_redact.pure.replacer import _mask_name
-
-        assert _mask_name("欧阳小明") == "欧阳**"
+        assert _core.mask_name("欧阳小明") == "欧阳**"
 
     def test_should_mask_5char_name_show_first2(self):
-        from argus_redact.pure.replacer import _mask_name
-
-        assert _mask_name("爱新觉罗弘") == "爱新***"
+        assert _core.mask_name("爱新觉罗弘") == "爱新***"
 
 
 class TestEmailMask:
@@ -49,15 +42,11 @@ class TestEmailMask:
 
 class TestLandlineMask:
     def test_should_keep_area_code_and_last3(self):
-        from argus_redact.pure.replacer import _mask_landline
-
-        assert _mask_landline("0755-12345678") == "0755-*****678"
-        assert _mask_landline("010-12345678") == "010-*****678"
+        assert _core.mask_landline("0755-12345678") == "0755-*****678"
+        assert _core.mask_landline("010-12345678") == "010-*****678"
 
     def test_should_handle_no_dash(self):
-        from argus_redact.pure.replacer import _mask_landline
-
-        assert _mask_landline("075512345678") == "0755*****678"
+        assert _core.mask_landline("075512345678") == "0755*****678"
 
 
 class TestIdNumberMask:
