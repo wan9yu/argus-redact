@@ -15,6 +15,7 @@ pub mod masks;
 pub mod shake_rng;
 pub mod fakers;
 pub mod person_data;
+pub(crate) mod person_zh;
 pub mod reserved_range;
 pub mod replace;
 
