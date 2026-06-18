@@ -1,41 +1,38 @@
-"""Data integrity tests for English surname + given-name lists."""
+"""Data-hygiene tests for the English surname + given-name pools.
+
+The pools now live in the Rust RON SSOT and are read via the ``_core``
+accessors (the old ``lang/en/surnames.py`` / ``lang/en/given_names.py``
+modules were deleted in v0.7.6 — their content is the RON SSOT).
+
+Exact size + sha256 fingerprints are locked by
+``test_person_data_parity.py``; this file keeps the structural invariants
+(non-empty, no duplicates, capitalization) pointed at the live pools.
+"""
+
+import argus_redact._core as _core
 
 
 class TestSurnameData:
-    def test_should_have_at_least_500_surnames(self):
-        from argus_redact.lang.en.surnames import SURNAMES
+    def test_no_duplicates(self):
+        surnames = list(_core.person_surnames_en())
+        assert len(set(surnames)) == len(surnames)
 
-        assert len(SURNAMES) >= 500
+    def test_non_empty(self):
+        assert len(list(_core.person_surnames_en())) > 0
 
-    def test_should_have_no_duplicates(self):
-        from argus_redact.lang.en.surnames import SURNAMES
-
-        assert len(set(SURNAMES)) == len(SURNAMES)
-
-    def test_should_be_capitalized(self):
-        from argus_redact.lang.en.surnames import SURNAMES
-
-        for name in SURNAMES[:20]:  # spot-check first 20
+    def test_capitalized(self):
+        for name in list(_core.person_surnames_en())[:20]:  # spot-check first 20
             assert name[0].isupper(), f"Surname {name!r} not capitalized"
-
-    def test_set_form_is_frozenset(self):
-        from argus_redact.lang.en.surnames import SURNAME_SET
-
-        assert isinstance(SURNAME_SET, frozenset)
 
 
 class TestGivenNameData:
-    def test_should_have_at_least_150_names(self):
-        from argus_redact.lang.en.given_names import GIVEN_NAMES
+    def test_no_duplicates(self):
+        given = list(_core.person_given_names_en())
+        assert len(set(given)) == len(given)
 
-        assert len(GIVEN_NAMES) >= 150
+    def test_non_empty(self):
+        assert len(list(_core.person_given_names_en())) > 0
 
-    def test_should_have_no_duplicates(self):
-        from argus_redact.lang.en.given_names import GIVEN_NAMES
-
-        assert len(set(GIVEN_NAMES)) == len(GIVEN_NAMES)
-
-    def test_set_form_is_frozenset(self):
-        from argus_redact.lang.en.given_names import GIVEN_NAME_SET
-
-        assert isinstance(GIVEN_NAME_SET, frozenset)
+    def test_capitalized(self):
+        for name in list(_core.person_given_names_en())[:20]:  # spot-check first 20
+            assert name[0].isupper(), f"Given name {name!r} not capitalized"
