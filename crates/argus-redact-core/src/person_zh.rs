@@ -99,11 +99,14 @@ pub(crate) struct NameCandidate {
 ///
 /// Direct port of `_trim_candidate(word, start, text)`. `word` arrives as the
 /// matched substring; `start` is the **char** offset of the match in `text`.
+/// `chars` is the whole source text as a shared `&[char]` slice (collected once
+/// by `detect_person_names` and threaded down, mirroring `person_en.rs`), used
+/// here only by the 3-char honorific-head branch's following-text lookahead.
 /// Returns `(trimmed_word, start, end)` where `end` is a char offset.
 ///
 /// All length / indexing / slicing is char-based (the Python `word[-1]`,
 /// `len(word)`, `word[:-1]`, `word[:2]` are str/char operations).
-fn trim_candidate(word: &str, start: usize, text: &str) -> (String, usize, usize) {
+fn trim_candidate(word: &str, start: usize, text_chars: &[char]) -> (String, usize, usize) {
     // Work on a Vec<char> so all operations stay in char-space.
     let mut chars: Vec<char> = word.chars().collect();
 
@@ -123,7 +126,6 @@ fn trim_candidate(word: &str, start: usize, text: &str) -> (String, usize, usize
     //       remaining = word[-1] + text[start + len(word) : start + len(word) + 2]
     //       if _HONORIFIC_SUFFIX.match(remaining): word = word[:2]
     if chars.len() == 3 && HONORIFIC_HEADS_SET.contains(chars.last().unwrap()) {
-        let text_chars: Vec<char> = text.chars().collect();
         let after_start = start + chars.len();
         let after_end = (start + chars.len() + 2).min(text_chars.len());
         let following_slice: String = if after_start <= text_chars.len() {
@@ -147,7 +149,12 @@ fn trim_candidate(word: &str, start: usize, text: &str) -> (String, usize, usize
 /// Direct port of `generate_candidates(text)`. For 3-char single-surname
 /// matches, emits both the 3-char and 2-char variants so the scoring/resolution
 /// phase can pick the best one. Returns candidates sorted by `start`.
-pub(crate) fn generate_candidates(text: &str) -> Vec<NameCandidate> {
+///
+/// Takes BOTH `text: &str` (the fancy_regex `find_iter` for the compound +
+/// single patterns runs on the whole text string) AND `chars: &[char]` (the
+/// shared whole-text char slice, threaded into `trim_candidate` so its
+/// following-text lookahead never re-collects the input).
+pub(crate) fn generate_candidates(text: &str, chars: &[char]) -> Vec<NameCandidate> {
     if text.is_empty() {
         return Vec::new();
     }
@@ -178,7 +185,7 @@ pub(crate) fn generate_candidates(text: &str) -> Vec<NameCandidate> {
                 is_compound: bool,
                 candidates: &mut Vec<NameCandidate>,
                 seen_starts: &mut HashSet<usize>| {
-        let (word, start, end) = trim_candidate(m_text, m_start, text);
+        let (word, start, end) = trim_candidate(m_text, m_start, chars);
         if word.is_empty() || seen_starts.contains(&start) {
             return;
         }
@@ -325,20 +332,24 @@ const BASE_LEN_2: f64 = 0.3;
 /// Direct port of `score_candidate(candidate, text, *, pii_entities)`. Returns a
 /// bit-identical f64 to the Python reference.
 ///
-/// `text` / `candidate` offsets are **char** offsets; `pii_entities[i].start` /
-/// `.end` are also char offsets (Python uses `pii.start` / `pii.end` directly).
-/// Only `start`/`end` are read off each entity — the `type != "self_reference"`
+/// `chars` is the whole source text as a shared `&[char]` slice (collected once
+/// by `detect_person_names` and threaded in, so per-candidate scoring no longer
+/// re-materializes the entire input — mirrors `person_en.rs`). `candidate`
+/// offsets are **char** offsets into `chars`; `pii_entities[i].start` / `.end`
+/// are also char offsets (Python uses `pii.start` / `pii.end` directly). Only
+/// `start`/`end` are read off each entity — the `type != "self_reference"`
 /// filter lives in `detect_person_names` (T5), not here.
 pub(crate) fn score_candidate(
     candidate: &NameCandidate,
-    text: &str,
+    chars: &[char],
     pii_entities: &[PatternMatch],
 ) -> f64 {
     // before = text[max(0, candidate.start - _CONTEXT_WINDOW) : candidate.start]
     // after  = text[candidate.end : candidate.end + _CONTEXT_WINDOW]
     // These are CHAR slices in Python; compute them in char-space so a
-    // multi-byte CJK window is never byte-sliced.
-    let text_chars: Vec<char> = text.chars().collect();
+    // multi-byte CJK window is never byte-sliced. `chars` is the shared
+    // whole-text slice (no per-call re-collect).
+    let text_chars = chars;
     let n = text_chars.len();
 
     let before_start = candidate.start.saturating_sub(CONTEXT_WINDOW);
@@ -484,11 +495,12 @@ type Grouped = Vec<(usize, Vec<(NameCandidate, f64)>)>;
 ///   swallow.
 fn resolve_variants(
     grouped: &Grouped,
-    text: &str,
+    chars: &[char],
     threshold: f64,
 ) -> Vec<(NameCandidate, f64)> {
     let common = common_words_zh_set();
-    let text_chars: Vec<char> = text.chars().collect();
+    // `chars` is the shared whole-text char slice (no per-call re-collect).
+    let text_chars = chars;
     let char_len = text_chars.len();
     let mut results: Vec<(NameCandidate, f64)> = Vec::new();
 
@@ -635,6 +647,12 @@ pub fn detect_person_names(
         return Vec::new();
     }
 
+    // Materialize the whole text as a char slice ONCE, then thread `&chars`
+    // through candidate generation, scoring and variant resolution — mirroring
+    // `person_en.rs`. Previously each helper re-collected `text.chars()`, making
+    // per-candidate scoring O(candidates × n) on dense-CJK input.
+    let chars: Vec<char> = text.chars().collect();
+
     let mut results: Vec<PatternMatch> = Vec::new();
     // occupied spans as (start, end) char offsets, in insertion order (a Vec is
     // enough — membership is tested by a linear `any`, mirroring the Python set
@@ -678,7 +696,7 @@ pub fn detect_person_names(
     }
 
     // Candidate generation → scoring → variant resolution.
-    let candidates = generate_candidates(text);
+    let candidates = generate_candidates(text, &chars);
 
     // Filter self_reference from PII entities (not structural PII for proximity
     // scoring). Python passes `None` when pii_entities is empty/None; an empty
@@ -698,7 +716,7 @@ pub fn detect_person_names(
         if occupied.iter().any(|&(s, e)| c.start >= s && c.end <= e) {
             continue;
         }
-        let s = score_candidate(&c, text, &structural_pii);
+        let s = score_candidate(&c, &chars, &structural_pii);
         // grouped.setdefault(c.start, []).append((c, s))
         let start = c.start;
         match index_of.get(&start) {
@@ -710,7 +728,7 @@ pub fn detect_person_names(
         }
     }
 
-    for (best, best_score) in resolve_variants(&grouped, text, threshold) {
+    for (best, best_score) in resolve_variants(&grouped, &chars, threshold) {
         results.push(PatternMatch {
             text: best.text,
             type_: "person".to_string(),
@@ -733,7 +751,8 @@ mod tests {
     // Helper: assert generate_candidates output equals the expected
     // (text, start, end) triples in order.
     fn assert_candidates(input: &str, expected: &[(&str, usize, usize)]) {
-        let got: Vec<(String, usize, usize)> = generate_candidates(input)
+        let chars: Vec<char> = input.chars().collect();
+        let got: Vec<(String, usize, usize)> = generate_candidates(input, &chars)
             .into_iter()
             .map(|c| (c.text, c.start, c.end))
             .collect();
@@ -876,6 +895,14 @@ mod tests {
         }
     }
 
+    // Test wrapper: collect the whole text into the shared char slice (as
+    // `detect_person_names` does once at runtime) and forward to the
+    // `&[char]`-taking `score_candidate`.
+    fn score(candidate: &NameCandidate, text: &str, pii_entities: &[PatternMatch]) -> f64 {
+        let chars: Vec<char> = text.chars().collect();
+        score_candidate(candidate, &chars, pii_entities)
+    }
+
     // ── Base-by-length (each carries a context-prefix signal so it doesn't zero
     //    out). These also exercise the cap at 1.0 for len 3/4. ──
 
@@ -885,7 +912,7 @@ mod tests {
         // → context-prefix fires. base 0.3 + 0.6 = 0.8999999999999999 (the
         // classic non-associative float — locks accumulation order).
         // Python: 0.8999999999999999
-        let s = score_candidate(&cand("张三", 4, 6), "我的客户张三你好", &[]);
+        let s = score(&cand("张三", 4, 6), "我的客户张三你好", &[]);
         assert_eq!(s, 0.8999999999999999);
     }
 
@@ -893,7 +920,7 @@ mod tests {
     fn base_len3_context_prefix_caps() {
         // "我的客户何秀珍来电" — 何秀珍 at 4..7. base 0.4 + 0.6 = 1.0.
         // Python: 1.0
-        let s = score_candidate(&cand("何秀珍", 4, 7), "我的客户何秀珍来电", &[]);
+        let s = score(&cand("何秀珍", 4, 7), "我的客户何秀珍来电", &[]);
         assert_eq!(s, 1.0);
     }
 
@@ -902,7 +929,7 @@ mod tests {
         // "我的客户欧阳娜娜来电" — 欧阳娜娜 (compound) at 4..8. base 0.5 + 0.6 = 1.1
         // → capped to 1.0.
         // Python: 1.0
-        let s = score_candidate(&cand("欧阳娜娜", 4, 8), "我的客户欧阳娜娜来电", &[]);
+        let s = score(&cand("欧阳娜娜", 4, 8), "我的客户欧阳娜娜来电", &[]);
         assert_eq!(s, 1.0);
     }
 
@@ -912,7 +939,7 @@ mod tests {
     fn signal_context_prefix_only() {
         // "客户张三" — before="客户" → context-prefix. base 0.3 + 0.6.
         // Python: 0.8999999999999999
-        let s = score_candidate(&cand("张三", 2, 4), "客户张三", &[]);
+        let s = score(&cand("张三", 2, 4), "客户张三", &[]);
         assert_eq!(s, 0.8999999999999999);
     }
 
@@ -920,7 +947,7 @@ mod tests {
     fn signal_honorific_suffix_only() {
         // "张三先生你好" — after="先生你好...", honorific 先生 matches. 0.3 + 0.5.
         // Python: 0.8
-        let s = score_candidate(&cand("张三", 0, 2), "张三先生你好", &[]);
+        let s = score(&cand("张三", 0, 2), "张三先生你好", &[]);
         assert_eq!(s, 0.8);
     }
 
@@ -928,7 +955,7 @@ mod tests {
     fn signal_pii_suffix_only() {
         // "张三的手机号码" — after="的手机号码" → PII-suffix 的手机. 0.3 + 0.5.
         // Python: 0.8
-        let s = score_candidate(&cand("张三", 0, 2), "张三的手机号码", &[]);
+        let s = score(&cand("张三", 0, 2), "张三的手机号码", &[]);
         assert_eq!(s, 0.8);
     }
 
@@ -936,7 +963,7 @@ mod tests {
     fn signal_paren_phone_only() {
         // "张三（13812345678）" — after starts with （138... → paren-phone. 0.3+0.5.
         // Python: 0.8
-        let s = score_candidate(&cand("张三", 0, 2), "张三（13812345678）", &[]);
+        let s = score(&cand("张三", 0, 2), "张三（13812345678）", &[]);
         assert_eq!(s, 0.8);
     }
 
@@ -950,7 +977,7 @@ mod tests {
         let c = cand("甲甲", 200, 202);
         let ps = 202 + distance; // pii.start - candidate.end == distance
         let p = pii(ps, ps + 5);
-        score_candidate(&c, &text, &[p])
+        score(&c, &text, &[p])
     }
 
     fn prox_before(distance: usize) -> f64 {
@@ -958,7 +985,7 @@ mod tests {
         let c = cand("甲甲", 200, 202);
         let pe = 200 - distance; // candidate.start - pii.end == distance
         let p = pii(pe - 5, pe);
-        score_candidate(&c, &text, &[p])
+        score(&c, &text, &[p])
     }
 
     #[test]
@@ -992,7 +1019,7 @@ mod tests {
         // Neutral filler, no PII → evidence == 0.0 → 0.0.
         // Python: 0.0
         let text: String = "甲".repeat(400);
-        let s = score_candidate(&cand("甲甲", 200, 202), &text, &[]);
+        let s = score(&cand("甲甲", 200, 202), &text, &[]);
         assert_eq!(s, 0.0);
     }
 
@@ -1012,7 +1039,7 @@ mod tests {
         let text: String = "甲".repeat(400);
         let c = cand("何秀珍", 200, 203);
         let p = pii(203 + 150, 203 + 155);
-        assert_eq!(score_candidate(&c, &text, &[p]), 0.7);
+        assert_eq!(score(&c, &text, &[p]), 0.7);
     }
 
     #[test]
@@ -1022,14 +1049,14 @@ mod tests {
         let text: String = "甲".repeat(400);
         let c = cand("欧阳娜娜", 200, 204);
         let p = pii(204 + 150, 204 + 155);
-        assert_eq!(score_candidate(&c, &text, &[p]), 0.8);
+        assert_eq!(score(&c, &text, &[p]), 0.8);
     }
 
     #[test]
     fn len3_honorific() {
         // 何秀珍 + 先生 → base 0.4 + 0.5 = 0.9.
         // Python: 0.9
-        let s = score_candidate(&cand("何秀珍", 0, 3), "何秀珍先生你好", &[]);
+        let s = score(&cand("何秀珍", 0, 3), "何秀珍先生你好", &[]);
         assert_eq!(s, 0.9);
     }
 
@@ -1037,7 +1064,7 @@ mod tests {
     fn len3_pii_suffix() {
         // 何秀珍 + 的手机 → base 0.4 + 0.5 = 0.9.
         // Python: 0.9
-        let s = score_candidate(&cand("何秀珍", 0, 3), "何秀珍的手机号码", &[]);
+        let s = score(&cand("何秀珍", 0, 3), "何秀珍的手机号码", &[]);
         assert_eq!(s, 0.9);
     }
 
@@ -1050,7 +1077,7 @@ mod tests {
         // after="先生你好..." (honorific +0.5). evidence accumulates 0.6 then 0.5;
         // base 0.4 + 1.1 = 1.5 → capped 1.0.
         // Python: 1.0
-        let s = score_candidate(&cand("何秀珍", 2, 5), "客户何秀珍先生你好", &[]);
+        let s = score(&cand("何秀珍", 2, 5), "客户何秀珍先生你好", &[]);
         assert_eq!(s, 1.0);
     }
 
@@ -1063,7 +1090,7 @@ mod tests {
         let text = "请联系客户张三的手机号码";
         let c = cand("张三", 5, 7);
         let p = pii(9, 20); // within 50 chars of the candidate
-        assert_eq!(score_candidate(&c, text, &[p]), 1.0);
+        assert_eq!(score(&c, text, &[p]), 1.0);
     }
 
     // ── detect_person_names — orchestrator golden tests ──
