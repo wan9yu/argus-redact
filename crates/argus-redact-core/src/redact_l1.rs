@@ -44,15 +44,26 @@
 //!   plus `near_misses`. Returning the four fields distinctly serves both without
 //!   a re-match.
 
+use std::collections::HashSet;
+
 use fancy_regex::Regex;
 
 use crate::data::builtin_patterns;
-use crate::hints::{get_person_threshold, produce_hints_l1, Hint};
+use crate::grammar::normalize_grammar_en;
+use crate::hints::{filter_self_reference, get_person_threshold, produce_hints_l1, Hint};
+use crate::merger::merge_entities;
 use crate::normalize::{map_spans_to_original, normalize_text};
 use crate::patterns::{match_patterns, PatternConfig, PatternError};
+use crate::replace::{replace, FakerFactory, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
 use crate::reserved_range::byte_to_char_offset;
 use crate::types::PatternMatch;
 use crate::{person_en, person_zh};
+
+/// Priority entity types for [`merge_with_priority`] — port of
+/// `pure/merger._PRIORITY_TYPES`. A `self_reference` entity wins overlaps and
+/// splits the loser, so it survives long enough for `filter_self_reference` to
+/// decide its fate by tier.
+const PRIORITY_TYPES: &[&str] = &["self_reference"];
 
 /// Layer = 1 (regex). Mirrors `argus_redact.layers.LAYER_REGEX`.
 const LAYER_REGEX: u8 = 1;
@@ -260,6 +271,233 @@ pub fn detect_l1(
 /// hold multi-byte chars, so byte-slicing would be wrong.
 fn char_slice(text: &str, start: usize, end: usize) -> String {
     text.chars().skip(start).take(end.saturating_sub(start)).collect()
+}
+
+/// Is `t` a priority type (currently only `self_reference`)?
+fn is_priority(t: &str) -> bool {
+    PRIORITY_TYPES.contains(&t)
+}
+
+/// Trim `e` so it starts at `new_start`; `None` if nothing (or only whitespace)
+/// remains. Port of `pure/merger._trim_entity` (char-sliced; `str.strip()` →
+/// trim of Unicode whitespace, matching Python `.strip()` for the empty test).
+fn trim_entity(e: &PatternMatch, new_start: usize, text: &str) -> Option<PatternMatch> {
+    if new_start >= e.end {
+        return None;
+    }
+    let new_text = char_slice(text, new_start, e.end);
+    if new_text.trim().is_empty() {
+        return None;
+    }
+    Some(PatternMatch {
+        text: new_text,
+        type_: e.type_.clone(),
+        start: new_start,
+        end: e.end,
+        confidence: e.confidence,
+        layer: e.layer,
+    })
+}
+
+/// Insert priority entities into already-merged non-priority results, splitting
+/// overlaps so a priority span wins. Port of `pure/merger._merge_priority`.
+fn merge_priority(
+    mut merged_others: Vec<PatternMatch>,
+    priority: Vec<PatternMatch>,
+    text: &str,
+) -> Vec<PatternMatch> {
+    merged_others.extend(priority);
+    let mut all_entities = merged_others;
+    // sort key: (start, -(end - start)) — longer span first on a tie.
+    all_entities.sort_by(|a, b| {
+        a.start
+            .cmp(&b.start)
+            .then_with(|| (b.end - b.start).cmp(&(a.end - a.start)))
+    });
+    let mut final_: Vec<PatternMatch> = vec![all_entities[0].clone()];
+    for current in all_entities.into_iter().skip(1) {
+        let last_end = final_.last().unwrap().end;
+        if current.start >= last_end {
+            final_.push(current);
+            continue;
+        }
+        // Overlap — priority wins.
+        let last_priority = is_priority(&final_.last().unwrap().type_);
+        let cur_priority = is_priority(&current.type_);
+        if cur_priority && !last_priority {
+            let last = final_.last().unwrap().clone();
+            let trimmed = trim_entity(&last, current.end, text);
+            let idx = final_.len() - 1;
+            final_[idx] = current;
+            if let Some(t) = trimmed {
+                final_.push(t);
+            }
+        } else if last_priority && !cur_priority {
+            let last = final_.last().unwrap();
+            if let Some(t) = trim_entity(&current, last.end, text) {
+                final_.push(t);
+            }
+        } else {
+            // Neither priority (or both): the longer span wins, else the higher
+            // confidence. Port of `_merge_priority`'s final branch (the two
+            // Python sub-conditions both replace `final[-1]`, so they fold into
+            // one `||`).
+            let last = final_.last().unwrap();
+            let idx = final_.len() - 1;
+            let longer = (current.end - current.start) > (last.end - last.start);
+            if longer || current.confidence > last.confidence {
+                final_[idx] = current;
+            }
+        }
+    }
+    final_.sort_by(|a, b| a.start.cmp(&b.start));
+    final_
+}
+
+/// Deduplicate overlapping entities, priority-aware — port of the Python
+/// `pure/merger.merge_entities(entities, text)` (the public callable, NOT the
+/// `_core.merge_entities` Rust primitive, which only handles the non-priority
+/// path). When no priority (`self_reference`) entity is present this is exactly
+/// the Rust [`merge_entities`]; otherwise the non-priority subset is merged in
+/// Rust and the priority entities are folded in via [`merge_priority`].
+fn merge_entities_with_text(entities: Vec<PatternMatch>, text: &str) -> Vec<PatternMatch> {
+    if entities.is_empty() {
+        return vec![];
+    }
+    let has_priority = entities.iter().any(|e| is_priority(&e.type_));
+    if !has_priority {
+        return merge_entities(entities);
+    }
+    let mut others: Vec<PatternMatch> = Vec::new();
+    let mut priority: Vec<PatternMatch> = Vec::new();
+    for e in entities {
+        if is_priority(&e.type_) {
+            priority.push(e);
+        } else {
+            others.push(e);
+        }
+    }
+    let merged_others = if others.is_empty() {
+        Vec::new()
+    } else {
+        merge_entities(others)
+    };
+    merge_priority(merged_others, priority, text)
+}
+
+/// Fast-mode end-to-end redaction over L1 (regex + person) only — Rust port of
+/// the fast-mode `redact()` post-detect path in `glue/redact.py`
+/// (`_detect` lines ~329-343 + `_replace_and_emit`). Produces the SAME
+/// `(redacted, key, aliases, keep_downgraded)` as the Python `redact(mode="fast")`.
+///
+/// The post-detect order mirrors Python EXACTLY:
+///
+/// 1. `detect_l1(text, lang, names)` → the RAW L1 entities (`layer1 ++ person`).
+/// 2. `merge_entities(entities, text)` — priority-aware (see
+///    [`merge_entities_with_text`]).
+/// 3. **`boost_cross_layer` is a NO-OP in fast mode** and is SKIPPED. Python
+///    runs it (`hints.boost_cross_layer(merged, pre_merge)`), but it returns
+///    `merged` unchanged whenever fewer than 2 distinct layers are present in
+///    `pre_merge` — and fast mode emits ONLY layer 1 (regex + person), so there
+///    is exactly one layer. Skipping it is byte-identical. (The `ARGUS_ABLATION_NO_BOOST`
+///    env var only ever toggles the same no-op here, so it is irrelevant too.)
+/// 4. `filter_self_reference(merged, &d.hints)`.
+/// 5. **Type filter** (matching `redact.py:337-343`): if `types` is given, keep
+///    only entities whose type is in `types`; ELSE if `types_exclude` is given,
+///    drop entities whose type is in `types_exclude`. `types` wins (Python
+///    `if ... elif ...`); the caller is responsible for rejecting the both-set
+///    combination, exactly as `redact()` does up front.
+/// 6. `replace(...)` — value-passing the SAME `type_info` / prefixes / whitelist
+///    / factories the Python `_build_type_info` resolves and threads through
+///    `_core.replace` (the T7 binding adapts the Python factories to these
+///    trait objects).
+/// 7. **Grammar normalize** (mirror `_replace_and_emit`): if the effective lang
+///    is `"en"`, run `normalize_grammar_en(redacted, key.values())`. This is a
+///    SEPARATE step here AND in Python — `replace()` does NOT call grammar
+///    internally (confirmed: `replace.rs` has no grammar reference), so there is
+///    no double-application. `effective_lang` mirrors Python:
+///    `lang[0] if lang else "zh"`.
+///
+/// The `key` threads through `replace` for collision continuity (the input
+/// `key` is merged in, the result key is returned), matching `_replace_and_emit`.
+/// `keep_downgraded` is surfaced on the result so the caller can raise the
+/// `SecurityWarning` (the Python shim does, T7).
+#[allow(clippy::too_many_arguments)]
+pub fn redact_l1<F: PseudoFactory>(
+    text: &str,
+    lang: &[String],
+    names: &[String],
+    type_info: &std::collections::HashMap<String, TypeInfo>,
+    salt: Option<&crate::seed::Salt>,
+    key: Option<&std::collections::HashMap<String, String>>,
+    person_prefix: &str,
+    org_prefix: &str,
+    unified_prefix: Option<&str>,
+    keep_whitelist: &HashSet<String>,
+    types: Option<&HashSet<String>>,
+    types_exclude: Option<&HashSet<String>>,
+    factory: &F,
+    faker_factory: Option<&dyn FakerFactory>,
+) -> Result<ReplaceResult, String> {
+    // 1. Raw L1 detection (layer1 ++ person) + hints.
+    let d = detect_l1(text, lang, names).map_err(|e| e.to_string())?;
+    let entities = d.entities();
+
+    // 2. Priority-aware merge over the ORIGINAL text.
+    let merged = merge_entities_with_text(entities, text);
+
+    // 3. boost_cross_layer: NO-OP in fast mode (single layer) — skipped.
+
+    // 4. Self-reference tier filter.
+    let filtered = filter_self_reference(merged, &d.hints);
+
+    // 5. Type filter (redact.py:337-343): types wins over types_exclude.
+    let filtered: Vec<PatternMatch> = if let Some(keep) = types {
+        filtered.into_iter().filter(|e| keep.contains(&e.type_)).collect()
+    } else if let Some(drop) = types_exclude {
+        filtered.into_iter().filter(|e| !drop.contains(&e.type_)).collect()
+    } else {
+        filtered
+    };
+
+    // 6. Replace. Both detect (above) and replace surface their error as a
+    //    `String`, so the binding (T7) re-wraps a single error type into a
+    //    Python exception.
+    let result = replace(
+        ReplaceArgs {
+            text,
+            entities: &filtered,
+            salt,
+            key,
+            type_info,
+            person_prefix,
+            org_prefix,
+            unified_prefix,
+            keep_whitelist,
+        },
+        factory,
+        faker_factory,
+    )?;
+
+    // 7. Grammar normalize (en only) — a SEPARATE step (replace() never calls it).
+    let effective_lang: &str = lang.first().map(String::as_str).unwrap_or("zh");
+    if effective_lang == "en" {
+        // normalize_grammar_en checks key VALUES (original strings), mirroring
+        // Python `normalize_grammar_en(redacted, result_key)` →
+        // `_core.normalize_grammar_en(text, list(key.values()))`. The Rust core
+        // `result.key` is {replacement: original}, so `.values()` are the
+        // originals — exactly what grammar checks for self-ref pronouns.
+        let originals: Vec<String> = result.key.values().cloned().collect();
+        let normalized = normalize_grammar_en(&result.redacted, &originals);
+        return Ok(ReplaceResult {
+            redacted: normalized,
+            key: result.key,
+            aliases: result.aliases,
+            keep_downgraded: result.keep_downgraded,
+        });
+    }
+
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -582,5 +820,345 @@ mod tests {
         // suppressed. Python _detect(lang=["en"]): [('Zaphod','person',0,6,1.0,1)]
         let r = run("Zaphod here", &["en"], &["Zaphod"]);
         assert_entities(&r.entities(), &[("Zaphod", "person", 0, 6, 1.0, 1)]);
+    }
+}
+
+#[cfg(test)]
+mod redact_l1_tests {
+    //! End-to-end `redact_l1` golden checks — locked against the T1 fixture
+    //! `tests/core/fixtures/redact_l1_v077.json`, frozen from LIVE Python at
+    //! `SALT=42`.
+    //!
+    //! ## Why a SUBSET of the T1 corpus
+    //!
+    //! The pseudonym strategies (`pseudonym`, and `remove`'s pseudonym fallback)
+    //! mint `<PREFIX>-NNNNN` codes from Python's `random.Random(seed)`
+    //! Mersenne-Twister stream — reproducible ONLY through the PyO3
+    //! `PyPseudoFactory` (a Python-backed `RandomSource`). The CORE crate has no
+    //! PyO3, so a pure-Rust test can't reproduce those codes; cases that emit
+    //! them (`zh_default`'s `P-83811`, `intent_instruction_en`'s `P-83811`,
+    //! `jwt_valid`'s `JWT-21680`, …) are covered by the T8 end-to-end golden
+    //! through Python instead.
+    //!
+    //! Everything that does NOT touch the MT stream IS reproducible here and is
+    //! asserted byte-for-byte against the frozen `(redacted, key)`:
+    //!   - `mask` / `name_mask` / `category` (deterministic, no RNG),
+    //!   - `keep` (whitelisted identity),
+    //!   - empty-entity cases (instruction-suppressed / neutral / near-miss),
+    //!   - `realistic` with a BUILT-IN faker (the faker stream is `ShakeRng`,
+    //!     which lives in core — fully reproducible).
+    //!
+    //! `type_info` for each case is hardcoded from what the Python
+    //! `_build_type_info` produces (captured via
+    //! `python -c "from argus_redact.pure.replacer import _build_type_info; ..."`).
+    //! The `keep_whitelist` for the kinship case carries `"我妈"` (a member of
+    //! `_KEEP_WHITELIST` = `SELF_REF_PRONOUNS | _ZH_PRONOUNS | _ZH_KINSHIP`).
+
+    use super::*;
+    use crate::pseudonym::RandomSource;
+    use crate::replace::FakerResolution;
+    use crate::seed::Salt;
+    use std::collections::HashMap;
+
+    const SALT: i64 = 42; // matches the T1 fixture freeze.
+
+    /// A `PseudoFactory` that must NEVER be exercised by these cases (none use a
+    /// pseudonym / remove-fallback strategy). It panics on use so a regression
+    /// that routes a code through the MT path is caught loudly rather than
+    /// silently producing a wrong (un-frozen) value.
+    struct UnusedFactory;
+    struct PanicRng;
+    impl RandomSource for PanicRng {
+        fn randint(&mut self, _lo: u32, _hi: u32) -> u32 {
+            panic!("pseudonym RNG must not be reached in the reproducible subset")
+        }
+        fn randbelow(&mut self, _range: u32) -> u32 {
+            panic!("pseudonym RNG must not be reached in the reproducible subset")
+        }
+        fn use_secrets(&self) -> bool {
+            false
+        }
+    }
+    impl PseudoFactory for UnusedFactory {
+        type Source = PanicRng;
+        fn make(&self, _seed: Option<u64>) -> PanicRng {
+            PanicRng
+        }
+    }
+
+    fn s(v: &[&str]) -> Vec<String> {
+        v.iter().map(|x| x.to_string()).collect()
+    }
+
+    /// Build one `TypeInfo` mirroring the Python `_build_type_info` dict shape.
+    #[allow(clippy::too_many_arguments)]
+    fn ti(
+        strategy: &str,
+        default_strategy: &str,
+        prefix: &str,
+        faker_name: Option<&str>,
+        replacement: Option<&str>,
+        label: Option<&str>,
+        default_category_label: &str,
+    ) -> TypeInfo {
+        TypeInfo {
+            strategy: strategy.to_string(),
+            default_strategy: default_strategy.to_string(),
+            prefix: prefix.to_string(),
+            prefix_overridden: false,
+            faker_resolution: match faker_name {
+                Some(n) => FakerResolution::Builtin(n.to_string()),
+                None => FakerResolution::None,
+            },
+            replacement: replacement.map(str::to_string),
+            label: label.map(str::to_string),
+            default_category_label: default_category_label.to_string(),
+            visible_prefix: 0,
+            visible_suffix: 0,
+        }
+    }
+
+    /// Run `redact_l1` and return `(redacted, sorted key entries)` to compare
+    /// against the fixture (whose key is stored sorted).
+    fn run(
+        text: &str,
+        lang: &[&str],
+        names: &[&str],
+        type_info: HashMap<String, TypeInfo>,
+        keep_whitelist: &[&str],
+    ) -> (String, Vec<(String, String)>) {
+        let wl: HashSet<String> = keep_whitelist.iter().map(|x| x.to_string()).collect();
+        let r = redact_l1(
+            text,
+            &s(lang),
+            &s(names),
+            &type_info,
+            Some(&Salt::Int(SALT)),
+            None,
+            "P",
+            "O",
+            None,
+            &wl,
+            None,
+            None,
+            &UnusedFactory,
+            None,
+        )
+        .unwrap();
+        let mut key: Vec<(String, String)> =
+            r.key.into_iter().collect();
+        key.sort();
+        (r.redacted, key)
+    }
+
+    fn kv(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+        let mut v: Vec<(String, String)> =
+            pairs.iter().map(|(k, val)| (k.to_string(), val.to_string())).collect();
+        v.sort();
+        v
+    }
+
+    // ── zh_mask: mask strategy on phone + bank_card (no pseudonym) ───────────
+    #[test]
+    fn golden_zh_mask() {
+        let mut info = HashMap::new();
+        info.insert("phone".into(), ti("mask", "mask", "PHON", None, None, None, "[phone]"));
+        info.insert("bank_card".into(), ti("mask", "mask", "BANK", None, None, None, "[bank_card]"));
+        let (redacted, key) =
+            run("电话13812345678 银行卡6217000000000000", &["zh"], &[], info, &[]);
+        assert_eq!(redacted, "电话138****5678 银行卡621700******0000");
+        assert_eq!(
+            key,
+            kv(&[("138****5678", "13812345678"), ("621700******0000", "6217000000000000")])
+        );
+    }
+
+    // ── zh_keep: kinship self_reference kept (tier 1) + phone mask ───────────
+    #[test]
+    fn golden_zh_keep_kinship() {
+        let mut info = HashMap::new();
+        // self_reference is "keep" (registry default keep); whitelisted "我妈"
+        // survives, so it is NOT added to the key (Python continues past the
+        // key-insert). phone masks.
+        info.insert(
+            "self_reference".into(),
+            ti("keep", "keep", "S", None, None, None, "[self_reference]"),
+        );
+        info.insert("phone".into(), ti("mask", "mask", "PHON", None, None, None, "[phone]"));
+        let (redacted, key) = run("我妈说她13812345678", &["zh"], &[], info, &["我妈"]);
+        assert_eq!(redacted, "我妈说她138****5678");
+        assert_eq!(key, kv(&[("138****5678", "13812345678")]));
+    }
+
+    // ── intent_instruction_zh: instruction suppresses the only self-ref →
+    //    empty entities → text unchanged, empty key. ───────────────────────────
+    #[test]
+    fn golden_intent_instruction_zh_empty() {
+        // No entities survive the tier filter (instruction tier 3 drops the
+        // pronoun self-ref, no other PII). type_info is empty, like Python.
+        let (redacted, key) =
+            run("帮我查一下张三的电话号码", &["zh"], &[], HashMap::new(), &[]);
+        assert_eq!(redacted, "帮我查一下张三的电话号码");
+        assert!(key.is_empty());
+    }
+
+    // ── zh_category: address → category label ────────────────────────────────
+    #[test]
+    fn golden_zh_category() {
+        let mut info = HashMap::new();
+        info.insert(
+            "address".into(),
+            ti("category", "remove", "ADDR", None, None, None, "[address]"),
+        );
+        let (redacted, key) = run("北京市朝阳区三里屯", &["zh"], &[], info, &[]);
+        assert_eq!(redacted, "[address]屯");
+        assert_eq!(key, kv(&[("[address]", "北京市朝阳区三里")]));
+    }
+
+    // ── zh_name_mask: known_names + name_mask ────────────────────────────────
+    #[test]
+    fn golden_zh_name_mask() {
+        let mut info = HashMap::new();
+        info.insert(
+            "person".into(),
+            ti("name_mask", "pseudonym", "P", None, None, None, "[person]"),
+        );
+        let (redacted, key) =
+            run("张三和欧阳明", &["zh"], &["张三", "欧阳明"], info, &[]);
+        assert_eq!(redacted, "张*和欧**");
+        assert_eq!(key, kv(&[("张*", "张三"), ("欧**", "欧阳明")]));
+    }
+
+    // ── zh_realistic: realistic with BUILT-IN fakers (ShakeRng — pure core).
+    //    Reproduces the frozen faker outputs at SALT=42. ──────────────────────
+    #[test]
+    fn golden_zh_realistic() {
+        let mut info = HashMap::new();
+        info.insert(
+            "person".into(),
+            ti("realistic", "pseudonym", "P", Some("fake_person_reserved"), None, None, "[person]"),
+        );
+        info.insert(
+            "phone".into(),
+            ti("realistic", "mask", "PHON", Some("fake_phone_reserved"), None, None, "[phone]"),
+        );
+        info.insert(
+            "id_number".into(),
+            ti("realistic", "remove", "ID", Some("fake_id_number_reserved"), None, None, "[id_number]"),
+        );
+        let (redacted, key) = run(
+            "张三的电话13812345678，身份证110101199003074610",
+            &["zh"],
+            &[],
+            info,
+            &[],
+        );
+        assert_eq!(redacted, "卷帘的电话19999892122，身份证999837198308135463");
+        assert_eq!(
+            key,
+            kv(&[
+                ("19999892122", "13812345678"),
+                ("999837198308135463", "110101199003074610"),
+                ("卷帘", "张三"),
+            ])
+        );
+    }
+
+    // ── en_realistic: en lang (exercises grammar-normalize gate) + realistic
+    //    built-in fakers. No first-person pronoun in the key, so grammar is a
+    //    no-op — but the lang=="en" branch IS taken, proving the wiring. ───────
+    #[test]
+    fn golden_en_realistic() {
+        let mut info = HashMap::new();
+        info.insert(
+            "person".into(),
+            ti("realistic", "pseudonym", "P", Some("fake_person_en_reserved"), None, None, "[person]"),
+        );
+        info.insert(
+            "ssn".into(),
+            ti("realistic", "remove", "SSN", Some("fake_ssn_en_reserved"), None, None, "[ssn]"),
+        );
+        info.insert(
+            "credit_card".into(),
+            ti("realistic", "mask", "CRED", Some("fake_credit_card_en_reserved"), None, None, "[credit_card]"),
+        );
+        let (redacted, key) = run(
+            "John Smith SSN 123-45-6789 card 4111111111111111",
+            &["en"],
+            &[],
+            info,
+            &[],
+        );
+        assert_eq!(redacted, "Richard Roe SSN 999-47-9373 card 9999996421710008");
+        assert_eq!(
+            key,
+            kv(&[
+                ("999-47-9373", "123-45-6789"),
+                ("9999996421710008", "4111111111111111"),
+                ("Richard Roe", "John Smith"),
+            ])
+        );
+    }
+
+    // ── type-filter placement (redact.py:337-343): `types` keeps only listed
+    //    types AFTER filter_self_reference. Drops the phone, keeps the masked
+    //    bank_card. ──────────────────────────────────────────────────────────
+    #[test]
+    fn type_filter_keep_only_listed() {
+        let mut info = HashMap::new();
+        info.insert("phone".into(), ti("mask", "mask", "PHON", None, None, None, "[phone]"));
+        info.insert("bank_card".into(), ti("mask", "mask", "BANK", None, None, None, "[bank_card]"));
+        let wl: HashSet<String> = HashSet::new();
+        let keep: HashSet<String> = ["bank_card"].iter().map(|x| x.to_string()).collect();
+        let r = redact_l1(
+            "电话13812345678 银行卡6217000000000000",
+            &s(&["zh"]),
+            &[],
+            &info,
+            Some(&Salt::Int(SALT)),
+            None,
+            "P",
+            "O",
+            None,
+            &wl,
+            Some(&keep),
+            None,
+            &UnusedFactory,
+            None,
+        )
+        .unwrap();
+        // phone left intact, only bank_card masked.
+        assert_eq!(r.redacted, "电话13812345678 银行卡621700******0000");
+        assert_eq!(r.key.get("621700******0000"), Some(&"6217000000000000".to_string()));
+        assert!(!r.key.values().any(|v| v == "13812345678"));
+    }
+
+    // ── types_exclude drops the listed type (mutually exclusive with `types`,
+    //    which the caller guards — matching redact()'s up-front check). ────────
+    #[test]
+    fn type_filter_exclude_listed() {
+        let mut info = HashMap::new();
+        info.insert("phone".into(), ti("mask", "mask", "PHON", None, None, None, "[phone]"));
+        info.insert("bank_card".into(), ti("mask", "mask", "BANK", None, None, None, "[bank_card]"));
+        let wl: HashSet<String> = HashSet::new();
+        let drop: HashSet<String> = ["phone"].iter().map(|x| x.to_string()).collect();
+        let r = redact_l1(
+            "电话13812345678 银行卡6217000000000000",
+            &s(&["zh"]),
+            &[],
+            &info,
+            Some(&Salt::Int(SALT)),
+            None,
+            "P",
+            "O",
+            None,
+            &wl,
+            None,
+            Some(&drop),
+            &UnusedFactory,
+            None,
+        )
+        .unwrap();
+        assert_eq!(r.redacted, "电话13812345678 银行卡621700******0000");
     }
 }

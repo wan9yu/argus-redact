@@ -48,4 +48,4 @@ pub use hints::{
 pub use person_zh::SCORE_THRESHOLD;
 pub use reserved_range::{scan_for_pollution, reserved_range_patterns};
 pub use replace::{replace, FakerFactory, FakerResolution, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
-pub use redact_l1::{detect_l1, DetectL1Result};
+pub use redact_l1::{detect_l1, redact_l1, DetectL1Result};
