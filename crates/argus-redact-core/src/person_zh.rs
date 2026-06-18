@@ -1,11 +1,11 @@
-//! Chinese person-name candidate generation — Rust port of the candidate-gen
-//! half of `lang/zh/person.py`.
+//! Chinese person-name detection — Rust port of `lang/zh/person.py`.
 //!
-//! This is a byte-faithful port of `generate_candidates` + `_trim_candidate` +
-//! the `NameCandidate` dataclass. Scoring (`score_candidate`), variant
-//! resolution (`_resolve_variants`) and the public `detect_person_names`
-//! entry point are ported in later tasks (T4/T5); this module stays
-//! crate-internal until then.
+//! This is a byte-faithful port of the full detector: candidate generation
+//! (`generate_candidates` + `_trim_candidate` + the `NameCandidate` dataclass),
+//! evidence scoring (`score_candidate`), variant resolution
+//! (`_resolve_variants`) and the public `detect_person_names` entry point.
+//! `detect_person_names` is the only `pub` surface; the rest stays
+//! crate-internal and is consumed transitively through it.
 //!
 //! ## Char offsets, not byte offsets
 //!
@@ -16,16 +16,15 @@
 //! loop operates entirely in char-space (a `Vec<char>` over the matched word),
 //! so a multi-byte CJK word is never byte-sliced.
 
-// TEMPORARY: candidate-gen lands before its consumers; detect_person_names
-// (Task 5) wires this chain into the crate. Remove this allow at Task 5.
-#![allow(dead_code)]
-
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
-use crate::person_data::{compound_surnames_zh, not_names_zh_set, surnames_zh};
+use crate::person_data::{
+    common_words_zh_set, compound_surnames_zh, not_names_zh_set, surnames_zh,
+};
 use crate::reserved_range::byte_to_char_offset;
 use crate::types::PatternMatch;
 
@@ -423,6 +422,302 @@ pub(crate) fn score_candidate(
     (score + evidence).min(1.0)
 }
 
+// ── Variant resolution ──
+//
+// Direct port of `_resolve_variants` from `lang/zh/person.py`.
+
+/// `_SCORE_THRESHOLD` — default minimum score to confirm a candidate. Exposed
+/// so the binding layer (T7) can supply Python's `threshold=_SCORE_THRESHOLD`
+/// keyword default; `detect_person_names` itself takes the threshold explicitly.
+pub const SCORE_THRESHOLD: f64 = 0.8;
+
+/// A start-position group: the candidates that share a start char offset, each
+/// paired with its score. Kept as a `Vec` of `(start, variants)` so iteration
+/// follows Python's insertion-ordered `dict` exactly (groups appear in the
+/// order their start was first seen, which — since `generate_candidates` sorts
+/// by start — is ascending start).
+type Grouped = Vec<(usize, Vec<(NameCandidate, f64)>)>;
+
+/// For each start position, pick the best variant above threshold.
+///
+/// Direct port of `_resolve_variants(grouped, text, threshold)`:
+///
+/// ```python
+/// common = _load_common_words()
+/// results = []
+/// for _start, variants in grouped.items():
+///     passing = [(c, s) for c, s in variants if s >= threshold]
+///     if not passing:
+///         continue
+///     if len(passing) == 1:
+///         results.append(passing[0])
+///         continue
+///     # Multiple variants: prefer longest, check for swallow
+///     passing.sort(key=lambda x: -len(x[0].text))
+///     best, best_score = passing[0]
+///     if len(best.text) == 3:
+///         last_char = best.text[-1]
+///         after = text[best.end : best.end + 2]
+///         following = last_char + after
+///         swallowed = any(following[:i] in common for i in range(2, len(following) + 1))
+///         if swallowed:
+///             short = [(c, s) for c, s in passing if len(c.text) == 2]
+///             if short:
+///                 best, best_score = short[0]
+///     results.append((best, best_score))
+/// return results
+/// ```
+///
+/// ## Bit-identity notes
+///
+/// - The `passing` filter is `s >= threshold` (a 0.8 score at the default 0.8
+///   threshold passes).
+/// - The longest-wins sort is `key=lambda x: -len(x[0].text)` — a STABLE sort
+///   (Python `list.sort`), so equal-length variants keep insertion order. We
+///   use `sort_by_key` (stable), NEVER `sort_unstable`.
+/// - The swallow `after` is a CHAR slice `text[best.end : best.end+2]` that
+///   Python clamps silently when it runs past the end; we OOB-guard with
+///   `best.end + 2 <= char_len` and otherwise take whatever chars remain.
+/// - `following[:i] for i in range(2, len(following)+1)` checks the length-2 up
+///   to length-`len(following)` prefixes of `following`; when `following` has
+///   fewer than 2 chars (i.e. no following char) the range is empty → no
+///   swallow.
+fn resolve_variants(
+    grouped: &Grouped,
+    text: &str,
+    threshold: f64,
+) -> Vec<(NameCandidate, f64)> {
+    let common = common_words_zh_set();
+    let text_chars: Vec<char> = text.chars().collect();
+    let char_len = text_chars.len();
+    let mut results: Vec<(NameCandidate, f64)> = Vec::new();
+
+    for (_start, variants) in grouped {
+        // passing = [(c, s) for c, s in variants if s >= threshold]
+        let mut passing: Vec<(NameCandidate, f64)> = variants
+            .iter()
+            .filter(|(_, s)| *s >= threshold)
+            .cloned()
+            .collect();
+
+        if passing.is_empty() {
+            continue;
+        }
+
+        if passing.len() == 1 {
+            results.push(passing.into_iter().next().unwrap());
+            continue;
+        }
+
+        // Multiple variants: prefer longest (STABLE sort), check for swallow.
+        //   passing.sort(key=lambda x: -len(x[0].text))
+        passing.sort_by_key(|(c, _)| std::cmp::Reverse(c.text.chars().count()));
+        let (mut best, mut best_score) = passing[0].clone();
+
+        // if len(best.text) == 3:
+        let best_len = best.text.chars().count();
+        if best_len == 3 {
+            let last_char = best.text.chars().next_back().unwrap();
+            // after = text[best.end : best.end + 2]  (char slice, clamps at end)
+            let after_start = best.end.min(char_len);
+            let after_end = if best.end + 2 <= char_len {
+                best.end + 2
+            } else {
+                char_len
+            };
+            let after: String = if after_start <= after_end {
+                text_chars[after_start..after_end].iter().collect()
+            } else {
+                String::new()
+            };
+            // following = last_char + after
+            let following: Vec<char> = {
+                let mut v = vec![last_char];
+                v.extend(after.chars());
+                v
+            };
+            // swallowed = any(following[:i] in common for i in range(2, len(following)+1))
+            let mut swallowed = false;
+            let following_len = following.len();
+            let mut i = 2;
+            while i <= following_len {
+                let prefix: String = following[..i].iter().collect();
+                if common.contains(&prefix) {
+                    swallowed = true;
+                    break;
+                }
+                i += 1;
+            }
+            if swallowed {
+                // short = [(c, s) for c, s in passing if len(c.text) == 2]
+                // if short: best, best_score = short[0]
+                if let Some((c, s)) = passing
+                    .iter()
+                    .find(|(c, _)| c.text.chars().count() == 2)
+                {
+                    best = c.clone();
+                    best_score = *s;
+                }
+            }
+        }
+
+        results.push((best, best_score));
+    }
+
+    results
+}
+
+// ── Public API ──
+
+/// Detect Chinese person names via candidate generation + evidence scoring.
+///
+/// Direct port of `detect_person_names(text, *, pii_entities, known_names,
+/// threshold)`. The Python keyword-argument defaults (`pii_entities=None`,
+/// `known_names=None`, `threshold=_SCORE_THRESHOLD`) are resolved at the binding
+/// layer; here every argument is explicit. Pass an empty slice for "no
+/// pii_entities" / "no known_names" and [`SCORE_THRESHOLD`] (0.8) for the
+/// default threshold.
+///
+/// ```python
+/// if not text:
+///     return []
+/// results = []
+/// occupied = set()
+/// if known_names:
+///     for name in known_names:
+///         if not name:
+///             continue
+///         for m in re.finditer(re.escape(name), text):
+///             results.append(PatternMatch(text=name, type="person",
+///                                         start=m.start(), end=m.end(),
+///                                         confidence=1.0))
+///             occupied.add((m.start(), m.end()))
+/// candidates = generate_candidates(text)
+/// structural_pii = ([p for p in pii_entities if p.type != "self_reference"]
+///                   if pii_entities else None)
+/// grouped = {}
+/// for c in candidates:
+///     if any(c.start >= s and c.end <= e for s, e in occupied):
+///         continue
+///     s = score_candidate(c, text, pii_entities=structural_pii)
+///     grouped.setdefault(c.start, []).append((c, s))
+/// for best, best_score in _resolve_variants(grouped, text, threshold):
+///     results.append(PatternMatch(text=best.text, type="person",
+///                                 start=best.start, end=best.end,
+///                                 confidence=best_score))
+/// results.sort(key=lambda r: r.start)
+/// return results
+/// ```
+///
+/// ## Bit-identity notes
+///
+/// - `PatternMatch` fields mirror Python exactly: `type_ = "person"`,
+///   `confidence` = the score (1.0 for known names), `start`/`end` = char
+///   offsets, and `layer = 0` — Python's `detect_person_names` constructs
+///   `PatternMatch(...)` WITHOUT a `layer` kwarg, so the dataclass default
+///   (`layer = 0`) applies.
+/// - known_names are matched FIRST via a (non-overlapping) `re.finditer` of the
+///   escaped name and appended at `confidence = 1.0`, each claiming an
+///   `(start, end)` occupied span.
+/// - The occupancy test skips a candidate fully contained in an occupied span:
+///   `c.start >= s && c.end <= e`.
+/// - The pii_entities filter drops entries whose `type == "self_reference"`
+///   BEFORE scoring (the scorer itself does not filter).
+/// - The final sort is STABLE by `start` (Python `list.sort`), so for an equal
+///   start a known-name result (appended first) precedes a candidate result.
+pub fn detect_person_names(
+    text: &str,
+    pii_entities: &[PatternMatch],
+    known_names: &[String],
+    threshold: f64,
+) -> Vec<PatternMatch> {
+    if text.is_empty() {
+        return Vec::new();
+    }
+
+    let mut results: Vec<PatternMatch> = Vec::new();
+    // occupied spans as (start, end) char offsets, in insertion order (a Vec is
+    // enough — membership is tested by a linear `any`, mirroring the Python set
+    // comprehension, and the order does not affect the boolean result).
+    let mut occupied: Vec<(usize, usize)> = Vec::new();
+
+    // Known names — exact match, bypass scoring.
+    if !known_names.is_empty() {
+        for name in known_names {
+            if name.is_empty() {
+                continue;
+            }
+            // re.finditer(re.escape(name), text) — non-overlapping, char offsets.
+            let pat = fancy_regex::escape(name);
+            let re = Regex::new(&pat).unwrap_or_else(|e| {
+                panic!("person_zh: known_name regex compile failed for {name:?}: {e}")
+            });
+            for m in re.find_iter(text) {
+                let m = m.unwrap();
+                let start = byte_to_char_offset(text, m.start());
+                let end = byte_to_char_offset(text, m.end());
+                results.push(PatternMatch {
+                    text: name.clone(),
+                    type_: "person".to_string(),
+                    start,
+                    end,
+                    confidence: 1.0,
+                    layer: 0,
+                });
+                occupied.push((start, end));
+            }
+        }
+    }
+
+    // Candidate generation → scoring → variant resolution.
+    let candidates = generate_candidates(text);
+
+    // Filter self_reference from PII entities (not structural PII for proximity
+    // scoring). Python passes `None` when pii_entities is empty/None; an empty
+    // slice is equivalent for the scorer (the `if pii_entities:` proximity guard
+    // simply doesn't fire), so we always pass a (possibly empty) slice.
+    let structural_pii: Vec<PatternMatch> = pii_entities
+        .iter()
+        .filter(|p| p.type_ != "self_reference")
+        .cloned()
+        .collect();
+
+    // grouped: dict[start] -> list[(candidate, score)], insertion-ordered.
+    let mut grouped: Grouped = Vec::new();
+    let mut index_of: HashMap<usize, usize> = HashMap::new();
+    for c in candidates {
+        // if any(c.start >= s and c.end <= e for s, e in occupied): continue
+        if occupied.iter().any(|&(s, e)| c.start >= s && c.end <= e) {
+            continue;
+        }
+        let s = score_candidate(&c, text, &structural_pii);
+        // grouped.setdefault(c.start, []).append((c, s))
+        let start = c.start;
+        match index_of.get(&start) {
+            Some(&idx) => grouped[idx].1.push((c, s)),
+            None => {
+                index_of.insert(start, grouped.len());
+                grouped.push((start, vec![(c, s)]));
+            }
+        }
+    }
+
+    for (best, best_score) in resolve_variants(&grouped, text, threshold) {
+        results.push(PatternMatch {
+            text: best.text,
+            type_: "person".to_string(),
+            start: best.start,
+            end: best.end,
+            confidence: best_score,
+            layer: 0,
+        });
+    }
+
+    // results.sort(key=lambda r: r.start) — STABLE.
+    results.sort_by_key(|r| r.start);
+    results
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -761,5 +1056,300 @@ mod tests {
         let c = cand("张三", 5, 7);
         let p = pii(9, 20); // within 50 chars of the candidate
         assert_eq!(score_candidate(&c, text, &[p]), 1.0);
+    }
+
+    // ── detect_person_names — orchestrator golden tests ──
+    //
+    // Inputs are drawn from the engineered T1 golden corpus
+    // (tests/core/fixtures/zh_person_detection_v076.json) AND the behavioral
+    // corpus (tests/fixtures/zh_person.json), plus a handful of orchestrator
+    // edge cases (multiple known-name hits, candidate-inside-occupied skip,
+    // multi-name texts). EVERY expected tuple below — including the EXACT f64
+    // confidence (asserted with `==`) — was CAPTURED FROM LIVE PYTHON
+    // (pyenv 3.11.3) via:
+    //
+    //   python3 - <<'PY'
+    //   from argus_redact.lang.zh.person import detect_person_names as d
+    //   from argus_redact._types import PatternMatch
+    //   res = d(text, pii_entities=pii, known_names=known, threshold=thr)
+    //   print([(m.text, m.start, m.end, m.confidence, m.type, m.layer) for m in res])
+    //   PY
+    //
+    // The fixture cases were fed through the SAME entry point with their own
+    // pii_entities / known_names / threshold fields. Python builds each result
+    // as PatternMatch(text, type="person", start, end, confidence) with NO
+    // `layer` kwarg, so layer defaults to 0 — every expected row carries
+    // type "person" + layer 0.
+
+    fn pm(start: usize, end: usize, ty: &str) -> PatternMatch {
+        PatternMatch {
+            text: "x".to_string(),
+            type_: ty.to_string(),
+            start,
+            end,
+            confidence: 1.0,
+            layer: 1,
+        }
+    }
+
+    /// (text, start, end, confidence) projection — confidence compared EXACTLY.
+    fn detect(
+        text: &str,
+        pii: &[PatternMatch],
+        known: &[&str],
+        thr: f64,
+    ) -> Vec<(String, usize, usize, f64)> {
+        let known: Vec<String> = known.iter().map(|s| s.to_string()).collect();
+        detect_person_names(text, pii, &known, thr)
+            .into_iter()
+            .map(|m| {
+                // Every result must be type="person", layer=0 (Python defaults).
+                assert_eq!(m.type_, "person");
+                assert_eq!(m.layer, 0);
+                (m.text, m.start, m.end, m.confidence)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn detect_default_threshold() {
+        assert_eq!(SCORE_THRESHOLD, 0.8);
+    }
+
+    #[test]
+    fn detect_basic_two_char() {
+        // T1 zh_corpus_person_basic_two_char "客户张三的手机号是13812345678".
+        // Python: [('张三', 2, 4, 1.0)]
+        assert_eq!(
+            detect("客户张三的手机号是13812345678", &[], &[], 0.8),
+            vec![("张三".to_string(), 2, 4, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_basic_three_char() {
+        // T1 zh_corpus_person_basic_three_char "联系人王小明，电话13912345678".
+        // Python: [('王小明', 3, 6, 1.0)]
+        assert_eq!(
+            detect("联系人王小明，电话13912345678", &[], &[], 0.8),
+            vec![("王小明".to_string(), 3, 6, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_variant_tie_prefer_three_char() {
+        // T1 zh_variant_tie_prefer_3char "客户何秀珍已登记" — both 何秀珍 and 何秀
+        // pass; longest-wins keeps the 3-char (no swallow).
+        // Python: [('何秀珍', 2, 5, 1.0)]
+        assert_eq!(
+            detect("客户何秀珍已登记", &[], &[], 0.8),
+            vec![("何秀珍".to_string(), 2, 5, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_swallow_prefer_two_char() {
+        // T1 zh_swallow_prefer_2char "张三预订了机票" with a phone PII at 0..0.
+        // 张三预 swallowed "预订" (a common word) → drop to 张三. Score lands
+        // exactly at the 0.8 threshold via the proximity bucket.
+        // Python: [('张三', 0, 2, 0.8)]
+        let pii = [pm(0, 0, "phone")];
+        assert_eq!(
+            detect("张三预订了机票", &pii, &[], 0.8),
+            vec![("张三".to_string(), 0, 2, 0.8)]
+        );
+    }
+
+    #[test]
+    fn detect_threshold_boundary_passes_at_0_8() {
+        // T1 zh_float_2char_strong_at_threshold — 张明 + phone exactly within the
+        // 50-char proximity bucket → score 0.8, which passes `>= 0.8`.
+        // Python: [('张明', 0, 2, 0.8)]
+        let text: String = format!("张明{}", "，".repeat(50));
+        // phone placed so distance(candidate, pii) == 50 (start 52, len 11).
+        let pii = [pm(52, 63, "phone")];
+        assert_eq!(
+            detect(&text, &pii, &[], 0.8),
+            vec![("张明".to_string(), 0, 2, 0.8)]
+        );
+    }
+
+    #[test]
+    fn detect_threshold_boundary_fails_below_0_8() {
+        // T1 zh_float_2char_weak_below_threshold — same 张明 but the phone is in
+        // the mid bucket (distance 120) → score 0.6 < 0.8 → no match.
+        // Python: []
+        let text: String = format!("张明{}", "，".repeat(120));
+        let pii = [pm(122, 133, "phone")];
+        assert!(detect(&text, &pii, &[], 0.8).is_empty());
+    }
+
+    #[test]
+    fn detect_non_default_threshold_0_7() {
+        // T1 zh_threshold_0_7_passes_3char — 何秀珍 + phone in mid bucket → 0.7,
+        // which fails the default 0.8 but passes a 0.7 threshold (`>=`).
+        // Python: [('何秀珍', 0, 3, 0.7)]
+        let text: String = format!("何秀珍{}", "，".repeat(120));
+        let pii = [pm(123, 134, "phone")];
+        assert_eq!(
+            detect(&text, &pii, &[], 0.7),
+            vec![("何秀珍".to_string(), 0, 3, 0.7)]
+        );
+    }
+
+    #[test]
+    fn detect_known_names_bypass() {
+        // T1 zh_known_names_bypass "下午和高明开会讨论方案", known=['高明'] →
+        // exact match at confidence 1.0, bypassing scoring.
+        // Python: [('高明', 3, 5, 1.0)]
+        assert_eq!(
+            detect("下午和高明开会讨论方案", &[], &["高明"], 0.8),
+            vec![("高明".to_string(), 3, 5, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_known_names_multiple_occurrences() {
+        // "高明和高明", known=['高明'] — non-overlapping finditer yields two hits,
+        // each claiming its own occupied span; both emitted at 1.0.
+        // Python: [('高明', 0, 2, 1.0), ('高明', 3, 5, 1.0)]
+        assert_eq!(
+            detect("高明和高明", &[], &["高明"], 0.8),
+            vec![
+                ("高明".to_string(), 0, 2, 1.0),
+                ("高明".to_string(), 3, 5, 1.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn detect_known_name_occupies_candidate_span() {
+        // "客户张三的手机号13800000000", known=['张三'] — the scored candidate 张三
+        // at 2..4 is fully inside the occupied span (2..4) and is skipped; only
+        // the known-name result (confidence 1.0) survives.
+        // Python: [('张三', 2, 4, 1.0)]
+        assert_eq!(
+            detect("客户张三的手机号13800000000", &[], &["张三"], 0.8),
+            vec![("张三".to_string(), 2, 4, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_self_reference_filtered() {
+        // T1 zh_self_reference_filtered — the only PII entity is a
+        // self_reference, which is dropped before proximity scoring → 张明 gets
+        // no evidence → no match.
+        // Python: []
+        let text: String = format!("张明{}13812345678", "，".repeat(200));
+        let pii = [pm(3, 4, "self_reference")];
+        assert!(detect(&text, &pii, &[], 0.8).is_empty());
+    }
+
+    #[test]
+    fn detect_self_reference_filtered_phone_survives() {
+        // self_reference dropped, but a real phone within 50 chars survives the
+        // filter → 客户张三 still scores via context-prefix + proximity → 1.0.
+        // Python: [('张三', 2, 4, 1.0)]
+        let pii = [pm(0, 1, "self_reference"), pm(4, 15, "phone")];
+        assert_eq!(
+            detect("客户张三", &pii, &[], 0.8),
+            vec![("张三".to_string(), 2, 4, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_emoji_offset_char_space() {
+        // T1 zh_emoji_offset "😀客户张明的手机号13812345678" — the emoji is 1 char
+        // (4 bytes); offsets must be char-space, so 张明 is at 3..5.
+        // Python: [('张明', 3, 5, 1.0)]
+        assert_eq!(
+            detect("😀客户张明的手机号13812345678", &[], &[], 0.8),
+            vec![("张明".to_string(), 3, 5, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_emoji_offset_multi() {
+        // T1 zh_emoji_offset_multi "🎉🎊客户李芳，电话13912345678" — two emoji
+        // prefix → 李芳 at char 4..6.
+        // Python: [('李芳', 4, 6, 1.0)]
+        assert_eq!(
+            detect("🎉🎊客户李芳，电话13912345678", &[], &[], 0.8),
+            vec![("李芳".to_string(), 4, 6, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_compound_vs_single() {
+        // T1 zh_compound_vs_single "客户欧阳明已登记" — compound surname 欧阳 +
+        // 明; compound matches are not split into a 2-char variant.
+        // Python: [('欧阳明', 2, 5, 1.0)]
+        assert_eq!(
+            detect("客户欧阳明已登记", &[], &[], 0.8),
+            vec![("欧阳明".to_string(), 2, 5, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_particle_trim_float_confidence() {
+        // T1 zh_particle_trim "客户张明了解情况" — greedy 张明了 trims trailing 了
+        // → 张明 (2 chars). context-prefix only → 0.3 + 0.6 = 0.8999999999999999
+        // (the non-associative float pins accumulation order through the
+        // orchestrator).
+        // Python: [('张明', 2, 4, 0.8999999999999999)]
+        assert_eq!(
+            detect("客户张明了解情况", &[], &[], 0.8),
+            vec![("张明".to_string(), 2, 4, 0.8999999999999999)]
+        );
+    }
+
+    #[test]
+    fn detect_proximity_through_orchestrator() {
+        // Bare "张三" with a phone PII entity adjacent (start 2) → proximity-only
+        // evidence (distance 0) → 0.3 + 0.5 = 0.8 → passes.
+        // Python: [('张三', 0, 2, 0.8)]
+        let pii = [pm(2, 13, "phone")];
+        assert_eq!(
+            detect("张三", &pii, &[], 0.8),
+            vec![("张三".to_string(), 0, 2, 0.8)]
+        );
+    }
+
+    #[test]
+    fn detect_multiple_names_final_sort_by_start() {
+        // "客户张三和联系人李芳，电话13800000000" — two scored names; results are
+        // STABLE-sorted by start. The phone at 13..24 is within the 50-char
+        // proximity bucket of BOTH names, so each gets context-prefix (+0.6) +
+        // proximity (+0.5) on top of its base, capping at 1.0.
+        // Python: [('张三', 2, 4, 1.0), ('李芳', 8, 10, 1.0)]
+        let pii = [pm(13, 24, "phone")];
+        assert_eq!(
+            detect("客户张三和联系人李芳，电话13800000000", &pii, &[], 0.8),
+            vec![
+                ("张三".to_string(), 2, 4, 1.0),
+                ("李芳".to_string(), 8, 10, 1.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn detect_no_match_generic_text() {
+        // T1 zh_corpus_no_person_generic "今天天气不错" — no surname-led
+        // candidate with evidence → no match.
+        // Python: []
+        assert!(detect("今天天气不错", &[], &[], 0.8).is_empty());
+    }
+
+    #[test]
+    fn detect_no_match_bare_name_no_evidence() {
+        // Behavioral corpus no_person_standalone "张三说了话" — a real name but no
+        // structural evidence → L1b declines (leaves it to L2 NER).
+        // Python: []
+        assert!(detect("张三说了话", &[], &[], 0.8).is_empty());
+    }
+
+    #[test]
+    fn detect_empty_text() {
+        assert!(detect("", &[], &[], 0.8).is_empty());
     }
 }

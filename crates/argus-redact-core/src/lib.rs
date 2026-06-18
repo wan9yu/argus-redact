@@ -15,7 +15,7 @@ pub mod masks;
 pub mod shake_rng;
 pub mod fakers;
 pub mod person_data;
-pub(crate) mod person_zh;
+pub mod person_zh;
 pub mod reserved_range;
 pub mod replace;
 
@@ -35,5 +35,6 @@ pub use fakers::{generate_unique_fake, resolve_faker, FakerFn};
 pub use person_data::{
     common_words_zh, compound_surnames_zh, given_names_en, not_names_zh, surnames_en, surnames_zh,
 };
+pub use person_zh::{detect_person_names, SCORE_THRESHOLD};
 pub use reserved_range::{scan_for_pollution, reserved_range_patterns};
 pub use replace::{replace, FakerFactory, FakerResolution, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
