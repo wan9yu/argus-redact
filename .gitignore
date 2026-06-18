@@ -13,6 +13,7 @@ marketing/
 tests/benchmark/data/
 .claude/
 _core*.so
+*.dSYM/
 target/
 .venv/
 

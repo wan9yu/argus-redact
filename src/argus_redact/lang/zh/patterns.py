@@ -6,114 +6,6 @@ This module only contains structural PII patterns (phone, ID, bank card, etc.).
 
 import re
 
-# Leading verbs/particles/questions stripped from org/school candidates before validation.
-# Matched via one-pass longest-prefix scan, so order within the tuple is irrelevant.
-_LEADING_NOISE = (
-    "请查一下",
-    "请查下",
-    "请查",
-    "查一下",
-    "查下",
-    "就职于",
-    "供职于",
-    "任职于",
-    "毕业于",
-    "就读于",
-    "就读",
-    "考入",
-    "考上",
-    "去过",
-    "到过",
-    "这是",
-    "那是",
-    "这个",
-    "那个",
-    "那里",
-    "这里",
-    "在",
-    "去",
-    "从",
-    "到",
-    "被",
-    "给",
-    "让",
-    "有",
-    "是",
-    "的",
-    "了",
-    "和",
-    "与",
-    "把",
-    "将",
-    "已",
-    "问",
-    "看",
-    "找",
-    "一下",
-)
-_ORG_SUFFIXES = (
-    "股份有限公司",
-    "有限责任公司",
-    "有限公司",
-    "责任公司",
-    "集团公司",
-    "集团",
-    "公司",
-    "企业",
-    "工厂",
-    "银行",
-    "保险",
-    "证券",
-    "基金",
-    "医院",
-    "诊所",
-    "药房",
-    "事务所",
-    "研究院",
-    "研究所",
-    "实验室",
-)
-_SCHOOL_SUFFIXES = (
-    "大学",
-    "学院",
-    "中学",
-    "小学",
-    "高中",
-    "初中",
-    "附中",
-    "附小",
-    "实验学校",
-    "外国语学校",
-    "师范学校",
-    "职业学校",
-    "技术学校",
-    "幼儿园",
-    "书院",
-    "学堂",
-    "党校",
-)
-
-
-def _has_name_before_suffix(value: str, suffixes: tuple[str, ...]) -> bool:
-    """After stripping leading verb/particle noise, verify a name char remains before suffix."""
-    stripped = value
-    while True:
-        for noise in _LEADING_NOISE:
-            if stripped.startswith(noise) and len(stripped) > len(noise):
-                stripped = stripped[len(noise) :]
-                break
-        else:
-            break
-    return any(stripped.endswith(suffix) and len(stripped) > len(suffix) for suffix in suffixes)
-
-
-def _validate_organization(value: str) -> bool:
-    return _has_name_before_suffix(value, _ORG_SUFFIXES)
-
-
-def _validate_school(value: str) -> bool:
-    return _has_name_before_suffix(value, _SCHOOL_SUFFIXES)
-
 
 GB11643_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
 GB11643_CHECK_CHARS = "10X98765432"
@@ -242,9 +134,9 @@ _CREDIT_CODE_CHAR_TO_VAL = {c: i for i, c in enumerate(_CREDIT_CODE_CHARSET)}
 _CREDIT_CODE_WEIGHTS = (1, 3, 9, 27, 19, 26, 16, 17, 20, 29, 25, 13, 8, 24, 10, 30, 28)
 
 
-# Pattern DATA is the SSOT in the Rust core (RON); read it here. The deferred
-# `organization`/`school` validators (above) are re-attached by core_patterns
-# as `validate` callables.
+# Pattern DATA is the SSOT in the Rust core (RON); read it here. Validation for
+# each type (organization, school, etc.) also runs in the Rust core
+# (validators.rs) — there is no Python validate callback.
 from argus_redact.lang._loader import core_patterns
 
 PATTERNS = core_patterns("zh")

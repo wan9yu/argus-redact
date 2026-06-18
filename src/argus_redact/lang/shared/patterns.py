@@ -1,9 +1,7 @@
-"""Cross-language Layer-1 helpers: faker-shared checksum utilities and the
-``jwt`` deferred validator. The regex pattern DATA itself lives in the Rust
-core (RON); ``PATTERNS`` below is a thin reader of that SSOT."""
-
-import base64
-import json
+"""Cross-language Layer-1 helpers: faker-shared checksum utilities. Both the
+regex pattern DATA and its validation run in the Rust core; ``PATTERNS`` below
+is a thin reader of that SSOT, and the per-type validators (jwt, etc.) live in
+``argus-redact-core/src/validators.rs``."""
 
 
 def luhn_check_digit(body: str) -> int:
@@ -23,22 +21,9 @@ def validate_luhn(value: str) -> bool:
     return luhn_check_digit(digits[:-1]) == int(digits[-1])
 
 
-def _validate_jwt(value: str) -> bool:
-    """JWT format validation: 3 base64url segments; header decodes to JSON with 'alg' field."""
-    parts = value.split(".")
-    if len(parts) != 3:
-        return False
-    try:
-        header_b64 = parts[0]
-        padded = header_b64 + "=" * (-len(header_b64) % 4)
-        header = json.loads(base64.urlsafe_b64decode(padded))
-        return isinstance(header, dict) and "alg" in header
-    except (ValueError, UnicodeDecodeError):
-        return False
-
-
-# Pattern DATA is the SSOT in the Rust core (RON); read it here. The deferred
-# `jwt` validator (above) is re-attached by core_patterns as a `validate` callable.
+# Pattern DATA is the SSOT in the Rust core (RON); read it here. Validation for
+# each type (jwt, etc.) also runs in the Rust core (validators.rs) — there is no
+# Python validate callback.
 from argus_redact.lang._loader import core_patterns
 
 PATTERNS = core_patterns("shared")
