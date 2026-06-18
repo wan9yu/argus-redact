@@ -25,6 +25,7 @@ _SCORE_THRESHOLD = 0.8
 
 def detect_person_names(
     text: str,
+    *,
     pii_entities: list[PatternMatch] | None = None,
     known_names: list[str] | None = None,
     threshold: float = _SCORE_THRESHOLD,
