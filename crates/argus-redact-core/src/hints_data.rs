@@ -90,8 +90,47 @@ pub fn raw_command_patterns() -> &'static [(String, bool)] {
     })
 }
 
+/// Python-`re`-`\s` parity transform (cf. v0.7.6 person_zh regexes).
+///
+/// Python's `re` `\s` matches U+001C–U+001F (FS/GS/RS/US) as whitespace, but
+/// fancy_regex's `\s` does NOT (it tracks `char::is_whitespace()`, which omits
+/// those four). To make these command patterns match Python on ANY input, we
+/// widen `\s` → `[\s\x1c-\x1f]` (and `\S` → `[^\s\x1c-\x1f]`) at COMPILE time.
+///
+/// The RON keeps the verbatim Python source (the Task-3 parity gate compares the
+/// RON source against Python, so it stays green — this transform only touches the
+/// compiled-regex copy, not `raw_command_patterns()`).
+///
+/// Backslash-aware: a `\\` (escaped backslash) is consumed as a unit so a literal
+/// `\\s` (backslash + s) is left untouched; only a `\s` / `\S` *class* is widened.
+fn widen_py_whitespace(src: &str) -> String {
+    let mut out = String::with_capacity(src.len());
+    let mut chars = src.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('s') => out.push_str(r"[\s\x1c-\x1f]"),
+                Some('S') => out.push_str(r"[^\s\x1c-\x1f]"),
+                // Any other escaped char (incl. a second '\\') passes through as a
+                // unit, so a literal "\\s" (backslash then s) is not widened.
+                Some(other) => {
+                    out.push('\\');
+                    out.push(other);
+                }
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// Compiled command-mode regexes, built once. Each pattern is wrapped in
 /// `(?i:…)` IFF its `ignorecase` flag is set, matching Python `re.IGNORECASE`.
+///
+/// The source `\s` is widened to `[\s\x1c-\x1f]` (see `widen_py_whitespace`)
+/// BEFORE the `(?i:…)` wrap, so `\s` matches Python `re` on FS/GS/RS/US inputs.
 pub fn command_patterns() -> &'static [Regex] {
     static CELL: OnceLock<Vec<Regex>> = OnceLock::new();
     CELL.get_or_init(|| {
@@ -99,10 +138,11 @@ pub fn command_patterns() -> &'static [Regex] {
             .command_patterns
             .iter()
             .map(|cp| {
+                let widened = widen_py_whitespace(&cp.pattern);
                 let src = if cp.ignorecase {
-                    format!("(?i:{})", cp.pattern)
+                    format!("(?i:{})", widened)
                 } else {
-                    cp.pattern.clone()
+                    widened
                 };
                 Regex::new(&src).unwrap_or_else(|e| {
                     panic!("invalid command pattern {:?}: {}", cp.pattern, e)
@@ -145,5 +185,45 @@ mod tests {
             .iter()
             .any(|re| re.is_match("PLEASE help me").unwrap_or(false));
         assert!(any_match);
+    }
+
+    #[test]
+    fn widen_py_whitespace_transforms_s_classes() {
+        assert_eq!(widen_py_whitespace(r"\s+"), r"[\s\x1c-\x1f]+");
+        assert_eq!(widen_py_whitespace(r"\S"), r"[^\s\x1c-\x1f]");
+        assert_eq!(widen_py_whitespace(r"\bword\b"), r"\bword\b");
+        // A literal escaped backslash followed by 's' must NOT be widened.
+        assert_eq!(widen_py_whitespace(r"\\s"), r"\\s");
+        // Mixed: \b stays, \s widens.
+        assert_eq!(
+            widen_py_whitespace(r"\bkönnen\s+Sie\b"),
+            r"\bkönnen[\s\x1c-\x1f]+Sie\b"
+        );
+    }
+
+    #[test]
+    fn raw_command_patterns_unchanged_by_transform() {
+        // The RON source (parity-gate side) must keep verbatim Python `\s`;
+        // only the compiled copy is widened. Find the de pattern and confirm
+        // its raw source still contains the un-widened `\s`.
+        let raw = raw_command_patterns();
+        let de = raw
+            .iter()
+            .find(|(src, _)| src.contains("können"))
+            .expect("de command pattern present");
+        assert!(de.0.contains(r"\s"), "raw RON source keeps verbatim \\s");
+        assert!(!de.0.contains(r"[\s\x1c-\x1f]"), "raw RON source not widened");
+    }
+
+    #[test]
+    fn command_pattern_matches_py_whitespace_separator() {
+        // Python `re` `\s` matches U+001D (GS); after the widening transform the
+        // compiled de pattern `können\s+Sie` must match "können\u{1d}Sie" too.
+        // (Live Python: _is_interaction_command("können\x1dSie helfen") == True.)
+        let input = "können\u{1d}Sie helfen";
+        let any = command_patterns()
+            .iter()
+            .any(|re| re.is_match(input).unwrap_or(false));
+        assert!(any, "U+001D separator should match the widened \\s pattern");
     }
 }

@@ -16,6 +16,7 @@ pub mod shake_rng;
 pub mod fakers;
 pub mod person_data;
 pub mod hints_data;
+pub mod hints;
 pub mod person_zh;
 pub mod person_en;
 pub mod reserved_range;
@@ -39,6 +40,9 @@ pub use person_data::{
 };
 pub use hints_data::{
     command_patterns, command_prefixes, command_suffixes, kinship_exact, kinship_prefixes,
+};
+pub use hints::{
+    filter_self_reference, get_person_threshold, produce_hints_l1, Hint, HintKind,
 };
 pub use person_zh::SCORE_THRESHOLD;
 pub use reserved_range::{scan_for_pollution, reserved_range_patterns};
