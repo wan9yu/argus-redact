@@ -71,18 +71,6 @@ pub fn common_words_zh() -> &'static [String] {
     &zh_data().common_words
 }
 
-/// Compound surnames as a membership set.
-pub fn compound_surnames_zh_set() -> &'static HashSet<String> {
-    static CELL: OnceLock<HashSet<String>> = OnceLock::new();
-    CELL.get_or_init(|| zh_data().compound_surnames.iter().cloned().collect())
-}
-
-/// Single-char surnames as a `char` membership set.
-pub fn surnames_zh_set() -> &'static HashSet<char> {
-    static CELL: OnceLock<HashSet<char>> = OnceLock::new();
-    CELL.get_or_init(|| zh_data().surnames.chars().collect())
-}
-
 /// Negative dict as a membership set.
 pub fn not_names_zh_set() -> &'static HashSet<String> {
     static CELL: OnceLock<HashSet<String>> = OnceLock::new();
@@ -137,8 +125,6 @@ mod tests {
     #[test]
     fn membership_sets_match_pool_lengths() {
         // Pools have no duplicates, so the set sizes equal the list lengths.
-        assert_eq!(compound_surnames_zh_set().len(), 16);
-        assert_eq!(surnames_zh_set().len(), 138);
         assert_eq!(not_names_zh_set().len(), 7533);
         assert_eq!(common_words_zh_set().len(), 31257);
         assert_eq!(given_names_en_set().len(), 199);
@@ -148,10 +134,9 @@ mod tests {
     #[test]
     fn spot_members_present() {
         assert!(surnames_zh().starts_with("王李张"));
-        assert!(surnames_zh_set().contains(&'王'));
-        assert!(surnames_zh_set().contains(&'欧'));
-        assert!(compound_surnames_zh_set().contains("欧阳"));
-        assert!(compound_surnames_zh_set().contains("司马"));
+        assert!(surnames_zh().contains('欧'));
+        assert!(compound_surnames_zh().iter().any(|s| s == "欧阳"));
+        assert!(compound_surnames_zh().iter().any(|s| s == "司马"));
         assert!(given_names_en_set().contains("James"));
         assert!(given_names_en_set().contains("Mary"));
         assert!(surnames_en_set().contains("Smith"));
