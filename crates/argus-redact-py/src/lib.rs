@@ -16,6 +16,7 @@ mod seed;
 mod masks;
 mod fakers;
 mod pools;
+mod person;
 
 /// argus-redact Rust core — high-performance pure functions over argus-redact-core.
 #[pymodule]
@@ -79,5 +80,8 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pools::rfc2606_domains, m)?)?;
     m.add_function(wrap_pyfunction!(pools::rfc5737_prefixes, m)?)?;
     m.add_function(wrap_pyfunction!(pools::rfc7042_mac_prefix, m)?)?;
+    // ── person-name detectors (zh, en) ──
+    m.add_function(wrap_pyfunction!(person::detect_person_names_zh, m)?)?;
+    m.add_function(wrap_pyfunction!(person::detect_person_names_en, m)?)?;
     Ok(())
 }
