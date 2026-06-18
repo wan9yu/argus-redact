@@ -30,6 +30,14 @@ _JWT_VALID = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.sig"
 _JWT_NOALG = "eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiIxMjMifQ.sig"
 # 2 segments → the regex itself needs 3, so it never matches at all.
 _JWT_2SEG = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ"
+# NON-CANONICAL header: base64url('{"alg":"none"}') is canonically
+# "eyJhbGciOiJub25lIn0"; this flips the last char to '1', which carries non-zero
+# trailing bits (len%4==3). Pre-port Python `base64.urlsafe_b64decode` (binascii)
+# is LENIENT → decodes to {"alg":"none"} → object with "alg" → ACCEPTS → REDACTED.
+# The default strict URL_SAFE engine returned InvalidLastSymbol → REJECTED → the
+# JWT LEAKED (near-miss, dropped in fast mode). The lenient JWT_B64 engine in
+# validators.rs restores parity: this is now a clean result, matching pre-port.
+_JWT_NONCANON = "eyJhbGciOiJub25lIn1.eyJzdWIiOiIxMjMifQ.sig"
 # A JSON-array header is unreachable: the regex anchors every segment to ``eyJ``
 # (= base64url of ``{"``), so a matched header always decodes to an object-ish
 # start. The array-vs-object distinction is covered by the Rust unit tests
@@ -69,6 +77,11 @@ CASES = [
      [], [(_JWT_NOALG, "jwt", 9, 50, 0.3)]),
     # jwt: 2 segments → regex requires 3 → no match at all (no result, no near-miss)
     ("jwt_2seg", f"token is {_JWT_2SEG}", "en", [], []),
+    # jwt: NON-CANONICAL header (trailing bits set) → pre-port Python's lenient
+    # base64 ACCEPTED → clean result at 1.0 (no near-miss). PARITY-RESTORING: under
+    # the old strict engine this was a 0.3 near-miss that leaked in fast mode.
+    ("jwt_noncanon", f"token is {_JWT_NONCANON}", "en",
+     [(_JWT_NONCANON, "jwt", 9, 51, 1.0)], []),
 
     # organization: valid → detected; span includes the greedily-captured "我在"
     ("org_valid", "我在阿里巴巴有限公司上班", "zh",

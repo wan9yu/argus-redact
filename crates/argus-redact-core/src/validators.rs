@@ -5,7 +5,8 @@
 
 use std::sync::LazyLock;
 use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE;
+use base64::alphabet;
+use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
 use fancy_regex::Regex;
 
 // ── Luhn ──────────────────────────────────────────────────────────────────
@@ -310,12 +311,31 @@ pub fn validate_jp_phone(value: &str) -> bool {
 }
 
 // ── JWT (deferred → Rust in v0.7.7) ─────────────────────────────────────────
+/// base64url engine matching Python `base64.urlsafe_b64decode` (binascii)
+/// LENIENT semantics: non-canonical trailing bits are allowed and padding is
+/// `Indifferent`. The default `URL_SAFE` engine is STRICT (RequireCanonical +
+/// rejects trailing bits), which rejected non-canonical headers that pre-port
+/// Python ACCEPTED — so a JWT with a non-canonical header that Python redacted
+/// silently LEAKED unredacted under the strict validator. This engine restores
+/// that parity. Canonical headers (the golden corpus) decode identically under
+/// both engines, so the only behavior change is ADDING acceptance of
+/// non-canonical headers — never removing a previously-accepted one.
+static JWT_B64: LazyLock<GeneralPurpose> = LazyLock::new(|| {
+    GeneralPurpose::new(
+        &alphabet::URL_SAFE,
+        GeneralPurposeConfig::new()
+            .with_decode_allow_trailing_bits(true)
+            .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+    )
+});
+
 /// JWT format validation, ported 1:1 from `lang/shared/patterns.py::_validate_jwt`.
 ///
 /// Splits on `.`, requires exactly 3 parts, base64url-decodes the header (part 0)
-/// with Python-equal padding (`-len % 4` pad `=`), parses the bytes as JSON, and
-/// returns `true` iff the result is a JSON OBJECT containing the key `"alg"`. Any
-/// decode/parse error (the Python `(ValueError, UnicodeDecodeError)` branch) → `false`.
+/// with Python-equal padding (`-len % 4` pad `=`) and Python-equal LENIENT
+/// base64 (see `JWT_B64`), parses the bytes as JSON, and returns `true` iff the
+/// result is a JSON OBJECT containing the key `"alg"`. Any decode/parse error
+/// (the Python `(ValueError, UnicodeDecodeError)` branch) → `false`.
 pub fn validate_jwt(value: &str) -> bool {
     let parts: Vec<&str> = value.split('.').collect();
     if parts.len() != 3 {
@@ -325,7 +345,7 @@ pub fn validate_jwt(value: &str) -> bool {
     // Python: padded = header_b64 + "=" * (-len(header_b64) % 4)
     let pad = (4 - header_b64.len() % 4) % 4;
     let padded = format!("{header_b64}{}", "=".repeat(pad));
-    let decoded = match URL_SAFE.decode(padded.as_bytes()) {
+    let decoded = match JWT_B64.decode(padded.as_bytes()) {
         Ok(bytes) => bytes,
         Err(_) => return false,
     };
@@ -515,6 +535,28 @@ mod tests {
         // header decodes to a JSON string (not an object) → false
         // base64url('"hello"') == "ImhlbGxvIg"
         assert!(!validate_jwt("ImhlbGxvIg.b.c"));
+    }
+
+    #[test]
+    fn jwt_non_canonical_header_parity() {
+        // PARITY REGRESSION: a JWT whose header base64 carries NON-ZERO trailing
+        // bits (len%4==3, last char '1' instead of canonical '0'). Pre-port Python
+        // `base64.urlsafe_b64decode` (binascii) is LENIENT and decodes this to
+        // {"alg":"none"} → a valid header → Python REDACTED it. The default strict
+        // URL_SAFE engine returns InvalidLastSymbol → would REJECT → leak. With the
+        // lenient JWT_B64 engine this must now ACCEPT, matching pre-port Python.
+        //   base64url('{"alg":"none"}') canonical == "eyJhbGciOiJub25lIn0"
+        //   non-canonical (trailing bits set) == "eyJhbGciOiJub25lIn1"
+        assert!(validate_jwt("eyJhbGciOiJub25lIn1.payload.sig"));
+        // The canonical form is of course still accepted (golden corpus uses these).
+        assert!(validate_jwt("eyJhbGciOiJub25lIn0.payload.sig"));
+        // Leniency is ONLY about trailing bits/padding — structural rejects stay
+        // rejected: a JSON ARRAY header is still false even with a non-canonical
+        // last char. base64url('[1,2,3]') == "WzEsMiwzXQ"; flip last char to a
+        // non-canonical equivalent ('Q'=16 010000 -> 'R'=17 010001, same top4).
+        assert!(!validate_jwt("WzEsMiwzXR.payload.sig"));
+        // A 2-segment value is still rejected regardless of base64 leniency.
+        assert!(!validate_jwt("eyJhbGciOiJub25lIn1.payload"));
     }
 
     #[test]
