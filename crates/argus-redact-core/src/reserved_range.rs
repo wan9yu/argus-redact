@@ -197,6 +197,13 @@ pub(crate) fn byte_to_char_offset(text: &str, byte_pos: usize) -> usize {
     text[..byte_pos].chars().count()
 }
 
+/// Slice `text` by CHAR offsets `[start, end)` (Python `text[start:end]`).
+/// Offsets are char indices; the text may hold multi-byte chars, so byte-slicing
+/// would be wrong.
+pub(crate) fn char_slice(text: &str, start: usize, end: usize) -> String {
+    text.chars().skip(start).take(end.saturating_sub(start)).collect()
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /// Return the canonical `(name, regex)` pattern list — the same set that

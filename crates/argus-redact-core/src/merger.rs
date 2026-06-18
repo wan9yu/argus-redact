@@ -1,3 +1,4 @@
+use crate::reserved_range::char_slice;
 use crate::types::PatternMatch;
 
 /// Priority entity types for [`merge_entities_with_text`] — port of
@@ -45,13 +46,6 @@ pub fn merge_entities(entities: Vec<PatternMatch>) -> Vec<PatternMatch> {
     }
 
     merged
-}
-
-/// Slice `text` by CHAR offsets `[start, end)` (Python `text[start:end]`).
-/// Offsets here are char indices; the text may hold multi-byte chars, so
-/// byte-slicing would be wrong.
-fn char_slice(text: &str, start: usize, end: usize) -> String {
-    text.chars().skip(start).take(end.saturating_sub(start)).collect()
 }
 
 /// Is `t` a priority type (currently only `self_reference`)?

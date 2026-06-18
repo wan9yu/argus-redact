@@ -46,8 +46,6 @@
 
 use std::collections::HashSet;
 
-use fancy_regex::Regex;
-
 use crate::data::builtin_patterns;
 use crate::grammar::normalize_grammar_en;
 use crate::hints::{filter_self_reference, get_person_threshold, produce_hints_l1, Hint};
@@ -55,7 +53,7 @@ use crate::merger::merge_entities_with_text;
 use crate::normalize::{map_spans_to_original, normalize_text};
 use crate::patterns::{match_patterns, PatternConfig, PatternError};
 use crate::replace::{replace, FakerFactory, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
-use crate::reserved_range::byte_to_char_offset;
+use crate::reserved_range::{byte_to_char_offset, char_slice};
 use crate::types::PatternMatch;
 use crate::{person_en, person_zh};
 
@@ -201,13 +199,15 @@ pub fn detect_l1(
 
     // 7. Person detection: zh first (threshold + layer1 as pii_entities), then en
     //    (ignores threshold). Match Python's extend order.
+    let has_zh = lang.iter().any(|c| c == "zh");
+    let has_en = lang.iter().any(|c| c == "en");
     let mut person: Vec<PatternMatch> = Vec::new();
-    if lang.iter().any(|c| c == "zh") {
+    if has_zh {
         let mut zh = person_zh::detect_person_names(text, &layer1, names, threshold);
         tag_layer(&mut zh, LAYER_REGEX);
         person.extend(zh);
     }
-    if lang.iter().any(|c| c == "en") {
+    if has_en {
         let mut en = person_en::detect_person_names(text, names);
         tag_layer(&mut en, LAYER_REGEX);
         person.extend(en);
@@ -222,36 +222,30 @@ pub fn detect_l1(
     //    at confidence 1.0, with `text = name` (exactly as Python sets `text=name`,
     //    not the matched slice — equal for a literal match). Appended AFTER layer1
     //    in `.entities()`, matching Python's `entities.append` order.
-    let has_zh = lang.iter().any(|c| c == "zh");
-    let has_en = lang.iter().any(|c| c == "en");
     if !has_zh && !has_en && !names.is_empty() {
         for name in names {
             // Python `if not name: continue` — skip empty names.
             if name.is_empty() {
                 continue;
             }
-            // `re.finditer(re.escape(name), text)` — literal, non-overlapping.
-            // re.escape output always compiles; the `if let Ok` guard mirrors the
-            // no-panic convention used for known_names elsewhere so a pathological
-            // name can't panic.
-            if let Ok(re) = Regex::new(&fancy_regex::escape(name)) {
-                for m in re.find_iter(text) {
-                    // The compile above is guarded, but per-match find_iter still
-                    // yields Err on backtrack-limit / stack overflow for
-                    // pathological input. Stop gracefully rather than panicking,
-                    // mirroring patterns.rs; bit-identical on normal input.
-                    let Ok(m) = m else { break };
-                    let start = byte_to_char_offset(text, m.start());
-                    let end = byte_to_char_offset(text, m.end());
-                    person.push(PatternMatch {
-                        text: name.clone(),
-                        type_: "person".to_string(),
-                        start,
-                        end,
-                        confidence: 1.0,
-                        layer: LAYER_REGEX,
-                    });
-                }
+            // `re.finditer(re.escape(name), text)` is a LITERAL, case-sensitive,
+            // non-overlapping scan; `str::match_indices` is exactly that (it
+            // advances past each match, so non-overlapping holds) for a non-empty
+            // needle — no regex compile, no per-hit fallibility. `match_indices`
+            // yields a BYTE offset; convert the start once, then the end is just
+            // `start + name.chars().count()` (the match equals `name`), saving the
+            // second `byte_to_char_offset` O(n) scan.
+            let name_chars = name.chars().count();
+            for (byte_pos, _) in text.match_indices(name.as_str()) {
+                let start = byte_to_char_offset(text, byte_pos);
+                person.push(PatternMatch {
+                    text: name.clone(),
+                    type_: "person".to_string(),
+                    start,
+                    end: start + name_chars,
+                    confidence: 1.0,
+                    layer: LAYER_REGEX,
+                });
             }
         }
     }
@@ -262,13 +256,6 @@ pub fn detect_l1(
         hints,
         near_misses,
     })
-}
-
-/// Slice `text` by CHAR offsets `[start, end)` (Python `text[start:end]`).
-/// Offsets from `map_spans_to_original` are char indices; the original text may
-/// hold multi-byte chars, so byte-slicing would be wrong.
-fn char_slice(text: &str, start: usize, end: usize) -> String {
-    text.chars().skip(start).take(end.saturating_sub(start)).collect()
 }
 
 /// Fast-mode end-to-end redaction over L1 (regex + person) only — Rust port of
@@ -361,9 +348,12 @@ pub fn redact_l1<F: PseudoFactory>(
         types_exclude,
     } = args;
 
-    // 1. Raw L1 detection (layer1 ++ person) + hints.
-    let d = detect_l1(text, lang, names).map_err(|e| e.to_string())?;
-    let entities = d.entities();
+    // 1. Raw L1 detection (layer1 ++ person) + hints. Destructure to MOVE the
+    //    entity vecs (no clone — this bundled fast path discards `d` afterward).
+    let DetectL1Result { layer1, person, hints, .. } =
+        detect_l1(text, lang, names).map_err(|e| e.to_string())?;
+    let mut entities = layer1;
+    entities.extend(person);
 
     // 2. Priority-aware merge over the ORIGINAL text.
     let merged = merge_entities_with_text(entities, text);
@@ -371,7 +361,7 @@ pub fn redact_l1<F: PseudoFactory>(
     // 3. boost_cross_layer: NO-OP in fast mode (single layer) — skipped.
 
     // 4. Self-reference tier filter.
-    let filtered = filter_self_reference(merged, &d.hints);
+    let filtered = filter_self_reference(merged, &hints);
 
     // 5. Type filter (redact.py:337-343): types wins over types_exclude.
     let filtered: Vec<PatternMatch> = if let Some(keep) = types {
