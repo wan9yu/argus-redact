@@ -54,3 +54,28 @@ These are static curated lists with no scripted derivation; the long tail is
 intentionally excluded (fast-mode list-match targets common names — rarer names
 should be supplied via `names=[...]` or detected with NER, `mode="ner"`). To
 update, edit the pools directly and re-freeze the parity test fingerprints.
+
+## `hints.ron` — cross-layer kinship / command hint tables
+
+Five pools, aggregated from the per-language `lang/<code>/hints.py` sources
+(zh/en/ja/ko/de/uk/in_/br) the way `pure/hints.py` combines them:
+
+| Pool               | Provenance                                                            |
+| ------------------ | -------------------------------------------------------------------- |
+| `kinship_exact`    | Union of each language's `KINSHIP` exact-match phrases.              |
+| `kinship_prefixes` | Union of each language's `KINSHIP_PREFIXES`.                         |
+| `command_prefixes` | Union of each language's `COMMAND_PREFIXES`.                         |
+| `command_suffixes` | Union of each language's `COMMAND_SUFFIXES`.                         |
+| `command_patterns` | Each language's `COMMAND_PATTERNS`, as `(pattern source, ignorecase)`. |
+
+The string pools are sorted; order is irrelevant (all consumers use `any(...)`
+or set membership). `command_patterns` carries the regex source plus a
+per-pattern `ignorecase` flag (read from Python's `re.Pattern.flags`, not
+assumed) — the loader wraps the source in `(?i:…)` IFF that flag is set,
+mirroring `re.IGNORECASE`.
+
+These feed the `text_intent` / `self_reference_tier` hint logic. They are
+golden-locked by `tests/architecture/test_hints_data_parity.py` (frozen counts +
+sha256 over each pool); editing a `lang/<code>/hints.py` source means
+regenerating this RON from the aggregated `pure.hints` attributes and re-freezing
+those fingerprints in the same reviewed change.

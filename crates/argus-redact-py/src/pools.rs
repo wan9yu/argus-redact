@@ -138,6 +138,45 @@ pub fn person_surnames_en() -> Vec<String> {
     argus_redact_core::person_data::surnames_en().to_vec()
 }
 
+// ── cross-layer hint pool accessors (RON-backed) ─────────────────────────────
+
+/// Exact kinship phrases pool (matches `pure.hints._KINSHIP_EXACT` as a set).
+#[pyfunction]
+pub fn hint_kinship_exact() -> Vec<String> {
+    argus_redact_core::hints_data::kinship_exact()
+        .iter()
+        .cloned()
+        .collect()
+}
+
+/// Kinship prefixes pool (matches `pure.hints._KINSHIP_PREFIXES` as a set).
+#[pyfunction]
+pub fn hint_kinship_prefixes() -> Vec<String> {
+    argus_redact_core::hints_data::kinship_prefixes().to_vec()
+}
+
+/// Command-mode prefixes pool (matches `pure.hints._COMMAND_PREFIXES` as a set).
+#[pyfunction]
+pub fn hint_command_prefixes() -> Vec<String> {
+    argus_redact_core::hints_data::command_prefixes().to_vec()
+}
+
+/// Command-mode suffixes pool (matches `pure.hints._COMMAND_SUFFIXES` as a set).
+#[pyfunction]
+pub fn hint_command_suffixes() -> Vec<String> {
+    argus_redact_core::hints_data::command_suffixes().to_vec()
+}
+
+/// Command-mode patterns as `[(source, ignorecase)]` (matches
+/// `pure.hints._COMMAND_PATTERNS` `[(p.pattern, bool(p.flags & re.IGNORECASE))]`).
+#[pyfunction]
+pub fn hint_command_patterns() -> Vec<(String, bool)> {
+    argus_redact_core::hints_data::raw_command_patterns()
+        .iter()
+        .map(|(src, ic)| (src.clone(), *ic))
+        .collect()
+}
+
 // ── shared pool accessors ────────────────────────────────────────────────────
 
 /// RFC 2606 reserved email domains pool (matches `RFC2606_DOMAINS`).

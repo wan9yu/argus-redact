@@ -15,6 +15,7 @@ pub mod masks;
 pub mod shake_rng;
 pub mod fakers;
 pub mod person_data;
+pub mod hints_data;
 pub mod person_zh;
 pub mod person_en;
 pub mod reserved_range;
@@ -35,6 +36,9 @@ pub use shake_rng::{seed_from_value, ShakeRng};
 pub use fakers::{generate_unique_fake, resolve_faker, FakerFn};
 pub use person_data::{
     common_words_zh, compound_surnames_zh, given_names_en, not_names_zh, surnames_en, surnames_zh,
+};
+pub use hints_data::{
+    command_patterns, command_prefixes, command_suffixes, kinship_exact, kinship_prefixes,
 };
 pub use person_zh::SCORE_THRESHOLD;
 pub use reserved_range::{scan_for_pollution, reserved_range_patterns};
