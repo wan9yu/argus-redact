@@ -930,7 +930,7 @@ register(
           # Person names are detected by lang/zh/person.py, not by regex PATTERNS
         sensitivity=3,
         source="公安部全国姓名统计, 百家姓",
-        description="Chinese person name (candidate generation + evidence scoring, see person.py)",
+        description="Chinese person name (candidate generation + evidence scoring). The detection logic lives in the Rust core (`crates/argus-redact-core/src/person_zh.rs`, with English in `person_en.rs`); the `lang/zh/person.py` module is a thin `_core` FFI shim over it.",
     )
 )
 
