@@ -47,8 +47,8 @@ Two pools, both curated from U.S. federal public-domain sources
 
 | Pool          | Source                                                                                     |
 | ------------- | ------------------------------------------------------------------------------------------ |
-| `given_names` | U.S. Social Security Administration, [Top Names by Decade](https://www.ssa.gov/oact/babynames/decades/) — ~250 most-frequent given names. |
-| `surnames`    | U.S. Census Bureau, [2010 Surname File](https://www.census.gov/topics/population/genealogy/data/2010_surnames.html) — top surnames covering ~75% of the U.S. population. |
+| `given_names` | U.S. Social Security Administration, [Top Names by Decade](https://www.ssa.gov/oact/babynames/decades/) — 199 most-frequent given names. |
+| `surnames`    | U.S. Census Bureau, [2010 Surname File](https://www.census.gov/topics/population/genealogy/data/2010_surnames.html) — the 615 most-frequent surnames sourced from the file, which itself covers ~75% of the U.S. population. |
 
 These are static curated lists with no scripted derivation; the long tail is
 intentionally excluded (fast-mode list-match targets common names — rarer names
