@@ -16,6 +16,7 @@ pub mod shake_rng;
 pub mod fakers;
 pub mod person_data;
 pub mod person_zh;
+pub mod person_en;
 pub mod reserved_range;
 pub mod replace;
 
