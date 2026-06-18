@@ -507,6 +507,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "expensive (~1MB single-token scan); proves the find_iter no-panic fix. Run via `cargo test -- --ignored`."]
     fn pathological_single_token_does_not_panic() {
         // A ~1MB single token can trip fancy_regex's backtrack limit / stack
         // overflow inside TOKEN_PAT.find_iter (and the known_names emit), which

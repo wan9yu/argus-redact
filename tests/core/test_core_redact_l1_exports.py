@@ -430,6 +430,7 @@ def test_redact_l1_type_filter_exclude_listed():
 # ══════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.slow  # ~1MB scan; excluded from the canonical fast suite. Proves the find_iter no-panic fix.
 def test_redact_pathological_single_token_does_not_raise():
     """A ~1MB single token (within the 1MB cap) tripped fancy_regex's backtrack /
     stack-overflow limit, which used to escape as a PanicException from `redact`.
