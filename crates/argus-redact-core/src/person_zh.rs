@@ -16,7 +16,6 @@
 //! loop operates entirely in char-space (a `Vec<char>` over the matched word),
 //! so a multi-byte CJK word is never byte-sliced.
 
-use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
@@ -197,16 +196,14 @@ pub(crate) fn generate_candidates(text: &str, chars: &[char]) -> Vec<NameCandida
         let mut variants: Vec<NameCandidate> = Vec::new();
 
         // The 2-char prefix being a known non-name blocks the 3-char extension.
+        // (Computed BEFORE `word`/`prefix2` are moved into the variants below.)
         let prefix_blocked = word_len == 3 && !is_compound && neg.contains(&prefix2);
         if !neg.contains(&word) && !prefix_blocked {
-            variants.push(NameCandidate { text: word.clone(), start, end });
+            variants.push(NameCandidate { text: word, start, end });
         }
         // For 3-char single-surname matches, also offer the 2-char variant.
-        if word_len == 3 && !is_compound {
-            let short = prefix2;
-            if !neg.contains(&short) {
-                variants.push(NameCandidate { text: short, start, end: start + 2 });
-            }
+        if word_len == 3 && !is_compound && !neg.contains(&prefix2) {
+            variants.push(NameCandidate { text: prefix2, start, end: start + 2 });
         }
 
         if !variants.is_empty() {
@@ -549,17 +546,14 @@ fn resolve_variants(
                 v
             };
             // swallowed = any(following[:i] in common for i in range(2, len(following)+1))
-            let mut swallowed = false;
+            // `(2..=following_len)` is empty when `following_len < 2` (matches the
+            // Python `range(2, len+1)` empty case); `.any` short-circuits like the
+            // original `break`.
             let following_len = following.len();
-            let mut i = 2;
-            while i <= following_len {
+            let swallowed = (2..=following_len).any(|i| {
                 let prefix: String = following[..i].iter().collect();
-                if common.contains(&prefix) {
-                    swallowed = true;
-                    break;
-                }
-                i += 1;
-            }
+                common.contains(&prefix)
+            });
             if swallowed {
                 // short = [(c, s) for c, s in passing if len(c.text) == 2]
                 // if short: best, best_score = short[0]
@@ -709,8 +703,14 @@ pub fn detect_person_names(
         .collect();
 
     // grouped: dict[start] -> list[(candidate, score)], insertion-ordered.
+    //
+    // `generate_candidates` returns candidates STABLE-sorted by `start`, and the
+    // occupancy filter below only REMOVES elements (order preserved), so equal
+    // starts are already contiguous. A linear adjacent-grouping pass therefore
+    // reproduces Python's insertion-ordered `dict.setdefault` exactly: each new
+    // start opens a fresh bucket, equal-start candidates append to the last
+    // bucket. (No HashMap index needed.)
     let mut grouped: Grouped = Vec::new();
-    let mut index_of: HashMap<usize, usize> = HashMap::new();
     for c in candidates {
         // if any(c.start >= s and c.end <= e for s, e in occupied): continue
         if occupied.iter().any(|&(s, e)| c.start >= s && c.end <= e) {
@@ -718,11 +718,10 @@ pub fn detect_person_names(
         }
         let s = score_candidate(&c, &chars, &structural_pii);
         // grouped.setdefault(c.start, []).append((c, s))
-        let start = c.start;
-        match index_of.get(&start) {
-            Some(&idx) => grouped[idx].1.push((c, s)),
-            None => {
-                index_of.insert(start, grouped.len());
+        match grouped.last_mut() {
+            Some((start, variants)) if *start == c.start => variants.push((c, s)),
+            _ => {
+                let start = c.start;
                 grouped.push((start, vec![(c, s)]));
             }
         }
