@@ -16,8 +16,10 @@ Two halves, by design:
 
 2. **Live-source half (runs only while the Python sources exist).** Wrapped in
    ``try/except (ImportError, FileNotFoundError)``: when the sources are present
-   (today, pre-T9) it derives the truth from the ACTUAL Python objects/loaders
-   and asserts they match the SAME frozen counts + sha256 AND equal the ``_core``
+   (today, pre-T9) it derives the truth DIRECTLY from the Python data sources
+   (the ``.txt`` files + the ``surnames.py`` / ``given_names.py`` modules, NOT the
+   ``lang.zh.person`` shim) and asserts they match the SAME frozen counts +
+   sha256 AND equal the ``_core``
    pools as sets (full membership) + SURNAMES as an exact string. When the
    sources are gone (post-T9), this half is skipped.
 
@@ -116,27 +118,34 @@ def test_core_pools_match_frozen_sha256():
 
 
 def _load_python_truth() -> dict[str, object] | None:
-    """Derive the truth from the ACTUAL Python objects/loaders.
+    """Derive the truth from the ACTUAL Python data sources.
 
     Returns ``None`` (and the caller skips) if the sources have been removed
-    (Task 9). Mirrors the exact Python derivation: SURNAMES verbatim string,
-    COMPOUND_SURNAMES/SET frozensets, and the two ``_load_*`` loaders.
+    (Task 9). Reads the ``.txt`` files directly and imports the ``.py`` modules
+    (NOT routed through the ``lang.zh.person`` shim, whose loaders were removed
+    when it became a thin ``_core`` wrapper): SURNAMES verbatim string,
+    COMPOUND_SURNAMES/SET frozensets, and the two negative/common-word dicts
+    derived with the SAME ``frozenset(text.strip().split("\\n"))`` as the old
+    ``_load_*`` loaders. When the ``.txt`` files AND the ``surnames.py`` /
+    ``given_names.py`` modules are deleted at Task 9, the reads/imports raise and
+    this returns ``None``.
     """
-    try:
-        from argus_redact.lang.en.given_names import GIVEN_NAME_SET
-        from argus_redact.lang.en.surnames import SURNAME_SET
-        from argus_redact.lang.zh.person import (
-            _load_common_words,
-            _load_negative_dict,
-        )
-        from argus_redact.lang.zh.surnames import COMPOUND_SURNAMES, SURNAMES
-    except (ImportError, FileNotFoundError):
-        return None
+    from pathlib import Path
 
     try:
-        not_names = _load_negative_dict()
-        common_words = _load_common_words()
-    except FileNotFoundError:
+        import argus_redact.lang.zh as _zh_pkg
+        from argus_redact.lang.en.given_names import GIVEN_NAME_SET
+        from argus_redact.lang.en.surnames import SURNAME_SET
+        from argus_redact.lang.zh.surnames import COMPOUND_SURNAMES, SURNAMES
+
+        _zh_dir = Path(_zh_pkg.__file__).parent
+        not_names = frozenset(
+            (_zh_dir / "not_names.txt").read_text(encoding="utf-8").strip().split("\n")
+        )
+        common_words = frozenset(
+            (_zh_dir / "common_words.txt").read_text(encoding="utf-8").strip().split("\n")
+        )
+    except (ImportError, FileNotFoundError):
         return None
 
     return {
@@ -152,7 +161,7 @@ def _load_python_truth() -> dict[str, object] | None:
 def test_python_source_matches_frozen_fingerprints():
     truth = _load_python_truth()
     if truth is None:
-        pytest.skip("Python person-name sources removed (post-Task-9)")
+        pytest.skip("Python person-name data sources removed (post-Task-9)")
     # Counts.
     assert len(set(truth["surnames_zh"])) == EXPECTED_COUNTS["surnames_zh"]
     for key in _LIST_POOLS:
@@ -166,7 +175,7 @@ def test_python_source_matches_frozen_fingerprints():
 def test_core_pools_equal_python_source():
     truth = _load_python_truth()
     if truth is None:
-        pytest.skip("Python person-name sources removed (post-Task-9)")
+        pytest.skip("Python person-name data sources removed (post-Task-9)")
     pools = _core_pools()
     # SURNAMES: exact string equality (byte-for-byte, order-load-bearing).
     assert pools["surnames_zh"] == truth["surnames_zh"]
