@@ -94,7 +94,7 @@
         type_: "jwt",
         label: "[JWT]",
         pattern: r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+",
-        validator: None,
+        validator: Some("jwt"),
         description: "JWT (3 base64url segments; header must decode to JSON with 'alg' field)",
     ),
     PatternData(

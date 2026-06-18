@@ -102,11 +102,12 @@ def _load_patterns(lang: str | list[str]) -> list[dict]:
     """Load regex patterns for the given language(s). Cached per language combo.
 
     Pattern DATA is the SSOT in argus-redact-core (RON), read via
-    ``core_patterns`` (a thin reader over ``_core.builtin_patterns``). The 3
-    deferred validators (organization/school/jwt) are re-attached there as
-    Python ``validate`` callables so they route through the Python validate
-    path; everything else (named ``validator`` strings) is validated inline in
-    Rust. The compiled core is required.
+    ``core_patterns`` (a thin reader over ``_core.builtin_patterns``). Every
+    builtin pattern names its validator as a Rust ``validator`` string, so its
+    regex AND validation run inline in Rust (as of v0.7.7 this includes the
+    formerly-deferred organization/school/jwt validators). Adapter / non-builtin
+    patterns may still carry a Python ``validate`` callable, handled by
+    ``pure/patterns.py``. The compiled core is required.
     """
     langs = tuple(lang) if isinstance(lang, list) else (lang,)
     if langs in _pattern_cache:
