@@ -51,19 +51,13 @@ use fancy_regex::Regex;
 use crate::data::builtin_patterns;
 use crate::grammar::normalize_grammar_en;
 use crate::hints::{filter_self_reference, get_person_threshold, produce_hints_l1, Hint};
-use crate::merger::merge_entities;
+use crate::merger::merge_entities_with_text;
 use crate::normalize::{map_spans_to_original, normalize_text};
 use crate::patterns::{match_patterns, PatternConfig, PatternError};
 use crate::replace::{replace, FakerFactory, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
 use crate::reserved_range::byte_to_char_offset;
 use crate::types::PatternMatch;
 use crate::{person_en, person_zh};
-
-/// Priority entity types for [`merge_with_priority`] — port of
-/// `pure/merger._PRIORITY_TYPES`. A `self_reference` entity wins overlaps and
-/// splits the loser, so it survives long enough for `filter_self_reference` to
-/// decide its fate by tier.
-const PRIORITY_TYPES: &[&str] = &["self_reference"];
 
 /// Layer = 1 (regex). Mirrors `argus_redact.layers.LAYER_REGEX`.
 const LAYER_REGEX: u8 = 1;
@@ -273,118 +267,6 @@ fn char_slice(text: &str, start: usize, end: usize) -> String {
     text.chars().skip(start).take(end.saturating_sub(start)).collect()
 }
 
-/// Is `t` a priority type (currently only `self_reference`)?
-fn is_priority(t: &str) -> bool {
-    PRIORITY_TYPES.contains(&t)
-}
-
-/// Trim `e` so it starts at `new_start`; `None` if nothing (or only whitespace)
-/// remains. Port of `pure/merger._trim_entity` (char-sliced; `str.strip()` →
-/// trim of Unicode whitespace, matching Python `.strip()` for the empty test).
-fn trim_entity(e: &PatternMatch, new_start: usize, text: &str) -> Option<PatternMatch> {
-    if new_start >= e.end {
-        return None;
-    }
-    let new_text = char_slice(text, new_start, e.end);
-    if new_text.trim().is_empty() {
-        return None;
-    }
-    Some(PatternMatch {
-        text: new_text,
-        type_: e.type_.clone(),
-        start: new_start,
-        end: e.end,
-        confidence: e.confidence,
-        layer: e.layer,
-    })
-}
-
-/// Insert priority entities into already-merged non-priority results, splitting
-/// overlaps so a priority span wins. Port of `pure/merger._merge_priority`.
-fn merge_priority(
-    mut merged_others: Vec<PatternMatch>,
-    priority: Vec<PatternMatch>,
-    text: &str,
-) -> Vec<PatternMatch> {
-    merged_others.extend(priority);
-    let mut all_entities = merged_others;
-    // sort key: (start, -(end - start)) — longer span first on a tie.
-    all_entities.sort_by(|a, b| {
-        a.start
-            .cmp(&b.start)
-            .then_with(|| (b.end - b.start).cmp(&(a.end - a.start)))
-    });
-    let mut final_: Vec<PatternMatch> = vec![all_entities[0].clone()];
-    for current in all_entities.into_iter().skip(1) {
-        let last_end = final_.last().unwrap().end;
-        if current.start >= last_end {
-            final_.push(current);
-            continue;
-        }
-        // Overlap — priority wins.
-        let last_priority = is_priority(&final_.last().unwrap().type_);
-        let cur_priority = is_priority(&current.type_);
-        if cur_priority && !last_priority {
-            let last = final_.last().unwrap().clone();
-            let trimmed = trim_entity(&last, current.end, text);
-            let idx = final_.len() - 1;
-            final_[idx] = current;
-            if let Some(t) = trimmed {
-                final_.push(t);
-            }
-        } else if last_priority && !cur_priority {
-            let last = final_.last().unwrap();
-            if let Some(t) = trim_entity(&current, last.end, text) {
-                final_.push(t);
-            }
-        } else {
-            // Neither priority (or both): the longer span wins, else the higher
-            // confidence. Port of `_merge_priority`'s final branch (the two
-            // Python sub-conditions both replace `final[-1]`, so they fold into
-            // one `||`).
-            let last = final_.last().unwrap();
-            let idx = final_.len() - 1;
-            let longer = (current.end - current.start) > (last.end - last.start);
-            if longer || current.confidence > last.confidence {
-                final_[idx] = current;
-            }
-        }
-    }
-    final_.sort_by(|a, b| a.start.cmp(&b.start));
-    final_
-}
-
-/// Deduplicate overlapping entities, priority-aware — port of the Python
-/// `pure/merger.merge_entities(entities, text)` (the public callable, NOT the
-/// `_core.merge_entities` Rust primitive, which only handles the non-priority
-/// path). When no priority (`self_reference`) entity is present this is exactly
-/// the Rust [`merge_entities`]; otherwise the non-priority subset is merged in
-/// Rust and the priority entities are folded in via [`merge_priority`].
-fn merge_entities_with_text(entities: Vec<PatternMatch>, text: &str) -> Vec<PatternMatch> {
-    if entities.is_empty() {
-        return vec![];
-    }
-    let has_priority = entities.iter().any(|e| is_priority(&e.type_));
-    if !has_priority {
-        return merge_entities(entities);
-    }
-    let mut others: Vec<PatternMatch> = Vec::new();
-    let mut priority: Vec<PatternMatch> = Vec::new();
-    for e in entities {
-        if is_priority(&e.type_) {
-            priority.push(e);
-        } else {
-            others.push(e);
-        }
-    }
-    let merged_others = if others.is_empty() {
-        Vec::new()
-    } else {
-        merge_entities(others)
-    };
-    merge_priority(merged_others, priority, text)
-}
-
 /// Fast-mode end-to-end redaction over L1 (regex + person) only — Rust port of
 /// the fast-mode `redact()` post-detect path in `glue/redact.py`
 /// (`_detect` lines ~329-343 + `_replace_and_emit`). Produces the SAME
@@ -422,23 +304,59 @@ fn merge_entities_with_text(entities: Vec<PatternMatch>, text: &str) -> Vec<Patt
 /// `key` is merged in, the result key is returned), matching `_replace_and_emit`.
 /// `keep_downgraded` is surfaced on the result so the caller can raise the
 /// `SecurityWarning` (the Python shim does, T7).
-#[allow(clippy::too_many_arguments)]
+///
+/// Data inputs to [`redact_l1`], grouped to keep the signature readable — mirrors
+/// the sibling [`ReplaceArgs`] idiom (the two `factory` params stay trailing on
+/// `redact_l1` itself, matching [`replace`]).
+pub struct RedactL1Args<'a> {
+    /// The source text.
+    pub text: &'a str,
+    /// Resolved language list (e.g. `["zh"]`, `["zh","en"]`).
+    pub lang: &'a [String],
+    /// Known-names list for person detection / names-only fallback.
+    pub names: &'a [String],
+    /// Per-type resolved info, keyed by entity type (Python `_build_type_info`).
+    pub type_info: &'a std::collections::HashMap<String, TypeInfo>,
+    /// Effective salt (drives pseudonym seed + realistic HMAC).
+    pub salt: Option<&'a crate::seed::Salt>,
+    /// Existing key to merge into (reuse + collision avoidance).
+    pub key: Option<&'a std::collections::HashMap<String, String>>,
+    /// Person pseudonym prefix.
+    pub person_prefix: &'a str,
+    /// Organization pseudonym prefix.
+    pub org_prefix: &'a str,
+    /// Unified-prefix mode: all reversible types collapse to one prefix.
+    pub unified_prefix: Option<&'a str>,
+    /// Keep-strategy whitelist (`SELF_REF_PRONOUNS` ∪ zh pronouns ∪ zh kinship).
+    pub keep_whitelist: &'a HashSet<String>,
+    /// Type allow-list: if set, keep only entities whose type is in it.
+    pub types: Option<&'a HashSet<String>>,
+    /// Type deny-list: if set (and `types` is not), drop entities whose type is
+    /// in it. `types` wins (Python `if ... elif ...`); the caller guards against
+    /// both being set.
+    pub types_exclude: Option<&'a HashSet<String>>,
+}
+
 pub fn redact_l1<F: PseudoFactory>(
-    text: &str,
-    lang: &[String],
-    names: &[String],
-    type_info: &std::collections::HashMap<String, TypeInfo>,
-    salt: Option<&crate::seed::Salt>,
-    key: Option<&std::collections::HashMap<String, String>>,
-    person_prefix: &str,
-    org_prefix: &str,
-    unified_prefix: Option<&str>,
-    keep_whitelist: &HashSet<String>,
-    types: Option<&HashSet<String>>,
-    types_exclude: Option<&HashSet<String>>,
+    args: RedactL1Args,
     factory: &F,
     faker_factory: Option<&dyn FakerFactory>,
 ) -> Result<ReplaceResult, String> {
+    let RedactL1Args {
+        text,
+        lang,
+        names,
+        type_info,
+        salt,
+        key,
+        person_prefix,
+        org_prefix,
+        unified_prefix,
+        keep_whitelist,
+        types,
+        types_exclude,
+    } = args;
+
     // 1. Raw L1 detection (layer1 ++ person) + hints.
     let d = detect_l1(text, lang, names).map_err(|e| e.to_string())?;
     let entities = d.entities();
@@ -928,19 +846,23 @@ mod redact_l1_tests {
         keep_whitelist: &[&str],
     ) -> (String, Vec<(String, String)>) {
         let wl: HashSet<String> = keep_whitelist.iter().map(|x| x.to_string()).collect();
+        let lang_v = s(lang);
+        let names_v = s(names);
         let r = redact_l1(
-            text,
-            &s(lang),
-            &s(names),
-            &type_info,
-            Some(&Salt::Int(SALT)),
-            None,
-            "P",
-            "O",
-            None,
-            &wl,
-            None,
-            None,
+            RedactL1Args {
+                text,
+                lang: &lang_v,
+                names: &names_v,
+                type_info: &type_info,
+                salt: Some(&Salt::Int(SALT)),
+                key: None,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+                types: None,
+                types_exclude: None,
+            },
             &UnusedFactory,
             None,
         )
@@ -1110,19 +1032,22 @@ mod redact_l1_tests {
         info.insert("bank_card".into(), ti("mask", "mask", "BANK", None, None, None, "[bank_card]"));
         let wl: HashSet<String> = HashSet::new();
         let keep: HashSet<String> = ["bank_card"].iter().map(|x| x.to_string()).collect();
+        let lang_v = s(&["zh"]);
         let r = redact_l1(
-            "电话13812345678 银行卡6217000000000000",
-            &s(&["zh"]),
-            &[],
-            &info,
-            Some(&Salt::Int(SALT)),
-            None,
-            "P",
-            "O",
-            None,
-            &wl,
-            Some(&keep),
-            None,
+            RedactL1Args {
+                text: "电话13812345678 银行卡6217000000000000",
+                lang: &lang_v,
+                names: &[],
+                type_info: &info,
+                salt: Some(&Salt::Int(SALT)),
+                key: None,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+                types: Some(&keep),
+                types_exclude: None,
+            },
             &UnusedFactory,
             None,
         )
@@ -1142,19 +1067,22 @@ mod redact_l1_tests {
         info.insert("bank_card".into(), ti("mask", "mask", "BANK", None, None, None, "[bank_card]"));
         let wl: HashSet<String> = HashSet::new();
         let drop: HashSet<String> = ["phone"].iter().map(|x| x.to_string()).collect();
+        let lang_v = s(&["zh"]);
         let r = redact_l1(
-            "电话13812345678 银行卡6217000000000000",
-            &s(&["zh"]),
-            &[],
-            &info,
-            Some(&Salt::Int(SALT)),
-            None,
-            "P",
-            "O",
-            None,
-            &wl,
-            None,
-            Some(&drop),
+            RedactL1Args {
+                text: "电话13812345678 银行卡6217000000000000",
+                lang: &lang_v,
+                names: &[],
+                type_info: &info,
+                salt: Some(&Salt::Int(SALT)),
+                key: None,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+                types: None,
+                types_exclude: Some(&drop),
+            },
             &UnusedFactory,
             None,
         )

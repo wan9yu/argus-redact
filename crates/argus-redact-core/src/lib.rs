@@ -24,7 +24,7 @@ pub mod replace;
 pub mod redact_l1;
 
 pub use types::PatternMatch;
-pub use merger::merge_entities;
+pub use merger::{merge_entities, merge_entities_with_text};
 pub use restore::{restore, restore_full, check_restore_safety, RestoreError};
 pub use patterns::{match_patterns, PatternConfig, PatternError};
 pub use pseudonym::{PseudonymGenerator, RandomSource};
@@ -48,4 +48,4 @@ pub use hints::{
 pub use person_zh::SCORE_THRESHOLD;
 pub use reserved_range::{scan_for_pollution, reserved_range_patterns};
 pub use replace::{replace, FakerFactory, FakerResolution, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
-pub use redact_l1::{detect_l1, redact_l1, DetectL1Result};
+pub use redact_l1::{detect_l1, redact_l1, DetectL1Result, RedactL1Args};
