@@ -27,7 +27,12 @@
 //! 6. zh person detection first (if "zh" in lang) — honors threshold, receives
 //!    `layer1` as `pii_entities`; then en (if "en" in lang) — ignores threshold.
 //!    (Matches Python's `entities.extend(zh); entities.extend(en)` order.)
-//! 7. layer1 + person tagged `layer = LAYER_REGEX` (= 1). RAW output: no
+//! 7. Names-only fallback (redact.py:268-283): if NEITHER "zh" NOR "en" is in
+//!    lang AND `names` is non-empty, each non-empty known name's literal,
+//!    non-overlapping occurrences in the ORIGINAL text are emitted as `person`
+//!    entities (confidence 1.0, `text = name`). Mutually exclusive with the
+//!    zh/en branches.
+//! 8. layer1 + person tagged `layer = LAYER_REGEX` (= 1). RAW output: no
 //!    merge/filter/boost.
 //!
 //! ## [`DetectL1Result`] serves both consumers
@@ -39,10 +44,13 @@
 //!   plus `near_misses`. Returning the four fields distinctly serves both without
 //!   a re-match.
 
+use fancy_regex::Regex;
+
 use crate::data::builtin_patterns;
 use crate::hints::{get_person_threshold, produce_hints_l1, Hint};
 use crate::normalize::{map_spans_to_original, normalize_text};
 use crate::patterns::{match_patterns, PatternConfig, PatternError};
+use crate::reserved_range::byte_to_char_offset;
 use crate::types::PatternMatch;
 use crate::{person_en, person_zh};
 
@@ -198,6 +206,45 @@ pub fn detect_l1(
         let mut en = person_en::detect_person_names(text, names);
         tag_layer(&mut en, LAYER_REGEX);
         person.extend(en);
+    }
+
+    // 8. Names-only fallback (redact.py:268-283): when NEITHER "zh" NOR "en" is
+    //    in lang AND names is non-empty, the zh/en person detectors never run, so
+    //    Python falls back to a literal scan of each known name over the ORIGINAL
+    //    text. Mutually exclusive with the zh/en branches above (the condition
+    //    guarantees it). Each name's NON-overlapping, case-sensitive, LITERAL
+    //    occurrences (`re.finditer(re.escape(name), text)`) become person entities
+    //    at confidence 1.0, with `text = name` (exactly as Python sets `text=name`,
+    //    not the matched slice — equal for a literal match). Appended AFTER layer1
+    //    in `.entities()`, matching Python's `entities.append` order.
+    let has_zh = lang.iter().any(|c| c == "zh");
+    let has_en = lang.iter().any(|c| c == "en");
+    if !has_zh && !has_en && !names.is_empty() {
+        for name in names {
+            // Python `if not name: continue` — skip empty names.
+            if name.is_empty() {
+                continue;
+            }
+            // `re.finditer(re.escape(name), text)` — literal, non-overlapping.
+            // re.escape output always compiles; the `if let Ok` guard mirrors the
+            // no-panic convention used for known_names elsewhere so a pathological
+            // name can't panic.
+            if let Ok(re) = Regex::new(&fancy_regex::escape(name)) {
+                for m in re.find_iter(text) {
+                    let m = m.unwrap();
+                    let start = byte_to_char_offset(text, m.start());
+                    let end = byte_to_char_offset(text, m.end());
+                    person.push(PatternMatch {
+                        text: name.clone(),
+                        type_: "person".to_string(),
+                        start,
+                        end,
+                        confidence: 1.0,
+                        layer: LAYER_REGEX,
+                    });
+                }
+            }
+        }
     }
 
     Ok(DetectL1Result {
@@ -457,5 +504,83 @@ mod tests {
             ],
         );
         assert_hints(&r.hints, &[("self_reference_tier (tier=1)", Some((1, false))), ("narrative", None)]);
+    }
+
+    // ── Names-only fallback (redact.py:268-283) ──────────────────────────────
+    //
+    // When NEITHER "zh" NOR "en" is in lang AND names is non-empty, the zh/en
+    // person detectors never run and Python falls back to a literal scan of each
+    // known name over the ORIGINAL text. Expected values below were captured from
+    // LIVE Python `_detect(..., mode="fast")`:
+    //   python3 -c "
+    //   from argus_redact.glue.redact import _detect
+    //   ents,_,_,_ = _detect('TEXT', lang=['ja'], mode='fast', names=[...],
+    //                        types=None, types_exclude=None)
+    //   print([(e.text,e.type,e.start,e.end,e.confidence,e.layer) for e in ents])
+    //   "
+
+    #[test]
+    fn names_only_fallback_differential() {
+        // The reviewer's differential case: lang=["ja"] (neither zh nor en), so
+        // the fallback fires for each known name. Python _detect output:
+        //   [('Zaphod','person',8,14,1.0,1), ('Trillian','person',19,27,1.0,1)]
+        let r = run("Talk to Zaphod and Trillian please", &["ja"], &["Zaphod", "Trillian"]);
+        assert_entities(
+            &r.entities(),
+            &[
+                ("Zaphod", "person", 8, 14, 1.0, 1),
+                ("Trillian", "person", 19, 27, 1.0, 1),
+            ],
+        );
+    }
+
+    #[test]
+    fn names_only_fallback_duplicate_occurrences() {
+        // A name appearing twice → two non-overlapping matches. Python:
+        //   [('Zaphod','person',0,6,1.0,1), ('Zaphod','person',11,17,1.0,1)]
+        let r = run("Zaphod met Zaphod again", &["ja"], &["Zaphod"]);
+        assert_entities(
+            &r.entities(),
+            &[
+                ("Zaphod", "person", 0, 6, 1.0, 1),
+                ("Zaphod", "person", 11, 17, 1.0, 1),
+            ],
+        );
+    }
+
+    #[test]
+    fn names_only_fallback_empty_name_skipped() {
+        // An empty name in the list is skipped (Python `if not name: continue`):
+        // no match, no panic. Python: [('Zaphod','person',0,6,1.0,1)]
+        let r = run("Zaphod is here", &["ja"], &["", "Zaphod"]);
+        assert_entities(&r.entities(), &[("Zaphod", "person", 0, 6, 1.0, 1)]);
+    }
+
+    #[test]
+    fn names_only_fallback_regex_special_char_literal() {
+        // A name with a regex-special char ("A.") is matched LITERALLY (re.escape),
+        // so it matches "A." and NOT "Ax" in "AxB". Python:
+        //   [('A.','person',0,2,1.0,1)]
+        let r = run("A. and AxB present", &["ja"], &["A."]);
+        assert_entities(&r.entities(), &[("A.", "person", 0, 2, 1.0, 1)]);
+    }
+
+    #[test]
+    fn names_only_fallback_not_fired_for_zh() {
+        // When "zh" is in lang the zh person branch handles names; the fallback is
+        // suppressed. The known name is still detected (via the zh branch) at the
+        // SAME (text, span, conf, layer), so the entity output is identical — what
+        // matters is the fallback condition (`!has_zh && !has_en`) excludes this.
+        // Python _detect(lang=["zh"]): [('Zaphod','person',0,6,1.0,1)]
+        let r = run("Zaphod here", &["zh"], &["Zaphod"]);
+        assert_entities(&r.entities(), &[("Zaphod", "person", 0, 6, 1.0, 1)]);
+    }
+
+    #[test]
+    fn names_only_fallback_not_fired_for_en() {
+        // When "en" is in lang the en person branch handles names; the fallback is
+        // suppressed. Python _detect(lang=["en"]): [('Zaphod','person',0,6,1.0,1)]
+        let r = run("Zaphod here", &["en"], &["Zaphod"]);
+        assert_entities(&r.entities(), &[("Zaphod", "person", 0, 6, 1.0, 1)]);
     }
 }
