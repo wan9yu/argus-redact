@@ -338,7 +338,11 @@ pub fn validate_jwt(value: &str) -> bool {
 
 // ── Chinese organization / school (deferred → Rust in v0.7.7) ────────────────
 /// Leading verbs/particles/questions stripped from org/school candidates before
-/// validation. Matched via a one-pass longest-prefix scan, so order is irrelevant
+/// validation. Stripped one at a time (`has_name_before_suffix` restarts the scan
+/// after each match), and the first entry that matches in array order wins.
+/// ORDER IS LOAD-BEARING: entries are ordered longest-prefix-first so a specific
+/// prefix shadows its own substring (e.g. "请查一下" before "请查"); reordering can
+/// change results and break parity with the Python `_has_name_before_suffix`
 /// (mirrors `lang/zh/patterns.py::_LEADING_NOISE`).
 const LEADING_NOISE: &[&str] = &[
     "请查一下", "请查下", "请查", "查一下", "查下", "就职于", "供职于", "任职于",
