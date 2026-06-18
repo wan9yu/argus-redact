@@ -276,7 +276,7 @@ static CONTEXT_PREFIX: LazyLock<Regex> = LazyLock::new(|| {
         // Conversational / intro phrases
         r"我是|我叫|这是|那是|找|叫做|叫作|本人|",
         r"通知|转告|联系|致电|询问",
-        r")[：:\s]?$"
+        r")[：:\s\x1c-\x1f]?$"
     );
     Regex::new(pat)
         .unwrap_or_else(|e| panic!("person_zh: _CONTEXT_PREFIX compile failed: {e}"))
@@ -296,7 +296,7 @@ static PII_SUFFIX: LazyLock<Regex> = LazyLock::new(|| {
 /// `_PAREN_PHONE` — a parenthesized mobile number right after the name. Python
 /// applies this with `re.match` (anchored); pattern is `^`-anchored.
 static PAREN_PHONE: LazyLock<Regex> = LazyLock::new(|| {
-    let pat = r"^[（(]\s*1[3-9]\d{9}";
+    let pat = r"^[（(][\s\x1c-\x1f]*1[3-9]\d{9}";
     Regex::new(pat).unwrap_or_else(|e| panic!("person_zh: _PAREN_PHONE compile failed: {e}"))
 });
 

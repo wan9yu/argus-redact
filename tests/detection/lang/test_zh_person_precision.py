@@ -266,3 +266,43 @@ def test_en_single_surname_alone_no_match():
     # intentionally NOT matched — a lone surname is too weak to emit. If the
     # `i == 0: continue` guard were dropped, "Smith" would surface.
     assert _core.detect_person_names_en("Smith arrived.") == []
+
+
+# ── Gate 5: Python-`re` `\s` parity for U+001C-U+001F (FS/GS/RS/US) ────────────
+#
+# Python `re`'s `\s` matches the 4 ASCII information-separator control chars
+# U+001C-U+001F; fancy_regex's `\s` does NOT. The pre-port Python person scorer
+# used `\s` as the optional separator in _CONTEXT_PREFIX (`)[：:\s]?$`) and in the
+# gap of _PAREN_PHONE (`^[（(]\s*1...`). A naive `\s` port silently DROPS those 4
+# chars, so when one is the SOLE separator the Rust misses the +0.6 / +0.5
+# evidence → the candidate scores 0.0 and is dropped → a name the original Python
+# DETECTED is now MISSED (silent under-detection — a leak for a redaction lib).
+# The fix extends the char classes to `[\s\x1c-\x1f]` (a no-op in Python, where
+# `\s` already covers them; restores the 4 chars in fancy_regex). The frozen
+# golden has zero control-char bytes, so these cases are the only guard.
+#
+# Before the fix all of these returned []; after, they detect at the exact
+# context-prefix / paren-phone confidence below.
+
+
+def test_context_prefix_fs_gs_rs_us_separators_match_python_re():
+    # _CONTEXT_PREFIX: role word `客户` + a single U+001C-U+001F separator + name.
+    # context-prefix fires (+0.6) on a 2-char base (0.3) → 0.8999999999999999
+    # (same non-associative f64 tail as the `[：:\s]?` separators above). Each of
+    # the 4 information-separator control chars must work identically — Python
+    # `re` `\s` matched all 4; fancy_regex `\s` matched NONE before the fix.
+    for sep in ("\x1c", "\x1d", "\x1e", "\x1f"):
+        out = _core.detect_person_names_zh("客户" + sep + "张三")
+        # name at chars 3..5 (客=0, 户=1, sep=2, 张=3, 三=4).
+        assert _rows(out) == [("张三", 3, 5, 0.8999999999999999)], f"sep={sep!r}"
+        assert out[0].confidence == 0.8999999999999999
+
+
+def test_paren_phone_control_char_in_gap_matches_python_re():
+    # _PAREN_PHONE: name + open paren + a U+001D (GS) control char in the gap +
+    # a valid 11-digit mobile. paren-phone fires (+0.5) on a 2-char base (0.3) →
+    # 0.8. Before the fix the `\s*` gap rejected the control char → no evidence →
+    # dropped. Uses the fullwidth paren `（` the regex accepts.
+    out = _core.detect_person_names_zh("张三（\x1d13812345678）")
+    assert _rows(out) == [("张三", 0, 2, 0.8)]
+    assert out[0].confidence == 0.8
