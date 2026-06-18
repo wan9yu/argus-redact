@@ -21,6 +21,7 @@ pub mod person_zh;
 pub mod person_en;
 pub mod reserved_range;
 pub mod replace;
+pub mod redact_l1;
 
 pub use types::PatternMatch;
 pub use merger::merge_entities;
@@ -47,3 +48,4 @@ pub use hints::{
 pub use person_zh::SCORE_THRESHOLD;
 pub use reserved_range::{scan_for_pollution, reserved_range_patterns};
 pub use replace::{replace, FakerFactory, FakerResolution, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
+pub use redact_l1::{detect_l1, DetectL1Result};
