@@ -285,162 +285,6 @@ def _detect(
     return entities, langs, timing, layer_stats
 
 
-def _fast_path_eligible(
-    *,
-    mode: str,
-    report: bool,
-    detailed: bool,
-    with_types: bool,
-    pre_detected: "list[PatternMatch] | None",
-) -> bool:
-    """Whether fast-mode ``redact()`` can route the default 2-tuple shape through
-    the Rust ``_core.redact_l1`` engine.
-
-    Routes through ``redact_l1`` only for the DEFAULT return shape: the richer
-    shapes (``report`` / ``detailed`` / ``with_types``) need the final entity list
-    for their per-entity assembly, which ``redact_l1`` does not return, so they
-    fall through to ``_detect`` + ``_replace_and_emit`` (both of which now run on
-    the SAME ``detect_l1`` engine underneath — one detection engine for all paths).
-
-    ``_pre_detected`` (caller-supplied entities) also bypasses detection entirely,
-    so it never routes through ``redact_l1``.
-
-    ``ARGUS_ABLATION_HINTS`` is a research-only knob read INSIDE the Python
-    ``produce_hints``; the Rust ``redact_l1`` hints do not honor it. When it is
-    active we fall through to the Python orchestration path so ablation keeps
-    working. (No test exercises ablation through ``redact()``; this guard simply
-    preserves the env var's effect rather than silently ignoring it.)
-    """
-    if mode != "fast":
-        return False
-    if report or detailed or with_types:
-        return False
-    if pre_detected is not None:
-        return False
-    if os.environ.get("ARGUS_ABLATION_HINTS") not in (None, "all"):
-        return False
-    # Telemetry needs the per-stage timing breakdown + entity list that
-    # _replace_and_emit assembles; when a perf hook is active, fall through to the
-    # Python path so the emitted record is unchanged. Zero overhead otherwise
-    # (the common case has no hook → routes through redact_l1).
-    if _telemetry_hook_active():
-        return False
-    return True
-
-
-def _redact_l1_fast(
-    text: str,
-    *,
-    lang: str | list[str],
-    langs: list[str],
-    names: list[str] | None,
-    config: dict | None,
-    salt: int | bytes | None,
-    existing_key: dict | None,
-    key_file: str | None,
-    unified_prefix: str | None,
-    types: list[str] | None,
-    types_exclude: list[str] | None,
-) -> tuple[str, dict]:
-    """Fast-mode default-shape redaction routed through ``_core.redact_l1``.
-
-    Builds the SAME ``type_info`` / ``custom_fakers`` / prefixes / keep-whitelist
-    the Python ``replace()`` resolves, then runs the WHOLE L1 redact pass
-    (detect_l1 → merge → filter → type-filter → replace → grammar-normalize) in
-    Rust. Returns the default ``(redacted, key)`` 2-tuple.
-
-    The detection used for ``_build_type_info`` and the ``keep_downgraded``
-    warning reconstruction comes from ``_detect`` (now ``detect_l1`` underneath),
-    so the final entity set matches exactly what ``redact_l1`` redacts internally.
-    """
-    from argus_redact.pure.replacer import (
-        DEFAULT_PREFIXES,
-        _KEEP_WHITELIST,
-        _build_type_info,
-        _get_entity_config,
-        _resolve_default_strategy,
-        _validate_config,
-        SecurityWarning,
-    )
-
-    # Mirror replace()'s up-front config guards so both paths raise identically.
-    _validate_config(config)
-    if config and "_unified_prefix" in config:
-        raise ValueError(
-            "_unified_prefix is no longer accepted as a config key in v0.6.0. "
-            "Use the top-level `unified_prefix=` kwarg on redact() / "
-            "redact_pseudonym_llm() instead."
-        )
-
-    # Final fast-mode entities (detect_l1 → merge → filter → type-filter) — the
-    # exact set redact_l1 redacts internally. Used for type_info resolution AND
-    # the keep_downgraded warning reconstruction so the warning surface matches
-    # the Python replace() path byte-for-byte.
-    entities, _langs, _timing, _stats = _detect(
-        text, lang=lang, mode="fast", names=names, types=types, types_exclude=types_exclude
-    )
-
-    type_info, custom_fakers = _build_type_info(entities, config, langs)
-    person_prefix = DEFAULT_PREFIXES["person"]
-    org_prefix = DEFAULT_PREFIXES["organization"]
-    if config:
-        person_prefix = config.get("person", {}).get("prefix", person_prefix)
-        org_prefix = config.get("organization", {}).get("prefix", org_prefix)
-
-    redacted, result_key, _aliases, keep_downgraded = _core.redact_l1(
-        text,
-        langs,
-        names or [],
-        type_info=type_info,
-        salt=salt,
-        key=existing_key,
-        person_prefix=person_prefix,
-        org_prefix=org_prefix,
-        unified_prefix=unified_prefix,
-        keep_whitelist=set(_KEEP_WHITELIST),
-        types=set(types) if types else None,
-        types_exclude=set(types_exclude) if types_exclude else None,
-        custom_fakers=custom_fakers or None,
-    )
-
-    if keep_downgraded:
-        # Mirror replace()'s per-entity SecurityWarning surface. Rust only signals
-        # THAT a downgrade happened; reconstruct the per-entity messages here over
-        # the same final entity list, with the same dedup + whitelist guard.
-        import warnings
-
-        warned: set[str] = set()
-        for entity in entities:
-            if entity.text in warned:
-                continue
-            ec = _get_entity_config(entity.type, config)
-            strategy = ec.get("strategy") or _resolve_default_strategy(entity.type)
-            if strategy != "keep":
-                continue
-            warned.add(entity.text)
-            if entity.type == "self_reference" and entity.text in _KEEP_WHITELIST:
-                continue  # whitelisted → kept verbatim, no warning
-            warnings.warn(
-                f"strategy='keep' is only supported for self_reference "
-                f"pronouns and kinship phrases; downgrading to default for "
-                f"type={entity.type!r}, text={entity.text[:40]!r}.",
-                SecurityWarning,
-                stacklevel=2,
-            )
-
-    # Persist key file (Python-owned; redact_l1 does not touch the filesystem).
-    if key_file is not None and result_key:
-        from argus_redact._safe_io import safe_atomic_write_text
-
-        safe_atomic_write_text(
-            key_file,
-            json.dumps(result_key, ensure_ascii=False, indent=2),
-            mode=0o600,
-        )
-
-    return redacted, result_key
-
-
 def _replace_and_emit(
     text: str,
     entities: list[PatternMatch],
@@ -589,33 +433,17 @@ def redact(
     if lang == "auto":
         lang = detect_languages(text)
 
-    # Fast-mode default shape → route the WHOLE L1 redact pass through the Rust
-    # _core.redact_l1 engine (detect_l1 → merge → filter → type-filter → replace →
-    # grammar-normalize, all in Rust). The richer shapes / _pre_detected / active
-    # ablation / active telemetry fall through to the Python _detect +
-    # _replace_and_emit path below — which now runs on the SAME detect_l1 engine.
-    if _fast_path_eligible(
-        mode=mode,
-        report=report,
-        detailed=detailed,
-        with_types=with_types,
-        pre_detected=_pre_detected,
-    ):
-        langs = [lang] if isinstance(lang, str) else list(lang)
-        return _redact_l1_fast(
-            text,
-            lang=lang,
-            langs=langs,
-            names=names,
-            config=config,
-            salt=salt,
-            existing_key=existing_key,
-            key_file=key_file,
-            unified_prefix=unified_prefix,
-            types=types,
-            types_exclude=types_exclude,
-        )
-
+    # Detection is unified on ONE path for every mode and return shape: _detect
+    # (Rust _core.detect_l1 under the hood, which skips L2/L3 in fast mode) runs
+    # the detection ONCE, then _replace_and_emit (Rust _core.replace) does the
+    # replacement. Fast / detailed / with_types / report differ only in the
+    # final return-shape dispatch below, never in how detection runs. The Python
+    # fast-mode path therefore detects exactly once and honors ARGUS_ABLATION_HINTS
+    # (read inside the Python produce_hints _detect calls).
+    #
+    # _core.redact_l1 (detect_l1 → merge → filter → replace, all in Rust as a
+    # single bundled call) is built, bound, and tested, but is NOT used by this
+    # shim — it is the entry point reserved for the upcoming iOS C ABI.
     if _pre_detected is not None:
         entities = _pre_detected
         langs = [lang] if isinstance(lang, str) else list(lang)
