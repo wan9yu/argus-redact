@@ -17,7 +17,7 @@ use crate::types::PyPatternMatch;
 /// `PyPseudonymGenerator::new` builds its source so the `replace` orchestrator's
 /// pseudonym generators reproduce the exact same Mersenne-Twister stream,
 /// preserving the frozen `P-NNNNN` codes.
-struct PyPseudoFactory;
+pub(crate) struct PyPseudoFactory;
 
 impl PseudoFactory for PyPseudoFactory {
     type Source = PyRandomSource;
@@ -33,9 +33,9 @@ impl PseudoFactory for PyPseudoFactory {
 /// Matches the Python signature `faker_reserved(value, rng) -> (str, list[str])`
 /// (`pure/replacer.py`), so the `_core.ShakeRng` hands the callable the same
 /// deterministic SHAKE stream the Rust engine uses for built-in fakers.
-struct PyFakerFactory {
+pub(crate) struct PyFakerFactory {
     /// type name -> Python callable.
-    fakers: HashMap<String, Py<PyAny>>,
+    pub(crate) fakers: HashMap<String, Py<PyAny>>,
 }
 
 impl FakerFactory for PyFakerFactory {
@@ -136,6 +136,40 @@ fn parse_type_info(d: &Bound<'_, PyDict>) -> PyResult<TypeInfo> {
     })
 }
 
+/// Build the per-type `{type_name: TypeInfo}` map from the Python `type_info`
+/// dict. Shared by `_core.replace` and `_core.redact_l1` so the two bindings
+/// adapt the Python `_build_type_info` shape identically (no field drift).
+pub(crate) fn build_info_map(
+    type_info: &Bound<'_, PyDict>,
+) -> PyResult<HashMap<String, TypeInfo>> {
+    let mut info_map: HashMap<String, TypeInfo> = HashMap::with_capacity(type_info.len());
+    for (k, v) in type_info.iter() {
+        let type_name: String = k.extract()?;
+        let d = v.cast::<PyDict>().map_err(|_| {
+            pyo3::exceptions::PyTypeError::new_err(format!(
+                "type_info['{type_name}'] must be a dict"
+            ))
+        })?;
+        info_map.insert(type_name, parse_type_info(d)?);
+    }
+    Ok(info_map)
+}
+
+/// Build the `{type_name: callable}` custom-faker map from the optional Python
+/// `custom_fakers` dict. Shared by `_core.replace` and `_core.redact_l1`.
+pub(crate) fn build_faker_factory(
+    custom_fakers: Option<&Bound<'_, PyDict>>,
+) -> PyResult<PyFakerFactory> {
+    let mut fakers: HashMap<String, Py<PyAny>> = HashMap::new();
+    if let Some(d) = custom_fakers {
+        for (k, v) in d.iter() {
+            let type_name: String = k.extract()?;
+            fakers.insert(type_name, v.unbind());
+        }
+    }
+    Ok(PyFakerFactory { fakers })
+}
+
 /// `(redacted, key, aliases, keep_downgraded)` — the [`replace`] return shape.
 type ReplaceOut = (String, HashMap<String, String>, HashMap<String, Vec<String>>, bool);
 
@@ -170,27 +204,11 @@ pub fn replace(
     let core_entities: Vec<CorePM> = entities.iter().map(CorePM::from).collect();
 
     // Build the per-type info map.
-    let mut info_map: HashMap<String, TypeInfo> = HashMap::with_capacity(type_info.len());
-    for (k, v) in type_info.iter() {
-        let type_name: String = k.extract()?;
-        let d = v.cast::<PyDict>().map_err(|_| {
-            pyo3::exceptions::PyTypeError::new_err(format!(
-                "type_info['{type_name}'] must be a dict"
-            ))
-        })?;
-        info_map.insert(type_name, parse_type_info(d)?);
-    }
+    let info_map = build_info_map(type_info)?;
 
     // Build the custom-faker map: {type_name: callable}. Empty when no custom
     // fakers are registered (the common path), so we pass `None` to core.
-    let mut fakers: HashMap<String, Py<PyAny>> = HashMap::new();
-    if let Some(d) = custom_fakers {
-        for (k, v) in d.iter() {
-            let type_name: String = k.extract()?;
-            fakers.insert(type_name, v.unbind());
-        }
-    }
-    let py_faker_factory = PyFakerFactory { fakers };
+    let py_faker_factory = build_faker_factory(custom_fakers)?;
     let faker_arg: Option<&dyn FakerFactory> = if py_faker_factory.fakers.is_empty() {
         None
     } else {

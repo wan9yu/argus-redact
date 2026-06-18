@@ -11,6 +11,7 @@ mod grammar;
 mod display_marker;
 mod reserved_range;
 mod replace;
+mod redact_l1;
 mod shake_rng;
 mod seed;
 mod masks;
@@ -41,6 +42,12 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(reserved_range::reserved_range_patterns, m)?)?;
     m.add_function(wrap_pyfunction!(reserved_range::scan_for_pollution, m)?)?;
     m.add_function(wrap_pyfunction!(replace::replace, m)?)?;
+    // ── L1 engine bindings (detect / redact / hints) ──
+    m.add_function(wrap_pyfunction!(redact_l1::detect_l1, m)?)?;
+    m.add_function(wrap_pyfunction!(redact_l1::redact_l1, m)?)?;
+    m.add_function(wrap_pyfunction!(redact_l1::produce_hints_l1, m)?)?;
+    m.add_function(wrap_pyfunction!(redact_l1::get_person_threshold, m)?)?;
+    m.add_function(wrap_pyfunction!(redact_l1::filter_self_reference, m)?)?;
     m.add_class::<crate::shake_rng::PyShakeRng>()?;
     m.add_function(wrap_pyfunction!(shake_rng::seed_from_value, m)?)?;
     m.add_function(wrap_pyfunction!(seed::resolve_salt, m)?)?;
