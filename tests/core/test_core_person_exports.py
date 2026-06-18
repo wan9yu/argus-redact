@@ -124,3 +124,37 @@ def test_en_defaults_match_python():
 def test_empty_text_returns_empty():
     assert _core.detect_person_names_zh("") == []
     assert _core.detect_person_names_en("") == []
+
+
+# ── Pathological known_names must not crash the process (Python parity) ────────
+#
+# fancy_regex (regex-automata) caps compiled size at ~10MB, so a multi-MB single
+# name (or a large alternation) makes Regex::new return Err. The pre-port Python
+# `re` never errors here — it compiles a huge literal and simply finds no match.
+# The core used to `panic!` on Err, which surfaces as a PyO3 `PanicException` — a
+# `BaseException` that escapes `except Exception`. These tests pin the parity fix:
+# the uncompilable name is skipped, normal names still match, and nothing crashes.
+
+
+def test_en_pathological_known_name_does_not_crash():
+    huge = "A" * 500_000
+    out = _core.detect_person_names_en("Email Alice please", [huge, "Alice"])
+    assert _tuples(out) == [("Alice", "person", 6, 11, 1.0, 0)]
+
+
+def test_zh_pathological_known_name_does_not_crash():
+    huge = "张" * 500_000
+    out = _core.detect_person_names_zh("联系李雷", None, [huge, "李雷"])
+    assert _tuples(out) == [("李雷", "person", 2, 4, 1.0, 0)]
+
+
+def test_redact_pathological_name_does_not_raise_panic():
+    """Top-level redact() must not surface a PyO3 PanicException for a huge name."""
+    import argus_redact
+
+    huge = "A" * 500_000
+    redacted, _key = argus_redact.redact(
+        "Email Alice please", lang="en", names=[huge, "Alice"]
+    )
+    # No crash; the normal name is redacted (replacement differs from the input).
+    assert "Alice" not in redacted

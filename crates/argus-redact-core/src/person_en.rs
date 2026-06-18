@@ -136,30 +136,60 @@ pub fn detect_person_names(text: &str, known_names: &[String]) -> Vec<PatternMat
         if !sorted_names.is_empty() {
             sorted_names
                 .sort_by_key(|n| std::cmp::Reverse(n.chars().count()));
+            // Shared per-match emit: append a known-name hit at confidence 1.0,
+            // deduped on the exact (start, end) char span. Used by both the
+            // normal alternation path and the per-name fallback so the emit
+            // semantics stay identical.
+            let emit = |re: &Regex,
+                        results: &mut Vec<PatternMatch>,
+                        seen_spans: &mut HashSet<(usize, usize)>| {
+                for m in re.find_iter(text) {
+                    let m = m.unwrap();
+                    let start = byte_to_char_offset(text, m.start());
+                    let end = byte_to_char_offset(text, m.end());
+                    let span = (start, end);
+                    if !seen_spans.contains(&span) {
+                        results.push(PatternMatch {
+                            text: m.as_str().to_string(),
+                            type_: "person".to_string(),
+                            start,
+                            end,
+                            confidence: 1.0,
+                            layer: 0,
+                        });
+                        seen_spans.insert(span);
+                    }
+                }
+            };
+
             // known_pat = "|".join(re.escape(n) for n in sorted_names)
             let alt = sorted_names
                 .iter()
                 .map(|n| fancy_regex::escape(n).into_owned())
                 .collect::<Vec<_>>()
                 .join("|");
-            let known_pat = Regex::new(&alt).unwrap_or_else(|e| {
-                panic!("person_en: known_names regex compile failed: {e}\nPattern: {alt}")
-            });
-            for m in known_pat.find_iter(text) {
-                let m = m.unwrap();
-                let start = byte_to_char_offset(text, m.start());
-                let end = byte_to_char_offset(text, m.end());
-                let span = (start, end);
-                if !seen_spans.contains(&span) {
-                    results.push(PatternMatch {
-                        text: m.as_str().to_string(),
-                        type_: "person".to_string(),
-                        start,
-                        end,
-                        confidence: 1.0,
-                        layer: 0,
-                    });
-                    seen_spans.insert(span);
+            match Regex::new(&alt) {
+                Ok(known_pat) => {
+                    // Normal case: one alternation, leftmost/longest over the
+                    // whole pattern. Bit-identical to the pre-port Python.
+                    emit(&known_pat, &mut results, &mut seen_spans);
+                }
+                Err(_) => {
+                    // The alternation is too large for fancy_regex (regex-automata)
+                    // to compile (~10MB cap), which happens only for a pathological
+                    // known_names entry (e.g. a multi-MB single name). Python's `re`
+                    // never errors here; match parity by best-effort matching each
+                    // name whose OWN escaped pattern compiles, skipping the
+                    // uncompilable one(s). The per-name order may differ slightly
+                    // from the alternation, but this branch only fires on input that
+                    // cannot appear in a bounded text — so exact parity is both
+                    // unachievable and unobservable, and the normal path above is
+                    // untouched.
+                    for name in &sorted_names {
+                        if let Ok(re) = Regex::new(&fancy_regex::escape(name)) {
+                            emit(&re, &mut results, &mut seen_spans);
+                        }
+                    }
                 }
             }
         }
@@ -446,5 +476,25 @@ mod tests {
             detect("Call John Smith at 555-1234", &[]),
             vec![row("John Smith", 5, 15, 1.0)]
         );
+    }
+
+    #[test]
+    fn pathological_known_name_does_not_panic() {
+        // A known_names list mixing a normal name with a PATHOLOGICAL oversized
+        // name: the joined alternation exceeds fancy_regex's compiled-size cap and
+        // Regex::new returns Err. The pre-port Python `re` never errors here, so we
+        // must NOT panic — the Err branch falls back to per-name matching. The
+        // normal name still matches at confidence 1.0 and the oversized name
+        // (which cannot occur in a bounded text) matches nothing.
+        let huge = "A".repeat(500_000);
+        // Sanity: the oversized name alone (or in the alternation) is what trips the
+        // compiler — proves the Err branch is actually exercised, not dead code.
+        assert!(
+            Regex::new(&fancy_regex::escape(&huge)).is_err(),
+            "expected the oversized literal to exceed fancy_regex's size cap"
+        );
+        let got = detect("Email Alice please", &[&huge, "Alice"]);
+        // Alice is matched at 1.0; the oversized name matches nothing; no panic.
+        assert_eq!(got, vec![row("Alice", 6, 11, 1.0)]);
     }
 }

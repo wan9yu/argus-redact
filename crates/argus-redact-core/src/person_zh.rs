@@ -649,9 +649,17 @@ pub fn detect_person_names(
             }
             // re.finditer(re.escape(name), text) — non-overlapping, char offsets.
             let pat = fancy_regex::escape(name);
-            let re = Regex::new(&pat).unwrap_or_else(|e| {
-                panic!("person_zh: known_name regex compile failed for {name:?}: {e}")
-            });
+            // fancy_regex (regex-automata) has a ~10MB compiled-size cap, so a
+            // pathological multi-MB single name returns Err. Python's `re` never
+            // errors here — it compiles even a huge literal and simply finds no
+            // match. Match that parity by skipping only the uncompilable name;
+            // every compilable name still matches exactly as before, keeping the
+            // normal-case output byte-identical. (Such a name cannot appear in a
+            // ≤1MB text anyway, so skipping it == Python's effective no-match.)
+            let re = match Regex::new(&pat) {
+                Ok(re) => re,
+                Err(_) => continue,
+            };
             for m in re.find_iter(text) {
                 let m = m.unwrap();
                 let start = byte_to_char_offset(text, m.start());
@@ -1351,5 +1359,26 @@ mod tests {
     #[test]
     fn detect_empty_text() {
         assert!(detect("", &[], &[], 0.8).is_empty());
+    }
+
+    #[test]
+    fn pathological_known_name_does_not_panic() {
+        // A known_names list mixing a PATHOLOGICAL oversized CJK name with a normal
+        // name: the oversized name's escaped pattern exceeds fancy_regex's compiled-
+        // size cap and Regex::new returns Err. The pre-port Python `re` never errors
+        // here, so we must NOT panic — the per-name loop `continue`s past the
+        // uncompilable name. The normal name still matches exactly at confidence
+        // 1.0; the oversized name (which cannot occur in a bounded text) matches
+        // nothing.
+        let huge: String = std::iter::repeat('张').take(500_000).collect();
+        // Sanity: the oversized name alone is what trips the compiler — proves the
+        // skip path is actually exercised, not dead code.
+        assert!(
+            Regex::new(&fancy_regex::escape(&huge)).is_err(),
+            "expected the oversized literal to exceed fancy_regex's size cap"
+        );
+        let got = detect("联系李雷", &[], &[&huge, "李雷"], 0.8);
+        // 李雷 is matched at 1.0 (known name); the oversized name matches nothing.
+        assert_eq!(got, vec![("李雷".to_string(), 2, 4, 1.0)]);
     }
 }
