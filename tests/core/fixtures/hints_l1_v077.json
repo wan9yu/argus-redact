@@ -1,0 +1,589 @@
+{
+  "emoji_prefix": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "en_address": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "en_realistic": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "intent_casual_zh": [
+    {
+      "data": {
+        "has_kinship": false,
+        "tier": 2
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "self_reference_tier"
+    },
+    {
+      "data": {
+        "intent": "casual"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "intent_instruction_en": [
+    {
+      "data": {
+        "has_kinship": false,
+        "tier": 3
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "self_reference_tier"
+    },
+    {
+      "data": {
+        "intent": "instruction"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "intent_instruction_zh": [
+    {
+      "data": {
+        "has_kinship": false,
+        "tier": 3
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "self_reference_tier"
+    },
+    {
+      "data": {
+        "intent": "instruction"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "intent_narrative_zh": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "intent_neutral_zh": [
+    {
+      "data": {
+        "intent": "neutral"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "jwt_invalid_2seg": [
+    {
+      "data": {
+        "intent": "neutral"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "jwt_invalid_noalg": [
+    {
+      "data": {
+        "intent": "neutral"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "jwt_valid": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "known_names": [
+    {
+      "data": {
+        "intent": "neutral"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "near_miss_id": [
+    {
+      "data": {
+        "intent": "neutral"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "org_nearmiss": [
+    {
+      "data": {
+        "intent": "neutral"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "org_valid": [
+    {
+      "data": {
+        "has_kinship": false,
+        "tier": 1
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "self_reference_tier"
+    },
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "roundtrip_en_faker": [
+    {
+      "data": {
+        "has_kinship": false,
+        "tier": 2
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "self_reference_tier"
+    },
+    {
+      "data": {
+        "intent": "casual"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "roundtrip_zh_realistic": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "school_nearmiss": [
+    {
+      "data": {
+        "intent": "neutral"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "school_valid": [
+    {
+      "data": {
+        "has_kinship": false,
+        "tier": 1
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "self_reference_tier"
+    },
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "selfref_tier1_kinship": [
+    {
+      "data": {
+        "has_kinship": true,
+        "tier": 1
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "self_reference_tier"
+    },
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "selfref_tier2_pronoun": [
+    {
+      "data": {
+        "has_kinship": false,
+        "tier": 2
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "self_reference_tier"
+    },
+    {
+      "data": {
+        "intent": "casual"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "selfref_tier3_command": [
+    {
+      "data": {
+        "has_kinship": false,
+        "tier": 3
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "self_reference_tier"
+    },
+    {
+      "data": {
+        "intent": "instruction"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "shared_email_ip": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "threshold_flip_instruction": [
+    {
+      "data": {
+        "has_kinship": false,
+        "tier": 3
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "self_reference_tier"
+    },
+    {
+      "data": {
+        "intent": "instruction"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "threshold_flip_narrative": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "unified": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "unified_prefix": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "zh_category": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "zh_collision": [
+    {
+      "data": {
+        "intent": "neutral"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "zh_default": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "zh_keep": [
+    {
+      "data": {
+        "has_kinship": true,
+        "tier": 1
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "self_reference_tier"
+    },
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "zh_landline_mask": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "zh_mask": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "zh_name_mask": [
+    {
+      "data": {
+        "intent": "neutral"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ],
+  "zh_realistic": [
+    {
+      "data": {
+        "intent": "narrative"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "text_intent"
+    }
+  ]
+}

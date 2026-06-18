@@ -1,0 +1,209 @@
+{
+  "emoji_prefix": {
+    "key": {
+      "138****5678": "13812345678",
+      "P-83811": "张三"
+    },
+    "redacted": "🎉P-83811的电话138****5678"
+  },
+  "en_address": {
+    "key": {
+      "31 Spooner Street, Quahog, USA": "1600 Pennsylvania Ave"
+    },
+    "redacted": "lives at 31 Spooner Street, Quahog, USA"
+  },
+  "en_realistic": {
+    "key": {
+      "999-47-9373": "123-45-6789",
+      "9999996421710008": "4111111111111111",
+      "Richard Roe": "John Smith"
+    },
+    "redacted": "Richard Roe SSN 999-47-9373 card 9999996421710008"
+  },
+  "intent_casual_zh": {
+    "key": {},
+    "redacted": "我今天很开心"
+  },
+  "intent_instruction_en": {
+    "key": {
+      "P-83811": "John Smith"
+    },
+    "redacted": "Can you tell me about P-83811?"
+  },
+  "intent_instruction_zh": {
+    "key": {},
+    "redacted": "帮我查一下张三的电话号码"
+  },
+  "intent_narrative_zh": {
+    "key": {
+      "138****5678": "13812345678",
+      "P-83811": "张三"
+    },
+    "redacted": "P-83811的电话138****5678"
+  },
+  "intent_neutral_zh": {
+    "key": {},
+    "redacted": "今天天气不错"
+  },
+  "jwt_invalid_2seg": {
+    "key": {},
+    "redacted": "token is eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ"
+  },
+  "jwt_invalid_noalg": {
+    "key": {},
+    "redacted": "token is eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiIxMjMifQ.sig"
+  },
+  "jwt_valid": {
+    "key": {
+      "JWT-21680": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.sig"
+    },
+    "redacted": "token is JWT-21680"
+  },
+  "known_names": {
+    "key": {
+      "P-14593": "司马光",
+      "P-83811": "欧阳明"
+    },
+    "redacted": "P-83811和P-14593开会"
+  },
+  "near_miss_id": {
+    "key": {},
+    "redacted": "身份证110101199003074611"
+  },
+  "org_nearmiss": {
+    "key": {},
+    "redacted": "这是公司"
+  },
+  "org_valid": {
+    "key": {
+      "O-05054": "在阿里巴巴有限公司"
+    },
+    "redacted": "我O-05054上班"
+  },
+  "roundtrip_en_faker": {
+    "key": {
+      "Mary Roe": "张三"
+    },
+    "redacted": "Mary Roe给我发了邮件"
+  },
+  "roundtrip_zh_realistic": {
+    "key": {
+      "138****5678": "13812345678",
+      "卷帘": "张三"
+    },
+    "redacted": "卷帘的电话138****5678"
+  },
+  "school_nearmiss": {
+    "key": {},
+    "redacted": "这是大学"
+  },
+  "school_valid": {
+    "key": {
+      "P-83811": "毕业于北京大学"
+    },
+    "redacted": "我P-83811"
+  },
+  "selfref_tier1_kinship": {
+    "key": {
+      "138****5678": "13812345678"
+    },
+    "redacted": "我妈说她的电话是138****5678"
+  },
+  "selfref_tier2_pronoun": {
+    "key": {},
+    "redacted": "我在这里"
+  },
+  "selfref_tier3_command": {
+    "key": {},
+    "redacted": "帮我看看我说的对不对"
+  },
+  "shared_email_ip": {
+    "key": {
+      "IP-94349": "8.8.8.8",
+      "a***@b.com": "a@b.com"
+    },
+    "redacted": "mail a***@b.com from IP-94349"
+  },
+  "threshold_flip_instruction": {
+    "key": {},
+    "redacted": "帮我查一下王芳的资料"
+  },
+  "threshold_flip_narrative": {
+    "key": {
+      "138****5678": "13812345678",
+      "P-83811": "王芳"
+    },
+    "redacted": "P-83811的电话是138****5678"
+  },
+  "unified": {
+    "key": {
+      "138****5678": "13812345678",
+      "ID-03292": "110101199003074610",
+      "P-83811": "张三"
+    },
+    "redacted": "P-83811 138****5678 ID-03292"
+  },
+  "unified_prefix": {
+    "key": {
+      "138****5678": "13812345678",
+      "R-03292": "110101199003074610",
+      "R-83811": "张三"
+    },
+    "redacted": "R-83811 138****5678 R-03292"
+  },
+  "zh_category": {
+    "key": {
+      "[address]": "北京市朝阳区三里"
+    },
+    "redacted": "[address]屯"
+  },
+  "zh_collision": {
+    "key": {
+      "张*": "张三",
+      "李*": "李四"
+    },
+    "redacted": "张* 张* 李* 张*"
+  },
+  "zh_default": {
+    "key": {
+      "138****5678": "13812345678",
+      "ID-03292": "110101199003074610",
+      "P-83811": "张三"
+    },
+    "redacted": "P-83811的电话138****5678，身份证ID-03292"
+  },
+  "zh_keep": {
+    "key": {
+      "138****5678": "13812345678"
+    },
+    "redacted": "我妈说她138****5678"
+  },
+  "zh_landline_mask": {
+    "key": {
+      "010-*****678": "010-12345678"
+    },
+    "redacted": "座机 010-*****678"
+  },
+  "zh_mask": {
+    "key": {
+      "138****5678": "13812345678",
+      "621700******0000": "6217000000000000"
+    },
+    "redacted": "电话138****5678 银行卡621700******0000"
+  },
+  "zh_name_mask": {
+    "key": {
+      "张*": "张三",
+      "欧**": "欧阳明"
+    },
+    "redacted": "张*和欧**"
+  },
+  "zh_realistic": {
+    "key": {
+      "19999892122": "13812345678",
+      "999837198308135463": "110101199003074610",
+      "卷帘": "张三"
+    },
+    "redacted": "卷帘的电话19999892122，身份证999837198308135463"
+  }
+}
