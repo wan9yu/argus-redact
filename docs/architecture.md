@@ -145,7 +145,7 @@ L1b combines two independent distance mechanisms — they are not the same numbe
 
 **(a) Prefix/suffix keyword window — ±20 chars**
 
-`src/argus_redact/lang/zh/person.py:_CONTEXT_WINDOW = 20`. Within 20 chars before/after the candidate, the scorer scans for:
+`crates/argus-redact-core/src/person_zh.rs:const CONTEXT_WINDOW: usize = 20`. Within 20 chars before/after the candidate, the scorer scans for:
 
 - Context prefix → +0.6 (`客户` / `我是` / `姓名` / `主治医生` …)
 - Honorific suffix → +0.5 (`先生` / `女士` / `老师` / `教授` …)

@@ -202,9 +202,16 @@ def _zh_edge_cases() -> list[dict]:
 def _zh_surname_sweep_cases() -> list[dict]:
     """Each single surname once in minimal positive context — locks the pool."""
     # Local import: only the regeneration (__main__) path builds the sweep
-    # corpus, so the replay+assert path never needs surnames.py. Keeping it
-    # lazy lets this test keep collecting if surnames.py is later removed.
-    from argus_redact.lang.zh.surnames import SURNAMES
+    # corpus, so the replay+assert path never needs the surname pool. Keeping it
+    # lazy keeps the replay gate independent of the regen-only source.
+    # The frozen golden was captured pre-port; this regen path now re-captures
+    # CURRENT (Rust-backed) output and is intended only for a deliberate
+    # re-freeze. Source the pool from the Rust SSOT (`_core.person_surnames_zh()`,
+    # the same 138 single-char surnames) — the old `lang.zh.surnames` module was
+    # removed during the port.
+    import argus_redact._core as _core
+
+    SURNAMES = _core.person_surnames_zh()
 
     cases = []
     for s in SURNAMES:

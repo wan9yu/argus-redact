@@ -308,7 +308,7 @@ Chinese passport number
 | Examples | `客户张三`, `联系人王小明`, `赵敏女士` |
 | Source | 公安部全国姓名统计, 百家姓 |
 
-Chinese person name (candidate generation + evidence scoring, see person.py)
+Chinese person name (candidate generation + evidence scoring). The detection logic lives in the Rust core (`crates/argus-redact-core/src/person_zh.rs`, with English in `person_en.rs`); the `lang/zh/person.py` module is a thin `_core` FFI shim over it.
 
 ### `phone`
 
