@@ -190,7 +190,8 @@ def _py_pre_merge_detect(text, langs, names=None):
     """
     import re
 
-    from argus_redact.glue.redact import _load_patterns, _tag_layer, LAYER_REGEX
+    from argus_redact.glue.redact import _load_patterns, _tag_layer
+    from argus_redact.layers import LAYER_REGEX
     from argus_redact.pure.hints import get_person_threshold
     from argus_redact.pure.normalize import map_spans_to_original, normalize_text
     from argus_redact.pure.patterns import match_patterns
