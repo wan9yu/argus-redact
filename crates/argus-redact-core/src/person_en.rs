@@ -144,7 +144,11 @@ pub fn detect_person_names(text: &str, known_names: &[String]) -> Vec<PatternMat
                         results: &mut Vec<PatternMatch>,
                         seen_spans: &mut HashSet<(usize, usize)>| {
                 for m in re.find_iter(text) {
-                    let m = m.unwrap();
+                    // fancy_regex yields Err on backtrack-limit / stack overflow
+                    // for pathological input (e.g. a ~1MB single token). Python's
+                    // `re` never errors here; stop gracefully on the first Err
+                    // rather than panicking, mirroring patterns.rs.
+                    let Ok(m) = m else { break };
                     let start = byte_to_char_offset(text, m.start());
                     let end = byte_to_char_offset(text, m.end());
                     let span = (start, end);
@@ -200,15 +204,19 @@ pub fn detect_person_names(text: &str, known_names: &[String]) -> Vec<PatternMat
     let given_names = given_names_en_set();
 
     // tokens = list(_TOKEN_PAT.finditer(text)) — char offsets.
+    // `map_while(Result::ok)` stops at the first Err, mirroring the graceful
+    // `Err(_) => break` convention in patterns.rs: fancy_regex returns Err on
+    // backtrack-limit / stack overflow for pathological input (a ~1MB single
+    // token), where Python's `re` never errors — so stop tokenizing rather than
+    // panic. On all non-pathological input every match is Ok, so this is
+    // bit-identical to the previous `.unwrap()`.
     let tokens: Vec<Token> = TOKEN_PAT
         .find_iter(text)
-        .map(|m| {
-            let m = m.unwrap();
-            Token {
-                word: m.as_str().to_string(),
-                start: byte_to_char_offset(text, m.start()),
-                end: byte_to_char_offset(text, m.end()),
-            }
+        .map_while(Result::ok)
+        .map(|m| Token {
+            word: m.as_str().to_string(),
+            start: byte_to_char_offset(text, m.start()),
+            end: byte_to_char_offset(text, m.end()),
         })
         .collect();
 
@@ -496,5 +504,20 @@ mod tests {
         let got = detect("Email Alice please", &[&huge, "Alice"]);
         // Alice is matched at 1.0; the oversized name matches nothing; no panic.
         assert_eq!(got, vec![row("Alice", 6, 11, 1.0)]);
+    }
+
+    #[test]
+    fn pathological_single_token_does_not_panic() {
+        // A ~1MB single token can trip fancy_regex's backtrack limit / stack
+        // overflow inside TOKEN_PAT.find_iter (and the known_names emit), which
+        // previously PANICKED via `.unwrap()`. The graceful `map_while(Result::ok)`
+        // / `let Ok(m) = m else { break }` must return a Vec instead of panicking.
+        let pathological = "A".to_string() + &"a".repeat(1_000_000);
+        // Just calling it must not panic; the result is whatever the graceful
+        // scan produces (possibly empty) — we only assert it returns a Vec.
+        let _got: Vec<PatternMatch> = detect_person_names(&pathological, &[]);
+        // Also exercise the known_names emit path on the same input.
+        let _got2: Vec<PatternMatch> =
+            detect_person_names(&pathological, &["Alice".to_string()]);
     }
 }

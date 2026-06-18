@@ -423,3 +423,19 @@ def test_redact_l1_type_filter_exclude_listed():
     )
     assert "13812345678" in redacted
     assert "621700******0000" in redacted
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# pathological input — must not panic (graceful find_iter on backtrack/overflow)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def test_redact_pathological_single_token_does_not_raise():
+    """A ~1MB single token (within the 1MB cap) tripped fancy_regex's backtrack /
+    stack-overflow limit, which used to escape as a PanicException from `redact`.
+    The graceful `find_iter` now stops scanning rather than panicking, so the
+    public API must return cleanly (no PanicException, no other raise)."""
+    pathological = "A" + "a" * 1_000_000  # 1,000,001 chars, under the 1MB cap
+    # Just must not raise — the result is whatever the graceful scan yields.
+    redacted, _key = redact(pathological, lang="en", mode="fast")
+    assert isinstance(redacted, str)

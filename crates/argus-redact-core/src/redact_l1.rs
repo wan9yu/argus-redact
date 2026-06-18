@@ -236,7 +236,11 @@ pub fn detect_l1(
             // name can't panic.
             if let Ok(re) = Regex::new(&fancy_regex::escape(name)) {
                 for m in re.find_iter(text) {
-                    let m = m.unwrap();
+                    // The compile above is guarded, but per-match find_iter still
+                    // yields Err on backtrack-limit / stack overflow for
+                    // pathological input. Stop gracefully rather than panicking,
+                    // mirroring patterns.rs; bit-identical on normal input.
+                    let Ok(m) = m else { break };
                     let start = byte_to_char_offset(text, m.start());
                     let end = byte_to_char_offset(text, m.end());
                     person.push(PatternMatch {

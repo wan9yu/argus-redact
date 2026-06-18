@@ -215,7 +215,10 @@ pub(crate) fn generate_candidates(text: &str, chars: &[char]) -> Vec<NameCandida
     // Compound surnames first (longer match wins).
     //   for m in _COMPOUND_PAT.finditer(text): _emit(m, is_compound=True)
     for m in COMPOUND_PAT.find_iter(text) {
-        let m = m.unwrap();
+        // fancy_regex yields Err on backtrack-limit / stack overflow for
+        // pathological input; Python's `re` never errors here. Stop gracefully
+        // rather than panicking, mirroring patterns.rs.
+        let Ok(m) = m else { break };
         let m_start = byte_to_char_offset(text, m.start());
         emit(m.as_str(), m_start, true, &mut candidates, &mut seen_starts);
     }
@@ -226,7 +229,9 @@ pub(crate) fn generate_candidates(text: &str, chars: &[char]) -> Vec<NameCandida
     //       if any(m.start() >= c.start and m.end() <= c.end for c in candidates): continue
     //       _emit(m)
     for m in SINGLE_PAT.find_iter(text) {
-        let m = m.unwrap();
+        // Stop gracefully on backtrack-limit / overflow Err (see COMPOUND_PAT
+        // above); bit-identical on all non-pathological input.
+        let Ok(m) = m else { break };
         let m_start = byte_to_char_offset(text, m.start());
         let m_end = byte_to_char_offset(text, m.end());
         if seen_starts.contains(&m_start) {
@@ -673,7 +678,9 @@ pub fn detect_person_names(
                 Err(_) => continue,
             };
             for m in re.find_iter(text) {
-                let m = m.unwrap();
+                // Stop gracefully on backtrack-limit / overflow Err rather than
+                // panicking; bit-identical on all non-pathological input.
+                let Ok(m) = m else { break };
                 let start = byte_to_char_offset(text, m.start());
                 let end = byte_to_char_offset(text, m.end());
                 results.push(PatternMatch {
@@ -1406,5 +1413,20 @@ mod tests {
         let got = detect("联系李雷", &[], &[&huge, "李雷"], 0.8);
         // 李雷 is matched at 1.0 (known name); the oversized name matches nothing.
         assert_eq!(got, vec![("李雷".to_string(), 2, 4, 1.0)]);
+    }
+
+    #[test]
+    fn pathological_single_token_does_not_panic() {
+        // A ~1MB single repeated CJK char can trip fancy_regex's backtrack limit /
+        // stack overflow inside COMPOUND_PAT / SINGLE_PAT.find_iter (and the
+        // per-name known_names emit), which previously PANICKED via `.unwrap()`.
+        // The graceful `let Ok(m) = m else { break }` must return a Vec instead.
+        let pathological: String = std::iter::repeat('张').take(1_000_000).collect();
+        // Just calling it must not panic; the result is whatever the graceful scan
+        // produces — we only assert it returns a Vec.
+        let _got = detect_person_names(&pathological, &[], &[], 0.8);
+        // Also exercise the per-name known_names emit path on the same input.
+        let _got2 =
+            detect_person_names(&pathological, &[], &["李雷".to_string()], 0.8);
     }
 }
