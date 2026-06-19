@@ -17,7 +17,7 @@
     PatternData(
         type_: r"credit_card",
         label: r"[CARD REDACTED]",
-        pattern: r"(?<!\d)[3-6]\d{3}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}(?!\d)",
+        pattern: r"(?<!\d)(?:3[47]\d{2}[-\s]?\d{6}[-\s]?\d{5}|3(?:0[0-5]|[68]\d)\d[-\s]?\d{6}[-\s]?\d{4}|[3-6]\d{3}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4})(?!\d)",
         validator: Some(r"credit_card_luhn"),
         check_context: true,
         description: r"Credit card number (Luhn checksum)",

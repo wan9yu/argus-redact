@@ -26,7 +26,8 @@ pub fn luhn_check_digit(body: &str) -> u32 {
 
 pub fn validate_luhn(value: &str) -> bool {
     let digits: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
-    if digits.len() < 16 { return false; }
+    // 13 is the minimum plausible card length; callers needing a stricter floor (e.g. CN bank ≥16) guard separately.
+    if digits.len() < 13 { return false; }
     let (body, last) = digits.split_at(digits.len() - 1);
     luhn_check_digit(body) == last.parse::<u32>().unwrap()
 }
@@ -34,6 +35,10 @@ pub fn validate_luhn(value: &str) -> bool {
 pub fn validate_credit_card_luhn(value: &str) -> bool {
     let digits_only: String = value.replace(['-', ' '], "");
     if digits_only.is_empty() || !digits_only.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    // PAN length per ISO/IEC 7812 is 13–19 digits; bound here defensively, independent of the regex.
+    if digits_only.len() < 13 || digits_only.len() > 19 {
         return false;
     }
     validate_luhn(&digits_only)
@@ -455,9 +460,13 @@ mod tests {
 
     #[test]
     fn luhn_and_cards() {
-        assert!(validate_credit_card_luhn("4111111111111111"));   // canonical Visa test
+        assert!(validate_credit_card_luhn("4111111111111111"));   // canonical Visa test (16)
         assert!(!validate_credit_card_luhn("4111111111111112"));
         assert!(!validate_credit_card_luhn("4111-1111-11AB-1111"));
+        assert!(validate_credit_card_luhn("378282246310005"));    // canonical Amex test (15)
+        assert!(validate_credit_card_luhn("30569309025904"));     // canonical Diners test (14)
+        assert!(!validate_credit_card_luhn("123456789012"));      // 12 digits — below floor
+        assert!(!validate_credit_card_luhn("12345678901234567890")); // 20 digits — above ceiling
         assert!(validate_cn_bank_card("6217000000000000")); // BIN-prefix fallback path
     }
 

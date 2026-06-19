@@ -16,7 +16,8 @@ def luhn_check_digit(body: str) -> int:
 def validate_luhn(value: str) -> bool:
     """Luhn checksum — shared by all languages' bank/credit card validation."""
     digits = "".join(d for d in value if d.isdigit())
-    if len(digits) < 16:
+    # 13 is the minimum plausible card length; callers needing a stricter floor (e.g. CN bank ≥16) guard separately.
+    if len(digits) < 13:
         return False
     return luhn_check_digit(digits[:-1]) == int(digits[-1])
 
