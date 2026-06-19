@@ -1,4 +1,4 @@
-.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check perf-update perf-check sync-docs-version sync-docs-version-check
+.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check gen-confusables gen-confusables-check perf-update perf-check sync-docs-version sync-docs-version-check
 
 install:
 	pip install -e .
@@ -48,6 +48,12 @@ gen-risk-data:
 
 gen-risk-data-check:
 	@PYTHONPATH=src python -m argus_redact.specs.gen_risk_data --check
+
+gen-confusables:
+	PYTHONPATH=src python -m argus_redact.specs.gen_confusables
+
+gen-confusables-check:
+	@PYTHONPATH=src python -m argus_redact.specs.gen_confusables --check
 
 perf-update:
 	PYTHONPATH=src python tests/benchmark/run_perf_budget.py \

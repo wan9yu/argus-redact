@@ -3,7 +3,7 @@
 //! Pipeline (must stay bit-identical to the Python original):
 //!   1. ASCII fast-path (skip everything if pure ASCII)
 //!   2. Strip invisible / direction-control characters (build char-index offset map)
-//!   3. Replace confusables (Cyrillic/Greek -> Latin), 1:1
+//!   3. Replace confusables (Latin/Cyrillic/Greek/Coptic look-alikes -> ASCII), 1:1
 //!   4. Per-char NFKC normalization (each source char normalized independently —
 //!      NO cross-char composition) — only run if the joined string isn't already NFKC
 //!   5. Contextual digit normalization (Chinese-digit sequences -> ASCII digits)
@@ -20,21 +20,13 @@ fn is_invisible(c: char) -> bool {
 }
 
 fn confusable(c: char) -> char {
-    // _CONFUSABLES (normalize.py:43-95): Cyrillic + Greek -> Latin, 1:1 (47 entries)
-    match c {
-        // Cyrillic -> Latin
-        '\u{0430}'=>'a','\u{0435}'=>'e','\u{043e}'=>'o','\u{0440}'=>'p','\u{0441}'=>'c',
-        '\u{0443}'=>'y','\u{0445}'=>'x','\u{0456}'=>'i','\u{04bb}'=>'h','\u{0432}'=>'b',
-        '\u{043a}'=>'k','\u{043c}'=>'m','\u{0442}'=>'t','\u{043d}'=>'h','\u{0410}'=>'A',
-        '\u{0412}'=>'B','\u{0415}'=>'E','\u{041a}'=>'K','\u{041c}'=>'M','\u{041d}'=>'H',
-        '\u{041e}'=>'O','\u{0420}'=>'P','\u{0421}'=>'C','\u{0422}'=>'T','\u{0425}'=>'X','\u{0423}'=>'Y',
-        // Greek -> Latin
-        '\u{03bf}'=>'o','\u{03b1}'=>'a','\u{03b5}'=>'e','\u{03b9}'=>'i','\u{03ba}'=>'k',
-        '\u{03bd}'=>'v','\u{03c1}'=>'p','\u{03c4}'=>'t','\u{039f}'=>'O','\u{0391}'=>'A',
-        '\u{0392}'=>'B','\u{0395}'=>'E','\u{0397}'=>'H','\u{0399}'=>'I','\u{039a}'=>'K',
-        '\u{039c}'=>'M','\u{039d}'=>'N','\u{03a1}'=>'P','\u{03a4}'=>'T','\u{03a7}'=>'X','\u{0396}'=>'Z',
-        other => other,
-    }
+    // Cyrillic / Greek / Coptic look-alikes -> ASCII Latin, 1:1. Generated from
+    // the Unicode UTS #39 confusables data + curated overlay (parity-gated by
+    // tests/architecture/test_confusables_parity.py). See src/confusables.rs.
+    crate::confusables::confusable_map()
+        .get(&c)
+        .copied()
+        .unwrap_or(c)
 }
 
 fn cn_digit(c: char) -> Option<char> {
@@ -186,6 +178,21 @@ mod tests {
         let (out, map) = normalize_text("\u{0430}bc"); // а(Cyrillic)bc
         assert_eq!(out, "abc");
         assert!(map.is_some());
+    }
+
+    #[test]
+    fn confusable_generated_capital_s() {
+        // U+0405 (Ѕ, CYRILLIC DZE) is a newly-covered confusable -> 'S'.
+        let (out, map) = normalize_text("\u{0405}mith"); // Ѕmith
+        assert_eq!(out, "Smith");
+        assert!(map.is_some());
+    }
+
+    #[test]
+    fn confusable_curated_cyrillic_ve() {
+        // Curated в (U+0432) -> 'b' must still fold.
+        let (out, _map) = normalize_text("\u{0432}ad"); // вad
+        assert_eq!(out, "bad");
     }
 
     #[test]

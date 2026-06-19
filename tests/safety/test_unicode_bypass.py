@@ -128,6 +128,18 @@ class TestHomoglyphBypass:
 
         assert "\u0430" in restored or "a" in restored
 
+    def test_should_detect_email_with_cyrillic_dze(self):
+        """Newly-covered confusable: U+0455 CYRILLIC SMALL LETTER DZE -> s.
+
+        Not in the original curated 47 — only the generated UTS #39 table covers it.
+        """
+        text = "邮箱\u0455mith@gmail.com"  # \u0455mith@gmail.com -> smith@gmail.com
+        redacted, key = redact(text, salt=42, mode="fast")
+
+        assert len(key) >= 1, "Email with Cyrillic \u0455 should be detected"
+        # Normalized email (with homoglyph folded to ASCII) must not appear in output
+        assert "smith@gmail.com" not in redacted
+
 
 class TestUnifiedPrefix:
     """Unified prefix hides PII type from output."""

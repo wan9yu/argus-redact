@@ -14,6 +14,7 @@ pub mod validators;
 pub mod data;
 pub mod lang_detect;
 pub mod normalize;
+pub mod confusables;
 pub mod grammar;
 pub mod display_marker;
 pub mod seed;
