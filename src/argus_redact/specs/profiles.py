@@ -44,17 +44,7 @@ PROFILES = {
         "config": _STRICT_STRATEGIES,
     },
     "hipaa": {
-        "description": "US HIPAA — 18 PHI identifiers",
-        "types": [
-            "phone",
-            "id_number",
-            "ssn",
-            "date_of_birth",
-            "email",
-            "address",
-            "person",
-            "ip_address",
-        ],
+        "description": "US HIPAA — strict strategies over all detected identifiers",
         "config": _STRICT_STRATEGIES,
     },
     "pseudonym-llm": {
