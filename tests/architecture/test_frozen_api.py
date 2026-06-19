@@ -40,6 +40,7 @@ LAYER_1_EXPORTED = frozenset({
     "max_pseudonym_length",
     "SecurityWarning",
     "SessionStateError",
+    "LayerUnavailableError",
     "PseudonymPollutionError",
 })
 
@@ -59,6 +60,7 @@ def test_layer_1_signatures_frozen(name, expected):
 FROZEN_EXCEPTION_PARENTS = {
     "SecurityWarning": "UserWarning",
     "SessionStateError": "RuntimeError",
+    "LayerUnavailableError": "RuntimeError",
     "PseudonymPollutionError": "ValueError",
 }
 
