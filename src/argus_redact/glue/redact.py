@@ -449,6 +449,17 @@ def redact(
     if types is not None and types_exclude is not None:
         raise ValueError("types and types_exclude are mutually exclusive")
 
+    if salt is not None and (
+        isinstance(salt, int)
+        or (isinstance(salt, (bytes, bytearray)) and len(salt) < 16)
+    ):
+        warnings.warn(
+            "low-entropy salt: an integer or short salt is grid-searchable on small "
+            "PII domains; prefer salt=os.urandom(32) for the forward-secure mapping claim.",
+            SecurityWarning,
+            stacklevel=2,
+        )
+
     # Resolve profile → types filter + strategy overrides
     if profile is not None:
         from argus_redact.specs.profiles import get_profile

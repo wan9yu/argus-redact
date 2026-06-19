@@ -41,3 +41,17 @@ def test_auto_mode_strict_raises(monkeypatch):
     monkeypatch.setattr(r, "_get_semantic_adapter", lambda: None)
     with pytest.raises(LayerUnavailableError):
         redact("Contact John Smith", lang="en", mode="auto", salt=42, strict=True)
+
+
+def test_low_entropy_int_salt_warns():
+    from argus_redact import SecurityWarning
+    with pytest.warns(SecurityWarning, match="low-entropy salt"):
+        redact("电话13800138000", lang="zh", mode="fast", salt=42)
+
+
+def test_strong_salt_no_warning(recwarn):
+    import argus_redact
+    redact("电话13800138000", lang="zh", mode="fast", salt=b"\x00" * 32)
+    assert not any(
+        issubclass(w.category, argus_redact.SecurityWarning) for w in recwarn
+    )
