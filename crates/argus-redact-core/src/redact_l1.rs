@@ -141,6 +141,13 @@ pub fn detect_l1(
     lang: &[String],
     names: &[String],
 ) -> Result<DetectL1Result, PatternError> {
+    if text.len() > crate::MAX_INPUT_SIZE {
+        return Err(PatternError(format!(
+            "input too large: {} bytes exceeds MAX_INPUT_SIZE {}",
+            text.len(),
+            crate::MAX_INPUT_SIZE
+        )));
+    }
     // 1. Normalize. use_normalized iff an offset map was produced.
     let (normalized, offset_map) = normalize_text(text);
     let use_normalized = offset_map.is_some();

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, LazyLock};
 
-use fancy_regex::Regex;
+use fancy_regex::{Regex, RegexBuilder};
 
 use crate::reserved_range::byte_to_char_offset;
 use crate::types::PatternMatch;
@@ -26,14 +26,26 @@ impl std::fmt::Display for PatternError {
 static REGEX_CACHE: LazyLock<Mutex<HashMap<String, Arc<Regex>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
+/// fancy-regex backtracking budget per scan. The library default (1M steps)
+/// is too low for some built-in patterns (the zh `organization` / `school`
+/// alternations) over large but LEGITIMATE repetitive input below
+/// [`crate::MAX_INPUT_SIZE`]: they would abort and — with the fail-closed scan
+/// loop — raise rather than match. Raising the budget lets sub-1MB input
+/// complete while still bounding truly pathological (super-linear) patterns:
+/// the [`PatternError`] from an exceeded budget is surfaced (fail closed), not
+/// silently swallowed. Chosen comfortably above what the built-ins need on a
+/// full 1MB input, yet finite so a genuinely catastrophic pattern still aborts.
+const BACKTRACK_LIMIT: usize = 1_000_000_000;
+
 fn get_regex(pattern: &str) -> Result<Arc<Regex>, PatternError> {
     let mut cache = REGEX_CACHE.lock().unwrap();
     if let Some(re) = cache.get(pattern) {
         return Ok(Arc::clone(re));
     }
-    let re = Regex::new(pattern).map_err(|e| {
-        PatternError(format!("Invalid regex: {e}"))
-    })?;
+    let re = RegexBuilder::new(pattern)
+        .backtrack_limit(BACKTRACK_LIMIT)
+        .build()
+        .map_err(|e| PatternError(format!("Invalid regex: {e}")))?;
     let arc = Arc::new(re);
     cache.insert(pattern.to_string(), Arc::clone(&arc));
     Ok(arc)
@@ -91,6 +103,13 @@ fn looks_like_false_positive(text: &str, start: usize, end: usize) -> bool {
 /// still returned but tagged `confidence = 0.3` (a near-miss) for the caller to
 /// route. Unknown validator names are a no-op (handled by the Python path).
 pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<PatternMatch>, PatternError> {
+    if text.len() > crate::MAX_INPUT_SIZE {
+        return Err(PatternError(format!(
+            "input too large: {} bytes exceeds MAX_INPUT_SIZE {}",
+            text.len(),
+            crate::MAX_INPUT_SIZE
+        )));
+    }
     if text.is_empty() || patterns.is_empty() {
         return Ok(vec![]);
     }
@@ -106,7 +125,11 @@ pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<Patt
             let m = match re.find_from_pos(text, search_start) {
                 Ok(Some(m)) => m,
                 Ok(None) => break,
-                Err(_) => break,
+                Err(e) => {
+                    return Err(PatternError(format!(
+                        "pattern scan aborted (backtrack/overflow): {e}"
+                    )))
+                }
             };
 
             let mut matched = m.as_str().to_string();
@@ -194,5 +217,13 @@ mod tests {
         let out = match_patterns("x 123-45-6789 y", &[cfg]).unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].confidence, 1.0);
+    }
+    #[test]
+    fn rejects_oversized_input() {
+        let big = "a".repeat(crate::MAX_INPUT_SIZE + 1);
+        let pats = vec![PatternConfig {
+            type_: "x".into(), pattern: "a".into(), check_context: false, group: None, validator: None,
+        }];
+        assert!(match_patterns(&big, &pats).is_err());
     }
 }
