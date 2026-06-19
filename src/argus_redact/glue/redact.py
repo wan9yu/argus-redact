@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import importlib
 import json
 import logging
@@ -33,6 +34,21 @@ logger = logging.getLogger(__name__)
 
 # Cached telemetry constants (resolved once at import, not per-call)
 from argus_redact._core_loader import HAS_CORE as _RUST_CORE, _core
+
+
+@functools.lru_cache(maxsize=1)
+def _warn_ablation_once() -> None:
+    """Warn ONCE per process if any research ablation env toggle is active.
+
+    These toggles ship in the wheel (research ablation hooks); a privacy tool
+    should not silently run a recall-degrading research mode. The env is read
+    INSIDE the function so a test can set the env, clear the cache, and observe
+    the warning. The lru_cache(maxsize=1) keyed on the empty arg tuple makes it
+    fire at most once until ``cache_clear()``.
+    """
+    active = [v for v in ("ARGUS_ABLATION_HINTS", "ARGUS_ABLATION_NO_BOOST") if os.environ.get(v)]
+    if active:
+        logger.warning("research ablation toggle(s) active: %s — recall may be degraded", active)
 
 
 def _ablation_enabled_hints() -> set[str] | None:
@@ -226,6 +242,7 @@ def _detect(
     entities: list[PatternMatch] = []
     langs = [lang] if isinstance(lang, str) else list(lang)
     _validate_langs(langs)
+    _warn_ablation_once()
 
     # Layer 1 (regex + person) — single Rust engine call. ``detect_l1`` reproduces
     # internally: normalize_text → match_patterns (over _load_patterns) →
