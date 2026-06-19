@@ -489,10 +489,19 @@ class TestRedactWithSemantic:
         assert "那个地方" not in redacted
 
     def test_should_skip_semantic_when_ner_mode(self):
+        # Stub the NER adapter so mode="ner" is satisfiable regardless of whether
+        # a real model is installed (fail-closed: mode="ner" with zero adapters
+        # raises LayerUnavailableError). The point of this test is that L3
+        # semantic is skipped in ner mode, not that NER itself finds anything.
+        ner = MagicMock()
+        ner.detect.return_value = []
         adapter = _mock_semantic_adapter(
             {"那个地方": [NEREntity("那个地方", "location", 8, 12, 0.7)]}
         )
-        with patch("argus_redact.glue.redact._get_semantic_adapter", return_value=adapter):
+        with (
+            patch("argus_redact.glue.redact._get_ner_adapters", return_value=[ner]),
+            patch("argus_redact.glue.redact._get_semantic_adapter", return_value=adapter),
+        ):
             redacted, key = redact("老王说他上周在那个地方见了人", salt=42, mode="ner", lang="zh")
         assert "那个地方" in redacted
         adapter.detect.assert_not_called()
