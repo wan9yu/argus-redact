@@ -4,9 +4,8 @@ Person name detection is handled separately by person.py (candidate + scoring).
 This module only contains structural PII patterns (phone, ID, bank card, etc.).
 """
 
-import re
 
-
+# Kept for fixture generation only (tests/benchmark/generators/fakers_zh_real.py); runtime validation lives in Rust validators.rs.
 GB11643_WEIGHTS = (7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
 GB11643_CHECK_CHARS = "10X98765432"
 
@@ -41,91 +40,6 @@ def hkid_check_digit(letters: str, digits: str) -> str:
     rem = total % 11
     check = (11 - rem) % 11
     return "X" if check == 10 else str(check)
-
-
-_HKID_BODY_RE = re.compile(r"([A-Z]{1,2})(\d{6})\((\d|X)\)")
-
-
-_TWID_LETTER_TO_CODE = {
-    "A": 10, "B": 11, "C": 12, "D": 13, "E": 14, "F": 15, "G": 16,
-    "H": 17, "I": 34, "J": 18, "K": 19, "L": 20, "M": 21, "N": 22,
-    "O": 35, "P": 23, "Q": 24, "R": 25, "S": 26, "T": 27, "U": 28,
-    "V": 29, "W": 32, "X": 30, "Y": 31, "Z": 33,
-}
-
-
-def twid_check_digit(letter: str, digits: str) -> str:
-    """Compute TWID check per ROC weighted-sum mod-10 algorithm.
-
-    `digits` is the 8-digit body; returns 1-char check digit.
-    Letter maps to a 2-digit region code (A=10..Z=33); first digit is
-    multiplied by 1, second by 9, then body digits use weights [8..1].
-    """
-    code = _TWID_LETTER_TO_CODE[letter]
-    n1, n2 = code // 10, code % 10
-    weights_body = [8, 7, 6, 5, 4, 3, 2, 1]
-    total = n1 * 1 + n2 * 9
-    for d, w in zip(digits, weights_body):
-        total += int(d) * w
-    rem = total % 10
-    return str((10 - rem) % 10)
-
-
-# Known Chinese bank BIN prefixes (6 digits)
-_BANK_BINS = {
-    "621700",
-    "621660",
-    "621662",
-    "621663",  # 建设银行
-    "622202",
-    "622200",
-    "622208",
-    "621225",  # 工商银行
-    "622848",
-    "622849",
-    "620059",
-    "621282",  # 农业银行
-    "622568",
-    "622569",
-    "625912",
-    "625911",  # 中国银行
-    "622588",
-    "622598",
-    "621483",
-    "622575",  # 招商银行
-    "622155",
-    "622156",
-    "622157",
-    "621002",  # 交通银行
-    "622689",
-    "622688",
-    "621691",
-    "622622",  # 民生银行
-    "622668",
-    "622669",
-    "622670",
-    "622671",  # 中信银行
-    "622630",
-    "622631",
-    "622632",
-    "622633",  # 浦发银行
-    "621283",
-    "621285",
-    "621286",
-    "621484",  # 光大银行
-    "622580",
-    "622581",
-    "622582",
-    "622583",  # 兴业银行
-    "622150",
-    "622151",
-    "622152",
-    "622153",  # 平安银行
-    "622700",
-    "622701",
-    "622690",
-    "622692",  # 邮储银行
-}
 
 
 # GB 32100-2015 Unified Social Credit Code constants
