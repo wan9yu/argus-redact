@@ -17,6 +17,7 @@ pub mod fakers;
 pub mod person_data;
 pub mod hints_data;
 pub mod risk_data;
+pub mod risk;
 pub mod hints;
 pub mod person_zh;
 pub mod person_en;
