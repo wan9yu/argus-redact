@@ -1,4 +1,4 @@
-.PHONY: install dev test cov lint build clean release catalog catalog-check perf-update perf-check sync-docs-version sync-docs-version-check
+.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check perf-update perf-check sync-docs-version sync-docs-version-check
 
 install:
 	pip install -e .
@@ -42,6 +42,12 @@ catalog-check:
 	@PYTHONPATH=src python -m argus_redact.specs.gen_catalog | diff -u docs/pii-types.md - >/dev/null \
 		|| (echo "docs/pii-types.md is out of sync with the registry. Run: make catalog" && exit 1)
 	@echo "docs/pii-types.md is in sync"
+
+gen-risk-data:
+	PYTHONPATH=src python -m argus_redact.specs.gen_risk_data
+
+gen-risk-data-check:
+	@PYTHONPATH=src python -m argus_redact.specs.gen_risk_data --check
 
 perf-update:
 	PYTHONPATH=src python tests/benchmark/run_perf_budget.py \
