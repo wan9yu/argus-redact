@@ -11,6 +11,13 @@ from pathlib import Path
 
 _REPO = Path(__file__).parent.parent
 
+# Authoritative PII-type count. SSOT is `argus_redact.specs.list_types()` /
+# `make catalog` (the catalog header reports "Total: N types"). Hardcoded here
+# (not imported) so this docs-sync script stays free of the native `_core`
+# import. Bump this when `make catalog` reports a different total; the README
+# count targets below are then re-asserted by `make sync-docs-version-check`.
+_PII_TYPE_COUNT = 62
+
 _TARGETS = [
     # (path, regex pattern, replacement template — single {v} placeholder)
     (
@@ -22,6 +29,21 @@ _TARGETS = [
         _REPO / "README.md",
         r"Current \(v([0-9.]+)\)",
         "Current (v{v})",
+    ),
+    # README.zh.md hardcoded milestone version ("当前 (vX.Y.Z)") — keep in
+    # lockstep with pyproject; the crates badge below is synced separately.
+    (
+        _REPO / "README.zh.md",
+        r"当前 \(v([0-9.]+)\)",
+        "当前 (v{v})",
+    ),
+    # README.zh.md PII-type count ("N 类 PII"). Replacement carries no {v}
+    # placeholder, so `.format(v=...)` leaves the SSOT count untouched; the
+    # regex re-asserts both occurrences (intro bullet + North Star table).
+    (
+        _REPO / "README.zh.md",
+        r"[0-9]+ 类 PII",
+        f"{_PII_TYPE_COUNT} 类 PII",
     ),
     # Static crates.io version badge (shields' dynamic crates/v endpoint is
     # intermittently "invalid"; a static badge is reliable, bumped here).

@@ -2,6 +2,102 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.7.9 — Hardening
+
+A security and detection-correctness hardening release. **This is an
+intentional bit-identity departure from v0.7.8**: v0.7.9 changes detection
+output by design (new card families, Unicode normalization, recall work), and
+the golden vectors were regenerated to match. Pin v0.7.8 if you depend on
+byte-for-byte v0.7.8 output; otherwise upgrade for the broader coverage and the
+fail-closed defaults below. This realignment is per the design spec.
+
+### Security / fail-closed
+
+- **Fail-closed detection layers.** A requested layer that is unavailable no
+  longer silently degrades:
+  - `mode="ner"` raises `LayerUnavailableError` when no NER model is installed
+    (previously fell back to L1 silently).
+  - `mode="auto"` emits a warning and reflects the missing layer in status when
+    L2/L3 are unavailable, and continues with the layers it has.
+  - New `strict=` parameter on `redact()` (default `False`): `strict=True`
+    turns the `auto`-mode degradation warnings into raised errors, for callers
+    that must not ship partial coverage.
+- **Unknown `lang` raises** `ValueError` instead of silently treating a typo'd
+  language code as "no language" (fail-closed input validation).
+- **Missing `_core` extension raises** at `redact()` time rather than producing
+  unredacted output — a missing/broken native extension can no longer
+  fail open.
+- **HIPAA profile redacts ≥ default.** Dropped the prior under-redacting
+  whitelist; the `hipaa` profile now redacts at least as much as `default`.
+- **Ollama egress guard.** A non-loopback `OLLAMA_HOST` ships raw,
+  pre-redaction text off the box; it is now default-denied and requires an
+  explicit `ARGUS_ALLOW_REMOTE_OLLAMA=1` opt-in (which also warns, naming the
+  remote host).
+- **CLI key-file hardening.** Input reads use `O_NOFOLLOW` (refuse symlinks),
+  and key-bearing output files are written with mode `0o600`.
+- **Rust `MAX_INPUT_SIZE` cap.** The core enforces an input-size ceiling and
+  fails closed on the pattern scan rather than attempting unbounded work.
+- **Low-entropy salt warning.** A salt with insufficient entropy now warns
+  (a salt-keyed KDF strengthening is deferred — see Known limitations).
+
+### Detection correctness (output intentionally changes)
+
+- **American Express / Diners Club cards** are now detected (Luhn floor lowered
+  to 13 digits, broadened card regex).
+- **Combining-mark normalization.** `normalize_text` folds combining marks
+  (offset-mapped so spans map back to the original text), and person detection
+  now runs on the normalized text with spans mapped back — closing a class of
+  diacritic-based evasions.
+- **Full Unicode confusables.** A generated confusables table
+  (Latin / Cyrillic / Greek / Coptic, parity-gated) replaces the prior partial
+  homograph defense.
+- **Context-heuristic gate fix.** Checksum-validated matches (e.g. Luhn,
+  MOD11-2) are no longer suppressed by adjacent context heuristics.
+- **Recall improvements.** Unicode-aware English tokenizer; grown en/zh surname
+  pools for non-Anglo names (parity-gated); a zh "surname + 3 characters" cap.
+- **zh org/school regex linearization.** Atomic suffix groups plus a lowered
+  backtrack limit for the Chinese organization/school patterns (ReDoS
+  hardening).
+- **CJK-digit homograph fix.** A lone CJK-digit homograph is no longer folded
+  into an adjacent ASCII PII run, closing an adjacency leak.
+
+### Honest note
+
+Recall improved broadly, with a precision tradeoff on noisy English prose. On
+the Kaggle PIILO real-essay set, `fast`-mode person-name recall rose
+(2.9% → 29.8%) while precision dropped (90% → 69%) as the broader detection
+adds false positives on free-form text. Benchmarks were re-run on v0.7.9; see
+[docs/benchmark-report.md](docs/benchmark-report.md) for the full matrix and
+reproduction commands.
+
+### Known limitations
+
+- **Cross-salt isolation** holds for **pseudonymized** values but **not for
+  masked** values: masked outputs are deterministic codes, so the same masked
+  input yields the same masked output across salts. An LLM-roundtrip-safe,
+  salt-keyed masking scheme is deferred.
+
+## v0.7.1 – v0.7.8 — Rust core migration
+
+The v0.7.x line moved the detection/redaction hot path from Python into the
+`argus-redact-core` Rust crate, in steps. Each release was locked to
+**bit-for-bit identical output** by golden-vector + KDF-replay parity tests —
+the Python API was unchanged throughout, and Python users needed no migration
+(`pip install -U`).
+
+- **v0.7.8 — Tier-1 close-out (100% Rust):** the L1 hot path is fully in Rust;
+  the Python entity merger fork was closed via
+  `_core.merge_entities_with_text`.
+- **v0.7.7 — Rust L1 redact/restore engine:** the redact/restore engine moved
+  to Rust.
+- **v0.7.6 — zh + en person scoring → Rust.**
+- **v0.7.5 — Faker-registry / crypto SSOT collapse:** closed the cleanup arc.
+- **v0.7.4 — Zero-debt cleanup:** the Python redact path became a thin shell
+  over the core.
+- **v0.7.3 — Replace / Restore / Fakers engine → Rust.**
+- **v0.7.2 — Detection normalization → Rust.**
+- **v0.7.1 — Patterns + Validators → Rust SSOT.**
+
 ## v0.7.0 — 2026-06-15 — Core Split
 
 ### Changed

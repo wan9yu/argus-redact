@@ -1,4 +1,4 @@
-.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check gen-confusables gen-confusables-check perf-update perf-check sync-docs-version sync-docs-version-check
+.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check gen-confusables gen-confusables-check perf-update perf-check sync-docs-version sync-docs-version-check changelog-version-check
 
 install:
 	pip install -e .
@@ -72,3 +72,18 @@ sync-docs-version:
 
 sync-docs-version-check:
 	python scripts/sync_docs_version.py --check
+
+# Assert the top CHANGELOG entry matches pyproject's version, so a release
+# cannot ship a stale changelog. (Until the version bump lands, a deliberate
+# CHANGELOG-ahead-of-pyproject state will fail here — that is expected.)
+changelog-version-check:
+	@CL=$$(grep -m1 -oE '^## v[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | sed -E 's/^## v//'); \
+	PP=$$(awk -F'"' '/^version = "/ {print $$2; exit}' pyproject.toml); \
+	if [ -z "$$CL" ]; then echo "ERROR: no '## vX.Y.Z' heading found in CHANGELOG.md" >&2; exit 1; fi; \
+	if [ -z "$$PP" ]; then echo "ERROR: could not extract version from pyproject.toml" >&2; exit 1; fi; \
+	if [ "$$CL" != "$$PP" ]; then \
+		echo "Version mismatch: CHANGELOG.md top = $$CL, pyproject.toml = $$PP" >&2; \
+		echo "Bump pyproject.toml (and run make sync-docs-version) or add the CHANGELOG entry." >&2; \
+		exit 1; \
+	fi; \
+	echo "CHANGELOG.md and pyproject.toml agree on v$$PP"
