@@ -2,16 +2,56 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
+import os
+import warnings
+from urllib.parse import urlparse
 
 import requests
 
 from argus_redact._types import NEREntity
 from argus_redact.impure.model_profiles import get_model_profile
 from argus_redact.impure.semantic import SemanticAdapter
+from argus_redact.pure.replacer import SecurityWarning
 
 logger = logging.getLogger(__name__)
+
+# Named hosts treated as loopback (IP literals are checked via `ipaddress` below,
+# which covers 127.0.0.0/8 + ::1 precisely and rejects look-alikes like 127.evil.com).
+_LOOPBACK_NAMES = {"localhost"}
+
+
+def _validate_ollama_host(base_url: str) -> None:
+    """Reject non-http(s) schemes; default-deny non-loopback hosts.
+
+    A non-loopback OLLAMA_HOST ships raw, pre-redaction PII off the box. Require
+    explicit ARGUS_ALLOW_REMOTE_OLLAMA=1 opt-in and warn (naming the host).
+    """
+    parsed = urlparse(base_url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(
+            f"OLLAMA_HOST must use http/https scheme, got '{parsed.scheme}' in {base_url!r}"
+        )
+    host = parsed.hostname or ""
+    is_loopback = host in _LOOPBACK_NAMES
+    if not is_loopback and host:
+        try:
+            is_loopback = ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            is_loopback = False
+    if not is_loopback:
+        if os.environ.get("ARGUS_ALLOW_REMOTE_OLLAMA") != "1":
+            raise ValueError(
+                f"refusing to send raw PII to non-loopback OLLAMA_HOST '{host}'. "
+                f"Set ARGUS_ALLOW_REMOTE_OLLAMA=1 to allow (Layer-3 sends pre-redaction text)."
+            )
+        warnings.warn(
+            f"Layer-3 will send raw, pre-redaction text to remote host '{host}'.",
+            SecurityWarning,
+            stacklevel=2,
+        )
 
 SYSTEM_PROMPT = """你是隐私分析专家。分析文本中所有隐含的敏感个人信息。
 
@@ -58,6 +98,7 @@ class OllamaAdapter(SemanticAdapter):
 
         self._model = model or os.environ.get("OLLAMA_MODEL", "qwen3:8b")
         self._base_url = base_url or os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+        _validate_ollama_host(self._base_url)
         self._profile = get_model_profile(self._model)
 
     def _call_ollama(self, text: str) -> requests.Response | None:
