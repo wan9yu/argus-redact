@@ -27,11 +27,34 @@ use crate::reserved_range::byte_to_char_offset;
 use crate::types::PatternMatch;
 
 /// `_TOKEN_PAT` — tokenize into "Capitalized" words or a single-letter initial
-/// like `J.`. Mirrors Python `re.compile(r"\b[A-Z][a-z]+\b|\b[A-Z]\.")`.
-/// Lowercase / punctuation runs between tokens act as gaps delimiting candidate
-/// name spans.
+/// like `J.`. Unicode-aware (replaces the old ASCII-only
+/// `\b[A-Z][a-z]+\b|\b[A-Z]\.`), so accented names (`Renée`, `Müller`),
+/// intra-word capitals (`McDonald`, `DeSantis`), apostrophes (`O'Brien` with
+/// ASCII `'` or typographic `’`) and hyphens (`Jean-Paul`) each tokenize as ONE
+/// token. Lowercase / punctuation runs between tokens act as gaps delimiting
+/// candidate name spans.
+///
+/// The pattern is anchored with a leading lookbehind `(?<!\p{L})` so a token
+/// never STARTS mid-word: `iPhone` does not yield a spurious `Phone` token (the
+/// `P` is preceded by a letter). The first alternative is a capital followed by
+/// a run of name-internal pieces, ending in a lowercase letter, so an all-caps
+/// acronym like `ABC` does not match (no trailing lowercase) — the same behavior
+/// as the old ASCII pattern. The second alternative is a single-capital initial
+/// like `J.`.
+///
+/// A name-internal piece is one of:
+///   - a plain letter `[\p{Ll}\p{Lu}]` (covers accents `Renée`/`Müller`/`José`
+///     and intra-word caps `McDonald`/`DeSantis`);
+///   - an apostrophe (ASCII `'` or typographic `’` U+2019) FOLLOWED BY AN
+///     UPPERCASE letter `\p{Lu}` (covers `O'Brien`, `D'Angelo`) — crucially this
+///     does NOT swallow a possessive `'s` (`Brown's` → `Brown`), because the
+///     apostrophe there is followed by a lowercase `s`;
+///   - a hyphen followed by any letter `\p{L}` (covers `Jean-Paul`).
+///
+/// Requiring the token to end in `\p{Ll}` then drops a trailing possessive so
+/// `Brown's account` still tokenizes as `Brown` and the surname look-back fires.
 static TOKEN_PAT: LazyLock<Regex> = LazyLock::new(|| {
-    let pat = r"\b[A-Z][a-z]+\b|\b[A-Z]\.";
+    let pat = r"(?<!\p{L})\p{Lu}(?:[\p{Ll}\p{Lu}]|['\u{2019}]\p{Lu}|-\p{L})*\p{Ll}|(?<!\p{L})\p{Lu}\.";
     Regex::new(pat)
         .unwrap_or_else(|e| panic!("person_en: _TOKEN_PAT compile failed: {e}\nPattern: {pat}"))
 });
@@ -327,6 +350,97 @@ mod tests {
     //   print([(m.text, m.start, m.end, m.confidence) for m in d('TEXT', known_names=[...])])
     //   "
     // Each expectation below is the verbatim output and is asserted with `==`.
+
+    /// Tokenize `text` into the matched word strings `TOKEN_PAT`
+    /// produces — used to assert the Unicode-aware tokenizer treats accented /
+    /// intra-word-cap / apostrophe / hyphen names as ONE token and never starts
+    /// a token mid-word.
+    fn tokens(text: &str) -> Vec<String> {
+        TOKEN_PAT
+            .find_iter(text)
+            .map_while(Result::ok)
+            .map(|m| m.as_str().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn tokenizer_unicode_single_token() {
+        // Each of these must tokenize as exactly ONE token (the old ASCII-only
+        // `[A-Z][a-z]+` would have split or dropped them).
+        assert_eq!(tokens("Renée"), vec!["Renée"]);
+        assert_eq!(tokens("Müller"), vec!["Müller"]);
+        assert_eq!(tokens("José"), vec!["José"]);
+        assert_eq!(tokens("McDonald"), vec!["McDonald"]);
+        assert_eq!(tokens("DeSantis"), vec!["DeSantis"]);
+        assert_eq!(tokens("O'Brien"), vec!["O'Brien"]);
+        // Typographic apostrophe U+2019.
+        assert_eq!(tokens("O\u{2019}Brien"), vec!["O\u{2019}Brien"]);
+        assert_eq!(tokens("Jean-Paul"), vec!["Jean-Paul"]);
+    }
+
+    #[test]
+    fn tokenizer_does_not_start_midword() {
+        // `iPhone` must NOT yield a `Phone` token: the leading lookbehind
+        // `(?<!\p{L})` blocks a token starting at the inner capital `P` because
+        // it is preceded by a letter.
+        assert_eq!(tokens("iPhone"), Vec::<String>::new());
+        // A capitalized word adjacent to a lowercased prefix word still tokenizes
+        // normally when preceded by a non-letter (space).
+        assert_eq!(tokens("my iPhone Smith"), vec!["Smith".to_string()]);
+    }
+
+    #[test]
+    fn tokenizer_possessive_not_swallowed() {
+        // A possessive `'s` must NOT be absorbed into the token (the apostrophe
+        // is followed by lowercase `s`, not an uppercase letter), so the surname
+        // look-back still anchors on the bare surname.
+        assert_eq!(tokens("Brown's"), vec!["Brown".to_string()]);
+        assert_eq!(tokens("O'Brien's"), vec!["O'Brien".to_string()]);
+        // Regression guard: "Michael Brown's account" → ["Michael","Brown"].
+        assert_eq!(
+            tokens("Michael Brown's account"),
+            vec!["Michael".to_string(), "Brown".to_string()]
+        );
+    }
+
+    #[test]
+    fn possessive_surname_still_detects() {
+        // "Michael Brown's account" — Brown (not Brown's) is the surname token;
+        // Michael is a known given name → 1.0 at 0..13.
+        assert_eq!(
+            detect("Michael Brown's account", &[]),
+            vec![row("Michael Brown", 0, 13, 1.0)]
+        );
+    }
+
+    #[test]
+    fn tokenizer_acronym_and_initial() {
+        // All-caps acronym does NOT match (first alt requires a trailing
+        // lowercase) — same as the old ASCII pattern.
+        assert_eq!(tokens("ABC"), Vec::<String>::new());
+        // A single-capital initial `J.` still matches via the second alt.
+        assert_eq!(tokens("J. Smith"), vec!["J.".to_string(), "Smith".to_string()]);
+    }
+
+    #[test]
+    fn intra_word_cap_surname_detects() {
+        // "Ronald McDonald" — Unicode tokenizer yields ["Ronald","McDonald"];
+        // McDonald is a known surname, Ronald a known given name → 1.0.
+        assert_eq!(
+            detect("Ronald McDonald", &[]),
+            vec![row("Ronald McDonald", 0, 15, 1.0)]
+        );
+    }
+
+    #[test]
+    fn apostrophe_surname_detects() {
+        // "Sean O'Brien" — O'Brien is one token AND a known surname; Sean is a
+        // known given name → 1.0. (Pre-fix the apostrophe split the token.)
+        assert_eq!(
+            detect("Sean O'Brien", &[]),
+            vec![row("Sean O'Brien", 0, 12, 1.0)]
+        );
+    }
 
     #[test]
     fn known_names_exact_match() {

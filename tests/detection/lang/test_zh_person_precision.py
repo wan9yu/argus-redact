@@ -90,13 +90,32 @@ def test_variant_tie_longest_wins_when_no_swallow():
 
 
 def test_variant_tie_swallow_drops_to_two_char():
-    # 张三预订了机票 → 张三预 (3) swallows "预订" (a common_words entry begins at
-    # the 3rd char 预) → resolution drops to the 2-char 张三. A phone PII adjacent
-    # (proximity bucket) lifts the 2-char to exactly the 0.8 threshold so it's
-    # emitted. If the swallow check were removed, 张三预 (start 0, end 3) would
-    # win instead.
+    # 张三预订了机票 → the SINGLE `{1,3}` cap makes the greedy match the 4-char
+    # 张三预订, whose 2-char tail 预订 ("to book") is a common word AND there is NO
+    # context-prefix before 张三, so resolution treats 预订 as a swallowed word and
+    # drops to the 2-char 张三. A phone PII adjacent lifts the 2-char to exactly
+    # the 0.8 threshold so it's emitted. (This preserves the semantic verb 预订
+    # for downstream function-calling — see tests/core/test_function_calling.py.)
     out = _core.detect_person_names_zh("张三预订了机票", [_pm("13800000000", "phone", 0, 0)])
     assert _rows(out) == [("张三", 0, 2, 0.8)]
+
+
+def test_single_surname_four_char_foreign_name():
+    # 客户马尔克斯已登记 → the SINGLE `{1,3}` cap lets the single surname 马 carry a
+    # 3-char given name, so the foreign transliteration 马尔克斯 is detected at its
+    # full 4-char length (the old `{1,2}` cap truncated it to 马尔). Its tail 克斯
+    # is also a common word, but the context-prefix 客户 marks it as a real name,
+    # so the 4-char swallow down-shift is NOT applied. base 0.5 + 0.6 → capped 1.0.
+    out = _core.detect_person_names_zh("客户马尔克斯已登记")
+    assert _rows(out) == [("马尔克斯", 2, 6, 1.0)]
+
+
+def test_compound_surname_four_char_triple_given():
+    # 客户欧阳娜娜娜已登记 → the COMPOUND `{1,3}` cap lets the compound surname 欧阳
+    # carry a triple given name 娜娜娜 → 欧阳娜娜娜 detected at its full 5-char
+    # length (the old `{1,2}` cap stopped at 欧阳娜娜).
+    out = _core.detect_person_names_zh("客户欧阳娜娜娜已登记")
+    assert _rows(out) == [("欧阳娜娜娜", 2, 7, 1.0)]
 
 
 # ── Gate 3: scoring-constants lock (each by observable effect) ─────────────────

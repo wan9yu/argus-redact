@@ -45,31 +45,49 @@ static NOT_NAME_CHARS_SET: LazyLock<HashSet<char>> =
 static HONORIFIC_HEADS_SET: LazyLock<HashSet<char>> =
     LazyLock::new(|| HONORIFIC_HEADS.chars().collect());
 
-/// `_COMPOUND_PAT` — compound surname (alternation) + 1-2 CJK chars.
+/// `_COMPOUND_PAT` — compound surname (alternation) + 1-3 CJK chars.
 ///
-/// Python builds this as
-/// `(?:s1|s2|...)[一-鿿]{1,2}` with each compound surname
+/// Built as `(?:s1|s2|...)[一-鿿]{1,3}` with each compound surname
 /// `re.escape`-d. The compound pool is 2-char CJK literals (nothing to escape),
-/// but we escape anyway to match the Python construction exactly.
+/// but we escape anyway. The `{1,3}` upper bound (raised from `{1,2}`) lets a
+/// compound surname carry a triple given name such as `欧阳娜娜娜` (compound
+/// `欧阳` + `娜娜娜`). The golden regeneration confirmed this is a net recall
+/// gain with no spurious matches (the evidence scorer still gates every
+/// candidate), so COMPOUND stays at `{1,3}` rather than reverting to `{1,2}`.
 static COMPOUND_PAT: LazyLock<Regex> = LazyLock::new(|| {
     let alt = compound_surnames_zh()
         .iter()
         .map(|s| fancy_regex::escape(s).into_owned())
         .collect::<Vec<_>>()
         .join("|");
-    let pat = format!(r"(?:{alt})[{CJK}]{{1,2}}");
+    let pat = format!(r"(?:{alt})[{CJK}]{{1,3}}");
     Regex::new(&pat)
         .unwrap_or_else(|e| panic!("person_zh: _COMPOUND_PAT compile failed: {e}\nPattern: {pat}"))
 });
 
-/// `_SINGLE_PAT` — single surname char class + 1-2 CJK chars.
+/// `_SINGLE_PAT` — single surname char class + 1-3 CJK chars.
 ///
-/// Python: `re.compile(r"[" + SURNAMES + r"][" + _CJK + r"]{1,2}")`.
-/// `SURNAMES` is the byte-for-byte single-char surname string used as a char
-/// class body.
+/// `re.compile(r"[" + SURNAMES + r"][" + _CJK + r"]{1,3}")`. `SURNAMES` is the
+/// byte-for-byte single-char surname string used as a char class body. The
+/// `{1,3}` upper bound (raised from `{1,2}`) lets a single surname carry a
+/// 3-char given name such as a foreign transliteration `马尔克斯` (`马` +
+/// `尔克斯`). `generate_candidates` then offers the 4-char word plus shorter
+/// prefix variants so the scorer / variant resolver can pick the right length;
+/// `interior_name_len` truncates over-grabbed particle / honorific tails.
+///
+/// PRECISION GUARD: a 4-char single-surname match whose two trailing chars form
+/// a common word is ambiguous — it can be a 2-char name + a swallowed verb
+/// (`张三预订` = `张三` + `预订` "to book") or a genuine foreign name whose tail is
+/// coincidentally common (`马尔克斯` — `克斯` ∈ common_words too). The dictionary
+/// alone cannot tell them apart, so the 4-char swallow check in
+/// `resolve_variants` breaks the tie with the strongest upstream NAME signal: a
+/// `_CONTEXT_PREFIX` right before the candidate keeps the full 4-char name
+/// (`客户马尔克斯` → `马尔克斯`); its absence treats the common-word tail as a
+/// swallowed word and down-shifts to the 2-char root (`给张三转账` → `张三`),
+/// preserving the verb for downstream function-calling.
 static SINGLE_PAT: LazyLock<Regex> = LazyLock::new(|| {
     let surnames = surnames_zh();
-    let pat = format!(r"[{surnames}][{CJK}]{{1,2}}");
+    let pat = format!(r"[{surnames}][{CJK}]{{1,3}}");
     Regex::new(&pat)
         .unwrap_or_else(|e| panic!("person_zh: _SINGLE_PAT compile failed: {e}\nPattern: {pat}"))
 });
@@ -143,11 +161,101 @@ fn trim_candidate(word: &str, start: usize, text_chars: &[char]) -> (String, usi
     (trimmed, start, start + len)
 }
 
-/// Find all surname + 1-2 CJK sequences, filtered by the negative dict.
+/// Find the first INTERIOR break point in a greedy regex match, returning the
+/// valid name length (in chars) when the match over-grabbed past the real name.
 ///
-/// Direct port of `generate_candidates(text)`. For 3-char single-surname
-/// matches, emits both the 3-char and 2-char variants so the scoring/resolution
-/// phase can pick the best one. Returns candidates sorted by `start`.
+/// `trim_candidate` only strips *trailing* particles / honorifics, which was
+/// sufficient under the old `{1,2}` cap (the match never reached past one
+/// over-grabbed char). With the raised `{1,3}` cap a single- or compound-surname
+/// match can grab two extra chars, so a particle or honorific can land in the
+/// MIDDLE of the match (`张明的手` — the particle `的` is the 3rd char, not the
+/// last; `刘伟先生` — the honorific `先生` is fully inside). Trailing-only
+/// trimming then leaves the over-grabbed tail attached.
+///
+/// This replicates the old `{1,2}`-cap + `trim_candidate` behavior, generalized
+/// to the one extra char `{1,3}` can grab. It scans the given-name region and
+/// returns the valid name length:
+///   - **Particle** (`_NOT_NAME_CHARS`: `的`, `了`, `已`, `因`, `完`, …) at index
+///     `i >= 2` — a name never contains one, so the name ends at `i`. (Index 1,
+///     the first given char, is never particle-trimmed: `trim_candidate`'s
+///     `len > 2` guard left it alone, and the 2-char-ending-in-particle case is
+///     already handled in `trim_candidate` before we get here.)
+///   - **Honorific head** (`_HONORIFIC_HEADS`) that actually starts an honorific
+///     suffix (`先生`, `女士`, `董事长`, …) right there. This mirrors the OLD
+///     `trim_candidate` honorific quirk, which only fired when the head was the
+///     LAST char of the old 3-char match:
+///       - head at index 2 (old's last position) → EXCLUDE the honorific, name
+///         ends at index 2 (`刘伟先生` → `刘伟`);
+///       - head at index 1 → the honorific stayed in the old 3-char match (the
+///         last char `生` was not itself a head), so INCLUDE it: the name ends at
+///         the END of the honorific suffix (`王先生你` → `王先生`), dropping any
+///         further over-grab.
+///
+/// `word_chars` is the matched word; `start` its char offset; `text_chars` the
+/// whole-text slice (for the honorific lookahead, identical to
+/// `trim_candidate`). Returns `word_chars.len()` when there is no interior break
+/// (the common case — every char is a valid given-name char, e.g. `马尔克斯`,
+/// `欧阳娜娜娜`).
+fn interior_name_len(word_chars: &[char], start: usize, text_chars: &[char]) -> usize {
+    let n = word_chars.len();
+    // Honorific suffix match length (in chars) when `word_chars[i]` is a head
+    // that starts a suffix in the text, else None. Probes `head + following two
+    // chars`, exactly as `trim_candidate` does, and measures how many chars the
+    // suffix actually spans (`先生` = 2, `董事长` = 3).
+    let honorific_suffix_len = |i: usize| -> Option<usize> {
+        if !HONORIFIC_HEADS_SET.contains(&word_chars[i]) {
+            return None;
+        }
+        let after_start = start + i + 1;
+        let after_end = (start + i + 3).min(text_chars.len());
+        let following: String = if after_start <= after_end {
+            text_chars[after_start..after_end].iter().collect()
+        } else {
+            String::new()
+        };
+        let remaining = format!("{}{}", word_chars[i], following);
+        // `HONORIFIC_SUFFIX` is `^`-anchored; the match length is the suffix's
+        // char count.
+        HONORIFIC_SUFFIX
+            .find(&remaining)
+            .ok()
+            .flatten()
+            .map(|m| remaining[..m.end()].chars().count())
+    };
+
+    // Index 1: the first given char. The OLD code never particle-trimmed it, but
+    // if it is an honorific head starting a suffix the honorific is INCLUDED and
+    // the name ends at the suffix's end (the `王先生你` → `王先生` quirk).
+    if n > 1 {
+        if let Some(sfx) = honorific_suffix_len(1) {
+            return (1 + sfx).min(n);
+        }
+    }
+
+    // Index 2 onward: particle ends the name here; an honorific head at index 2
+    // EXCLUDES the honorific (name ends at index 2). The index `i` is the return
+    // value (the truncation length) and is also passed to `honorific_suffix_len`,
+    // so an enumerate-over-slice rewrite would not be clearer here.
+    #[allow(clippy::needless_range_loop)]
+    for i in 2..n {
+        let ch = word_chars[i];
+        if NOT_NAME_CHARS_SET.contains(&ch) {
+            return i;
+        }
+        if honorific_suffix_len(i).is_some() {
+            return i;
+        }
+    }
+    n
+}
+
+/// Find all surname + 1-3 CJK sequences, filtered by the negative dict.
+///
+/// Port of `generate_candidates(text)`. For 3-/4-char single-surname matches it
+/// emits the full word plus shorter prefix variants (2-char, and 3-char for a
+/// 4-char match) so the scoring / resolution phase can pick the best one;
+/// `interior_name_len` first truncates an over-grabbed particle / honorific
+/// tail. Returns candidates sorted by `start`.
 ///
 /// Takes BOTH `text: &str` (the fancy_regex `find_iter` for the compound +
 /// single patterns runs on the whole text string) AND `chars: &[char]` (the
@@ -162,47 +270,90 @@ pub(crate) fn generate_candidates(text: &str, chars: &[char]) -> Vec<NameCandida
     let mut candidates: Vec<NameCandidate> = Vec::new();
     let mut seen_starts: HashSet<usize> = HashSet::new();
 
-    // Mirror the Python `_emit` closure. `m_text` is the matched substring,
-    // `m_start` is the match's CHAR start offset.
+    // `_emit` — register a candidate (plus shorter prefix variants) so the
+    // scorer / variant resolver downstream can pick the best length.
     //
-    //   def _emit(m, is_compound=False):
-    //       word, start, end = _trim_candidate(m.group(), m.start(), text)
-    //       if not word or start in seen_starts: return
-    //       variants = []
-    //       prefix_blocked = len(word) == 3 and not is_compound and word[:2] in neg
-    //       if word not in neg and not prefix_blocked:
-    //           variants.append(NameCandidate(word, start, end))
-    //       if len(word) == 3 and not is_compound:
-    //           short = word[:2]
-    //           if short not in neg:
-    //               variants.append(NameCandidate(short, start, start + 2))
-    //       if variants:
-    //           candidates.extend(variants)
-    //           seen_starts.add(start)
+    // `m_text` is the matched substring, `m_start` its CHAR start offset.
+    //
+    // ## Interior truncation (the `{1,3}` recall extension)
+    //
+    // `trim_candidate` already stripped *trailing* particles / honorifics. With
+    // the raised `{1,3}` cap a match can over-grab past the real name so a
+    // particle / honorific lands in the MIDDLE (`张明的手`, `刘伟先生`,
+    // `欧阳明已登`). `interior_name_len` finds that first interior break and we
+    // truncate the word to it, UNIFORMLY for single AND compound matches, before
+    // building any candidate. This is `trim_candidate`'s philosophy applied at
+    // the interior cut, and it leaves the old `{1,2}`-cap behavior unchanged
+    // (a 2-/3-char match has no interior break to find).
+    //
+    // ## Variant philosophy (single-surname matches only; compound matches are
+    //    never split — they carry a fixed compound surname head)
+    //
+    // The 2-char prefix (`surname + first given char`) is the candidate ROOT. If
+    // that root is a known non-name (`prefix2 in neg`) the whole match is a
+    // non-name and is fully blocked — NO variant of any length is emitted. This
+    // is the `prefix_blocked` rule, applied uniformly to 3- AND 4-char matches.
+    //
+    // When the root is not blocked we offer, longest-first, the shorter prefixes
+    // so the resolver can shrink an over-greedy match to its real name length:
+    //   - len-3 match  → [word(3), prefix2]            (unchanged from before)
+    //   - len-4 match  → [word(4), prefix3, prefix2]   (new, for `{1,3}` cap)
+    // Each emitted variant is itself gated on `not in neg` (a prefix that is a
+    // known non-name is not emitted), mirroring the original 3-char gating. The
+    // len-2 prefix needs no separate neg-check beyond the root block above
+    // (`prefix2 not in neg` is the un-blocked precondition).
+    //
+    // The original Python closure only handled len-3; the len-4 arm + the
+    // interior truncation are the T7 recall extension for the `{1,3}` cap.
     let emit = |m_text: &str,
                 m_start: usize,
                 is_compound: bool,
                 candidates: &mut Vec<NameCandidate>,
                 seen_starts: &mut HashSet<usize>| {
-        let (word, start, end) = trim_candidate(m_text, m_start, chars);
+        let (word, start, _end) = trim_candidate(m_text, m_start, chars);
         if word.is_empty() || seen_starts.contains(&start) {
             return;
         }
 
-        let word_chars: Vec<char> = word.chars().collect();
+        // Truncate at the first interior particle / honorific (no-op when there
+        // is none). `chars` is the whole-text slice for the honorific lookahead.
+        let mut word_chars: Vec<char> = word.chars().collect();
+        let valid_len = interior_name_len(&word_chars, start, chars);
+        word_chars.truncate(valid_len);
+
+        // A truncation can drop the word below 2 chars only if `valid_len < 2`,
+        // which `interior_name_len` never returns (it scans from index 2), so a
+        // truncated word is always >= 2 chars. Still, guard defensively.
+        if word_chars.len() < 2 {
+            return;
+        }
+
         let word_len = word_chars.len();
+        let word: String = word_chars.iter().collect();
+        let end = start + word_len;
         let prefix2: String = word_chars.iter().take(2).collect();
+        let prefix3: String = word_chars.iter().take(3).collect();
 
         let mut variants: Vec<NameCandidate> = Vec::new();
 
-        // The 2-char prefix being a known non-name blocks the 3-char extension.
-        // (Computed BEFORE `word`/`prefix2` are moved into the variants below.)
-        let prefix_blocked = word_len == 3 && !is_compound && neg.contains(&prefix2);
+        // The 2-char root being a known non-name blocks every variant of a
+        // single-surname 3-/4-char match. (Computed BEFORE `word`/`prefix2`/
+        // `prefix3` are moved into the variants below.)
+        let prefix_blocked =
+            (word_len == 3 || word_len == 4) && !is_compound && neg.contains(&prefix2);
+
+        // Full word (len 2/3/4 for single, any for compound), longest variant.
         if !neg.contains(&word) && !prefix_blocked {
             variants.push(NameCandidate { text: word, start, end });
         }
-        // For 3-char single-surname matches, also offer the 2-char variant.
-        if word_len == 3 && !is_compound && !neg.contains(&prefix2) {
+        // For a 4-char single-surname match, also offer the 3-char prefix
+        // (gated on the 3-char prefix itself not being a known non-name).
+        if word_len == 4 && !is_compound && !prefix_blocked && !neg.contains(&prefix3) {
+            variants.push(NameCandidate { text: prefix3, start, end: start + 3 });
+        }
+        // For 3-/4-char single-surname matches, also offer the 2-char variant.
+        // (`prefix2 not in neg` is the un-blocked precondition above.)
+        if (word_len == 3 || word_len == 4) && !is_compound && !neg.contains(&prefix2) {
             variants.push(NameCandidate { text: prefix2, start, end: start + 2 });
         }
 
@@ -437,7 +588,7 @@ pub(crate) fn score_candidate(
 
 // ── Variant resolution ──
 //
-// Direct port of `_resolve_variants` from `lang/zh/person.py`.
+// Port of `_resolve_variants` from `lang/zh/person.py`; extended in T7 (4-char swallow).
 
 /// `_SCORE_THRESHOLD` — default minimum score to confirm a candidate. Exposed
 /// so the binding layer (T7) can supply Python's `threshold=_SCORE_THRESHOLD`
@@ -453,7 +604,13 @@ type Grouped = Vec<(usize, Vec<(NameCandidate, f64)>)>;
 
 /// For each start position, pick the best variant above threshold.
 ///
-/// Direct port of `_resolve_variants(grouped, text, threshold)`:
+/// Port of `_resolve_variants(grouped, text, threshold)`, with a T7 extension:
+/// the Python original only swallow-checks a 3-char best; this also handles the
+/// 4-char single-surname best the raised `{1,3}` cap introduces (the
+/// `best_len == 4` branch — a common-word tail down-shifts to the 2-char root
+/// UNLESS a context-prefix justifies the full name; see `SINGLE_PAT`).
+///
+/// The 3-char path below is byte-identical to the Python:
 ///
 /// ```python
 /// common = _load_common_words()
@@ -568,6 +725,43 @@ fn resolve_variants(
                 {
                     best = c.clone();
                     best_score = *s;
+                }
+            }
+        } else if best_len == 4 {
+            // 4-char single-surname swallow (the `{1,3}`-cap extension). The
+            // 2-char tail `best.text[2:4]` (e.g. the verb 转账 / 预订 in
+            // 张三转账 / 张三预订) being a common word means the greedy match
+            // likely absorbed a following word, so down-shift to the 2-char root.
+            //
+            // BUT a real 4-char foreign name can ALSO have a common-word tail
+            // (马尔克斯 — 克斯 ∈ common_words), indistinguishable from a verb by
+            // the dictionary alone. We break the tie with the strongest upstream
+            // NAME signal: a `_CONTEXT_PREFIX` immediately before the candidate
+            // (客户 / 联系人 / 我叫 / …). When that signal is present the full
+            // 4-char name is kept (客户马尔克斯 → 马尔克斯); when it is absent the
+            // common-word tail is treated as a swallowed word and we down-shift
+            // (给张三转账 → 张三), preserving the verb for downstream
+            // function-calling. This re-runs the SAME `_CONTEXT_PREFIX` over the
+            // SAME ±20 `before` window `score_candidate` uses.
+            let tail: String = best.text.chars().skip(2).take(2).collect();
+            if tail.chars().count() == 2 && common.contains(&tail) {
+                // before = text[max(0, best.start - _CONTEXT_WINDOW) : best.start]
+                let before_start = best.start.saturating_sub(CONTEXT_WINDOW);
+                let before_end = best.start.min(char_len);
+                let before: String = if before_start <= before_end {
+                    text_chars[before_start..before_end].iter().collect()
+                } else {
+                    String::new()
+                };
+                let has_context_prefix = CONTEXT_PREFIX.is_match(&before).unwrap_or(false);
+                if !has_context_prefix {
+                    if let Some((c, s)) = passing
+                        .iter()
+                        .find(|(c, _)| c.text.chars().count() == 2)
+                    {
+                        best = c.clone();
+                        best_score = *s;
+                    }
                 }
             }
         }
@@ -849,11 +1043,16 @@ mod tests {
     #[test]
     fn adjacent_overlapping_surname_starts() {
         // "张三李四" — both 张 and 李 are surnames, but finditer is
-        // non-overlapping: the greedy match at 0 is 张三李 (张 + 2 CJK), which
-        // consumes 李 at index 2. The next scan position is char 3 (四, not a
-        // surname), so 李四 is never produced. Emits 张三李 + the 张三 variant.
-        // Python: [('张三李', 0, 3), ('张三', 0, 2)]
-        assert_candidates("张三李四", &[("张三李", 0, 3), ("张三", 0, 2)]);
+        // non-overlapping: with the {1,3} cap the greedy match at 0 is the full
+        // 张三李四 (张 + 3 CJK), which consumes 李 at index 2. The next scan
+        // position is past 四, so 李四 is never produced. None of 李/四 is a
+        // particle/honorific, so interior_name_len keeps all 4 chars; _emit then
+        // offers the 4-char word + 3-char + 2-char prefixes at the same start.
+        // (Old {1,2}: greedy 张三李 → [('张三李',0,3),('张三',0,2)].)
+        assert_candidates(
+            "张三李四",
+            &[("张三李四", 0, 4), ("张三李", 0, 3), ("张三", 0, 2)],
+        );
     }
 
     #[test]
@@ -867,6 +1066,38 @@ mod tests {
     #[test]
     fn empty_input() {
         assert_candidates("", &[]);
+    }
+
+    #[test]
+    fn single_surname_four_char_emits_full_and_prefixes() {
+        // "马尔克斯" — foreign transliteration, single surname 马 + 3 chars. With
+        // the {1,3} cap the greedy single-pat match is the full 4-char word; the
+        // len-4 _emit arm offers the 4-char word + the 3-char prefix + the 2-char
+        // prefix at the same start (longest-first), so the resolver can shrink to
+        // the right length.
+        assert_candidates(
+            "马尔克斯",
+            &[("马尔克斯", 0, 4), ("马尔克", 0, 3), ("马尔", 0, 2)],
+        );
+    }
+
+    #[test]
+    fn single_surname_four_char_with_context() {
+        // "客户马尔克斯" — same name behind a context prefix; candidate generation
+        // is independent of scoring, so the same variant set is produced at the
+        // shifted start (2).
+        assert_candidates(
+            "客户马尔克斯",
+            &[("马尔克斯", 2, 6), ("马尔克", 2, 5), ("马尔", 2, 4)],
+        );
+    }
+
+    #[test]
+    fn compound_surname_four_char_triple_given() {
+        // "欧阳娜娜娜" — compound surname 欧阳 + triple given 娜娜娜. With COMPOUND
+        // at {1,3} the full 5-char compound word is matched; compound matches are
+        // NOT split into shorter variants (is_compound=True).
+        assert_candidates("欧阳娜娜娜", &[("欧阳娜娜娜", 0, 5)]);
     }
 
     // ── score_candidate — bit-identity golden tests ──
@@ -1191,13 +1422,51 @@ mod tests {
     #[test]
     fn detect_swallow_prefer_two_char() {
         // T1 zh_swallow_prefer_2char "张三预订了机票" with a phone PII at 0..0.
-        // 张三预 swallowed "预订" (a common word) → drop to 张三. Score lands
-        // exactly at the 0.8 threshold via the proximity bucket.
-        // Python: [('张三', 0, 2, 0.8)]
+        // With the SINGLE {1,3} cap the greedy match is the 4-char 张三预订, whose
+        // 2-char tail 预订 ("to book") is a common word AND there is no context-
+        // prefix before 张三 → the 4-char swallow down-shift treats 预订 as a
+        // swallowed word and drops to 张三. Score lands exactly at the 0.8
+        // threshold via the proximity bucket.
+        // Python (pre-port {1,2}): [('张三', 0, 2, 0.8)] — same final result.
         let pii = [pm(0, 0, "phone")];
         assert_eq!(
             detect("张三预订了机票", &pii, &[], 0.8),
             vec![("张三".to_string(), 0, 2, 0.8)]
+        );
+    }
+
+    #[test]
+    fn detect_single_surname_four_char_foreign_name() {
+        // 客户马尔克斯已登记 — the {1,3} cap lets 马 carry the 3-char given name
+        // 尔克斯; 马尔克斯 is detected at its full 4-char length. Its tail 克斯 is
+        // also a common word, but the context-prefix 客户 marks it as a real name,
+        // so the 4-char swallow down-shift is NOT applied. base 0.5 + 0.6 → 1.0.
+        assert_eq!(
+            detect("客户马尔克斯已登记", &[], &[], 0.8),
+            vec![("马尔克斯".to_string(), 2, 6, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_four_char_swallow_without_context_prefix() {
+        // 给张三转账5000元... — 张三转账 is a 4-char match whose tail 转账 ("to
+        // transfer") is a common word, with NO context-prefix before 张三 → the
+        // swallow down-shift drops to 张三, preserving the verb 转账 downstream. A
+        // bank-card PII supplies proximity evidence (within 50 chars).
+        let pii = [pm(14, 30, "bank_card")];
+        assert_eq!(
+            detect("给张三转账5000元到银行卡4111111111111111", &pii, &[], 0.8),
+            vec![("张三".to_string(), 1, 3, 0.8)]
+        );
+    }
+
+    #[test]
+    fn detect_compound_four_char_triple_given() {
+        // 客户欧阳娜娜娜已登记 — the COMPOUND {1,3} cap lets 欧阳 carry the triple
+        // given name 娜娜娜 → 欧阳娜娜娜 detected at its full 5-char length.
+        assert_eq!(
+            detect("客户欧阳娜娜娜已登记", &[], &[], 0.8),
+            vec![("欧阳娜娜娜".to_string(), 2, 7, 1.0)]
         );
     }
 

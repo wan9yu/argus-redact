@@ -147,5 +147,57 @@
     "known_names": null,
     "threshold": null,
     "output": []
+  },
+  {
+    "id": "en_accented_name",
+    "lang": "en",
+    "input": "Renée Müller",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": []
+  },
+  {
+    "id": "en_intra_word_cap",
+    "lang": "en",
+    "input": "Ronald McDonald",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": [
+      {
+        "text": "Ronald McDonald",
+        "type": "person",
+        "start": 0,
+        "end": 15,
+        "confidence": 1.0
+      }
+    ]
+  },
+  {
+    "id": "en_apostrophe_name",
+    "lang": "en",
+    "input": "Sean O'Brien",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": [
+      {
+        "text": "Sean O'Brien",
+        "type": "person",
+        "start": 0,
+        "end": 12,
+        "confidence": 1.0
+      }
+    ]
+  },
+  {
+    "id": "en_hyphen_name",
+    "lang": "en",
+    "input": "Jean-Paul Sartre",
+    "pii_entities": null,
+    "known_names": null,
+    "threshold": null,
+    "output": []
   }
 ]

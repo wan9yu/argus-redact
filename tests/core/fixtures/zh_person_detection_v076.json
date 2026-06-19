@@ -728,6 +728,40 @@
     "output": []
   },
   {
+    "id": "zh_single_surname_four_char",
+    "lang": "zh",
+    "input": "客户马尔克斯已登记",
+    "pii_entities": [],
+    "known_names": null,
+    "threshold": 0.8,
+    "output": [
+      {
+        "text": "马尔克斯",
+        "type": "person",
+        "start": 2,
+        "end": 6,
+        "confidence": 1.0
+      }
+    ]
+  },
+  {
+    "id": "zh_compound_four_char",
+    "lang": "zh",
+    "input": "客户欧阳娜娜娜已登记",
+    "pii_entities": [],
+    "known_names": null,
+    "threshold": 0.8,
+    "output": [
+      {
+        "text": "欧阳娜娜娜",
+        "type": "person",
+        "start": 2,
+        "end": 7,
+        "confidence": 1.0
+      }
+    ]
+  },
+  {
     "id": "zh_surname_sweep_王",
     "lang": "zh",
     "input": "客户王磊",

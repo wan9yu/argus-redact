@@ -196,6 +196,13 @@ def _zh_edge_cases() -> list[dict]:
         pii=[PatternMatch("我", "self_reference", 3, 4)],
     )
 
+    # ── surname+3 cap: 4-char names the old {1,2} cap truncated ──
+    # 马尔克斯 — foreign transliteration, single surname 马 + 3 chars. With a
+    # context prefix the 4-char candidate scores high enough to confirm.
+    add("zh_single_surname_four_char", "客户马尔克斯已登记")
+    # 欧阳娜娜娜 — compound surname 欧阳 + triple given name.
+    add("zh_compound_four_char", "客户欧阳娜娜娜已登记")
+
     return cases
 
 
@@ -257,6 +264,13 @@ def _en_cases() -> list[dict]:
     add("en_lowercase_surname_negative", "john smith called.")
     add("en_unknown_surname_negative", "John Xeoplux arrived.")
     add("en_no_capitalized_pattern", "call them later")
+
+    # Unicode-aware tokenizer recall (accented / intra-word-cap / apostrophe /
+    # hyphen names tokenize as ONE token; surname-anchored look-back applies).
+    add("en_accented_name", "Renée Müller")
+    add("en_intra_word_cap", "Ronald McDonald")
+    add("en_apostrophe_name", "Sean O'Brien")
+    add("en_hyphen_name", "Jean-Paul Sartre")
 
     return cases
 
