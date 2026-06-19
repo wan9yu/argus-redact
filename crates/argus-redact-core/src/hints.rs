@@ -1,9 +1,10 @@
-//! L1 cross-layer hint logic — the `text_intent` + `self_reference_tier` subset.
+//! L1 cross-layer hint logic — `pii_density`, `near_miss_format`, `text_intent`,
+//! and `self_reference_tier`.
 //!
-//! Byte-for-byte port of the L1 slice of `pure/hints.py`'s `produce_hints`
-//! (plus `get_person_threshold` / `filter_self_reference` consumers). The full
-//! Python producer also emits `pii_density` / `near_miss_format`; those are NOT
-//! part of L1 and are intentionally excluded here.
+//! Byte-for-byte port of `pure/hints.py`'s `produce_hints` (plus the
+//! `get_person_threshold` / `filter_self_reference` consumers). Emission order
+//! mirrors Python exactly: `pii_density`, then `near_miss_format` (per
+//! near-miss), then the `text_intent` / `self_reference_tier` decision tree.
 //!
 //! ## Cross-engine fidelity (Python `re` / `str` ↔ Rust / fancy_regex)
 //!
@@ -33,13 +34,18 @@ const DEFAULT_PERSON_THRESHOLD: f64 = 0.8;
 /// the PyO3 binding encodes them when mapping to the Python `_types.Hint`.)
 #[derive(Clone, Debug, PartialEq)]
 pub enum HintKind {
+    /// `pii_density`: bucketed count of non-self_reference L1 entities.
+    PiiDensity { level: String, count: usize },
+    /// `near_miss_format`: a validator-rejected format match (region = span).
+    NearMissFormat { original_type: String, text: String, start: usize, end: usize },
     /// `text_intent`: "neutral" | "narrative" | "casual" | "instruction".
     TextIntent { intent: String },
     /// `self_reference_tier`: tier 1/2/3 + whether any self-ref is kinship.
     SelfReferenceTier { tier: u8, has_kinship: bool },
 }
 
-/// An L1 cross-layer hint (the `text_intent` / `self_reference_tier` subset).
+/// An L1 cross-layer hint (`pii_density`, `near_miss_format`, `text_intent`, or
+/// `self_reference_tier`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Hint {
     pub kind: HintKind,
@@ -54,14 +60,14 @@ pub struct Hint {
 /// the tests). Used by `py_strip` and conceptually mirrored by the `\s` widening
 /// in `hints_data::command_patterns`.
 #[inline]
-fn py_is_space(c: char) -> bool {
+pub(crate) fn py_is_space(c: char) -> bool {
     c.is_whitespace() || matches!(c, '\u{1c}'..='\u{1f}')
 }
 
 /// Python `str.strip()` (no args): trim leading/trailing `py_is_space` chars.
 ///
 /// Deliberately NOT `str::trim()`, which would miss U+001C–U+001F.
-fn py_strip(s: &str) -> &str {
+pub(crate) fn py_strip(s: &str) -> &str {
     s.trim_matches(py_is_space)
 }
 
@@ -100,18 +106,50 @@ fn is_interaction_command(text: &str) -> bool {
 
 // ── Producer (L1 subset of `produce_hints`) ───────────────────────────────────
 
-/// Produce the L1 `text_intent` + `self_reference_tier` hints.
+/// Produce the L1 hints: `pii_density`, `near_miss_format`, `text_intent`,
+/// `self_reference_tier`.
 ///
-/// Exact port of the decision tree in `pure/hints.py::produce_hints` restricted
-/// to those two hint types (the Python function also emits `pii_density` and
-/// `near_miss_format`, which are out of scope for L1).
-pub fn produce_hints_l1(entities: &[PatternMatch], text: &str) -> Vec<Hint> {
+/// Exact port of the decision tree in `pure/hints.py::produce_hints`. Emission
+/// order is bit-identity-critical: `pii_density` first (always), then one
+/// `near_miss_format` per near-miss, then either `text_intent` (no self-refs) or
+/// `self_reference_tier` followed by `text_intent`.
+pub fn produce_hints_l1(
+    entities: &[PatternMatch],
+    text: &str,
+    near_misses: &[PatternMatch],
+) -> Vec<Hint> {
     let mut hints: Vec<Hint> = Vec::new();
 
-    // Split into self_refs / others (preserving Python's partition).
     let self_refs: Vec<&PatternMatch> =
         entities.iter().filter(|e| e.type_ == "self_reference").collect();
     let others_count = entities.len() - self_refs.len();
+
+    // pii_density (always; excludes self_reference).
+    let level = if others_count >= 3 {
+        "high"
+    } else if others_count >= 1 {
+        "medium"
+    } else {
+        "none"
+    };
+    hints.push(Hint {
+        kind: HintKind::PiiDensity {
+            level: level.to_string(),
+            count: others_count,
+        },
+    });
+
+    // near_miss_format (one per near-miss).
+    for nm in near_misses {
+        hints.push(Hint {
+            kind: HintKind::NearMissFormat {
+                original_type: nm.type_.clone(),
+                text: nm.text.clone(),
+                start: nm.start,
+                end: nm.end,
+            },
+        });
+    }
 
     if self_refs.is_empty() {
         let intent = if others_count > 0 { "narrative" } else { "neutral" };
@@ -127,7 +165,6 @@ pub fn produce_hints_l1(entities: &[PatternMatch], text: &str) -> Vec<Hint> {
     let has_other_pii = others_count > 0;
     let is_command = is_interaction_command(text);
 
-    // Self-reference tier.
     let tier: u8 = if is_command && !has_kinship && !has_other_pii {
         3
     } else if has_other_pii || has_kinship {
@@ -135,12 +172,10 @@ pub fn produce_hints_l1(entities: &[PatternMatch], text: &str) -> Vec<Hint> {
     } else {
         2
     };
-
     hints.push(Hint {
         kind: HintKind::SelfReferenceTier { tier, has_kinship },
     });
 
-    // Text intent.
     let intent = if is_command {
         "instruction"
     } else if has_other_pii {
@@ -148,7 +183,6 @@ pub fn produce_hints_l1(entities: &[PatternMatch], text: &str) -> Vec<Hint> {
     } else {
         "casual"
     };
-
     hints.push(Hint {
         kind: HintKind::TextIntent {
             intent: intent.to_string(),
@@ -228,6 +262,7 @@ mod tests {
                     tier = Some(*t);
                     has_kinship = Some(*k);
                 }
+                HintKind::PiiDensity { .. } | HintKind::NearMissFormat { .. } => {}
             }
         }
         (intent, tier, has_kinship)
@@ -241,31 +276,37 @@ mod tests {
 
     #[test]
     fn no_selfref_no_others_is_neutral() {
-        let h = produce_hints_l1(&[], "hello world");
+        let h = produce_hints_l1(&[], "hello world", &[]);
         assert_eq!(summarize(&h), (Some("neutral".into()), None, None));
-        assert_eq!(h.len(), 1); // only text_intent, no self_reference_tier
+        // pii_density + text_intent (no self_reference_tier, no near-misses).
+        assert_eq!(h.len(), 2);
+        assert!(matches!(h[0].kind, HintKind::PiiDensity { .. }));
     }
 
     #[test]
     fn no_selfref_with_others_is_narrative() {
         let ents = [pm("555-1234", "phone")];
-        let h = produce_hints_l1(&ents, "call 555-1234");
+        let h = produce_hints_l1(&ents, "call 555-1234", &[]);
         assert_eq!(summarize(&h), (Some("narrative".into()), None, None));
-        assert_eq!(h.len(), 1);
+        // pii_density + text_intent.
+        assert_eq!(h.len(), 2);
+        assert!(matches!(h[0].kind, HintKind::PiiDensity { .. }));
     }
 
     #[test]
     fn selfref_plus_command_is_instruction_tier3() {
         let ents = [pm("me", "self_reference")];
-        let h = produce_hints_l1(&ents, "please tell me about it");
+        let h = produce_hints_l1(&ents, "please tell me about it", &[]);
         assert_eq!(summarize(&h), (Some("instruction".into()), Some(3), Some(false)));
-        assert_eq!(h.len(), 2);
+        // pii_density + self_reference_tier + text_intent.
+        assert_eq!(h.len(), 3);
+        assert!(matches!(h[0].kind, HintKind::PiiDensity { .. }));
     }
 
     #[test]
     fn selfref_plus_other_pii_is_narrative_tier1() {
         let ents = [pm("me", "self_reference"), pm("555-1234", "phone")];
-        let h = produce_hints_l1(&ents, "me and the number 555-1234 are here");
+        let h = produce_hints_l1(&ents, "me and the number 555-1234 are here", &[]);
         assert_eq!(summarize(&h), (Some("narrative".into()), Some(1), Some(false)));
     }
 
@@ -273,14 +314,14 @@ mod tests {
     fn selfref_plus_kinship_is_casual_tier1() {
         // "我妈" is in _KINSHIP_EXACT; the text is not a command.
         let ents = [pm("我妈", "self_reference")];
-        let h = produce_hints_l1(&ents, "我妈在这里");
+        let h = produce_hints_l1(&ents, "我妈在这里", &[]);
         assert_eq!(summarize(&h), (Some("casual".into()), Some(1), Some(true)));
     }
 
     #[test]
     fn selfref_pure_is_casual_tier2() {
         let ents = [pm("me", "self_reference")];
-        let h = produce_hints_l1(&ents, "just me here");
+        let h = produce_hints_l1(&ents, "just me here", &[]);
         assert_eq!(summarize(&h), (Some("casual".into()), Some(2), Some(false)));
     }
 
@@ -288,7 +329,7 @@ mod tests {
     fn command_with_pii_precedence_instruction_tier1() {
         // command wins → instruction even with other_pii; other_pii → tier 1.
         let ents = [pm("me", "self_reference"), pm("555-1234", "phone")];
-        let h = produce_hints_l1(&ents, "please tell me about 555-1234");
+        let h = produce_hints_l1(&ents, "please tell me about 555-1234", &[]);
         assert_eq!(summarize(&h), (Some("instruction".into()), Some(1), Some(false)));
     }
 
@@ -296,7 +337,7 @@ mod tests {
     fn kinship_plus_command_zh_is_instruction_tier1() {
         // 请帮我 is a command prefix; 我妈 kinship → command-but-kinship → tier 1.
         let ents = [pm("我妈", "self_reference")];
-        let h = produce_hints_l1(&ents, "请帮我找我妈");
+        let h = produce_hints_l1(&ents, "请帮我找我妈", &[]);
         assert_eq!(summarize(&h), (Some("instruction".into()), Some(1), Some(true)));
     }
 
@@ -304,14 +345,14 @@ mod tests {
     fn command_kinship_no_pii_is_instruction_tier1() {
         // English command + kinship self-ref, no other PII → tier 1 (not 3).
         let ents = [pm("我妈", "self_reference")];
-        let h = produce_hints_l1(&ents, "please tell me about 我妈");
+        let h = produce_hints_l1(&ents, "please tell me about 我妈", &[]);
         assert_eq!(summarize(&h), (Some("instruction".into()), Some(1), Some(true)));
     }
 
     #[test]
     fn all_flags_is_instruction_tier1() {
         let ents = [pm("我妈", "self_reference"), pm("555-1234", "phone")];
-        let h = produce_hints_l1(&ents, "请帮我找我妈 555-1234");
+        let h = produce_hints_l1(&ents, "请帮我找我妈 555-1234", &[]);
         assert_eq!(summarize(&h), (Some("instruction".into()), Some(1), Some(true)));
     }
 
@@ -319,7 +360,7 @@ mod tests {
     fn kinship_prefix_match() {
         // "my " is a kinship prefix → kinship via startswith.
         let ents = [pm("my brother", "self_reference")];
-        let h = produce_hints_l1(&ents, "my brother lives here");
+        let h = produce_hints_l1(&ents, "my brother lives here", &[]);
         let (intent, tier, hk) = summarize(&h);
         assert_eq!((intent, tier, hk), (Some("casual".into()), Some(1), Some(true)));
     }
@@ -328,7 +369,7 @@ mod tests {
     fn command_suffix_match_ja() {
         // "してください" is a command suffix; self-ref pure → instruction tier 3.
         let ents = [pm("私", "self_reference")];
-        let h = produce_hints_l1(&ents, "それを教えてしてください");
+        let h = produce_hints_l1(&ents, "それを教えてしてください", &[]);
         let (intent, tier, _) = summarize(&h);
         assert_eq!((intent, tier), (Some("instruction".into()), Some(3)));
     }
@@ -337,7 +378,7 @@ mod tests {
     fn multiple_self_refs_kinship_any() {
         // has_kinship is any(...) over self_refs.
         let ents = [pm("me", "self_reference"), pm("我妈", "self_reference")];
-        let h = produce_hints_l1(&ents, "我妈 and me here");
+        let h = produce_hints_l1(&ents, "我妈 and me here", &[]);
         let (_, tier, hk) = summarize(&h);
         assert_eq!((tier, hk), (Some(1), Some(true)));
     }
@@ -472,7 +513,7 @@ mod tests {
         // Also via the public path: produce_hints over a kinship self-ref in zh
         // narrative stays casual (no spurious instruction).
         let ents = [pm("我妈", "self_reference")];
-        let h = produce_hints_l1(&ents, "我妈在这里没有任何命令词");
+        let h = produce_hints_l1(&ents, "我妈在这里没有任何命令词", &[]);
         let (intent, _, _) = summarize(&h);
         assert_eq!(intent, Some("casual".into()));
     }

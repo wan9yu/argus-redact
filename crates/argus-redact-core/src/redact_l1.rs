@@ -21,8 +21,8 @@
 //!    layer1 spans back to ORIGINAL-text offsets, rebuilding each match's `text`
 //!    as `text[s..e]` (char-sliced) from the original — mirroring redact.py
 //!    :210-228.
-//! 4. `produce_hints_l1(layer1, text)` — using the ORIGINAL `text`, not
-//!    `detect_text`.
+//! 4. `produce_hints_l1(layer1, text, near_misses)` — using the ORIGINAL `text`,
+//!    not `detect_text`.
 //! 5. `get_person_threshold(hints)`.
 //! 6. zh person detection first (if "zh" in lang) — honors threshold, receives
 //!    `layer1` as `pii_entities`; then en (if "en" in lang) — ignores threshold.
@@ -39,9 +39,11 @@
 //!
 //! - **Fast mode** (caller T6) needs `layer1 ++ person` (via [`DetectL1Result::entities`])
 //!   plus `hints` to merge/filter/boost.
-//! - **Full mode** (caller T8) needs `layer1` *separately* (to recompute the FULL
-//!   Python hints — `pii_density` / `near_miss_format` — over the L1a regex set)
-//!   plus `near_misses`. Returning the four fields distinctly serves both without
+//! - **Full mode** (caller T8) consumes the same full four-kind `hints`
+//!   (`pii_density` / `near_miss_format` / `text_intent` / `self_reference_tier`)
+//!   that `detect_l1` already produces, and additionally needs `layer1`,
+//!   `person`, and `near_misses` returned *separately* for the L2/L3 merge and
+//!   the final report. Returning the four fields distinctly serves both without
 //!   a re-match.
 
 use std::collections::HashSet;
@@ -62,8 +64,10 @@ const LAYER_REGEX: u8 = 1;
 
 /// The raw (pre-merge) output of L1 detection.
 ///
-/// `layer1` and `person` are kept distinct so full mode can recompute the full
-/// Python hint set over the L1a regex entities; fast mode concatenates them via
+/// `layer1` and `person` are kept distinct so full mode can thread the L1a regex
+/// entities and the person matches separately into the L2/L3 merge and report;
+/// the full four-kind hint set is returned in `hints` (already produced here, not
+/// recomputed downstream). Fast mode concatenates `layer1`/`person` via
 /// [`DetectL1Result::entities`].
 pub struct DetectL1Result {
     /// L1a regex matches (validator-clean), tagged `layer = 1`, spans in
@@ -71,7 +75,8 @@ pub struct DetectL1Result {
     pub layer1: Vec<PatternMatch>,
     /// L1b person-name matches (zh then en), tagged `layer = 1`.
     pub person: Vec<PatternMatch>,
-    /// L1 hints (`text_intent` + `self_reference_tier`) over the ORIGINAL text.
+    /// L1 hints — all four kinds (`pii_density`, `near_miss_format`,
+    /// `text_intent`, `self_reference_tier`) over the ORIGINAL text.
     pub hints: Vec<Hint>,
     /// Validator near-misses (regex matched, validation failed) — confidence 0.3.
     pub near_misses: Vec<PatternMatch>,
@@ -192,7 +197,7 @@ pub fn detect_l1(
     tag_layer(&mut layer1, LAYER_REGEX);
 
     // 5. Hints from the ORIGINAL text (not detect_text).
-    let hints = produce_hints_l1(&layer1, text);
+    let hints = produce_hints_l1(&layer1, text, &near_misses);
 
     // 6. Person threshold from the text_intent hint.
     let threshold = get_person_threshold(&hints);
@@ -472,6 +477,7 @@ mod tests {
                 HintKind::SelfReferenceTier { tier: t, has_kinship: k } => {
                     tier = Some((*t, *k))
                 }
+                HintKind::PiiDensity { .. } | HintKind::NearMissFormat { .. } => {}
             }
         }
         // expected always has exactly one text_intent entry (last); a tier entry

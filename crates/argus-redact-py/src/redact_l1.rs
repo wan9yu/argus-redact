@@ -51,13 +51,24 @@ fn hint_to_py<'py>(py: Python<'py>, hint: &Hint) -> PyResult<Bound<'py, PyAny>> 
         .import("argus_redact._types")?
         .getattr("Hint")?;
     let data = PyDict::new(py);
+    let mut region: (i64, i64) = (0, 0);
     let type_name: &str = match &hint.kind {
+        HintKind::PiiDensity { level, count } => {
+            data.set_item("level", level)?;
+            data.set_item("count", *count)?;
+            "pii_density"
+        }
+        HintKind::NearMissFormat { original_type, text, start, end } => {
+            data.set_item("original_type", original_type)?;
+            data.set_item("text", text)?;
+            region = (*start as i64, *end as i64);
+            "near_miss_format"
+        }
         HintKind::TextIntent { intent } => {
             data.set_item("intent", intent)?;
             "text_intent"
         }
         HintKind::SelfReferenceTier { tier, has_kinship } => {
-            // tier → Python int, has_kinship → Python bool (exact value types).
             data.set_item("tier", *tier)?;
             data.set_item("has_kinship", *has_kinship)?;
             "self_reference_tier"
@@ -66,7 +77,7 @@ fn hint_to_py<'py>(py: Python<'py>, hint: &Hint) -> PyResult<Bound<'py, PyAny>> 
     let kwargs = PyDict::new(py);
     kwargs.set_item("type", type_name)?;
     kwargs.set_item("data", &data)?;
-    kwargs.set_item("region", PyTuple::new(py, [0i64, 0i64])?)?;
+    kwargs.set_item("region", PyTuple::new(py, [region.0, region.1])?)?;
     kwargs.set_item("source_layer", 1i64)?;
     hint_cls.call((), Some(&kwargs))
 }
@@ -236,19 +247,27 @@ pub fn redact_l1(
 
 // ── hint helpers ──────────────────────────────────────────────────────────────
 
-/// Produce the L1 `text_intent` + `self_reference_tier` hints as `_types.Hint`s.
+/// Produce the full L1 hint set (`pii_density`, `near_miss_format`, `text_intent`,
+/// `self_reference_tier`) as `_types.Hint`s.
 ///
 /// COMPARABLE to the L1 slice of Python `produce_hints` (the binding returns real
-/// `_types.Hint` instances).
+/// `_types.Hint` instances). `near_misses` defaults to empty.
 #[pyfunction]
+#[pyo3(signature = (entities, text, near_misses=None))]
 pub fn produce_hints_l1<'py>(
     py: Python<'py>,
     entities: Vec<PyPatternMatch>,
     text: &str,
+    near_misses: Option<Vec<PyPatternMatch>>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let core_entities: Vec<CorePM> = entities.iter().map(CorePM::from).collect();
-    let hints = core_produce_hints_l1(&core_entities, text);
-    hints_to_py(py, &hints)
+    let ents: Vec<CorePM> = entities.iter().map(CorePM::from).collect();
+    let nms: Vec<CorePM> = near_misses
+        .unwrap_or_default()
+        .iter()
+        .map(CorePM::from)
+        .collect();
+    let hints = core_produce_hints_l1(&ents, text, &nms);
+    hints.iter().map(|h| hint_to_py(py, h)).collect()
 }
 
 /// Person-name threshold from the hints (1.2 instruction / 0.8 otherwise).
