@@ -137,11 +137,7 @@ pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<Patt
             let mut end = m.end();
             search_start = if end > start { end } else { start + 1 };
 
-            if pat.check_context && looks_like_false_positive(text, start, end) {
-                continue;
-            }
-
-            // Extract named group if specified
+            // Extract named group if specified (the validator must see the group text).
             if let Some(ref group_name) = pat.group {
                 if let Ok(Some(caps)) = re.captures(&text[m.start()..]) {
                     if let Some(grp) = caps.name(group_name) {
@@ -152,17 +148,25 @@ pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<Patt
                 }
             }
 
+            // Run the validator once (if any): Some(true)=passed, Some(false)=failed, None=no/unknown validator.
+            let validator_passed = match pat.validator {
+                Some(ref name) => resolve_validator(name).map(|f| f(&matched)),
+                None => None,
+            };
+            let confidence = if validator_passed == Some(false) { 0.3 } else { 1.0 };
+
+            // FALSE_POSITIVE context suppression is skipped ONLY for checksum-validated matches:
+            // a Luhn/MOD11-valid value is real PII, not a version/serial, and must not be suppressed
+            // by attacker-influenceable surrounding text (a prepended "version"/"计算" or an appended
+            // " - 0" used to evade redaction). Non-validated/near-miss matches keep the heuristic,
+            // which discriminates e.g. a real IP from a "1.2.3.4" version string.
+            if pat.check_context && validator_passed != Some(true) && looks_like_false_positive(text, start, end) {
+                continue;
+            }
+
             // Convert byte offsets to char offsets (Python uses char positions)
             let char_start = byte_to_char_offset(text, start);
             let char_end = byte_to_char_offset(text, end);
-
-            let confidence = match pat.validator {
-                Some(ref name) => match resolve_validator(name) {
-                    Some(f) if !f(&matched) => 0.3, // validator failed → near-miss
-                    _ => 1.0,                        // passed, or unknown name (no-op)
-                },
-                None => 1.0,
-            };
 
             results.push(PatternMatch {
                 text: matched,
@@ -192,10 +196,39 @@ mod tests {
     }
     #[test]
     fn check_context_suppresses_fp() {
-        // "订单号123" — 订单号 is a FALSE_POSITIVE_PREFIX trigger
+        // 订单号 is a FALSE_POSITIVE_PREFIX trigger. With validator: None there is
+        // no checksum confirmation, so the FP heuristic applies and the match in
+        // this context IS suppressed (the precision guard for format-ambiguous
+        // types, e.g. a phone-shaped 订单号 / order number).
         let cfg = PatternConfig { type_: "phone".into(), pattern: r"\d{3}".into(), check_context: true, group: None, validator: None };
         let out = match_patterns("订单号123", &[cfg]).unwrap();
-        assert_eq!(out.len(), 0, "订单号 prefix should suppress the match");
+        assert_eq!(out.len(), 0, "订单号 prefix should suppress a no-validator FP match");
+    }
+    #[test]
+    fn check_context_suppresses_near_miss() {
+        // 订单号 is a FALSE_POSITIVE_PREFIX trigger. The ssn validator FAILS on
+        // "000-..." (invalid area), so this is a confidence-0.3 near-miss — not a
+        // checksum-confirmed value — and a near-miss in an FP context IS suppressed.
+        let cfg = PatternConfig {
+            type_: "ssn".into(), pattern: r"\d{3}-\d{2}-\d{4}".into(),
+            check_context: true, group: None, validator: Some("ssn".into()),
+        };
+        let out = match_patterns("订单号000-12-3456", &[cfg]).unwrap();
+        assert_eq!(out.len(), 0, "订单号 prefix should suppress a failing near-miss");
+    }
+    #[test]
+    fn check_context_does_not_suppress_validated_match() {
+        // A checksum-validated match (ssn validator PASSES on 123-45-6789) in an FP
+        // context is NOT suppressed: attacker-influenceable surrounding text (here a
+        // 订单号 prefix) must not evade redaction of a value confirmed real by a validator.
+        let cfg = PatternConfig {
+            type_: "ssn".into(), pattern: r"\d{3}-\d{2}-\d{4}".into(),
+            check_context: true, group: None, validator: Some("ssn".into()),
+        };
+        let out = match_patterns("订单号123-45-6789", &[cfg]).unwrap();
+        assert_eq!(out.len(), 1, "订单号 prefix must NOT suppress a validator-passing match");
+        assert_eq!(out[0].confidence, 1.0);
+        assert_eq!(out[0].text, "123-45-6789");
     }
     #[test]
     fn validator_failure_becomes_near_miss() {
