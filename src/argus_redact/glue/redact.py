@@ -35,6 +35,23 @@ logger = logging.getLogger(__name__)
 from argus_redact._core_loader import HAS_CORE as _RUST_CORE, _core
 
 
+def _ablation_enabled_hints() -> set[str] | None:
+    """Resolve the ARGUS_ABLATION_HINTS research hook from the environment (glue).
+
+    The env read lives here (impure glue), not in the pure layer. Returns the
+    enabled hint-type set for ``_apply_ablation``:
+      unset / "all" → None (keep all); "off" → empty set (drop all);
+      comma-separated names → keep only the listed types.
+    Recognized: pii_density, text_intent, self_reference_tier, near_miss_format.
+    """
+    raw = os.environ.get("ARGUS_ABLATION_HINTS")
+    if raw is None or raw == "all":
+        return None
+    if raw == "off":
+        return set()
+    return {h.strip() for h in raw.split(",") if h.strip()}
+
+
 def _telemetry_hook_active() -> bool:
     return get_perf_hook() is not None
 
@@ -230,7 +247,7 @@ def _detect(
     # Python order, consumed by L2 (NER gating), L3, and the report. Ablation
     # (the ARGUS_ABLATION_HINTS research hook) is applied Python-side because the
     # Rust core is environment-unaware.
-    hints = _apply_ablation(l1_hints)
+    hints = _apply_ablation(l1_hints, _ablation_enabled_hints())
 
     # Layer 2: NER (auto or ner mode), hint-gated
     layer2_count = 0

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 from argus_redact._types import Hint, PatternMatch
 from argus_redact.lang.br import hints as _br_hints
 from argus_redact.lang.de import hints as _de_hints
@@ -50,27 +48,16 @@ _COMMAND_PATTERNS = _collect("COMMAND_PATTERNS")
 _DEFAULT_PERSON_THRESHOLD = 0.8
 
 
-# Ablation hook (research-only). Set ARGUS_ABLATION_HINTS to control which
-# hint types `produce_hints()` emits. Unset / "all" = default behavior.
-# "off" = emit nothing. Comma-separated names = emit only listed types.
-# Recognized: pii_density, text_intent, self_reference_tier, near_miss_format.
-def _ablation_enabled_hints() -> set[str] | None:
-    raw = os.environ.get("ARGUS_ABLATION_HINTS")
-    if raw is None or raw == "all":
-        return None
-    if raw == "off":
-        return set()
-    return {h.strip() for h in raw.split(",") if h.strip()}
+# Ablation hook (research-only). The ARGUS_ABLATION_HINTS env read is resolved
+# in the glue layer (glue/redact._ablation_enabled_hints); this pure helper takes
+# the already-resolved enabled-set so the pure layer stays environment-unaware.
+# Recognized hint types: pii_density, text_intent, self_reference_tier,
+# near_miss_format.
+def _apply_ablation(hints: list[Hint], enabled: set[str] | None) -> list[Hint]:
+    """Filter Rust-produced hints by the ablation enabled-set (resolved in glue).
 
-
-def _apply_ablation(hints: list[Hint]) -> list[Hint]:
-    """Apply ARGUS_ABLATION_HINTS to a Rust-produced hint list (research hook).
-
-    Mirrors produce_hints' _emit() gating: None/"all" → keep all, "off" → drop
-    all, CSV → keep only the listed hint types. Kept Python-side because the Rust
-    core is environment-unaware.
+    None → keep all; empty set → drop all; otherwise keep only listed hint types.
     """
-    enabled = _ablation_enabled_hints()
     if enabled is None:
         return list(hints)
     return [h for h in hints if h.type in enabled]
@@ -108,7 +95,10 @@ def produce_hints(
     L3 LLM, tier filter) can consume.
     """
     hints: list[Hint] = []
-    enabled = _ablation_enabled_hints()
+    # produce_hints is the pure Rust-vs-Python oracle: it emits the full hint set
+    # unconditionally. Ablation (ARGUS_ABLATION_HINTS) is applied downstream in the
+    # glue layer via _apply_ablation, keeping the env read out of pure/.
+    enabled: set[str] | None = None
 
     def _emit(htype: str, **fields: object) -> None:
         if enabled is None or htype in enabled:
