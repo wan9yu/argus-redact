@@ -110,8 +110,15 @@ fn normalize_digit_sequences(chars: &mut [char]) {
                 None => break,
             }
         }
-        let has_cn = run.iter().any(|&idx| cn_digit(chars[idx]).is_some());
-        if run.len() >= MIN_DIGIT_SEQ && has_cn {
+        // Count CJK digits in the run. Fold only when they are a strict MAJORITY:
+        // a genuine Chinese-digit number (一三八零零…) is all/mostly CJK, whereas a
+        // name/word char that is also a digit homograph (三 in 张三, 四 in 李四)
+        // abutting an ASCII PII number is a lone minority. Folding such a boundary
+        // homograph would merge it into the digit run and break the PII regex's
+        // `(?<!\d)` anchor — leaking e.g. "张三13800138000". The majority test keeps
+        // the homograph intact so the adjacent phone/id/card still matches.
+        let cn_count = run.iter().filter(|&&idx| cn_digit(chars[idx]).is_some()).count();
+        if run.len() >= MIN_DIGIT_SEQ && cn_count * 2 > run.len() {
             for (k, &idx) in run.iter().enumerate() {
                 chars[idx] = ascii[k];
             }
@@ -290,6 +297,32 @@ mod tests {
     }
 
     #[test]
+    fn lone_cjk_homograph_not_folded_into_ascii_run() {
+        // SECURITY: a lone CJK-digit homograph (三=3 in the name 张三) abutting an
+        // ASCII PII number is a MINORITY of the run (1 CJK + 11 ASCII = 12 chars).
+        // It must NOT fold — folding 三→3 would merge it into the phone digits and
+        // break the zh phone regex's `(?<!\d)` anchor, leaking the phone AND the name.
+        assert_eq!(
+            normalize_text("张三13800138000").0,
+            "张三13800138000"
+        );
+        // Same with a bare homograph, no name: still a lone minority → intact.
+        assert_eq!(normalize_text("三13800138000").0, "三13800138000");
+    }
+
+    #[test]
+    fn genuine_all_cjk_run_still_folds() {
+        // An all-CJK number is 100% CJK → strict majority → still folds (no regression).
+        assert_eq!(normalize_text("一三八零零一三八零零零").0, "13800138000");
+    }
+
+    #[test]
+    fn majority_cjk_mixed_run_still_folds() {
+        // 7-char run, 6 CJK + 1 ASCII: cn_count(6)*2 = 12 > 7 → strict majority → folds.
+        assert_eq!(normalize_text("一二三四五六7").0, "1234567");
+    }
+
+    #[test]
     fn short_cn_unchanged() {
         // 三月三日 — not a 7+ digit run → unchanged → None
         assert_eq!(normalize_text("三月三日"), ("三月三日".into(), None));
@@ -324,12 +357,19 @@ mod tests {
         // and the full variant share the SAME offset map (positions) — only some
         // char values differ. This is what lets layer1 (full-norm coords) be used
         // as the zh detector's pii_entities against the person-detect-text.
-        let text = "张三 13812345678 110101199003074610";
+        //
+        // Use a name abutting a genuine all-CJK number so the full-norm digit step
+        // fires on a strict-majority run: 张 + 三八零零一三八零零零 (10 CJK digits).
+        // Full norm folds the digit run to ASCII (and 三 here IS part of that number);
+        // person norm keeps the CJK chars. A LONE homograph next to an ASCII number
+        // (张三13800138000) must NOT fold — that case is covered by
+        // `lone_cjk_homograph_not_folded_into_ascii_run`.
+        let text = "张三八零零一三八零零零";
         let (full, fmap) = normalize_text(text);
         let (person, pmap) = normalize_text_for_person(text);
-        // Full norm mangles 三→3; person norm keeps it.
-        assert!(full.contains("张3"));
-        assert!(person.contains("张三"));
+        // Full norm folds the CJK-digit run; person norm keeps it.
+        assert!(full.contains("张3800138000"));
+        assert!(person.contains("张三八零零一三八零零零"));
         // Positions line up: full norm produced a map; person norm produced none
         // here (digit step was its only change), and that map is the identity over
         // the same length, so any layer1 span in full coords addresses the same
