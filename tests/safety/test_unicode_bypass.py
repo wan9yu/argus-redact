@@ -12,12 +12,17 @@ class TestFullwidthBypass:
 
         # Key stores original (fullwidth) text for correct restore
         assert len(key) >= 1, "Fullwidth phone should be detected"
+        # Normalized value and original fullwidth form must not appear in output
+        assert "13800138000" not in redacted
+        assert "１３８００１３８０００" not in redacted
 
     def test_should_detect_fullwidth_email_at(self):
         text = "邮箱zhang＠gmail.com"
         redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Fullwidth @ email should be detected"
+        # Normalized email must not appear in output
+        assert "zhang@gmail.com" not in redacted
 
 
 class TestZeroWidthBypass:
@@ -32,6 +37,8 @@ class TestZeroWidthBypass:
         # Key stores original text (with ZWSP) for correct restore
         val = list(key.values())[0]
         assert "13800138000" in val.replace("\u200b", "")
+        # Normalized value must not appear in output even after stripping ZWSP
+        assert "13800138000" not in redacted.replace("\u200b", "")
 
     def test_should_detect_phone_with_zwj(self):
         """Zero-width joiner U+200D."""
@@ -39,6 +46,8 @@ class TestZeroWidthBypass:
         redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Phone with ZWJ should be detected"
+        # Normalized value must not appear in output even after stripping ZWJ
+        assert "13800138000" not in redacted.replace("\u200d", "")
 
     def test_should_detect_phone_with_soft_hyphen(self):
         """Soft hyphen U+00AD."""
@@ -46,12 +55,16 @@ class TestZeroWidthBypass:
         redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Phone with soft hyphen should be detected"
+        # Normalized value must not appear in output even after stripping soft hyphens
+        assert "13800138000" not in redacted.replace("\u00ad", "")
 
     def test_should_detect_email_with_zwsp(self):
         text = "邮箱z\u200bhang@example.com"
         redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Email with ZWSP should be detected"
+        # Normalized email must not appear in output even after stripping ZWSP
+        assert "zhang@example.com" not in redacted.replace("\u200b", "")
 
 
 class TestDirectionBypass:
@@ -64,6 +77,8 @@ class TestDirectionBypass:
 
         # Direction chars stripped during normalization → phone detected
         assert len(key) >= 1, "Phone wrapped in RTL should be detected"
+        # Normalized value must not appear in output
+        assert "13800138000" not in redacted
 
 
 class TestRoundtripWithNormalization:
@@ -95,12 +110,16 @@ class TestHomoglyphBypass:
         redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Email with Cyrillic а should be detected"
+        # Normalized email (with homoglyph replaced) must not appear in output
+        assert "zhang@gmail.com" not in redacted
 
     def test_should_detect_email_with_greek_o(self):
         text = "邮箱zhang@gmail.c\u03bfm"
         redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Email with Greek ο should be detected"
+        # Normalized email (with homoglyph replaced) must not appear in output
+        assert "zhang@gmail.com" not in redacted
 
     def test_should_roundtrip_homoglyph_email(self):
         text = "邮箱zh\u0430ng@gmail.com"
