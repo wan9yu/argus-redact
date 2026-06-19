@@ -450,7 +450,7 @@ llm_output ─────────────────→ restore(text, 
 restored_text ←─────────────────────┘
 ```
 
-**Key invariant:** The key and original text never leave the user's device. Only the redacted text crosses the network boundary.
+**Key invariant:** The key never leaves the user's device. In `fast` and `ner` modes — and in `auto` mode with a loopback Ollama host — the original text never leaves the device either; only the redacted text crosses the network boundary. The one exception is `auto` mode (Layer 3) pointed at a non-loopback `OLLAMA_HOST`: that sends the original pre-redaction text to the remote host for semantic detection, and is default-denied — it requires the explicit `ARGUS_ALLOW_REMOTE_OLLAMA=1` opt-in and emits a `SecurityWarning`.
 
 ---
 

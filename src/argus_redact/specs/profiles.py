@@ -1,4 +1,15 @@
-"""Compliance profiles — pre-configured type sets and strategy overrides."""
+"""Compliance profiles — pre-configured type sets and strategy overrides.
+
+Caveat — these are **strategy-override presets, not coverage guarantees.**
+``gdpr`` and ``pipl`` change *how* detected types are redacted (forcing
+``remove``/``realistic`` over the leaky ``mask`` default), not *which* types are
+detected. Selecting one does not widen — or narrow — detection coverage, and it
+does not by itself make a pipeline compliant: compliance depends on what the
+detectors find, the review process, and legal review, not on the profile name.
+(Unlike the old ``hipaa`` whitelist, which restricted the detected type set and
+thereby under-redacted — fixed in v0.7.9 so that ``hipaa`` now applies strict
+strategies over *all* detected identifiers rather than reducing coverage.)
+"""
 
 # Strategy overrides: compliance profiles force pseudonym/remove for types
 # that default to mask, because mask leaks partial information (e.g., 138****5678

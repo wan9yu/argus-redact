@@ -99,8 +99,15 @@ The attack relies on correlating pseudonymous activity across multiple requests.
 |------|---------------|--------------|
 | Redacted text | Yes → LLM API | No |
 | Key | **Never** | Yes — the key IS the sensitive data |
-| Original text | **Never** | Yes |
+| Original text | Not in `fast`/`ner` mode; see note below for `auto` | Yes |
 | Key file (if saved) | Only if user copies it | Yes (plaintext dict) |
+
+> **Egress scope for `auto` mode (Layer 3).** In `fast` and `ner` modes — and in
+> `auto` mode with a loopback Ollama host — the original text never leaves your
+> device. A non-loopback `OLLAMA_HOST` sends the original (pre-redaction) text to
+> that host for Layer-3 semantic detection. argus-redact default-denies this: a
+> non-loopback host requires the explicit `ARGUS_ALLOW_REMOTE_OLLAMA=1` opt-in and
+> emits a `SecurityWarning` (naming the host) before any text is sent.
 
 ---
 
@@ -142,6 +149,22 @@ The key maps pseudonyms to originals. Anyone with the key and the redacted text 
 - They only get identities from **that specific session**.
 - Other sessions used different keys — each session is isolated.
 - Without the redacted text, the key alone reveals entity names but not context.
+
+### Scope of cross-message isolation (pseudonymized vs. masked)
+
+The salt isolates **pseudonymized** values across messages: a key from one
+redaction cannot reconstruct a pseudonymized value (salt-derived `P-NNNNN`,
+faker/realistic value) that was redacted under a different salt.
+
+**Masked** values use deterministic, content-derived codes that are
+salt-independent (and partially self-revealing by design — see *mask strategy
+partial leakage* below), so they are **not** isolated across messages: a key can
+reconstruct a masked value it shares with another message. The exposure is
+narrow — this only re-exposes a value the key holder already possesses (a
+cross-message *linkage* of an already-known value, not new PII). A
+salt-independent code is also the only form that currently survives the LLM
+round-trip (redact → LLM → restore the LLM's fresh reply). LLM-roundtrip-compatible
+salt-keyed masking is planned for a future release.
 
 ---
 
