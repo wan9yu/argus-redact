@@ -1,13 +1,16 @@
 //! Unicode normalization for PII detection (port of pure/normalize.py).
 //!
-//! Pipeline (must stay bit-identical to the Python original):
+//! Pipeline:
 //!   1. ASCII fast-path (skip everything if pure ASCII)
 //!   2. Strip invisible / direction-control characters (build char-index offset map)
+//!   2b. Fold combining accents/diacritics (NFD-decompose, drop the nonspacing mark)
+//!       so ASCII-anchored tokens survive a diacritic; offset map preserved
 //!   3. Replace confusables (Latin/Cyrillic/Greek/Coptic look-alikes -> ASCII), 1:1
 //!   4. Per-char NFKC normalization (each source char normalized independently —
 //!      NO cross-char composition) — only run if the joined string isn't already NFKC
 //!   5. Contextual digit normalization (Chinese-digit sequences -> ASCII digits)
 use unicode_normalization::UnicodeNormalization;
+use unicode_normalization::char::canonical_combining_class;
 use unicode_normalization::is_nfkc;
 
 const MIN_DIGIT_SEQ: usize = 7; // shortest PII (phone fragments)
@@ -17,6 +20,33 @@ fn is_invisible(c: char) -> bool {
     matches!(c,
         '\u{200b}'|'\u{200c}'|'\u{200d}'|'\u{00ad}'|'\u{feff}'|'\u{200e}'|'\u{200f}'|
         '\u{202a}'|'\u{202b}'|'\u{202c}'|'\u{202d}'|'\u{202e}'|'\u{2066}'|'\u{2067}'|'\u{2068}'|'\u{2069}')
+}
+
+fn is_droppable_mark(c: char) -> bool {
+    // A nonspacing combining mark we fold away to de-accent ASCII-anchored tokens
+    // (Latin/Greek/Cyrillic accents, etc.).
+    //
+    // We test canonical_combining_class != 0 (nonspacing marks) rather than
+    // is_combining_mark, which would ALSO match *spacing* marks (Mc, ccc=0) such as
+    // Indic vowel signs (e.g. U+093E DEVANAGARI VOWEL SIGN AA); those are kept.
+    // This is a deliberately broad de-accenter: it also drops nonspacing marks that
+    // are meaning-bearing in some scripts (e.g. Devanagari nukta U+093C / virama
+    // U+094D, Thai/Lao tone marks, Arabic harakat, Hebrew niqqud), so the *internal*
+    // normalized form of such text is lossy. That is acceptable under the current
+    // detector set (PII patterns are ASCII / Latin / CJK-digit based; no detector
+    // matches those scripts) AND restore is lossless — spans map back to the
+    // ORIGINAL text, so surrounding script text is preserved verbatim in the output.
+    // Revisit this filter (add per-script exemptions) if/when detection expands to
+    // Indic/Thai/Arabic/Hebrew/etc. scripts.
+    //
+    // Exception: U+3099 / U+309A (CJK voiced / semi-voiced sound marks) are nonspacing
+    // (Mn, ccc=8) but are NOT diacritics — they distinguish CJK letters (で=de vs て=te)
+    // that the Japanese detector and the normalize parity corpus exercise. Dropping
+    // them silently rewrites Japanese, so they are kept.
+    if matches!(c, '\u{3099}' | '\u{309a}') {
+        return false;
+    }
+    canonical_combining_class(c) != 0
 }
 
 fn confusable(c: char) -> char {
@@ -107,6 +137,33 @@ pub fn normalize_text(text: &str) -> (String, Option<Vec<usize>>) {
             offset_map.push(i);
         }
     }
+    // Step 1b: fold combining accents/diacritics (NFD-decompose, drop the mark),
+    // keeping the offset map. Folds both precomposed (á) and decomposed (a + ◌́)
+    // accents so ASCII-anchored tokens (email/phone) survive a diacritic.
+    //
+    // We decompose a char ONLY when its NFD actually contains a droppable mark, and
+    // otherwise keep the ORIGINAL char untouched. Decomposing unconditionally would
+    // shatter precomposed Hangul syllables (한 → 3 jamo) — and the per-char NFKC in
+    // Step 3 does NOT recompose across separate chars, so the output would silently
+    // ship decomposed jamo and break Korean detection.
+    let mut folded_chars: Vec<char> = Vec::with_capacity(chars.len());
+    let mut folded_map: Vec<usize> = Vec::with_capacity(offset_map.len());
+    for (&ch, &src) in chars.iter().zip(offset_map.iter()) {
+        if !ch.nfd().any(is_droppable_mark) {
+            folded_chars.push(ch); // no accent to fold — keep the char as-is
+            folded_map.push(src);
+            continue;
+        }
+        for d in ch.nfd() {
+            if is_droppable_mark(d) {
+                continue; // drop the accent; its base char keeps `src`
+            }
+            folded_chars.push(d);
+            folded_map.push(src);
+        }
+    }
+    chars = folded_chars;
+    offset_map = folded_map;
     // Step 2: confusables (1:1)
     for c in chars.iter_mut() {
         *c = confusable(*c);
@@ -248,5 +305,138 @@ mod tests {
         assert_eq!(m[0], 0); // 'f' from source idx 0
         assert_eq!(m[1], 0); // 'i' also from source idx 0
         assert_eq!(m[2], 1); // 'x' from source idx 1
+    }
+
+    // Helper: slice the ORIGINAL string by a char-index span (the offset map and
+    // map_spans_to_original both work in CHAR indices, not byte indices).
+    fn orig_slice(original: &str, span: (usize, usize)) -> String {
+        original
+            .chars()
+            .skip(span.0)
+            .take(span.1 - span.0)
+            .collect()
+    }
+
+    #[test]
+    fn combining_precomposed_cafe_maps_back_to_full() {
+        // "café" = c,a,f,é(U+00E9 precomposed). é → e + U+0301(dropped). Output "cafe",
+        // one output char per source char, identity offset map.
+        let original = "caf\u{00e9}";
+        let (out, map) = normalize_text(original);
+        assert_eq!(out, "cafe");
+        let m = map.unwrap();
+        assert_eq!(m, vec![0, 1, 2, 3]); // each output char inherits its source index
+        // A span over the whole normalized token maps back to the WHOLE precomposed original.
+        let mapped = map_spans_to_original(&[(0, 4)], Some(&m), original.chars().count());
+        assert_eq!(mapped, vec![(0, 4)]);
+        assert_eq!(orig_slice(original, mapped[0]), "caf\u{00e9}");
+    }
+
+    #[test]
+    fn combining_decomposed_cafe_trailing_mark_behavior() {
+        // "cafe" + U+0301 (decomposed): the accent is the LAST char of the token.
+        // Source chars: c(0) a(1) f(2) e(3) ́(4). The mark is dropped; the surviving
+        // 4 base chars keep indices 0..3. Output "cafe", offset map length 4.
+        let original = "cafe\u{0301}";
+        assert_eq!(original.chars().count(), 5); // 4 base + 1 combining mark
+        let (out, map) = normalize_text(original);
+        assert_eq!(out, "cafe");
+        let m = map.unwrap();
+        assert_eq!(m.len(), 4); // mark dropped: 4 output chars
+        assert_eq!(m, vec![0, 1, 2, 3]);
+        // Mapping the [0,4) span back: orig_end = map[3]+1 = 4, which points JUST PAST
+        // the base 'e' and does NOT cover the trailing combining mark at original index 4.
+        // KNOWN cosmetic artifact: redacting this span removes the PII ("cafe") but leaves
+        // the orphaned U+0301 behind. This is NOT a PII leak — documented, not "fixed" here.
+        let mapped = map_spans_to_original(&[(0, 4)], Some(&m), original.chars().count());
+        assert_eq!(mapped, vec![(0, 4)]);
+        assert_eq!(orig_slice(original, mapped[0]), "cafe"); // base chars covered
+        // The trailing mark lives at original char index 4, outside the mapped [0,4) span.
+        let tail: Vec<char> = original.chars().skip(4).collect();
+        assert_eq!(tail, vec!['\u{0301}']); // orphaned mark remains after redaction
+    }
+
+    #[test]
+    fn combining_mid_token_mark_covered_by_span() {
+        // A decomposed mark MID-token, on a Cyrillic confusable: а(U+0430, →'a') + U+0301,
+        // wrapped by ASCII so the mark is strictly interior. Source chars:
+        // x(0) а(1) ́(2) y(3). The mark drops; the surviving base chars keep 0,1,3.
+        let original = "x\u{0430}\u{0301}y";
+        assert_eq!(original.chars().count(), 4);
+        let (out, map) = normalize_text(original);
+        assert_eq!(out, "xay"); // Cyrillic а folds to ASCII a; accent dropped
+        let m = map.unwrap();
+        assert_eq!(m, vec![0, 1, 3]); // note: index 2 (the mark) is skipped
+        // A span over the whole token [0,3): orig_start=map[0]=0, orig_end=map[2]+1=4.
+        // The mark's original index 2 falls INSIDE [0,4), so it IS covered/replaced.
+        let mapped = map_spans_to_original(&[(0, 3)], Some(&m), original.chars().count());
+        assert_eq!(mapped, vec![(0, 4)]);
+        assert_eq!(orig_slice(original, mapped[0]), "x\u{0430}\u{0301}y"); // mark included
+    }
+
+    #[test]
+    fn combining_fullwidth_digits_with_stray_accent() {
+        // Fullwidth digit run (NFKC → ASCII) interleaved with a stray combining accent.
+        // The accent must be dropped (Step 1b, before NFKC) and digits must still fold.
+        // Source: １(0) ２(1) ́(2) ３(3). Mark drops at Step 1b; survivors keep 0,1,3;
+        // then per-char NFKC folds the fullwidth digits to ASCII.
+        let original = "\u{ff11}\u{ff12}\u{0301}\u{ff13}";
+        let (out, map) = normalize_text(original);
+        assert_eq!(out, "123"); // accent gone, fullwidth digits normalized
+        let m = map.unwrap();
+        assert_eq!(m.len(), 3); // one per surviving digit
+        assert_eq!(m, vec![0, 1, 3]); // index 2 (the dropped mark) skipped
+        let mapped = map_spans_to_original(&[(0, 3)], Some(&m), original.chars().count());
+        // orig_start=0, orig_end=map[2]+1=4 — spans across the dropped mark.
+        assert_eq!(mapped, vec![(0, 4)]);
+        assert_eq!(orig_slice(original, mapped[0]), original); // whole original covered
+    }
+
+    #[test]
+    fn combining_pure_ascii_returns_none() {
+        // ASCII fast-path: no marks possible, identity mapping → None.
+        assert_eq!(normalize_text("hello"), ("hello".into(), None));
+    }
+
+    #[test]
+    fn combining_cjk_voicing_mark_preserved() {
+        // U+3099 / U+309A (CJK voiced / semi-voiced sound marks) are nonspacing (Mn,
+        // ccc=8) but are NOT diacritics: they distinguish CJK letters. で (U+3067, "de")
+        // NFD-decomposes to て (U+3066, "te") + U+3099. Dropping U+3099 would silently
+        // rewrite Japanese (de → te). The voicing mark must be PRESERVED so the
+        // precomposed syllable round-trips unchanged through normalization.
+        assert_eq!(canonical_combining_class('\u{3099}'), 8); // nonspacing but kept
+        assert!(!is_droppable_mark('\u{3099}'));
+        assert!(!is_droppable_mark('\u{309a}'));
+        // "日本語ですよ" must pass through unchanged (no accents to fold, voicing kept).
+        assert_eq!(
+            normalize_text("\u{65e5}\u{672c}\u{8a9e}\u{3067}\u{3059}\u{3088}"),
+            ("\u{65e5}\u{672c}\u{8a9e}\u{3067}\u{3059}\u{3088}".into(), None)
+        );
+    }
+
+    #[test]
+    fn combining_hangul_not_shattered() {
+        // Precomposed Hangul syllables NFD-decompose into conjoining jamo (all ccc=0,
+        // none droppable). Step 1b must NOT decompose them — it keeps the original char
+        // when there is no mark to drop — so the output stays precomposed (byte-identical)
+        // and Korean detection is unaffected. (Unconditional NFD would emit decomposed
+        // jamo, since per-char NFKC in Step 3 does not recompose across separate chars.)
+        let original = "\u{d55c}\u{ad6d}\u{c5b4}"; // 한국어
+        assert_eq!(normalize_text(original), (original.to_string(), None));
+    }
+
+    #[test]
+    fn combining_indic_spacing_mark_preserved() {
+        // U+093E DEVANAGARI VOWEL SIGN AA is a SPACING mark (Mc, ccc=0). It must be
+        // PRESERVED — we only drop NONSPACING marks (Mn, ccc!=0). Proves we test
+        // canonical_combining_class, not is_combining_mark (which would match Mc too).
+        assert_eq!(canonical_combining_class('\u{093e}'), 0); // spacing: ccc 0 → kept
+        assert_eq!(canonical_combining_class('\u{0301}'), 230); // nonspacing accent → dropped
+        let (out, _map) = normalize_text("\u{0915}\u{093e}"); // क + ◌ा (vowel sign AA)
+        assert!(
+            out.contains('\u{093e}'),
+            "Indic spacing vowel sign U+093E must survive Step 1b; got {out:?}"
+        );
     }
 }

@@ -140,6 +140,13 @@ class TestHomoglyphBypass:
         # Normalized email (with homoglyph folded to ASCII) must not appear in output
         assert "smith@gmail.com" not in redacted
 
+    def test_should_detect_email_with_combining_mark(self):
+        # precomposed: gmáil — the diacritic must fold so the ASCII email matches
+        text = "联系 victim@gmáil.com 谢谢"
+        redacted, key = redact(text, salt=42, mode="fast")
+        assert len(key) >= 1
+        assert "victim@gmail.com" not in redacted  # normalized email must be gone
+
 
 class TestUnifiedPrefix:
     """Unified prefix hides PII type from output."""

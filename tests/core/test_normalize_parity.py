@@ -32,6 +32,9 @@ NORMALIZE_CORPUS = [
     "한국어입니다",                          # ko
     "中文测试",                              # zh
     "mixed 中文 and English",                # mixed
+    "café münchen",                          # precomposed accents (é, ü) — fold to ASCII
+    "áé",                        # decomposed combining acute (NFD) — fold to ASCII
+    "José",                                  # precomposed é at token end — folds to "Jose"
 ]
 LANG_CORPUS = [
     "", "hello world", "ab", "中文", "日本語", "한국어",

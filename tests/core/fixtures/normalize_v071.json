@@ -50,6 +50,39 @@
       "",
       null
     ],
+    "José": [
+      "Jose",
+      [
+        0,
+        1,
+        2,
+        3
+      ]
+    ],
+    "áé": [
+      "ae",
+      [
+        0,
+        2
+      ]
+    ],
+    "café münchen": [
+      "cafe munchen",
+      [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ]
+    ],
     "mixed 中文 and English": [
       "mixed 中文 and English",
       null
