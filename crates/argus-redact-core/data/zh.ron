@@ -162,7 +162,7 @@
     PatternData(
         type_: r"organization",
         label: r"[机构已脱敏]",
-        pattern: r"(?:请查一下|请查下|查一下|一下|就职于|供职于|任职于|这是|那是|在|去|从|到|被|给|让|有|是|的|了)?(?P<organization>(?<!\d)[\u4e00-\u9fff]{2,12}(?:股份有限公司|有限责任公司|有限公司|责任公司|集团公司|集团|公司|企业|工厂|银行|保险|证券|基金|医院|诊所|药房|事务所|研究院|研究所|实验室))",
+        pattern: r"(?:请查一下|请查下|查一下|一下|就职于|供职于|任职于|这是|那是|在|去|从|到|被|给|让|有|是|的|了)?(?P<organization>(?<!\d)[\u4e00-\u9fff]{2,12}(?>(?:股份有限公司|有限责任公司|有限公司|责任公司|集团公司|集团|公司|企业|工厂|银行|保险|证券|基金|医院|诊所|药房|事务所|研究院|研究所|实验室)))",
         group: Some(r"organization"),
         validator: Some(r"organization"),
         description: r"Chinese organization name (CJK prefix + legal/industry suffix)",
@@ -170,7 +170,7 @@
     PatternData(
         type_: r"school",
         label: r"[学校已脱敏]",
-        pattern: r"(?:毕业于|就读于?|考入|考上|在|去|从|到|有|是)?(?P<school>(?<!\d)[\u4e00-\u9fff]{2,10}(?:大学|学院|中学|小学|高中|初中|附中|附小|实验学校|外国语学校|师范学校|职业学校|技术学校|幼儿园|书院|学堂|党校))",
+        pattern: r"(?:毕业于|就读于?|考入|考上|在|去|从|到|有|是)?(?P<school>(?<!\d)[\u4e00-\u9fff]{2,10}(?>(?:大学|学院|中学|小学|高中|初中|附中|附小|实验学校|外国语学校|师范学校|职业学校|技术学校|幼儿园|书院|学堂|党校)))",
         group: Some(r"school"),
         validator: Some(r"school"),
         description: r"Chinese school name (CJK prefix + educational suffix)",

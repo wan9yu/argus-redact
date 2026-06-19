@@ -26,16 +26,24 @@ impl std::fmt::Display for PatternError {
 static REGEX_CACHE: LazyLock<Mutex<HashMap<String, Arc<Regex>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-/// fancy-regex backtracking budget per scan. The library default (1M steps)
-/// is too low for some built-in patterns (the zh `organization` / `school`
-/// alternations) over large but LEGITIMATE repetitive input below
-/// [`crate::MAX_INPUT_SIZE`]: they would abort and — with the fail-closed scan
-/// loop — raise rather than match. Raising the budget lets sub-1MB input
-/// complete while still bounding truly pathological (super-linear) patterns:
-/// the [`PatternError`] from an exceeded budget is surfaced (fail closed), not
-/// silently swallowed. Chosen comfortably above what the built-ins need on a
-/// full 1MB input, yet finite so a genuinely catastrophic pattern still aborts.
-const BACKTRACK_LIMIT: usize = 1_000_000_000;
+/// fancy-regex backtracking budget per scan. The built-in patterns — including
+/// the zh `organization` / `school` alternations — are ~O(N) in the input,
+/// which is itself bounded by [`crate::MAX_INPUT_SIZE`] (1 MiB). They are NOT
+/// super-linear: there is no catastrophic backtracking. The budget is not a
+/// guard against exponential blow-up; it is sized so a SINGLE `find` can scan a
+/// full-size no-match (or partial-suffix) CJK region without a false abort.
+///
+/// Such a scan accumulates many *linear* backtrack steps: at each of ~350K char
+/// positions the `{2,12}` prefix tries several lengths before the suffix
+/// alternation fails. The atomic suffix groups (`(?>…)`) cut the per-position
+/// constant by not re-trying the ordered, longest-first alternation. The
+/// worst-case legitimate 1 MiB input (CJK prose with an unterminated suffix
+/// fragment) needs ~13M steps measured empirically; this value is ~5× that for
+/// headroom across platforms. The library default (1M) aborts such legitimate
+/// input. The [`PatternError`] from an exceeded budget is surfaced (fail
+/// closed), not silently swallowed, so the finite limit still bounds any future
+/// pattern that genuinely misbehaves.
+const BACKTRACK_LIMIT: usize = 64_000_000;
 
 fn get_regex(pattern: &str) -> Result<Arc<Regex>, PatternError> {
     let mut cache = REGEX_CACHE.lock().unwrap();
