@@ -82,11 +82,13 @@ pub fn assess_risk(entities: &[(String, i64)], lang: &str) -> RiskOut {
         reasons.push("multiple high/critical entities detected".to_string());
     }
 
-    // Self-reference amplification.
+    // Self-reference amplification: self_reference + any sensitive/structural type.
     if types_found.contains("self_reference") {
-        let mut amplify: BTreeSet<&str> = pipl_sensitive_pi().iter().map(|s| s.as_str()).collect();
-        amplify.extend(SELF_REF_EXTRA);
-        if types_found.iter().any(|t| amplify.contains(t)) {
+        let sensitive = pipl_sensitive_pi();
+        if types_found
+            .iter()
+            .any(|t| sensitive.contains(*t) || SELF_REF_EXTRA.contains(t))
+        {
             score += 0.15;
             reasons.push(
                 "self-reference amplification: PII directly linked to user".to_string(),
