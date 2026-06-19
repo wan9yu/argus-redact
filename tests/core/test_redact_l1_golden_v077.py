@@ -9,8 +9,9 @@ equivalence:
      ``{label: {redacted, key(sorted)}}``. ``redact()``'s default
      ``(redacted, key)`` return is the master gate (same convention as
      ``test_redact_engine_parity.py``).
-  2. ``hints_l1_v077.json`` — the ``text_intent`` + ``self_reference_tier`` L1
-     hints per case, captured with the EXACT inputs the pipeline feeds
+  2. ``hints_l1_v077.json`` — the four L1 hints (``pii_density``,
+     ``near_miss_format``, ``text_intent``, ``self_reference_tier``) per case,
+     captured with the EXACT inputs the pipeline feeds
      ``produce_hints`` (the L1a ``match_patterns`` entities + near-misses, on
      the same patterns ``_detect`` loads via ``_load_patterns``).
 
@@ -164,7 +165,8 @@ def _capture_hints(text, lang):
     yields the L1a entities + near-misses, then
     ``produce_hints(layer1, text, near_misses=near_misses)``. Only ``layer1`` is
     needed for text_intent / self_reference_tier (the self_reference entities come
-    from the L1a regex match itself). We serialize ONLY those two hint types.
+    from the L1a regex match itself). We serialize all four hint types (pii_density,
+    near_miss_format, text_intent, self_reference_tier).
 
     Note: ``_detect`` normalizes text and maps spans back before calling
     produce_hints; for these corpus inputs no normalization span shift affects the
@@ -174,7 +176,12 @@ def _capture_hints(text, lang):
     """
     layer1, near_misses = match_patterns(text, _load_patterns(lang))
     hints = produce_hints(layer1, text, near_misses=near_misses)
-    l1_hints = [h for h in hints if h.type in ("text_intent", "self_reference_tier")]
+    l1_hints = [
+        h
+        for h in hints
+        if h.type
+        in ("pii_density", "near_miss_format", "text_intent", "self_reference_tier")
+    ]
     return [
         {
             "type": h.type,
@@ -232,7 +239,7 @@ def test_redact_golden(label):
 
 @pytest.mark.parametrize("label", _CASE_IDS)
 def test_hints_golden(label):
-    """Current Python L1 hints == frozen text_intent + self_reference_tier per case."""
+    """Current Python L1 hints == frozen L1 hints (all four types) per case."""
     golden = _load(FIXTURE_HINTS)[label]
     case = next(c for c in CASES if c[0] == label)
     _, text, lang, _config, _names, _prefix = case

@@ -2,6 +2,18 @@
   "emoji_prefix": [
     {
       "data": {
+        "count": 1,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "intent": "narrative"
       },
       "region": [
@@ -13,6 +25,18 @@
     }
   ],
   "en_address": [
+    {
+      "data": {
+        "count": 1,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
     {
       "data": {
         "intent": "narrative"
@@ -28,6 +52,18 @@
   "en_realistic": [
     {
       "data": {
+        "count": 2,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "intent": "narrative"
       },
       "region": [
@@ -39,6 +75,18 @@
     }
   ],
   "intent_casual_zh": [
+    {
+      "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
     {
       "data": {
         "has_kinship": false,
@@ -66,6 +114,18 @@
   "intent_instruction_en": [
     {
       "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "has_kinship": false,
         "tier": 3
       },
@@ -89,6 +149,18 @@
     }
   ],
   "intent_instruction_zh": [
+    {
+      "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
     {
       "data": {
         "has_kinship": false,
@@ -116,6 +188,18 @@
   "intent_narrative_zh": [
     {
       "data": {
+        "count": 1,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "intent": "narrative"
       },
       "region": [
@@ -127,6 +211,18 @@
     }
   ],
   "intent_neutral_zh": [
+    {
+      "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
     {
       "data": {
         "intent": "neutral"
@@ -142,6 +238,18 @@
   "jwt_invalid_2seg": [
     {
       "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "intent": "neutral"
       },
       "region": [
@@ -153,6 +261,30 @@
     }
   ],
   "jwt_invalid_noalg": [
+    {
+      "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
+        "original_type": "jwt",
+        "text": "eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiIxMjMifQ.sig"
+      },
+      "region": [
+        9,
+        50
+      ],
+      "source_layer": 1,
+      "type": "near_miss_format"
+    },
     {
       "data": {
         "intent": "neutral"
@@ -168,6 +300,18 @@
   "jwt_valid": [
     {
       "data": {
+        "count": 1,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "intent": "narrative"
       },
       "region": [
@@ -179,6 +323,18 @@
     }
   ],
   "known_names": [
+    {
+      "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
     {
       "data": {
         "intent": "neutral"
@@ -194,6 +350,42 @@
   "near_miss_id": [
     {
       "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
+        "original_type": "id_number",
+        "text": "110101199003074611"
+      },
+      "region": [
+        3,
+        21
+      ],
+      "source_layer": 1,
+      "type": "near_miss_format"
+    },
+    {
+      "data": {
+        "original_type": "credit_code",
+        "text": "110101199003074611"
+      },
+      "region": [
+        3,
+        21
+      ],
+      "source_layer": 1,
+      "type": "near_miss_format"
+    },
+    {
+      "data": {
         "intent": "neutral"
       },
       "region": [
@@ -207,6 +399,30 @@
   "org_nearmiss": [
     {
       "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
+        "original_type": "organization",
+        "text": "这是公司"
+      },
+      "region": [
+        0,
+        4
+      ],
+      "source_layer": 1,
+      "type": "near_miss_format"
+    },
+    {
+      "data": {
         "intent": "neutral"
       },
       "region": [
@@ -218,6 +434,18 @@
     }
   ],
   "org_valid": [
+    {
+      "data": {
+        "count": 1,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
     {
       "data": {
         "has_kinship": false,
@@ -245,6 +473,18 @@
   "roundtrip_en_faker": [
     {
       "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "has_kinship": false,
         "tier": 2
       },
@@ -270,6 +510,18 @@
   "roundtrip_zh_realistic": [
     {
       "data": {
+        "count": 1,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "intent": "narrative"
       },
       "region": [
@@ -283,6 +535,30 @@
   "school_nearmiss": [
     {
       "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
+        "original_type": "school",
+        "text": "这是大学"
+      },
+      "region": [
+        0,
+        4
+      ],
+      "source_layer": 1,
+      "type": "near_miss_format"
+    },
+    {
+      "data": {
         "intent": "neutral"
       },
       "region": [
@@ -294,6 +570,18 @@
     }
   ],
   "school_valid": [
+    {
+      "data": {
+        "count": 1,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
     {
       "data": {
         "has_kinship": false,
@@ -321,6 +609,18 @@
   "selfref_tier1_kinship": [
     {
       "data": {
+        "count": 1,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "has_kinship": true,
         "tier": 1
       },
@@ -344,6 +644,18 @@
     }
   ],
   "selfref_tier2_pronoun": [
+    {
+      "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
     {
       "data": {
         "has_kinship": false,
@@ -371,6 +683,18 @@
   "selfref_tier3_command": [
     {
       "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "has_kinship": false,
         "tier": 3
       },
@@ -396,6 +720,18 @@
   "shared_email_ip": [
     {
       "data": {
+        "count": 2,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "intent": "narrative"
       },
       "region": [
@@ -407,6 +743,18 @@
     }
   ],
   "threshold_flip_instruction": [
+    {
+      "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
     {
       "data": {
         "has_kinship": false,
@@ -434,6 +782,18 @@
   "threshold_flip_narrative": [
     {
       "data": {
+        "count": 1,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "intent": "narrative"
       },
       "region": [
@@ -445,6 +805,30 @@
     }
   ],
   "unified": [
+    {
+      "data": {
+        "count": 2,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
+        "original_type": "credit_code",
+        "text": "110101199003074610"
+      },
+      "region": [
+        15,
+        33
+      ],
+      "source_layer": 1,
+      "type": "near_miss_format"
+    },
     {
       "data": {
         "intent": "narrative"
@@ -460,6 +844,30 @@
   "unified_prefix": [
     {
       "data": {
+        "count": 2,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
+        "original_type": "credit_code",
+        "text": "110101199003074610"
+      },
+      "region": [
+        15,
+        33
+      ],
+      "source_layer": 1,
+      "type": "near_miss_format"
+    },
+    {
+      "data": {
         "intent": "narrative"
       },
       "region": [
@@ -471,6 +879,18 @@
     }
   ],
   "zh_category": [
+    {
+      "data": {
+        "count": 1,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
     {
       "data": {
         "intent": "narrative"
@@ -486,6 +906,18 @@
   "zh_collision": [
     {
       "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "intent": "neutral"
       },
       "region": [
@@ -499,6 +931,30 @@
   "zh_default": [
     {
       "data": {
+        "count": 2,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
+        "original_type": "credit_code",
+        "text": "110101199003074610"
+      },
+      "region": [
+        20,
+        38
+      ],
+      "source_layer": 1,
+      "type": "near_miss_format"
+    },
+    {
+      "data": {
         "intent": "narrative"
       },
       "region": [
@@ -510,6 +966,18 @@
     }
   ],
   "zh_keep": [
+    {
+      "data": {
+        "count": 1,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
     {
       "data": {
         "has_kinship": true,
@@ -537,6 +1005,18 @@
   "zh_landline_mask": [
     {
       "data": {
+        "count": 1,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "intent": "narrative"
       },
       "region": [
@@ -548,6 +1028,18 @@
     }
   ],
   "zh_mask": [
+    {
+      "data": {
+        "count": 2,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
     {
       "data": {
         "intent": "narrative"
@@ -563,6 +1055,18 @@
   "zh_name_mask": [
     {
       "data": {
+        "count": 0,
+        "level": "none"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
         "intent": "neutral"
       },
       "region": [
@@ -574,6 +1078,30 @@
     }
   ],
   "zh_realistic": [
+    {
+      "data": {
+        "count": 2,
+        "level": "medium"
+      },
+      "region": [
+        0,
+        0
+      ],
+      "source_layer": 1,
+      "type": "pii_density"
+    },
+    {
+      "data": {
+        "original_type": "credit_code",
+        "text": "110101199003074610"
+      },
+      "region": [
+        20,
+        38
+      ],
+      "source_layer": 1,
+      "type": "near_miss_format"
+    },
     {
       "data": {
         "intent": "narrative"
