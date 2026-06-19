@@ -265,8 +265,12 @@ def _en_cases() -> list[dict]:
     add("en_unknown_surname_negative", "John Xeoplux arrived.")
     add("en_no_capitalized_pattern", "call them later")
 
-    # Unicode-aware tokenizer recall (accented / intra-word-cap / apostrophe /
-    # hyphen names tokenize as ONE token; surname-anchored look-back applies).
+    # Unicode-aware tokenizer recall (intra-word-cap / apostrophe / hyphen names
+    # tokenize as ONE token; surname-anchored look-back applies). The accented
+    # case yields NO match at this DETECTOR level by design: the pools store the
+    # de-accented (normalized) form, so accented input matches only after the
+    # redact() pipeline's accent fold — that real-path recall is pinned in
+    # tests/detection/lang/test_person_pools_recall.py.
     add("en_accented_name", "Renée Müller")
     add("en_intra_word_cap", "Ronald McDonald")
     add("en_apostrophe_name", "Sean O'Brien")

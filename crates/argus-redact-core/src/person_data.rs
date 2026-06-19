@@ -113,22 +113,23 @@ mod tests {
 
     #[test]
     fn pools_load_with_expected_cardinalities() {
-        // Frozen counts mirror the pure-Python sources (see parity gate).
-        assert_eq!(surnames_zh().chars().count(), 138);
+        // Frozen counts mirror the embedded RON pools (see the parity gate
+        // `EXPECTED_COUNTS`). The surname pools were grown for non-Anglo recall.
+        assert_eq!(surnames_zh().chars().count(), 146);
         assert_eq!(compound_surnames_zh().len(), 16);
-        assert_eq!(not_names_zh().len(), 7533);
+        assert_eq!(not_names_zh().len(), 7534);
         assert_eq!(common_words_zh().len(), 31257);
-        assert_eq!(given_names_en().len(), 199);
-        assert_eq!(surnames_en().len(), 615);
+        assert_eq!(given_names_en().len(), 206);
+        assert_eq!(surnames_en().len(), 643);
     }
 
     #[test]
     fn membership_sets_match_pool_lengths() {
         // Pools have no duplicates, so the set sizes equal the list lengths.
-        assert_eq!(not_names_zh_set().len(), 7533);
+        assert_eq!(not_names_zh_set().len(), 7534);
         assert_eq!(common_words_zh_set().len(), 31257);
-        assert_eq!(given_names_en_set().len(), 199);
-        assert_eq!(surnames_en_set().len(), 615);
+        assert_eq!(given_names_en_set().len(), 206);
+        assert_eq!(surnames_en_set().len(), 643);
     }
 
     #[test]

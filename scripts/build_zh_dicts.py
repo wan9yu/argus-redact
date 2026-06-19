@@ -54,6 +54,7 @@ SURNAMES_POOL = (
     "侯邵孟龙万段漕钱汤尹黎易常武乔贺赖龚文庞"
     "樊兰殷施陶洪翟安颜倪严牛温芦季俞章鲁葛伍"
     "韦申尤毕聂丛焦向柳邢骆岳齐沿雷詹欧"
+    "莫缪邝靳邬滕佟翁"
 )
 
 COMPOUND_SURNAMES = (
@@ -103,6 +104,11 @@ OVERRIDE_COMMON_WORDS = {
     "高陵", "金平", "罗田", "黄石",
 }
 
+# Manually-curated not-name entries that jieba's dict.txt does NOT mark, added to
+# block false-positive name candidates from surnames whose common words jieba
+# misses (e.g. 莫名 for the 莫 surname). Unioned into the derived not_names.
+MANUAL_NOT_NAMES = ("莫名",)
+
 
 def _is_cjk(word: str) -> bool:
     return all("一" <= c <= "鿿" for c in word)
@@ -132,7 +138,7 @@ def derive_jieba_pools(dict_path: str) -> tuple[list[str], list[str]]:
                 common.add(word)
 
     negative |= OVERRIDE_COMMON_WORDS
-    return sorted(negative), sorted(common)
+    return sorted(set(negative) | set(MANUAL_NOT_NAMES)), sorted(common)
 
 
 def _emit_list(name: str, items: list[str]) -> str:

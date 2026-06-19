@@ -198,6 +198,14 @@
     "pii_entities": null,
     "known_names": null,
     "threshold": null,
-    "output": []
+    "output": [
+      {
+        "text": "Jean-Paul Sartre",
+        "type": "person",
+        "start": 0,
+        "end": 16,
+        "confidence": 0.9
+      }
+    ]
   }
 ]

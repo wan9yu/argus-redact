@@ -3106,5 +3106,141 @@
         "confidence": 0.8999999999999999
       }
     ]
+  },
+  {
+    "id": "zh_surname_sweep_莫",
+    "lang": "zh",
+    "input": "客户莫磊",
+    "pii_entities": [],
+    "known_names": null,
+    "threshold": 0.8,
+    "output": [
+      {
+        "text": "莫磊",
+        "type": "person",
+        "start": 2,
+        "end": 4,
+        "confidence": 0.8999999999999999
+      }
+    ]
+  },
+  {
+    "id": "zh_surname_sweep_缪",
+    "lang": "zh",
+    "input": "客户缪磊",
+    "pii_entities": [],
+    "known_names": null,
+    "threshold": 0.8,
+    "output": [
+      {
+        "text": "缪磊",
+        "type": "person",
+        "start": 2,
+        "end": 4,
+        "confidence": 0.8999999999999999
+      }
+    ]
+  },
+  {
+    "id": "zh_surname_sweep_邝",
+    "lang": "zh",
+    "input": "客户邝磊",
+    "pii_entities": [],
+    "known_names": null,
+    "threshold": 0.8,
+    "output": [
+      {
+        "text": "邝磊",
+        "type": "person",
+        "start": 2,
+        "end": 4,
+        "confidence": 0.8999999999999999
+      }
+    ]
+  },
+  {
+    "id": "zh_surname_sweep_靳",
+    "lang": "zh",
+    "input": "客户靳磊",
+    "pii_entities": [],
+    "known_names": null,
+    "threshold": 0.8,
+    "output": [
+      {
+        "text": "靳磊",
+        "type": "person",
+        "start": 2,
+        "end": 4,
+        "confidence": 0.8999999999999999
+      }
+    ]
+  },
+  {
+    "id": "zh_surname_sweep_邬",
+    "lang": "zh",
+    "input": "客户邬磊",
+    "pii_entities": [],
+    "known_names": null,
+    "threshold": 0.8,
+    "output": [
+      {
+        "text": "邬磊",
+        "type": "person",
+        "start": 2,
+        "end": 4,
+        "confidence": 0.8999999999999999
+      }
+    ]
+  },
+  {
+    "id": "zh_surname_sweep_滕",
+    "lang": "zh",
+    "input": "客户滕磊",
+    "pii_entities": [],
+    "known_names": null,
+    "threshold": 0.8,
+    "output": [
+      {
+        "text": "滕磊",
+        "type": "person",
+        "start": 2,
+        "end": 4,
+        "confidence": 0.8999999999999999
+      }
+    ]
+  },
+  {
+    "id": "zh_surname_sweep_佟",
+    "lang": "zh",
+    "input": "客户佟磊",
+    "pii_entities": [],
+    "known_names": null,
+    "threshold": 0.8,
+    "output": [
+      {
+        "text": "佟磊",
+        "type": "person",
+        "start": 2,
+        "end": 4,
+        "confidence": 0.8999999999999999
+      }
+    ]
+  },
+  {
+    "id": "zh_surname_sweep_翁",
+    "lang": "zh",
+    "input": "客户翁磊",
+    "pii_entities": [],
+    "known_names": null,
+    "threshold": 0.8,
+    "output": [
+      {
+        "text": "翁磊",
+        "type": "person",
+        "start": 2,
+        "end": 4,
+        "confidence": 0.8999999999999999
+      }
+    ]
   }
 ]

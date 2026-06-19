@@ -42,23 +42,23 @@ import argus_redact._core as _core
 # ── Frozen fingerprints (captured from the live Python sources at port time) ──
 
 EXPECTED_COUNTS = {
-    "surnames_zh": 138,        # distinct chars in SURNAMES string
+    "surnames_zh": 146,        # distinct chars in SURNAMES string
     "compound_surnames_zh": 16,
-    "not_names_zh": 7533,
+    "not_names_zh": 7534,
     "common_words_zh": 31257,
-    "given_names_en": 199,
-    "surnames_en": 615,
+    "given_names_en": 206,
+    "surnames_en": 643,
 }
 
 EXPECTED_SHA256 = {
     # sha256 over the raw SURNAMES string (order-load-bearing, exact).
-    "surnames_zh": "8db618e15616cacb112c44167b80cef15f62e2558065e27f601dc39b2f1cebcc",
+    "surnames_zh": "13d0f2f67950dbeebdb4e694d06342518ae00432bde3d5e9b4ac440beb8be3dc",
     # sha256 over "\n".join(sorted(pool)) (order-independent).
     "compound_surnames_zh": "e4c54f36dfabff6b2ba5e995a9382d7b4eaa5457a52e4917b58002e9e41b2af8",
-    "not_names_zh": "f329de7ddba52e49c3ab740b9e63150d10a1134399e0bf06f041e4d7f35c18c5",
+    "not_names_zh": "b23a31aaf4f7272a2cbb4be58d85081f28dcbac38b795b6b19dc113f387efb9c",
     "common_words_zh": "a725bd410a74cd222151d9dd719472b5e2649873483862a2a15a949ef55543fe",
-    "given_names_en": "fa796ed470e997631ee1956f41c1d161cd9a5673e25f7feeccef97665db6bf77",
-    "surnames_en": "1fefac4e9cad7cbfa561ccce81232f952a8ab781404ced944cab506e5e86626b",
+    "given_names_en": "7286ace41c7c55a78e7a026fe142de46d234663c0d88dff059df346b96d3be10",
+    "surnames_en": "adb6028d53c52f494b497a09c2dc49e94c6946db388eaf7e0556d88241b0a1d0",
 }
 
 
