@@ -20,8 +20,9 @@ import pytest
 
 import argus_redact
 
+# Additive optional keyword-only params are minor-compatible; only removals/renames/required-additions need v2.0.
 FROZEN_SIGNATURES = {
-    'redact': '(text: \'str\', *, key: \'dict | str | None\' = None, lang: \'str | list[str]\' = \'zh\', mode: \'str\' = \'fast\', salt: \'int | bytes | None\' = None, config: \'dict | str | None\' = None, names: \'list[str] | None\' = None, detailed: \'bool\' = False, report: \'bool\' = False, with_types: \'bool\' = False, profile: \'str | None\' = None, types: \'list[str] | None\' = None, types_exclude: \'list[str] | None\' = None, unified_prefix: \'str | None\' = None, _pre_detected: "\'list[PatternMatch] | None\'" = None)',
+    'redact': '(text: \'str\', *, key: \'dict | str | None\' = None, lang: \'str | list[str]\' = \'zh\', mode: \'str\' = \'fast\', salt: \'int | bytes | None\' = None, config: \'dict | str | None\' = None, names: \'list[str] | None\' = None, detailed: \'bool\' = False, report: \'bool\' = False, with_types: \'bool\' = False, profile: \'str | None\' = None, types: \'list[str] | None\' = None, types_exclude: \'list[str] | None\' = None, unified_prefix: \'str | None\' = None, strict: \'bool\' = False, _pre_detected: "\'list[PatternMatch] | None\'" = None)',
     'restore': "(text: 'str', key: 'dict[str, str] | str', *, aliases: 'dict[str, tuple[str, ...]] | None' = None, display_marker: 'str | None' = None) -> 'str'",
     'assess_risk': "(entities: 'list[dict]', lang: 'str' = 'zh') -> 'RiskResult'",
     'check_restore_safety': "(redacted: 'str', llm_output: 'str', key: 'dict[str, str]') -> 'list[str]'",

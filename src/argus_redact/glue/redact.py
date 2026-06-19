@@ -7,10 +7,12 @@ import json
 import logging
 import os
 import time
+import warnings
 from pathlib import Path
 
 from argus_redact._safe_io import safe_read_text as _safe_read_text
 from argus_redact._types import PatternMatch
+from argus_redact.exceptions import LayerUnavailableError
 from argus_redact.lang._loader import core_patterns
 from argus_redact.layers import LAYER_NER, LAYER_SEMANTIC
 from argus_redact.pure.grammar import normalize_grammar_en
@@ -24,7 +26,7 @@ from argus_redact.pure.hints import (
 from argus_redact.pure.lang_detect import detect_languages
 from argus_redact.pure.merger import merge_entities
 from argus_redact.pure.normalize import MAX_INPUT_SIZE
-from argus_redact.pure.replacer import replace
+from argus_redact.pure.replacer import SecurityWarning, replace
 from argus_redact.telemetry import PerfRecord, emit, get_perf_hook
 
 logger = logging.getLogger(__name__)
@@ -193,6 +195,7 @@ def _detect(
     names: list[str] | None,
     types: list[str] | None,
     types_exclude: list[str] | None,
+    strict: bool = False,
 ) -> tuple[list[PatternMatch], list[str], dict, dict]:
     """Run the full detection pipeline (L1 regex + L1b person + L2 NER + L3 LLM + merge).
 
@@ -238,12 +241,24 @@ def _detect(
         ner_confidence = get_ner_min_confidence(hints)
         t0 = time.perf_counter()
         adapters = _get_ner_adapters(lang)
-        if not adapters and mode == "ner":
-            logger.warning(
-                "mode='ner' but no NER models available. "
-                "Install language extras: pip install argus-redact[zh] or [en]"
+        if not adapters:
+            if mode == "ner":
+                raise LayerUnavailableError(
+                    "mode='ner' requested but no NER model is available. "
+                    "Install a language extra: pip install argus-redact[zh] or [en]."
+                )
+            # mode == "auto": best-effort degradation — warn + signal, don't raise.
+            warnings.warn(
+                "mode='auto': no NER model available; degrading to L1-only "
+                "(set strict=True to raise instead).",
+                SecurityWarning,
+                stacklevel=2,
             )
             layer2_status = "no_model"
+            if strict:
+                raise LayerUnavailableError(
+                    "mode='auto' + strict=True: no NER model available."
+                )
         for adapter in adapters:
             ner_entities = detect_ner(text, adapter=adapter, min_confidence=ner_confidence)
             layer2_matches = [e.to_pattern_match(layer=LAYER_NER) for e in ner_entities]
@@ -271,6 +286,16 @@ def _detect(
             except Exception:
                 logger.warning("Layer 3 semantic detection failed", exc_info=True)
                 layer3_status = "error"
+                warnings.warn(
+                    "mode='auto': Layer-3 semantic detection failed; continuing "
+                    "with L1+L2 (set strict=True to raise instead).",
+                    SecurityWarning,
+                    stacklevel=2,
+                )
+                if strict:
+                    raise LayerUnavailableError(
+                        "mode='auto' + strict=True: Layer-3 semantic detection failed."
+                    ) from None
             timing["layer_3_ms"] = (time.perf_counter() - t0) * 1000
 
     t0 = time.perf_counter()
@@ -368,6 +393,7 @@ def redact(
     types: list[str] | None = None,
     types_exclude: list[str] | None = None,
     unified_prefix: str | None = None,
+    strict: bool = False,
     _pre_detected: "list[PatternMatch] | None" = None,
 ):
     """Detect and replace PII in text.
@@ -477,6 +503,7 @@ def redact(
             names=names,
             types=types,
             types_exclude=types_exclude,
+            strict=strict,
         )
 
     redacted, result_key, _aliases = _replace_and_emit(
