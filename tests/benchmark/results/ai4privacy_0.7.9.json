@@ -1,0 +1,35 @@
+{
+  "version": "0.7.9-dev",
+  "package_version_string": "0.7.8",
+  "commit": "f17ad8a",
+  "dataset": "ai4privacy",
+  "language": "en",
+  "samples": 500,
+  "salt": 42,
+  "modes": {
+    "fast": {
+      "precision": 81.6,
+      "recall": 31.9,
+      "f1": 45.8
+    },
+    "ner": {
+      "precision": 74.9,
+      "recall": 42.8,
+      "f1": 54.4
+    }
+  },
+  "per_type_fast": {
+    "address": {"precision": 0.0, "recall": 0.0, "f1": 0.0, "tp": 0, "fp": 51, "fn": 204},
+    "credit_card": {"precision": 100.0, "recall": 10.4, "f1": 18.9, "tp": 5, "fp": 0, "fn": 43},
+    "email": {"precision": 99.6, "recall": 99.6, "f1": 99.6, "tp": 226, "fp": 1, "fn": 1},
+    "location": {"precision": 100.0, "recall": 0.0, "f1": 0.0, "tp": 0, "fp": 0, "fn": 246}
+  },
+  "per_type_ner": {
+    "address": {"precision": 0.0, "recall": 0.0, "f1": 0.0, "tp": 0, "fp": 48, "fn": 204},
+    "credit_card": {"precision": 100.0, "recall": 8.3, "f1": 15.4, "tp": 4, "fp": 0, "fn": 44},
+    "email": {"precision": 99.6, "recall": 99.1, "f1": 99.3, "tp": 225, "fp": 1, "fn": 2},
+    "location": {"precision": 59.6, "recall": 32.9, "f1": 42.4, "tp": 81, "fp": 55, "fn": 165}
+  },
+  "notes": "Measured on the v0.7.9 development HEAD (commit f17ad8a, Phase 2 hardening: unicode-aware en tokenizer + grown surname pools). The package __version__ string is still 0.7.8 because the v0.7.9 tag is not yet cut; package_version_string records what the build self-reports. First 500 English samples streamed from ai4privacy/pii-masking-400k (deterministic order, no random sampling); salt=42 fixes the pseudonym mapping. auto mode skipped — qwen2.5:32b inference exceeded 60s timeout on the maintainer's machine; rerun on a host with adequate memory or use a smaller LLM (e.g., qwen2.5:7b). Apple M1 Max, Python 3.11.",
+  "date": "2026-06-20"
+}

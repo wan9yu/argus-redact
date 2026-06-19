@@ -1,15 +1,29 @@
 # Benchmark Report
 
-> **Currency**: This report reflects argus-redact v0.7.8 on Apple M1 Max,
-> Python 3.11. ai4privacy 500 samples, seed=42. `auto` mode skipped on the
-> maintainer's machine (qwen2.5:32b inference exceeded 60s read timeout —
-> rerun on a host with adequate memory, or use a smaller LLM like
-> qwen2.5:7b). Reproduce: `python -m tests.benchmark ai4privacy --mode fast,ner --limit 500 --save tests/benchmark/results/ai4privacy_0.6.6.json`.
-> Pinned result JSON: `tests/benchmark/results/ai4privacy_0.6.6.json`.
+> **Currency**: All three benchmarks below were re-run on the **v0.7.9
+> development HEAD** (commit `f17ad8a`) on Apple M1 Max, Python 3.11. The
+> build still self-reports `__version__ == "0.7.8"` because the v0.7.9 tag is
+> not yet cut; the numbers measure the Phase 2 hardening already merged on
+> that line (unicode-aware English tokenizer, surname+3 cap, grown en/zh
+> surname pools). There is **no random sampling** — each run streams the
+> first N rows of the dataset in deterministic order; `salt=42` fixes the
+> pseudonym mapping. `auto` (LLM) mode is **skipped** on the maintainer's
+> machine (qwen2.5:32b inference exceeded the 60s read timeout — rerun on a
+> host with adequate memory, or use a smaller LLM like qwen2.5:7b).
+>
+> | Benchmark | Samples | Reproduce | Pinned JSON |
+> |---|---|---|---|
+> | pii_bench_zh (zh, self-authored) | 1000 | `python -m tests.benchmark pii_bench_zh --lang zh --mode fast,ner --limit 1000 --save tests/benchmark/results/pii_bench_zh_0.7.9.json` | `tests/benchmark/results/pii_bench_zh_0.7.9.json` |
+> | ai4privacy (en) | 500 | `python -m tests.benchmark ai4privacy --lang en --mode fast,ner --limit 500 --save tests/benchmark/results/ai4privacy_0.7.9.json` | `tests/benchmark/results/ai4privacy_0.7.9.json` |
+> | kaggle_piilo (en, real essays) | 500 | `python -m tests.benchmark kaggle_piilo --lang en --mode fast,ner --limit 500 --save tests/benchmark/results/kaggle_piilo_0.7.9.json` | `tests/benchmark/results/kaggle_piilo_0.7.9.json` |
+>
+> The earlier `tests/benchmark/results/ai4privacy_0.6.6.json` is retained as a
+> historical baseline (it backs a schema-guard test); the report now pins the
+> v0.7.9 result files above.
 
 ## Executive Summary
 
-argus-redact is the only tool that combines PII detection with **reversible encryption and per-message keys**. On structured PII (phone, ID, email, bank card), it achieves near-perfect precision. On Chinese PII specifically, it is **the only viable open-source option** — Presidio has no Chinese support.
+argus-redact is the only tool that combines PII detection with **reversible encryption and per-message keys**. On checksum-validated structured PII (phone, ID, email, bank card, license plate), it scores 100% precision and 100% recall on the self-authored Chinese suite. On Chinese PII specifically, it is **the only viable open-source option** — Presidio has no Chinese support.
 
 |  | argus-redact | Presidio |
 |--|:-----------:|:--------:|
@@ -23,73 +37,156 @@ argus-redact is the only tool that combines PII detection with **reversible encr
 
 ## 1. Chinese PII Detection (pii_bench_zh, 1000 samples)
 
-**No other open-source tool benchmarks against Chinese PII.** This dataset was created by us to fill this gap.
+**No other open-source tool benchmarks against Chinese PII.** This dataset is
+**self-authored** (`wan9yu/pii-bench-zh`) — created by us to fill this gap, so
+treat it as an internal coverage check, not a third-party-audited score.
+Numbers below are measured on the v0.7.9 development HEAD (commit `f17ad8a`).
 
-### argus-redact (regex + name scoring, `mode="fast"`)
+### argus-redact, `mode="fast"` (regex + name scoring)
 
 | Entity type | Precision | Recall | F1 | Notes |
 |-------------|-----------|--------|-----|-------|
 | email | 100.0% | 100.0% | 100.0% | |
 | id_number | 100.0% | 100.0% | 100.0% | MOD 11-2 checksum validation |
 | license_plate | 100.0% | 100.0% | 100.0% | |
-| passport | 100.0% | 100.0% | 100.0% | |
 | phone | 100.0% | 100.0% | 100.0% | |
 | bank_card | 100.0% | 100.0% | 100.0% | Luhn + BIN prefix |
-| address | 88.8% | 88.8% | 88.8% | Complex multi-part matching |
-| person | 92.9% | 98.5% | 95.6% | Candidate generation + evidence scoring |
-| **Overall** | **96.5%** | **98.5%** | **97.4%** | |
+| passport | 100.0% | 72.9% | 84.4% | recall gap — see analysis |
+| address | 71.7% | 71.7% | 71.7% | Complex multi-part matching |
+| person | 91.5% | 86.5% | 88.9% | Candidate generation + evidence scoring |
+| **Overall** | **94.6%** | **92.1%** | **93.3%** | |
+
+### argus-redact, `mode="ner"` (+ HanLP)
+
+| Entity type | Precision | Recall | F1 |
+|-------------|-----------|--------|-----|
+| email | 100.0% | 100.0% | 100.0% |
+| id_number | 100.0% | 100.0% | 100.0% |
+| license_plate | 100.0% | 100.0% | 100.0% |
+| phone | 100.0% | 100.0% | 100.0% |
+| bank_card | 100.0% | 100.0% | 100.0% |
+| passport | 100.0% | 72.9% | 84.4% |
+| address | 71.7% | 71.7% | 71.7% |
+| person | 92.1% | 88.0% | 90.0% |
+| **Overall** | **94.7%** | **92.6%** | **93.7%** |
+
+_Result JSON: `tests/benchmark/results/pii_bench_zh_0.7.9.json`. `auto` (LLM)
+mode skipped — see currency note._
 
 **Presidio:** Not applicable — no Chinese language support.
 
-**Key takeaway:** Person name detection uses a candidate generation + evidence scoring approach: surname + CJK sequences are scored against PII proximity, context words, and honorific suffixes. This achieves 98.5% recall without any NER model — a leap from the prior 49% recall with simple context-prefix heuristics.
+**Key takeaway:** Checksum-validated structured PII (phone, email, ID, bank
+card, license plate) stays at 100% precision **and** 100% recall on this suite.
+Person names are detected by candidate generation + evidence scoring (surname +
+CJK sequences scored against PII proximity, context words, honorific suffixes) —
+no NER model required: `fast` gets 86.5% recall at 91.5% precision, and HanLP in
+`ner` mode adds only ~1.5 points of recall (88.0%) for a ~30x speed cost, so
+`fast` is the recommended default.
+
+**Honest deltas vs. the previous (v0.7.8-era, never-pinned) numbers:** these
+v0.7.9 numbers are measured against the published `wan9yu/pii-bench-zh` rows and
+are lower than the prior unpinned table (which claimed 98.5% person recall,
+100% passport, 88.8% address, 97.4% overall F1). Those earlier figures were
+never committed as a result JSON and do not reproduce against the published
+dataset, so they are replaced rather than relabeled. Two real recall gaps
+remain on this dataset: (1) **passport** — the suite includes single-letter +
+8-digit passport numbers (e.g. `G10122691`) that the current pattern does not
+fully cover (precision stays 100%, no false positives); (2) **address** —
+multi-part informal address spans still under-match. These are tracked in
+Limitations below.
 
 ---
 
 ## 2. English PII Detection — ai4privacy (400K dataset, 500 samples)
 
+Measured on the v0.7.9 development HEAD (commit `f17ad8a`), first 500 English
+rows.
+
 ### argus-redact
 
 | Mode | Precision | Recall | F1 |
 |---|---|---|---|
-| fast (regex)          | 78.3% | 30.3% | 43.7% |
-| ner (+ spaCy)         | 72.8% | 41.4% | 52.8% |
+| fast (regex)          | 81.6% | 31.9% | 45.8% |
+| ner (+ spaCy)         | 74.9% | 42.8% | 54.4% |
 | auto (+ Ollama 32B)   | _skipped this run — see currency note_ | | |
 
-_Run details: 500 samples, seed=42. Result JSON: `tests/benchmark/results/ai4privacy_0.6.6.json`._
+_Result JSON: `tests/benchmark/results/ai4privacy_0.7.9.json`._
 
-### Per-type breakdown (ner mode, 200 samples)
+### Per-type breakdown (same 500-sample run)
 
-| Entity type | Precision | Recall | F1 |
-|-------------|-----------|--------|-----|
-| email | 95.4% | 93.7% | 94.5% |
-| credit_card | 100.0% | 10.5% | 19.0% |
-| location | 64.2% | 34.7% | 45.0% |
-| address | 0.0% | 0.0% | 0.0% |
+| Entity type | Mode | Precision | Recall | F1 |
+|-------------|------|-----------|--------|-----|
+| email | fast | 99.6% | 99.6% | 99.6% |
+| email | ner | 99.6% | 99.1% | 99.3% |
+| credit_card | fast | 100.0% | 10.4% | 18.9% |
+| credit_card | ner | 100.0% | 8.3% | 15.4% |
+| location | fast | _100.0%_ | 0.0% | 0.0% |
+| location | ner | 59.6% | 32.9% | 42.4% |
+| address | fast | 0.0% | 0.0% | 0.0% |
+| address | ner | 0.0% | 0.0% | 0.0% |
 
-**Analysis:** High precision across the board. Recall is limited because ai4privacy uses European formats (Dutch, German, French) that don't match US-centric regex patterns. The NER layer adds +16% recall for location entities.
+(`location` fast precision is 100% only because `fast` detects zero locations —
+no false positives, no true positives either.)
+
+**Analysis:** Email is essentially solved (99.6% precision/recall). Recall is
+limited overall because ai4privacy uses European formats (Dutch, German, French)
+that don't match the US-centric structured patterns, and the dataset's
+`address`/`STREET` spans don't align with the detector's address model (0%, and
+the `fast` false positives there pull precision down). The NER layer adds
+location recall (0% → 32.9%) at the cost of location precision (59.6%). Versus
+the prior v0.7.8-era table (fast 78.3/30.3/43.7, ner 72.8/41.4/52.8), the v0.7.9
+Phase 2 person-detection work nudged both modes up on every axis (fast F1
+43.7 → 45.8, ner F1 52.8 → 54.4) — no regression on this dataset.
 
 ---
 
 ## 3. Real Student Essays — Kaggle PIILO (7K dataset, 500 samples)
 
-This is the only benchmark with **real (non-synthetic) text**.
+This is the only benchmark with **real (non-synthetic) text**. argus-redact
+numbers are measured on the v0.7.9 development HEAD (commit `f17ad8a`).
 
 | Tool | Mode | Precision | Recall | F1 | Speed |
 |------|------|-----------|--------|-----|-------|
-| argus-redact | fast | 90.0% | 2.9% | 5.6% | 35 docs/s |
-| argus-redact | ner | 20.8% | 40.5% | 27.5% | 2 docs/s |
+| argus-redact | fast | 68.9% | 29.8% | 41.6% | 16 docs/s |
+| argus-redact | ner | 25.2% | 46.6% | 32.7% | 2 docs/s |
 | **Presidio** | — | 35.1% | 47.1% | 40.2% | 5 docs/s |
 
-### Per-type breakdown (argus-redact ner, 200 samples)
+_argus-redact result JSON: `tests/benchmark/results/kaggle_piilo_0.7.9.json`.
+The Presidio row was measured on an earlier run and is **not re-measured** for
+v0.7.9 — keep it as a scoped historical reference, not a head-to-head on
+identical code._
 
-| Entity type | Precision | Recall | F1 |
-|-------------|-----------|--------|-----|
-| email | 100.0% | 100.0% | 100.0% |
-| person | 19.5% | 43.0% | 26.9% |
-| id_number | 100.0% | 0.0% | 0.0% |
-| url | 100.0% | 0.0% | 0.0% |
+### Per-type breakdown (argus-redact, same 500-sample run)
 
-**Analysis:** On this dataset, person name detection dominates (85%+ of entities are names). Presidio's spaCy NER + regex combination gives better overall F1 because it's optimized for English name detection. argus-redact's strength is in structured PII (email: 100%, phone, ID) — but this dataset has very few of those.
+| Entity type | Mode | Precision | Recall | F1 |
+|-------------|------|-----------|--------|-----|
+| email | fast | 100.0% | 100.0% | 100.0% |
+| email | ner | 100.0% | 100.0% | 100.0% |
+| person | fast | 67.2% | 31.7% | 43.1% |
+| person | ner | 24.0% | 51.6% | 32.8% |
+| id_number | fast/ner | 100.0% | 0.0% | 0.0% |
+| url | fast/ner | 100.0% | 0.0% | 0.0% |
+
+**Analysis:** On this dataset, person name detection dominates (85%+ of entities
+are names), so the v0.7.9 Phase 2 recall work moves the headline numbers the
+most — and the tradeoff is visible in both directions:
+
+- **`fast` recall jumped 2.9% → 29.8%** (and F1 5.6% → 41.6%) thanks to the
+  unicode-aware tokenizer and grown surname pools picking up many more student
+  names without an NER model.
+- **`fast` precision dropped 90.0% → 68.9%.** This is a real regression to
+  report plainly: broader name detection on free-form essay text adds false
+  positives (person FP went up to 81 in `fast`). The net F1 still improves
+  because the recall gain dominates, but the precision cost is genuine on
+  noisy English prose.
+- **`ner` mode** trades precision hard for recall (person precision 24.0% at
+  51.6% recall) — spaCy NER over-fires on capitalized non-name tokens in essay
+  text. On this dataset `fast` is the better-balanced mode despite lower recall.
+
+Presidio's spaCy NER + regex combination still gives better overall F1 here
+because it is tuned for English name detection out of the box; argus-redact's
+structural strength (email 100%, phone, ID) is under-exercised because this
+dataset is almost entirely names.
 
 **The critical difference:** Presidio's detected PII is **permanently deleted**. argus-redact's detected PII is **reversibly encrypted** — the downstream LLM output can be restored to contain real names afterward. These are fundamentally different use cases.
 
@@ -190,14 +287,22 @@ Streaming hot path (`StreamingRestorer.feed` × N sentences) is the primary bene
 
 ## 8. Limitations & Roadmap
 
-**Current limitations:**
-- Chinese address detection (~89% F1) — complex multi-part matching has room to improve
-- English address detection needs improvement
-- HanLP (Chinese NER) requires upgrade for current environment
-- Person name false positives (~7%) — negative dictionary coverage can be expanded
+**Current limitations (v0.7.9 measurements):**
+- Chinese address detection (~72% F1 on pii_bench_zh) — multi-part informal
+  address spans under-match
+- Chinese passport recall (72.9%) — single-letter + 8-digit formats (e.g.
+  `G10122691`) are not yet fully covered by the pattern (precision stays 100%)
+- English/European address detection essentially unsupported (0% on ai4privacy
+  `STREET` spans; `fast` even emits false positives there)
+- Person name precision on noisy real English prose — the v0.7.9 recall work
+  (unicode tokenizer + grown surname pools) raised Kaggle PIILO `fast` recall
+  (2.9% → 29.8%) but dropped `fast` precision (90% → 69%); broader detection
+  adds false positives on free-form essay text
 
 **Planned improvements:**
-- Expand negative dictionary and scoring signals for person name precision
+- Add the single-letter + 8-digit Chinese passport format to the pattern set
+- Recover person-name precision on noisy English (expand negative dictionary +
+  scoring signals) without giving back the v0.7.9 recall gains
 - Improve Chinese address patterns for informal formats
 - Improve English/European address patterns
 - Fine-tune name detection for Kaggle-style educational text

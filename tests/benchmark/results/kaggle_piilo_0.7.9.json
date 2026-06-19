@@ -1,0 +1,37 @@
+{
+  "version": "0.7.9-dev",
+  "package_version_string": "0.7.8",
+  "commit": "f17ad8a",
+  "dataset": "kaggle_piilo",
+  "language": "en",
+  "samples": 500,
+  "salt": 42,
+  "modes": {
+    "fast": {
+      "precision": 68.9,
+      "recall": 29.8,
+      "f1": 41.6
+    },
+    "ner": {
+      "precision": 25.2,
+      "recall": 46.6,
+      "f1": 32.7
+    }
+  },
+  "per_type_fast": {
+    "email": {"precision": 100.0, "recall": 100.0, "f1": 100.0, "tp": 17, "fp": 0, "fn": 0},
+    "id_number": {"precision": 100.0, "recall": 0.0, "f1": 0.0, "tp": 0, "fp": 0, "fn": 39},
+    "person": {"precision": 67.2, "recall": 31.7, "f1": 43.1, "tp": 166, "fp": 81, "fn": 357},
+    "phone": {"precision": 33.3, "recall": 33.3, "f1": 33.3, "tp": 1, "fp": 2, "fn": 2},
+    "url": {"precision": 100.0, "recall": 0.0, "f1": 0.0, "tp": 0, "fp": 0, "fn": 36}
+  },
+  "per_type_ner": {
+    "email": {"precision": 100.0, "recall": 100.0, "f1": 100.0, "tp": 17, "fp": 0, "fn": 0},
+    "id_number": {"precision": 100.0, "recall": 0.0, "f1": 0.0, "tp": 0, "fp": 0, "fn": 39},
+    "person": {"precision": 24.0, "recall": 51.6, "f1": 32.8, "tp": 270, "fp": 853, "fn": 253},
+    "phone": {"precision": 33.3, "recall": 33.3, "f1": 33.3, "tp": 1, "fp": 2, "fn": 2},
+    "url": {"precision": 100.0, "recall": 0.0, "f1": 0.0, "tp": 0, "fp": 0, "fn": 36}
+  },
+  "notes": "Real (non-synthetic) student essays. HuggingFace mirror metaboulie/Tidied-PII-Detection-Kaggle-7k (first 500 samples streamed in deterministic order, no random sampling). Measured on the v0.7.9 development HEAD (commit f17ad8a, Phase 2 hardening: unicode-aware en tokenizer + grown surname pools). The package __version__ string is still 0.7.8 because the v0.7.9 tag is not yet cut; package_version_string records what the build self-reports. salt=42 fixes the pseudonym mapping. ner mode adds spaCy en_core_web_lg. Presidio not re-measured this run — its prior numbers are retained in the report as a scoped historical comparison. Apple M1 Max, Python 3.11.",
+  "date": "2026-06-20"
+}
