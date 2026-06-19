@@ -7,8 +7,11 @@ constant gates. It is the standing regression net for the v0.7.7 Rust port.
 What is locked, and against WHICH reference (this is load-bearing):
 
   A. Hint parity — Rust ``_core.produce_hints_l1`` vs LIVE Python
-     ``pure/hints.produce_hints`` (filtered to the 2 L1 hint types). Task 8 routed
-     the fast-mode detect/replace path through Rust, but ``pure/hints.produce_hints``
+     ``pure/hints.produce_hints`` over the FULL 4-hint set (``pii_density``,
+     ``near_miss_format``, ``text_intent``, ``self_reference_tier``). The Rust
+     producer now emits all 4 types (matching Python), so the comparison is
+     apples-to-apples across the whole set — no filtering. Task 8 routed the
+     fast-mode detect/replace path through Rust, but ``pure/hints.produce_hints``
      is STILL pure Python and STILL live (full-mode + the report build the FULL
      4-hint set from it). So this is a genuine Rust-vs-Python differential — NOT a
      self-comparison. It locks the 8-language ``text_intent`` decision logic and the
@@ -60,10 +63,6 @@ from argus_redact.pure.replacer import (
 
 SALT = 42  # matches the T1 fixture freeze.
 
-# The two L1 hint types produce_hints_l1 emits; the Python produce_hints emits
-# these PLUS pii_density / near_miss_format (L2/L3/report-only) — filter to compare.
-_L1_HINT_TYPES = ("text_intent", "self_reference_tier")
-
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -77,12 +76,15 @@ def _to_core(matches):
 
 
 def _py_l1_hints(entities, text):
-    """The L1 slice of LIVE Python produce_hints (text_intent + self_reference_tier).
+    """The FULL hint set from LIVE Python produce_hints — all 4 hint types
+    (pii_density, near_miss_format, text_intent, self_reference_tier).
 
-    This is the INDEPENDENT reference for the Rust _core.produce_hints_l1 gate.
+    The Rust _core.produce_hints_l1 now emits the same 4 types, so this is the
+    INDEPENDENT, apples-to-apples reference for the Rust producer (no filtering).
+    With no near_misses passed, produce_hints emits pii_density + [tier] +
+    text_intent and NO near_miss_format — matching produce_hints_l1's default.
     """
-    hints = py_produce_hints(entities, text)
-    return [h for h in hints if h.type in _L1_HINT_TYPES]
+    return py_produce_hints(entities, text)
 
 
 def _real_entities(text, lang):
@@ -206,11 +208,11 @@ _HINT_CORPUS = [
 
 @pytest.mark.parametrize("case", _HINT_CORPUS, ids=[c[0] for c in _HINT_CORPUS])
 def test_hint_parity_core_vs_live_python(case):
-    """_core.produce_hints_l1(ents, text) == LIVE Python produce_hints(...) L1 slice.
+    """_core.produce_hints_l1(ents, text) == LIVE Python produce_hints(...), all 4 types.
 
     Rust-vs-Python differential (NOT self-compare). If the Rust text_intent /
-    self_reference tier logic, the \\s control-char widening, or the py_strip
-    leading-control handling drifts from Python, this fails.
+    self_reference tier / pii_density logic, the \\s control-char widening, or the
+    py_strip leading-control handling drifts from Python, this fails.
     """
     _label, text, lang = case
     py_ents = _real_entities(text, lang)
@@ -509,15 +511,20 @@ def test_hint_differential_is_real_not_self_compare():
     py = _py_l1_hints(py_ents, text)
     # The two engines agree (the gate's positive assertion).
     assert core == py
-    # A deliberately-wrong expectation (intent forced to 'narrative') must NOT match —
-    # proving the equality above is load-bearing, not a tautology.
+    # A deliberately-wrong expectation: the FULL correct 4-type-shape hint set with
+    # ONLY the intent flipped to 'narrative'. It must NOT match — proving the equality
+    # above is load-bearing on the intent VALUE (not merely on hint count / membership).
     from argus_redact._types import Hint
 
     wrong = [
+        Hint(type="pii_density", data={"level": "medium", "count": 1}),
         Hint(type="self_reference_tier", data={"tier": 1, "has_kinship": False}),
         Hint(type="text_intent", data={"intent": "narrative"}),  # WRONG: should be instruction
     ]
     assert core != wrong, "command-with-PII must be 'instruction', not 'narrative'"
+    # Sanity: `wrong` differs from `core` ONLY in the intent — same length, same types,
+    # so the inequality is driven by the intent value, not a trivial shape mismatch.
+    assert [h.type for h in core] == [h.type for h in wrong]
     # And the references are distinct objects from distinct engines (not `x == x`).
     assert core is not py
 

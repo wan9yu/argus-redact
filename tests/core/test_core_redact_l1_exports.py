@@ -8,8 +8,9 @@ binding output must match it field-for-field (confidence compared with exact
 `==`, no rounding; hints compared with the frozen-dataclass `__eq__`).
 
 The hint bindings must interop with `argus_redact._types.Hint`: `produce_hints_l1`
-returns real `_types.Hint` instances so it is `==`-comparable to the L1 slice of
-Python `produce_hints`, and the consumers (`get_person_threshold` /
+returns real `_types.Hint` instances so it is `==`-comparable to the FULL output of
+Python `produce_hints` (all 4 hint types: pii_density, near_miss_format,
+text_intent, self_reference_tier), and the consumers (`get_person_threshold` /
 `filter_self_reference`) read those instances duck-typed (`.type` / `.data`).
 """
 
@@ -36,9 +37,6 @@ from argus_redact.pure.replacer import (
 FIXTURE_REDACT = Path(__file__).parent / "fixtures" / "redact_l1_v077.json"
 SALT = 42  # matches the T1 fixture freeze.
 
-_L1_HINT_TYPES = ("text_intent", "self_reference_tier")
-
-
 def _tuples(matches):
     """(text, type, start, end, confidence, layer) per match, order-preserving."""
     return [(m.text, m.type, m.start, m.end, m.confidence, m.layer) for m in matches]
@@ -49,9 +47,14 @@ def _pm(text, type_, start, end, confidence=1.0, layer=1):
 
 
 def _py_l1_hints(entities, text, near_misses=None):
-    """The L1 slice of Python `produce_hints` (text_intent + self_reference_tier)."""
-    hints = py_produce_hints(entities, text, near_misses=near_misses)
-    return [h for h in hints if h.type in _L1_HINT_TYPES]
+    """The FULL output of Python `produce_hints` — all 4 hint types (pii_density,
+    near_miss_format, text_intent, self_reference_tier).
+
+    The Rust _core.produce_hints_l1 now emits the same 4 types, so this is the
+    apples-to-apples reference (no filtering). near_miss_format is emitted only
+    when `near_misses` is non-empty, matching the Rust producer.
+    """
+    return py_produce_hints(entities, text, near_misses=near_misses)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -70,7 +73,8 @@ def test_produce_hints_l1_returns_types_hint_instances():
 
 
 def test_produce_hints_l1_self_reference_plus_pii_equals_python():
-    # Self-reference + other PII → self_reference_tier(1) + text_intent(narrative).
+    # Self-reference + other PII → pii_density(medium) + self_reference_tier(1)
+    # + text_intent(narrative). Full Rust-vs-Python parity over all emitted types.
     ents = [_pm("me", "self_reference", 0, 2), _pm("555-1234", "phone", 18, 26)]
     text = "me and the number 555-1234 are here"
     core = _core.produce_hints_l1(ents, text)
@@ -91,7 +95,7 @@ def test_produce_hints_l1_self_reference_plus_pii_equals_python():
 @pytest.mark.parametrize(
     "ents, text",
     [
-        # neutral: no self-ref, no PII → only text_intent.
+        # neutral: no self-ref, no PII → pii_density(none) + text_intent(neutral).
         ([], "hello world"),
         # narrative: no self-ref, PII present.
         ([("555-1234", "phone", 5, 13)], "call 555-1234"),
@@ -259,9 +263,11 @@ def test_detect_l1_components_equal_python_pre_merge(text, lang, names):
     assert [(m.text, m.type, m.start, m.end) for m in near_misses] == [
         (m.text, m.type, m.start, m.end) for m in py_near
     ]
-    # hints == the L1 slice of Python produce_hints over layer1 (the L1a set).
+    # hints == the FULL Python produce_hints (all 4 types) over the SAME inputs
+    # detect_l1 used: layer1 (person is not a hint input) + py_near. The near_miss
+    # regions align because line ~262 already locks detect_l1's near_misses to
+    # py_near (matching text/type/span), so near_miss_format hints match on both sides.
     py_l1 = layer1  # already pre-merge layer1; person not part of hint input
-    # Reconstruct Python hints from the same layer1 the core used.
     py_hints = _py_l1_hints(
         [PyPM(m.text, m.type, m.start, m.end, m.confidence, m.layer) for m in py_l1],
         text,
@@ -440,3 +446,45 @@ def test_redact_pathological_single_token_does_not_raise():
     # Just must not raise — the result is whatever the graceful scan yields.
     redacted, _key = redact(pathological, lang="en", mode="fast")
     assert isinstance(redacted, str)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# produce_hints_l1 — direct Rust↔Python bit-identity gate (all 4 hint types).
+#   Feeds IDENTICAL _core.PatternMatch inputs to the Rust producer and the Python
+#   `produce_hints` oracle (which reads inputs duck-typed), so the comparison
+#   sidesteps any normalization-coordinate question — same inputs, both sides.
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _as_tuples(hints):
+    """(type, data, region, source_layer) per hint, order-preserving — for ==."""
+    return [(h.type, dict(h.data), tuple(h.region), h.source_layer) for h in hints]
+
+
+@pytest.mark.parametrize(
+    "entities, text, near_misses",
+    [
+        # no entities → pii_density none + text_intent neutral
+        ([], "hello", []),
+        # one non-self PII → pii_density medium + text_intent narrative
+        ([_pm("13800138000", "phone", 0, 11)], "my number", []),
+        # three+ → pii_density high
+        (
+            [
+                _pm("13800138000", "phone", 0, 11),
+                _pm("a@b.com", "email", 12, 19),
+                _pm("X", "name", 20, 21),
+            ],
+            "narrative text",
+            [],
+        ),
+        # self_reference + other PII → tier 1 + intent narrative
+        ([_pm("我", "self_reference", 0, 1), _pm("13800138000", "phone", 2, 13)], "我的电话", []),
+        # near-miss present → near_miss_format hint with real region
+        ([], "id 110101199003078888", [_pm("110101199003078888", "id_number", 3, 21, 0.3)]),
+    ],
+)
+def test_produce_hints_l1_matches_python_all_four_types(entities, text, near_misses):
+    rust = _core.produce_hints_l1(entities, text, near_misses)
+    py = py_produce_hints(entities, text, near_misses=near_misses)
+    assert _as_tuples(rust) == _as_tuples(py)
