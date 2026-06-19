@@ -26,6 +26,17 @@ impl PyRandomSource {
     /// `Some` (seeded), `secrets` when `None` (unseeded). Same construction the
     /// `replace` orchestrator's `PseudoFactory` relies on, so seeded bit streams
     /// reproduce identically across the standalone generator and the orchestrator.
+    ///
+    /// Seeded predictability caveat: with a seed/salt, the `P-NNNNN` codes are
+    /// drawn from a Mersenne-Twister (MT19937) stream — CPython's `random.Random`.
+    /// MT19937 is deterministic and not cryptographic: given enough observed
+    /// outputs the stream is, in principle, recoverable, so codes are predictable
+    /// and linkable across redactions that share the same seed/salt. This is a
+    /// low-severity property because the code is an opaque sequence label, not
+    /// derived from the original value — it carries no PII-bearing information. It
+    /// is a deterministic-but-predictable label, not a cryptographic commitment.
+    /// Unseeded mode draws from `secrets` instead (see `randbelow`), which is not
+    /// reproducible and not subject to this caveat.
     pub(crate) fn for_seed(seed: Option<u64>) -> Self {
         match seed {
             Some(s) => Python::attach(|py| {

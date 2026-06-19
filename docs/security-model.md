@@ -225,3 +225,7 @@ If an attacker controls the LLM output (via prompt injection), they can include 
 ### mask strategy partial leakage
 
 The `mask` strategy (e.g., `138****5678`) reveals prefix and suffix digits. For phone numbers, 3 prefix + 4 suffix digits may narrow the search space to ~10,000 numbers. For strict privacy, use `pseudonym` or `remove` strategy instead. PIPL/GDPR compliance profiles should prefer non-mask strategies.
+
+### Seeded pseudonym codes are predictable, not random
+
+When you supply a seed/salt, the `P-NNNNN` codes are drawn from a Mersenne-Twister (MT19937) stream (CPython's `random.Random`), which is deterministic and not cryptographic — so the codes are reproducible and, given enough outputs, predictable and linkable across redactions that share the same seed/salt. This is low severity: the code is an opaque sequence label, not derived from the original value, so it leaks no original-value information. It is a deterministic-but-predictable label, not a cryptographic commitment. Unseeded redactions use `secrets` instead and are not subject to this property.
