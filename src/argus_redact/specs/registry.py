@@ -144,12 +144,21 @@ def register(typedef: PIITypeDef) -> PIITypeDef:
         )
     key = (typedef.lang, typedef.name)
     _REGISTRY[key] = typedef
+    # Lazy import avoids the registry → replacer cycle. Invalidate the faker
+    # resolution caches so a type registered after the first redact() is seen.
+    from argus_redact.pure.replacer import _clear_faker_caches
+
+    _clear_faker_caches()
     return typedef
 
 
 def unregister(lang: str, name: str) -> None:
     """Remove a registration. Primarily for tests that inject temporary types."""
     _REGISTRY.pop((lang, name), None)
+    # Lazy import avoids the registry → replacer cycle (see register()).
+    from argus_redact.pure.replacer import _clear_faker_caches
+
+    _clear_faker_caches()
 
 
 def get(lang: str, name: str) -> PIITypeDef:
