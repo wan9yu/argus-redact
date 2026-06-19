@@ -452,6 +452,19 @@ def redact(
     if not isinstance(text, str):
         raise TypeError(f"text must be a string, got {type(text).__name__}")
 
+    # Fail closed if the compiled core is missing. _core has been mandatory since
+    # v0.7.1; without it the fast path would otherwise call detect_l1 on None and
+    # raise an opaque AttributeError. Read HAS_CORE off the loader module (not a
+    # module-level alias) so the value is resolved per call. A privacy tool must
+    # never silently pass text through unredacted when its detection engine is gone.
+    import argus_redact._core_loader as _cl
+
+    if not _cl.HAS_CORE:
+        raise ImportError(
+            "argus-redact requires the compiled _core extension for redaction "
+            "(install the wheel or build with maturin)."
+        )
+
     if len(text) > MAX_INPUT_SIZE:
         raise ValueError(
             f"Input text ({len(text)} chars) exceeds maximum allowed size "
