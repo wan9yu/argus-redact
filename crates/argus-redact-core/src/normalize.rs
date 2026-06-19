@@ -125,6 +125,33 @@ fn normalize_digit_sequences(chars: &mut [char]) {
 /// char index of the i-th output char. `offset_map` is `None` when the text is
 /// unchanged (identity mapping).
 pub fn normalize_text(text: &str) -> (String, Option<Vec<usize>>) {
+    normalize_text_impl(text, true)
+}
+
+/// Normalize text for PERSON-NAME detection — identical to [`normalize_text`]
+/// EXCEPT it skips the Chinese-digit-sequence step (step 4).
+///
+/// ## Why person detection skips the digit step
+///
+/// The digit-sequence step rewrites a run of ≥7 digit-like chars (containing at
+/// least one CJK digit) to ASCII — it exists so a phone/ID written in Chinese
+/// digits (`一三八…` → `138…`) is caught by the regex layer. But CJK *names*
+/// share characters with the digit map (`三`=3, `五`=5, `九`=9, …): a name like
+/// `张三` adjacent to a phone number forms one long digit run, so `三` folds to
+/// `3` and the surname-regex no longer sees a name — dropping a real, common
+/// detection. Digit runs are PII for the regex layer, never names, so person
+/// detection genuinely does not need them folded. The OTHER folds (invisible
+/// strip, accent fold, confusable, NFKC) are NAME-PRESERVING — they turn an
+/// obfuscated name back INTO a name (`Ｊohn`→`John`, `José`→`Jose`, `Ѕmith`→
+/// `Smith`) — so person detection keeps those. Resulting spans map back to the
+/// ORIGINAL via the returned offset map, exactly like the full-normalization path.
+pub fn normalize_text_for_person(text: &str) -> (String, Option<Vec<usize>>) {
+    normalize_text_impl(text, false)
+}
+
+/// Shared normalization core. `digit_sequences` gates the Chinese-digit-sequence
+/// step (true for general PII detection, false for person-name detection).
+fn normalize_text_impl(text: &str, digit_sequences: bool) -> (String, Option<Vec<usize>>) {
     if text.is_ascii() {
         return (text.to_string(), None);
     }
@@ -183,8 +210,12 @@ pub fn normalize_text(text: &str) -> (String, Option<Vec<usize>>) {
         chars = new_chars;
         offset_map = new_map;
     }
-    // Step 4: Chinese-digit-sequence normalization
-    normalize_digit_sequences(&mut chars);
+    // Step 4: Chinese-digit-sequence normalization (skipped for person detection,
+    // which must not let a digit run swallow a CJK name char — see
+    // `normalize_text_for_person`).
+    if digit_sequences {
+        normalize_digit_sequences(&mut chars);
+    }
 
     let result: String = chars.iter().collect();
     if result == text {
@@ -262,6 +293,50 @@ mod tests {
     fn short_cn_unchanged() {
         // 三月三日 — not a 7+ digit run → unchanged → None
         assert_eq!(normalize_text("三月三日"), ("三月三日".into(), None));
+    }
+
+    #[test]
+    fn person_norm_skips_cn_digit_step() {
+        // The Chinese-digit run that normalize_text folds to ASCII must be left
+        // INTACT by the person variant — so a name char that is a digit homograph
+        // (三=3) survives. Full norm folds the whole run to "13800138000"; the
+        // person variant keeps the CN digits, so (being digit-free of any other
+        // change) it returns None / the original text.
+        assert_eq!(normalize_text("一三八零零一三八零零零").0, "13800138000");
+        assert_eq!(
+            normalize_text_for_person("一三八零零一三八零零零"),
+            ("一三八零零一三八零零零".into(), None)
+        );
+    }
+
+    #[test]
+    fn person_norm_keeps_name_preserving_folds() {
+        // The person variant still applies the NON-digit folds: fullwidth NFKC,
+        // confusable, accent — so an obfuscated NAME still becomes a name.
+        assert_eq!(normalize_text_for_person("\u{FF2A}ohn").0, "John"); // Ｊ→J
+        assert_eq!(normalize_text_for_person("\u{0405}mith").0, "Smith"); // Cyrillic Ѕ→S
+        assert_eq!(normalize_text_for_person("Jos\u{00E9}").0, "Jose"); // é→e
+    }
+
+    #[test]
+    fn person_norm_same_positions_as_full_norm() {
+        // The digit step is an in-place value substitution, so the person variant
+        // and the full variant share the SAME offset map (positions) — only some
+        // char values differ. This is what lets layer1 (full-norm coords) be used
+        // as the zh detector's pii_entities against the person-detect-text.
+        let text = "张三 13812345678 110101199003074610";
+        let (full, fmap) = normalize_text(text);
+        let (person, pmap) = normalize_text_for_person(text);
+        // Full norm mangles 三→3; person norm keeps it.
+        assert!(full.contains("张3"));
+        assert!(person.contains("张三"));
+        // Positions line up: full norm produced a map; person norm produced none
+        // here (digit step was its only change), and that map is the identity over
+        // the same length, so any layer1 span in full coords addresses the same
+        // char index in the original / person text.
+        assert!(fmap.is_some());
+        assert!(pmap.is_none());
+        assert_eq!(full.chars().count(), person.chars().count());
     }
 
     #[test]

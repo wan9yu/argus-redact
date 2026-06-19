@@ -52,7 +52,7 @@ use crate::data::builtin_patterns;
 use crate::grammar::normalize_grammar_en;
 use crate::hints::{filter_self_reference, get_person_threshold, produce_hints_l1, Hint};
 use crate::merger::merge_entities_with_text;
-use crate::normalize::{map_spans_to_original, normalize_text};
+use crate::normalize::{map_spans_to_original, normalize_text, normalize_text_for_person};
 use crate::patterns::{match_patterns, PatternConfig, PatternError};
 use crate::replace::{replace, FakerFactory, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
 use crate::reserved_range::{byte_to_char_offset, char_slice};
@@ -132,6 +132,37 @@ fn tag_layer(entities: &mut [PatternMatch], layer: u8) {
     }
 }
 
+/// Map matches from detect_text (normalized) coords back to ORIGINAL-text coords,
+/// rebuilding each match's `text` as the original char-slice. Identity (clone) when
+/// there is no offset map (text was not normalized).
+fn map_matches_to_original(
+    matches: &[PatternMatch],
+    text: &str,
+    offset_map: Option<&[usize]>,
+    orig_len: usize,
+) -> Vec<PatternMatch> {
+    match offset_map {
+        Some(map) if !matches.is_empty() => {
+            let spans: Vec<(usize, usize)> =
+                matches.iter().map(|m| (m.start, m.end)).collect();
+            let mapped = map_spans_to_original(&spans, Some(map), orig_len);
+            matches
+                .iter()
+                .zip(mapped.iter())
+                .map(|(m, &(s, e))| PatternMatch {
+                    text: char_slice(text, s, e),
+                    type_: m.type_.clone(),
+                    start: s,
+                    end: e,
+                    confidence: m.confidence,
+                    layer: m.layer,
+                })
+                .collect()
+        }
+        _ => matches.to_vec(),
+    }
+}
+
 /// Run the fast-mode L1 detection sequence, returning the RAW (unmerged) result.
 ///
 /// `lang` is the resolved language list (e.g. `["zh"]`, `["zh","en"]`). `names`
@@ -178,27 +209,12 @@ pub fn detect_l1(
 
     // 3. Map normalized offsets back to original text (only on the raw results,
     //    matching Python which maps `layer1_raw` only). Rebuild each match's text
-    //    as the ORIGINAL char-slice text[s..e].
-    let mut layer1: Vec<PatternMatch> = if use_normalized && !layer1_raw.is_empty() {
-        let spans: Vec<(usize, usize)> =
-            layer1_raw.iter().map(|e| (e.start, e.end)).collect();
-        let orig_len = text.chars().count();
-        let mapped = map_spans_to_original(&spans, offset_map.as_deref(), orig_len);
-        layer1_raw
-            .iter()
-            .zip(mapped.iter())
-            .map(|(e_orig, &(s, e))| PatternMatch {
-                text: char_slice(text, s, e),
-                type_: e_orig.type_.clone(),
-                start: s,
-                end: e,
-                confidence: e_orig.confidence,
-                layer: e_orig.layer,
-            })
-            .collect()
-    } else {
-        layer1_raw
-    };
+    //    as the ORIGINAL char-slice text[s..e]. `layer1_raw` stays AVAILABLE after
+    //    this (the helper clones), so the zh person detector can reuse it as
+    //    detect-coord pii_entities below.
+    let orig_len = text.chars().count();
+    let mut layer1 =
+        map_matches_to_original(&layer1_raw, text, offset_map.as_deref(), orig_len);
 
     // 4. Tag layer1 with LAYER_REGEX.
     tag_layer(&mut layer1, LAYER_REGEX);
@@ -209,33 +225,75 @@ pub fn detect_l1(
     // 6. Person threshold from the text_intent hint.
     let threshold = get_person_threshold(&hints);
 
-    // 7. Person detection: zh first (threshold + layer1 as pii_entities), then en
-    //    (ignores threshold). Match Python's extend order.
+    // 7. Person detection runs over a PERSON-specific normalized text — every
+    //    name-preserving fold of `normalize_text` (invisible strip / accent fold /
+    //    confusable / NFKC) EXCEPT the Chinese-digit-sequence step. That step turns
+    //    a ≥7-char digit run into ASCII and would swallow a CJK name char that is
+    //    also a digit homograph (`三`=3): `张三` next to a phone forms one digit run,
+    //    so the full-normalization detect_text reads `张3` and the surname regex
+    //    misses the name. Skipping ONLY that step keeps `张三` intact while still
+    //    folding `Ｊohn`→`John`, `José`→`Jose`, `Ѕmith`→`Smith`. Resulting spans
+    //    are in person-detect coords and map back to the ORIGINAL below (step 9),
+    //    mirroring the layer1 map-back.
+    //
+    //    The digit-sequence step is the ONLY length-preserving in-place value
+    //    substitution in the pipeline, so the person-detect-text shares the SAME
+    //    char positions and SAME offset map as the full-normalization `detect_text`
+    //    — only some char VALUES differ. Therefore `layer1_raw` (full-norm detect
+    //    coords) is coordinate-correct as the zh detector's `pii_entities`: its
+    //    `.start`/`.end` line up with the person-detect-text. (The zh detector reads
+    //    only `.start`/`.end`/`.type_` of pii_entities, never `.layer`, so passing
+    //    the untagged `layer1_raw` rather than the LAYER_REGEX-tagged `layer1` is
+    //    behaviorally identical.) zh runs first (threshold + pii_entities), then en
+    //    (ignores threshold), matching Python's extend order.
+    //
+    //    Known names must match the person-detect-text, so they fold through the
+    //    SAME person normalization (a plain name folds to itself). Spans map back
+    //    to the original below, so an accented/fullwidth known-name still restores
+    //    correctly.
+    let (person_normalized, person_offset_map) = normalize_text_for_person(text);
+    let person_use_normalized = person_offset_map.is_some();
+    let person_detect_text: &str =
+        if person_use_normalized { &person_normalized } else { text };
+    let scan_names: Vec<String> = if person_use_normalized {
+        names.iter().map(|n| normalize_text_for_person(n).0).collect()
+    } else {
+        names.to_vec()
+    };
+
     let has_zh = lang.iter().any(|c| c == "zh");
     let has_en = lang.iter().any(|c| c == "en");
+
     let mut person: Vec<PatternMatch> = Vec::new();
     if has_zh {
-        let mut zh = person_zh::detect_person_names(text, &layer1, names, threshold);
+        let mut zh = person_zh::detect_person_names(
+            person_detect_text,
+            &layer1_raw,
+            &scan_names,
+            threshold,
+        );
         tag_layer(&mut zh, LAYER_REGEX);
         person.extend(zh);
     }
     if has_en {
-        let mut en = person_en::detect_person_names(text, names);
+        let mut en = person_en::detect_person_names(person_detect_text, &scan_names);
         tag_layer(&mut en, LAYER_REGEX);
         person.extend(en);
     }
 
     // 8. Names-only fallback (redact.py:268-283): when NEITHER "zh" NOR "en" is
     //    in lang AND names is non-empty, the zh/en person detectors never run, so
-    //    Python falls back to a literal scan of each known name over the ORIGINAL
-    //    text. Mutually exclusive with the zh/en branches above (the condition
-    //    guarantees it). Each name's NON-overlapping, case-sensitive, LITERAL
-    //    occurrences (`re.finditer(re.escape(name), text)`) become person entities
-    //    at confidence 1.0, with `text = name` (exactly as Python sets `text=name`,
+    //    Python falls back to a literal scan of each known name. We scan
+    //    `person_detect_text` with the person-normalized `scan_names` (parity with
+    //    the detectors above), then map back in step 9. Mutually exclusive with the
+    //    zh/en branches above (the condition guarantees it). Each name's
+    //    NON-overlapping, case-sensitive, LITERAL occurrences
+    //    (`re.finditer(re.escape(name), text)`) become person entities at
+    //    confidence 1.0, with `text = name` (exactly as Python sets `text=name`,
     //    not the matched slice — equal for a literal match). Appended AFTER layer1
     //    in `.entities()`, matching Python's `entities.append` order.
-    if !has_zh && !has_en && !names.is_empty() {
-        for name in names {
+    if !has_zh && !has_en && !scan_names.is_empty() {
+        for name in &scan_names {
             // Python `if not name: continue` — skip empty names.
             if name.is_empty() {
                 continue;
@@ -248,8 +306,8 @@ pub fn detect_l1(
             // `start + name.chars().count()` (the match equals `name`), saving the
             // second `byte_to_char_offset` O(n) scan.
             let name_chars = name.chars().count();
-            for (byte_pos, _) in text.match_indices(name.as_str()) {
-                let start = byte_to_char_offset(text, byte_pos);
+            for (byte_pos, _) in person_detect_text.match_indices(name.as_str()) {
+                let start = byte_to_char_offset(person_detect_text, byte_pos);
                 person.push(PatternMatch {
                     text: name.clone(),
                     type_: "person".to_string(),
@@ -261,6 +319,19 @@ pub fn detect_l1(
             }
         }
     }
+
+    // 9. Map person spans (person-detect coords) back to ORIGINAL text, like
+    //    layer1. Identity-clone when the person text was not normalized, so the
+    //    common path (no folds applied — e.g. `张三 13812345678 …`, which is
+    //    digit-free WITHOUT the digit step) is byte-identical to the pre-change
+    //    behavior. Uses the PERSON offset map (positions equal the full map, but
+    //    keep them paired with the text they describe).
+    let person = map_matches_to_original(
+        &person,
+        text,
+        person_offset_map.as_deref(),
+        orig_len,
+    );
 
     Ok(DetectL1Result {
         layer1,
@@ -1095,5 +1166,154 @@ mod redact_l1_tests {
         )
         .unwrap();
         assert_eq!(r.redacted, "电话13812345678 银行卡621700******0000");
+    }
+}
+
+#[cfg(test)]
+mod person_normalized_offset_tests {
+    //! Person detection now runs on the NORMALIZED detect_text and maps the
+    //! resulting spans back to the ORIGINAL text (Task 6, v0.7.9 Phase 2). These
+    //! tests lock the OFFSET round-trip: a confusable / fullwidth / combining-mark
+    //! name is detected after folding, and the emitted entity's `start`/`end`/`text`
+    //! address the ORIGINAL substring (so restore recovers the exact obfuscated
+    //! bytes). A pure-ASCII name must stay byte-identical to the pre-change path.
+
+    use super::*;
+
+    fn s(v: &[&str]) -> Vec<String> {
+        v.iter().map(|x| x.to_string()).collect()
+    }
+
+    fn run(text: &str, lang: &[&str], names: &[&str]) -> DetectL1Result {
+        detect_l1(text, &s(lang), &s(names)).unwrap()
+    }
+
+    /// Find the single person entity, asserting there is exactly one.
+    fn only_person(r: &DetectL1Result) -> &PatternMatch {
+        assert_eq!(r.person.len(), 1, "expected exactly one person entity");
+        &r.person[0]
+    }
+
+    /// The ORIGINAL char-substring `text[start..end]` — what restore must recover.
+    fn orig_slice(text: &str, start: usize, end: usize) -> String {
+        text.chars().skip(start).take(end - start).collect()
+    }
+
+    #[test]
+    fn fullwidth_name_maps_to_original_substring() {
+        // Ｊ (U+FF2A, fullwidth J) folds to ASCII 'J' in detect_text → "John Smith"
+        // is detected there. The span/text must address the ORIGINAL fullwidth
+        // substring so restore puts the exact bytes back.
+        let text = "Contact \u{FF2A}ohn Smith today";
+        let r = run(text, &["en"], &[]);
+        let p = only_person(&r);
+        assert_eq!(p.type_, "person");
+        assert_eq!(p.layer, LAYER_REGEX);
+        assert_eq!((p.start, p.end), (8, 18));
+        // The entity text is the ORIGINAL (fullwidth-Ｊ) slice, NOT the folded one.
+        assert_eq!(p.text, "\u{FF2A}ohn Smith");
+        assert_eq!(p.text, orig_slice(text, p.start, p.end));
+        assert!(p.text.contains('\u{FF2A}'), "must keep the original fullwidth J");
+    }
+
+    #[test]
+    fn combining_mark_name_maps_to_original_substring() {
+        // "José" written as Jose + U+0301 (combining acute). The mark is dropped
+        // during normalization (so the surname scan sees "Jose Smith"), but it
+        // shifts NO original offsets — the base 'e' keeps its source index. The
+        // mapped-back span must still cover the original chars INCLUDING the mark.
+        let text = "Contact Jos\u{0065}\u{0301} Smith today";
+        let r = run(text, &["en"], &[]);
+        let p = only_person(&r);
+        assert_eq!((p.start, p.end), (8, 19));
+        // Original slice still carries the combining mark.
+        assert_eq!(p.text, "Jose\u{0301} Smith");
+        assert_eq!(p.text, orig_slice(text, p.start, p.end));
+        assert!(p.text.contains('\u{0301}'), "must keep the combining mark");
+    }
+
+    #[test]
+    fn confusable_adjacent_name_maps_to_original_substring() {
+        // Ѕ (U+0405, Cyrillic DZE) is a confusable that folds to ASCII 'S', so
+        // "John Ѕmith" reads as the surname "Smith" after folding. The span/text
+        // map back to the ORIGINAL run that still contains the Cyrillic Ѕ.
+        let text = "Email John \u{0405}mith now";
+        let r = run(text, &["en"], &[]);
+        let p = only_person(&r);
+        assert_eq!((p.start, p.end), (6, 16));
+        assert_eq!(p.text, "John \u{0405}mith");
+        assert_eq!(p.text, orig_slice(text, p.start, p.end));
+        assert!(p.text.contains('\u{0405}'), "must keep the original Cyrillic S");
+    }
+
+    #[test]
+    fn pure_ascii_name_byte_identical_to_pre_change() {
+        // A pure-ASCII name does NOT normalize (offset_map is None), so detect_text
+        // == text and map_matches_to_original is an identity clone. The entity must
+        // be byte-identical to the pre-change behavior: same start/end/text/conf.
+        let r = run("Contact John Smith today", &["en"], &[]);
+        let p = only_person(&r);
+        assert_eq!(p.type_, "person");
+        assert_eq!(p.layer, LAYER_REGEX);
+        assert_eq!((p.start, p.end), (8, 18));
+        assert_eq!(p.text, "John Smith");
+        assert_eq!(p.confidence, 1.0);
+    }
+
+    #[test]
+    fn zh_name_with_fullwidth_digits_elsewhere_maps_back() {
+        // Fullwidth digits "１２３" elsewhere force use_normalized = true, so the
+        // whole person scan runs on detect_text. The zh name 张三 (no special
+        // chars, identity-folds) must map back to the CORRECT original char span —
+        // the fullwidth digits ahead of it must not shift its offsets.
+        //   chars: １(0) ２(1) ３(2) ' '(3) 客(4) 户(5) 张(6) 三(7) 的(8) 手(9) 机(10)
+        let text = "\u{FF11}\u{FF12}\u{FF13} 客户张三的手机";
+        let r = run(text, &["zh"], &[]);
+        let p = only_person(&r);
+        assert_eq!(p.type_, "person");
+        assert_eq!((p.start, p.end), (6, 8));
+        assert_eq!(p.text, "张三");
+        assert_eq!(p.text, orig_slice(text, p.start, p.end));
+    }
+
+    #[test]
+    fn zh_digit_homograph_name_survives_digit_run() {
+        // REGRESSION GUARD: `张三` (三 == the Chinese digit 3) immediately before a
+        // long phone digit run. The FULL normalization folds `张三 138…` into the
+        // one ≥7-char digit run `张3 138…`, which would hide the name from the
+        // surname regex. Person detection uses the digit-step-SKIPPED normalization,
+        // so `张三` stays a name and is detected at the correct ORIGINAL span.
+        //   chars: 张(0) 三(1) ' '(2) then the phone digits…
+        let text = "张三 13812345678 110101199003074610";
+        let r = run(text, &["zh"], &[]);
+        let p = r
+            .person
+            .iter()
+            .find(|p| p.text == "张三")
+            .expect("张三 must still be detected next to a digit run");
+        assert_eq!((p.start, p.end), (0, 2));
+        assert_eq!(p.text, orig_slice(text, p.start, p.end));
+        // The phone is still caught by the regex layer (full-normalization path).
+        assert!(r.layer1.iter().any(|e| e.type_ == "phone"));
+    }
+
+    #[test]
+    fn normalized_known_name_maps_back_to_original() {
+        // A known-name supplied with a precomposed accent ("José"): the scan_names
+        // entry normalizes to "Jose" and matches the folded detect_text, then maps
+        // back to the original "José" substring. Exercises the scan_names
+        // normalization + the person map-back together.
+        let text = "Email Jos\u{00E9} now";
+        let r = run(text, &["en"], &["Jos\u{00E9}"]);
+        // The known-name (José) is detected (confidence 1.0) and restores the
+        // original precomposed accent.
+        let p = r
+            .person
+            .iter()
+            .find(|p| p.start == 6 && p.end == 10)
+            .expect("known name José at 6..10");
+        assert_eq!(p.text, "Jos\u{00E9}");
+        assert_eq!(p.text, orig_slice(text, p.start, p.end));
+        assert_eq!(p.confidence, 1.0);
     }
 }
