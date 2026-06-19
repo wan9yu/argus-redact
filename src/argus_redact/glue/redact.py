@@ -15,10 +15,10 @@ from argus_redact.lang._loader import core_patterns
 from argus_redact.layers import LAYER_NER, LAYER_SEMANTIC
 from argus_redact.pure.grammar import normalize_grammar_en
 from argus_redact.pure.hints import (
+    _apply_ablation,
     boost_cross_layer,
     filter_self_reference,
     get_ner_min_confidence,
-    produce_hints,
     should_skip_ner,
 )
 from argus_redact.pure.lang_detect import detect_languages
@@ -202,18 +202,18 @@ def _detect(
     # also tagged LAYER_REGEX), the internal L1 hints, and validator ``near_misses``.
     # detect_l1 takes the ORIGINAL text (it normalizes internally).
     t0 = time.perf_counter()
-    layer1, person, _l1_hints, near_misses = _core.detect_l1(text, langs, names or [])
+    layer1, person, l1_hints, near_misses = _core.detect_l1(text, langs, names or [])
     timing["layer_1_ms"] = (time.perf_counter() - t0) * 1000
     entities.extend(layer1)
     entities.extend(person)
     layer1_count = len(layer1) + len(person)
 
-    # Produce the FULL Python hints (all 4 types) from the L1a regex set — consumed
-    # by L2 (NER gating), L3, and the report. The 2 L1 hints here
-    # (text_intent / self_reference_tier) equal detect_l1's internal ones
-    # (golden-locked); the Python set additionally carries pii_density +
-    # near_miss_format, which only the L2/L3/report consumers need.
-    hints = produce_hints(layer1, text, near_misses=near_misses)
+    # Hints come fully from the Rust engine now: detect_l1 emits all 4 types
+    # (pii_density / near_miss_format / text_intent / self_reference_tier) in
+    # Python order, consumed by L2 (NER gating), L3, and the report. Ablation
+    # (the ARGUS_ABLATION_HINTS research hook) is applied Python-side because the
+    # Rust core is environment-unaware.
+    hints = _apply_ablation(l1_hints)
 
     # Layer 2: NER (auto or ner mode), hint-gated
     layer2_count = 0
@@ -439,7 +439,7 @@ def redact(
     # replacement. Fast / detailed / with_types / report differ only in the
     # final return-shape dispatch below, never in how detection runs. The Python
     # fast-mode path therefore detects exactly once and honors ARGUS_ABLATION_HINTS
-    # (read inside the Python produce_hints _detect calls).
+    # (applied via _apply_ablation to the Rust-produced hints in _detect).
     #
     # _core.redact_l1 (detect_l1 → merge → filter → replace, all in Rust as a
     # single bundled call) is built, bound, and tested, but is NOT used by this

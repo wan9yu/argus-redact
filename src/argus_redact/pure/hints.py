@@ -63,6 +63,19 @@ def _ablation_enabled_hints() -> set[str] | None:
     return {h.strip() for h in raw.split(",") if h.strip()}
 
 
+def _apply_ablation(hints: list[Hint]) -> list[Hint]:
+    """Apply ARGUS_ABLATION_HINTS to a Rust-produced hint list (research hook).
+
+    Mirrors produce_hints' _emit() gating: None/"all" → keep all, "off" → drop
+    all, CSV → keep only the listed hint types. Kept Python-side because the Rust
+    core is environment-unaware.
+    """
+    enabled = _ablation_enabled_hints()
+    if enabled is None:
+        return list(hints)
+    return [h for h in hints if h.type in enabled]
+
+
 # ══════════════════════════════════════════════════════════════
 # Producers: generate hints from detected entities
 # ══════════════════════════════════════════════════════════════
