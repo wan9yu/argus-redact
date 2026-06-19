@@ -192,17 +192,25 @@ mod tests {
         assert_eq!(resolve_salt(Some(&Salt::Int(-1))), Ok(expected));
     }
 
+    // `ARGUS_REDACT_PSEUDONYM_SALT` is process-global; the two tests below mutate
+    // it. `cargo test` is multi-threaded by default (CI does NOT pass
+    // --test-threads=1), so they must serialize on a shared lock or they race
+    // (one test's remove_var clears the other's set_var mid-assert).
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn resolve_salt_none_no_env() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // Clear env var to ensure we get an Err.
-        // SAFETY: tests run single-threaded in the test harness; no concurrent env reads.
+        // SAFETY: ENV_LOCK serializes all ARGUS_REDACT_PSEUDONYM_SALT mutation.
         unsafe { std::env::remove_var("ARGUS_REDACT_PSEUDONYM_SALT") };
         assert!(resolve_salt(None).is_err());
     }
 
     #[test]
     fn resolve_salt_none_env() {
-        // SAFETY: tests run single-threaded in the test harness; no concurrent env reads.
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: ENV_LOCK serializes all ARGUS_REDACT_PSEUDONYM_SALT mutation.
         unsafe { std::env::set_var("ARGUS_REDACT_PSEUDONYM_SALT", "test-salt") };
         let result = resolve_salt(None);
         unsafe { std::env::remove_var("ARGUS_REDACT_PSEUDONYM_SALT") };
