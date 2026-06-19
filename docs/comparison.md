@@ -40,16 +40,19 @@ restored = bridge.restore(llm_output, key)
 
 ## Benchmark: ai4privacy/pii-masking-400k
 
-Tested on the [ai4privacy PII benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-400k) (English, 200 examples):
+Tested on the [ai4privacy PII benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-400k) (English, first 500 samples, deterministic order, `salt=42`), measured on the v0.7.9 development HEAD:
 
-| Mode | Precision | Recall | F1 | Speed |
-|------|-----------|--------|-----|-------|
-| `fast` (regex only) | 67.2% | 13.8% | 22.9% | 84 docs/s |
-| `ner` (regex + spaCy) | 41.0% | 32.8% | 36.5% | 4 docs/s |
-| `auto` (regex + NER + Ollama 3B) | 45.1% | 34.8% | 39.3% | 1.0 docs/s |
-| `auto` (regex + NER + Ollama 32B) | 48.5% | 34.8% | 40.5% | 0.2 docs/s |
+| Mode | Precision | Recall | F1 |
+|------|-----------|--------|-----|
+| `fast` (regex only) | 81.6% | 31.9% | 45.8% |
+| `ner` (regex + spaCy) | 74.9% | 42.8% | 54.4% |
+| `auto` (regex + NER + Ollama) | _skipped this run — see benchmark report_ | | |
 
-**Email detection: P=92% R=94%**
+**Email detection (`fast`): P=99.6% R=99.6%**
+
+_Numbers match `tests/benchmark/results/ai4privacy_0.7.9.json`. See the
+[full benchmark report](benchmark-report.md) for the per-type breakdown and the
+`auto`-mode skip note._
 
 > argus-redact is the only tool in this comparison that offers reversible PII encryption with per-message keys. Other tools achieve higher recall by permanently destroying PII.
 

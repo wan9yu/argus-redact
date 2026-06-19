@@ -173,11 +173,11 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 
 | Mode | Precision | Recall | F1 |
 |---|---|---|---|
-| fast (regex)          | 78.3% | 30.3% | 43.7% |
-| ner (+ spaCy)         | 72.8% | 41.4% | 52.8% |
+| fast (regex)          | 81.6% | 31.9% | 45.8% |
+| ner (+ spaCy)         | 74.9% | 42.8% | 54.4% |
 | auto (+ Ollama 32B)   | _skipped this run_ | | |
 
-_ai4privacy en, 500 samples, v0.6.6. `auto` mode skipped on the maintainer's hardware — see [benchmark-report.md](docs/benchmark-report.md) for full matrix + reproduction commands._
+_ai4privacy en, 500 samples, v0.7.9. `auto` mode skipped on the maintainer's hardware — see [benchmark-report.md](docs/benchmark-report.md) for full matrix + reproduction commands._
 
 For context: `fast` mode is high-precision / low-recall by design — it only emits formats it can validate (Luhn, MOD11-2, etc.). Recall comes from `ner` and `auto` at the cost of latency. Pick the mode for your deployment shape (see *Deployment fit* above). [Full benchmarks →](docs/benchmark-report.md) | [Performance →](docs/performance.md)
 

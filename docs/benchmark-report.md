@@ -23,15 +23,15 @@
 
 ## Executive Summary
 
-argus-redact is the only tool that combines PII detection with **reversible encryption and per-message keys**. On checksum-validated structured PII (phone, ID, email, bank card, license plate), it scores 100% precision and 100% recall on the self-authored Chinese suite. On Chinese PII specifically, it is **the only viable open-source option** — Presidio has no Chinese support.
+argus-redact combines PII detection with **reversible encryption and per-message keys**. On checksum-validated structured PII (phone, ID, email, bank card, license plate), it shows high precision and recall on the self-authored Chinese suite (100.0% on each of those types in the measured run below). On Chinese PII specifically, it is **the only bundled tool here with out-of-the-box Chinese PII support** — Presidio ships no out-of-the-box Chinese recognizer (one can be added via custom recognizers).
 
 |  | argus-redact | Presidio |
 |--|:-----------:|:--------:|
-| Reversible | **Yes** (per-message key) | No (one-way) |
-| Chinese PII | **Yes** (8 types) | No |
+| Reversible | **Yes** (per-message key) | No (one-way; reversible only via custom operator) |
+| Chinese PII out-of-the-box | **Yes** (8 types) | No (add via custom recognizers) |
 | 7 languages | **Yes** | Configurable (mostly English) |
 | Local / offline | **Yes** | **Yes** |
-| Semantic detection | **Yes** (Layer 3 LLM) | No |
+| Semantic detection | **Yes** (Layer 3 LLM) | No (add via custom recognizer) |
 
 ---
 
@@ -73,7 +73,7 @@ Numbers below are measured on the v0.7.9 development HEAD (commit `f17ad8a`).
 _Result JSON: `tests/benchmark/results/pii_bench_zh_0.7.9.json`. `auto` (LLM)
 mode skipped — see currency note._
 
-**Presidio:** Not applicable — no Chinese language support.
+**Presidio:** ships no out-of-the-box Chinese recognizer (one can be added via a spaCy zh model + custom recognizers), so it is not benchmarked here.
 
 **Key takeaway:** Checksum-validated structured PII (phone, email, ID, bank
 card, license plate) stays at 100% precision **and** 100% recall on this suite.
