@@ -1,3 +1,4 @@
+use crate::hints::py_strip;
 use crate::reserved_range::char_slice;
 use crate::types::PatternMatch;
 
@@ -54,14 +55,15 @@ fn is_priority(t: &str) -> bool {
 }
 
 /// Trim `e` so it starts at `new_start`; `None` if nothing (or only whitespace)
-/// remains. Port of `pure/merger._trim_entity` (char-sliced; `str.strip()` →
-/// trim of Unicode whitespace, matching Python `.strip()` for the empty test).
+/// remains. Port of `pure/merger._trim_entity` (char-sliced). The empty test uses
+/// [`py_strip`] (NOT `str::trim`) so U+001C–U+001F count as whitespace, matching
+/// Python `str.strip()`.
 fn trim_entity(e: &PatternMatch, new_start: usize, text: &str) -> Option<PatternMatch> {
     if new_start >= e.end {
         return None;
     }
     let new_text = char_slice(text, new_start, e.end);
-    if new_text.trim().is_empty() {
+    if py_strip(&new_text).is_empty() {
         return None;
     }
     Some(PatternMatch {
@@ -313,5 +315,21 @@ mod tests {
                 ("13800138000", "phone", 2, 13, 1.0, 1),
             ],
         );
+    }
+
+    #[test]
+    fn priority_trim_drops_u001c_only_remainder() {
+        // self_reference [0,1] "我" overlaps other [0,3] "我\u{1c}\u{1c}".
+        // Trimming other to start at 1 → "\u{1c}\u{1c}" → py_strip empty → dropped
+        // (Python str.strip() trims U+001C–001F; str::trim() would not, leaving a
+        // garbage entity). Locks the py_strip parity fix.
+        let out = merge_entities_with_text(
+            vec![
+                pmt("我", "self_reference", 0, 1, 1.0, 1),
+                pmt("我\u{1c}\u{1c}", "other", 0, 3, 1.0, 1),
+            ],
+            "我\u{1c}\u{1c}",
+        );
+        assert_merged(&out, &[("我", "self_reference", 0, 1, 1.0, 1)]);
     }
 }
