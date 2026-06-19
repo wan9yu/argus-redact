@@ -89,15 +89,20 @@ def produce_hints(
     *,
     near_misses: list[PatternMatch] | None = None,
 ) -> list[Hint]:
-    """Produce hints from L1 detection results.
+    """Parity-test-only oracle — no production caller.
 
-    Returns hints that downstream layers (L1b person names, L2 NER,
-    L3 LLM, tier filter) can consume.
+    Production hint generation is performed by the Rust ``_core.produce_hints_l1``
+    inside the glue layer (``glue/redact.py``). This pure-Python implementation
+    exists solely so tests can compare its output against the Rust implementation
+    to verify bit-level parity across all four hint types (``pii_density``,
+    ``near_miss_format``, ``self_reference_tier``, ``text_intent``).
+
+    Do not call this from any production code path.
     """
     hints: list[Hint] = []
-    # produce_hints is the pure Rust-vs-Python oracle: it emits the full hint set
-    # unconditionally. Ablation (ARGUS_ABLATION_HINTS) is applied downstream in the
-    # glue layer via _apply_ablation, keeping the env read out of pure/.
+    # This oracle emits the full hint set unconditionally. Ablation
+    # (ARGUS_ABLATION_HINTS) is applied downstream in the glue layer via
+    # _apply_ablation, keeping the env read out of pure/.
     enabled: set[str] | None = None
 
     def _emit(htype: str, **fields: object) -> None:
