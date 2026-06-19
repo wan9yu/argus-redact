@@ -79,6 +79,19 @@ _LANG_PATTERNS = {
     "br": "argus_redact.lang.br.patterns",
 }
 
+
+def _validate_langs(langs: list[str]) -> None:
+    """Raise ValueError for any requested language code not in the known set.
+
+    'shared' is merged in implicitly and is never requestable on its own.
+    """
+    for code in langs:
+        if code not in _LANG_PATTERNS:
+            raise ValueError(
+                f"Unknown language '{code}'. Available: {list(_LANG_PATTERNS.keys())}"
+            )
+
+
 _LANG_NER_ADAPTERS = {
     "zh": "argus_redact.lang.zh.ner_adapter",
     "en": "argus_redact.lang.en.ner_adapter",
@@ -192,6 +205,7 @@ def _detect(
     timing: dict[str, float] = {}
     entities: list[PatternMatch] = []
     langs = [lang] if isinstance(lang, str) else list(lang)
+    _validate_langs(langs)
 
     # Layer 1 (regex + person) — single Rust engine call. ``detect_l1`` reproduces
     # internally: normalize_text → match_patterns (over _load_patterns) →
