@@ -24,6 +24,10 @@ def _open_nofollow(path: str, mode: int) -> Iterator[int]:
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
     fd = os.open(path, flags, mode)
     try:
+        # os.open applies `mode` only when CREATING the file (and umask-masked).
+        # Enforce the exact mode unconditionally so a key written into a
+        # pre-existing world-readable file is still locked to e.g. 0o600.
+        os.fchmod(fd, mode)
         yield fd
     finally:
         os.close(fd)

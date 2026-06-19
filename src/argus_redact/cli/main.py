@@ -17,17 +17,17 @@ def _read_input(input_path: str | None) -> str:
         if not path.exists():
             print(f"Error: input file not found: {input_path}", file=sys.stderr)
             sys.exit(1)
-        return path.read_text(encoding="utf-8")
+        return _safe_read_text(path)
     # Bypass platform-default encoding (cp1252 on Windows) — read raw bytes
     # and decode as UTF-8. Without this, Chinese stdin produces surrogate
     # characters that downstream Rust regex / json.dumps reject.
     return sys.stdin.buffer.read().decode("utf-8")
 
 
-def _write_output(text: str, output_path: str | None):
+def _write_output(text: str, output_path: str | None, mode: int = 0o644):
     """Write text to file or stdout. Forces UTF-8 encoding on stdout."""
     if output_path:
-        _safe_write_text(output_path, text)
+        _safe_write_text(output_path, text, mode=mode)
         return
     # Bypass platform-default stdout encoding (cp1252 on Windows). Use the
     # binary buffer to avoid UnicodeEncodeError on CJK output.
@@ -102,7 +102,7 @@ def cmd_redact(args):
             "display_text": result.display_text,
             "key": result.key,
         }
-        _write_output(json.dumps(payload, ensure_ascii=False, indent=2), args.output)
+        _write_output(json.dumps(payload, ensure_ascii=False, indent=2), args.output, mode=0o600)
         return
 
     # Standard path (default / pipl / gdpr / hipaa / config-only)
