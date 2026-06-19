@@ -115,7 +115,7 @@ _LANG_PATTERNS = {
 }
 
 
-def _validate_langs(langs: list[str]) -> None:
+def _validate_langs(langs: tuple[str, ...] | list[str]) -> None:
     """Raise ValueError for any requested language code not in the known set.
 
     'shared' is merged in implicitly and is never requestable on its own.
@@ -162,9 +162,7 @@ def _load_patterns(lang: str | list[str]) -> list[dict]:
     # "shared" is not a requestable lang on its own (it is always merged in
     # below); requesting it raises, which the parity test relies on to skip the
     # synthetic "shared" corpus.
-    for code in langs:
-        if code not in _LANG_PATTERNS:
-            raise ValueError(f"Unknown language '{code}'. Available: {list(_LANG_PATTERNS.keys())}")
+    _validate_langs(langs)
 
     all_patterns = core_patterns("shared")
     for code in langs:
