@@ -22,7 +22,7 @@ const MAX_NUMERIC_COLLISION_SUFFIX: u32 = 10_000;
 /// Mirrors `_mask_value` (replacer.py:346–380).
 ///
 /// Email special-case: `local[0]` + at least 3 stars + `@domain`.
-/// Per-type defaults: phone(3,4), bank_card(6,4), credit_card(6,4), id_number(4,4).
+/// Per-type defaults: phone(3,4), bank_card(6,4), credit_card(6,4), id_number(0,4).
 /// If `visible_prefix` and `visible_suffix` are both 0 the per-type default applies.
 ///
 /// **Char-based**: all lengths are Unicode scalar values (`.chars().count()`),
@@ -60,7 +60,7 @@ pub fn mask_value(
         "phone" => (3usize, 4usize),
         "bank_card" => (6, 4),
         "credit_card" => (6, 4),
-        "id_number" => (4, 4),
+        "id_number" => (0, 4),
         _ => (3, 4),
     };
 
@@ -247,11 +247,19 @@ mod tests {
 
     #[test]
     fn mask_value_id_number() {
-        // 18 chars: show first 4 + last 4
+        // 18 chars: suffix-only default (0, 4) — leading region code stays hidden.
         assert_eq!(
             mask_value("110101199003074610", "id_number", 0, 0),
-            "1101**********4610"
+            "**************4610"
         );
+    }
+
+    #[test]
+    fn id_number_default_hides_leading_region_code() {
+        // 18-digit Chinese ID; default mask must NOT reveal the leading region code.
+        let out = mask_value("110101199003078888", "id_number", 0, 0);
+        assert!(!out.starts_with("1101"), "must not reveal the region code");
+        assert!(out.ends_with("8888"));
     }
 
     #[test]
