@@ -238,29 +238,37 @@ def _zh_surname_sweep_cases() -> list[dict]:
 def _en_cases() -> list[dict]:
     cases: list[dict] = []
 
-    def add(case_id, text, *, known=None):
+    def add(case_id, text, *, pii=None, known=None, threshold=0.8):
         cases.append(
             {
                 "id": case_id,
                 "lang": "en",
                 "input": text,
-                "pii_entities": None,  # en has no pii_entities param
+                "pii_entities": [_pm_to_dict(p) for p in (pii or [])],
                 "known_names": known,
-                "threshold": None,  # en has no threshold param
+                "threshold": threshold,
             }
         )
 
-    # The six required en cases:
+    # The required en cases (confidence behavior under the evidence gate):
     add("en_known_names_exact", "O'Brien filed the report.", known=["O'Brien"])  # → 1.0
-    add("en_surname_plus_known_given", "Email John Smith today.")  # → 1.0
-    add("en_surname_plus_unknown_given", "Quincy Smith arrived.")  # → 0.9
+    add("en_surname_plus_known_given", "Email John Smith today.")  # given-led → 1.0
+    add("en_surname_plus_unknown_given", "Quincy Smith arrived.")  # bare, no signal → suppressed
     add("en_single_surname_alone", "Smith arrived.")  # → no match
-    add("en_initial_form", "J. Smith joined.")  # → J. Smith, 0.9
+    add("en_initial_form", "J. Smith joined.")  # bare (initial), no signal → suppressed
     add("en_adjacency_gap_negative", "John, Smith arrived.")  # → no match (comma gap)
 
+    # Evidence-gate corroboration cases (bare surname lifted above threshold):
+    add("en_title_prefix", "Mr. Smith arrived.")  # title → corroborated, emitted
+    add(
+        "en_pii_proximity",  # bare pair near a phone → corroborated, emitted
+        "Quincy Smith, phone 4155551234",
+        pii=[PatternMatch("4155551234", "phone", 20, 30)],
+    )
+
     # Folded-in coverage from tests/detection/lang/test_en_person.py:
-    add("en_middle_initial", "John A. Smith joined.")
-    add("en_first_middle_last", "Mary Ann Johnson called.")
+    add("en_middle_initial", "John A. Smith joined.")  # given-led (prev2 John) → 1.0
+    add("en_first_middle_last", "Mary Ann Johnson called.")  # given-led (prev2 Mary) → 1.0
     add("en_lowercase_surname_negative", "john smith called.")
     add("en_unknown_surname_negative", "John Xeoplux arrived.")
     add("en_no_capitalized_pattern", "call them later")
@@ -270,7 +278,8 @@ def _en_cases() -> list[dict]:
     # case yields NO match at this DETECTOR level by design: the pools store the
     # de-accented (normalized) form, so accented input matches only after the
     # redact() pipeline's accent fold — that real-path recall is pinned in
-    # tests/detection/lang/test_person_pools_recall.py.
+    # tests/detection/lang/test_person_pools_recall.py. McDonald / O'Brien /
+    # Jean-Paul are given-name-led (Ronald / Sean / Jean) → 1.0.
     add("en_accented_name", "Renée Müller")
     add("en_intra_word_cap", "Ronald McDonald")
     add("en_apostrophe_name", "Sean O'Brien")
@@ -306,7 +315,13 @@ def _run_zh_case(case: dict) -> list[dict]:
 
 
 def _run_en_case(case: dict) -> list[dict]:
-    out = detect_en(case["input"], known_names=case["known_names"])
+    pii = [_dict_to_pm(p) for p in case["pii_entities"]] if case["pii_entities"] else None
+    out = detect_en(
+        case["input"],
+        pii_entities=pii,
+        known_names=case["known_names"],
+        threshold=case["threshold"],
+    )
     return [_pm_to_dict(m) for m in out]
 
 

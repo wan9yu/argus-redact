@@ -82,7 +82,7 @@ def test_zh_self_reference_in_pii_is_filtered():
 
 def test_en_known_names_confidence_one():
     text = "Contact Alice Johnson today"
-    out = _core.detect_person_names_en(text, ["Alice Johnson"])
+    out = _core.detect_person_names_en(text, known_names=["Alice Johnson"])
     assert isinstance(out, list)
     assert all(isinstance(m, _core.PatternMatch) for m in out)
     assert _tuples(out) == [("Alice Johnson", "person", 8, 21, 1.0, 0)]
@@ -138,7 +138,7 @@ def test_empty_text_returns_empty():
 
 def test_en_pathological_known_name_does_not_crash():
     huge = "A" * 500_000
-    out = _core.detect_person_names_en("Email Alice please", [huge, "Alice"])
+    out = _core.detect_person_names_en("Email Alice please", known_names=[huge, "Alice"])
     assert _tuples(out) == [("Alice", "person", 6, 11, 1.0, 0)]
 
 

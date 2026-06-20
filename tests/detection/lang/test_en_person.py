@@ -14,11 +14,39 @@ class TestDetectPersonNames:
         smith = next(r for r in results if r.text == "John Smith")
         assert smith.confidence == 1.0
 
-    def test_should_use_lower_confidence_when_given_not_in_top_list(self):
-        # "Quincy" not in GIVEN_NAMES, but "Smith" is a known surname → 0.9
+    def test_should_suppress_uncorroborated_common_word_pair(self):
+        # "Central Park" — "Park" is a pooled surname, but the leading token
+        # "Central" IS a common / place word, so the pool-independent name-like
+        # signal does NOT fire and, with no title / nearby PII, the bare pair
+        # scores below threshold and is SUPPRESSED (the evidence gate; left to L2
+        # NER). This is the precision guard — it must not over-redact place pairs.
+        results = detect_person_names("Central Park is large.")
+        assert not results
+
+    def test_should_emit_name_like_bare_surname(self):
+        # "Quincy" is NOT in the SSA given-name pool, but it is name-like (not a
+        # common word), so the pool-independent signal corroborates the bare pair
+        # → emitted at 0.8 with no title / PII. This recovers real Given+Surname
+        # names the Anglo-biased pool would otherwise drop (fairness fix).
         results = detect_person_names("Quincy Smith arrived.")
-        smith = next(r for r in results if "Smith" in r.text)
-        assert smith.confidence == 0.9
+        assert any(r.text == "Quincy Smith" and r.confidence == 0.8 for r in results)
+
+    def test_should_emit_bare_surname_with_title(self):
+        # A title immediately before the surname corroborates the bare pair, so it
+        # is emitted (base 0.3 + title 0.6).
+        results = detect_person_names("Dr. Smith arrived.")
+        assert any("Smith" in r.text for r in results)
+
+    def test_should_emit_bare_surname_near_pii(self):
+        # PII proximity corroborates a bare pair. "Quincy Smith" alone is
+        # suppressed; an adjacent phone entity lifts it above threshold.
+        from argus_redact._types import PatternMatch
+
+        phone = PatternMatch(text="4155551234", type="phone", start=14, end=24)
+        results = detect_person_names(
+            "Quincy Smith, 4155551234", pii_entities=[phone]
+        )
+        assert any("Quincy Smith" in r.text for r in results)
 
     def test_should_skip_unknown_surname(self):
         # "Xeoplux" not in SURNAMES

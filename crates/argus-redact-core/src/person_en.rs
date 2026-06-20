@@ -1,9 +1,21 @@
-//! English person-name detection — Rust port of `lang/en/person.py`.
+//! English person-name detection — surname-list match + given-name look-back,
+//! evidence-gated to mirror the zh detector.
 //!
-//! Unlike the zh detector there is NO evidence scoring: English surnames have
-//! minimal overlap with common words, so the algorithm is a surname-list match
-//! plus a 1-2 token given-name look-back. `detect_person_names` is the only
-//! `pub` surface.
+//! The algorithm tokenizes capitalized words, identifies surname-pool tokens and
+//! looks back 1-2 tokens for a leading given name / initial. A FULL `Given +
+//! Surname` (both in the pools) or a user-supplied `known_names` match is
+//! emitted high-confidence (recall preserved). A BARE surname-pool match — a
+//! capitalized leading word that is NOT a known given name (`Quincy Smith`, `Lake
+//! Park`, `York Stone`) — used to fire unconditionally at 0.9, over-redacting
+//! noisy prose. It is now EVIDENCE-GATED exactly like zh's `score_candidate`:
+//! `base + evidence`, a zero-evidence short-circuit, and emit only when the score
+//! clears `threshold`. The corroboration signals are a title/honorific
+//! immediately before the surname, a pool-independent **name-like** leading token
+//! (alphabetic, length ≥ 2, not a common English / place word — this recovers
+//! non-Anglo `Given Surname` names the SSA pool misses without reviving place
+//! FPs), and proximity to other detected PII; with none, a lone capitalized
+//! surname pair scores below threshold and is left to L2 NER rather than redacted
+//! at L1. `detect_person_names` is the only `pub` surface.
 //!
 //! ## Char offsets, not byte offsets
 //!
@@ -22,7 +34,7 @@ use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
-use crate::person_data::{given_names_en_set, surnames_en_set};
+use crate::person_data::{common_words_en_set, given_names_en_set, surnames_en_set};
 use crate::reserved_range::byte_to_char_offset;
 use crate::types::PatternMatch;
 
@@ -66,88 +78,227 @@ struct Token {
     end: usize,
 }
 
-/// Detect English person names via surname-list match + optional given-name boost.
+/// `_TITLES` — honorifics / titles that, immediately before a surname,
+/// CORROBORATE a bare (non-given-name-led) surname-pool match. Matched against
+/// the leading token with its trailing dot stripped (`Mr.` → `Mr`), so both the
+/// `Mr. Smith` (dot in the gap) and `Mr Smith` forms qualify. Lowercase-folded
+/// before the lookup so `dr` / `Dr` / `DR` all match. Kept deliberately small —
+/// the common English honorifics — to avoid widening the gate into ordinary
+/// capitalized words.
+static TITLES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+    [
+        "mr", "mrs", "ms", "mx", "miss", "dr", "prof", "professor", "sir",
+        "madam", "madame", "rev", "reverend", "hon", "fr", "st", "capt",
+        "captain", "lt", "sgt", "gen", "col", "maj", "sen", "rep", "gov",
+        "pres", "president", "judge", "officer", "dame", "lord", "lady",
+    ]
+    .into_iter()
+    .collect()
+});
+
+// ── Evidence scoring (mirrors `person_zh::score_candidate`) ──
+//
+// A bare surname-pool match (leading token NOT a known given name) is gated:
+// `base + evidence`, zero-evidence → 0.0, emit only when `score >= threshold`.
+// A given-name-led match and a `known_names` exact match bypass this entirely at
+// confidence 1.0 (recall preserved). The weights are chosen so a single strong
+// corroboration signal clears the default 0.8 threshold and an uncorroborated
+// pair does not:
+//   - title only:        base 0.3 + 0.6 = 0.9  → emit
+//   - name-like lead:    base 0.3 + 0.5 = 0.8  → emit (== threshold passes)
+//   - PII near (<=50):   base 0.3 + 0.5 = 0.8  → emit (== threshold passes)
+//   - PII mid (<=150):   base 0.3 + 0.3 = 0.6  → suppress (weak, leave to L2)
+//   - no evidence:       0.0                   → suppress
+//
+// The signals are OR'd additively (`(base + evidence).min(1.0)`), so a name-like
+// leading token AND a nearby PII compound to 1.0 — they can only RAISE a score,
+// never suppress one that already cleared the gate.
+//
+// ## Why a pool-independent name-like signal
+//
+// Given-name-led corroboration relies on the SSA given-name pool, which is
+// Anglo-biased (it covers `Jose`/`Maria` but not `Marco`/`Wei`/`Mohammed`). That
+// made the gate drop real `Given Surname` names by ethnicity: `Marco Rossi` was
+// suppressed while `Jose Garcia` was kept. The name-like signal removes that bias
+// LEXICALLY: a leading token is name-like when its lowercased form is NOT a common
+// English word / place term (`common_words_en_set`). `Marco`/`Wei`/`Mohammed` are
+// not common words → name-like → corroborate; `Central`/`Lake`/`Apple` ARE common
+// / place words → not name-like → stay suppressed. This recovers non-Anglo names
+// without reviving the place/noise FPs.
+
+/// Flat base score for a bare-surname candidate. English surname matches carry
+/// no length signal worth differentiating (the surname is one pool token), so a
+/// single base is used rather than zh's per-char-length tiers.
+const BARE_BASE: f64 = 0.3;
+/// Title / honorific immediately before the surname.
+const W_TITLE: f64 = 0.6;
+/// Pool-independent "name-like leading token": the given-name slot is alphabetic,
+/// length >= 2, and NOT a common English word / place term. Chosen so a name-like
+/// lead ALONE clears the default 0.8 threshold (`BARE_BASE 0.3 + 0.5 = 0.8`),
+/// recovering non-Anglo `Given Surname` names the SSA pool misses.
+const W_NAME_LIKE: f64 = 0.5;
+/// PII within the near proximity window.
+const W_PROXIMITY_NEAR: f64 = 0.5;
+/// PII within the mid proximity window.
+const W_PROXIMITY_MID: f64 = 0.3;
+/// Proximity buckets — char distance to the nearest detected PII entity. Same
+/// bucket edges as `person_zh::score_candidate`.
+const PROXIMITY_NEAR: usize = 50;
+const PROXIMITY_MID: usize = 150;
+
+/// Score a BARE-surname candidate (leading token not a given name) against the
+/// corroboration signals, mirroring `person_zh::score_candidate`'s structure:
+/// accumulate evidence, zero-evidence short-circuit, then `base + evidence`
+/// capped at 1.0. `lead_clean` is the leading token with its trailing dot
+/// stripped (used for the title + name-like tests); `start`/`end` are the
+/// candidate's char offsets (for proximity). The signals (title / name-like /
+/// proximity) are OR'd additively. Returns 0.0 when no signal fires.
+fn score_bare_surname(
+    lead_clean: &str,
+    start: usize,
+    end: usize,
+    pii_entities: &[&PatternMatch],
+) -> f64 {
+    let mut evidence = 0.0_f64;
+
+    // Title / honorific immediately before the surname (the leading token IS the
+    // title). `Mr. Smith` / `Dr Smith` corroborate. A title occupies the title
+    // slot, NOT the given-name slot, so it is mutually exclusive with the
+    // name-like signal below — otherwise `Mr` (alphabetic, len 2, not a common
+    // word) would ALSO score as name-like and double-count (title + name-like).
+    let lead_lower = lead_clean.to_ascii_lowercase();
+    if TITLES.contains(lead_lower.as_str()) {
+        evidence += W_TITLE;
+    } else if is_name_like(lead_clean) {
+        // Pool-independent name-like leading token: `Marco Rossi`, `Wei Chen` (the
+        // given-name slot is not in the SSA pool, but it is name-like, not a
+        // common word) corroborate; `Central Park`, `Lake Park` (leading token IS
+        // a common / place word) do not. See [`is_name_like`] for the guards.
+        evidence += W_NAME_LIKE;
+    }
+
+    // Proximity to structural PII — first entity within a bucket wins (break).
+    // `abs_diff` over usize char offsets == Python `abs(...)` on ints.
+    for pii in pii_entities {
+        let distance = start
+            .abs_diff(pii.end)
+            .min(pii.start.abs_diff(end));
+        if distance <= PROXIMITY_NEAR {
+            evidence += W_PROXIMITY_NEAR;
+            break;
+        } else if distance <= PROXIMITY_MID {
+            evidence += W_PROXIMITY_MID;
+            break;
+        }
+    }
+
+    // No corroboration → don't match at L1 (leave to L2 NER).
+    if evidence == 0.0_f64 {
+        return 0.0;
+    }
+
+    (BARE_BASE + evidence).min(1.0)
+}
+
+/// Is the leading (given-name-slot) token "name-like"? — a pool-INDEPENDENT
+/// corroboration test that distinguishes a real given name from a place / common
+/// word lexically, not by ethnicity. True when ALL hold:
+///   - the token is alphabetic (`char::is_alphabetic` for every char; an internal
+///     hyphen in `Jean-Paul` and an apostrophe — ASCII `'` or typographic `’`
+///     U+2019 — in `D'Andre` / `O'Shea` are allowed, see below, matching the
+///     tokenizer's single-token support) — digits / other symbols are not names;
+///   - its char length is >= 2 — a single-letter INITIAL (`J.` → `J`) is NOT
+///     name-like, so `J. Smith` stays suppressed (matches the golden);
+///   - its `to_ascii_lowercase()` (the caller already strips a trailing dot) is
+///     NOT in [`common_words_en_set`] — `Central`/`Lake`/`Apple` are common /
+///     place words and fail this, `Marco`/`Wei`/`Mohammed` pass.
 ///
-/// Direct port of `detect_person_names(text, *, known_names=None)`. The Python
-/// keyword-argument default (`known_names=None`) is resolved at the binding
-/// layer; here the caller passes an empty slice for "no known_names".
+/// Hyphenated names (`Jean-Paul`) and apostrophe names (`D'Andre`, `O'Shea`) are
+/// name-like: the hyphen / apostrophe is allowed and the lowercased whole is not a
+/// common word. ASCII lowercasing is
+/// sufficient because the lexicon is ASCII; an accented leading token (`Renée`)
+/// is name-like too (not in the set, alphabetic), but in the real pipeline the
+/// detector runs after the accent fold, so this only matters for the raw detector.
+fn is_name_like(lead_clean: &str) -> bool {
+    // Length >= 2 chars — a single-letter initial is not name-like.
+    if lead_clean.chars().count() < 2 {
+        return false;
+    }
+    // Alphabetic (letters), with an internal hyphen allowed for `Jean-Paul` and
+    // an apostrophe (ASCII `'` or typographic `’` U+2019) allowed for single-token
+    // given names like `D'Andre` / `O'Shea` / `D'Angelo` — the tokenizer emits
+    // these as ONE token, so the filter must match its support or the name leaks.
+    if !lead_clean
+        .chars()
+        .all(|c| c.is_alphabetic() || c == '-' || c == '\'' || c == '\u{2019}')
+    {
+        return false;
+    }
+    // Not a common English word / place term.
+    !common_words_en_set().contains(lead_clean.to_ascii_lowercase().as_str())
+}
+
+/// Detect English person names via surname-list match + given-name look-back,
+/// evidence-gating bare-surname matches.
 ///
-/// ```python
-/// results: list[PatternMatch] = []
-/// seen_spans: set[tuple[int, int]] = set()
+/// Param order mirrors `person_zh::detect_person_names` for consistency:
+/// `(text, pii_entities, known_names, threshold)`. `pii_entities` are the L1
+/// structural PII (phone / id / …) used as the proximity corroboration signal;
+/// `threshold` is the minimum score a bare-surname candidate must clear to be
+/// emitted (the pipeline default is 0.8). Pass an empty slice for "no
+/// pii_entities" / "no known_names".
 ///
-/// # Phase 1: known_names exact match wins (confidence 1.0).
-/// if known_names:
-///     sorted_names = sorted((n for n in known_names if n), key=len, reverse=True)
-///     if sorted_names:
-///         known_pat = re.compile("|".join(re.escape(n) for n in sorted_names))
-///         for m in known_pat.finditer(text):
-///             span = (m.start(), m.end())
-///             if span not in seen_spans:
-///                 results.append(PatternMatch(text=m.group(0), type="person",
-///                                             start=m.start(), end=m.end(),
-///                                             confidence=1.0))
-///                 seen_spans.add(span)
+/// ## Confidence model
 ///
-/// # Phase 2: tokenize, scan for surnames, look back.
-/// tokens = list(_TOKEN_PAT.finditer(text))
-/// for i, tok in enumerate(tokens):
-///     word = tok.group()
-///     if word not in SURNAME_SET:
-///         continue
-///     if i == 0:
-///         continue
-///     prev = tokens[i - 1]
-///     gap = text[prev.end() : tok.start()]
-///     if gap.strip(" \t.") != "":
-///         continue
-///     first = prev.group()
-///     match_start = prev.start()
-///     if i >= 2:
-///         prev2 = tokens[i - 2]
-///         gap2 = text[prev2.end() : prev.start()]
-///         prev2_word = prev2.group().rstrip(".")
-///         if gap2.strip(" \t.") == "" and prev2_word in GIVEN_NAME_SET:
-///             match_start = prev2.start()
-///             first = prev2.group()
-///     span = (match_start, tok.end())
-///     if span in seen_spans:
-///         continue
-///     first_clean = first.rstrip(".")
-///     confidence = 1.0 if first_clean in GIVEN_NAME_SET else 0.9
-///     results.append(PatternMatch(text=text[match_start : tok.end()],
-///                                 type="person", start=match_start,
-///                                 end=tok.end(), confidence=confidence))
-///     seen_spans.add(span)
-/// return results
-/// ```
+/// - **Phase 1 — `known_names` exact match** → confidence 1.0, bypasses the
+///   gate (recall preserved). Matched FIRST via one alternation regex of the
+///   `re.escape`-d names sorted longest-first, non-overlapping, `seen_spans`-
+///   deduped on the exact `(start, end)` char span.
+/// - **Phase 2 — surname-pool look-back**: tokenize, find surname-pool tokens,
+///   look back 1-2 tokens for a leading given name / initial. Then:
+///   - **given-name-led** (the leading or prev2 token is a known given name) →
+///     confidence 1.0, bypasses the gate (this is the strong NAME signal —
+///     `Given + Surname`, both in the pools — that preserves recall).
+///   - **bare surname** (leading token is NOT a known given name — `Quincy
+///     Smith`, `Lake Park`, `Mr. Smith`, `Marco Rossi`) → EVIDENCE-GATED via
+///     [`score_bare_surname`]: a title/honorific immediately before the surname,
+///     a **name-like** leading token (alphabetic, length ≥ 2, not a common
+///     English / place word — see [`is_name_like`]), or proximity to a
+///     `pii_entities` entry corroborates; with none, the score is below
+///     `threshold` and the candidate is SUPPRESSED (left to L2 NER). The
+///     name-like signal is pool-independent, so a real `Given Surname` whose
+///     given name is outside the SSA pool (`Marco Rossi`, `Wei Chen`) is
+///     recovered, while a place pair (`Central Park`) stays suppressed. When
+///     emitted, the confidence is the gated score (`base + evidence`, ≤ 1.0). An
+///     initial-led pair (`J. Smith`) is a bare surname whose leading token is a
+///     single letter → not name-like, no corroboration → suppressed.
 ///
-/// ## Bit-identity notes
-///
-/// - `PatternMatch` fields mirror Python exactly: `type_ = "person"`,
-///   `start`/`end` = char offsets, `confidence` = 1.0 (known name, or
-///   given-name-led) / 0.9 (surname with adjacent non-given-name leading token),
-///   and `layer = 0` — Python's `PatternMatch(...)` is built WITHOUT a `layer`
-///   kwarg, so the dataclass default (`layer = 0`) applies.
-/// - Known names are matched FIRST via one alternation regex of the `re.escape`-d
-///   names sorted longest-first (`key=len, reverse=True`, a STABLE sort), then a
-///   non-overlapping `find_iter` (≡ `re.finditer`). Each hit is `seen_spans`-deduped
-///   on the EXACT `(start, end)` char span.
-/// - The adjacency gap test is the exact Python expression
-///   `text[prev_end:tok_start].strip(" \t.") == ""` — the strip set is
-///   space / tab / dot, replicated char-for-char.
-/// - A leading token is `rstrip(".")`-cleaned before the `GIVEN_NAME_SET`
-///   membership test (so an initial like `J.` is tested as `J`).
-/// - Result ORDER is Python's append order: Phase-1 known names first (in
-///   regex-match order), then Phase-2 surname matches (in token-scan order). No
-///   final sort.
-pub fn detect_person_names(text: &str, known_names: &[String]) -> Vec<PatternMatch> {
+/// The adjacency gap test is `text[prev_end:tok_start].strip(" \t.") == ""` (the
+/// strip set is space / tab / dot), so the `Mr. Smith` / `J. Smith` dot lands in
+/// the gap and the pair still assembles. A leading token is `rstrip(".")`-cleaned
+/// before the given-name / title membership tests (so `J.` tests as `J`, `Mr.`
+/// as `Mr`). Result ORDER is append order: Phase-1 known names first, then
+/// Phase-2 emitted surname matches in token-scan order; no final sort.
+pub fn detect_person_names(
+    text: &str,
+    pii_entities: &[PatternMatch],
+    known_names: &[String],
+    threshold: f64,
+) -> Vec<PatternMatch> {
     let mut results: Vec<PatternMatch> = Vec::new();
     // (start, end) char spans already emitted — dedup is on the exact pair.
     let mut seen_spans: HashSet<(usize, usize)> = HashSet::new();
 
     // Source as chars so every slice / strip stays in char-space.
     let text_chars: Vec<char> = text.chars().collect();
+
+    // Structural PII for the bare-surname proximity gate — drop `self_reference`
+    // exactly as `person_zh::detect_person_names` does (a "me" / "I" near a name
+    // must not grant a proximity bonus). Built once and reused per candidate.
+    let structural_pii: Vec<&PatternMatch> = pii_entities
+        .iter()
+        .filter(|p| p.type_ != "self_reference")
+        .collect();
 
     // ── Phase 1: known_names exact match (confidence 1.0). ──
     //   sorted_names = sorted((n for n in known_names if n), key=len, reverse=True)
@@ -281,10 +432,24 @@ pub fn detect_person_names(text: &str, known_names: &[String]) -> Vec<PatternMat
         if seen_spans.contains(&span) {
             continue;
         }
-        // first_clean = first.rstrip(".")
-        // confidence = 1.0 if first_clean in GIVEN_NAME_SET else 0.9
+        // first_clean = first.rstrip(".") — tested against the given-name pool
+        // (given-name-led → high confidence) and, when bare, the title pool.
         let first_clean = rstrip_dot(first);
-        let confidence = if given_names.contains(first_clean) { 1.0 } else { 0.9 };
+
+        // given-name-led (the leading token is a known given name) → strong NAME
+        // signal, bypass the gate at confidence 1.0 (recall preserved). A bare
+        // surname (leading token not a given name) is EVIDENCE-GATED: emit only
+        // when a title / PII-proximity signal lifts it to >= threshold.
+        let confidence = if given_names.contains(first_clean) {
+            1.0
+        } else {
+            let score = score_bare_surname(first_clean, match_start, tok.end, &structural_pii);
+            if score < threshold {
+                // Uncorroborated lone capitalized surname pair — leave to L2 NER.
+                continue;
+            }
+            score
+        };
 
         // text = text[match_start : tok.end()] (char slice)
         let matched_text: String = text_chars[match_start..tok.end].iter().collect();
@@ -325,9 +490,20 @@ mod tests {
 
     /// (text, start, end, confidence) projection — confidence compared EXACTLY.
     /// Also asserts every result is `type_ == "person"` and `layer == 0`.
+    /// Runs with NO pii_entities at the pipeline-default threshold (0.8), so a
+    /// bare-surname pair with no title / proximity signal is suppressed.
     fn detect(text: &str, known: &[&str]) -> Vec<(String, usize, usize, f64)> {
+        detect_with_pii(text, known, &[])
+    }
+
+    /// Like [`detect`] but with PII entities supplied for the proximity gate.
+    fn detect_with_pii(
+        text: &str,
+        known: &[&str],
+        pii: &[PatternMatch],
+    ) -> Vec<(String, usize, usize, f64)> {
         let known: Vec<String> = known.iter().map(|s| s.to_string()).collect();
-        detect_person_names(text, &known)
+        detect_person_names(text, pii, &known, SCORE_THRESHOLD)
             .into_iter()
             .map(|m| {
                 assert_eq!(m.type_, "person");
@@ -337,19 +513,30 @@ mod tests {
             .collect()
     }
 
+    /// Pipeline-default person threshold (mirrors `hints::DEFAULT_PERSON_THRESHOLD`
+    /// and `person_zh::SCORE_THRESHOLD`). Bare-surname candidates must clear this.
+    const SCORE_THRESHOLD: f64 = 0.8;
+
     fn row(text: &str, start: usize, end: usize, conf: f64) -> (String, usize, usize, f64) {
         (text.to_string(), start, end, conf)
     }
 
-    // ── Expected values below were CAPTURED FROM LIVE PYTHON (pyenv 3.11.3) ──
-    // Inputs sourced from the T1 en golden corpus
-    // (tests/core/fixtures/en_person_detection_v076.json) and
-    // tests/detection/lang/test_en_person.py. Capture command:
-    //   python3 -c "
-    //   from argus_redact.lang.en.person import detect_person_names as d
-    //   print([(m.text, m.start, m.end, m.confidence) for m in d('TEXT', known_names=[...])])
-    //   "
-    // Each expectation below is the verbatim output and is asserted with `==`.
+    fn pii(type_: &str, start: usize, end: usize) -> PatternMatch {
+        PatternMatch {
+            text: "x".to_string(),
+            type_: type_.to_string(),
+            start,
+            end,
+            confidence: 1.0,
+            layer: 1,
+        }
+    }
+
+    // ── Expectations below are the NEW evidence-gated behavior (the detector is
+    // 100% Rust — the golden fixture + these unit tests ARE the spec, there is no
+    // Python reference to stay bit-identical to). Given-name-led and known-name
+    // matches stay high-confidence; a bare surname (leading token not a given
+    // name) is emitted only when corroborated by a title or PII-proximity. ──
 
     /// Tokenize `text` into the matched word strings `TOKEN_PAT`
     /// produces — used to assert the Unicode-aware tokenizer treats accented /
@@ -465,14 +652,146 @@ mod tests {
     }
 
     #[test]
-    fn surname_plus_unknown_given() {
-        // en_surname_plus_unknown_given "Quincy Smith arrived." — "Quincy" is not
-        // in GIVEN_NAME_SET but "Smith" is a surname → confidence 0.9.
-        // Python: [('Quincy Smith', 0, 12, 0.9)]
+    fn surname_plus_unknown_given_name_like_emits() {
+        // "Quincy Smith arrived." — "Quincy" is NOT in the SSA given-name pool,
+        // but it IS name-like (alphabetic, len >= 2, not a common word) → base 0.3
+        // + name-like 0.5 = 0.8 >= threshold, emitted at 0.8 with no title / PII.
+        // (Before the name-like signal this pair was suppressed; the suppression
+        // case is now demonstrated by `common_word_lead_stays_suppressed`, whose
+        // leading token IS a common word.)
         assert_eq!(
             detect("Quincy Smith arrived.", &[]),
-            vec![row("Quincy Smith", 0, 12, 0.9)]
+            vec![row("Quincy Smith", 0, 12, 0.8)]
         );
+    }
+
+    #[test]
+    fn surname_plus_unknown_given_pii_proximity_corroborates() {
+        // Same name-like pair WITH a phone number adjacent (within the near
+        // window): name-like 0.5 + proximity-near 0.5 both fire → base 0.3 + 1.0,
+        // capped at 1.0. The phone is at chars 14..24 (distance from the candidate
+        // end at 12 is 2 → near bucket). The signals are additive — proximity
+        // raises the already-emitting name-like score to the 1.0 cap.
+        assert_eq!(
+            detect_with_pii(
+                "Quincy Smith, 4155551234",
+                &[],
+                &[pii("phone", 14, 24)],
+            ),
+            vec![row("Quincy Smith", 0, 12, 1.0)]
+        );
+    }
+
+    #[test]
+    fn name_like_lead_recovers_non_anglo_name() {
+        // "Marco Rossi" — "Marco" is NOT in the SSA given-name pool, but it is
+        // name-like (alphabetic, len >= 2, not a common word) and "Rossi" is a
+        // pooled surname → base 0.3 + name-like 0.5 = 0.8 >= threshold, emitted at
+        // 0.8 with NO title / PII corroboration. This is the fairness recovery: a
+        // real Given+Surname name the Anglo-biased pool would otherwise drop.
+        assert_eq!(
+            detect("Marco Rossi called.", &[]),
+            vec![row("Marco Rossi", 0, 11, 0.8)]
+        );
+        // Hyphenated non-Anglo given name — "Jean-Paul" is one token, name-like
+        // (hyphen allowed), "Sartre" is pooled → 0.8.
+        assert_eq!(
+            detect("Jean-Paul Sartre spoke.", &[]),
+            vec![row("Jean-Paul Sartre", 0, 16, 0.8)]
+        );
+    }
+
+    #[test]
+    fn name_like_compounds_with_proximity() {
+        // "Quincy Smith" with an adjacent phone: name-like (0.5) AND proximity
+        // (0.5) both fire → base 0.3 + 1.0, capped at 1.0. The signals are OR'd
+        // additively and can only RAISE the score.
+        assert_eq!(
+            detect_with_pii("Quincy Smith, 4155551234", &[], &[pii("phone", 14, 24)]),
+            vec![row("Quincy Smith", 0, 12, 1.0)]
+        );
+    }
+
+    #[test]
+    fn common_word_lead_stays_suppressed() {
+        // "Central Park" / "Lake Park" — "Park" is a pooled surname, but the
+        // leading token ("Central" / "Lake") IS a common / place word, so the
+        // name-like signal does NOT fire and, with no title / PII, the score is
+        // 0.0 < threshold → SUPPRESSED. The fairness fix must not revive these
+        // place FPs.
+        assert!(detect("Central Park is large.", &[]).is_empty());
+        assert!(detect("Lake Park nearby.", &[]).is_empty());
+        // "We visited Hyde Park yesterday" — anchor surname is "Park"; the leading
+        // token "Hyde" is a curated place component in the common-word lexicon →
+        // not name-like → suppressed. (Note "yesterday Park" never assembles: the
+        // prev token would be "yesterday", lowercase, not a TOKEN_PAT match.)
+        assert!(detect("We visited Hyde Park often.", &[]).is_empty());
+    }
+
+    #[test]
+    fn apostrophe_lead_is_name_like() {
+        // Single-token apostrophe given names tokenize as ONE token (the
+        // tokenizer supports ASCII `'` and typographic `’` followed by a capital);
+        // the name-like char filter must permit the apostrophe too, or the name
+        // leaks. `D'Andre` / `O'Shea` / `D'Angelo` are name-like; the typographic
+        // form is covered as well.
+        assert!(is_name_like("D'Andre"));
+        assert!(is_name_like("O'Shea"));
+        assert!(is_name_like("D'Angelo"));
+        assert!(is_name_like("O\u{2019}Shea"));
+        // Hyphenated names stay name-like (regression guard).
+        assert!(is_name_like("Jean-Paul"));
+    }
+
+    #[test]
+    fn apostrophe_given_name_redacts() {
+        // "D'Andre Williams" — "D'Andre" is one token, not in the SSA given-name
+        // pool, but name-like (apostrophe allowed) and "Williams" is a pooled
+        // surname → base 0.3 + name-like 0.5 = 0.8 >= threshold. Before the
+        // apostrophe fix the leading token failed the char filter and the pair
+        // was suppressed (the full name LEAKED).
+        assert_eq!(
+            detect("D'Andre Williams called.", &[]),
+            vec![row("D'Andre Williams", 0, 16, 0.8)]
+        );
+    }
+
+    #[test]
+    fn removed_common_word_given_name_redacts() {
+        // "Hope Johnson" — "hope" was removed from the common-word lexicon (it is
+        // primarily a given name), so the leading token is now name-like and the
+        // pair redacts. Before the removal "Hope" was a common word → not
+        // name-like → the full name LEAKED. "Johnson" is a pooled surname.
+        assert_eq!(
+            detect("Hope Johnson arrived.", &[]),
+            vec![row("Hope Johnson", 0, 12, 0.8)]
+        );
+        // A surname-pool word removed from the lexicon ("king") leads name-like as
+        // a GIVEN slot while still anchoring as a surname.
+        assert_eq!(
+            detect("King Davis spoke.", &[]),
+            vec![row("King Davis", 0, 10, 0.8)]
+        );
+    }
+
+    #[test]
+    fn added_place_word_lead_suppressed() {
+        // "Golden Davis" — "golden" was ADDED to the common-word lexicon (a color,
+        // not a given name and not a pooled surname), so the leading token is no
+        // longer name-like and, with no title / PII, the pair is SUPPRESSED.
+        // Before the addition "Golden" was name-like and false-positived at 0.8.
+        assert!(detect("Golden Davis arrived.", &[]).is_empty());
+        // "United Davis" — org/function word added to the lexicon → suppressed.
+        assert!(detect("United Davis arrived.", &[]).is_empty());
+    }
+
+    #[test]
+    fn initial_lead_not_name_like_still_suppressed() {
+        // "J. Smith" — "J." rstrip('.') → "J" is a single letter (length 1), so
+        // the name-like guard (length >= 2) rejects it. No title, no PII → 0.0 <
+        // threshold → STILL suppressed, matching the golden. The name-like signal
+        // must not turn an initial-led pair into an emission.
+        assert!(detect("J. Smith joined.", &[]).is_empty());
     }
 
     #[test]
@@ -485,14 +804,11 @@ mod tests {
 
     #[test]
     fn initial_form_j_smith() {
-        // en_initial_form "J. Smith joined." — "J." is the single-initial token
-        // form; rstrip('.') → "J" is not a given name → confidence 0.9. The dot
-        // between "J." and "Smith" is inside the gap strip-set (space/tab/dot).
-        // Python: [('J. Smith', 0, 8, 0.9)]
-        assert_eq!(
-            detect("J. Smith joined.", &[]),
-            vec![row("J. Smith", 0, 8, 0.9)]
-        );
+        // "J. Smith joined." — "J." rstrip('.') → "J" is neither a given name nor
+        // a title, and there is no PII signal → bare-surname score 0.0 < 0.8 →
+        // SUPPRESSED. An initial alone is not corroboration (a deliberate recall
+        // trade for precision; the full-name and titled forms still fire).
+        assert!(detect("J. Smith joined.", &[]).is_empty());
     }
 
     #[test]
@@ -579,13 +895,25 @@ mod tests {
 
     #[test]
     fn dot_gap_title_prefix() {
-        // "Mr. Smith arrived." — "Mr" is a token, the "." before "Smith" is in
-        // the gap strip-set so the gap is blank; "Mr" is not a given name → 0.9,
-        // and text[0:9] = "Mr. Smith".
-        // Python: [('Mr. Smith', 0, 9, 0.9)]
+        // "Mr. Smith arrived." — "Mr" is not a given name, but it IS a title; the
+        // "." before "Smith" is in the gap strip-set so the pair assembles. The
+        // title corroborates → base 0.3 + title 0.6 = 0.9 >= threshold, emitted
+        // at 0.9, text[0:9] = "Mr. Smith". (Correctness win over the old ungated
+        // 0.9 — the score is now justified by the title signal.)
         assert_eq!(
             detect("Mr. Smith arrived.", &[]),
-            vec![row("Mr. Smith", 0, 9, 0.9)]
+            vec![row("Mr. Smith", 0, 9, 0.8999999999999999)]
+        );
+    }
+
+    #[test]
+    fn title_no_dot_prefix() {
+        // "Dr Smith arrived." — title without a trailing dot still corroborates
+        // (the title test lowercase-folds the rstrip'd leading token). base 0.3 +
+        // title 0.6 = 0.9.
+        assert_eq!(
+            detect("Dr Smith arrived.", &[]),
+            vec![row("Dr Smith", 0, 8, 0.8999999999999999)]
         );
     }
 
@@ -630,9 +958,14 @@ mod tests {
         let pathological = "A".to_string() + &"a".repeat(1_000_000);
         // Just calling it must not panic; the result is whatever the graceful
         // scan produces (possibly empty) — we only assert it returns a Vec.
-        let _got: Vec<PatternMatch> = detect_person_names(&pathological, &[]);
+        let _got: Vec<PatternMatch> =
+            detect_person_names(&pathological, &[], &[], SCORE_THRESHOLD);
         // Also exercise the known_names emit path on the same input.
-        let _got2: Vec<PatternMatch> =
-            detect_person_names(&pathological, &["Alice".to_string()]);
+        let _got2: Vec<PatternMatch> = detect_person_names(
+            &pathological,
+            &[],
+            &["Alice".to_string()],
+            SCORE_THRESHOLD,
+        );
     }
 }

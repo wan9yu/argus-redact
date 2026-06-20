@@ -35,6 +35,14 @@ struct EnPersonData {
     surnames: Vec<String>,
 }
 
+/// Pool-independent common-word lexicon (lowercased) for the en person
+/// detector's "name-like leading token" corroboration signal. See
+/// `data/en_common_words.ron` for the contract.
+#[derive(Debug, Deserialize)]
+struct EnCommonWords {
+    words: Vec<String>,
+}
+
 macro_rules! embed_ron {
     ($fn_name:ident, $ty:ty, $path:literal) => {
         fn $fn_name() -> &'static $ty {
@@ -48,6 +56,7 @@ macro_rules! embed_ron {
 }
 embed_ron!(zh_data, ZhPersonData, "../data/zh_person.ron");
 embed_ron!(en_data, EnPersonData, "../data/en_person.ron");
+embed_ron!(en_common_words_data, EnCommonWords, "../data/en_common_words.ron");
 
 // ── zh accessors ────────────────────────────────────────────────────────────
 
@@ -107,6 +116,23 @@ pub fn surnames_en_set() -> &'static HashSet<String> {
     CELL.get_or_init(|| en_data().surnames.iter().cloned().collect())
 }
 
+/// English common-word lexicon (lowercased), sorted. The corroboration signal
+/// uses [`common_words_en_set`]; this accessor exposes the raw pool (e.g. for a
+/// data-parity / count test) mirroring `given_names_en` / `surnames_en`.
+pub fn common_words_en() -> &'static [String] {
+    &en_common_words_data().words
+}
+
+/// English common-word lexicon as a lowercased membership set. The en person
+/// detector's name-like leading-token signal corroborates a bare surname when
+/// the leading token's lowercased form is NOT in this set (and it is alphabetic,
+/// length >= 2). Entries are authored lowercase in the RON, so membership tests
+/// against an `to_ascii_lowercase()`-folded token are direct.
+pub fn common_words_en_set() -> &'static HashSet<String> {
+    static CELL: OnceLock<HashSet<String>> = OnceLock::new();
+    CELL.get_or_init(|| en_common_words_data().words.iter().cloned().collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,5 +168,28 @@ mod tests {
         assert!(given_names_en_set().contains("Mary"));
         assert!(surnames_en_set().contains("Smith"));
         assert!(surnames_en_set().contains("Nguyen"));
+    }
+
+    #[test]
+    fn en_common_words_lexicon_loads_and_separates_names_from_places() {
+        // Non-trivial curated lexicon (place/geo + common words).
+        assert!(
+            common_words_en().len() >= 600,
+            "common_words_en too small: {}",
+            common_words_en().len()
+        );
+        // No duplicates — set size equals the sorted pool length.
+        assert_eq!(common_words_en_set().len(), common_words_en().len());
+        // Place / common-word leading tokens ARE in the set (signal suppressed):
+        for w in ["central", "lake", "park", "the", "new", "hyde"] {
+            assert!(common_words_en_set().contains(w), "expected {w:?} in set");
+        }
+        // Name-like leading tokens are NOT in the set (signal corroborates):
+        for w in ["marco", "wei", "mohammed", "aisha", "sanjay", "olga"] {
+            assert!(!common_words_en_set().contains(w), "{w:?} must not be a common word");
+        }
+        // Lexicon is authored lowercase — uppercased forms are absent (membership
+        // tests lowercase-fold the token first).
+        assert!(!common_words_en_set().contains("Central"));
     }
 }

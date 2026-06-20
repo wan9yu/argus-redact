@@ -46,7 +46,8 @@ pub use display_marker::{resolve_marker, mark_for_display, strip_display_markers
 pub use shake_rng::{seed_from_value, ShakeRng};
 pub use fakers::{generate_unique_fake, resolve_faker, FakerFn};
 pub use person_data::{
-    common_words_zh, compound_surnames_zh, given_names_en, not_names_zh, surnames_en, surnames_zh,
+    common_words_en, common_words_zh, compound_surnames_zh, given_names_en, not_names_zh,
+    surnames_en, surnames_zh,
 };
 pub use hints_data::{
     command_patterns, command_prefixes, command_suffixes, kinship_exact, kinship_prefixes,

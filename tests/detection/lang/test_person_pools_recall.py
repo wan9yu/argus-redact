@@ -10,6 +10,13 @@ Recall for accented English names is asserted through the real ``redact()``
 pipeline. Detection runs on accent-folded text (``Müller`` -> ``Muller``), so
 the pools store the DE-ACCENTED form; the match span maps back to the original
 accented text, which is what lands in the restore key.
+
+NOTE: en person detection is now evidence-gated (mirroring zh). A foreign GIVEN
+name that is NOT in the given-name pool (``Marco``, ``Jean-Paul``) makes the pair
+a BARE-surname match, which fast-mode L1 emits only when corroborated by a title
+or nearby PII (otherwise it is left to L2 NER). The pool-growth recall these
+cases pin is therefore asserted WITH a corroborating signal — the realistic shape
+for a name worth redacting — rather than from a context-free two-word fragment.
 """
 
 from __future__ import annotations
@@ -36,14 +43,28 @@ class TestEnRecall:
         assert any("Müller" in v for v in key.values())
 
     def test_hyphen_jean_paul_sartre(self):
-        # Sartre (surname) + Jean-Paul (hyphenated given token).
-        assert any("Sartre" in t for t in _redacted_names("Jean-Paul Sartre", "en"))
+        # Sartre (surname) + Jean-Paul (hyphenated given token, NOT in the given
+        # pool → bare pair). The leading token is name-like (the pool-independent
+        # signal), so fast-mode L1 emits it WITHOUT extra corroboration; the
+        # adjacent phone is kept as a belt-and-suspenders signal. The hyphenated
+        # token still tokenizes as ONE token (the recall gain being pinned).
+        assert any(
+            "Sartre" in t
+            for t in _redacted_names("Jean-Paul Sartre, phone 4155551234", "en")
+        )
 
     def test_japanese_hiro_suzuki(self):
+        # Hiro IS in the given pool → given-name-led, emitted with no corroboration.
         assert any("Suzuki" in t for t in _redacted_names("Hiro Suzuki", "en"))
 
     def test_italian_marco_rossi(self):
-        assert any("Rossi" in t for t in _redacted_names("Marco Rossi", "en"))
+        # Marco is NOT in the given pool → bare pair; "Marco" is name-like (the
+        # pool-independent signal), so fast-mode L1 emits it on its own (Rossi is
+        # the pool-growth surname being pinned). The phone is kept as an extra
+        # corroborating signal.
+        assert any(
+            "Rossi" in t for t in _redacted_names("Marco Rossi, phone 4155551234", "en")
+        )
 
     def test_south_asian_priya_sharma(self):
         assert any("Sharma" in t for t in _redacted_names("Priya Sharma", "en"))

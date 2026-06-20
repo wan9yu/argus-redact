@@ -24,8 +24,9 @@
 //! 4. `produce_hints_l1(layer1, text, near_misses)` — using the ORIGINAL `text`,
 //!    not `detect_text`.
 //! 5. `get_person_threshold(hints)`.
-//! 6. zh person detection first (if "zh" in lang) — honors threshold, receives
-//!    `layer1` as `pii_entities`; then en (if "en" in lang) — ignores threshold.
+//! 6. zh person detection first (if "zh" in lang), then en (if "en" in lang) —
+//!    BOTH honor `threshold` and receive `layer1` as `pii_entities` (en's
+//!    bare-surname evidence gate uses the same proximity / threshold model as zh).
 //!    (Matches Python's `entities.extend(zh); entities.extend(en)` order.)
 //! 7. Names-only fallback (redact.py:268-283): if NEITHER "zh" NOR "en" is in
 //!    lang AND `names` is non-empty, each non-empty known name's literal,
@@ -257,7 +258,8 @@ pub fn detect_l1(
     //    only `.start`/`.end`/`.type_` of pii_entities, never `.layer`, so passing
     //    the untagged `layer1_raw` rather than the LAYER_REGEX-tagged `layer1` is
     //    behaviorally identical.) zh runs first (threshold + pii_entities), then en
-    //    (ignores threshold), matching Python's extend order.
+    //    (SAME threshold + pii_entities — its bare-surname evidence gate mirrors
+    //    zh's proximity / threshold model), matching Python's extend order.
     //
     //    Known names must match the person-detect-text, so they fold through the
     //    SAME person normalization (a plain name folds to itself). Spans map back
@@ -291,7 +293,12 @@ pub fn detect_l1(
         person.extend(zh);
     }
     if has_en {
-        let mut en = person_en::detect_person_names(person_detect_text, &scan_names);
+        let mut en = person_en::detect_person_names(
+            person_detect_text,
+            &layer1_raw,
+            &scan_names,
+            threshold,
+        );
         tag_layer(&mut en, LAYER_REGEX);
         person.extend(en);
     }

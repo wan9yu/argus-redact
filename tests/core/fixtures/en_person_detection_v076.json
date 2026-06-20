@@ -3,11 +3,11 @@
     "id": "en_known_names_exact",
     "lang": "en",
     "input": "O'Brien filed the report.",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": [
       "O'Brien"
     ],
-    "threshold": null,
+    "threshold": 0.8,
     "output": [
       {
         "text": "O'Brien",
@@ -22,9 +22,9 @@
     "id": "en_surname_plus_known_given",
     "lang": "en",
     "input": "Email John Smith today.",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": [
       {
         "text": "John Smith",
@@ -39,16 +39,16 @@
     "id": "en_surname_plus_unknown_given",
     "lang": "en",
     "input": "Quincy Smith arrived.",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": [
       {
         "text": "Quincy Smith",
         "type": "person",
         "start": 0,
         "end": 12,
-        "confidence": 0.9
+        "confidence": 0.8
       }
     ]
   },
@@ -56,44 +56,78 @@
     "id": "en_single_surname_alone",
     "lang": "en",
     "input": "Smith arrived.",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": []
   },
   {
     "id": "en_initial_form",
     "lang": "en",
     "input": "J. Smith joined.",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
-    "output": [
-      {
-        "text": "J. Smith",
-        "type": "person",
-        "start": 0,
-        "end": 8,
-        "confidence": 0.9
-      }
-    ]
+    "threshold": 0.8,
+    "output": []
   },
   {
     "id": "en_adjacency_gap_negative",
     "lang": "en",
     "input": "John, Smith arrived.",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": []
+  },
+  {
+    "id": "en_title_prefix",
+    "lang": "en",
+    "input": "Mr. Smith arrived.",
+    "pii_entities": [],
+    "known_names": null,
+    "threshold": 0.8,
+    "output": [
+      {
+        "text": "Mr. Smith",
+        "type": "person",
+        "start": 0,
+        "end": 9,
+        "confidence": 0.8999999999999999
+      }
+    ]
+  },
+  {
+    "id": "en_pii_proximity",
+    "lang": "en",
+    "input": "Quincy Smith, phone 4155551234",
+    "pii_entities": [
+      {
+        "text": "4155551234",
+        "type": "phone",
+        "start": 20,
+        "end": 30,
+        "confidence": 1.0
+      }
+    ],
+    "known_names": null,
+    "threshold": 0.8,
+    "output": [
+      {
+        "text": "Quincy Smith",
+        "type": "person",
+        "start": 0,
+        "end": 12,
+        "confidence": 1.0
+      }
+    ]
   },
   {
     "id": "en_middle_initial",
     "lang": "en",
     "input": "John A. Smith joined.",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": [
       {
         "text": "John A. Smith",
@@ -108,9 +142,9 @@
     "id": "en_first_middle_last",
     "lang": "en",
     "input": "Mary Ann Johnson called.",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": [
       {
         "text": "Mary Ann Johnson",
@@ -125,45 +159,45 @@
     "id": "en_lowercase_surname_negative",
     "lang": "en",
     "input": "john smith called.",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": []
   },
   {
     "id": "en_unknown_surname_negative",
     "lang": "en",
     "input": "John Xeoplux arrived.",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": []
   },
   {
     "id": "en_no_capitalized_pattern",
     "lang": "en",
     "input": "call them later",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": []
   },
   {
     "id": "en_accented_name",
     "lang": "en",
     "input": "Renée Müller",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": []
   },
   {
     "id": "en_intra_word_cap",
     "lang": "en",
     "input": "Ronald McDonald",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": [
       {
         "text": "Ronald McDonald",
@@ -178,9 +212,9 @@
     "id": "en_apostrophe_name",
     "lang": "en",
     "input": "Sean O'Brien",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": [
       {
         "text": "Sean O'Brien",
@@ -195,16 +229,16 @@
     "id": "en_hyphen_name",
     "lang": "en",
     "input": "Jean-Paul Sartre",
-    "pii_entities": null,
+    "pii_entities": [],
     "known_names": null,
-    "threshold": null,
+    "threshold": 0.8,
     "output": [
       {
         "text": "Jean-Paul Sartre",
         "type": "person",
         "start": 0,
         "end": 16,
-        "confidence": 0.9
+        "confidence": 0.8
       }
     ]
   }

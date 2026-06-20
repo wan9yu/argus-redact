@@ -265,19 +265,30 @@ def test_invariant_no_empty_or_whitespace_pool_entries():
 
 # ── en gates: contracts not already a NAMED tripwire ──────────────────────────
 #
-# The en detector has NO scoring — confidence is a fixed 1.0 / 0.9 by rule. Pin
-# the two contracts the golden encodes only implicitly: the 1.0-vs-0.9 boundary
-# (given-name-led vs surname-only-led) and single-surname-alone → no match.
+# The en detector now evidence-GATES a bare-surname match (mirroring zh): a
+# given-name-led pair stays high-confidence, but a surname led by a non-given-name
+# capitalized token is suppressed unless corroborated by a title or PII proximity.
+# Pin the contracts the golden encodes only implicitly: the given-name-led → 1.0
+# boundary, the bare-surname suppression, and single-surname-alone → no match.
 
 
 def test_en_confidence_1_0_vs_0_9_boundary():
     # given-name-led (first token in GIVEN_NAME_SET) → 1.0.
     known = _core.detect_person_names_en("Email John Smith today.")
     assert _rows(known) == [("John Smith", 6, 16, 1.0)]
-    # surname-led by a non-given-name capitalized token → 0.9 (NOT 1.0).
-    unknown = _core.detect_person_names_en("Quincy Smith arrived.")
-    assert _rows(unknown) == [("Quincy Smith", 0, 12, 0.9)]
-    assert unknown[0].confidence == 0.9  # flip the 0.9 default → fails
+    # surname led by a COMMON-WORD capitalized token with NO corroboration →
+    # suppressed (the evidence gate; left to L2 NER), not emitted at 0.9. "Park"
+    # is a pooled surname but "Central" is a common / place word, so the
+    # pool-independent name-like signal does NOT fire.
+    assert _core.detect_person_names_en("Central Park is large.") == []
+    # surname led by a NAME-LIKE token (not in the SSA pool, not a common word) →
+    # emitted at the gated score (base 0.3 + name-like 0.5 = 0.8). This is the
+    # fairness recovery: real Given+Surname names outside the Anglo-biased pool.
+    name_like = _core.detect_person_names_en("Quincy Smith arrived.")
+    assert _rows(name_like) == [("Quincy Smith", 0, 12, 0.8)]
+    # A title corroborates a bare pair → emitted (base 0.3 + title 0.6).
+    titled = _core.detect_person_names_en("Dr. Smith arrived.")
+    assert _rows(titled) == [("Dr. Smith", 0, 9, 0.8999999999999999)]
 
 
 def test_en_single_surname_alone_no_match():
