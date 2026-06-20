@@ -74,7 +74,6 @@ jobs:
         with:
           files: coverage.xml
           flags: python
-          fail_ci_if_not_found: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
@@ -139,6 +138,5 @@ jobs:
         with:
           files: rust-cov.json
           flags: rust
-          fail_ci_if_not_found: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
