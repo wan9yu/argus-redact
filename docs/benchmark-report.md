@@ -2,10 +2,9 @@
 
 > **Currency**: All three benchmarks below were re-run on the **v0.7.9
 > development HEAD** (commit `f17ad8a`) on Apple M1 Max, Python 3.11. The
-> build still self-reports `__version__ == "0.7.8"` because the v0.7.9 tag is
-> not yet cut; the numbers measure the Phase 2 hardening already merged on
-> that line (unicode-aware English tokenizer, surname+3 cap, grown en/zh
-> surname pools). There is **no random sampling** — each run streams the
+> numbers measure the Phase 2 hardening on that line (unicode-aware English
+> tokenizer, surname+3 cap, grown en/zh surname pools). There is **no random
+> sampling** — each run streams the
 > first N rows of the dataset in deterministic order; `salt=42` fixes the
 > pseudonym mapping. `auto` (LLM) mode is **skipped** on the maintainer's
 > machine (qwen2.5:32b inference exceeded the 60s read timeout — rerun on a

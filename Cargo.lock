@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "argus-redact-core"
-version = "0.7.8"
+version = "0.7.9"
 dependencies = [
  "base64",
  "fancy-regex",
@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "argus-redact-py"
-version = "0.7.8"
+version = "0.7.9"
 dependencies = [
  "argus-redact-core",
  "pyo3",
