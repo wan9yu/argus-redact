@@ -375,7 +375,7 @@ custom.downstream_text  # phone → "PHON-NNNNN", address still realistic
 | en | phone, ssn, credit_card, address, person | (555) 555-01XX, 999-XX SSN, 999999 BIN, 1313 Mockingbird Lane, John Doe |
 | shared (RFC) | email, ip_address, mac_address | example.{com,org,net} (RFC 2606), 192.0.2.0/24 etc. (RFC 5737), 2001:db8::/32 (RFC 3849), 00:00:5E:00:53:xx (RFC 7042) |
 
-> ℹ️ **en/person realistic requires NER**: English person detection is NER-only (spaCy `en_core_web_sm`). In `mode="fast"` no person entity is detected, so realistic person replacement only happens in `mode="ner"` or higher, or when `names=[...]` is supplied for fast-mode list matching.
+> ℹ️ **fast vs. ner for person**: Person detection (en and zh) runs in `mode="fast"` too — it's a Layer-1 pooled detector (surname / given-name pools) gated by corroborating evidence (a title, nearby PII, name-like shape, or a given-name lead). What `mode="fast"` does **not** run is the Layer-2 NER model (spaCy `en_core_web_sm`), so names with no structural or contextual evidence are missed in fast mode and recovered in `mode="ner"` or higher. Supplying `names=[...]` adds exact list matching on top of fast-mode detection.
 
 ### Errors
 
