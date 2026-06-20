@@ -267,13 +267,12 @@ def _detect(
     # Layer 2: NER (auto or ner mode), hint-gated
     layer2_count = 0
     layer2_status = "skipped"
-    if mode in ("auto", "ner") and not should_skip_ner(hints):
-        from argus_redact.impure.ner import detect_ner
-
-        ner_confidence = get_ner_min_confidence(hints)
-        t0 = time.perf_counter()
+    if mode in ("auto", "ner"):
         adapters = _get_ner_adapters(lang)
         if not adapters:
+            # Availability check runs UNCONDITIONALLY when the layer is requested
+            # (NOT gated by should_skip_ner): the caller named the layer and it is
+            # unavailable, so surface it even for instruction-intent input.
             if mode == "ner":
                 raise LayerUnavailableError(
                     "mode='ner' requested but no NER model is available. "
@@ -291,14 +290,21 @@ def _detect(
                 raise LayerUnavailableError(
                     "mode='auto' + strict=True: no NER model available."
                 )
-        for adapter in adapters:
-            ner_entities = detect_ner(text, adapter=adapter, min_confidence=ner_confidence)
-            layer2_matches = [e.to_pattern_match(layer=LAYER_NER) for e in ner_entities]
-            entities.extend(layer2_matches)
-            layer2_count += len(layer2_matches)
-        if adapters:
+        elif not should_skip_ner(hints):
+            # Model present AND not hint-skipped → run L2 detection.
+            from argus_redact.impure.ner import detect_ner
+
+            ner_confidence = get_ner_min_confidence(hints)
+            t0 = time.perf_counter()
+            for adapter in adapters:
+                ner_entities = detect_ner(text, adapter=adapter, min_confidence=ner_confidence)
+                layer2_matches = [e.to_pattern_match(layer=LAYER_NER) for e in ner_entities]
+                entities.extend(layer2_matches)
+                layer2_count += len(layer2_matches)
             layer2_status = "ok"
-        timing["layer_2_ms"] = (time.perf_counter() - t0) * 1000
+            timing["layer_2_ms"] = (time.perf_counter() - t0) * 1000
+        # else: model present but hint-skipped → layer2_status stays "skipped"
+        #       (the should_skip_ner optimization is preserved for the RUN).
 
     # Layer 3: Semantic LLM (auto mode only)
     layer3_count = 0
