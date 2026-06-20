@@ -589,4 +589,99 @@ mod tests {
             "Indic spacing vowel sign U+093E must survive Step 1b; got {out:?}"
         );
     }
+
+    // ── Mutation-kill guards (cargo-mutants survivors) ───────────────────────
+
+    #[test]
+    fn cn_digit_financial_and_nine_arms_fold() {
+        // cn_digit match arms for 九 and the formal/financial digits 壹-玖 were
+        // unexercised by the Rust suite (the phone tests use only 一二三…八零). Each
+        // arm maps a CJK digit to its ASCII value; deleting any arm makes that char
+        // a non-digit, so a run containing it no longer reaches the 7+ majority
+        // fold. A single all-CJK run over every financial arm folds to ASCII.
+        // 壹贰叁肆伍陆柒捌玖 (9 chars, 100% CJK) → strict majority → "123456789".
+        assert_eq!(normalize_text("壹贰叁肆伍陆柒捌玖").0, "123456789");
+        // A run including 九 (first-row nine) + 零: 七八九零壹贰叁 → "7890123".
+        assert_eq!(normalize_text("七八九零壹贰叁").0, "7890123");
+    }
+
+    #[test]
+    fn digit_sequence_majority_boundary_strict() {
+        // normalize_digit_sequences L121 `cn_count * 2 > run.len()` — the STRICT
+        // majority test, plus the per-step `i += 1` run-walk (L98).
+        //
+        // 4 CJK (一二三四) + 3 ASCII (567) = "1234567", folded (4*2=8 > 7).
+        assert_eq!(normalize_text("一二三四567").0, "1234567");
+        // 3 CJK (一二三) + 4 ASCII (4567) — minority CJK → run left UNFOLDED; the CJK
+        // digits stay as the original chars (3*2=6, NOT > 7). This pins `*` vs `+`:
+        // a `*`→`+` mutant turns the 4-CJK fold case above into `4+2=6 > 7` false →
+        // would NOT fold (HEAD folds), so the two opposite outcomes lock it.
+        assert_eq!(normalize_text("一二三4567").0, "一二三4567");
+        // EXACT-HALF boundary: 4 CJK + 4 ASCII = 8 chars, `4*2 = 8`, NOT > 8 → HEAD
+        // does NOT fold. Mutating `>` to `>=` (`8 >= 8` true) WOULD fold it, so
+        // asserting the run stays as original chars kills the `>=` survivor.
+        assert_eq!(normalize_text("一二三四5678").0, "一二三四5678");
+        // Leading-ASCII run that pins the per-step advance `i += 1` (L98). The first
+        // digit is ASCII '5'; the run is 7 chars (1 ASCII + 4 CJK + 2 ASCII), 4 CJK →
+        // 4*2=8 > 7 → folds to "5123467". A `+=`→`*=` mutant leaves `i` parked on the
+        // first index, re-counting it: the run length inflates to 8 while cn_count
+        // stays 4 → `8 > 8` false → would NOT fold. (`*=` here does not loop forever
+        // because the inner loop's own `i += 1` still advances past the second char.)
+        assert_eq!(normalize_text("5一二三四67").0, "5123467");
+    }
+
+    #[test]
+    fn is_digit_sep_joins_separated_digit_run() {
+        // is_digit_sep (L71-74) lets a separator (space/dot/-/，/…) sit INSIDE a
+        // digit run without breaking it, so "一二三-四五六-七" is one 7-digit run
+        // that folds to "123-456-7"... no — the seps are SKIPPED, not emitted, so
+        // the folded run drops them: the run collects 7 CJK digits → "1234567" with
+        // the separators removed from the digit positions only (they remain in text
+        // at their own indices). Mutating `is_digit_sep` to always-`false` would
+        // break the run at the first separator (each sub-run < 7) → no fold.
+        // Verify the separated CJK run still folds (the separator does not abort it).
+        let out = normalize_text("一二三 四五六 七").0;
+        assert!(
+            out.starts_with('1') && out.contains('7') && !out.contains('一'),
+            "separated CJK digit run must still fold; got {out:?}"
+        );
+    }
+
+    #[test]
+    fn map_spans_to_original_out_of_range_clamps() {
+        // map_spans_to_original boundary clamps (L282, L287). For an out-of-range
+        // span the helper must return `original_len` rather than indexing past the
+        // offset map. Each mutated comparison would index out of bounds (panic) or
+        // underflow on these spans, so asserting the clamped result kills them:
+        //   - L282 `start < map.len()` → `<=`: span start == map.len() would index
+        //     map[len] (panic); HEAD returns original_len.
+        //   - L287 `end > 0` → `>=`: span end == 0 would compute `end - 1` (usize
+        //     underflow panic); HEAD returns original_len.
+        //   - L287 `end - 1 < map.len()` → `<=` and the `&&` → `||`: span end ==
+        //     map.len() + 1 (or beyond) would index map[end-1] (panic); HEAD clamps.
+        let map = vec![0_usize, 2, 4]; // len 3
+        let orig_len = 6;
+        // start == map.len() (3): orig_start clamps to original_len.
+        assert_eq!(
+            map_spans_to_original(&[(3, 5)], Some(&map), orig_len),
+            vec![(6, 6)]
+        );
+        // end == 0: orig_end clamps to original_len (and `end - 1` is never reached).
+        assert_eq!(
+            map_spans_to_original(&[(0, 0)], Some(&map), orig_len),
+            vec![(0, 6)]
+        );
+        // end == map.len() + 1 (4) with an in-range start: orig_end clamps; this
+        // also exercises the `&&` guard (end > 0 is true, end-1 < len is false).
+        assert_eq!(
+            map_spans_to_original(&[(1, 4)], Some(&map), orig_len),
+            vec![(2, 6)]
+        );
+        // A fully out-of-range span (both ends past the map): both clamp.
+        assert_eq!(
+            map_spans_to_original(&[(5, 9)], Some(&map), orig_len),
+            vec![(6, 6)]
+        );
+    }
 }
+

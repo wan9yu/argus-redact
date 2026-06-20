@@ -123,6 +123,19 @@ pub(crate) struct NameCandidate {
 ///
 /// All length / indexing / slicing is char-based (the Python `word[-1]`,
 /// `len(word)`, `word[:-1]`, `word[:2]` are str/char operations).
+///
+/// ## Mutation coverage note
+///
+/// Only the 2-char-ending-in-particle empty return is uniquely observable in the
+/// `generate_candidates` output (see `trim_two_char_surname_plus_particle_blocked`);
+/// the trailing-particle loop (`len > 2`) and the honorific-head trailing trim are
+/// MASKED by [`interior_name_len`], which the `emit` closure runs immediately after
+/// `trim_candidate` and which re-derives the SAME truncation from index 2 onward.
+/// Their cargo-mutants survivors are therefore equivalent under composition for the
+/// detector's output, and the Python golden/parity suite (`tests/core`,
+/// `tests/detection/lang`) covers them end-to-end (cargo-mutants runs only the Rust
+/// unit tests). The discarded `end` return value (`start + len`) is dead in the
+/// caller (`let (word, start, _end) = …`), so its arithmetic mutant is equivalent.
 fn trim_candidate(word: &str, start: usize, text_chars: &[char]) -> (String, usize, usize) {
     // Work on a Vec<char> so all operations stay in char-space.
     let mut chars: Vec<char> = word.chars().collect();
@@ -196,6 +209,17 @@ fn trim_candidate(word: &str, start: usize, text_chars: &[char]) -> (String, usi
 /// `trim_candidate`). Returns `word_chars.len()` when there is no interior break
 /// (the common case — every char is a valid given-name char, e.g. `马尔克斯`,
 /// `欧阳娜娜娜`).
+///
+/// ## Mutation coverage note
+///
+/// The honorific lookahead window-end `start + i + 3` is robust to widening: the
+/// `^`-anchored `_HONORIFIC_SUFFIX` matches a fixed-length prefix, so a window that
+/// only GROWS (`i + 3` → `i * 3`, for the reachable `i >= 1`) does not change the
+/// match — that survivor is equivalent. The `start + i` → `start * i` survivor IS
+/// killed (`interior_honorific_head_at_index_two_truncates`: at start 0 the product
+/// zeroes the lookahead offset and the suffix is missed). The `n > 1` guard
+/// (vs `n >= 1`) differs only at `n == 1`, which the `emit` 2-char floor makes
+/// unreachable → equivalent.
 fn interior_name_len(word_chars: &[char], start: usize, text_chars: &[char]) -> usize {
     let n = word_chars.len();
     // Honorific suffix match length (in chars) when `word_chars[i]` is a head
@@ -311,6 +335,13 @@ pub(crate) fn generate_candidates(text: &str, chars: &[char]) -> Vec<NameCandida
                 candidates: &mut Vec<NameCandidate>,
                 seen_starts: &mut HashSet<usize>| {
         let (word, start, _end) = trim_candidate(m_text, m_start, chars);
+        // Mutation note: the `||` → `&&` survivor here is equivalent. The empty-word
+        // half is independently re-guarded below (`word_chars.len() < 2`), and the
+        // seen-start dedup half is never reached with an already-seen start — the
+        // single-pat loop pre-filters `seen_starts` (and inserts only on emit), and
+        // the compound loop's matches are non-overlapping, so `emit` is never invoked
+        // twice for one start. With no input that reaches the dedup path, the `&&`
+        // mutant produces identical output.
         if word.is_empty() || seen_starts.contains(&start) {
             return;
         }
@@ -517,6 +548,11 @@ pub(crate) fn score_candidate(
     };
 
     let after_start = candidate.end.min(n);
+    // Mutation note: the `candidate.end + CONTEXT_WINDOW` → `candidate.end *
+    // CONTEXT_WINDOW` survivor is equivalent. `end >= 2` always (min 2-char name),
+    // so the product only GROWS the window; the three `after` signals
+    // (`_HONORIFIC_SUFFIX`, `_PII_SUFFIX`, `_PAREN_PHONE`) are all `^`-anchored
+    // prefix matches, so a wider `after` never changes whether they fire.
     let after_end = (candidate.end + CONTEXT_WINDOW).min(n);
     let after: String = if after_start <= after_end {
         text_chars[after_start..after_end].iter().collect()
@@ -689,6 +725,18 @@ fn resolve_variants(
         let (mut best, mut best_score) = passing[0].clone();
 
         // if len(best.text) == 3:
+        //
+        // Mutation note: this 3-char swallow arm is a faithful port of the
+        // pre-`{1,3}`-cap Python, retained for parity, but a genuine SWALLOW is
+        // effectively unreachable under the current cap — if the 3rd name char plus
+        // the next text char form a CJK common word, the greedy `[surname][CJK]{1,3}`
+        // already grabbed 4 chars and routes through the `best_len == 4` branch
+        // instead. So the arm's surviving arithmetic / `==`-find mutants (the `after`
+        // window offsets and the 2-char `.find`) cannot be reached by a swallow-firing
+        // input; the NON-swallow path (e.g. `客户何秀珍已登记`) is exercised but is
+        // insensitive to those edits (the `^`-anchored common-word check is unaffected
+        // by a wider `after` window). The 4-char arm's equivalent gate IS killed
+        // (`detect_four_char_real_name_no_common_tail_kept`).
         let best_len = best.text.chars().count();
         if best_len == 3 {
             let last_char = best.text.chars().next_back().unwrap();
@@ -1101,6 +1149,46 @@ mod tests {
         // at {1,3} the full 5-char compound word is matched; compound matches are
         // NOT split into shorter variants (is_compound=True).
         assert_candidates("欧阳娜娜娜", &[("欧阳娜娜娜", 0, 5)]);
+    }
+
+    // ── Mutation-kill guards (cargo-mutants survivors) ───────────────────────
+
+    #[test]
+    fn trim_two_char_surname_plus_particle_blocked() {
+        // trim_candidate L137 `len == 2 && last in _NOT_NAME_CHARS → return ""`.
+        // "李的" is a 2-char greedy match (the space stops the regex): surname 李 +
+        // the particle 的. trim returns the empty word, so NO candidate is emitted —
+        // this is the ONE trim behavior `interior_name_len` (which scans only from
+        // index 2) does not also produce. Mutating `==` to `!=` skips the empty
+        // return, leaking "李的" (not in the negative dict) as a spurious candidate.
+        assert_candidates("李的 abc", &[]);
+    }
+
+    #[test]
+    fn interior_honorific_head_at_index_two_truncates() {
+        // interior_name_len honorific lookahead (L209-210). "刘伟先生你好" greedy
+        // single match is 刘伟先 (刘 + 伟先); the honorific head 先 sits at index 2
+        // and `先` + the following `生` forms the suffix 先生, so the name ends at
+        // index 2 → 刘伟. This pins the lookahead window arithmetic `start + i + …`:
+        // the `start + i` term mutated to `start * i` zeroes the offset at start 0
+        // (i ≠ 0), so the lookahead reads the wrong following text, the 先生 suffix
+        // is not recognized, and 刘伟先 leaks instead of truncating to 刘伟.
+        assert_candidates("刘伟先生你好", &[("刘伟", 0, 2)]);
+    }
+
+    #[test]
+    fn single_match_nested_in_compound_is_skipped() {
+        // generate_candidates containment skip (the `m_start >= c.start && m_end <=
+        // c.end` `.any`). The COMPOUND match 诸葛李明 (诸葛 + 李明) claims 0..4 first.
+        // 诸 is NOT a single surname but 葛 IS, so the SEPARATE single-pat finditer
+        // pass independently matches 葛李明 at start 1 — a start NOT in `seen_starts`
+        // (only 0 is) — so it REACHES the containment check, which finds it nested in
+        // 0..4 (`1 >= 0 && 4 <= 4`) and skips it. Mutating `>=` to `<` (`1 < 0` →
+        // false) stops the skip, leaking the nested 葛李明 / 葛李 as extra candidates.
+        // (Using a compound whose FIRST char is also a single surname, e.g. 欧阳,
+        // would not reach this check: the single pass matches at start 0, which
+        // `seen_starts` already filters earlier.)
+        assert_candidates("诸葛李明", &[("诸葛李明", 0, 4)]);
     }
 
     // ── score_candidate — bit-identity golden tests ──
@@ -1646,6 +1734,40 @@ mod tests {
     }
 
     #[test]
+    fn detect_four_char_real_name_no_common_tail_kept() {
+        // resolve_variants 4-char swallow gate (L750) `tail.count() == 2 &&
+        // common.contains(tail)`. "马尔斯顿" is a 4-char single-surname foreign name
+        // whose tail 斯顿 is NOT a common word, with NO context-prefix; a phone right
+        // after supplies proximity so the 4-char (1.0) AND 2-char (0.8) variants both
+        // pass. HEAD: tail not common → `&&` short-circuits false → no down-shift →
+        // keeps the full 4-char name. Mutating `&&` to `||` makes the gate fire on
+        // `tail.count() == 2` alone (always true for a 4-char best) → with no
+        // context-prefix it down-shifts to the 2-char root 马尔, dropping the name.
+        let pii = [pm(4, 15, "phone")];
+        assert_eq!(
+            detect("马尔斯顿13800138000", &pii, &[], 0.8),
+            vec![("马尔斯顿".to_string(), 0, 4, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_known_name_does_not_occupy_later_candidate() {
+        // detect_person_names occupancy containment (L920) `c.start >= s &&
+        // c.end <= e`. Known name 张三 claims 0..2; a SEPARATE scored name 李芳 later
+        // (behind the context-prefix 客户) is NOT contained in 0..2 → kept. HEAD:
+        // `20 >= 0 && 22 <= 2` = false → not skipped. Mutating `&&` to `||` makes it
+        // `20 >= 0 || …` = true → the later 李芳 is wrongly treated as occupied and
+        // dropped, so only the known name would survive.
+        assert_eq!(
+            detect("张三的电话是13800138000，客户李芳", &[], &["张三"], 0.8),
+            vec![
+                ("张三".to_string(), 0, 2, 1.0),
+                ("李芳".to_string(), 20, 22, 0.8999999999999999),
+            ]
+        );
+    }
+
+    #[test]
     fn detect_no_match_generic_text() {
         // T1 zh_corpus_no_person_generic "今天天气不错" — no surname-led
         // candidate with evidence → no match.
@@ -1703,3 +1825,9 @@ mod tests {
             detect_person_names(&pathological, &[], &["李雷".to_string()], 0.8);
     }
 }
+
+
+
+
+
+

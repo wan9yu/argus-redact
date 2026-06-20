@@ -928,6 +928,79 @@ mod tests {
         );
     }
 
+    // ── Mutation-kill guards (cargo-mutants survivors) ───────────────────────
+    //
+    // The cases below pin the exact boundary conditions the bare-surname evidence
+    // gate flips, so a mutation in `score_bare_surname` / `is_name_like` changes
+    // an observable result. Each uses a NON-name-like, NON-title leading token
+    // ("Lake", a common/place word) for the proximity cases so ONLY the proximity
+    // signal drives the score — a name-like lead would mask the proximity
+    // mutation by clearing the gate on its own.
+
+    /// score_bare_surname directly, so the proximity arithmetic / bucket edges are
+    /// asserted on the raw f64 without the threshold gate folding distinct values
+    /// to the same emit/suppress outcome. `lead` is "Lake" (common word → not
+    /// name-like, not a title → zero non-proximity evidence).
+    fn score_lake(distance: usize) -> f64 {
+        // Candidate "Lake Park" spans chars 0..9. A PII entity placed after the
+        // candidate at start = 9 + distance gives min(pend, pstart-9) == distance.
+        let p = pii("phone", 9 + distance, 9 + distance + 11);
+        score_bare_surname("Lake", 0, 9, &[&p])
+    }
+
+    #[test]
+    fn score_bare_surname_proximity_near_bucket_edge() {
+        // L186 `distance <= PROXIMITY_NEAR (50)`: at distance 50 the NEAR weight
+        // (0.5) fires → base 0.3 + 0.5 = 0.8. Mutating `<=` to `>` would drop the
+        // near bucket at the edge (distance 50 → falls through to the mid `<= 150`
+        // → 0.6), changing the value.
+        assert_eq!(score_lake(50), 0.8);
+        assert_eq!(score_lake(49), 0.8);
+        // Just past the near edge → mid bucket 0.3 → 0.6 (also kills a `>=`-style
+        // off-by-one that would extend the near bucket to 51).
+        assert_eq!(score_lake(51), 0.6);
+    }
+
+    #[test]
+    fn score_bare_surname_proximity_mid_bucket_edge() {
+        // L189 `distance <= PROXIMITY_MID (150)`: at distance 150 the MID weight
+        // fires → base 0.3 + 0.3 = 0.6. Mutating `<=` to `>` drops the mid bucket
+        // at the edge (150 → no proximity → zero evidence → 0.0). L190 `+=`
+        // (W_PROXIMITY_MID) is also pinned: `-=` would give 0.3 - 0.3 = 0.0 →
+        // zero-evidence short-circuit → 0.0; `*=` would give 0.3 * 0.3 = 0.09.
+        assert_eq!(score_lake(150), 0.6);
+        assert_eq!(score_lake(149), 0.6);
+        // Past the mid edge → no proximity signal at all → zero evidence → 0.0.
+        assert_eq!(score_lake(151), 0.0);
+    }
+
+    #[test]
+    fn score_bare_surname_mid_bucket_value_exact() {
+        // Redundant exact-value lock on the MID weight accumulation (L190 `+=`):
+        // a lone mid-bucket proximity yields EXACTLY base 0.3 + 0.3 = 0.6, never
+        // 0.0 (`-=`) or 0.09 (`*=`). Kept separate from the bucket-edge test so a
+        // future edit to the edges does not silently relax this value check.
+        assert_eq!(score_lake(100), 0.6);
+    }
+
+    #[test]
+    fn is_name_like_two_char_boundary() {
+        // L224 `chars().count() < 2`: a 2-char token IS name-like (the guard
+        // rejects only single-letter initials). Mutating `<` to `<=` would reject
+        // a 2-char token as too short. "Bo" is alphabetic, len 2, not a common
+        // word, not a given name → name-like.
+        assert!(is_name_like("Bo"));
+        // The single-letter initial stays NOT name-like under either operator —
+        // included so the test also documents the intended low end.
+        assert!(!is_name_like("J"));
+        // End-to-end: a 2-char name-like lead clears the gate (0.3 + 0.5 = 0.8).
+        // Under the `<=` mutant "Bo" is not name-like → no signal → suppressed.
+        assert_eq!(
+            detect("Bo Smith arrived.", &[]),
+            vec![row("Bo Smith", 0, 8, 0.8)]
+        );
+    }
+
     #[test]
     fn pathological_known_name_does_not_panic() {
         // A known_names list mixing a normal name with a PATHOLOGICAL oversized

@@ -138,6 +138,15 @@ fn tag_layer(entities: &mut [PatternMatch], layer: u8) {
 /// Map matches from detect_text (normalized) coords back to ORIGINAL-text coords,
 /// rebuilding each match's `text` as the original char-slice. Identity (clone) when
 /// there is no offset map (text was not normalized).
+///
+/// ## Mutation coverage note
+///
+/// The `!matches.is_empty()` match guard (its `→ true` survivor) is an equivalent
+/// mutant: when `matches` is empty the `Some` arm maps an empty span list and the
+/// `.zip(...).map(...)` yields `[]`, exactly what the `_` arm's `matches.to_vec()`
+/// returns. The guard is only a tiny shortcut (skip the `map_spans_to_original`
+/// call on the empty fast path); removing it changes no output, so no test can
+/// distinguish it.
 fn map_matches_to_original(
     matches: &[PatternMatch],
     text: &str,
@@ -839,6 +848,33 @@ mod tests {
         let r = run("Zaphod here", &["en"], &["Zaphod"]);
         assert_entities(&r.entities(), &[("Zaphod", "person", 0, 6, 1.0, 1)]);
     }
+
+    // ── Mutation-kill guard: the oversize input boundary (detect_l1 L178) ─────
+    //
+    // `if text.len() > MAX_INPUT_SIZE { Err }`. A text of EXACTLY MAX_INPUT_SIZE
+    // bytes must SUCCEED (the guard is strict `>`). This single boundary kills
+    // both surviving mutants:
+    //   - `>` → `>=`: would reject an exactly-MAX text → Err (off-by-one).
+    //   - `>` → `==`: would reject an exactly-MAX text → Err (only `==` fires).
+    // (A MAX+1 text errors under HEAD AND both mutants — `match_patterns` has its
+    // own `> MAX` guard downstream — so the over-limit side cannot distinguish
+    // them; the exactly-MAX side is the discriminating case.)
+    #[test]
+    fn input_at_exact_max_size_succeeds() {
+        // 1 MiB of ASCII (bytes == chars), no PII, no normalization needed.
+        let text = "a".repeat(crate::MAX_INPUT_SIZE);
+        assert_eq!(text.len(), crate::MAX_INPUT_SIZE);
+        let r = detect_l1(&text, &s(&["en"]), &[]);
+        assert!(r.is_ok(), "exactly-MAX_INPUT_SIZE input must not be rejected");
+    }
+
+    #[test]
+    fn input_over_max_size_errors() {
+        // MAX+1 bytes is rejected (documents the over-limit side of the guard;
+        // does not by itself distinguish the `==`/`>=` mutants — see above).
+        let text = "a".repeat(crate::MAX_INPUT_SIZE + 1);
+        assert!(detect_l1(&text, &s(&["en"]), &[]).is_err());
+    }
 }
 
 #[cfg(test)]
@@ -1156,6 +1192,39 @@ mod redact_l1_tests {
         assert_eq!(r.redacted, "电话13812345678 银行卡621700******0000");
         assert_eq!(r.key.get("621700******0000"), Some(&"6217000000000000".to_string()));
         assert!(!r.key.values().any(|v| v == "13812345678"));
+    }
+
+    // ── Mutation-kill guard: the en grammar-normalize gate (redact_l1 L501) ──
+    //
+    // `if effective_lang == "en" { normalize_grammar_en(...) }`. The forward
+    // grammar rule rewrites a pseudonym code followed by a first-person verb to
+    // the third-person form (`P-7 am` → `P-7 is`), but ONLY when a key VALUE is a
+    // self-ref pronoun. We arm both preconditions with the deterministic `remove`
+    // strategy (fixed `replacement`, no RNG):
+    //   - "John Smith" (person) → "P-7" (a `[A-Z]+-\d+` code),
+    //   - "I" (self_reference)  → "X" (so "I" lands in `key.values()`, arming the
+    //     grammar pass).
+    // A phone (layer1 PII) is added so the self_reference tier is 1 (kept by
+    // `filter_self_reference`; tier 2 would DROP the lone pronoun and leave "I"
+    // un-redacted, disarming the grammar). The phone masks (no RNG, no code that
+    // could disturb the verb rule). Text replaces to "P-7 am X, …"; the en gate
+    // then rewrites it to "P-7 is X, …". Mutating `==` to `!=` SKIPS grammar for
+    // en, leaving the un-normalized "P-7 am X, …" — an observable difference.
+    #[test]
+    fn en_grammar_normalize_gate_fires() {
+        let mut info = HashMap::new();
+        info.insert(
+            "person".into(),
+            ti("remove", "remove", "P", None, Some("P-7"), None, "[person]"),
+        );
+        info.insert(
+            "self_reference".into(),
+            ti("remove", "remove", "S", None, Some("X"), None, "[self_reference]"),
+        );
+        info.insert("phone".into(), ti("mask", "mask", "PHON", None, None, None, "[phone]"));
+        let (redacted, _key) = run("John Smith am I, phone 4155551234", &["en"], &[], info, &[]);
+        // en gate fires → forward verb rule rewrites "P-7 am" to "P-7 is".
+        assert_eq!(redacted, "P-7 is X, phone 415***1234");
     }
 
     // ── types_exclude drops the listed type (mutually exclusive with `types`,

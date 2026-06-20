@@ -76,6 +76,14 @@ static FALSE_POSITIVE_SUFFIX: LazyLock<Regex> = LazyLock::new(|| {
 const CONTEXT_WINDOW: usize = 15;
 
 /// Find the nearest char boundary at or before `pos`.
+///
+/// Mutation note: the `i > 0` loop guard's `> → >=` survivor is equivalent — index
+/// 0 is ALWAYS a char boundary, so `!is_char_boundary(0)` is false and the loop
+/// stops at 0 whether the guard tests `i > 0` or `i >= 0` (and the `i -= 1` never
+/// underflows). The `i -= 1` body mutated to `+= 1` / `/= 1` makes the loop never
+/// reach a lower boundary (it diverges or stalls) → cargo-mutants reports those as
+/// TIMEOUT (= caught), and `char_boundary_helpers_on_multibyte` pins the correct
+/// direction on HEAD.
 fn floor_char_boundary(text: &str, pos: usize) -> usize {
     if pos >= text.len() { return text.len(); }
     let mut i = pos;
@@ -84,6 +92,10 @@ fn floor_char_boundary(text: &str, pos: usize) -> usize {
 }
 
 /// Find the nearest char boundary at or after `pos`.
+///
+/// Mutation note: the `i < text.len()` guard's `< → <=` survivor is equivalent —
+/// `text.len()` is always a char boundary, so the loop stops at `len` either way.
+/// The `i += 1` body mutated to `-= 1` / `*= 1` diverges → TIMEOUT (= caught).
 fn ceil_char_boundary(text: &str, pos: usize) -> usize {
     if pos >= text.len() { return text.len(); }
     let mut i = pos;
@@ -143,6 +155,18 @@ pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<Patt
             let mut matched = m.as_str().to_string();
             let mut start = m.start();
             let mut end = m.end();
+            // Mutation note: the search-advance comparison/arithmetic here and the
+            // group-offset `m.start() + grp.{start,end}()` below have cargo-mutants
+            // survivors (cargo-mutants runs only the Rust unit tests). The Rust unit
+            // tests `multiple_non_overlapping_matches_advance_correctly` /
+            // `named_group_offsets_are_match_relative` cover the common cases, and the
+            // remainder (e.g. `end > start` → `end == start`, which re-scans on every
+            // multi-match input) is covered end-to-end by the Python detection golden
+            // suite — VERIFIED: applying that mutation fails
+            // `tests/detection/test_patterns.py::…test_should_sort_by_position_when_multiple_matches`
+            // (and 16 others). The `> → >=` / `+ → -` variants that only diverge on
+            // ZERO-WIDTH matches are unreachable from the built-in patterns (none can
+            // match empty), so they are equivalent for the production pattern set.
             search_start = if end > start { end } else { start + 1 };
 
             // Extract named group if specified (the validator must see the group text).
@@ -267,4 +291,143 @@ mod tests {
         }];
         assert!(match_patterns(&big, &pats).is_err());
     }
+
+    // ── Mutation-kill guards (cargo-mutants survivors) ───────────────────────
+
+    #[test]
+    fn pattern_error_display_passes_through_message() {
+        // PatternError's Display (L22) must render the wrapped message verbatim, not
+        // an empty/default string. Mutating the body to `Ok(Default::default())`
+        // would format to "" — the assertion on the message text kills it.
+        let e = PatternError("boom: bad regex".to_string());
+        assert_eq!(format!("{e}"), "boom: bad regex");
+        assert!(!format!("{e}").is_empty());
+    }
+
+    #[test]
+    fn input_at_exact_max_size_is_ok() {
+        // L114 `text.len() > MAX_INPUT_SIZE`: a text of EXACTLY MAX bytes must be
+        // accepted (strict `>`). `>=` would reject it. 1 MiB of ASCII, a pattern
+        // that finds nothing → Ok([]).
+        let text = "a".repeat(crate::MAX_INPUT_SIZE);
+        let pats = vec![PatternConfig {
+            type_: "x".into(), pattern: "Z".into(), check_context: false, group: None, validator: None,
+        }];
+        let out = match_patterns(&text, &pats).unwrap();
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn empty_text_short_circuits_before_scan() {
+        // L121 `text.is_empty() || patterns.is_empty()`: empty text returns [] WITHOUT
+        // entering the scan loop. Mutating `||` to `&&` would let an empty text fall
+        // through to the loop, where a zero-width pattern (`a*`) matches the empty
+        // string at 0..0 and leaks a spurious empty match. HEAD returns [].
+        let pats = vec![PatternConfig {
+            type_: "x".into(), pattern: "a*".into(), check_context: false, group: None, validator: None,
+        }];
+        assert!(match_patterns("", &pats).unwrap().is_empty());
+        // Symmetric guard: non-empty text + empty pattern list also returns [].
+        assert!(match_patterns("abc", &[]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn multiple_non_overlapping_matches_advance_correctly() {
+        // match_patterns search advance (L146 `if end > start { end } else { start+1 }`).
+        // Three non-overlapping `\d{3}` matches must all be found, sorted by start,
+        // with correct char offsets. A mutated advance (`==`/`+`→`-`/`*`) re-scans,
+        // skips, or mis-offsets the later matches.
+        let cfg = PatternConfig {
+            type_: "num".into(), pattern: r"\d{3}".into(),
+            check_context: false, group: None, validator: None,
+        };
+        let out = match_patterns("a123 b456 c789", &[cfg]).unwrap();
+        let got: Vec<(String, usize, usize)> =
+            out.iter().map(|m| (m.text.clone(), m.start, m.end)).collect();
+        assert_eq!(
+            got,
+            vec![
+                ("123".to_string(), 1, 4),
+                ("456".to_string(), 6, 9),
+                ("789".to_string(), 11, 14),
+            ]
+        );
+    }
+
+    #[test]
+    fn named_group_offsets_are_match_relative() {
+        // match_patterns named-group extraction (L153-154 `start = m.start() + grp.start()`).
+        // The group `(?P<g>\d+)` inside `#(?P<g>\d+)` must report the GROUP span
+        // (the digits), offset from the MATCH start. Mutating the `+` (to `-`/`*`)
+        // mis-locates the group span. The `#` ensures match.start != group.start so
+        // the offset arithmetic is actually exercised.
+        let cfg = PatternConfig {
+            type_: "id".into(), pattern: r"#(?P<g>\d+)".into(),
+            check_context: false, group: Some("g".into()), validator: None,
+        };
+        let out = match_patterns("xx #4321 yy", &[cfg]).unwrap();
+        assert_eq!(out.len(), 1);
+        // The match is "#4321" at 3..8; the group is "4321" at 4..8.
+        assert_eq!(out[0].text, "4321");
+        assert_eq!((out[0].start, out[0].end), (4, 8));
+    }
+
+    #[test]
+    fn char_boundary_helpers_on_multibyte() {
+        // floor_char_boundary / ceil_char_boundary walk to the nearest UTF-8 char
+        // boundary. "中x": 中 is bytes 0..3, x is byte 3. Bytes 1 and 2 are INTERIOR
+        // (not boundaries). These pin the loop direction (`-=`/`+=`), the `i > 0` /
+        // `i < len` guards, and the early `pos >= len` returns:
+        let t = "中x"; // len 4 bytes
+        assert_eq!(t.len(), 4);
+        // floor: interior byte 1/2 walks DOWN to 0; a real boundary stays put.
+        assert_eq!(floor_char_boundary(t, 1), 0);
+        assert_eq!(floor_char_boundary(t, 2), 0);
+        assert_eq!(floor_char_boundary(t, 3), 3); // boundary (start of 'x')
+        assert_eq!(floor_char_boundary(t, 0), 0);
+        assert_eq!(floor_char_boundary(t, 99), 4); // pos >= len → len
+        // ceil: interior byte 1/2 walks UP to 3 (next boundary).
+        assert_eq!(ceil_char_boundary(t, 1), 3);
+        assert_eq!(ceil_char_boundary(t, 2), 3);
+        assert_eq!(ceil_char_boundary(t, 3), 3); // already a boundary
+        assert_eq!(ceil_char_boundary(t, 0), 0);
+        assert_eq!(ceil_char_boundary(t, 99), 4); // pos >= len → len
+    }
+
+    #[test]
+    fn looks_like_false_positive_prefix_and_suffix() {
+        // looks_like_false_positive (L94-104): a FALSE_POSITIVE_PREFIX in the BEFORE
+        // window OR a FALSE_POSITIVE_SUFFIX in the AFTER window flags a number as a
+        // non-PII (version/serial/arithmetic) context. Multi-byte CJK ("版本") in the
+        // window also exercises the floor/ceil boundary slicing on non-ASCII.
+        //   - prefix "version " before "1.2.3.4" → flagged.
+        let t1 = "version 1.2.3.4 rest";
+        assert!(looks_like_false_positive(t1, 8, 15)); // "1.2.3.4"
+        //   - CJK prefix "版本" before the number → flagged (boundary slicing on CJK).
+        let t2 = "版本1234567";
+        // "1234567" starts after the two 3-byte CJK chars (byte 6).
+        assert!(looks_like_false_positive(t2, 6, 13));
+        //   - arithmetic suffix " / 2" after the number → flagged.
+        let t3 = "12345 / 2";
+        assert!(looks_like_false_positive(t3, 0, 5));
+        //   - a plain number in neutral context is NOT flagged.
+        assert!(!looks_like_false_positive("call 4155551234 now", 5, 15));
+    }
+
+    #[test]
+    fn false_positive_before_window_width_is_three_times() {
+        // L95 `CONTEXT_WINDOW * 3` sizes the BEFORE window. The prefix pattern is
+        // `$`-anchored (matches at the END of `before`), so the window WIDTH decides
+        // whether a distant trigger word is still captured. "version" + 25 spaces +
+        // "1.2.3.4" places the trigger ~32 chars before the number: inside the `*3`
+        // (= 45) window → flagged. Mutating `*` to `+` (15 + 3 = 18) would NARROW the
+        // window below 32 and drop the trigger → NOT flagged. (The AFTER-window
+        // `* 3` on L99 is, by contrast, equivalent: the suffix pattern is
+        // `^`-anchored at the START of `after`, so widening/narrowing its end never
+        // changes the match — those survivors cannot be killed by any input.)
+        let t = format!("version{}1.2.3.4", " ".repeat(25));
+        let numstart = t.find("1.2.3.4").unwrap();
+        assert!(looks_like_false_positive(&t, numstart, numstart + 7));
+    }
 }
+

@@ -89,10 +89,14 @@ changelog-version-check:
 	echo "CHANGELOG.md and pyproject.toml agree on v$$PP"
 
 # Run cargo-mutants over the security-critical Rust core (crypto / checksum /
-# restore / seed / pseudonym). The `--file` glob resolves against the workspace
-# ROOT, so we cd into the crate and use the `**/file.rs` glob form.
+# restore / seed / pseudonym) AND the Layer-1 detection core (normalize /
+# redact_l1 / person_en / person_zh / patterns). The `--file` glob resolves
+# against the workspace ROOT, so we cd into the crate and use the `**/file.rs`
+# glob form.
 mutants-core:
 	cd crates/argus-redact-core && cargo mutants \
 		--file '**/seed.rs' --file '**/validators.rs' --file '**/restore.rs' \
 		--file '**/replace.rs' --file '**/shake_rng.rs' --file '**/pseudonym.rs' \
+		--file '**/normalize.rs' --file '**/redact_l1.rs' --file '**/person_en.rs' \
+		--file '**/person_zh.rs' --file '**/patterns.rs' \
 		--timeout 120 -j 4
