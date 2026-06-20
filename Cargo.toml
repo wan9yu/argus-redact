@@ -3,7 +3,7 @@ members  = ["crates/argus-redact-core", "crates/argus-redact-py"]
 resolver = "2"
 
 [workspace.package]
-version      = "0.7.9"
+version      = "0.7.10"
 edition      = "2024"
 rust-version = "1.85"
 license      = "Apache-2.0"

@@ -2,6 +2,58 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.7.10 — Detection-correctness closeout
+
+A focused follow-up to v0.7.9 that closes three detection-correctness gaps from
+the v0.7.9 audit and folds in maintenance quick-wins. **Detection output changes
+for English person names by design** (the golden vectors were regenerated); all
+other detection output is unchanged from v0.7.9.
+
+### Detection correctness (output intentionally changes)
+
+- **No leading-slice leak when an entity contains a self-reference.** A
+  non-priority entity (organization, address) that wholly contains an interior
+  self_reference is now redacted whole; previously the container's leading slice
+  could leak (e.g. zh `自我管理咨询有限公司` → `自我[ORG]`). The contained
+  self_reference yields to its container.
+- **Streaming no longer splits an entity at a chunk boundary.** `StreamingRedactor`
+  carries a trailing window across the buffer force-flush, and no longer treats a
+  `.` inside an email/host (or a trailing ambiguous `.`) as a flush point — so an
+  entity straddling a chunk boundary is caught whole next round instead of leaking
+  a raw fragment. CJK boundaries and `\n` are unchanged.
+- **English person detection is evidence-gated.** A bare `Capitalized Surname`
+  pair is no longer auto-redacted; it must be corroborated — a known given name,
+  a title (Mr/Dr/…), proximity to other PII, or a pool-independent "name-like"
+  leading token (alphabetic, not a common English word). This recovers precision
+  on noisy prose (drops `Central Park`-style false positives) while keeping the
+  recall trade origin-neutral: the name-like signal recovers non-Anglo full names
+  (Marco Rossi, Wei Chen, D'Andre…) the US given-name pool misses, rather than an
+  Anglo-biased gate. zh person detection already used this evidence model.
+
+### Maintenance
+
+- **Quick-wins:** corrected the api-reference note on fast-mode person detection;
+  moved key-file loading out of the pure layer into glue (pure `restore` is now
+  I/O-free); scrubbed the Layer-3 failure log to the exception type only (no
+  traceback / input fragment); broke the registry↔replacer import cycle via a
+  leaf module.
+- **Mutation testing extended to the detection core.** `make mutants-core` now
+  covers normalize / redact_l1 / person_en / person_zh / patterns; genuine
+  surviving mutants were killed with Rust unit tests.
+
+### Honest note
+
+The English evidence-gate recovers person precision on the Kaggle PIILO
+real-essay set (`fast`-mode 67.2% → 71.6%) for a small recall trade
+(31.7% → 29.8%). The
+benchmark precision understates the gate: a large share of the remaining "false
+positives" are real names the value-exact benchmark counts as errors
+(whitespace/zero-width mismatches, or non-PII famous-name citations the gold
+does not label). The dominant recall ceiling is surname-pool coverage (non-Anglo
+surnames not yet pooled), not the gate. ai4privacy (no person type) and the
+Chinese suite are unchanged; English benchmarks were re-run — see
+[docs/benchmark-report.md](docs/benchmark-report.md).
+
 ## v0.7.9 — Hardening
 
 A security and detection-correctness hardening release. **This is an

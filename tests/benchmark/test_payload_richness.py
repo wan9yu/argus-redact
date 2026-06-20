@@ -18,9 +18,30 @@ pass.
 
 from __future__ import annotations
 
+import json
+import re
+from pathlib import Path
+
+import pytest
+
 from argus_redact import __version__
 from tests.benchmark.__main__ import build_payload
 from tests.benchmark.model import Result, TypeMetrics
+
+_RESULTS = Path(__file__).resolve().parent / "results"
+
+# Committed result files whose filename carries a version token. The in-file
+# ``version`` / ``package_version_string`` must agree with that token, so a
+# result generated under an un-bumped build (self-reporting the OLD version) is
+# never committed under a NEW-version filename. The benchmark numbers in such a
+# file ARE the new-version measurements; only the label is stale, and this guard
+# catches that staleness.
+_VERSIONED_RESULTS = [
+    "kaggle_piilo_0.7.10.json",
+    "ai4privacy_0.7.10.json",
+]
+
+_FILENAME_VERSION = re.compile(r"_(\d+\.\d+\.\d+)\.json$")
 
 
 def _fast_result() -> Result:
@@ -63,3 +84,28 @@ def test_payload_keeps_legacy_top_level_fields():
     assert payload["language"] == "en"
     assert payload["samples"] == 3
     assert "version" in payload and "date" in payload
+
+
+@pytest.mark.parametrize("filename", _VERSIONED_RESULTS)
+def test_committed_result_version_matches_filename(filename):
+    # A result file committed under ``*_X.Y.Z.json`` must self-report that same
+    # ``X.Y.Z`` in its ``version`` / ``package_version_string`` fields. Generating
+    # the benchmark under an un-bumped build records the OLD version in the file;
+    # committing it under the NEW-version filename leaves a stale label. This guard
+    # fails until the label is corrected to match the filename token.
+    path = _RESULTS / filename
+    assert path.exists(), f"missing committed result: {filename}"
+    m = _FILENAME_VERSION.search(filename)
+    assert m, f"filename has no version token: {filename}"
+    expected = m.group(1)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data.get("version") == expected, (
+        filename,
+        data.get("version"),
+        expected,
+    )
+    assert data.get("package_version_string") == expected, (
+        filename,
+        data.get("package_version_string"),
+        expected,
+    )

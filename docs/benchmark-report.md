@@ -1,24 +1,30 @@
 # Benchmark Report
 
-> **Currency**: All three benchmarks below were re-run on the **v0.7.9
-> development HEAD** (commit `f17ad8a`) on Apple M1 Max, Python 3.11. The
-> numbers measure the Phase 2 hardening on that line (unicode-aware English
-> tokenizer, surname+3 cap, grown en/zh surname pools). There is **no random
-> sampling** — each run streams the
-> first N rows of the dataset in deterministic order; `salt=42` fixes the
-> pseudonym mapping. `auto` (LLM) mode is **skipped** on the maintainer's
-> machine (qwen2.5:32b inference exceeded the 60s read timeout — rerun on a
-> host with adequate memory, or use a smaller LLM like qwen2.5:7b).
+> **Currency** (per-row, mixed across two releases for v0.7.10):
+> - **English sets** (`ai4privacy`, `kaggle_piilo`) were **re-run on v0.7.10** —
+>   this release's detection-correctness work is **English-only** (the
+>   evidence-gated person detector), so the English benchmarks are the ones that
+>   can move.
+> - **Chinese suite** (`pii_bench_zh`) is **carried from v0.7.9 unchanged** — it
+>   was **not re-measured** for v0.7.10. v0.7.10's person work is EN-only, and the
+>   container/self-reference merger fix produced **no golden change** on the
+>   Chinese suite, so the v0.7.9 numbers stand as-is.
 >
-> | Benchmark | Samples | Reproduce | Pinned JSON |
-> |---|---|---|---|
-> | pii_bench_zh (zh, self-authored) | 1000 | `python -m tests.benchmark pii_bench_zh --lang zh --mode fast,ner --limit 1000 --save tests/benchmark/results/pii_bench_zh_0.7.9.json` | `tests/benchmark/results/pii_bench_zh_0.7.9.json` |
-> | ai4privacy (en) | 500 | `python -m tests.benchmark ai4privacy --lang en --mode fast,ner --limit 500 --save tests/benchmark/results/ai4privacy_0.7.9.json` | `tests/benchmark/results/ai4privacy_0.7.9.json` |
-> | kaggle_piilo (en, real essays) | 500 | `python -m tests.benchmark kaggle_piilo --lang en --mode fast,ner --limit 500 --save tests/benchmark/results/kaggle_piilo_0.7.9.json` | `tests/benchmark/results/kaggle_piilo_0.7.9.json` |
+> Runs are on Apple M1 Max, Python 3.11. There is **no random sampling** — each
+> run streams the first N rows of the dataset in deterministic order; `salt=42`
+> fixes the pseudonym mapping. `auto` (LLM) mode is **skipped** on the
+> maintainer's machine (qwen2.5:32b inference exceeded the 60s read timeout —
+> rerun on a host with adequate memory, or use a smaller LLM like qwen2.5:7b).
+>
+> | Benchmark | Samples | Re-run for v0.7.10? | Reproduce | Pinned JSON |
+> |---|---|---|---|---|
+> | pii_bench_zh (zh, self-authored) | 1000 | No — carried from v0.7.9 | `python -m tests.benchmark pii_bench_zh --lang zh --mode fast,ner --limit 1000 --save tests/benchmark/results/pii_bench_zh_0.7.9.json` | `tests/benchmark/results/pii_bench_zh_0.7.9.json` |
+> | ai4privacy (en) | 500 | Yes | `python -m tests.benchmark ai4privacy --lang en --mode fast,ner --limit 500 --save tests/benchmark/results/ai4privacy_0.7.10.json` | `tests/benchmark/results/ai4privacy_0.7.10.json` |
+> | kaggle_piilo (en, real essays) | 500 | Yes | `python -m tests.benchmark kaggle_piilo --lang en --mode fast,ner --limit 500 --save tests/benchmark/results/kaggle_piilo_0.7.10.json` | `tests/benchmark/results/kaggle_piilo_0.7.10.json` |
 >
 > The earlier `tests/benchmark/results/ai4privacy_0.6.6.json` is retained as a
 > historical baseline (it backs a schema-guard test); the report now pins the
-> v0.7.9 result files above.
+> v0.7.10 English result files and the carried-forward v0.7.9 Chinese file above.
 
 ## Executive Summary
 
@@ -40,6 +46,11 @@ argus-redact combines PII detection with **reversible encryption and per-message
 **self-authored** (`wan9yu/pii-bench-zh`) — created by us to fill this gap, so
 treat it as an internal coverage check, not a third-party-audited score.
 Numbers below are measured on the v0.7.9 development HEAD (commit `f17ad8a`).
+
+> **Carried from v0.7.9 — not re-measured for v0.7.10.** This release's detection
+> work is English-only (the evidence-gated person detector); the
+> container/self-reference merger fix produced no golden change on the Chinese
+> suite. The v0.7.9 numbers below therefore stand unchanged.
 
 ### argus-redact, `mode="fast"` (regex + name scoring)
 
@@ -98,18 +109,22 @@ Limitations below.
 
 ## 2. English PII Detection — ai4privacy (400K dataset, 500 samples)
 
-Measured on the v0.7.9 development HEAD (commit `f17ad8a`), first 500 English
-rows.
+Re-run on v0.7.10, first 500 English rows. ai4privacy has **no person type**, and
+v0.7.10's only detection change is the English person evidence-gate, so the
+`fast`-mode numbers are **identical to v0.7.9** (81.6 / 31.9 / 45.8). The
+`ner`-mode row moved by tenths between runs — that is **spaCy NER run jitter on
+the location type**, not a v0.7.10 code effect (the `fast` path, which is what
+v0.7.10 touches, is bit-identical).
 
 ### argus-redact
 
 | Mode | Precision | Recall | F1 |
 |---|---|---|---|
 | fast (regex)          | 81.6% | 31.9% | 45.8% |
-| ner (+ spaCy)         | 74.9% | 42.8% | 54.4% |
+| ner (+ spaCy)         | 74.8% | 42.9% | 54.5% |
 | auto (+ Ollama 32B)   | _skipped this run — see currency note_ | | |
 
-_Result JSON: `tests/benchmark/results/ai4privacy_0.7.9.json`._
+_Result JSON: `tests/benchmark/results/ai4privacy_0.7.10.json`._
 
 ### Per-type breakdown (same 500-sample run)
 
@@ -120,7 +135,7 @@ _Result JSON: `tests/benchmark/results/ai4privacy_0.7.9.json`._
 | credit_card | fast | 100.0% | 10.4% | 18.9% |
 | credit_card | ner | 100.0% | 8.3% | 15.4% |
 | location | fast | _100.0%_ | 0.0% | 0.0% |
-| location | ner | 59.6% | 32.9% | 42.4% |
+| location | ner | 59.4% | 33.3% | 42.7% |
 | address | fast | 0.0% | 0.0% | 0.0% |
 | address | ner | 0.0% | 0.0% | 0.0% |
 
@@ -132,27 +147,30 @@ limited overall because ai4privacy uses European formats (Dutch, German, French)
 that don't match the US-centric structured patterns, and the dataset's
 `address`/`STREET` spans don't align with the detector's address model (0%, and
 the `fast` false positives there pull precision down). The NER layer adds
-location recall (0% → 32.9%) at the cost of location precision (59.6%). Versus
-the prior v0.7.8-era table (fast 78.3/30.3/43.7, ner 72.8/41.4/52.8), the v0.7.9
-Phase 2 person-detection work nudged both modes up on every axis (fast F1
-43.7 → 45.8, ner F1 52.8 → 54.4) — no regression on this dataset.
+location recall (0% → 33.3%) at the cost of location precision (59.4%). The
+v0.7.9 Phase 2 person-detection work had already lifted both modes over the
+v0.7.8-era table (fast 78.3/30.3/43.7, ner 72.8/41.4/52.8); v0.7.10 leaves the
+`fast` numbers byte-identical (no person type to gate here) and the `ner` row
+moves only by spaCy run jitter on the location type — no regression on this
+dataset.
 
 ---
 
 ## 3. Real Student Essays — Kaggle PIILO (7K dataset, 500 samples)
 
 This is the only benchmark with **real (non-synthetic) text**. argus-redact
-numbers are measured on the v0.7.9 development HEAD (commit `f17ad8a`).
+numbers are re-run on v0.7.10, which is where the English person evidence-gate
+shows up.
 
 | Tool | Mode | Precision | Recall | F1 | Speed |
 |------|------|-----------|--------|-----|-------|
-| argus-redact | fast | 68.9% | 29.8% | 41.6% | 16 docs/s |
-| argus-redact | ner | 25.2% | 46.6% | 32.7% | 2 docs/s |
+| argus-redact | fast | 73.1% | 28.2% | 40.7% | 16 docs/s |
+| argus-redact | ner | 24.6% | 45.0% | 31.8% | 2 docs/s |
 | **Presidio** | — | 35.1% | 47.1% | 40.2% | 5 docs/s |
 
-_argus-redact result JSON: `tests/benchmark/results/kaggle_piilo_0.7.9.json`.
+_argus-redact result JSON: `tests/benchmark/results/kaggle_piilo_0.7.10.json`.
 The Presidio row was measured on an earlier run and is **not re-measured** for
-v0.7.9 — keep it as a scoped historical reference, not a head-to-head on
+v0.7.10 — keep it as a scoped historical reference, not a head-to-head on
 identical code._
 
 ### Per-type breakdown (argus-redact, same 500-sample run)
@@ -161,8 +179,9 @@ identical code._
 |-------------|------|-----------|--------|-----|
 | email | fast | 100.0% | 100.0% | 100.0% |
 | email | ner | 100.0% | 100.0% | 100.0% |
-| person | fast | 67.2% | 31.7% | 43.1% |
-| person | ner | 24.0% | 51.6% | 32.8% |
+| person | fast | 71.6% | 29.8% | 42.1% |
+| person | ner | 23.5% | 49.7% | 31.9% |
+| phone | fast/ner | 33.3% | 33.3% | 33.3% |
 | id_number | fast/ner | 100.0% | 0.0% | 0.0% |
 | url | fast/ner | 100.0% | 0.0% | 0.0% |
 
