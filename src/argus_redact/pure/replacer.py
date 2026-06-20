@@ -9,48 +9,30 @@ from typing import Callable
 from argus_redact._core_loader import _core
 from argus_redact._types import PatternMatch
 from argus_redact.lang.zh.hints import KINSHIP as _ZH_KINSHIP
+from argus_redact.pure._strategy_kind import (
+    VALID_STRATEGIES,
+    is_strategy_reversible,
+)
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS
 
 # Rust PatternMatch class, resolved once at import (same idiom as pure/merger.py).
 _RustPM = _core.PatternMatch
 
+# Strategy-classification SSOT lives in the dependency-free `_strategy_kind`
+# leaf and is re-exported here for back-compat (public `argus_redact.
+# is_strategy_reversible` resolves through this module). `VALID_STRATEGIES` /
+# `is_strategy_reversible` are imported above, not defined here, so registry can
+# import the leaf top-level without a cycle.
+__all__ = [
+    "VALID_STRATEGIES",
+    "is_strategy_reversible",
+    "SecurityWarning",
+    "replace",
+]
+
 
 class SecurityWarning(UserWarning):
     """Emitted when a misconfiguration would silently weaken redaction."""
-
-
-VALID_STRATEGIES = (
-    "pseudonym",
-    "realistic",
-    "mask",
-    "remove",
-    "category",
-    "name_mask",
-    "landline_mask",
-    "keep",
-)
-
-# Strategies whose output can be mapped back to the original via the key dict.
-# Adding a new strategy to VALID_STRATEGIES requires classifying it here.
-_REVERSIBLE_STRATEGIES = frozenset({"pseudonym", "realistic", "remove", "keep"})
-
-
-def is_strategy_reversible(strategy: str) -> bool:
-    """Return True if ``strategy`` produces output that ``restore()`` can map
-    back to the original value.
-
-    Reversible: ``pseudonym`` / ``realistic`` / ``remove`` / ``keep``.
-    Irreversible (lossy by design): ``mask`` / ``name_mask`` / ``landline_mask``
-    / ``category``.
-
-    Use in multi-turn dialog flows to fall through to a reversible strategy
-    when the LLM response must be restored to original PII for follow-up.
-    """
-    if strategy not in VALID_STRATEGIES:
-        raise ValueError(
-            f"Unknown strategy '{strategy}'. Valid: {', '.join(VALID_STRATEGIES)}"
-        )
-    return strategy in _REVERSIBLE_STRATEGIES
 
 
 # ``keep`` strategy preserves these verbatim; anything else downgrades to the

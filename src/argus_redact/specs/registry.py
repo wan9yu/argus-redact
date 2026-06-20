@@ -6,6 +6,7 @@ import dataclasses
 from dataclasses import dataclass, field
 from typing import Callable
 
+from argus_redact.pure._strategy_kind import is_strategy_reversible
 from argus_redact.specs._compliance import gdpr_special_for as _gdpr_special_for
 from argus_redact.specs._compliance import hipaa_for as _hipaa_for
 from argus_redact.specs._compliance import pipl_articles_for as _pipl_articles_for
@@ -83,10 +84,9 @@ class PIITypeDef:
     @property
     def is_reversible(self) -> bool:
         """Whether ``replace()→restore()`` recovers the original. Derived
-        from ``self.strategy``. Lazy import avoids registry → replacer cycle.
+        from ``self.strategy`` via the dependency-free ``_strategy_kind`` leaf
+        (imported top-level — no registry ↔ replacer cycle).
         """
-        from argus_redact.pure.replacer import is_strategy_reversible
-
         return is_strategy_reversible(self.strategy)
 
     def to_fixtures(self) -> list[dict]:
