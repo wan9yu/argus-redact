@@ -669,6 +669,10 @@ mod tests {
         ).unwrap();
         assert!(r.redacted.starts_with("CUST-acme-"));
         assert_eq!(r.key.get(&r.redacted), Some(&"acme".to_string()));
+        // The stub faker returns an EMPTY alias list, so the `if
+        // !alias_list.is_empty()` guard must skip the insert — no alias entry.
+        // Pins that guard (a mutant inverting it would insert an empty vec).
+        assert!(r.aliases.is_empty(), "empty alias list must not be inserted: {:?}", r.aliases);
     }
 
     #[test]
@@ -728,6 +732,156 @@ mod tests {
         assert!(r.redacted.starts_with("W-"));
         assert!(!r.redacted.starts_with("CUST-"));
         assert_eq!(r.key.get(&r.redacted), Some(&"acme".to_string()));
+    }
+
+    #[test]
+    fn realistic_builtin_faker_emits_aliases() {
+        // `fake_person_reserved` returns a reserved name PLUS its pinyin aliases.
+        // The `if !alias_list.is_empty()` guard on the built-in path must then
+        // record `{fake: aliases}` in the result. Pins that guard: a mutant
+        // deleting the `!` would skip the insert and leave aliases empty.
+        let mut info_map = HashMap::new();
+        info_map.insert("person".to_string(), {
+            let mut i = info("realistic", "P");
+            i.faker_resolution = FakerResolution::Builtin("fake_person_reserved".to_string());
+            i
+        });
+        let wl = empty_whitelist();
+        let text = "张三来了";
+        let ents = vec![pm("张三", "person", 0, 2)];
+        let r = replace(
+            ReplaceArgs {
+                text,
+                entities: &ents,
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+            },
+            &SeqFactory,
+            None,
+        )
+        .unwrap();
+        // The reserved person faker emits pinyin aliases, so the alias map must
+        // carry an entry keyed by the chosen fake name, with a non-empty list.
+        assert!(!r.aliases.is_empty(), "person faker must emit aliases");
+        let fake = r
+            .key
+            .iter()
+            .find(|(_, v)| *v == "张三")
+            .map(|(k, _)| k.clone())
+            .expect("person must have a replacement");
+        let alias_list = r.aliases.get(&fake).expect("fake must have aliases recorded");
+        assert!(!alias_list.is_empty(), "recorded alias list must be non-empty");
+    }
+
+    #[test]
+    fn pseudonym_organization_uses_org_generator() {
+        // An `organization` entity routed through the `pseudonym` strategy must
+        // mint its code from the ORG generator (org_prefix "O"), not the person
+        // generator (person_prefix "P"). Pins the `entity.type_ ==
+        // "organization"` branch: a mutant inverting it would emit a "P-" code.
+        let mut info_map = HashMap::new();
+        info_map.insert("organization".to_string(), info("pseudonym", "O"));
+        let wl = empty_whitelist();
+        let text = "在阿里巴巴工作";
+        let ents = vec![pm("阿里巴巴", "organization", 1, 5)];
+        let r = replace(
+            ReplaceArgs {
+                text,
+                entities: &ents,
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+            },
+            &SeqFactory,
+            None,
+        )
+        .unwrap();
+        let code = r
+            .key
+            .iter()
+            .find(|(_, v)| *v == "阿里巴巴")
+            .map(|(k, _)| k.clone())
+            .expect("organization must have a pseudonym code");
+        assert!(code.starts_with("O-"), "org must use org_prefix, got {code}");
+        assert!(!code.starts_with("P-"), "org must NOT use person generator");
+        assert!(r.redacted.contains(&code));
+    }
+
+    #[test]
+    fn pseudonym_person_uses_person_generator() {
+        // The contrast partner: a non-org entity through `pseudonym` uses the
+        // PERSON generator (person_prefix "P"). Together with the org test this
+        // pins both sides of the `entity.type_ == "organization"` branch.
+        let mut info_map = HashMap::new();
+        info_map.insert("person".to_string(), info("pseudonym", "P"));
+        let wl = empty_whitelist();
+        let text = "张三来了";
+        let ents = vec![pm("张三", "person", 0, 2)];
+        let r = replace(
+            ReplaceArgs {
+                text,
+                entities: &ents,
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+            },
+            &SeqFactory,
+            None,
+        )
+        .unwrap();
+        let code = r
+            .key
+            .iter()
+            .find(|(_, v)| *v == "张三")
+            .map(|(k, _)| k.clone())
+            .expect("person must have a pseudonym code");
+        assert!(code.starts_with("P-"), "person must use person_prefix, got {code}");
+        assert!(!code.starts_with("O-"), "person must NOT use org generator");
+    }
+
+    #[test]
+    fn entity_span_ends_at_end_of_text() {
+        // An entity whose span ends EXACTLY at text length exercises the
+        // `hi < cur_len` slice-clamp boundary: with hi == cur_len, the tail
+        // slice must be skipped (no out-of-range copy) and the replacement must
+        // land at the very end. Pins the `if hi < cur_len` guard.
+        let mut info_map = HashMap::new();
+        info_map.insert("phone".to_string(), info("mask", "P"));
+        let wl = empty_whitelist();
+        // "call 13812345678" — phone occupies chars [5..16], end == len (16).
+        let text = "call 13812345678";
+        assert_eq!(text.chars().count(), 16);
+        let ents = vec![pm("13812345678", "phone", 5, 16)];
+        let r = replace(
+            ReplaceArgs {
+                text,
+                entities: &ents,
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+            },
+            &SeqFactory,
+            None,
+        )
+        .unwrap();
+        assert_eq!(r.redacted, "call 138****5678");
     }
 
     #[test]

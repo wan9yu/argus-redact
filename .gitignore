@@ -28,3 +28,8 @@ docs/superpowers/
 # mutmut workspace (regenerated on every `mutmut run`)
 mutants/
 mutmut-stats.json
+
+# cargo-mutants scratch output (regenerated on every `make mutants-core`)
+mutants.out/
+mutants.out.old/
+mutants.out*/

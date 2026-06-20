@@ -446,6 +446,43 @@ mod tests {
     }
 
     #[test]
+    fn safety_reserved_range_delta_in_message() {
+        // The reserved-range warning embeds the EXACT count of EXTRA hits
+        // (`output_hits - redacted_hits`). Pins the subtraction: input has 1
+        // reserved-range value, output has 3 → delta must be reported as 2.
+        // A mutant flipping the operands (`redacted - output`) would underflow
+        // (panic) or report a wrong delta; a mutant zeroing it would say "0".
+        let mut k = HashMap::new();
+        k.insert("张明".to_string(), "王建国".to_string());
+        k.insert("19999123456".to_string(), "13912345678".to_string());
+        let downstream = "联系 张明 拨 19999123456"; // 1 reserved-range value
+        let llm = "张明 给了 19999123456 和 19999987654 和 19999555000"; // 3 reserved-range values
+        let warns = check_restore_safety(downstream, llm, &k);
+        let rr_warn = warns
+            .iter()
+            .find(|w| w.contains("reserved-range"))
+            .expect("reserved-range warning");
+        assert_eq!(
+            rr_warn,
+            "LLM output contains 2 additional reserved-range value(s) not in input — \
+possible hallucination or fabrication"
+        );
+    }
+
+    #[test]
+    fn restore_repeated_needle_advance() {
+        // A repeated needle that exactly tiles the haystack pins the
+        // count_occurrences / single-pass advance arithmetic: every "AA" must
+        // be replaced, not just the first (an off-by-one in the advance would
+        // drop or double-count occurrences). "AAAA" → two "AA" → "XX".
+        let mut k = HashMap::new();
+        k.insert("AA".to_string(), "X".to_string());
+        assert_eq!(restore("AAAA", &k).unwrap(), "XX");
+        // And inside surrounding text (advance past the match, not past start).
+        assert_eq!(restore("zAAyAAz", &k).unwrap(), "zXyXz");
+    }
+
+    #[test]
     fn safety_warning_message_strings_exact() {
         // Assert byte-identical message format against the Python f-string.
         let mut k = HashMap::new();

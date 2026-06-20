@@ -208,6 +208,20 @@ mod tests {
     }
 
     #[test]
+    fn resolve_salt_none_empty_env_errors() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // An env var set to the EMPTY string must NOT count as a usable salt —
+        // it must error exactly as an unset var does. Pins the `!v.is_empty()`
+        // guard (a mutant dropping it would accept "" as a zero-length salt,
+        // silently weakening every realistic pseudonym in that process).
+        // SAFETY: ENV_LOCK serializes all ARGUS_REDACT_PSEUDONYM_SALT mutation.
+        unsafe { std::env::set_var("ARGUS_REDACT_PSEUDONYM_SALT", "") };
+        let result = resolve_salt(None);
+        unsafe { std::env::remove_var("ARGUS_REDACT_PSEUDONYM_SALT") };
+        assert!(result.is_err(), "empty env salt must error, got {result:?}");
+    }
+
+    #[test]
     fn resolve_salt_none_env() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // SAFETY: ENV_LOCK serializes all ARGUS_REDACT_PSEUDONYM_SALT mutation.

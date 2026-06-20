@@ -471,6 +471,52 @@ mod tests {
     }
 
     #[test]
+    fn luhn_card_length_boundaries() {
+        // ISO/IEC 7812 PAN length is 13–19 digits. Pin BOTH ends of the
+        // [13, 19] window so a mutant that relaxes either bound (e.g. `< 13`
+        // → `< 14`, or `> 19` → `>= 19`) is caught. Both literals are
+        // Luhn-valid (verified): check digit 8 (13-digit) / 2 (19-digit).
+        assert!(validate_credit_card_luhn("4444444444448")); // 13 digits — lower bound
+        assert!(validate_credit_card_luhn("4444444444444444442")); // 19 digits — upper bound
+        assert!(!validate_credit_card_luhn("444444444444")); // 12 — one below floor
+        assert!(!validate_credit_card_luhn("44444444444444444442")); // 20 — one above ceiling
+        // cn_bank_card floor is a STRICTER 16 (banks never issue < 16). A
+        // 15-digit value (even one whose Luhn would pass at the 13-floor) must
+        // reject — pins the `digits.len() < 16` guard.
+        assert!(!validate_cn_bank_card("444444444444448")); // 15 digits — below CN floor
+    }
+
+    #[test]
+    fn ssn_reject_branches() {
+        // Each disqualifying field rejected INDEPENDENTLY (pins each `||` arm).
+        assert!(!validate_ssn("000-45-6789")); // area 000
+        assert!(!validate_ssn("123-00-6789")); // group 00
+        assert!(!validate_ssn("123-45-0000")); // serial 0000
+        assert!(!validate_ssn("900-45-6789")); // area >= 900
+        assert!(validate_ssn("123-45-6789")); // all fields valid
+    }
+
+    #[test]
+    fn email_local_part_dot_boundaries() {
+        // Trailing dot, leading dot, and consecutive dots in the local part all
+        // reject; a single interior dot is fine. Pins the three `||` arms.
+        assert!(!validate_email("a.@example.com")); // trailing dot in local
+        assert!(!validate_email(".a@example.com")); // leading dot in local
+        assert!(validate_email("a.b@example.com")); // interior dot — valid
+    }
+
+    #[test]
+    fn my_number_remainder_special_case() {
+        // remainder <= 1 ⇒ check digit 0 (the JP My Number special case). Body
+        // 10000000003 has weighted total ≡ 1 (mod 11), so the valid check digit
+        // is 0. A mutant flipping `<= 1` to `< 1` would compute check = 10 (an
+        // impossible single digit) and reject this valid number.
+        assert!(validate_my_number("100000000030"));
+        // Flipping the check digit away from 0 must reject.
+        assert!(!validate_my_number("100000000033"));
+    }
+
+    #[test]
     fn cn_id_and_credit_code() {
         assert!(validate_id_number("11010519491231002X"));  // known valid GB11643 sample
         assert!(!validate_id_number("110105194912310021"));
@@ -527,6 +573,21 @@ mod tests {
         assert!(resolve_validator("organization").is_some());
         assert!(resolve_validator("school").is_some());
         assert!(resolve_validator("nonexistent").is_none());
+    }
+
+    #[test]
+    fn resolve_every_known_key() {
+        // Every machine key in the dispatch table must resolve to Some — pins
+        // each match arm (a mutant deleting an arm would fall through to None).
+        // Keys mirror `resolve_validator`'s arms exactly.
+        for key in [
+            "credit_card_luhn", "cn_bank_card", "gb11643_mod11", "hkid", "twid",
+            "credit_code_mod31", "iban_mod97", "aadhaar", "cpf", "cnpj",
+            "my_number", "email", "pan", "ssn", "age", "de_phone", "de_tax_id",
+            "jp_phone", "jwt", "organization", "school",
+        ] {
+            assert!(resolve_validator(key).is_some(), "key {key} must resolve");
+        }
     }
 
     #[test]

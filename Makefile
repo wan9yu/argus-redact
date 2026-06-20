@@ -1,4 +1,4 @@
-.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check gen-confusables gen-confusables-check perf-update perf-check sync-docs-version sync-docs-version-check changelog-version-check
+.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check gen-confusables gen-confusables-check perf-update perf-check sync-docs-version sync-docs-version-check changelog-version-check mutants-core
 
 install:
 	pip install -e .
@@ -87,3 +87,12 @@ changelog-version-check:
 		exit 1; \
 	fi; \
 	echo "CHANGELOG.md and pyproject.toml agree on v$$PP"
+
+# Run cargo-mutants over the security-critical Rust core (crypto / checksum /
+# restore / seed / pseudonym). The `--file` glob resolves against the workspace
+# ROOT, so we cd into the crate and use the `**/file.rs` glob form.
+mutants-core:
+	cd crates/argus-redact-core && cargo mutants \
+		--file '**/seed.rs' --file '**/validators.rs' --file '**/restore.rs' \
+		--file '**/replace.rs' --file '**/shake_rng.rs' --file '**/pseudonym.rs' \
+		--timeout 120 -j 4
