@@ -183,7 +183,15 @@ class StreamingRedactor:
         a boundary yet. Call ``flush()`` at end-of-stream to drain the tail.
         Cross-chunk consistency is preserved via the shared accumulated key.
         """
-        emit_text, residual = _consume_to_boundary(self._inc_buffer, chunk)
+        emit_text, residual = _consume_to_boundary(
+            self._inc_buffer,
+            chunk,
+            lang=self._lang,
+            mode=self._mode,
+            names=self._names,
+            types=self._types,
+            types_exclude=self._types_exclude,
+        )
         self._inc_buffer = residual
         if not emit_text:
             return _empty_result()

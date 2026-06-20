@@ -6,7 +6,11 @@ API; tested here directly.
 
 import pytest
 
-from argus_redact.glue._detect_partial import _detect_partial, _last_boundary_index
+from argus_redact.glue._detect_partial import (
+    _CARRY_WINDOW,
+    _detect_partial,
+    _last_boundary_index,
+)
 
 
 class TestLastBoundaryIndex:
@@ -14,12 +18,33 @@ class TestLastBoundaryIndex:
         assert _last_boundary_index("hello world") == -1
 
     def test_returns_index_after_boundary(self):
-        assert _last_boundary_index("hi.") == 3
-        assert _last_boundary_index("hi.\n") == 4
-        assert _last_boundary_index("你好。") == 3
+        # An ASCII boundary counts only when followed by whitespace (a real
+        # sentence end). A trailing "." at the buffer end is ambiguous (could be
+        # ".com" intra-entity) so it does NOT count until the next char arrives.
+        assert _last_boundary_index("hi. ") == 3  # '.' followed by space → real end
+        assert _last_boundary_index("hi.\n") == 4  # '\n' always counts
+        assert _last_boundary_index("你好。") == 3  # CJK 。 always counts
+
+    def test_ascii_boundary_at_buffer_end_is_ambiguous(self):
+        # A trailing ASCII boundary with no following char is ambiguous — wait for
+        # the next chunk to disambiguate ". " (sentence end) vs ".com" (entity).
+        assert _last_boundary_index("hi.") == -1
+        assert _last_boundary_index("a@bcd.") == -1  # intra-entity dot, not a boundary
+        assert _last_boundary_index("a@bcd.com listening") == -1  # '.' before 'c'
+
+    def test_cjk_and_newline_always_count(self):
+        # CJK full-width punctuation and \n never appear inside ASCII entities and
+        # CJK sentences carry no trailing space, so they count even at buffer end.
+        assert _last_boundary_index("你好。世界") == 3  # boundary after 。
+        assert _last_boundary_index("done\n") == 5
+        assert _last_boundary_index("结束！") == 3
+
+    def test_normal_en_sentence_splits_at_dot_space(self):
+        # "Hello. World" — the '.' is followed by a space → a real sentence end.
+        assert _last_boundary_index("Hello. World") == 6  # after ". "
 
     def test_picks_rightmost_boundary(self):
-        assert _last_boundary_index("a. b. c") == 5  # after second '.'
+        assert _last_boundary_index("a. b. c") == 5  # after second '. '
 
     def test_empty_string(self):
         assert _last_boundary_index("") == -1
@@ -76,13 +101,27 @@ class TestForceFlush:
 
 
 class TestMaxBufferOverride:
-    def test_max_buffer_force_flushes_no_boundary(self):
-        long_text = "x" * 50  # 50 chars, no boundary
-        entities, residual = _detect_partial(long_text, lang="zh", max_buffer=20)
-        # max_buffer triggered → flushed, residual empty
-        assert residual == ""
-        # Detection ran (no PII in xxxxx, but no error)
+    def test_max_buffer_carries_trailing_window_no_boundary(self):
+        # A boundary-less buffer past max_buffer no longer emits everything: it
+        # carries a trailing _CARRY_WINDOW so an entity straddling the cut stays
+        # whole for the next round (the streaming carry-window fix).
+        long_text = "x" * (_CARRY_WINDOW + 50)
+        max_buffer = _CARRY_WINDOW + 10  # > window so an emit prefix exists
+        entities, residual = _detect_partial(
+            long_text, lang="zh", max_buffer=max_buffer
+        )
+        # No PII in the filler → no entity straddles the cut → cut at len-window.
+        assert residual == long_text[-_CARRY_WINDOW:]
+        assert len(residual) == _CARRY_WINDOW
         assert isinstance(entities, list)
+
+    def test_buffer_at_or_below_window_carries_everything(self):
+        # When the whole buffer fits inside the carry window, carry it all
+        # rather than slicing a negative index — nothing is emitted yet.
+        long_text = "x" * 50  # 50 chars, no boundary, below the window
+        entities, residual = _detect_partial(long_text, lang="zh", max_buffer=20)
+        assert residual == long_text
+        assert entities == []
 
 
 class TestEmptyAndEdgeCases:
@@ -92,9 +131,11 @@ class TestEmptyAndEdgeCases:
         assert residual == ""
 
     def test_lang_passthrough_to_detect(self):
-        # Passing lang="en" should detect en-specific patterns (SSN)
+        # Passing lang="en" should detect en-specific patterns (SSN). The trailing
+        # ". " (dot + space) is a real sentence end so the prefix is emitted; a
+        # bare trailing "." would be ambiguous (buffer-end) and emit nothing yet.
         entities, _ = _detect_partial(
-            "SSN 123-45-6789.", lang="en"
+            "SSN 123-45-6789. ", lang="en"
         )
         assert any(e.type == "ssn" for e in entities)
 

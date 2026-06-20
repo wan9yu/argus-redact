@@ -228,11 +228,15 @@ class TestStreamingRedactor:
         r.feed("再次出现 19999111222。")
 
     def test_should_route_en_chunk_correctly(self):
+        # The sentence ends with "today." — a bare trailing '.' at the buffer end
+        # is ambiguous (could be ".com"), so feed() defers it; flush() drains the
+        # tail at end-of-stream (the documented usage). Concatenate both emits.
         r = StreamingRedactor(salt=b"test-salt", lang="en")
-        result = r.feed("Call (415) 555-1234, SSN 123-45-6789 today.")
-        assert "(555) 555-01" in result.downstream_text
-        assert "999-" in result.downstream_text
-        assert restore(result.downstream_text, result.key) == "Call (415) 555-1234, SSN 123-45-6789 today."
+        out = r.feed("Call (415) 555-1234, SSN 123-45-6789 today.").downstream_text
+        out += r.flush().downstream_text
+        assert "(555) 555-01" in out
+        assert "999-" in out
+        assert restore(out, r.aggregate_key()) == "Call (415) 555-1234, SSN 123-45-6789 today."
 
     def test_should_require_salt(self):
         with pytest.raises(TypeError):
