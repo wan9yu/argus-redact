@@ -336,11 +336,14 @@ pub(crate) fn generate_candidates(text: &str, chars: &[char]) -> Vec<NameCandida
 
         let mut variants: Vec<NameCandidate> = Vec::new();
 
+        // A single-surname match of length 3 or 4 — the shape that offers prefix
+        // variants and is gated on the 2-char root. Deduped here and reused below.
+        let single_multi = !is_compound && (word_len == 3 || word_len == 4);
+
         // The 2-char root being a known non-name blocks every variant of a
         // single-surname 3-/4-char match. (Computed BEFORE `word`/`prefix2`/
         // `prefix3` are moved into the variants below.)
-        let prefix_blocked =
-            (word_len == 3 || word_len == 4) && !is_compound && neg.contains(&prefix2);
+        let prefix_blocked = single_multi && neg.contains(&prefix2);
 
         // Full word (len 2/3/4 for single, any for compound), longest variant.
         if !neg.contains(&word) && !prefix_blocked {
@@ -353,7 +356,7 @@ pub(crate) fn generate_candidates(text: &str, chars: &[char]) -> Vec<NameCandida
         }
         // For 3-/4-char single-surname matches, also offer the 2-char variant.
         // (`prefix2 not in neg` is the un-blocked precondition above.)
-        if (word_len == 3 || word_len == 4) && !is_compound && !neg.contains(&prefix2) {
+        if single_multi && !neg.contains(&prefix2) {
             variants.push(NameCandidate { text: prefix2, start, end: start + 2 });
         }
 

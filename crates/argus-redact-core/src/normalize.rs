@@ -132,7 +132,10 @@ fn normalize_digit_sequences(chars: &mut [char]) {
 /// char index of the i-th output char. `offset_map` is `None` when the text is
 /// unchanged (identity mapping).
 pub fn normalize_text(text: &str) -> (String, Option<Vec<usize>>) {
-    normalize_text_impl(text, true)
+    match normalize_core(text) {
+        None => (text.to_string(), None),
+        Some((chars, offset_map)) => finalize(&chars, &offset_map, text, true),
+    }
 }
 
 /// Normalize text for PERSON-NAME detection — identical to [`normalize_text`]
@@ -152,15 +155,28 @@ pub fn normalize_text(text: &str) -> (String, Option<Vec<usize>>) {
 /// obfuscated name back INTO a name (`Ｊohn`→`John`, `José`→`Jose`, `Ѕmith`→
 /// `Smith`) — so person detection keeps those. Resulting spans map back to the
 /// ORIGINAL via the returned offset map, exactly like the full-normalization path.
+///
+/// Both views derive from the SAME [`normalize_core`] intermediate (steps 1–3),
+/// so they STRUCTURALLY share char positions and offset map — only the optional
+/// step-4 digit fold changes some char VALUES.
 pub fn normalize_text_for_person(text: &str) -> (String, Option<Vec<usize>>) {
-    normalize_text_impl(text, false)
+    match normalize_core(text) {
+        None => (text.to_string(), None),
+        Some((chars, offset_map)) => finalize(&chars, &offset_map, text, false),
+    }
 }
 
-/// Shared normalization core. `digit_sequences` gates the Chinese-digit-sequence
-/// step (true for general PII detection, false for person-name detection).
-fn normalize_text_impl(text: &str, digit_sequences: bool) -> (String, Option<Vec<usize>>) {
+/// Steps 1–3 of the normalization pipeline (the expensive, shared prefix):
+/// invisible-strip + combining-mark fold + confusables + per-char NFKC. Returns
+/// the post-step-3 `(chars, offset_map)`, or `None` for the pure-ASCII fast-path.
+///
+/// Both [`normalize_text`] and [`normalize_text_for_person`] run this ONCE and
+/// derive their views via [`finalize`]; that makes the "two views share the same
+/// positions + offset map, only digit VALUES differ" property STRUCTURAL rather
+/// than coincidental.
+pub(crate) fn normalize_core(text: &str) -> Option<(Vec<char>, Vec<usize>)> {
     if text.is_ascii() {
-        return (text.to_string(), None);
+        return None;
     }
     // Step 1: strip invisible, build char-index offset map
     let mut chars: Vec<char> = Vec::new();
@@ -182,13 +198,19 @@ fn normalize_text_impl(text: &str, digit_sequences: bool) -> (String, Option<Vec
     // ship decomposed jamo and break Korean detection.
     let mut folded_chars: Vec<char> = Vec::with_capacity(chars.len());
     let mut folded_map: Vec<usize> = Vec::with_capacity(offset_map.len());
+    // Decompose each char ONCE into this reusable buffer (char::nfd yields ≤4
+    // chars), then both check for a droppable mark and push from the buffer —
+    // avoiding the double `ch.nfd()` of the check-then-loop form.
+    let mut nfd_buf: Vec<char> = Vec::with_capacity(4);
     for (&ch, &src) in chars.iter().zip(offset_map.iter()) {
-        if !ch.nfd().any(is_droppable_mark) {
+        nfd_buf.clear();
+        nfd_buf.extend(ch.nfd());
+        if !nfd_buf.iter().copied().any(is_droppable_mark) {
             folded_chars.push(ch); // no accent to fold — keep the char as-is
             folded_map.push(src);
             continue;
         }
-        for d in ch.nfd() {
+        for &d in &nfd_buf {
             if is_droppable_mark(d) {
                 continue; // drop the accent; its base char keeps `src`
             }
@@ -217,18 +239,31 @@ fn normalize_text_impl(text: &str, digit_sequences: bool) -> (String, Option<Vec
         chars = new_chars;
         offset_map = new_map;
     }
+    Some((chars, offset_map))
+}
+
+/// Derive a final normalized view from a [`normalize_core`] intermediate:
+/// clone `chars`, apply step 4 (Chinese-digit-sequence fold) iff `digit_sequences`,
+/// then join. Returns `(text.to_string(), None)` when the result equals the
+/// original `text` (identity mapping), else `(result, Some(offset_map))`.
+pub(crate) fn finalize(
+    chars: &[char],
+    offset_map: &[usize],
+    text: &str,
+    digit_sequences: bool,
+) -> (String, Option<Vec<usize>>) {
+    let mut chars = chars.to_vec();
     // Step 4: Chinese-digit-sequence normalization (skipped for person detection,
     // which must not let a digit run swallow a CJK name char — see
     // `normalize_text_for_person`).
     if digit_sequences {
         normalize_digit_sequences(&mut chars);
     }
-
     let result: String = chars.iter().collect();
     if result == text {
         (text.to_string(), None)
     } else {
-        (result, Some(offset_map))
+        (result, Some(offset_map.to_vec()))
     }
 }
 

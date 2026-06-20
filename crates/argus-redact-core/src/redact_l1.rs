@@ -52,7 +52,9 @@ use crate::data::builtin_patterns;
 use crate::grammar::normalize_grammar_en;
 use crate::hints::{filter_self_reference, get_person_threshold, produce_hints_l1, Hint};
 use crate::merger::merge_entities_with_text;
-use crate::normalize::{map_spans_to_original, normalize_text, normalize_text_for_person};
+use crate::normalize::{
+    finalize, map_spans_to_original, normalize_core, normalize_text_for_person,
+};
 use crate::patterns::{match_patterns, PatternConfig, PatternError};
 use crate::replace::{replace, FakerFactory, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
 use crate::reserved_range::{byte_to_char_offset, char_slice};
@@ -179,8 +181,16 @@ pub fn detect_l1(
             crate::MAX_INPUT_SIZE
         )));
     }
-    // 1. Normalize. use_normalized iff an offset map was produced.
-    let (normalized, offset_map) = normalize_text(text);
+    // 1. Normalize. The expensive steps 1–3 (invisible strip + accent fold +
+    //    confusables + per-char NFKC) run ONCE via `normalize_core`; the full
+    //    detect view and the person-detect view (step 7) both derive from that
+    //    same intermediate, so they STRUCTURALLY share char positions + offset
+    //    map (see step 7). `use_normalized` iff an offset map was produced.
+    let core = normalize_core(text);
+    let (normalized, offset_map) = match &core {
+        Some((chars, omap)) => finalize(chars, omap, text, true),
+        None => (text.to_string(), None),
+    };
     let use_normalized = offset_map.is_some();
     let detect_text: &str = if use_normalized { &normalized } else { text };
 
@@ -236,11 +246,13 @@ pub fn detect_l1(
     //    are in person-detect coords and map back to the ORIGINAL below (step 9),
     //    mirroring the layer1 map-back.
     //
-    //    The digit-sequence step is the ONLY length-preserving in-place value
-    //    substitution in the pipeline, so the person-detect-text shares the SAME
-    //    char positions and SAME offset map as the full-normalization `detect_text`
-    //    — only some char VALUES differ. Therefore `layer1_raw` (full-norm detect
-    //    coords) is coordinate-correct as the zh detector's `pii_entities`: its
+    //    Both the full `detect_text` and this person-detect-text derive from the
+    //    SAME `normalize_core` intermediate (steps 1–3 above) — they diverge only
+    //    in the step-4 digit fold, which is an in-place, length-preserving value
+    //    substitution. So the two views STRUCTURALLY share the SAME char positions
+    //    and SAME offset map; only some char VALUES differ. Therefore `layer1_raw`
+    //    (full-norm detect coords) is coordinate-correct as the zh detector's
+    //    `pii_entities` (`person_norm_same_positions_as_full_norm` guards this): its
     //    `.start`/`.end` line up with the person-detect-text. (The zh detector reads
     //    only `.start`/`.end`/`.type_` of pii_entities, never `.layer`, so passing
     //    the untagged `layer1_raw` rather than the LAYER_REGEX-tagged `layer1` is
@@ -251,7 +263,10 @@ pub fn detect_l1(
     //    SAME person normalization (a plain name folds to itself). Spans map back
     //    to the original below, so an accented/fullwidth known-name still restores
     //    correctly.
-    let (person_normalized, person_offset_map) = normalize_text_for_person(text);
+    let (person_normalized, person_offset_map) = match &core {
+        Some((chars, omap)) => finalize(chars, omap, text, false),
+        None => (text.to_string(), None),
+    };
     let person_use_normalized = person_offset_map.is_some();
     let person_detect_text: &str =
         if person_use_normalized { &person_normalized } else { text };
