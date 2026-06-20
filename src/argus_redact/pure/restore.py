@@ -38,12 +38,17 @@ def wipe_key(key: dict) -> None:
 
 def restore(
     text: str,
-    key: dict[str, str] | str,
+    key: Mapping[str, str],
     *,
     aliases: dict[str, tuple[str, ...]] | None = None,
     display_marker: str | None = None,
 ) -> str:
     """Replace pseudonyms with originals using the key.
+
+    `key` must be an in-memory mapping. The public
+    ``argus_redact.restore(...)`` entry point also accepts a ``str`` path to a
+    JSON key file; that file load happens in ``glue/restore.py`` (the I/O
+    boundary) so this pure function stays filesystem-free.
 
     `aliases` (v0.6.0+): optional dict mapping a fake to alternate
     transliterations. Each alias is also matched and mapped back to the
@@ -59,16 +64,8 @@ def restore(
     pass-through. See `PRESET_MARKER_CHARS` in `pure/display_marker.py` for
     the canonical preset character set.
     """
-    # JSON-key-from-path load stays in Python (I/O boundary; T8 is unaffected).
-    if isinstance(key, str):
-        import json
-
-        from argus_redact._safe_io import safe_read_text
-
-        key = json.loads(safe_read_text(key))
-
     if not isinstance(key, Mapping):
-        raise TypeError(f"key must be a Mapping or str (file path), got {type(key).__name__}")
+        raise TypeError(f"key must be a Mapping, got {type(key).__name__}")
 
     if not key:
         # Even with an empty key, an explicit display_marker should be stripped.

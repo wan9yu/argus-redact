@@ -382,6 +382,57 @@ class TestRestoreEmptyKeyShortCircuit:
         assert result == text
 
 
+class TestRestoreKeyFileLoadIsGlueOnly:
+    """The key-file path load is a glue concern; ``pure.restore.restore``
+    accepts only an in-memory Mapping. The public ``argus_redact.restore``
+    (glue wrapper) still accepts a ``str`` path for back-compat."""
+
+    def test_pure_restore_accepts_in_memory_mapping(self):
+        from argus_redact.pure.restore import restore as _pure_restore
+
+        result = _pure_restore("P-037 is here", {"P-037": "王五"})
+
+        assert result == "王五 is here"
+
+    def test_pure_restore_rejects_str_path(self):
+        # pure layer is I/O-free: a str is no longer a "load this file" signal.
+        from argus_redact.pure.restore import restore as _pure_restore
+
+        with pytest.raises(TypeError):
+            _pure_restore("text", "key.json")
+
+    def test_public_restore_loads_key_file_path(self, tmp_path):
+        import json
+
+        from argus_redact import restore as public_restore
+
+        key_path = tmp_path / "key.json"
+        key_path.write_text(json.dumps({"P-037": "王五"}), encoding="utf-8")
+
+        result = public_restore("P-037 是好人", str(key_path))
+
+        assert result == "王五 是好人"
+
+    def test_pure_restore_module_is_filesystem_free(self):
+        """Structural guard: pure/restore.py must not import the project's
+        filesystem helper or json (those moved to glue/restore.py)."""
+        import ast
+        from pathlib import Path
+
+        src = Path("src/argus_redact/pure/restore.py").read_text(encoding="utf-8")
+        tree = ast.parse(src)
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(n.name for n in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module)
+
+        assert "argus_redact._safe_io" not in imported
+        assert "json" not in imported
+        assert "pathlib" not in imported
+
+
 class TestRestoreAliasesMapBackToOriginal:
     """``aliases=`` lets restore() map alternative transliterations back to
     the same original. Key insight: if any alias is present in the key map's

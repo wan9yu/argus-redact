@@ -22,6 +22,10 @@ _FORBIDDEN = frozenset({
     "argus_redact.glue",
     "argus_redact.impure",
     "argus_redact.integrations",
+    # Filesystem I/O — the pure layer takes in-memory data only; any
+    # path → bytes/text load belongs in glue. _safe_io is the project's
+    # filesystem helper, so importing it from pure/ is itself a violation.
+    "argus_redact._safe_io",
     # Network I/O
     "httpx",
     "requests",
