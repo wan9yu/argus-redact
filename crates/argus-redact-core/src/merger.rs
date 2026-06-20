@@ -102,7 +102,23 @@ fn merge_priority(
         let last_priority = is_priority(&final_.last().unwrap().type_);
         let cur_priority = is_priority(&current.type_);
         if cur_priority && !last_priority {
-            let last = final_.last().unwrap().clone();
+            let last = final_.last().unwrap();
+            // A self_reference strictly INTERIOR to a non-priority entity (it starts
+            // after the entity start) is part of that entity's name, not a standalone
+            // pronoun: the container wins (whole-entity redaction) and the interior
+            // self_reference is dropped. Prevents the leading slice
+            // [last.start, current.start] from leaking
+            // (自我管理咨询有限公司 with interior 我[1,2] -> [ORG], not 自我[ORG]).
+            //
+            // The guard is strict (`>`, not `>=`): a self_reference at the entity
+            // START (current.start == last.start) is NOT swallowed — that is the
+            // "keep the leading pronoun" case (我在阿里巴巴有限公司 -> 我[ORG]), where
+            // the sr must keep splitting the over-greedy entity so the pronoun
+            // survives. Only an interior sr (a head exists to leak) yields here.
+            if current.start > last.start && current.end <= last.end {
+                continue; // drop the contained self_reference; keep the container
+            }
+            let last = last.clone();
             let trimmed = trim_entity(&last, current.end, text);
             let idx = final_.len() - 1;
             final_[idx] = current;
@@ -209,6 +225,17 @@ mod tests {
     }
 
     #[test]
+    fn interior_self_reference_does_not_split_container() {
+        let text = "自我管理咨询有限公司";
+        let org = pmt("自我管理咨询有限公司", "organization", 0, 10, 1.0, 0);
+        let sr = pmt("我", "self_reference", 1, 2, 1.0, 0);
+        let out = merge_entities_with_text(vec![org, sr], text);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].type_, "organization");
+        assert_eq!((out[0].start, out[0].end), (0, 10));
+    }
+
+    #[test]
     fn priority_partial_overlap_sr_first() {
         // sr [0,3] precedes an overlapping `other` [2,6]; sr wins, other trimmed
         // to start at sr.end=3. Live Python:
@@ -245,12 +272,12 @@ mod tests {
     }
 
     #[test]
-    fn priority_containment_other_contains_sr() {
-        // `other` [0,6] fully contains sr [2,4]; sr wins and `other` is split —
-        // the trailing remainder [4,6] survives (the leading [0,2] is consumed
-        // because the merged-others entity is replaced by sr in the same slot).
-        // Live Python:
-        //   ('cd','self_reference',2,4,1.0,1), ('ef','other',4,6,1.0,1)
+    fn priority_containment_other_wins() {
+        // `other` [0,6] fully contains sr [2,4]: the sr is part of the container's
+        // span (an interior pronoun inside a real entity name), so the container
+        // wins INTACT and the contained sr is dropped — no whole-entity split, no
+        // leading-slice [0,2] leak. (Previously this split to sr + tail [4,6],
+        // dropping the leading 'ab'; that was the partial-leak defect.)
         let out = merge_entities_with_text(
             vec![
                 pmt("abcdef", "other", 0, 6, 1.0, 1),
@@ -258,19 +285,56 @@ mod tests {
             ],
             "abcdefghij",
         );
+        assert_merged(&out, &[("abcdef", "other", 0, 6, 1.0, 1)]);
+    }
+
+    #[test]
+    fn standalone_self_reference_outside_entity_kept() {
+        // A self_reference [0,1] that is NOT inside any entity (a standalone
+        // pronoun) is preserved after merge — the containment guard must not
+        // swallow it. The phone [3,14] is disjoint; both survive, start-sorted.
+        let out = merge_entities_with_text(
+            vec![
+                pmt("我", "self_reference", 0, 1, 1.0, 0),
+                pmt("13800138000x", "phone", 3, 14, 1.0, 0),
+            ],
+            "我 x 13800138000x",
+        );
+        assert_eq!(out.len(), 2);
         assert_merged(
             &out,
             &[
-                ("cd", "self_reference", 2, 4, 1.0, 1),
-                ("ef", "other", 4, 6, 1.0, 1),
+                ("我", "self_reference", 0, 1, 1.0, 0),
+                ("13800138000x", "phone", 3, 14, 1.0, 0),
             ],
         );
     }
 
     #[test]
+    fn partial_overlap_sr_not_contained_keeps_split() {
+        // org [0,10] is followed by an sr [8,12] that extends PAST the org end —
+        // the sr is NOT fully contained, so the old priority-split behavior holds:
+        // the sr wins and the org is trimmed to start at sr.end=12 (nothing left,
+        // 12 >= 10), leaving the sr alone.
+        let text = "organizatio我我";
+        let out = merge_entities_with_text(
+            vec![
+                pmt("organizati", "organization", 0, 10, 1.0, 0),
+                pmt("o我我", "self_reference", 8, 12, 1.0, 0),
+            ],
+            text,
+        );
+        assert_merged(&out, &[("o我我", "self_reference", 8, 12, 1.0, 0)]);
+    }
+
+    #[test]
     fn priority_same_span_sr_wins() {
         // sr and `other` share the exact span [0,2]; the priority entity wins.
-        // Live Python: ('ab','self_reference',0,2,1.0,1)
+        // Same-span is NOT interior containment (current.start == last.start, no
+        // leading slice to leak), so the containment guard (current.start >
+        // last.start) does not fire — the sr keeps winning the tie as before, so
+        // tier-filtering can still decide its fate. Live Python:
+        //   ('ab','self_reference',0,2,1.0,1)
         let out = merge_entities_with_text(
             vec![
                 pmt("ab", "other", 0, 2, 1.0, 1),
@@ -320,6 +384,9 @@ mod tests {
     #[test]
     fn priority_trim_drops_u001c_only_remainder() {
         // self_reference [0,1] "我" overlaps other [0,3] "我\u{1c}\u{1c}".
+        // The sr starts AT the entity start (current.start == last.start), so this
+        // is prefix-aligned, not interior containment — the containment guard
+        // (current.start > last.start) does not fire and the sr keeps winning.
         // Trimming other to start at 1 → "\u{1c}\u{1c}" → py_strip empty → dropped
         // (Python str.strip() trims U+001C–001F; str::trim() would not, leaving a
         // garbage entity). Locks the py_strip parity fix.
