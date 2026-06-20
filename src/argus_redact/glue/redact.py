@@ -321,8 +321,12 @@ def _detect(
                 entities.extend(layer3_matches)
                 layer3_count += len(layer3_matches)
                 layer3_status = "ok"
-            except Exception:
-                logger.warning("Layer 3 semantic detection failed", exc_info=True)
+            except Exception as exc:
+                # Type only, never exc_info=True: a full traceback can embed
+                # input fragments from the adapter call frames.
+                logger.warning(
+                    "Layer 3 semantic detection failed: %s", type(exc).__name__
+                )
                 layer3_status = "error"
                 warnings.warn(
                     "mode='auto': Layer-3 semantic detection failed; continuing "
