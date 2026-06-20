@@ -24,6 +24,60 @@ from .report import print_comparison, print_report
 RESULTS_DIR = Path(__file__).parent / "results"
 
 
+def _per_type_dict(result) -> dict:
+    """Per-type {precision,recall,f1 (as %), tp,fp,fn} for one Result.
+
+    Percentages match the overall mode block (1-decimal %), so a reader can
+    compare a per-type row against the overall row without unit conversion.
+    """
+    return {
+        etype: {
+            "precision": round(m.precision * 100, 1),
+            "recall": round(m.recall * 100, 1),
+            "f1": round(m.f1 * 100, 1),
+            "tp": m.tp,
+            "fp": m.fp,
+            "fn": m.fn,
+        }
+        for etype, m in sorted(result.per_type.items())
+    }
+
+
+def build_payload(ds_name: str, ds_results: list) -> dict:
+    """Build the saved-result JSON for one dataset's runs (one per mode).
+
+    Shape (backward-compatible — only adds keys):
+      * top-level ``version`` (human label) + ``package_version_string``
+        (``argus_redact.__version__``, what the build self-reports)
+      * ``modes[mode]`` keeps the overall ``precision/recall/f1`` AND gains a
+        ``per_type`` block (per-type {precision,recall,f1,tp,fp,fn})
+      * ``per_type_{mode}`` — the same per-type block flattened to the top level
+        (the form the en precision-floor test reads as ``per_type_fast``)
+    """
+    first = ds_results[0]
+    modes: dict = {}
+    per_type_flat: dict = {}
+    for r in ds_results:
+        per_type = _per_type_dict(r)
+        modes[r.mode] = {
+            "precision": round(r.precision * 100, 1),
+            "recall": round(r.recall * 100, 1),
+            "f1": round(r.f1 * 100, 1),
+            "per_type": per_type,
+        }
+        per_type_flat[f"per_type_{r.mode}"] = per_type
+    return {
+        "version": __version__,
+        "package_version_string": __version__,
+        "dataset": ds_name,
+        "language": first.lang,
+        "samples": first.n_samples,
+        "modes": modes,
+        **per_type_flat,
+        "date": datetime.date.today().isoformat(),
+    }
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="benchmarks",
@@ -89,22 +143,7 @@ def main(argv: list[str] | None = None) -> None:
             ds_results.append(result)
 
         if args.save and ds_results:
-            first = ds_results[0]
-            payload = {
-                "version": __version__,
-                "dataset": ds_name,
-                "language": first.lang,
-                "samples": first.n_samples,
-                "modes": {
-                    r.mode: {
-                        "precision": round(r.precision * 100, 1),
-                        "recall": round(r.recall * 100, 1),
-                        "f1": round(r.f1 * 100, 1),
-                    }
-                    for r in ds_results
-                },
-                "date": datetime.date.today().isoformat(),
-            }
+            payload = build_payload(ds_name, ds_results)
             save_path = Path(args.save)
             save_path.parent.mkdir(parents=True, exist_ok=True)
             save_path.write_text(
