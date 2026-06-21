@@ -17,6 +17,12 @@ _core*.so
 target/
 .venv/
 
+# wasm-pack build output — a generated artifact (CI regenerates + attaches it to
+# the GH release). wasm-pack also writes a pkg/.gitignore of `*`, but ignore it at
+# the repo root too so no variant (bundler / nodejs / web out-dir) is ever staged.
+crates/argus-redact-wasm/pkg/
+crates/argus-redact-wasm/pkg-*/
+
 # member-level lock files would shadow the workspace-root lock
 crates/*/Cargo.lock
 

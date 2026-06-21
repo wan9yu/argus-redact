@@ -17,6 +17,14 @@ console_error_panic_hook = { version = "0.1", optional = true }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
+serde_json = { workspace = true }
 
 [features]
 default = ["console_error_panic_hook"]
+
+# wasm-pack reads this. `wasm-opt = false` keeps `wasm-pack build` from fetching a
+# binaryen release at build time (a network dependency that is also arch-mismatched
+# on Apple Silicon). The artifact is unoptimized but functional; the P1.4 CI job
+# runs `wasm-opt` separately when producing the published, size-optimized package.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
