@@ -2,6 +2,31 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.7.11 — In-browser WASM build
+
+Adds a WebAssembly build for fully in-browser PII redaction, plus maintenance.
+**No change to Python/crates behavior** — the supporting core refactors are
+parity-preserving (golden vectors byte-identical to v0.7.10); zero migration.
+
+### Added
+- **`argus-redact-wasm`** — a WebAssembly build (wasm-bindgen) exposing fast-mode
+  `redact()` / `restore()` and a streaming `StreamingRedactor` (`feed`/`flush`),
+  for browser + Node, all 8 languages, all built-in types + strategies. Shipped
+  as the `pkg/` artifact on the GitHub release (not published to npm). Output is
+  byte-identical to the native fast-mode engine (same detection, realistic fakes,
+  and pseudonym codes). ~823 KB gzipped.
+
+### Internal (parity-preserving, no output change)
+- The last replace-path logic moved into the Rust core so the PyO3 binding and
+  the WASM build share one implementation (SSOT): built-in `TypeInfo` assembly,
+  the pseudonym RNG (a CPython-exact MT19937 port that removes the CPython
+  `random` dependency), and the streaming carry-window state machine (the Python
+  `StreamingRedactor`/`StreamingRestorer` are now thin shims). Golden vectors
+  unchanged.
+
+### Chore
+- Bump `actions/checkout` to v7.0.0 and `taiki-e/install-action` to v2.82.2.
+
 ## v0.7.10 — Detection-correctness closeout
 
 A focused follow-up to v0.7.9 that closes three detection-correctness gaps from
