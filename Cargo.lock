@@ -42,7 +42,6 @@ dependencies = [
  "console_error_panic_hook",
  "serde",
  "serde-wasm-bindgen",
- "sha3",
  "wasm-bindgen",
  "wasm-bindgen-test",
 ]

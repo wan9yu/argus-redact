@@ -65,6 +65,49 @@ fn redact_masks_and_restores() {
     assert_eq!(restored, original, "roundtrip must recover the original");
 }
 
+/// Cross-runtime pseudonym parity: wasm now mints `P-NNNNN` codes from the SAME
+/// CPython-exact MT19937 (`MtRandomSource`) the Python wheel uses, so for a fixed
+/// `(text, salt)` the code is byte-identical to what the Python build produces.
+///
+/// The expected code below was captured from the Python wheel:
+///   redact("Contact Alice Johnson at the office.", salt=42, mode="fast",
+///          lang="en", names=["Alice Johnson"])  →  "Contact P-83811 at the office."
+/// Before this change wasm used a divergent SHAKE stream and produced a DIFFERENT
+/// code; this test pins the parity that now holds.
+#[wasm_bindgen_test]
+fn pseudonym_code_matches_python_wheel() {
+    #[derive(Serialize)]
+    struct EnOpts {
+        lang: String,
+        mode: String,
+        salt: i64,
+        names: Vec<String>,
+    }
+    let original = "Contact Alice Johnson at the office.";
+    let opts = serde_wasm_bindgen::to_value(&EnOpts {
+        lang: "en".to_string(),
+        mode: "fast".to_string(),
+        salt: 42,
+        names: vec!["Alice Johnson".to_string()],
+    })
+    .unwrap();
+
+    let result_js = redact(original, opts).expect("redact should succeed");
+    let result: RedactOut = serde_wasm_bindgen::from_value(result_js).unwrap();
+
+    // The exact code the Python wheel produces for this (text, salt) — proves the
+    // wasm MT19937 stream is byte-identical to CPython's random.Random(seed).
+    assert_eq!(
+        result.text, "Contact P-83811 at the office.",
+        "wasm pseudonym code must match the Python wheel's code"
+    );
+    assert_eq!(
+        result.key.get("P-83811").map(String::as_str),
+        Some("Alice Johnson"),
+        "key must map the Python-identical code back to the original"
+    );
+}
+
 #[wasm_bindgen_test]
 fn non_fast_mode_rejected() {
     #[derive(Serialize)]

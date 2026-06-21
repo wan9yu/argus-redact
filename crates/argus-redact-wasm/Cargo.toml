@@ -13,7 +13,6 @@ argus-redact-core = { path = "../argus-redact-core" }
 wasm-bindgen = "0.2"
 serde-wasm-bindgen = "0.6"
 serde = { workspace = true }
-sha3 = { workspace = true }
 console_error_panic_hook = { version = "0.1", optional = true }
 
 [dev-dependencies]

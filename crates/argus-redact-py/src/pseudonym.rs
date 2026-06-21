@@ -2,66 +2,63 @@ use std::collections::HashMap;
 
 use pyo3::prelude::*;
 
-use argus_redact_core::{PseudonymGenerator, RandomSource};
+use argus_redact_core::{MtRandomSource, PseudonymGenerator, RandomSource};
 
-/// RandomSource backed by Python: random.Random(seed).randint (seeded) or
-/// secrets.randbelow (unseeded). Preserves the exact call sequence the
-/// pre-split code used, so seeded bit streams reproduce.
+/// RandomSource for the pseudonym generator. Two paths:
+/// - **Seeded** (`salt`/`seed` given): a pure-Rust, CPython-exact MT19937
+///   ([`MtRandomSource`] in the core). This reproduces `random.Random(seed)`
+///   byte-for-byte WITHOUT calling into CPython's `random` module — the same
+///   single implementation the wasm crate uses, so the `P-NNNNN` code stream is
+///   identical across the Python wheel and wasm (SSOT).
+/// - **Unseeded** (`seed == None`): non-deterministic `secrets.randbelow`. This
+///   path is Python-only (there is no host entropy source in wasm) and carries no
+///   cross-runtime parity concern, so it stays in the binding.
 ///
-/// Note: the trait methods return `u32` (not `PyResult`), so a Python-side RNG
-/// failure surfaces as a Rust panic, which PyO3 converts to a Python
-/// `PanicException` at the `#[pymethods]` boundary (no `panic = "abort"` in the
-/// workspace, so it unwinds — not a process abort). The pre-split code raised a
-/// normal `PyErr`. In practice these are stdlib calls on validated `u32` inputs
-/// that do not fail; the difference is the exception *type* on the theoretical
-/// error path, not behavior on the happy path.
-pub(crate) struct PyRandomSource {
-    /// random.Random instance (seeded), or None (secrets/unseeded).
-    rng: Option<Py<PyAny>>,
-    use_secrets: bool,
+/// Note: the trait methods return `u32` (not `PyResult`). The seeded path is now
+/// pure Rust and cannot fail. The unseeded `secrets` call, on the theoretical
+/// error path, surfaces as a Rust panic → PyO3 `PanicException` at the
+/// `#[pymethods]` boundary (no `panic = "abort"` in the workspace, so it unwinds —
+/// not a process abort). In practice it is a stdlib call on a validated `u32` that
+/// does not fail; the difference is the exception *type*, not happy-path behavior.
+pub(crate) enum PyRandomSource {
+    /// Seeded: CPython-exact MT19937, pure Rust, no `random` module call.
+    Seeded(MtRandomSource),
+    /// Unseeded: `secrets.randbelow` (non-deterministic, Python-only).
+    Secrets,
 }
 
 impl PyRandomSource {
-    /// Mint a source for an optional `u64` seed: `random.Random(seed)` when
-    /// `Some` (seeded), `secrets` when `None` (unseeded). Same construction the
-    /// `replace` orchestrator's `PseudoFactory` relies on, so seeded bit streams
-    /// reproduce identically across the standalone generator and the orchestrator.
+    /// Mint a source for an optional `u64` seed: the core MT19937 (CPython-exact)
+    /// when `Some` (seeded), `secrets` when `None` (unseeded). Same construction
+    /// the `replace` orchestrator's `PseudoFactory` relies on, so seeded bit
+    /// streams reproduce identically across the standalone generator and the
+    /// orchestrator.
     ///
     /// Seeded predictability caveat: with a seed/salt, the `P-NNNNN` codes are
-    /// drawn from a Mersenne-Twister (MT19937) stream — CPython's `random.Random`.
-    /// MT19937 is deterministic and not cryptographic: given enough observed
-    /// outputs the stream is, in principle, recoverable, so codes are predictable
-    /// and linkable across redactions that share the same seed/salt. This is a
-    /// low-severity property because the code is an opaque sequence label, not
-    /// derived from the original value — it carries no PII-bearing information. It
-    /// is a deterministic-but-predictable label, not a cryptographic commitment.
-    /// Unseeded mode draws from `secrets` instead (see `randbelow`), which is not
-    /// reproducible and not subject to this caveat.
+    /// drawn from a Mersenne-Twister (MT19937) stream — CPython's `random.Random`,
+    /// now reimplemented in the core. MT19937 is deterministic and not
+    /// cryptographic: given enough observed outputs the stream is, in principle,
+    /// recoverable, so codes are predictable and linkable across redactions that
+    /// share the same seed/salt. This is a low-severity property because the code
+    /// is an opaque sequence label, not derived from the original value — it
+    /// carries no PII-bearing information. It is a deterministic-but-predictable
+    /// label, not a cryptographic commitment. Unseeded mode draws from `secrets`
+    /// instead (see `randbelow`), which is not reproducible and not subject to
+    /// this caveat.
     pub(crate) fn for_seed(seed: Option<u64>) -> Self {
         match seed {
-            Some(s) => Python::attach(|py| {
-                let random_mod = py.import("random").expect("import random failed");
-                let rng_obj = random_mod
-                    .call_method1("Random", (s,))
-                    .expect("random.Random(seed) failed");
-                PyRandomSource { rng: Some(rng_obj.unbind()), use_secrets: false }
-            }),
-            None => PyRandomSource { rng: None, use_secrets: true },
+            Some(s) => PyRandomSource::Seeded(MtRandomSource::for_seed(s)),
+            None => PyRandomSource::Secrets,
         }
     }
 }
 
 impl RandomSource for PyRandomSource {
     fn randint(&mut self, lo: u32, hi: u32) -> u32 {
-        Python::attach(|py| {
-            self.rng
-                .as_ref()
-                .expect("randint called without a seeded rng")
-                .call_method1(py, "randint", (lo, hi))
-                .expect("random.Random.randint failed")
-                .extract(py)
-                .expect("randint result not u32")
-        })
+        match self {
+            PyRandomSource::Seeded(mt) => mt.randint(lo, hi),
+            PyRandomSource::Secrets => panic!("randint called without a seeded rng"),
+        }
     }
 
     fn randbelow(&mut self, range: u32) -> u32 {
@@ -76,7 +73,7 @@ impl RandomSource for PyRandomSource {
     }
 
     fn use_secrets(&self) -> bool {
-        self.use_secrets
+        matches!(self, PyRandomSource::Secrets)
     }
 }
 

@@ -7,18 +7,20 @@
 //! There are NO custom Python fakers — the `realistic` strategy resolves only the
 //! built-in (`ShakeRng`-backed) fakers that already live in core.
 //!
-//! ## Pseudonym codes are NOT Python-MT-compatible (and that's fine)
+//! ## Pseudonym codes ARE Python-MT-compatible (true cross-runtime parity)
 //!
 //! The `pseudonym` strategy (and `remove`'s pseudonym fallback) mints `P-NNNNN`
-//! codes from a [`RandomSource`]. The PyO3 path threads Python's Mersenne-Twister
-//! to reproduce the frozen `P-NNNNN` codes; wasm has no Python, so it uses a
-//! pure-Rust, salt-seeded SHAKE-256 source ([`WasmRng`]). The codes therefore
-//! DIFFER from the Python wheel's codes — but they are (a) deterministic for a
-//! given salt and (b) fully restorable, because `restore` keys off the returned
-//! `key` map, never the code's value. The forward-secure "same salt → same fake"
-//! property holds within the wasm build. (Cross-runtime code parity is out of
-//! scope for fast-mode wasm; the realistic strategy IS byte-identical to Python
-//! because its `ShakeRng` faker stream lives entirely in core.)
+//! codes from a [`RandomSource`]. Both the PyO3 path and wasm now use the SAME
+//! seeded source: [`MtRandomSource`], a CPython-exact MT19937 living in the core.
+//! It reproduces `random.Random(seed)` byte-for-byte with no Python dependency, so
+//! the wasm codes are IDENTICAL to the Python wheel's codes for the same
+//! `(text, salt)`. One implementation (SSOT), one stream, true cross-runtime
+//! parity. The codes are (a) deterministic for a given salt and (b) fully
+//! restorable, because `restore` keys off the returned `key` map.
+//!
+//! wasm only supports the seeded path (a salt is required — there is no host
+//! entropy source for the unseeded `secrets` path); an absent salt is folded to a
+//! fixed seed so unsalted pseudonym redaction is still deterministic in wasm.
 
 use std::collections::{HashMap, HashSet};
 
@@ -29,80 +31,22 @@ use argus_redact_core::redact_l1::{redact_l1, RedactL1Args};
 use argus_redact_core::restore::restore_full;
 use argus_redact_core::seed::Salt;
 use argus_redact_core::typeinfo::{build_type_info, Config, EntityConfig};
-use argus_redact_core::{kinship_exact, PseudoFactory, RandomSource, SELF_REF_PRONOUNS};
+use argus_redact_core::{kinship_exact, MtRandomSource, PseudoFactory, SELF_REF_PRONOUNS};
 
-// ── pure-Rust pseudonym RNG (no Python MT) ──────────────────────────────────
+// ── pseudonym RNG: the core's CPython-exact MT19937 (shared with PyO3) ───────
 
-/// A deterministic [`RandomSource`] for the pseudonym generator, seeded by the
-/// effective salt-derived `u64`. Uses the SHAKE-256 XOF (same primitive the
-/// realistic fakers use) so the stream is reproducible from the seed alone, with
-/// no host RNG. `use_secrets()` is always `false` — wasm always takes the seeded
-/// `randint` branch (the unseeded `secrets` path needs a host entropy source we
-/// deliberately do not wire in for determinism).
-struct WasmRng {
-    reader: sha3::Shake256Reader,
-}
-
-impl WasmRng {
-    fn new(seed: u64) -> Self {
-        use sha3::digest::{ExtendableOutput, Update};
-        let mut h = sha3::Shake256::default();
-        // Domain-separate from the realistic-faker stream so an attacker cannot
-        // align the two; the exact label is irrelevant to correctness.
-        h.update(b"argus-wasm-pseudonym\0");
-        h.update(&seed.to_be_bytes());
-        Self { reader: h.finalize_xof() }
-    }
-
-    /// Uniform integer in `[lo, hi]` via rejection sampling — same byte math as
-    /// `core::ShakeRng::randint`, so the implementation is uniform (no modulo bias).
-    fn uniform(&mut self, lo: u32, hi: u32) -> u32 {
-        use sha3::digest::XofReader;
-        debug_assert!(hi >= lo);
-        let rng = (hi as u128) - (lo as u128) + 1;
-        let bits = 128 - (rng - 1).leading_zeros();
-        let bytes_needed = std::cmp::max(1, ((bits + 7) / 8) as usize);
-        let space: u128 = 1u128 << (bytes_needed * 8);
-        let max_unbiased = space - (space % rng);
-        loop {
-            let mut buf = vec![0u8; bytes_needed];
-            self.reader.read(&mut buf);
-            let mut n: u128 = 0;
-            for b in &buf {
-                n = (n << 8) | (*b as u128);
-            }
-            if n < max_unbiased {
-                return lo + (n % rng) as u32;
-            }
-        }
-    }
-}
-
-impl RandomSource for WasmRng {
-    fn randint(&mut self, lo: u32, hi: u32) -> u32 {
-        self.uniform(lo, hi)
-    }
-    fn randbelow(&mut self, range: u32) -> u32 {
-        // Only reached if `use_secrets()` returned true — it never does here, but
-        // keep it correct (uniform over [0, range)).
-        self.uniform(0, range.saturating_sub(1))
-    }
-    fn use_secrets(&self) -> bool {
-        false
-    }
-}
-
-/// [`PseudoFactory`] minting a fresh [`WasmRng`] per (seed) — mirrors how
-/// `PyPseudoFactory` mints a Python-backed source, but with the pure-Rust stream.
-/// An absent seed (`None`) would normally route core to the `secrets` path; we
-/// fold `None` to a fixed seed so unsalted pseudonym redaction is still
-/// deterministic in wasm (there is no host entropy source).
+/// [`PseudoFactory`] minting a fresh [`MtRandomSource`] per (seed) — the SAME
+/// CPython-exact MT19937 the PyO3 binding uses, so the `P-NNNNN` codes are
+/// byte-identical to the Python wheel for the same `(text, salt)`. An absent seed
+/// (`None`) would normally route core to the `secrets` path, which has no host
+/// entropy source in wasm; we fold `None` to a fixed seed (`0`) so unsalted
+/// pseudonym redaction is still deterministic in wasm.
 struct WasmPseudoFactory;
 
 impl PseudoFactory for WasmPseudoFactory {
-    type Source = WasmRng;
-    fn make(&self, seed: Option<u64>) -> WasmRng {
-        WasmRng::new(seed.unwrap_or(0))
+    type Source = MtRandomSource;
+    fn make(&self, seed: Option<u64>) -> MtRandomSource {
+        MtRandomSource::for_seed(seed.unwrap_or(0))
     }
 }
 
