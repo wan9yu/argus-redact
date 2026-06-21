@@ -33,6 +33,7 @@ pub mod reserved_range;
 pub mod replace;
 pub mod typeinfo;
 pub mod redact_l1;
+pub mod streaming;
 
 pub use types::PatternMatch;
 pub use merger::{merge_entities, merge_entities_with_text};
@@ -63,3 +64,8 @@ pub use reserved_range::{scan_for_pollution, reserved_range_patterns};
 pub use replace::{replace, FakerFactory, FakerResolution, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
 pub use typeinfo::{build_type_info, Config, EntityConfig};
 pub use redact_l1::{detect_l1, redact_l1, DetectL1Result, RedactL1Args};
+pub use streaming::{
+    bounded_carry, carry_cut_index, consume_to_boundary, consume_to_boundary_detect,
+    last_boundary_index, restorer_split, DetectSpans, EmitResult, RedactSegment, RestoreStrategy,
+    StreamingRedactor, StreamingRestorer, CARRY_WINDOW, DEFAULT_MAX_BUFFER,
+};

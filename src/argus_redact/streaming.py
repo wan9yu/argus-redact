@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import warnings
 
+from argus_redact._core_loader import _core
 from argus_redact._types import PseudonymLLMResult
 from argus_redact.glue._detect_partial import _consume_to_boundary
 from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
@@ -87,25 +88,29 @@ class StreamingRestorer:
         self._strategy = strategy
 
     def feed(self, chunk: str) -> str:
-        """Feed a chunk. Returns restored text based on strategy."""
+        """Feed a chunk. Returns restored text based on strategy.
+
+        The boundary split delegates to ``_core.streaming_restorer_split`` (the
+        SSOT), which shares the redactor's ``_last_boundary_index`` rule: ``\\n``
+        and the CJK ``。！？；`` always count; the ASCII ``.!?;`` count ONLY when
+        the next buffer char is whitespace, and NEVER at the buffer end. A bare
+        trailing ASCII ``.`` is ambiguous — it can be a realistic fake's internal
+        dot (``user16068@example.net``, an IPv4 octet) sitting at the rightmost
+        position of this ``feed``. Flushing on it would emit a half-token
+        (``…@example.``) and restore the fragment, leaving the pseudonym
+        unrestored; so the split holds the dot until the next chunk disambiguates.
+        Returns ``(complete, residual)`` (``("", buffer)`` when no real boundary
+        is present).
+        """
         if self._strategy == "none":
             return restore(chunk, self._key)
 
         self._buffer += chunk
 
-        # Find last sentence boundary
-        last_boundary = -1
-        for b in self.BOUNDARIES:
-            pos = self._buffer.rfind(b)
-            if pos > last_boundary:
-                last_boundary = pos
-
-        if last_boundary == -1:
+        complete, residual = _core.streaming_restorer_split(self._buffer)
+        if not complete:
             return ""
-
-        # Split at boundary, restore the complete part
-        complete = self._buffer[: last_boundary + 1]
-        self._buffer = self._buffer[last_boundary + 1 :]
+        self._buffer = residual
         return restore(complete, self._key)
 
     def flush(self) -> str:
