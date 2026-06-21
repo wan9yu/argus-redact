@@ -151,13 +151,14 @@ Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张�
 
 ## Performance
 
-Rust core (PyO3) — M1 Max, `mode="fast"`:
+Rust core (PyO3), `mode="fast"` — p50, Apple M-series, Python 3.11. Reproduce
+with `python tests/benchmark/bench_l1_rust_vs_python.py`:
 
 | Text | redact() | restore() | Throughput |
 |------|:--------:|:---------:|:----------:|
-| Short (17 chars) | 0.07ms | 0.04ms | 13,036 docs/sec |
-| Medium (770 chars) | 1.00ms | 0.05ms | 1,031 docs/sec |
-| Long (10K chars) | 22.2ms | 0.05ms | 45 docs/sec |
+| Short (17 chars) | 0.03ms | <0.01ms | ~29,000 docs/sec |
+| Medium (770 chars) | 0.75ms | 0.15ms | ~1,330 docs/sec |
+| Long (10K chars) | 9.3ms | 0.18ms | ~107 docs/sec |
 
 Pre-built wheels for all major platforms — no Rust toolchain needed to install:
 

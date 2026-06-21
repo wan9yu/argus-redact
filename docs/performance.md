@@ -55,8 +55,8 @@ After first load, models stay cached in memory for subsequent calls.
 |-------------|---------|---------|---------|
 | 100 chars | < 1ms | ~15ms | ~300ms |
 | 1,000 chars | < 1ms | ~30ms | ~500ms |
-| 10,000 chars | ~1ms | ~100ms | ~2s |
-| 100,000 chars | ~5ms | ~500ms | ~15s |
+| 10,000 chars | ~8ms | ~100ms | ~2s |
+| 100,000 chars | ~80ms | ~500ms | ~15s |
 
 Layer 2 and 3 process text in chunks (512 tokens). Latency scales linearly with chunk count.
 
@@ -127,7 +127,7 @@ v0.1 is Python. Performance-critical paths are candidates for Rust rewrite (via 
 
 | Component | Language | Rationale |
 |-----------|----------|-----------|
-| Layer 1 regex engine | Python → **Rust** | 100x faster regex on bulk workloads |
+| Layer 1 regex engine | Python → **Rust** (done v0.7.8) | ~3x faster regex measured (en; see [perf-history.md](perf-history.md)) |
 | `restore()` string replacement | Python → **Rust** | Critical for streaming and bulk |
 | Key management | Python → **Rust** | Memory safety — no GC residue of sensitive mappings |
 | Layer 2/3 model inference | Python | Bottleneck is the model, not the language |

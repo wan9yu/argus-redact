@@ -212,21 +212,27 @@ dataset is almost entirely names.
 
 ## 4. Performance
 
-### Latency (M1 Max)
+### Latency
 
-| Text size | Layer 1 (regex) | Layer 1+2 (NER) |
+`redact(mode="fast")` p50 — Apple M-series, Python 3.11. Reproduce with
+`python tests/benchmark/bench_l1_rust_vs_python.py`. The NER column is the
+Layer 1+2 path and is approximate (not re-measured by the same script).
+
+| Text size | Layer 1 (fast) | Layer 1+2 (NER) |
 |-----------|-----------------|-----------------|
-| Short (17 chars) | 0.06ms | ~15ms |
-| Medium (770 chars) | 0.36ms | ~30ms |
-| Long (10K chars) | 4.84ms | ~100ms |
-| `restore()` | 0.01ms | 0.01ms |
+| Short (17 chars) | 0.03ms | ~15ms |
+| Medium (770 chars) | 0.75ms | ~30ms |
+| Long (10K chars) | 9.3ms | ~100ms |
+| `restore()` | <0.01–0.18ms | <0.01–0.18ms |
 
 ### Throughput
 
+`mode="fast"`, same machine/corpus as above:
+
 | Scenario | argus-redact (fast) | Presidio |
 |----------|:------------------:|:--------:|
-| Short docs | 36,353 docs/s | ~5 docs/s |
-| Medium docs | 2,802 docs/s | ~5 docs/s |
+| Short docs | ~29,000 docs/s | ~5 docs/s |
+| Medium docs | ~1,330 docs/s | ~5 docs/s |
 
 argus-redact in `fast` mode is **~1000x faster** than Presidio for regex-detectable PII, because Presidio always runs NER models even for pattern-based entities.
 
@@ -246,7 +252,7 @@ argus-redact in `fast` mode is **~1000x faster** than Presidio for regex-detecta
 | **Structured data** (JSON/CSV) | **Yes** | No | **Yes** | No |
 | **Streaming restore** | **Yes** | No | No | No |
 | **MCP Server** | **Yes** | No | Yes (commercial) | No |
-| Regex speed | 36K docs/s | ~5 docs/s | N/A | N/A |
+| Regex speed | ~29K docs/s | ~5 docs/s | N/A | N/A |
 | Open source | Apache 2.0 | Apache 2.0 | Proprietary | MIT |
 
 ---
