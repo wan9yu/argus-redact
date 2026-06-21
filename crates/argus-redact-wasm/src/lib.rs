@@ -28,6 +28,7 @@ use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 
 use argus_redact_core::redact_l1::{detect_l1, redact_l1, RedactL1Args};
 use argus_redact_core::restore::restore_full;
@@ -97,10 +98,18 @@ struct EntityConfigOpt {
     visible_suffix: Option<usize>,
 }
 
-/// The full `redact` options object. Unknown fields are rejected so a typo (e.g.
-/// `langs` for `lang`) surfaces loudly rather than being silently ignored.
+/// The full `redact` options object. Unknown keys are rejected (by
+/// [`reject_unknown_opts`], called at every opts entry point) so a typo such as
+/// `langs` for `lang` surfaces loudly rather than being silently ignored — a
+/// silently-dropped `lang` would fall back to the `zh` default and skip the
+/// detectors the caller meant to run, leaking PII with no error.
+///
+/// Note: serde's `deny_unknown_fields` is a NO-OP under `serde-wasm-bindgen` (its
+/// Deserializer resolves fields by name and never enforces it), so the guarantee
+/// is delivered by the runtime key-check in [`reject_unknown_opts`], not by serde.
+/// `KNOWN_OPTS_KEYS` must stay in sync with the fields below.
 #[derive(Deserialize, Default)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 struct RedactOpts {
     lang: Option<StringOrVec>,
     mode: Option<String>,
@@ -108,6 +117,43 @@ struct RedactOpts {
     config: Option<HashMap<String, EntityConfigOpt>>,
     names: Option<Vec<String>>,
     unified_prefix: Option<String>,
+}
+
+/// The exact set of keys [`RedactOpts`] understands. Kept next to the struct so the
+/// two stay in lockstep; [`reject_unknown_opts`] rejects any key not in this set.
+const KNOWN_OPTS_KEYS: &[&str] = &["lang", "mode", "salt", "config", "names", "unified_prefix"];
+
+/// Reject any opts key not in [`KNOWN_OPTS_KEYS`] with a clear JS `Error`. This is
+/// the runtime enforcement of the documented "a typo surfaces loudly" guarantee
+/// (serde's `deny_unknown_fields` does not fire under `serde-wasm-bindgen`).
+///
+/// A non-object `opts` (e.g. a `Map`, a string) is left for the deserializer to
+/// reject; `undefined` / `null` are accepted (they mean "use defaults") and handled
+/// by the callers before this is reached.
+fn reject_unknown_opts(opts: &JsValue) -> Result<(), JsValue> {
+    let obj: &js_sys::Object = match opts.dyn_ref::<js_sys::Object>() {
+        Some(o) => o,
+        // Not a plain object — let the serde deserializer produce the type error.
+        None => return Ok(()),
+    };
+    let keys = js_sys::Object::keys(obj);
+    for k in keys.iter() {
+        if let Some(key) = k.as_string() {
+            if !KNOWN_OPTS_KEYS.contains(&key.as_str()) {
+                return Err(JsValue::from_str(&format!("unknown option key: {key}")));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A `serde_wasm_bindgen::Serializer` that emits Rust maps as PLAIN JS objects
+/// rather than the default JS `Map`. A `Map` does not survive `JSON.stringify`
+/// (`JSON.stringify(new Map(...)) === "{}"`), so the `key` / `aliases` fields would
+/// silently lose every entry across a JSON boundary — breaking the documented
+/// redact → persist key as JSON → restore roundtrip. Used at every return path.
+fn to_object_serializer() -> serde_wasm_bindgen::Serializer {
+    serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true)
 }
 
 /// The `redact` return shape `{ text, key, aliases }`. `key` is `{fake: original}`
@@ -260,6 +306,9 @@ pub fn redact(text: &str, opts: JsValue) -> Result<JsValue, JsValue> {
     let opts: RedactOpts = if opts.is_undefined() || opts.is_null() {
         RedactOpts::default()
     } else {
+        // Reject typo'd / unknown keys BEFORE deserializing (serde's
+        // deny_unknown_fields is a no-op under serde-wasm-bindgen).
+        reject_unknown_opts(&opts)?;
         serde_wasm_bindgen::from_value(opts)
             .map_err(|e| JsValue::from_str(&format!("invalid opts: {e}")))?
     };
@@ -283,7 +332,7 @@ pub fn redact(text: &str, opts: JsValue) -> Result<JsValue, JsValue> {
         key: segment.key,
         aliases: segment.aliases,
     };
-    serde_wasm_bindgen::to_value(&out)
+    out.serialize(&to_object_serializer())
         .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
 }
 
@@ -387,6 +436,9 @@ impl StreamingRedactor {
         let opts: RedactOpts = if opts.is_undefined() || opts.is_null() {
             RedactOpts::default()
         } else {
+            // Reject typo'd / unknown keys BEFORE deserializing (serde's
+            // deny_unknown_fields is a no-op under serde-wasm-bindgen).
+            reject_unknown_opts(&opts)?;
             serde_wasm_bindgen::from_value(opts)
                 .map_err(|e| JsValue::from_str(&format!("invalid opts: {e}")))?
         };
@@ -483,7 +535,7 @@ impl StreamingRedactor {
             key: emit.accumulated_key,
             aliases: emit.segment.aliases,
         };
-        serde_wasm_bindgen::to_value(&out)
+        out.serialize(&to_object_serializer())
             .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
     }
 }

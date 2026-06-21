@@ -1,5 +1,5 @@
-//! Parity tests for the streaming carry-window state machine — the A2 oracle
-//! (v0.7.10 task A2), ported from the Python streaming tests
+//! Parity tests for the streaming carry-window state machine — the v0.7.10
+//! boundary-split oracle, ported from the Python streaming tests
 //! (`tests/safety/test_streaming_straddle.py`, `tests/core/test_detect_partial.py`,
 //! `tests/core/test_streaming.py`).
 //!

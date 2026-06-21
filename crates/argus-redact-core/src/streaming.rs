@@ -1,8 +1,9 @@
 //! Streaming carry-window state machine — the SSOT for incremental redaction.
 //!
 //! This is the Rust port of the carry-window engine that lived in
-//! `glue/_detect_partial.py` + `streaming.py` (hardened in v0.7.10 task A2, which
-//! caught two real PII leaks). The state machine buffers chunks until a SAFE cut
+//! `glue/_detect_partial.py` + `streaming.py` (the carry-window engine hardened in
+//! v0.7.10, which fixed two boundary-split PII leaks). The state machine buffers
+//! chunks until a SAFE cut
 //! point, emits the committed prefix for redaction, and carries the unconsumed
 //! tail into the next round so an entity straddling the cut is never split (which
 //! would leak its head unredacted — neither half matches its pattern alone).
