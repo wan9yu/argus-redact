@@ -8,8 +8,11 @@ these tests assert the callback path's observable result directly.
 
 from __future__ import annotations
 
+import warnings
+
 import pytest
 
+from argus_redact import redact
 from argus_redact._core_loader import HAS_CORE
 from argus_redact.pure.replacer import _faker_reserved_cached, replace
 from argus_redact.specs.registry import PIITypeDef, register, unregister
@@ -102,3 +105,95 @@ def test_custom_faker_key_maps_fake_to_original():
     assert list(key.values()) == [_INPUT_VALUE], (
         f"Key values must be [{_INPUT_VALUE!r}], got {list(key.values())}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Adapter-default parity: a custom type's registry-declared strategy must be
+# honored WITHOUT explicit per-call config. Pre-port `_build_type_info` read
+# the default strategy from the LIVE registry (`_resolve_default_strategy`), so
+# a `realistic`+`faker_reserved` adapter fired its custom faker and a
+# `pseudonym`-default adapter pseudonymized — both with NO config override. The
+# c872064 SSOT port hardcoded a built-in-only strategy table in Rust, which
+# downgraded every custom type's default to `remove`, silently killing the
+# custom faker / pseudonym default. These tests lock the registry-default path.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
+def test_adapter_realistic_default_fires_custom_faker_without_config():
+    """A `realistic`-default adapter must fire its faker with NO config override.
+
+    Pre-port: `_resolve_default_strategy('vehicle_vin')` → 'realistic' (the
+    typedef's declared strategy), so the custom faker ran. Post-port the Rust
+    built-in table downgraded it to 'remove' → `VEHI-NNNNN` pseudonym, killing
+    the faker. Expected output is byte-identical to pre-port.
+    """
+
+    def vin_faker(value, rng):
+        return ("FAKE-VIN-0000", ["vin-alias"])
+
+    td = PIITypeDef(
+        name="vehicle_vin",
+        lang="en",
+        format="VIN",
+        strategy="realistic",
+        faker_reserved=vin_faker,
+        sensitivity=2,
+    )
+    register(td)
+    _faker_reserved_cached.cache_clear()
+    try:
+        pm = make_match("1HGCM82633A004352", "vehicle_vin", 7)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            out = redact(
+                "VIN is 1HGCM82633A004352 today",
+                mode="fast",
+                lang=["en"],
+                salt=5,
+                _pre_detected=[pm],
+            )[0]
+        # Pre-port (c872064^): registry strategy 'realistic' → custom faker.
+        assert out == "VIN is FAKE-VIN-0000 today", (
+            f"adapter custom faker must fire from registry default; got {out!r}"
+        )
+    finally:
+        unregister("en", "vehicle_vin")
+        _faker_reserved_cached.cache_clear()
+
+
+@pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
+def test_adapter_pseudonym_default_applies_without_config():
+    """A `pseudonym`-default adapter must pseudonymize with NO config override.
+
+    Pre-port read the 'pseudonym' default from the registry; post-port the Rust
+    built-in table downgraded an unknown type to 'remove'. For a non-realistic
+    reversible strategy the observable output is the type-prefixed code, but the
+    `default_strategy` recorded in the per-type info differs ('pseudonym' vs
+    'remove'); assert via `_build_type_info` so the regression is visible even
+    where 'remove' and 'pseudonym' happen to render the same code shape.
+    """
+    from argus_redact.pure.replacer import _build_type_info
+
+    td = PIITypeDef(
+        name="loyalty_id",
+        lang="en",
+        format="LID",
+        strategy="pseudonym",
+        sensitivity=2,
+    )
+    register(td)
+    _faker_reserved_cached.cache_clear()
+    try:
+        pm = make_match("LID-42", "loyalty_id", 0)
+        info, _ = _build_type_info([pm], None, ["en"])
+        assert info["loyalty_id"]["strategy"] == "pseudonym", (
+            "adapter default strategy must come from the live registry"
+        )
+        assert info["loyalty_id"]["default_strategy"] == "pseudonym", (
+            f"default_strategy must be 'pseudonym' from registry, got "
+            f"{info['loyalty_id']['default_strategy']!r}"
+        )
+    finally:
+        unregister("en", "loyalty_id")
+        _faker_reserved_cached.cache_clear()

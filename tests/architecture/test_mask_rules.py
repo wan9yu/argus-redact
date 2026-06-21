@@ -61,6 +61,38 @@ class TestIdNumberMask:
         assert "*" in replacement
 
 
+class TestMaskVisibleCoercion:
+    """`visible_prefix`/`visible_suffix` from config must int-coerce like Python.
+
+    Pre-port `_build_type_info` ran `int(ec.get('visible_prefix', 0) or 0)`, so a
+    numeric string ('5') or a float (2.7 → 2) carried through (config from
+    json.loads / yaml.safe_load arrives with these). The c872064 port's
+    `extract::<usize>().ok()` dropped any non-integer to None → 0 → the per-type
+    mask default, REVEALING MORE digits for bank_card (a privacy regression).
+    These assert the pre-port byte-identical mask output.
+    """
+
+    def test_numeric_string_visible_values(self):
+        config = {"phone": {"strategy": "mask", "visible_prefix": "5", "visible_suffix": "2"}}
+        out, _ = redact("Call 13800138000", salt=5, mode="fast", lang=["zh"], config=config)
+        # Pre-port: int('5')=5, int('2')=2 → 13800****00 (not the 3+4 default).
+        assert out == "Call 13800****00", f"numeric-string coercion failed: {out!r}"
+
+    def test_float_visible_values_truncate(self):
+        config = {"phone": {"strategy": "mask", "visible_prefix": 2.7, "visible_suffix": 3.9}}
+        out, _ = redact("Call 13800138000", salt=5, mode="fast", lang=["zh"], config=config)
+        # Pre-port: int(2.7)=2, int(3.9)=3 → 13******000.
+        assert out == "Call 13******000", f"float truncation failed: {out!r}"
+
+    def test_negative_visible_values_clamp_to_default(self):
+        # Python `int(ec.get(..,0) or 0)` keeps -1, but the negative falls
+        # through to the per-type mask default downstream (len <= p+s guard /
+        # default branch). Pre-port output: the 3+4 phone default.
+        config = {"phone": {"strategy": "mask", "visible_prefix": -1, "visible_suffix": -1}}
+        out, _ = redact("Call 13800138000", salt=5, mode="fast", lang=["zh"], config=config)
+        assert out == "Call 138****8000", f"negative clamp failed: {out!r}"
+
+
 class TestPhoneRegionalMask:
     def test_should_mask_mainland_3_4_4(self):
         from argus_redact.pure.replacer import _mask_phone_regional

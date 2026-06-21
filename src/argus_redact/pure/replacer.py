@@ -275,51 +275,67 @@ def _build_type_info(
     that callable. The Rust core receives this map and invokes the callable via
     ``PyFakerFactory`` when ``TypeInfo.custom_faker`` is true. Built-in realistic
     fakers resolve in Rust by name; types with no faker fall through to a pseudonym.
+
+    SSOT: the ``info`` dict assembly (default strategy + user config + prefix /
+    category label + the built-in faker name) lives in the Rust core
+    (``_core.build_type_info``) so the PyO3 binding and a future wasm crate share
+    one implementation.
+
+    The per-type DEFAULTS, however, are owned by the Python registry — it is the
+    only place a runtime adapter type (``register_pii_type(...)``) is visible, and
+    the Rust core's built-in tables can't see it. So we resolve the authoritative
+    default strategy / prefix / category-label per detected type here (from
+    ``_resolve_default_strategy`` + ``DEFAULT_PREFIXES`` / ``DEFAULT_CATEGORY_LABEL``,
+    exactly as the pre-port Python did) and thread them into the core as
+    ``registry_defaults``; the core uses them when present and falls back to its
+    built-in tables only on the wasm path (no Python registry).
+
+    The other Python-only piece is the custom-adapter faker overlay: a type
+    registered with ``faker_reserved=…`` carries a Python callable the core can't
+    see, so we re-run the lang-preference resolver here and, when it picks a
+    CUSTOM callable (which may legitimately shadow a built-in for another lang),
+    flip the core's ``faker_name``/``custom_faker`` fields and collect the callable.
     """
-    info: dict[str, dict] = {}
-    custom_fakers: dict[str, Callable] = {}
-    for entity in entities:
-        etype = entity.type
-        if etype in info:
+    # Built-in assembly in Rust (single SSOT). `custom_faker` is always False here.
+    # The core reads only `entity.type`; convert the dataclass entities into the
+    # Rust PatternMatch the binding expects (same idiom as `replace()` / merger).
+    rust_entities = [
+        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer)
+        for e in entities
+    ]
+    # Per-type defaults from the live registry (SSOT; includes runtime adapter
+    # types). Resolve once per distinct detected type — the same lookups the
+    # pre-port `_build_type_info` did inline (strategy from the registry, prefix /
+    # label from the module-level DEFAULT_* maps). The core uses these and only
+    # falls back to its built-in tables for types absent from this map (wasm).
+    registry_defaults: dict[str, dict] = {}
+    for e in entities:
+        if e.type in registry_defaults:
             continue
-        ec = _get_entity_config(etype, config)
-        default_strategy = _resolve_default_strategy(etype)
-        strategy = ec.get("strategy") or default_strategy
-        prefix_overridden = "prefix" in ec
-        prefix = ec.get("prefix", DEFAULT_PREFIXES.get(etype, etype.upper()[:4]))
-
-        # Resolve the faker once via a single lang-preference pass; derive both
-        # the built-in name (for Rust) and the custom-faker flag (for dispatch).
-        # A non-realistic type needs neither. Built-ins are callable-less: their
-        # faker name comes from the Rust ``_core`` association; a custom
-        # ``faker_reserved`` (name not in the built-in set) is invoked via the
-        # Rust callback. Both compete in the SAME lang-preference order so the
-        # detected lang's faker is never shadowed by another lang's faker.
-        faker_name = None
-        is_custom_faker = False
-        if strategy == "realistic":
-            resolved = _resolve_realistic_faker(etype, langs)
-            if resolved is not None:
-                kind, ref = resolved
-                if kind == "builtin":
-                    faker_name = ref  # resolved by the Rust _core association
-                else:
-                    is_custom_faker = True  # custom faker → Rust callback
-                    custom_fakers[etype] = ref
-
-        info[etype] = {
-            "strategy": strategy,
-            "default_strategy": default_strategy,
-            "prefix": prefix,
-            "prefix_overridden": prefix_overridden,
-            "faker_name": faker_name,
-            "custom_faker": is_custom_faker,
-            "replacement": ec.get("replacement"),
-            "label": ec.get("label"),
-            "default_category_label": DEFAULT_CATEGORY_LABEL.get(etype, f"[{etype}]"),
-            "visible_prefix": int(ec.get("visible_prefix", 0) or 0),
-            "visible_suffix": int(ec.get("visible_suffix", 0) or 0),
+        registry_defaults[e.type] = {
+            "strategy": _resolve_default_strategy(e.type),
+            "prefix": DEFAULT_PREFIXES.get(e.type, e.type.upper()[:4]),
+            "category_label": DEFAULT_CATEGORY_LABEL.get(e.type, f"[{e.type}]"),
         }
+    info: dict[str, dict] = _core.build_type_info(
+        rust_entities, config, langs, registry_defaults
+    )
+
+    # Custom-adapter faker overlay (the only Python-side piece). For every
+    # realistic type, re-run the SAME single lang-preference pass the built-in
+    # resolver used: when it resolves to a CUSTOM callable, that callable WON the
+    # precedence (it can shadow a built-in for another lang), so flip the core's
+    # fields and route it through the Rust callback. A built-in / no-faker result
+    # leaves the core's `faker_name` untouched.
+    custom_fakers: dict[str, Callable] = {}
+    for etype, ti in info.items():
+        if ti["strategy"] != "realistic":
+            continue
+        resolved = _resolve_realistic_faker(etype, langs)
+        if resolved is not None and resolved[0] == "custom":
+            ti["faker_name"] = None
+            ti["custom_faker"] = True
+            custom_fakers[etype] = resolved[1]
     return info, custom_fakers
 
 

@@ -7,6 +7,10 @@ use argus_redact_core::replace::{
     replace as core_replace, FakerFactory, FakerResolution, PseudoFactory, ReplaceArgs, TypeInfo,
 };
 use argus_redact_core::seed::Salt;
+use argus_redact_core::typeinfo::{
+    build_type_info as core_build_type_info, Config as CoreConfig, EntityConfig, RegistryDefault,
+    RegistryDefaults as CoreRegistryDefaults,
+};
 use argus_redact_core::PatternMatch as CorePM;
 
 use crate::pseudonym::PyRandomSource;
@@ -234,4 +238,199 @@ pub fn replace(
     .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
     Ok((result.redacted, result.key, result.aliases, result.keep_downgraded))
+}
+
+/// Parse the Python `config` dict (`{type: {strategy, prefix, ...}}`) into the
+/// core [`CoreConfig`]. Only the per-type entries that are dicts are read (a
+/// non-dict value — e.g. the legacy `_unified_prefix` sentinel the Python
+/// wrapper rejects up front — is skipped). `prefix.is_some()` carries the Python
+/// `"prefix" in ec` check that drives `prefix_overridden`.
+fn parse_config(config: Option<&Bound<'_, PyDict>>) -> PyResult<Option<CoreConfig>> {
+    let Some(d) = config else { return Ok(None) };
+    let mut out: CoreConfig = CoreConfig::with_capacity(d.len());
+    for (k, v) in d.iter() {
+        let type_name: String = match k.extract() {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let Ok(ec) = v.cast::<PyDict>() else { continue };
+        let get_str = |key: &str| -> Option<String> {
+            ec.get_item(key).ok().flatten().and_then(|x| {
+                if x.is_none() {
+                    None
+                } else {
+                    x.extract::<String>().ok()
+                }
+            })
+        };
+        // visible_prefix/suffix: reproduce Python `int(ec.get(key, 0) or 0)`
+        // followed by the downstream non-positive → per-type-default behavior.
+        //
+        // Config from json.loads / yaml.safe_load carries numeric STRINGS ('5')
+        // and FLOATS (2.7) that the validator doesn't coerce, plus int and the
+        // wasm path's JS f64. Pre-port Python truncated floats (int(2.7)=2),
+        // parsed numeric strings (int('5')=5), and let any non-positive result
+        // fall through to the per-type mask default (a negative failed the old
+        // `extract::<usize>()`; 0 is the explicit default sentinel). So:
+        //   - usize > 0                 → Some(n)
+        //   - Python float, floor >= 1  → Some(floor)
+        //   - numeric string, int >= 1  → Some(parsed)
+        //   - negative / 0 / None / NaN / non-numeric → None (per-type default)
+        let get_usize = |key: &str| -> Option<usize> {
+            let x = ec.get_item(key).ok().flatten()?;
+            if x.is_none() {
+                return None;
+            }
+            // Direct usize (plain int, JS integers): the common path.
+            if let Ok(n) = x.extract::<usize>() {
+                return (n > 0).then_some(n);
+            }
+            // Python float / JS number arriving as f64: truncate toward zero
+            // (Python `int(2.7) == 2`); drop NaN / non-finite / non-positive.
+            if let Ok(f) = x.extract::<f64>() {
+                if f.is_finite() && f >= 1.0 {
+                    return Some(f.trunc() as usize);
+                }
+                return None;
+            }
+            // Numeric string ('5', '2.7'): parse as int first, then as float so
+            // '2.7' truncates the same way Python `int(float('2.7'))` would.
+            if let Ok(s) = x.extract::<String>() {
+                let s = s.trim();
+                if let Ok(n) = s.parse::<i64>() {
+                    return (n >= 1).then_some(n as usize);
+                }
+                if let Ok(f) = s.parse::<f64>() {
+                    if f.is_finite() && f >= 1.0 {
+                        return Some(f.trunc() as usize);
+                    }
+                }
+            }
+            None
+        };
+        out.insert(
+            type_name,
+            EntityConfig {
+                strategy: get_str("strategy"),
+                // `prefix` present (even if None) sets prefix_overridden in
+                // Python (`"prefix" in ec`). Match that: Some iff the key exists.
+                prefix: if ec.contains("prefix").unwrap_or(false) {
+                    Some(get_str("prefix").unwrap_or_default())
+                } else {
+                    None
+                },
+                replacement: get_str("replacement"),
+                label: get_str("label"),
+                visible_prefix: get_usize("visible_prefix"),
+                visible_suffix: get_usize("visible_suffix"),
+            },
+        );
+    }
+    Ok(Some(out))
+}
+
+/// Parse the optional Python `registry_defaults` dict
+/// (`{type: {strategy, prefix, category_label}}`) into the core
+/// [`CoreRegistryDefaults`]. The Python shim resolves the live-registry default
+/// strategy + `DEFAULT_PREFIXES` / `DEFAULT_CATEGORY_LABEL` per detected type and
+/// hands them in so runtime adapter types — invisible to the core's built-in
+/// tables — get their declared defaults. `None` (the wasm path) → the core's
+/// built-in fallback tables drive every type. A per-type field absent / None
+/// falls back to the built-in table for that field.
+fn parse_registry_defaults(
+    registry_defaults: Option<&Bound<'_, PyDict>>,
+) -> PyResult<Option<CoreRegistryDefaults>> {
+    let Some(d) = registry_defaults else {
+        return Ok(None);
+    };
+    let mut out: CoreRegistryDefaults = CoreRegistryDefaults::with_capacity(d.len());
+    for (k, v) in d.iter() {
+        let type_name: String = match k.extract() {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let Ok(rd) = v.cast::<PyDict>() else { continue };
+        let get_str = |key: &str| -> Option<String> {
+            rd.get_item(key).ok().flatten().and_then(|x| {
+                if x.is_none() {
+                    None
+                } else {
+                    x.extract::<String>().ok()
+                }
+            })
+        };
+        out.insert(
+            type_name,
+            RegistryDefault {
+                strategy: get_str("strategy"),
+                prefix: get_str("prefix"),
+                category_label: get_str("category_label"),
+            },
+        );
+    }
+    Ok(Some(out))
+}
+
+/// Build the per-type replacement info dict in the shape the Python
+/// `_build_type_info` produces (the `info` return value, before the custom-faker
+/// overlay). SSOT: the core [`core_build_type_info`] — the PyO3 binding and a
+/// future wasm crate share this assembly. The Python wrapper layers its custom
+/// adapter `faker_reserved` callables on top of this result.
+///
+/// `registry_defaults` carries the live-registry per-type default strategy /
+/// prefix / category-label (resolved Python-side, the SSOT that includes runtime
+/// adapter types) so a custom type honors its declared defaults; absent it the
+/// core falls back to its built-in tables (the wasm path).
+///
+/// Returns `{type_name: {strategy, default_strategy, prefix, prefix_overridden,
+/// faker_name, custom_faker, replacement, label, default_category_label,
+/// visible_prefix, visible_suffix}}` — the dict `build_info_map` consumes, so the
+/// Python dict shape is unchanged. The core never emits a `Custom` faker (only
+/// `Builtin`/`None`); the custom-faker flag is therefore always `false` here and
+/// the Python overlay flips it for registered adapter types.
+#[pyfunction]
+#[pyo3(signature = (entities, config=None, langs=None, registry_defaults=None))]
+pub fn build_type_info<'py>(
+    py: Python<'py>,
+    entities: Vec<PyPatternMatch>,
+    config: Option<&Bound<'_, PyDict>>,
+    langs: Option<Vec<String>>,
+    registry_defaults: Option<&Bound<'_, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let core_entities: Vec<CorePM> = entities.iter().map(CorePM::from).collect();
+    let core_config = parse_config(config)?;
+    let core_registry_defaults = parse_registry_defaults(registry_defaults)?;
+    let langs = langs.unwrap_or_default();
+
+    let pairs = core_build_type_info(
+        &core_entities,
+        core_config.as_ref(),
+        &langs,
+        core_registry_defaults.as_ref(),
+    );
+
+    let out = PyDict::new(py);
+    for (type_name, ti) in pairs {
+        let d = PyDict::new(py);
+        d.set_item("strategy", &ti.strategy)?;
+        d.set_item("default_strategy", &ti.default_strategy)?;
+        d.set_item("prefix", &ti.prefix)?;
+        d.set_item("prefix_overridden", ti.prefix_overridden)?;
+        // Fold FakerResolution back into the (faker_name, custom_faker) dict
+        // fields the Python shape expects. The core never returns Custom.
+        let (faker_name, custom_faker): (Option<&str>, bool) = match &ti.faker_resolution {
+            FakerResolution::Builtin(n) => (Some(n.as_str()), false),
+            FakerResolution::Custom => (None, true),
+            FakerResolution::None => (None, false),
+        };
+        d.set_item("faker_name", faker_name)?;
+        d.set_item("custom_faker", custom_faker)?;
+        d.set_item("replacement", ti.replacement.as_deref())?;
+        d.set_item("label", ti.label.as_deref())?;
+        d.set_item("default_category_label", &ti.default_category_label)?;
+        d.set_item("visible_prefix", ti.visible_prefix)?;
+        d.set_item("visible_suffix", ti.visible_suffix)?;
+        out.set_item(type_name, d)?;
+    }
+    Ok(out)
 }
