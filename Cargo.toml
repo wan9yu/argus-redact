@@ -1,5 +1,5 @@
 [workspace]
-members  = ["crates/argus-redact-core", "crates/argus-redact-py"]
+members  = ["crates/argus-redact-core", "crates/argus-redact-py", "crates/argus-redact-wasm"]
 resolver = "2"
 
 [workspace.package]

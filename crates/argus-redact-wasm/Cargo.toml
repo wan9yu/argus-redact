@@ -1,0 +1,23 @@
+[package]
+name = "argus-redact-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+argus-redact-core = { path = "../argus-redact-core" }
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
+serde = { workspace = true }
+sha3 = { workspace = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[features]
+default = ["console_error_panic_hook"]
