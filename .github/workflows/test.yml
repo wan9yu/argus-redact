@@ -109,6 +109,69 @@ jobs:
           /tmp/sdist-venv/bin/pip install dist/*.tar.gz
           /tmp/sdist-venv/bin/python -c "from argus_redact import redact; out, key = redact('Alice 13800138000', mode='fast', lang='zh'); assert '13800138000' not in out, out; print('sdist OK')"
 
+  # Build the wasm package (argus-redact-wasm), run its node test suite (smoke +
+  # golden-parity), size-optimize the artifact with wasm-opt, and gate the
+  # optimized gzipped .wasm against tests/benchmark/wasm_bundle_budget.json.
+  # ARTIFACT ONLY — this job does NOT publish to npm. The crate sets
+  # `wasm-opt = false` (so wasm-pack does not auto-fetch binaryen), so wasm-opt is
+  # run here explicitly. A separate job so a wasm failure is attributed cleanly.
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Rust (wasm target)
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable @ 2026-05-03
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: rust-wasm-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+
+      - name: Install binaryen (wasm-opt)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+
+      - name: Build wasm package (bundler target)
+        run: wasm-pack build crates/argus-redact-wasm --target bundler --out-dir pkg
+
+      - name: Run wasm node tests (smoke + golden-parity)
+        run: wasm-pack test --node crates/argus-redact-wasm
+
+      - name: Size-optimize and gate the bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          WASM=crates/argus-redact-wasm/pkg/argus_redact_wasm_bg.wasm
+          # Modern LLVM emits bulk-memory / ref-types ops; enable the feature set so
+          # wasm-opt validates the wasm-bindgen output (the crate disables wasm-pack's
+          # auto wasm-opt, so we run it here).
+          wasm-opt -Oz \
+            --enable-bulk-memory \
+            --enable-nontrapping-float-to-int \
+            --enable-sign-ext \
+            --enable-mutable-globals \
+            --enable-reference-types \
+            --enable-multivalue \
+            "$WASM" -o /tmp/argus_opt.wasm
+          GZ=$(gzip -c /tmp/argus_opt.wasm | wc -c)
+          CEILING=$(python3 -c "import json;print(json.load(open('tests/benchmark/wasm_bundle_budget.json'))['budget']['ceiling_bytes'])")
+          echo "optimized gzipped .wasm: ${GZ} bytes (budget ceiling: ${CEILING} bytes)"
+          if [ "$GZ" -gt "$CEILING" ]; then
+            echo "::error::wasm bundle ${GZ} B exceeds budget ${CEILING} B (see tests/benchmark/wasm_bundle_budget.json)"
+            exit 1
+          fi
+          echo "wasm bundle within budget."
+
   # Rust coverage for the pure core crate (argus-redact-core), uploaded to Codecov
   # under the `rust` flag. Python (`pytest --cov`) only measures the Python surface;
   # as Layer-1 logic moves into the core (validators, normalize, lang_detect, …),

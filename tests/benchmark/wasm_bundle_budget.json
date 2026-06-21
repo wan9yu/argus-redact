@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "artifact": "argus-redact-wasm",
+  "target": "bundler",
+  "measured_on": "2026-06-21",
+  "machine": "generic CI-class x86_64 / local arm64 — gzip default level (-6); CI enforces on ubuntu-latest",
+  "toolchain": {
+    "wasm_pack": "0.13.1",
+    "wasm_opt": "binaryen 130",
+    "note": "the crate sets wasm-opt = false so wasm-pack does not auto-fetch binaryen; the size-optimized .wasm is produced by running wasm-opt -Oz separately (see reproduce below)"
+  },
+  "measurements_bytes": {
+    "raw_unoptimized_wasm": 2716363,
+    "gzipped_unoptimized_wasm": 840318,
+    "raw_optimized_wasm_Oz": 2587387,
+    "gzipped_optimized_wasm_Oz": 842781
+  },
+  "budget": {
+    "metric": "gzipped_optimized_wasm_Oz",
+    "ceiling_bytes": 970000,
+    "ceiling_note": "measured optimized-gzipped (~843 KB) + ~15% headroom; CI fails the wasm job if the optimized gzipped .wasm exceeds this ceiling"
+  },
+  "gating_decision": {
+    "languages_embedded": ["zh", "en", "ja", "ko", "de", "uk", "in", "br"],
+    "lang_cargo_gating": false,
+    "rationale": "Per-language gating is not the size lever. The 8 per-language pattern files are 0.7-16 KB each; the embedded person-name corpora gzip-floor at ~140 KB; the remaining bulk is language-independent compiled code (fancy-regex backtracking engine, unicode-normalization tables, sha2/sha3/hmac, serde/ron). wasm-opt -Oz strips ~129 KB of raw code but leaves the gzipped size essentially flat, confirming the weight is the shared code+data floor, not language data. Embedding all 8 languages keeps the in-browser API at parity with the Python fast mode for a one-time, HTTP-cached load. Future size reduction is a code-level effort (regex engine, dependency trimming), not language gating."
+  },
+  "reproduce": [
+    "rustup target add wasm32-unknown-unknown",
+    "cargo install wasm-pack --locked   # or jetli/wasm-pack-action in CI",
+    "wasm-pack build crates/argus-redact-wasm --target bundler --out-dir pkg",
+    "wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals --enable-reference-types --enable-multivalue crates/argus-redact-wasm/pkg/argus_redact_wasm_bg.wasm -o /tmp/argus_opt.wasm",
+    "gzip -c /tmp/argus_opt.wasm | wc -c   # compare against budget.ceiling_bytes"
+  ],
+  "wasm_opt_features_note": "wasm-opt is invoked with the modern wasm feature set explicitly enabled (bulk-memory, nontrapping-float-to-int, sign-ext, mutable-globals, reference-types, multivalue) because recent LLVM emits these by default; without them wasm-opt 130 fails input validation on memory.copy / bulk-memory ops."
+}
