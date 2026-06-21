@@ -22,16 +22,21 @@
 //! entropy source for the unseeded `secrets` path); an absent salt is folded to a
 //! fixed seed so unsalted pseudonym redaction is still deterministic in wasm.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-use argus_redact_core::redact_l1::{redact_l1, RedactL1Args};
+use argus_redact_core::redact_l1::{detect_l1, redact_l1, RedactL1Args};
 use argus_redact_core::restore::restore_full;
 use argus_redact_core::seed::Salt;
+use argus_redact_core::streaming::{
+    DetectSpans, RedactSegment, StreamingRedactor as CoreStreamingRedactor,
+};
 use argus_redact_core::typeinfo::{build_type_info, Config, EntityConfig};
-use argus_redact_core::{kinship_exact, MtRandomSource, PseudoFactory, SELF_REF_PRONOUNS};
+use argus_redact_core::{kinship_exact, MtRandomSource, PseudoFactory, SELF_REF_PRONOUNS, TypeInfo};
 
 // ── pseudonym RNG: the core's CPython-exact MT19937 (shared with PyO3) ───────
 
@@ -161,6 +166,68 @@ fn lookup_prefix(info: &[(String, argus_redact_core::TypeInfo)], type_: &str, fa
         .unwrap_or_else(|| fallback.to_string())
 }
 
+/// The resolved redaction params shared by the one-shot `redact` and the streaming
+/// `feed`/`flush` closures: the SAME detect → `build_type_info` → `redact_l1` path
+/// with one set of langs/names/config/salt/whitelist. Holding them once keeps the
+/// streaming closures byte-parity with the one-shot path (and with Python).
+struct RedactParams {
+    langs: Vec<String>,
+    names: Vec<String>,
+    salt: Option<Salt>,
+    config: Option<Config>,
+    unified_prefix: Option<String>,
+    whitelist: HashSet<String>,
+}
+
+/// Run the one-shot fast-mode redact path over `text`, optionally threading an
+/// `existing_key` for cross-chunk collision continuity (same original reuses the
+/// same fake — mirrors the Python `existing_key=` / `setdefault` merge). This is
+/// the SSOT for both `redact` and the streaming redact closure: `detect_l1` →
+/// `build_type_info` (`registry_defaults = None`) → `redact_l1` with the wasm
+/// MT19937 pseudo-factory. Returns the `(downstream, key, aliases)` segment.
+fn redact_segment(
+    params: &RedactParams,
+    text: &str,
+    existing_key: Option<&HashMap<String, String>>,
+) -> Result<RedactSegment, String> {
+    // Detect first so build_type_info only resolves the types that actually
+    // appear — redact_l1 re-detects internally; this re-detect feeds type_info,
+    // matching the Python shim's build-type-info-over-detected-entities order.
+    let detected = detect_l1(text, &params.langs, &params.names).map_err(|e| e.to_string())?;
+    let mut entities = detected.layer1;
+    entities.extend(detected.person);
+
+    let info_pairs = build_type_info(&entities, params.config.as_ref(), &params.langs, None);
+    let person_prefix = lookup_prefix(&info_pairs, "person", "P");
+    let org_prefix = lookup_prefix(&info_pairs, "organization", "O");
+    let info_map: HashMap<String, TypeInfo> = info_pairs.into_iter().collect();
+
+    let result = redact_l1(
+        RedactL1Args {
+            text,
+            lang: &params.langs,
+            names: &params.names,
+            type_info: &info_map,
+            salt: params.salt.as_ref(),
+            key: existing_key,
+            person_prefix: &person_prefix,
+            org_prefix: &org_prefix,
+            unified_prefix: params.unified_prefix.as_deref(),
+            keep_whitelist: &params.whitelist,
+            types: None,
+            types_exclude: None,
+        },
+        &WasmPseudoFactory,
+        None, // no custom Python fakers in wasm
+    )?;
+
+    Ok(RedactSegment {
+        downstream_text: result.redacted,
+        key: result.key,
+        aliases: result.aliases,
+    })
+}
+
 // ── public API ──────────────────────────────────────────────────────────────
 
 /// Set the panic hook once so wasm panics surface as readable JS console errors.
@@ -208,60 +275,38 @@ pub fn redact(text: &str, opts: JsValue) -> Result<JsValue, JsValue> {
         }
     }
 
+    let params = resolve_params(opts);
+    let segment = redact_segment(&params, text, None).map_err(|e| JsValue::from_str(&e))?;
+
+    let out = RedactResult {
+        text: segment.downstream_text,
+        key: segment.key,
+        aliases: segment.aliases,
+    };
+    serde_wasm_bindgen::to_value(&out)
+        .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
+}
+
+/// Resolve a deserialized [`RedactOpts`] into the shared [`RedactParams`] (langs
+/// default to `zh`, salt mapped to the core [`Salt`], config translated, whitelist
+/// built once). Mode is validated by the caller before this is called.
+fn resolve_params(opts: RedactOpts) -> RedactParams {
     let langs: Vec<String> = opts
         .lang
         .map(StringOrVec::into_vec)
         .unwrap_or_else(|| vec!["zh".to_string()]);
-    let names: Vec<String> = opts.names.unwrap_or_default();
     let salt: Option<Salt> = opts.salt.map(|s| match s {
         SaltOpt::Int(i) => Salt::Int(i),
         SaltOpt::Bytes(b) => Salt::Bytes(b),
     });
-    let config = to_core_config(opts.config);
-
-    // Detect first so build_type_info only resolves the types that actually
-    // appear — but redact_l1 detects internally, so we re-detect for type_info.
-    // Cheap relative to a network round-trip; matches the Python shim, which also
-    // builds type_info over the detected entity set before calling _core.redact_l1.
-    let detected = argus_redact_core::redact_l1::detect_l1(text, &langs, &names)
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-    let mut entities = detected.layer1;
-    entities.extend(detected.person);
-
-    // registry_defaults = None: built-in type table is the SSOT for wasm.
-    let info_pairs = build_type_info(&entities, config.as_ref(), &langs, None);
-    let person_prefix = lookup_prefix(&info_pairs, "person", "P");
-    let org_prefix = lookup_prefix(&info_pairs, "organization", "O");
-    let info_map: HashMap<String, argus_redact_core::TypeInfo> = info_pairs.into_iter().collect();
-
-    let wl = keep_whitelist();
-    let result = redact_l1(
-        RedactL1Args {
-            text,
-            lang: &langs,
-            names: &names,
-            type_info: &info_map,
-            salt: salt.as_ref(),
-            key: None,
-            person_prefix: &person_prefix,
-            org_prefix: &org_prefix,
-            unified_prefix: opts.unified_prefix.as_deref(),
-            keep_whitelist: &wl,
-            types: None,
-            types_exclude: None,
-        },
-        &WasmPseudoFactory,
-        None, // no custom Python fakers in wasm
-    )
-    .map_err(|e| JsValue::from_str(&e))?;
-
-    let out = RedactResult {
-        text: result.redacted,
-        key: result.key,
-        aliases: result.aliases,
-    };
-    serde_wasm_bindgen::to_value(&out)
-        .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
+    RedactParams {
+        langs,
+        names: opts.names.unwrap_or_default(),
+        salt,
+        config: to_core_config(opts.config),
+        unified_prefix: opts.unified_prefix,
+        whitelist: keep_whitelist(),
+    }
 }
 
 /// Restore redacted text using the `key` map (`{fake: original}`) returned by
@@ -280,4 +325,165 @@ pub fn restore(text: &str, key: JsValue) -> Result<String, JsValue> {
     };
 
     restore_full(text, &key, None, None).map_err(|e| JsValue::from_str(&e.0))
+}
+
+// ── streaming: feed / flush over the core carry-window engine ─────────────────
+
+/// The boxed detect / redact closure types the concrete core `StreamingRedactor`
+/// is instantiated with. `#[wasm_bindgen]` structs can't be generic, so the
+/// generic core engine is monomorphized over these trait objects (the detect
+/// closure for the carry-window entity-snap, the redact closure for the emit).
+type BoxedDetect = Box<dyn Fn(&str) -> DetectSpans>;
+type BoxedRedact = Box<dyn Fn(&str) -> Result<RedactSegment, String>>;
+
+/// The `feed` / `flush` return shape `{ downstreamText, key, aliases }`. Mirrors
+/// the fields the Python `StreamingRedactor` surfaces from its `PseudonymLLMResult`
+/// (`downstream_text` → `downstreamText`); `key` is the redactor's ACCUMULATED key
+/// snapshot after merging this segment (so a caller can restore the whole stream
+/// with one key), and `aliases` are this segment's realistic-faker aliases.
+#[derive(Serialize)]
+struct EmitResultJs {
+    #[serde(rename = "downstreamText")]
+    downstream_text: String,
+    key: HashMap<String, String>,
+    aliases: HashMap<String, Vec<String>>,
+}
+
+/// Sentence-bounded incremental fast-mode redaction with cross-chunk key
+/// continuity, over the core carry-window state machine (the SSOT shared with the
+/// Python `StreamingRedactor` and the wasm one-shot `redact`).
+///
+/// Each [`feed`](StreamingRedactor::feed) buffers input until a SAFE cut (an entity
+/// straddling the cut is carried whole, never emitted half-redacted), then redacts
+/// the committed prefix through the SAME detect → `build_type_info` → `redact_l1`
+/// path the one-shot uses and merges the segment's key into the accumulated key
+/// (first-seen wins). [`flush`](StreamingRedactor::flush) drains the tail at
+/// end-of-stream. Returns `{ downstreamText, key, aliases }`; an empty
+/// `downstreamText` means the buffer hasn't reached a cut yet.
+///
+/// Construct one per logical session: the accumulated key grows monotonically.
+#[wasm_bindgen]
+pub struct StreamingRedactor {
+    inner: CoreStreamingRedactor<BoxedDetect, BoxedRedact>,
+    /// Shared with the redact closure so each segment threads the accumulated key
+    /// as `existing_key` (a repeated original reuses its fake — mirroring the
+    /// Python `existing_key=self._accumulated_key`). Kept in sync with the core's
+    /// own accumulated key after every emit.
+    accumulated_key: Rc<RefCell<HashMap<String, String>>>,
+}
+
+#[wasm_bindgen]
+impl StreamingRedactor {
+    /// Build a streaming redactor from an `opts` object `{ lang, mode: "fast",
+    /// salt (required), config, names }` — the SAME opts the one-shot `redact`
+    /// takes. Errors (as a JS `Error`):
+    /// - `mode` other than `"fast"` (NER / semantic layers are unavailable in wasm);
+    /// - a missing `salt` (wasm has no host entropy for the unseeded pseudonym
+    ///   path, so a salt is required for deterministic, restorable codes).
+    #[wasm_bindgen(constructor)]
+    pub fn new(opts: JsValue) -> Result<StreamingRedactor, JsValue> {
+        set_panic_hook();
+
+        let opts: RedactOpts = if opts.is_undefined() || opts.is_null() {
+            RedactOpts::default()
+        } else {
+            serde_wasm_bindgen::from_value(opts)
+                .map_err(|e| JsValue::from_str(&format!("invalid opts: {e}")))?
+        };
+
+        // Mode gate: wasm streaming ships fast mode only.
+        match opts.mode.as_deref() {
+            None | Some("fast") => {}
+            Some(other) => {
+                return Err(JsValue::from_str(&format!(
+                    "mode='{other}' is not supported in wasm — only mode='fast' (regex \
+                     + known-names) is available; NER/semantic layers need the Python build"
+                )));
+            }
+        }
+
+        // Salt is required: there is no host entropy source for the unseeded
+        // pseudonym path in wasm, so streaming demands an explicit salt for
+        // deterministic, restorable codes.
+        if opts.salt.is_none() {
+            return Err(JsValue::from_str(
+                "StreamingRedactor requires a salt — wasm has no host entropy source \
+                 for the unseeded pseudonym path; pass an integer or byte-array salt",
+            ));
+        }
+
+        let params = Rc::new(resolve_params(opts));
+        let accumulated_key: Rc<RefCell<HashMap<String, String>>> =
+            Rc::new(RefCell::new(HashMap::new()));
+
+        // Detect closure: the RAW `layer1 ++ person` entities + L1 hints over the
+        // combined buffer — the carry-window snap NORMALIZES them (merge +
+        // self-reference filter) to the exact set Python's fast `_detect` produces,
+        // so the cut is identical across runtimes.
+        let detect_params = Rc::clone(&params);
+        let detect: BoxedDetect = Box::new(move |text: &str| {
+            match detect_l1(text, &detect_params.langs, &detect_params.names) {
+                Ok(r) => {
+                    let mut entities = r.layer1;
+                    entities.extend(r.person);
+                    DetectSpans {
+                        entities,
+                        hints: r.hints,
+                    }
+                }
+                // A detect failure (e.g. oversize buffer) yields no spans → the
+                // carry-window falls back to its non-entity-aware cut; the redact
+                // closure surfaces the real error on emit.
+                Err(_) => DetectSpans::default(),
+            }
+        });
+
+        // Redact closure: the same one-shot path, threading the accumulated key as
+        // `existing_key` for cross-chunk collision continuity.
+        let redact_params = Rc::clone(&params);
+        let redact_key = Rc::clone(&accumulated_key);
+        let redact: BoxedRedact = Box::new(move |text: &str| {
+            let existing = redact_key.borrow();
+            redact_segment(&redact_params, text, Some(&existing))
+        });
+
+        Ok(StreamingRedactor {
+            inner: CoreStreamingRedactor::new(detect, redact),
+            accumulated_key,
+        })
+    }
+
+    /// Buffer until a safe cut, then redact the committed prefix. Returns
+    /// `{ downstreamText, key, aliases }`; `downstreamText` is `""` when the buffer
+    /// hasn't reached a cut yet (the `key` still carries the accumulated snapshot).
+    #[wasm_bindgen]
+    pub fn feed(&mut self, chunk: &str) -> Result<JsValue, JsValue> {
+        let emit = self.inner.feed(chunk).map_err(|e| JsValue::from_str(&e))?;
+        self.emit_to_js(emit)
+    }
+
+    /// End-of-stream flush — drain the pending buffer through the redact path.
+    /// Returns an empty `downstreamText` when nothing is buffered.
+    #[wasm_bindgen]
+    pub fn flush(&mut self) -> Result<JsValue, JsValue> {
+        let emit = self.inner.flush().map_err(|e| JsValue::from_str(&e))?;
+        self.emit_to_js(emit)
+    }
+
+    /// Marshal a core `EmitResult` to `{ downstreamText, key, aliases }` and keep
+    /// the shared accumulated-key cell in sync with the core's snapshot (so the
+    /// next segment's `existing_key` reflects everything seen so far).
+    fn emit_to_js(
+        &self,
+        emit: argus_redact_core::streaming::EmitResult,
+    ) -> Result<JsValue, JsValue> {
+        *self.accumulated_key.borrow_mut() = emit.accumulated_key.clone();
+        let out = EmitResultJs {
+            downstream_text: emit.segment.downstream_text,
+            key: emit.accumulated_key,
+            aliases: emit.segment.aliases,
+        };
+        serde_wasm_bindgen::to_value(&out)
+            .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
+    }
 }
