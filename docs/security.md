@@ -71,7 +71,7 @@ content to an on-device model.
 | Regulatory data seizure | ✅ | seized data is placeholders (salt + key stay local) |
 | Naive lookup linkage (plaintext name → DB) | ✅ | plaintext identifiers never leave the device |
 | Cross-session identity linkage | ⚠️ | use per-session salt; accumulated corpus can still be re-segmented by stylometry |
-| Quasi-identifier inference (age + occupation + city → narrow cohort) | ⚠️ | partially mitigated by quasi-identifier types + generalization; not eliminated |
+| Quasi-identifier inference (age + occupation + city → narrow cohort) | ⚠️ | partially mitigated by detecting + removing quasi-identifier types; the *combination* of residuals can still narrow a cohort, so not eliminated |
 | Stylometry / authorship fingerprint | ❌ | not defended; salt rotation does not touch this channel |
 | Semantic content leakage ("P-12345 mentions diabetes") | ❌ | retained by design (it is the utility); use an on-device model |
 | Rare-attribute single-out (rare condition + city + age band) | ❌ | population size is the anonymity source; rare attributes remove it |

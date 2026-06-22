@@ -349,9 +349,8 @@ Key:     {"P-037": "张三", "[手机号已脱敏]": "13812345678", "[咖啡店]
 | `category` | "星巴克" | "[咖啡店①]" | Yes (numbered on collision) |
 | `mask` | "13812345678" | "138****5678" | Yes (visible digits differ) |
 | `remove` | "110101199003071234" | "[身份证号①]" | Yes (numbered on collision) |
-| `generalize` | "北京市朝阳区三里屯" | "[北京市某地址①]" | Yes (numbered on collision) |
 
-**Uniqueness guarantee:** Every replacement in the key must be unique — it's a dict key. `pseudonym` and `mask` produce unique outputs naturally. `category`, `remove`, and `generalize` append a circled number (①②③...) when a collision occurs. First occurrence has no suffix, second gets ①, third gets ②, etc.
+**Uniqueness guarantee:** Every replacement in the key must be unique — it's a dict key. `pseudonym` and `mask` produce unique outputs naturally. `category` and `remove` append a circled number (①②③...) when a collision occurs. First occurrence has no suffix, second gets ①, third gets ②, etc.
 
 **Pseudonym generation:**
 - Code = prefix + random integer from `code_range` (default 1-999)

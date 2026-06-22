@@ -318,17 +318,21 @@ quasi-identifiers), `python -m tests.benchmark.reid_eval` (snapshot:
 
 | Model | raw (upper bound) | argus `fast` |
 |-------|:-----------------:|:------------:|
-| deepseek-chat | 100% | 87.5% |
-| qwen-plus | 100% | 95.8% |
-| deepseek-chat (via OpenRouter) | 100% | 91.7% |
+| deepseek-chat | 100% | 83.3% |
+| qwen-plus | 100% | 91.7% |
+| deepseek-chat (via OpenRouter) | 100% | 79.2% |
 
 **Read this honestly:** `fast` removes explicit PII (name / phone / checksum-valid ID,
-plus the age / employer / title / condition tokens argus emits) but **leaves
-city/district, occupation, sensitive-attribute phrasing, and hobbies** — so the subject
-is usually still re-identifiable (87.5–95.8% across three models on this set). This is a
+plus the age / employer / job-title / condition tokens argus emits) but **leaves
+city/district, sensitive-attribute phrasing, and hobbies** — so the subject
+is usually still re-identifiable (79.2–91.7% across three models on this set). This is a
 **directional indicator on a small closed-world synthetic set, per model — not a
-real-world guarantee.** It is exactly the gap that **quasi-identifier generalization**
-(roadmap) must close; this benchmark is its regression gate. The re-identification
+real-world guarantee.** It reflects a structural limitation: *removing explicit PII is
+not anonymization*. The residual comes from the *combination* of surviving
+quasi-identifiers (age + coarse location + free-text attributes), not any single field —
+coarsening one field (the explored-and-removed `generalize` experiment, see
+[why coarsening one field didn't help](design-quasi-identifier-generalization.md))
+did not measurably reduce it; removal is at least as good. The re-identification
 tooling here is eval/defensive only.
 
 ---

@@ -7,7 +7,11 @@ candidate pool? Lower re-id rate = better privacy.
 
 Redactors: raw (upper bound) vs argus_fast (mode='fast'). argus_fast removes
 explicit PII but leaves most quasi-identifiers, so a high residual re-id rate is
-the EXPECTED, honest result — it motivates future quasi-identifier generalization.
+the EXPECTED, honest result: removing explicit PII is NOT anonymization. The
+residual comes from the COMBINATION of surviving quasi-identifiers (age + coarse
+location + free-text attributes), not any single field — see
+docs/design-quasi-identifier-generalization.md for why coarsening one field
+(the explored-and-removed 'generalize' experiment) did not move this number.
 
 Closed-world, fully synthetic fixture (no real people, no live web). Numbers are a
 controlled directional indicator, NOT a real-world re-identification guarantee.
@@ -54,19 +58,7 @@ def redactor_argus_fast(text: str) -> str:
     return out[0] if isinstance(out, tuple) else out
 
 
-_GEN_CONFIG = {
-    "location": {"strategy": "generalize", "level": "city"},
-    "address":  {"strategy": "generalize", "level": "city"},
-}
-
-
-def redactor_argus_generalize(text: str) -> str:
-    from argus_redact import redact
-    out = redact(text, mode="fast", lang=["zh", "en"], salt=SALT, config=_GEN_CONFIG)
-    return out[0] if isinstance(out, tuple) else out
-
-
-REDACTORS = {"raw": redactor_raw, "argus_fast": redactor_argus_fast, "argus_generalize": redactor_argus_generalize}
+REDACTORS = {"raw": redactor_raw, "argus_fast": redactor_argus_fast}
 
 
 def available_providers() -> list[str]:

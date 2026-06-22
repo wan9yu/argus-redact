@@ -66,7 +66,7 @@ The attack relies on correlating pseudonymous activity across multiple requests.
 
 | Threat | Why not | Mitigation |
 |--------|---------|------------|
-| **Context inference** | "the CEO of [company] in [city] discussed quarterly results" — identity might be guessable from context alone | Layer 3 (semantic) tries to detect these. Use `generalize` strategy. No guarantee. |
+| **Context inference** | "the CEO of [company] in [city] discussed quarterly results" — identity might be guessable from context alone | Layer 3 (semantic) tries to detect these; detected quasi-identifiers default to `remove`. Removing explicit PII is not anonymization — residual cue *combinations* may still enable inference. No guarantee. |
 | **Timing correlation** | Requests always at 9am from same IP | Outside scope. Use VPN, randomize timing. |
 | **Device compromise** | Attacker has access to your filesystem | Encrypt disk. Delete key files after use. |
 | **Traffic analysis** | Request size, frequency patterns | Outside scope. |

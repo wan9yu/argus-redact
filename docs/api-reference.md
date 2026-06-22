@@ -48,7 +48,7 @@ Detect and replace PII in the input text. Returns `(redacted_text, key)`, or `(r
 - `redacted_text`: the input with all detected PII replaced
 - `key`: mapping from replacement → original. Example: `{"P-037": "王五", "[咖啡店]": "星巴克"}`
 
-**Key uniqueness:** Every replacement string is guaranteed unique within a key. `pseudonym` and `mask` strategies produce naturally unique outputs. `category`, `remove`, and `generalize` append a circled number (①②③) on collision:
+**Key uniqueness:** Every replacement string is guaranteed unique within a key. `pseudonym` and `mask` strategies produce naturally unique outputs. `category` and `remove` append a circled number (①②③) on collision:
 
 ```python
 redacted, key = redact("他在星巴克和Costa都喝了咖啡")

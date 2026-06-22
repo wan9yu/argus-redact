@@ -123,9 +123,7 @@ bank_card:
   visible_suffix: 4
 
 address:
-  strategy: generalize          # 北京市朝阳区三里屯SOHO → [北京市某地址]
-  keep_city: true               # Preserve city-level info
-  keep_province: true           # Preserve province-level info
+  strategy: remove              # default; address is removed, not coarsened
 
 date_of_birth:
   strategy: remove
@@ -232,20 +230,6 @@ Output: "...身份证[身份证号已脱敏]，...身份证[身份证号已脱�
 |--------|------|---------|-------------|
 | `replacement` | `str` | `"[REDACTED]"` | The replacement label. Collision suffix (①②③) is appended automatically when multiple entities produce the same label. |
 
-### generalize
-
-Replace with a less specific version of the same information.
-
-```
-Input:  "北京市朝阳区三里屯SOHO 1号楼"
-Output: "[北京市某地址]"
-```
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `keep_city` | `bool` | `true` | Preserve city name. |
-| `keep_province` | `bool` | `true` | Preserve province name. |
-
 ---
 
 ## Built-in Defaults
@@ -261,7 +245,7 @@ When no config file is provided, these defaults are used:
 | `id_number` | `remove` | `"[身份证号已脱敏]"` |
 | `email` | `mask` | Preserve domain |
 | `bank_card` | `mask` | Show first 4 + last 4 |
-| `address` | `generalize` | Keep city + province |
+| `address` | `remove` | `"[地址已脱敏]"` |
 | `date_of_birth` | `remove` | `"[出生日期已脱敏]"` |
 | *(other)* | `remove` | `"[REDACTED]"` |
 
@@ -269,12 +253,12 @@ When no config file is provided, these defaults are used:
 
 ## Validation
 
-Invalid configuration raises `ConfigError` at call time:
+Invalid configuration raises `ValueError` at call time:
 
 ```python
 redacted, key = redact(text, config={"person": {"strategy": "invalid"}})
-# ConfigError: Unknown strategy 'invalid' for entity type 'person'.
-#   Valid strategies: pseudonym, category, mask, remove, generalize
+# ValueError: Unknown strategy 'invalid' for entity type 'person'.
+#   Valid: pseudonym, realistic, mask, remove, category, name_mask, landline_mask, keep
 ```
 
 Missing fields fall back to defaults — you only need to specify what you want to override:

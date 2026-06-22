@@ -148,8 +148,12 @@ OpenAI-compatible LLM is asked to match it to the numbered pool
 indicator on a small synthetic set (N=24), per model** — *not* a real-world
 re-identification guarantee or an upper bound on adversarial inference. `fast` mode
 removes explicit PII but not quasi-identifiers, so a **high residual re-id rate is
-expected**; the metric exists to (a) quantify that gap honestly and (b) gate future
-**quasi-identifier-generalization** work (the rate should drop once it lands).
+expected**; the metric exists to quantify that gap honestly — *removing explicit
+PII is not anonymization*. The residual comes from the *combination* of surviving
+quasi-identifiers, not any single field: coarsening one field (e.g. location) does
+not measurably reduce it, and removal is at least as good (see
+[the explored-and-removed generalize experiment](design-quasi-identifier-generalization.md)).
+It is a documented limitation, not a gated roadmap promise.
 
 ---
 
