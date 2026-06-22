@@ -18,7 +18,7 @@ import pytest
 
 def _org_school(text):
     """Return [(type, start, end, text)] for organization/school L1 matches."""
-    layer1, _person, _hints, _near = _core.detect_l1(text, ["zh"], [])
+    layer1, _person, _regions, _hints, _near = _core.detect_l1(text, ["zh"], [])
     return [
         (m.type, m.start, m.end, m.text)
         for m in layer1

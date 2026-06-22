@@ -57,6 +57,7 @@ use crate::normalize::{
     finalize, map_spans_to_original, normalize_core, normalize_text_for_person,
 };
 use crate::patterns::{match_patterns, PatternConfig, PatternError};
+use crate::regions::detect_regions_zh;
 use crate::replace::{replace, FakerFactory, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
 use crate::reserved_range::{byte_to_char_offset, char_slice};
 use crate::types::PatternMatch;
@@ -78,6 +79,10 @@ pub struct DetectL1Result {
     pub layer1: Vec<PatternMatch>,
     /// L1b person-name matches (zh then en), tagged `layer = 1`.
     pub person: Vec<PatternMatch>,
+    /// L1b evidence-gated Chinese admin-region matches (`type_ = "location"`),
+    /// tagged `layer = 1`, spans in ORIGINAL-text offsets. Empty when `zh` is not
+    /// in the requested lang.
+    pub regions: Vec<PatternMatch>,
     /// L1 hints — all four kinds (`pii_density`, `near_miss_format`,
     /// `text_intent`, `self_reference_tier`) over the ORIGINAL text.
     pub hints: Vec<Hint>,
@@ -364,9 +369,31 @@ pub fn detect_l1(
         orig_len,
     );
 
+    // 10. Evidence-gated Chinese admin-region detection (only when "zh" is in
+    //     lang). Mirrors the person block: run on the SAME person-detect-text
+    //     (digit-step-skipped normalization, so a region name that shares a CJK
+    //     digit homograph isn't folded away), pass `layer1_raw` as the structural
+    //     PII proximity context (same detect-coord convention as the zh person
+    //     detector — positions line up with the person-detect-text), tag the
+    //     LAYER_REGEX layer like person does, then map the spans back to the
+    //     ORIGINAL text exactly like layer1/person. Empty when "zh" is absent.
+    let mut regions: Vec<PatternMatch> = Vec::new();
+    if has_zh {
+        let mut zh_regions = detect_regions_zh(person_detect_text, &layer1_raw);
+        tag_layer(&mut zh_regions, LAYER_REGEX);
+        regions = zh_regions;
+    }
+    let regions = map_matches_to_original(
+        &regions,
+        text,
+        person_offset_map.as_deref(),
+        orig_len,
+    );
+
     Ok(DetectL1Result {
         layer1,
         person,
+        regions,
         hints,
         near_misses,
     })
@@ -464,10 +491,11 @@ pub fn redact_l1<F: PseudoFactory>(
 
     // 1. Raw L1 detection (layer1 ++ person) + hints. Destructure to MOVE the
     //    entity vecs (no clone — this bundled fast path discards `d` afterward).
-    let DetectL1Result { layer1, person, hints, .. } =
+    let DetectL1Result { layer1, person, regions, hints, .. } =
         detect_l1(text, lang, names).map_err(|e| e.to_string())?;
     let mut entities = layer1;
     entities.extend(person);
+    entities.extend(regions);
 
     // 2. Priority-aware merge over the ORIGINAL text.
     let merged = merge_entities_with_text(entities, text);

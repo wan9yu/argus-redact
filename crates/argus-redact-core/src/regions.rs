@@ -203,12 +203,6 @@ fn region_candidates(chars: &[char]) -> Vec<(String, usize, usize)> {
 ///
 /// `pii_entities[i].start/.end` are char offsets (same convention as
 /// `score_candidate`).
-///
-/// `#[allow(dead_code)]`: the detector + its private helpers/consts are wired
-/// into the pipeline in a follow-up; until then nothing in the non-test build
-/// reaches them. The `allow` on this entry point covers the whole transitive
-/// surface (the helpers are only reachable through it).
-#[allow(dead_code)]
 pub(crate) fn detect_regions_zh(
     text: &str,
     pii_entities: &[crate::types::PatternMatch],
