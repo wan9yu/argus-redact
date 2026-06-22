@@ -1,14 +1,16 @@
-"""Offline baker: project today's PRvL paper-data into demo/prvl_cache.json.
+"""Offline baker: project a PRvL benchmark run into demo/prvl_cache.json.
 
-Run once after a fresh PRvL benchmark; the cache is committed alongside app.py.
+Run once after a fresh PRvL benchmark; point SRC at your run JSON. The baked
+cache is committed under demo/ and consumed by the static demo page.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-SRC = Path.home() / "Desktop/argus-paper-data/2026-05-04/raw/prvl_multi.json"
-DST = Path(__file__).resolve().parent / "prvl_cache.json"
+SRC = Path.home() / "prvl_multi.json"  # point at your PRvL run JSON
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DST = REPO_ROOT / "demo" / "prvl_cache.json"
 
 CASE_ID = "summarize_zh"
 PROFILE = "pseudonym-llm"
