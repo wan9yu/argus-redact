@@ -19,6 +19,7 @@ function applyStatic() {
   T.steps.forEach((s) => { const li = document.createElement('li'); li.textContent = s; ol.appendChild(li); });
   const badges = document.getElementById('badges');
   T.badges.forEach((b) => { const sp = document.createElement('span'); sp.textContent = b; badges.appendChild(sp); });
+  document.getElementById('how-limit').textContent = T.limitNote;
   document.getElementById('dev-summary').textContent = T.devFold;
 }
 

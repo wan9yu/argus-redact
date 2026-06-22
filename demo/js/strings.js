@@ -15,6 +15,7 @@ export const T = {
   howTitle: '怎么做到的 · How it works',
   steps: ['① 找出隐私信息 · find personal info', '② 换成安全替身 · swap in safe look-alikes', '③ 回复里再换回来 · restore from the reply'],
   badges: ['50+ 类隐私信息', '8 种语言', '可逆还原', '开源 Apache-2.0', '身份证/银行卡校验'],
+  limitNote: '⚠ 脱敏移除显式 PII，但不能保证抵御从残留上下文的推理式重识别 · removes explicit PII, not a guarantee against inference-based re-identification',
   llmProof: '真实大模型，零泄漏 · Real AIs, zero leaks',
   llmProvenance: '来源 · Source: ',
   llmCaptionTail: '。非对抗输入下的缓存结果，非绝对保证 · cached reference run, not a guarantee against adversarial input.',

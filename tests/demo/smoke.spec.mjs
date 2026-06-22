@@ -51,6 +51,11 @@ test('chinese-first: the headline leads with Chinese', async ({ page }) => {
   await expect(page.locator('#headline')).toContainText('脱敏');
 });
 
+test('honest positioning: inference/re-identification limitation is shown', async ({ page }) => {
+  await ready(page);
+  await expect(page.locator('#how-limit')).toContainText('推理');
+});
+
 test('dev fold: phone → pseudonym yields a PHON- code', async ({ page }) => {
   await ready(page);
   await page.locator('#dev > summary').click();

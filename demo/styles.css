@@ -28,4 +28,5 @@ button.primary { font-size: 1.05rem; padding: .55rem 1.1rem; }
 .badges { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
 .badges span { background: #f0f0f6; border-radius: 12px; padding: .2rem .6rem; font-size: .85rem; }
 #how-steps { line-height: 1.9; }
+.limit { color: #8a6d00; background: #fff8e1; border-radius: 6px; padding: .4rem .6rem; margin-top: .7rem; font-size: .82rem; }
 .dev-row { display: flex; gap: .5rem; align-items: center; margin: .3rem 0; flex-wrap: wrap; }
