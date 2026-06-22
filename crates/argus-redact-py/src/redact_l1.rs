@@ -138,9 +138,10 @@ type RedactL1Out = (
     bool,
 );
 
-/// `(layer1, person, regions, job_titles, hints, near_misses)` — the
+/// `(layer1, person, regions, job_titles, framework, hints, near_misses)` — the
 /// [`detect_l1`] return shape.
 type DetectL1Out<'py> = (
+    Vec<PyPatternMatch>,
     Vec<PyPatternMatch>,
     Vec<PyPatternMatch>,
     Vec<PyPatternMatch>,
@@ -150,9 +151,9 @@ type DetectL1Out<'py> = (
 );
 
 /// Run the fast-mode L1 detection sequence, returning the RAW (unmerged) result
-/// as six distinct components so both fast mode
-/// (`layer1 ++ person ++ regions ++ job_titles`) and full mode (`layer1`
-/// separately + `near_misses`) can consume it.
+/// as seven distinct components so both fast mode
+/// (`layer1 ++ person ++ regions ++ job_titles ++ framework`) and full mode
+/// (`layer1` separately + `near_misses`) can consume it.
 ///
 /// Mirrors `argus_redact_core::redact_l1::detect_l1`. `known_names=None` behaves
 /// like the Python detector's empty-names default.
@@ -175,13 +176,15 @@ pub fn detect_l1<'py>(
         result.regions.into_iter().map(PyPatternMatch::from).collect();
     let job_titles: Vec<PyPatternMatch> =
         result.job_titles.into_iter().map(PyPatternMatch::from).collect();
+    let framework: Vec<PyPatternMatch> =
+        result.framework.into_iter().map(PyPatternMatch::from).collect();
     let hints = hints_to_py(py, &result.hints)?;
     let near_misses: Vec<PyPatternMatch> = result
         .near_misses
         .into_iter()
         .map(PyPatternMatch::from)
         .collect();
-    Ok((layer1, person, regions, job_titles, hints, near_misses))
+    Ok((layer1, person, regions, job_titles, framework, hints, near_misses))
 }
 
 // ── redact_l1 ─────────────────────────────────────────────────────────────────

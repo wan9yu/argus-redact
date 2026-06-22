@@ -88,6 +88,10 @@ pub struct DetectL1Result {
     /// tagged `layer = 1`, spans in ORIGINAL-text offsets. Empty when `zh` is not
     /// in the requested lang.
     pub job_titles: Vec<PatternMatch>,
+    /// L1b framework-detector matches (conditions ++ hobbies) — evidence-gated
+    /// quasi-identifiers from `evidence_detector`. One combined vec so future
+    /// framework detectors don't grow the result shape again.
+    pub framework: Vec<PatternMatch>,
     /// L1 hints — all four kinds (`pii_density`, `near_miss_format`,
     /// `text_intent`, `self_reference_tier`) over the ORIGINAL text.
     pub hints: Vec<Hint>,
@@ -414,11 +418,21 @@ pub fn detect_l1(
         orig_len,
     );
 
+    // 12. Evidence-gated framework detectors (zh only): conditions (+ hobbies in
+    //     a later release). Combined into one `framework` vec.
+    let mut framework: Vec<PatternMatch> = Vec::new();
+    if has_zh {
+        framework.extend(crate::conditions::detect_conditions_zh(person_detect_text, &layer1_raw));
+        tag_layer(&mut framework, LAYER_REGEX);
+    }
+    let framework = map_matches_to_original(&framework, text, person_offset_map.as_deref(), orig_len);
+
     Ok(DetectL1Result {
         layer1,
         person,
         regions,
         job_titles,
+        framework,
         hints,
         near_misses,
     })
@@ -516,12 +530,13 @@ pub fn redact_l1<F: PseudoFactory>(
 
     // 1. Raw L1 detection (layer1 ++ person) + hints. Destructure to MOVE the
     //    entity vecs (no clone — this bundled fast path discards `d` afterward).
-    let DetectL1Result { layer1, person, regions, job_titles, hints, .. } =
+    let DetectL1Result { layer1, person, regions, job_titles, framework, hints, .. } =
         detect_l1(text, lang, names).map_err(|e| e.to_string())?;
     let mut entities = layer1;
     entities.extend(person);
     entities.extend(regions);
     entities.extend(job_titles);
+    entities.extend(framework);
 
     // 2. Priority-aware merge over the ORIGINAL text.
     let merged = merge_entities_with_text(entities, text);

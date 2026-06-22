@@ -244,6 +244,7 @@ fn redact_segment(
     entities.extend(detected.person);
     entities.extend(detected.regions);
     entities.extend(detected.job_titles);
+    entities.extend(detected.framework);
 
     let info_pairs = build_type_info(&entities, params.config.as_ref(), &params.langs, None);
     let person_prefix = lookup_prefix(&info_pairs, "person", "P");
@@ -482,6 +483,7 @@ impl StreamingRedactor {
                     entities.extend(r.person);
                     entities.extend(r.regions);
                     entities.extend(r.job_titles);
+                    entities.extend(r.framework);
                     DetectSpans {
                         entities,
                         hints: r.hints,

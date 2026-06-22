@@ -250,11 +250,12 @@ def _detect(
     # spans mapped back to original text), ``person`` (zh-then-en or names-only,
     # also tagged LAYER_REGEX), ``regions`` (evidence-gated zh admin-region
     # ``location`` matches, also tagged LAYER_REGEX), ``job_titles`` (evidence-gated
-    # zh occupation ``job_title`` matches, also tagged LAYER_REGEX), the internal L1
-    # hints, and validator ``near_misses``. detect_l1 takes the ORIGINAL text (it
-    # normalizes internally).
+    # zh occupation ``job_title`` matches, also tagged LAYER_REGEX), ``framework``
+    # (evidence-gated zh framework detectors — conditions/``medical`` now, hobbies
+    # later — also tagged LAYER_REGEX), the internal L1 hints, and validator
+    # ``near_misses``. detect_l1 takes the ORIGINAL text (it normalizes internally).
     t0 = time.perf_counter()
-    layer1, person, regions, job_titles, l1_hints, near_misses = _core.detect_l1(
+    layer1, person, regions, job_titles, framework, l1_hints, near_misses = _core.detect_l1(
         text, langs, names or []
     )
     timing["layer_1_ms"] = (time.perf_counter() - t0) * 1000
@@ -262,7 +263,8 @@ def _detect(
     entities.extend(person)
     entities.extend(regions)
     entities.extend(job_titles)
-    layer1_count = len(layer1) + len(person) + len(regions) + len(job_titles)
+    entities.extend(framework)
+    layer1_count = len(layer1) + len(person) + len(regions) + len(job_titles) + len(framework)
 
     # Hints come fully from the Rust engine now: detect_l1 emits all 4 types
     # (pii_density / near_miss_format / text_intent / self_reference_tier) in
