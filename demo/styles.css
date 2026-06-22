@@ -16,3 +16,16 @@ textarea { width: 100%; box-sizing: border-box; padding: .5rem; font: inherit; }
 .error { color: #c62828; margin-top: .5rem; white-space: pre-wrap; }
 table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #e0e0e8; padding: .4rem; text-align: left; vertical-align: top; font-size: .9em; }
 caption { caption-side: bottom; color: #666; font-size: .8em; padding-top: .4rem; }
+.subtitle { color: #555; margin: .2rem 0 0; font-size: 1.05rem; }
+.trust { color: #2e7d32; margin: .3rem 0 0; font-size: .9rem; }
+.chips { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: .5rem 0; }
+.chip-btn { background: #ede9fb; color: #4a32b0; border: 1px solid #d7cdf7; border-radius: 14px; padding: .25rem .7rem; cursor: pointer; font: inherit; }
+button.primary { font-size: 1.05rem; padding: .55rem 1.1rem; }
+.two-up { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.two-up pre { white-space: pre-wrap; word-break: break-word; background: #f7f7fb; padding: .6rem; border-radius: 6px; min-height: 3rem; }
+@media (max-width: 720px) { .two-up { grid-template-columns: 1fr; } }
+.restore { color: #2e7d32; margin-top: .5rem; font-weight: 600; }
+.badges { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
+.badges span { background: #f0f0f6; border-radius: 12px; padding: .2rem .6rem; font-size: .85rem; }
+#how-steps { line-height: 1.9; }
+.dev-row { display: flex; gap: .5rem; align-items: center; margin: .3rem 0; flex-wrap: wrap; }
