@@ -2,8 +2,8 @@
 
 Reversible strategies (pseudonym/realistic/remove/keep) emit output that
 restore() can map back to the original. Irreversible strategies
-(mask/name_mask/landline_mask/category) lose information by design and the
-key dict cannot recover the original.
+(mask/name_mask/landline_mask/category/generalize) lose information by design
+and the key dict cannot recover the original.
 
 PIITypeDef.is_reversible delegates to this function so callers can ask a
 typedef for its reversibility without duplicating strategy classification.
@@ -33,7 +33,7 @@ class TestStrategyClassification:
         assert is_strategy_reversible(strategy) is True
 
     @pytest.mark.parametrize(
-        "strategy", ["mask", "name_mask", "landline_mask", "category"]
+        "strategy", ["mask", "name_mask", "landline_mask", "category", "generalize"]
     )
     def test_irreversible_strategies(self, strategy):
         assert is_strategy_reversible(strategy) is False
@@ -42,7 +42,7 @@ class TestStrategyClassification:
         # Every strategy in VALID_STRATEGIES must be classified as either
         # reversible or irreversible — no new strategy can sneak in without
         # an explicit verdict. Uses the public API only (no private import).
-        irreversible = {"mask", "name_mask", "landline_mask", "category"}
+        irreversible = {"mask", "name_mask", "landline_mask", "category", "generalize"}
         reversible = {s for s in VALID_STRATEGIES if is_strategy_reversible(s)}
         assert reversible | irreversible == set(VALID_STRATEGIES), (
             "Every VALID_STRATEGIES member must be classified as either "
