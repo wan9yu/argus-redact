@@ -23,6 +23,9 @@ target/
 crates/argus-redact-wasm/pkg/
 crates/argus-redact-wasm/pkg-*/
 
+# wasm-pack --target web output for the HF demo Space (built at deploy time, never committed)
+demo/pkg-web/
+
 # member-level lock files would shadow the workspace-root lock
 crates/*/Cargo.lock
 

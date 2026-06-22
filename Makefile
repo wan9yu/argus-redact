@@ -1,4 +1,4 @@
-.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check gen-confusables gen-confusables-check perf-update perf-check sync-docs-version sync-docs-version-check changelog-version-check mutants-core
+.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check gen-confusables gen-confusables-check perf-update perf-check sync-docs-version sync-docs-version-check changelog-version-check mutants-core demo
 
 install:
 	pip install -e .
@@ -100,3 +100,17 @@ mutants-core:
 		--file '**/normalize.rs' --file '**/redact_l1.rs' --file '**/person_en.rs' \
 		--file '**/person_zh.rs' --file '**/patterns.rs' \
 		--timeout 120 -j 4
+
+demo:
+	@command -v wasm-pack >/dev/null || { echo "ERROR: wasm-pack not found (cargo install wasm-pack --locked)"; exit 1; }
+	@command -v wasm-opt  >/dev/null || { echo "ERROR: wasm-opt not found (install binaryen)"; exit 1; }
+	wasm-pack build crates/argus-redact-wasm --release --target web --out-dir $(CURDIR)/demo/pkg-web
+	wasm-opt -Oz \
+		--enable-bulk-memory \
+		--enable-nontrapping-float-to-int \
+		--enable-sign-ext \
+		--enable-mutable-globals \
+		--enable-reference-types \
+		--enable-multivalue \
+		demo/pkg-web/argus_redact_wasm_bg.wasm -o demo/pkg-web/argus_redact_wasm_bg.wasm
+	@echo "demo/pkg-web built (gzipped wasm:" $$(gzip -c demo/pkg-web/argus_redact_wasm_bg.wasm | wc -c) "bytes)"
