@@ -309,6 +309,30 @@ Streaming hot path (`StreamingRestorer.feed` × N sentences) is the primary bene
 
 ---
 
+## Re-identification risk (PRvL+ X axis)
+
+Can an LLM re-identify a redacted subject from residual quasi-identifiers + a known
+candidate pool? Closed-world synthetic set (N=24 clustered personas with overlapping
+quasi-identifiers), `python -m tests.benchmark.reid_eval` (snapshot:
+`tests/benchmark/results/reidentification_0.7.11.json`). **Lower = better.**
+
+| Model | raw (upper bound) | argus `fast` |
+|-------|:-----------------:|:------------:|
+| deepseek-chat | 100% | 87.5% |
+| qwen-plus | 100% | 95.8% |
+| deepseek-chat (via OpenRouter) | 100% | 91.7% |
+
+**Read this honestly:** `fast` removes explicit PII (name / phone / checksum-valid ID,
+plus the age / employer / title / condition tokens argus emits) but **leaves
+city/district, occupation, sensitive-attribute phrasing, and hobbies** — so the subject
+is usually still re-identifiable (87.5–95.8% across three models on this set). This is a
+**directional indicator on a small closed-world synthetic set, per model — not a
+real-world guarantee.** It is exactly the gap that **quasi-identifier generalization**
+(roadmap) must close; this benchmark is its regression gate. The re-identification
+tooling here is eval/defensive only.
+
+---
+
 ## 8. Limitations & Roadmap
 
 **Current limitations (v0.7.9 measurements):**
