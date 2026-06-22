@@ -23,6 +23,6 @@ export async function renderLlmProof() {
     <table>
       <thead><tr><th>LLM</th><th>${T.redacted}</th><th>reply · 回复</th><th>leaked · 泄漏</th><th>utility · 效用</th></tr></thead>
       <tbody>${rows}</tbody>
-      <caption>${T.llmProvenance}${escapeHtml(data.source_run)} · case ${escapeHtml(data.case_id)} · profile ${escapeHtml(data.profile)}. Scoped to this cached reference run — not a guarantee against adversarial input.</caption>
+      <caption>${T.llmProvenance}${escapeHtml(data.source_run)} · case ${escapeHtml(data.case_id)} · profile ${escapeHtml(data.profile)}${T.llmCaptionTail}</caption>
     </table>`;
 }

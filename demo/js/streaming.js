@@ -3,9 +3,9 @@ import { T } from './strings.js';
 export function initStreaming(api) {
   const body = document.getElementById('streaming-body');
   body.innerHTML = `
-    <textarea id="st-input" rows="4" placeholder="${T.input}"></textarea>
+    <textarea id="st-input" rows="4" placeholder="${T.devInput}"></textarea>
     <div class="controls">
-      <label>${T.salt} <input id="st-salt" type="text" value="42" /></label>
+      <label>${T.devSeed} <input id="st-salt" type="text" value="42" /></label>
       <button id="st-run" type="button">${T.streamRun}</button>
     </div>
     <pre id="st-out"></pre>
