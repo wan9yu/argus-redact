@@ -432,6 +432,9 @@ pub fn build_type_info<'py>(
         d.set_item("default_category_label", &ti.default_category_label)?;
         d.set_item("visible_prefix", ti.visible_prefix)?;
         d.set_item("visible_suffix", ti.visible_suffix)?;
+        // generalize coarsening level — round-tripped so build_info_map (which
+        // re-parses this dict for replace()) sees the config level, not "city".
+        d.set_item("level", &ti.level)?;
         out.set_item(type_name, d)?;
     }
     Ok(out)

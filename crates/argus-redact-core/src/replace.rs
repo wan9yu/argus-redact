@@ -385,13 +385,38 @@ pub fn replace<F: PseudoFactory>(
                 .or_else(|| info.map(|i| i.default_category_label.clone()))
                 .unwrap_or_else(|| format!("[{}]", entity.type_));
             resolve_collision(&label, &used_labels)
+        } else if strategy == "generalize" {
+            // Lossy location coarsening: district/address → city|province ancestor.
+            // No restore-key entry (many regions → one city would clobber on restore).
+            let level = info.map(|i| i.level.as_str()).unwrap_or("city");
+            match crate::regions::coarsen(&entity.text, level) {
+                Some(coarse) => resolve_collision(&coarse, &used_labels),
+                None => {
+                    // No region resolved → fall back to the type's default (remove)
+                    // via the per-type generator.
+                    let type_gen = get_type_gen(
+                        &mut type_gens,
+                        &entity.type_,
+                        info,
+                        unified_prefix,
+                        pseudo_seed_int,
+                        existing_for_gen.as_ref(),
+                        factory,
+                    );
+                    type_gen.get(&entity.text)
+                }
+            }
         } else {
             resolve_collision(DEFAULT_REDACT_LABEL, &used_labels)
         };
 
         entity_replacements.insert(entity.text.clone(), replacement.clone());
         used_labels.insert(replacement.clone());
-        result_key.insert(replacement, entity.text.clone());
+        // generalize is LOSSY → no restore-key entry (the coarse value maps to many
+        // originals; a key entry would mis-restore unrelated city mentions).
+        if strategy != "generalize" {
+            result_key.insert(replacement, entity.text.clone());
+        }
     }
 
     // Replace right-to-left, dedup by (start, end). Char-based slicing to match
@@ -914,5 +939,71 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.redacted, "a 138****5678 b 139****0000");
+    }
+
+    #[test]
+    fn generalize_address_to_city_is_lossy() {
+        let mut info_map = HashMap::new();
+        info_map.insert("address".to_string(), {
+            let mut i = info("generalize", "A");
+            i.level = "city".to_string();
+            i
+        });
+        let wl = empty_whitelist();
+        let text = "他住在杭州西湖区文一路100号。";
+        // address span chars [3..14] = "杭州西湖区文一路100号"
+        let ents = vec![pm("杭州西湖区文一路100号", "address", 3, 15)];
+        let r = replace(
+            ReplaceArgs {
+                text,
+                entities: &ents,
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+            },
+            &SeqFactory,
+            None,
+        )
+        .unwrap();
+        assert_eq!(r.redacted, "他住在杭州市。");
+        // Lossy: no restore-key entry for the coarse value.
+        assert!(!r.key.contains_key("杭州市"));
+        assert!(r.key.is_empty());
+    }
+
+    #[test]
+    fn generalize_address_to_province_is_lossy() {
+        let mut info_map = HashMap::new();
+        info_map.insert("address".to_string(), {
+            let mut i = info("generalize", "A");
+            i.level = "province".to_string();
+            i
+        });
+        let wl = empty_whitelist();
+        let text = "他住在杭州西湖区文一路100号。";
+        let ents = vec![pm("杭州西湖区文一路100号", "address", 3, 15)];
+        let r = replace(
+            ReplaceArgs {
+                text,
+                entities: &ents,
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+            },
+            &SeqFactory,
+            None,
+        )
+        .unwrap();
+        assert_eq!(r.redacted, "他住在浙江省。");
+        assert!(!r.key.contains_key("浙江省"));
+        assert!(r.key.is_empty());
     }
 }
