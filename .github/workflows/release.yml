@@ -170,7 +170,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          wasm-pack build crates/argus-redact-wasm --release --target web --out-dir demo/pkg-web
+          # --out-dir is resolved relative to the CRATE dir, so an absolute path is
+          # required to land the artifact at repo-root/demo/pkg-web (where upload_folder
+          # reads it) rather than crates/argus-redact-wasm/demo/pkg-web.
+          wasm-pack build crates/argus-redact-wasm --release --target web --out-dir "$GITHUB_WORKSPACE/demo/pkg-web"
           wasm-opt -Oz \
             --enable-bulk-memory \
             --enable-nontrapping-float-to-int \

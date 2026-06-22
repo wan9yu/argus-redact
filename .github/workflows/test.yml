@@ -175,6 +175,59 @@ jobs:
           fi
           echo "wasm bundle within budget."
 
+  # Demo end-to-end: build the --target web artifact the HF Space ships (same build
+  # the release `deploy-demo` job runs) and drive it in headless Chromium via the
+  # Playwright suite (golden P-83811 + restore + streaming straddle + hero/playground
+  # UI). Gates main/PR so a broken demo or web-build-path regression is caught here,
+  # not silently shipped to the Space on the next tag. Independent of the release path.
+  demo-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Rust (wasm target)
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable @ 2026-05-03
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            target
+          key: rust-wasm-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Install wasm-pack
+        run: command -v wasm-pack >/dev/null || cargo install wasm-pack --locked
+
+      - name: Install binaryen (wasm-opt)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+
+      - name: Build demo web artifact (mirrors the deploy build)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # --out-dir is crate-relative, so an absolute path lands it at repo-root/demo/pkg-web.
+          wasm-pack build crates/argus-redact-wasm --release --target web --out-dir "$GITHUB_WORKSPACE/demo/pkg-web"
+          wasm-opt -Oz \
+            --enable-bulk-memory \
+            --enable-nontrapping-float-to-int \
+            --enable-sign-ext \
+            --enable-mutable-globals \
+            --enable-reference-types \
+            --enable-multivalue \
+            demo/pkg-web/argus_redact_wasm_bg.wasm -o demo/pkg-web/argus_redact_wasm_bg.wasm
+
+      - name: Run demo browser tests (Playwright)
+        working-directory: tests/demo
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+          npx playwright test
+
   # Rust coverage for the pure core crate (argus-redact-core), uploaded to Codecov
   # under the `rust` flag. Python (`pytest --cov`) only measures the Python surface;
   # as Layer-1 logic moves into the core (validators, normalize, lang_detect, …),
