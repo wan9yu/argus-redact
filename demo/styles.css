@@ -1,0 +1,18 @@
+:root { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.5; }
+body { max-width: 1000px; margin: 0 auto; padding: 1.5rem; color: #1a1a2e; }
+header h1 { margin: 0; }
+.status-loading { color: #b08900; } .status-ready { color: #2e7d32; } .status-failed { color: #c62828; }
+.card { border: 1px solid #e0e0e8; border-radius: 10px; padding: 1rem; margin: 1rem 0; }
+.controls { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin: .5rem 0; }
+.controls input[type=text] { flex: 1 1 8rem; padding: .4rem; }
+button { padding: .4rem .8rem; border-radius: 6px; border: 1px solid #5b3fd6; background: #5b3fd6; color: #fff; cursor: pointer; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+textarea { width: 100%; box-sizing: border-box; padding: .5rem; font: inherit; }
+.three-up { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .75rem; }
+.three-up pre { white-space: pre-wrap; word-break: break-word; background: #f7f7fb; padding: .5rem; border-radius: 6px; min-height: 3rem; }
+@media (max-width: 720px) { .three-up { grid-template-columns: 1fr; } }
+.findings mark { background: #ffe08a; padding: 0 .1em; border-radius: 3px; }
+.chip { display: inline-block; background: #ede9fb; color: #4a32b0; border-radius: 12px; padding: .1rem .5rem; margin: .15rem; font-size: .85em; }
+.error { color: #c62828; margin-top: .5rem; white-space: pre-wrap; }
+table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #e0e0e8; padding: .4rem; text-align: left; vertical-align: top; font-size: .9em; }
+caption { caption-side: bottom; color: #666; font-size: .8em; padding-top: .4rem; }

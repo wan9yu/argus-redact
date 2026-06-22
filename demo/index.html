@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>argus-redact — Redact PII in your browser</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header>
+    <h1>🛡️ argus-redact</h1>
+    <p id="tagline"></p>
+    <span id="status" class="status-loading"></span>
+  </header>
+
+  <main>
+    <section id="hero" class="card">
+      <textarea id="hero-input" rows="3"></textarea>
+      <div class="controls">
+        <input id="hero-names" type="text" />
+        <select id="hero-lang"></select>
+        <input id="hero-salt" type="text" value="42" />
+        <button id="hero-salt-rand" type="button"></button>
+        <button id="hero-redact" type="button" disabled></button>
+      </div>
+      <div class="three-up">
+        <div><h3 id="lbl-original"></h3><pre id="hero-original"></pre></div>
+        <div><h3 id="lbl-redacted"></h3><pre id="hero-redacted"></pre></div>
+        <div><h3 id="lbl-restored"></h3><pre id="hero-restored"></pre></div>
+      </div>
+      <div id="hero-findings" class="findings"></div>
+      <div id="hero-error" class="error"></div>
+    </section>
+
+    <section id="llm-proof" class="card"></section>
+
+    <details id="playground" class="card"><summary></summary><div id="playground-body"></div></details>
+
+    <details id="streaming" class="card"><summary></summary><div id="streaming-body"></div></details>
+  </main>
+
+  <footer>
+    <a href="https://github.com/wan9yu/argus-redact">GitHub</a> ·
+    <code>pip install argus-redact</code>
+  </footer>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

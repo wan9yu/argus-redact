@@ -1,0 +1,28 @@
+export const LANGS = ['zh', 'en', 'ja', 'ko', 'de', 'uk', 'in', 'br'];
+
+export const T = {
+  tagline: 'Redact PII in your browser — nothing leaves the page · 在浏览器里脱敏，数据不离开页面',
+  loading: 'Loading wasm… · 加载中…',
+  ready: '● wasm ready · 已就绪',
+  failed: '⚠ failed to load · 加载失败: ',
+  input: 'Your text · 你的文本',
+  names: 'Known names (comma-separated) · 已知姓名（逗号分隔）',
+  lang: 'Language · 语言',
+  salt: 'Salt · 盐值',
+  randomize: '🎲 Randomize · 随机',
+  redact: 'Redact · 脱敏',
+  original: 'Original · 原文',
+  redacted: 'Redacted — what an LLM sees · 脱敏后（大模型所见）',
+  restored: 'Restored · 还原',
+  restore: 'Restore · 还原',
+  restoreHint: 'Paste an LLM reply to restore · 粘贴大模型回复以还原',
+  findings: 'Findings · 发现',
+  items: 'items redacted · 项已脱敏',
+  llmProof: 'Real LLM proof · 真实大模型实测',
+  llmProvenance: 'Source · 来源: ',
+  playground: 'Playground · 调参',
+  streaming: 'Streaming · 流式',
+  streamRun: 'Stream it · 开始流式',
+  keyJson: 'Key (JSON) · 密钥（JSON）',
+  copy: 'Copy · 复制',
+};
