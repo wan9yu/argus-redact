@@ -35,6 +35,7 @@ pub mod typeinfo;
 pub mod redact_l1;
 pub mod streaming;
 pub mod regions;
+pub mod occupation;
 
 pub use types::PatternMatch;
 pub use merger::{merge_entities, merge_entities_with_text};
