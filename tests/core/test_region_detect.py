@@ -63,3 +63,11 @@ def test_region_precision_floor():
 def test_region_recall_floor():
     hits = sum(1 for t in POSITIVES if _detects_region(t))
     assert hits >= 8, f"region recall floor 8/9: only {hits}/{len(POSITIVES)} detected"
+
+
+def test_parent_city_prefix_absorbed():
+    # 上海浦东新区 must redact as ONE location, not leave bare 上海.
+    out, _ = redact("我住在上海浦东新区，平时很忙。", mode="fast", lang=["zh"],
+                    salt=42, config={"location": {"strategy": "category"}})
+    assert "上海" not in out, f"bare parent city leaked: {out!r}"
+    assert "[location]" in out or "[LOCATION]" in out

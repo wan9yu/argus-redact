@@ -88,6 +88,30 @@ fn region_max_len() -> usize {
     })
 }
 
+/// Trailing administrative-division suffix chars a colloquial parent reference
+/// drops (`上海市`→`上海`, `广东省`→`广东`, `海淀区`→`海淀`, `阿拉善盟`→`阿拉善`).
+/// Used only by [`is_suffix_elided_region`] for parent-prefix absorption — never
+/// by the candidate scan or evidence gate.
+const REGION_ADMIN_SUFFIXES: &[char] = &['市', '省', '区', '县', '旗', '州', '盟'];
+
+/// True if `prefix` is a gazetteer region name with its trailing admin suffix
+/// elided (the colloquial parent form, e.g. `上海` for `上海市`). Tests each
+/// admin suffix appended back against the gazetteer set; bounded, O(1) lookups.
+/// A bare `prefix` of length < 1 or already ending in a name is handled by the
+/// exact-name check at the call site, so this only covers the elided case.
+fn is_suffix_elided_region(prefix: &str) -> bool {
+    if prefix.is_empty() {
+        return false;
+    }
+    let set = region_name_set();
+    REGION_ADMIN_SUFFIXES.iter().any(|suf| {
+        let mut candidate = String::with_capacity(prefix.len() + suf.len_utf8());
+        candidate.push_str(prefix);
+        candidate.push(*suf);
+        set.contains(candidate.as_str())
+    })
+}
+
 /// `_REGION_CUE` — address-context cue words. A hit anywhere in the ±window is
 /// the strongest single signal that a region name is being used as a *place a
 /// person is associated with* rather than as part of a proper noun
@@ -296,6 +320,40 @@ pub(crate) fn detect_regions_zh(
                 confidence: evidence.min(1.0),
                 layer: 1,
             });
+        }
+    }
+
+    // Parent-prefix absorption: 上海浦东新区 is a parent region glued to a
+    // district; only the district cleared evidence above, leaving a bare 上海. If
+    // an emitted region is immediately preceded (no gap) by another gazetteer
+    // region name in `chars`, extend its span left to swallow the prefix so the
+    // whole place reference is redacted as one unit.
+    //
+    // The gazetteer stores names WITH their admin suffix (`上海市`, `广东省`,
+    // `海淀区`), but a parent written directly before a child is usually
+    // colloquial and drops it (`上海`浦东新区, `广东`深圳市). So a prefix matches
+    // if it equals a gazetteer name OR a gazetteer name minus its trailing admin
+    // char. This only WIDENS an already-emitted match — it can never create a
+    // new one, so the precision guards (北京时间/北京大学/北京烤鸭, which never
+    // emit) are unaffected.
+    for m in out.iter_mut() {
+        loop {
+            let probe_lo = m.start.saturating_sub(region_max_len());
+            let mut absorbed = false;
+            for s in probe_lo..m.start {
+                let prefix: String = chars[s..m.start].iter().collect();
+                if region_name_set().contains(prefix.as_str())
+                    || is_suffix_elided_region(&prefix)
+                {
+                    m.text = chars[s..m.end].iter().collect();
+                    m.start = s;
+                    absorbed = true;
+                    break;
+                }
+            }
+            if !absorbed {
+                break;
+            }
         }
     }
 
