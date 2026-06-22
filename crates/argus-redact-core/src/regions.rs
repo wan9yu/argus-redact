@@ -110,8 +110,9 @@ fn region_max_len() -> usize {
 /// person is associated with* rather than as part of a proper noun
 /// (`北京大学`) or a fixed phrase (`北京时间`).
 static REGION_CUE: LazyLock<Regex> = LazyLock::new(|| {
-    let pat =
-        r"住|家在|家住|户籍|籍贯|老家|来自|位于|坐落|工作于|就职|任职|上班|租住|租房|搬到|搬去|定居";
+    // `住` already subsumes 现住/居住/居住在/租住; the rest are distinct
+    // residence/registration/birthplace cues common in CN address phrasing.
+    let pat = r"住|家在|家住|户籍|户口|籍贯|老家|来自|位于|坐落|工作于|工作单位|就职|任职|上班|租住|租房|搬到|搬去|定居|现居|落户|居住|出生";
     Regex::new(pat).unwrap_or_else(|e| panic!("regions: _REGION_CUE compile failed: {e}"))
 });
 
@@ -261,7 +262,22 @@ pub(crate) fn detect_regions_zh(
 
         // Proximity to structural PII — first entity within a bucket wins
         // (break). abs_diff over usize char offsets == Python abs() on ints.
+        //
+        // Two entity types do NOT corroborate a bare region:
+        //   - `self_reference` (我/我们) is whitelisted non-PII; letting it
+        //     corroborate makes any `我 … <district>` with no address cue
+        //     (`我很喜欢西湖区的风景`) falsely clear the threshold.
+        //   - `organization` co-occurs with place names as a matter of course
+        //     (`海淀区中关村科技园…`, `我们公司在黄浦区…`); an org being near a
+        //     region is NOT evidence the region is a person's address, and the
+        //     org span itself frequently mis-segments and leaves a bare region
+        //     prefix un-absorbed. Org-near-region alone must not fire L1; a
+        //     real address cue or structural suffix still will.
+        // Person-identifying PII (phone/person/id/email) still counts.
         for pii in pii_entities {
+            if pii.type_ == "self_reference" || pii.type_ == "organization" {
+                continue;
+            }
             let distance = start
                 .abs_diff(pii.end)
                 .min(pii.start.abs_diff(end));
@@ -332,6 +348,74 @@ mod tests {
         for t in ["现在是北京时间晚上8点。", "他考上了北京大学。", "我想吃北京烤鸭。"] {
             let hits = detect_regions_zh(t, &[]);
             assert!(hits.is_empty(), "false positive on {t:?}: {hits:?}");
+        }
+    }
+
+    fn pm(text: &str, type_: &str, start: usize, end: usize) -> crate::types::PatternMatch {
+        crate::types::PatternMatch {
+            text: text.to_string(),
+            type_: type_.to_string(),
+            start,
+            end,
+            confidence: 1.0,
+            layer: 0,
+        }
+    }
+
+    #[test]
+    fn self_reference_does_not_corroborate_region() {
+        // `我很喜欢西湖区的风景` — `我` (self_reference) is near 西湖区 but must
+        // NOT corroborate it: no cue, no struct, so the region stays at L2.
+        let t = "我很喜欢西湖区的风景。";
+        let sr = vec![pm("我", "self_reference", 0, 1)];
+        assert!(
+            detect_regions_zh(t, &sr).is_empty(),
+            "self_reference must not corroborate a bare region"
+        );
+    }
+
+    #[test]
+    fn organization_does_not_corroborate_region() {
+        // `海淀区中关村科技园…` — an org span adjacent to 海淀区 must NOT make
+        // the bare region fire (orgs co-occur with place names routinely).
+        let t = "海淀区中关村科技园聚集了大量互联网企业。";
+        let org = vec![pm("中关村科技园", "organization", 3, 9)];
+        assert!(
+            detect_regions_zh(t, &org).is_empty(),
+            "organization must not corroborate a bare region"
+        );
+    }
+
+    #[test]
+    fn real_pii_still_corroborates_region() {
+        // A phone number (person-identifying PII) near a bare region SHOULD
+        // still clear the proximity bucket — only self_reference/organization
+        // are excluded.
+        let t = "西湖区 13812345678";
+        let phone = vec![pm("13812345678", "phone", 4, 15)];
+        assert!(
+            detect_regions_zh(t, &phone)
+                .iter()
+                .any(|h| h.text == "西湖区"),
+            "real PII (phone) must still corroborate a region by proximity"
+        );
+    }
+
+    #[test]
+    fn residence_cues_detect_region() {
+        // The cues added to _REGION_CUE (现居/户口/落户/出生) each fire on their
+        // own (W_REGION_CUE 0.6 >= 0.5).
+        for t in [
+            "现居北京市海淀区。",
+            "户口在西安市雁塔区。",
+            "落户深圳市福田区。",
+            "出生在重庆市渝中区。",
+        ] {
+            let hits = detect_regions_zh(t, &[]);
+            assert!(
+                !hits.is_empty(),
+                "expected a location hit for residence cue in {t:?}, got {hits:?}"
+            );
         }
     }
 }

@@ -22,6 +22,13 @@ POSITIVES = [
     "户籍地在广州天河区。",
     "我在深圳南山区租房，房租不便宜。",
     "老家是成都武侯区的。",
+    # Residence/registration/birthplace cues added to _REGION_CUE: each carries
+    # an explicit address-context cue (现居/户口/落户/出生), so the region is a
+    # location quasi-identifier, not a bare mention.
+    "现居北京市海淀区。",
+    "户口在西安市雁塔区。",
+    "落户深圳市福田区。",
+    "出生在重庆市渝中区。",
 ]
 # Negatives: a region name (or near-region) in a NON-PII context → must NOT detect.
 NEGATIVES = [
@@ -32,6 +39,19 @@ NEGATIVES = [
     "西湖醋鱼是杭州名菜。",
     "这家公司在朝阳群众的监督下整改。",
     "广州塔是地标建筑。",
+    # self_reference (我/我们) must NOT corroborate a region: a `我 … <district>`
+    # sentence with no address cue is a bare mention, not a location PII.
+    "我很喜欢西湖区的风景。",
+    "我觉得朝阳区的房价太高了。",
+    "我昨天路过海淀区。",
+    # `我们公司` is an organization + self_reference; an org co-occurring with a
+    # region is not address evidence, so this must stay clean.
+    "我们公司在黄浦区附近开会。",
+    # region glued to a longer proper-noun/org run (`海淀区中关村科技园…`): the
+    # org span mis-segments and leaves `海淀区` un-absorbed, but with no address
+    # cue and only org proximity it must NOT fire (organization is excluded from
+    # the proximity corroboration, same as self_reference).
+    "海淀区中关村科技园聚集了大量互联网企业。",
 ]
 
 
@@ -42,4 +62,4 @@ def test_region_precision_floor():
 
 def test_region_recall_floor():
     hits = sum(1 for t in POSITIVES if _detects_region(t))
-    assert hits >= 4, f"region recall floor 4/5: only {hits}/{len(POSITIVES)} detected"
+    assert hits >= 8, f"region recall floor 8/9: only {hits}/{len(POSITIVES)} detected"
