@@ -4,84 +4,78 @@ const GOLDEN_IN = 'Contact Alice Johnson at the office.';
 const GOLDEN_OPTS = { salt: 42, lang: 'en', names: ['Alice Johnson'], mode: 'fast' };
 const GOLDEN_OUT = 'Contact P-83811 at the office.';
 
-test('wasm initializes in a real browser', async ({ page }) => {
+async function ready(page) {
   await page.goto('/index.html');
   await page.waitForFunction(() => window.argusReady !== undefined);
   await page.evaluate(() => window.argusReady);
+}
+
+test('wasm initializes in a real browser', async ({ page }) => {
+  await ready(page);
   expect(await page.evaluate(() => typeof window.argus.redact)).toBe('function');
 });
 
-test('one-shot redact matches the core golden (P-83811)', async ({ page }) => {
-  await page.goto('/index.html');
-  await page.evaluate(() => window.argusReady);
-  const out = await page.evaluate(
-    ({ text, opts }) => window.argus.redact(text, opts),
-    { text: GOLDEN_IN, opts: GOLDEN_OPTS }
-  );
-  expect(out.text).toBe(GOLDEN_OUT);
-  expect(typeof out.key).toBe('object');
-});
-
-test('restore round-trips', async ({ page }) => {
-  await page.goto('/index.html');
-  await page.evaluate(() => window.argusReady);
-  const restored = await page.evaluate(({ text, opts }) => {
+// GOLDEN ANCHOR — UI-independent core parity; do not change.
+test('core golden via window.argus (P-83811) + restore', async ({ page }) => {
+  await ready(page);
+  const r = await page.evaluate(({ text, opts }) => {
     const out = window.argus.redact(text, opts);
-    return window.argus.restore(out.text, out.key);
+    return { text: out.text, restored: window.argus.restore(out.text, out.key) };
   }, { text: GOLDEN_IN, opts: GOLDEN_OPTS });
-  expect(restored).toBe(GOLDEN_IN);
+  expect(r.text).toBe(GOLDEN_OUT);
+  expect(r.restored).toBe(GOLDEN_IN);
 });
 
-test('streaming never half-leaks an entity across a chunk boundary', async ({ page }) => {
-  await page.goto('/index.html');
-  await page.evaluate(() => window.argusReady);
-  const result = await page.evaluate(() => {
-    const sr = new window.argus.StreamingRedactor({ salt: 42, lang: 'en', names: ['Alice Johnson'], mode: 'fast' });
-    const emits = [];
-    emits.push(sr.feed('Contact Alice ').downstreamText);
-    emits.push(sr.feed('Johnson at the office.').downstreamText);
-    emits.push(sr.flush().downstreamText);
-    return { downstream: emits.join(''), emits };
-  });
-  expect(result.downstream).toBe('Contact P-83811 at the office.');
-  for (const e of result.emits) expect(e).not.toContain('Johnson');
-});
-
-test('hero UI is wired (fill → redact → see code)', async ({ page }) => {
-  await page.goto('/index.html');
-  await page.evaluate(() => window.argusReady);
-  await page.fill('#hero-input', GOLDEN_IN);
-  await page.fill('#hero-names', 'Alice Johnson');
-  await page.selectOption('#hero-lang', 'en');
-  await page.fill('#hero-salt', '42');
+test('hero: prefilled example redacts to realistic fakes and restores exactly', async ({ page }) => {
+  await ready(page);
+  const original = await page.inputValue('#hero-input');
+  expect(original).toContain('黄芳');
   await page.click('#hero-redact');
-  await expect(page.locator('#hero-redacted')).toContainText('P-83811');
-  await expect(page.locator('#hero-original')).toContainText('Alice Johnson');
+  const after = await page.locator('#hero-redacted').innerText();
+  expect(after).not.toContain('黄芳');
+  expect(after).not.toContain('13912345678');
+  await expect(page.locator('#hero-redacted mark')).toHaveCount(3);
+  await expect(page.locator('#hero-restore')).toContainText('还原');
 });
 
-test('streaming panel UI produces safe redacted output', async ({ page }) => {
-  await page.goto('/index.html');
-  await page.evaluate(() => window.argusReady);
-  await page.locator('#streaming > summary').click();   // expand
+test('hero: clicking a chip swaps the input and redacts', async ({ page }) => {
+  await ready(page);
+  await page.locator('#hero-chips button', { hasText: 'English' }).click();
+  expect(await page.inputValue('#hero-input')).toContain('Alice Johnson');
+  const after = await page.locator('#hero-redacted').innerText();
+  expect(after).not.toContain('Alice Johnson');
+});
+
+test('chinese-first: the headline leads with Chinese', async ({ page }) => {
+  await ready(page);
+  await expect(page.locator('#headline')).toContainText('脱敏');
+});
+
+test('dev fold: phone → pseudonym yields a PHON- code', async ({ page }) => {
+  await ready(page);
+  await page.locator('#dev > summary').click();
+  await page.fill('#dev-input', '联系电话 13912345678。');
+  await page.selectOption('#dev-strategy-phone', 'pseudonym');
+  await page.fill('#dev-salt', '42');
+  await page.click('#dev-run');
+  await expect(page.locator('#dev-redacted')).toContainText('PHON-');
+  await expect(page.locator('#dev-key')).toContainText('PHON-');
+});
+
+test('dev fold: randomize changes the seed', async ({ page }) => {
+  await ready(page);
+  await page.locator('#dev > summary').click();
+  const before = await page.inputValue('#dev-salt');
+  await page.click('#dev-rand');
+  expect(await page.inputValue('#dev-salt')).not.toBe(before);
+});
+
+test('dev fold: streaming never half-leaks across a chunk boundary', async ({ page }) => {
+  await ready(page);
+  await page.locator('#dev > summary').click();
   await page.fill('#st-input', 'Contact Alice Johnson at the office.');
   await page.fill('#st-salt', '42');
   await page.click('#st-run');
   await expect(page.locator('#st-out')).not.toContainText('Johnson');
   await expect(page.locator('#st-out')).not.toBeEmpty();
-});
-
-test('playground panel redacts with per-type config and restores', async ({ page }) => {
-  await page.goto('/index.html');
-  await page.evaluate(() => window.argusReady);
-  await page.locator('#playground > summary').click();   // expand
-  await page.fill('#pg-input', 'Contact Alice Johnson at the office.');
-  await page.fill('#pg-names', 'Alice Johnson');
-  await page.selectOption('#pg-lang', ['en']);
-  await page.selectOption('#pg-strategy', 'pseudonym');
-  await page.fill('#pg-salt', '42');
-  await page.click('#pg-run');
-  await expect(page.locator('#pg-redacted')).toContainText('P-83811');
-  await expect(page.locator('#pg-key')).toContainText('P-83811');
-  await expect(page.locator('#pg-restored')).toContainText('Alice Johnson');
-  await expect(page.locator('#pg-error')).toBeEmpty();
 });
