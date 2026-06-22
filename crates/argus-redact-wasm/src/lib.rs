@@ -94,7 +94,6 @@ struct EntityConfigOpt {
     prefix: Option<String>,
     replacement: Option<String>,
     label: Option<String>,
-    level: Option<String>,
     visible_prefix: Option<usize>,
     visible_suffix: Option<usize>,
 }
@@ -195,7 +194,6 @@ fn to_core_config(opt: Option<HashMap<String, EntityConfigOpt>>) -> Option<Confi
                         prefix: v.prefix,
                         replacement: v.replacement,
                         label: v.label,
-                        level: v.level,
                         visible_prefix: v.visible_prefix,
                         visible_suffix: v.visible_suffix,
                     },

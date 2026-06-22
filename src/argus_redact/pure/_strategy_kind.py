@@ -17,7 +17,6 @@ VALID_STRATEGIES = (
     "name_mask",
     "landline_mask",
     "keep",
-    "generalize",
 )
 
 # Strategies whose output can be mapped back to the original via the key dict.
@@ -31,7 +30,7 @@ def is_strategy_reversible(strategy: str) -> bool:
 
     Reversible: ``pseudonym`` / ``realistic`` / ``remove`` / ``keep``.
     Irreversible (lossy by design): ``mask`` / ``name_mask`` / ``landline_mask``
-    / ``category`` / ``generalize``.
+    / ``category``.
 
     Use in multi-turn dialog flows to fall through to a reversible strategy
     when the LLM response must be restored to original PII for follow-up.

@@ -1,9 +1,9 @@
 """Evidence-gated region detector — precision + recall floors.
 
 Bare admin regions are detected ONLY with address-context evidence, so location
-quasi-identifiers can be generalized/removed while region names in non-PII
-contexts (time/org/food/landmark) are NOT over-redacted. Floors, not exact match
-(the gate is a heuristic). cf. the person-detector precision/recall floors.
+quasi-identifiers are removed (the default `location` strategy) while region
+names in non-PII contexts (time/org/food/landmark) are NOT over-redacted. Floors,
+not exact match (the gate is a heuristic). cf. the person-detector floors.
 """
 from argus_redact import redact
 

@@ -179,8 +179,6 @@ pub struct EntityConfig {
     pub visible_prefix: Option<usize>,
     /// `config[type]["visible_suffix"]` for `mask` (`None`/`0` → per-type default).
     pub visible_suffix: Option<usize>,
-    /// `config[type]["level"]` for the `generalize` strategy ("city"|"province").
-    pub level: Option<String>,
 }
 
 /// User config: `{type_name: EntityConfig}`. The full `config` dict passed to
@@ -300,10 +298,6 @@ pub fn build_type_info(
                 default_category_label: dcl,
                 visible_prefix: ec.and_then(|e| e.visible_prefix).unwrap_or(0),
                 visible_suffix: ec.and_then(|e| e.visible_suffix).unwrap_or(0),
-                level: ec
-                    .and_then(|e| e.level.clone())
-                    .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| "city".to_string()),
             },
         ));
     }

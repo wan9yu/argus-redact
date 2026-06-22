@@ -124,7 +124,6 @@ fn realistic_config() -> crate::typeinfo::Config {
                 prefix: None,
                 replacement: None,
                 label: None,
-                level: None,
                 visible_prefix: None,
                 visible_suffix: None,
             },

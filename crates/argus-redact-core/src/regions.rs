@@ -1,9 +1,11 @@
-//! Chinese admin-region gazetteer + quasi-identifier coarsening (SSOT).
+//! Chinese admin-region gazetteer + evidence-gated bare-region detection (SSOT).
 //!
-//! Loads `data/regions/zh.ron` (GB/T 2260) once and exposes `coarsen()`, which
-//! maps a span containing an admin region to its city/province ancestor —
-//! the core of the lossy `generalize` strategy. Shared by PyO3 + wasm.
-use std::collections::{HashMap, HashSet};
+//! Loads `data/regions/zh.ron` (GB/T 2260) once and uses it as the dictionary for
+//! [`detect_regions_zh`], which finds bare admin-region mentions (北京 / 浦东新区)
+//! used as a place a person is associated with, gated on positive evidence so
+//! 北京时间 / 北京大学 don't fire. Shared by PyO3 + wasm; feeds the default
+//! `remove` strategy for `location`.
+use std::collections::HashSet;
 use std::sync::{LazyLock, OnceLock};
 
 use fancy_regex::Regex;
@@ -23,21 +25,6 @@ fn zh_region_data() -> &'static ZhRegionData {
     })
 }
 
-/// name → (city, province). Names are not globally unique across provinces (e.g.
-/// 朝阳区 exists in 北京 and 辽宁朝阳市); first-by-load-order wins — acceptable for
-/// a coarsening heuristic. Built once.
-fn region_index() -> &'static HashMap<&'static str, (&'static str, &'static str)> {
-    static CELL: OnceLock<HashMap<&'static str, (&'static str, &'static str)>> = OnceLock::new();
-    CELL.get_or_init(|| {
-        let mut m = HashMap::new();
-        for (name, _level, city, province) in &zh_region_data().regions {
-            m.entry(name.as_str())
-                .or_insert((city.as_str(), province.as_str()));
-        }
-        m
-    })
-}
-
 /// All region names sorted LONGEST-first (by char count), for greedy
 /// longest-match scans.
 fn region_names_longest_first() -> &'static [&'static str] {
@@ -49,25 +36,6 @@ fn region_names_longest_first() -> &'static [&'static str] {
         names
     })
     .as_slice()
-}
-
-/// Coarsen `span` to the requested level. Finds the FINEST (longest) region name
-/// contained in `span`, then returns its `city` (level="city", default) or
-/// `province` (level="province") ancestor. Returns `None` if no region is found
-/// (caller falls back to the type's default strategy).
-pub fn coarsen(span: &str, level: &str) -> Option<String> {
-    // Greedy longest-match: names are pre-sorted longest-first, so the first
-    // name that appears in the span is the most specific (上海市浦东新区 >
-    // 浦东新区 > 上海市) — break on first hit.
-    let name = region_names_longest_first()
-        .iter()
-        .find(|&&n| span.contains(n))
-        .copied()?;
-    let (city, province) = region_index().get(name).copied()?;
-    Some(match level {
-        "province" => province.to_string(),
-        _ => city.to_string(), // default "city"
-    })
 }
 
 // ── Evidence-gated bare-region detection ──
@@ -313,19 +281,6 @@ pub(crate) fn detect_regions_zh(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn coarsens_district_to_city_and_province() {
-        assert_eq!(coarsen("杭州西湖区文一路100号", "city").as_deref(), Some("杭州市"));
-        assert_eq!(coarsen("杭州西湖区文一路100号", "province").as_deref(), Some("浙江省"));
-        assert_eq!(coarsen("上海浦东新区建国路100号", "city").as_deref(), Some("上海市"));
-        assert_eq!(coarsen("广州天河区天河路", "province").as_deref(), Some("广东省"));
-    }
-
-    #[test]
-    fn no_region_returns_none() {
-        assert_eq!(coarsen("一段没有地名的文本", "city"), None);
-    }
 
     #[test]
     fn gazetteer_loads_and_is_nonempty() {

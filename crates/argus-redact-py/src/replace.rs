@@ -137,7 +137,6 @@ fn parse_type_info(d: &Bound<'_, PyDict>) -> PyResult<TypeInfo> {
         default_category_label: get_str("default_category_label").unwrap_or_default(),
         visible_prefix: get_usize("visible_prefix"),
         visible_suffix: get_usize("visible_suffix"),
-        level: get_str("level").unwrap_or_else(|| "city".to_string()),
     })
 }
 
@@ -322,7 +321,6 @@ fn parse_config(config: Option<&Bound<'_, PyDict>>) -> PyResult<Option<CoreConfi
                 },
                 replacement: get_str("replacement"),
                 label: get_str("label"),
-                level: get_str("level"),
                 visible_prefix: get_usize("visible_prefix"),
                 visible_suffix: get_usize("visible_suffix"),
             },
@@ -432,9 +430,6 @@ pub fn build_type_info<'py>(
         d.set_item("default_category_label", &ti.default_category_label)?;
         d.set_item("visible_prefix", ti.visible_prefix)?;
         d.set_item("visible_suffix", ti.visible_suffix)?;
-        // generalize coarsening level — round-tripped so build_info_map (which
-        // re-parses this dict for replace()) sees the config level, not "city".
-        d.set_item("level", &ti.level)?;
         out.set_item(type_name, d)?;
     }
     Ok(out)
