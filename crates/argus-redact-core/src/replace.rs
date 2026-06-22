@@ -106,6 +106,8 @@ pub struct TypeInfo {
     pub visible_prefix: usize,
     /// `config[type]["visible_suffix"]` for `mask` (0 = use per-type default).
     pub visible_suffix: usize,
+    /// Coarsening level for the `generalize` strategy ("city" default | "province").
+    pub level: String,
 }
 
 /// Result of a `replace()` call.

@@ -969,6 +969,7 @@ mod redact_l1_tests {
             default_category_label: default_category_label.to_string(),
             visible_prefix: 0,
             visible_suffix: 0,
+            level: "city".to_string(),
         }
     }
 

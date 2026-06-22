@@ -137,6 +137,7 @@ fn parse_type_info(d: &Bound<'_, PyDict>) -> PyResult<TypeInfo> {
         default_category_label: get_str("default_category_label").unwrap_or_default(),
         visible_prefix: get_usize("visible_prefix"),
         visible_suffix: get_usize("visible_suffix"),
+        level: get_str("level").unwrap_or_else(|| "city".to_string()),
     })
 }
 
@@ -321,6 +322,7 @@ fn parse_config(config: Option<&Bound<'_, PyDict>>) -> PyResult<Option<CoreConfi
                 },
                 replacement: get_str("replacement"),
                 label: get_str("label"),
+                level: get_str("level"),
                 visible_prefix: get_usize("visible_prefix"),
                 visible_suffix: get_usize("visible_suffix"),
             },
