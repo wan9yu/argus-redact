@@ -254,7 +254,7 @@ def _py_pre_merge_detect(text, langs, names=None):
     ],
 )
 def test_detect_l1_components_equal_python_pre_merge(text, lang, names):
-    layer1, person, _regions, hints, near_misses = _core.detect_l1(text, lang, names)
+    layer1, person, _regions, _job_titles, hints, near_misses = _core.detect_l1(text, lang, names)
     assert all(isinstance(m, _core.PatternMatch) for m in layer1 + person + near_misses)
     py_entities, py_near = _py_pre_merge_detect(text, lang, names)
     # layer1 ++ person == Python pre-merge entities (RAW order).

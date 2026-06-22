@@ -245,6 +245,7 @@ fn redact_segment(
     let mut entities = detected.layer1;
     entities.extend(detected.person);
     entities.extend(detected.regions);
+    entities.extend(detected.job_titles);
 
     let info_pairs = build_type_info(&entities, params.config.as_ref(), &params.langs, None);
     let person_prefix = lookup_prefix(&info_pairs, "person", "P");
@@ -482,6 +483,7 @@ impl StreamingRedactor {
                     let mut entities = r.layer1;
                     entities.extend(r.person);
                     entities.extend(r.regions);
+                    entities.extend(r.job_titles);
                     DetectSpans {
                         entities,
                         hints: r.hints,

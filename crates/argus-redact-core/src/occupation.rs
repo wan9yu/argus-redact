@@ -284,7 +284,6 @@ fn productive_suffix_len_ending_at(chars: &[char], j: usize) -> Option<usize> {
 /// Zero evidence → skip (leave to L2 NER). Otherwise emit when the total clears
 /// [`OCC_THRESHOLD`], with `confidence = evidence.min(1.0)`, `type_ =
 /// "job_title"` and `layer = 1`.
-#[allow(dead_code)] // wired into the L1 pipeline in task 12.
 pub fn detect_occupation_zh(
     text: &str,
     pii_entities: &[crate::types::PatternMatch],
