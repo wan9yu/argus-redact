@@ -2,12 +2,13 @@
 
 Conditions/allergens are detected (type "medical", default strategy remove) ONLY
 with a health cue (过敏/患有/确诊…) or PII proximity, so food words in non-health
-contexts (我喜欢吃花生 / 海鲜大餐很美味) are not over-redacted. Floors, not exact match.
+contexts (我喜欢吃花生 / 海鲜大餐很美味 / 今天吃了海鲜大餐) are not over-redacted.
+Floors, not exact match.
 
-NB: the NEGATIVES deliberately avoid the pre-existing data/zh.ron *medication*
-regex's weak `吃的`/`吃了` triggers (`吃了海鲜大餐` over-matches via that legacy
-pattern, independent of this detector). This test pins THIS detector's precision;
-the legacy 吃了/吃的 over-match is tracked separately.
+`今天吃了海鲜大餐` also guards the medication-regex fix: the weak `吃的`/`吃了`
+triggers now fire `medical` ONLY when the following term ends in a drug suffix
+(药/片/胶囊…), so `吃了海鲜大餐` (ends 餐) stays un-redacted while a real
+`吃的降压药` (ends 药) is still caught.
 """
 from argus_redact import redact
 
@@ -19,7 +20,7 @@ def _detects(text: str) -> bool:
     return "[medical]" in out or "[MEDICAL]" in out
 
 POSITIVES = ["我对花生严重过敏。", "她对海鲜过敏。", "他确诊了糖尿病。", "有高血压病史。", "我对青霉素过敏。"]
-NEGATIVES = ["我喜欢吃花生。", "海鲜大餐很美味。", "这道菜很好吃。", "牛奶很有营养。", "花粉季节到了。"]
+NEGATIVES = ["我喜欢吃花生。", "海鲜大餐很美味。", "今天吃了海鲜大餐。", "这道菜很好吃。", "牛奶很有营养。", "花粉季节到了。"]
 
 def test_condition_precision_floor():
     fps = [t for t in NEGATIVES if _detects(t)]

@@ -216,9 +216,16 @@
     PatternData(
         type_: r"medical",
         label: r"[医疗信息已脱敏]",
-        pattern: r"(?:服用|注射|口服|吃的|吃了|开了)(?P<medical>[\u4e00-\u9fff\w]{2,10})",
+        pattern: r"(?:服用|注射|口服|开了)(?P<medical>[\u4e00-\u9fff\w]{2,10})",
         group: Some(r"medical"),
-        description: r"Medical medication (keyword-triggered, preserves trigger verb)",
+        description: r"Medical medication — strong triggers (服用/注射/口服/开了), any following term",
+    ),
+    PatternData(
+        type_: r"medical",
+        label: r"[医疗信息已脱敏]",
+        pattern: r"(?:吃的|吃了)(?P<medical>[一-鿿]{1,7}(?:药|片|胶囊|丸|膏|针剂|冲剂|滴剂|颗粒|糖浆))",
+        group: Some(r"medical"),
+        description: r"Medical medication via the colloquial 吃的/吃了 trigger, gated on a drug suffix (药/片/胶囊…) so it captures 吃的降压药 but NOT 吃了海鲜大餐",
     ),
     PatternData(
         type_: r"medical",
