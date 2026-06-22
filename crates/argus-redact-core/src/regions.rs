@@ -60,6 +60,21 @@ fn region_name_set() -> &'static HashSet<&'static str> {
     CELL.get_or_init(|| region_names_longest_first().iter().copied().collect())
 }
 
+/// First chars of every gazetteer region name, for a cheap prefilter before the
+/// longest-match probe in [`region_candidates`]: a position whose char never
+/// starts ANY region name cannot begin a match, so the probe (up to `max_len`
+/// substring allocations + lookups) is skipped there. Pure speedup — the set of
+/// emitted matches is unchanged. Built once.
+fn region_first_chars() -> &'static HashSet<char> {
+    static CELL: OnceLock<HashSet<char>> = OnceLock::new();
+    CELL.get_or_init(|| {
+        region_names_longest_first()
+            .iter()
+            .filter_map(|n| n.chars().next())
+            .collect()
+    })
+}
+
 /// Longest region-name length in **chars**, the upper bound for the
 /// longest-match probe window. Built once from the gazetteer.
 fn region_max_len() -> usize {
@@ -129,12 +144,21 @@ const REGION_THRESHOLD: f64 = 0.5;
 /// it so matches never overlap. O(text · max_name_len) with O(1) set lookups.
 fn region_candidates(chars: &[char]) -> Vec<(String, usize, usize)> {
     let names = region_name_set();
+    let first_chars = region_first_chars();
     let max_len = region_max_len();
     let n = chars.len();
     let mut out: Vec<(String, usize, usize)> = Vec::new();
 
     let mut i = 0;
     while i < n {
+        // Prefilter: if chars[i] never starts any region name, no candidate can
+        // begin here — skip the (up to max_len) substring probe entirely. Keeps
+        // the longest-match result identical; only avoids wasted work (the bulk
+        // of any non-region text, e.g. phone/email runs).
+        if !first_chars.contains(&chars[i]) {
+            i += 1;
+            continue;
+        }
         // Longest-match probe: try length max_len down to 1, first hit wins.
         let hi = max_len.min(n - i);
         let mut matched_len = 0usize;
