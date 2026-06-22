@@ -215,6 +215,109 @@
               "guess": 24
             }
           ]
+        },
+        "argus_generalize": {
+          "reid_rate": 0.875,
+          "correct": 21,
+          "n": 24,
+          "per_profile": [
+            {
+              "truth": 1,
+              "guess": 1
+            },
+            {
+              "truth": 2,
+              "guess": 2
+            },
+            {
+              "truth": 3,
+              "guess": 3
+            },
+            {
+              "truth": 4,
+              "guess": 4
+            },
+            {
+              "truth": 5,
+              "guess": 5
+            },
+            {
+              "truth": 6,
+              "guess": 6
+            },
+            {
+              "truth": 7,
+              "guess": 7
+            },
+            {
+              "truth": 8,
+              "guess": 8
+            },
+            {
+              "truth": 9,
+              "guess": 9
+            },
+            {
+              "truth": 10,
+              "guess": 10
+            },
+            {
+              "truth": 11,
+              "guess": 11
+            },
+            {
+              "truth": 12,
+              "guess": 12
+            },
+            {
+              "truth": 13,
+              "guess": 1
+            },
+            {
+              "truth": 14,
+              "guess": 14
+            },
+            {
+              "truth": 15,
+              "guess": 15
+            },
+            {
+              "truth": 16,
+              "guess": 16
+            },
+            {
+              "truth": 17,
+              "guess": 17
+            },
+            {
+              "truth": 18,
+              "guess": 18
+            },
+            {
+              "truth": 19,
+              "guess": 19
+            },
+            {
+              "truth": 20,
+              "guess": 7
+            },
+            {
+              "truth": 21,
+              "guess": 4
+            },
+            {
+              "truth": 22,
+              "guess": 22
+            },
+            {
+              "truth": 23,
+              "guess": 23
+            },
+            {
+              "truth": 24,
+              "guess": 24
+            }
+          ]
         }
       }
     },
@@ -429,6 +532,109 @@
               "guess": 24
             }
           ]
+        },
+        "argus_generalize": {
+          "reid_rate": 0.9583333333333334,
+          "correct": 23,
+          "n": 24,
+          "per_profile": [
+            {
+              "truth": 1,
+              "guess": 1
+            },
+            {
+              "truth": 2,
+              "guess": 2
+            },
+            {
+              "truth": 3,
+              "guess": 3
+            },
+            {
+              "truth": 4,
+              "guess": 4
+            },
+            {
+              "truth": 5,
+              "guess": 5
+            },
+            {
+              "truth": 6,
+              "guess": 6
+            },
+            {
+              "truth": 7,
+              "guess": 7
+            },
+            {
+              "truth": 8,
+              "guess": 8
+            },
+            {
+              "truth": 9,
+              "guess": 9
+            },
+            {
+              "truth": 10,
+              "guess": 10
+            },
+            {
+              "truth": 11,
+              "guess": 11
+            },
+            {
+              "truth": 12,
+              "guess": 12
+            },
+            {
+              "truth": 13,
+              "guess": 13
+            },
+            {
+              "truth": 14,
+              "guess": 14
+            },
+            {
+              "truth": 15,
+              "guess": 15
+            },
+            {
+              "truth": 16,
+              "guess": 16
+            },
+            {
+              "truth": 17,
+              "guess": 17
+            },
+            {
+              "truth": 18,
+              "guess": 18
+            },
+            {
+              "truth": 19,
+              "guess": 19
+            },
+            {
+              "truth": 20,
+              "guess": 7
+            },
+            {
+              "truth": 21,
+              "guess": 21
+            },
+            {
+              "truth": 22,
+              "guess": 22
+            },
+            {
+              "truth": 23,
+              "guess": 23
+            },
+            {
+              "truth": 24,
+              "guess": 24
+            }
+          ]
         }
       }
     },
@@ -542,6 +748,109 @@
           ]
         },
         "argus_fast": {
+          "reid_rate": 0.875,
+          "correct": 21,
+          "n": 24,
+          "per_profile": [
+            {
+              "truth": 1,
+              "guess": 1
+            },
+            {
+              "truth": 2,
+              "guess": 2
+            },
+            {
+              "truth": 3,
+              "guess": 3
+            },
+            {
+              "truth": 4,
+              "guess": 4
+            },
+            {
+              "truth": 5,
+              "guess": 5
+            },
+            {
+              "truth": 6,
+              "guess": 6
+            },
+            {
+              "truth": 7,
+              "guess": 7
+            },
+            {
+              "truth": 8,
+              "guess": 8
+            },
+            {
+              "truth": 9,
+              "guess": 9
+            },
+            {
+              "truth": 10,
+              "guess": 10
+            },
+            {
+              "truth": 11,
+              "guess": 11
+            },
+            {
+              "truth": 12,
+              "guess": 12
+            },
+            {
+              "truth": 13,
+              "guess": 1
+            },
+            {
+              "truth": 14,
+              "guess": 14
+            },
+            {
+              "truth": 15,
+              "guess": 15
+            },
+            {
+              "truth": 16,
+              "guess": 16
+            },
+            {
+              "truth": 17,
+              "guess": 17
+            },
+            {
+              "truth": 18,
+              "guess": 18
+            },
+            {
+              "truth": 19,
+              "guess": 19
+            },
+            {
+              "truth": 20,
+              "guess": 7
+            },
+            {
+              "truth": 21,
+              "guess": 6
+            },
+            {
+              "truth": 22,
+              "guess": 22
+            },
+            {
+              "truth": 23,
+              "guess": 23
+            },
+            {
+              "truth": 24,
+              "guess": 24
+            }
+          ]
+        },
+        "argus_generalize": {
           "reid_rate": 0.9166666666666666,
           "correct": 22,
           "n": 24,
@@ -628,7 +937,7 @@
             },
             {
               "truth": 21,
-              "guess": 4
+              "guess": 6
             },
             {
               "truth": 22,

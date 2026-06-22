@@ -54,7 +54,19 @@ def redactor_argus_fast(text: str) -> str:
     return out[0] if isinstance(out, tuple) else out
 
 
-REDACTORS = {"raw": redactor_raw, "argus_fast": redactor_argus_fast}
+_GEN_CONFIG = {
+    "location": {"strategy": "generalize", "level": "city"},
+    "address":  {"strategy": "generalize", "level": "city"},
+}
+
+
+def redactor_argus_generalize(text: str) -> str:
+    from argus_redact import redact
+    out = redact(text, mode="fast", lang=["zh", "en"], salt=SALT, config=_GEN_CONFIG)
+    return out[0] if isinstance(out, tuple) else out
+
+
+REDACTORS = {"raw": redactor_raw, "argus_fast": redactor_argus_fast, "argus_generalize": redactor_argus_generalize}
 
 
 def available_providers() -> list[str]:
