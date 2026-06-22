@@ -130,6 +130,27 @@ multimodal — is **out of scope** for both primitive and compose layers. That
 work belongs to downstream products (e.g., a coref-aware gateway) or to
 caller-side post-processing.
 
+### X — Re-identification resistance (extension)
+
+**Question:** after redaction, can an LLM still re-identify the subject by combining
+the *residual quasi-identifiers* (age, city/district, occupation, employer, sensitive
+attribute, hobby) with a known candidate pool? (cf. arXiv 2603.18382.)
+
+**Metric:** re-identification rate = correct top-1 matches / N, per (redactor × model).
+**Lower is better.** Reported alongside a `raw` (no-redaction) upper bound.
+
+**Methodology (closed-world):** a fully synthetic candidate pool + profile set
+(`tests/benchmark/fixtures/reid_profiles.json`); each profile is redacted, then an
+OpenAI-compatible LLM is asked to match it to the numbered pool
+(`python -m tests.benchmark.reid_eval`). No real people, no live web.
+
+**Scope caveat (read this):** this is a **controlled, closed-world directional
+indicator on a small synthetic set (N=24), per model** — *not* a real-world
+re-identification guarantee or an upper bound on adversarial inference. `fast` mode
+removes explicit PII but not quasi-identifiers, so a **high residual re-id rate is
+expected**; the metric exists to (a) quantify that gap honestly and (b) gate future
+**quasi-identifier-generalization** work (the rate should drop once it lands).
+
 ---
 
 ## Test Methodology
