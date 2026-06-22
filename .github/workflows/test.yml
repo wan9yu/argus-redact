@@ -136,7 +136,10 @@ jobs:
           key: rust-wasm-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
 
       - name: Install wasm-pack
-        run: cargo install wasm-pack --locked
+        # Idempotent: the Rust cache (keyed on Cargo.lock) restores ~/.cargo/bin,
+        # so a cache hit already has wasm-pack and `cargo install` would abort with
+        # "binary already exists". Skip the install when it's already on PATH.
+        run: command -v wasm-pack >/dev/null || cargo install wasm-pack --locked
 
       - name: Install binaryen (wasm-opt)
         run: sudo apt-get update && sudo apt-get install -y binaryen
