@@ -58,3 +58,14 @@ test('hero UI is wired (fill → redact → see code)', async ({ page }) => {
   await expect(page.locator('#hero-redacted')).toContainText('P-83811');
   await expect(page.locator('#hero-original')).toContainText('Alice Johnson');
 });
+
+test('streaming panel UI produces safe redacted output', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.evaluate(() => window.argusReady);
+  await page.locator('#streaming > summary').click();   // expand
+  await page.fill('#st-input', 'Contact Alice Johnson at the office.');
+  await page.fill('#st-salt', '42');
+  await page.click('#st-run');
+  await expect(page.locator('#st-out')).not.toContainText('Johnson');
+  await expect(page.locator('#st-out')).not.toBeEmpty();
+});
