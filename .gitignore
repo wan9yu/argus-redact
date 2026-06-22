@@ -42,3 +42,9 @@ mutmut-stats.json
 mutants.out/
 mutants.out.old/
 mutants.out*/
+
+# demo browser-test deps
+tests/demo/node_modules/
+tests/demo/test-results/
+tests/demo/playwright-report/
+tests/demo/package-lock.json
