@@ -10,6 +10,9 @@ function applyStaticStrings() {
   document.getElementById('status').textContent = T.loading;
   document.getElementById('hero-input').placeholder = T.input;
   document.getElementById('hero-names').placeholder = T.names;
+  const heroSalt = document.getElementById('hero-salt');
+  heroSalt.title = T.salt;
+  heroSalt.setAttribute('aria-label', T.salt);
   document.getElementById('hero-salt-rand').textContent = T.randomize;
   document.getElementById('hero-redact').textContent = T.redact;
   document.getElementById('lbl-original').textContent = T.original;

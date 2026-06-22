@@ -11,7 +11,7 @@ export function initPlayground(api) {
       <input id="pg-names" type="text" placeholder="${T.names}" />
       <label>${T.lang} <select id="pg-lang" multiple size="4"></select></label>
       <label>person <select id="pg-strategy">${STRATEGIES.map((s) => `<option>${s}</option>`).join('')}</select></label>
-      <input id="pg-salt" type="text" value="42" />
+      <label>${T.salt} <input id="pg-salt" type="text" value="42" /></label>
       <button id="pg-run" type="button">${T.redact}</button>
     </div>
     <div class="three-up">

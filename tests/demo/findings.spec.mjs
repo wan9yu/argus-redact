@@ -14,3 +14,18 @@ test('highlight wraps each fake token with its original in a title', () => {
   expect(html).toContain('<mark title="Alice Johnson">P-83811</mark>');
   expect(html).toContain('Contact ');
 });
+
+test('highlight handles a token that is a prefix of another without nesting', () => {
+  // "P-12" is a substring of "P-1234"; a naive sequential replace would nest <mark>.
+  const html = highlight('see P-1234 and P-12 end', { 'P-1234': 'Long', 'P-12': 'Short' });
+  expect(html).toBe(
+    'see <mark title="Long">P-1234</mark> and <mark title="Short">P-12</mark> end'
+  );
+  expect(html).not.toContain('<mark title="Short"><mark'); // no nested marks
+});
+
+test('highlight escapes surrounding text and original values', () => {
+  const html = highlight('a <b> P-1', { 'P-1': '<script>' });
+  expect(html).toContain('a &lt;b&gt; ');
+  expect(html).toContain('<mark title="&lt;script&gt;">P-1</mark>');
+});

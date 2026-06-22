@@ -5,7 +5,7 @@ export function initStreaming(api) {
   body.innerHTML = `
     <textarea id="st-input" rows="4" placeholder="${T.input}"></textarea>
     <div class="controls">
-      <input id="st-salt" type="text" value="42" />
+      <label>${T.salt} <input id="st-salt" type="text" value="42" /></label>
       <button id="st-run" type="button">${T.streamRun}</button>
     </div>
     <pre id="st-out"></pre>

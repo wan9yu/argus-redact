@@ -6,8 +6,8 @@
 // `X-` prefix (mask / realistic) count toward the total but get no chip.
 const PREFIX_TYPE = { 'P-': 'person', 'IP-': 'ip', 'O-': 'organization' };
 
-function escapeHtml(s) {
-  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+export function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
 export function summarizeFindings(result) {
@@ -21,18 +21,33 @@ export function summarizeFindings(result) {
   return { count: fakes.length, types };
 }
 
+// Single left-to-right pass over the raw redacted text: each fake token is wrapped
+// exactly once and the surrounding text is escaped. Alternation is longest-first so a
+// token that is a prefix of another (e.g. "P-12" vs "P-1234") never produces nested
+// <mark> tags, and matching never re-scans already-inserted markup.
 export function highlight(redactedText, key) {
   const fakes = Object.keys(key || {}).sort((a, b) => b.length - a.length); // longest-first
-  let html = escapeHtml(redactedText);
-  for (const f of fakes) {
-    const safe = escapeHtml(f).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    html = html.replace(new RegExp(safe, 'g'), `<mark title="${escapeHtml(key[f])}">${escapeHtml(f)}</mark>`);
+  if (fakes.length === 0) return escapeHtml(redactedText);
+  const alt = fakes.map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const re = new RegExp(alt, 'g');
+  let out = '';
+  let last = 0;
+  let m;
+  while ((m = re.exec(redactedText)) !== null) {
+    out += escapeHtml(redactedText.slice(last, m.index));
+    const tok = m[0];
+    out += `<mark title="${escapeHtml(key[tok] ?? '')}">${escapeHtml(tok)}</mark>`;
+    last = m.index + tok.length;
+    if (m.index === re.lastIndex) re.lastIndex++; // guard against a zero-length match
   }
-  return html;
+  out += escapeHtml(redactedText.slice(last));
+  return out;
 }
 
 export function renderFindings(el, result, label) {
   const { count, types } = summarizeFindings(result);
-  const chips = Object.entries(types).map(([t, n]) => `<span class="chip">${t}: ${n}</span>`).join('');
-  el.innerHTML = `<strong>${count}</strong> ${label} ${chips}`;
+  const chips = Object.entries(types)
+    .map(([t, n]) => `<span class="chip">${escapeHtml(t)}: ${n}</span>`)
+    .join('');
+  el.innerHTML = `<strong>${count}</strong> ${escapeHtml(label)} ${chips}`;
 }

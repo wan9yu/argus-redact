@@ -69,3 +69,19 @@ test('streaming panel UI produces safe redacted output', async ({ page }) => {
   await expect(page.locator('#st-out')).not.toContainText('Johnson');
   await expect(page.locator('#st-out')).not.toBeEmpty();
 });
+
+test('playground panel redacts with per-type config and restores', async ({ page }) => {
+  await page.goto('/index.html');
+  await page.evaluate(() => window.argusReady);
+  await page.locator('#playground > summary').click();   // expand
+  await page.fill('#pg-input', 'Contact Alice Johnson at the office.');
+  await page.fill('#pg-names', 'Alice Johnson');
+  await page.selectOption('#pg-lang', ['en']);
+  await page.selectOption('#pg-strategy', 'pseudonym');
+  await page.fill('#pg-salt', '42');
+  await page.click('#pg-run');
+  await expect(page.locator('#pg-redacted')).toContainText('P-83811');
+  await expect(page.locator('#pg-key')).toContainText('P-83811');
+  await expect(page.locator('#pg-restored')).toContainText('Alice Johnson');
+  await expect(page.locator('#pg-error')).toBeEmpty();
+});
