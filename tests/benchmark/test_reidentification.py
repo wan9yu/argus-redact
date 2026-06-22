@@ -11,8 +11,10 @@ and produces a well-formed snapshot; does NOT assert exact re-id rates (LLM
 nondeterminism — the directional result raw >= argus_fast is REPORTED, not gated).
 """
 import os
-import httpx
 import pytest
+# NOTE: httpx is imported LAZILY inside _backend_available() — it is not a declared
+# dependency, so a module-top import would crash collection (and red CI) on envs
+# without it, even though this test is deselected there.
 
 from tests.benchmark.reid_eval import PROVIDERS, available_providers, run_eval
 
@@ -29,6 +31,7 @@ def _backend_available() -> bool:
         return True
     if "ollama" in provs:
         try:
+            import httpx
             httpx.get("http://localhost:11434/api/tags", timeout=2.0)
             return True
         except Exception:  # noqa: BLE001
