@@ -661,20 +661,20 @@ pub fn builtin_faker_names() -> &'static [&'static str] {
     ]
 }
 
-/// Re-roll a fake until it is unique within `used ∪ {value}`, mirroring
-/// the Python `_generate_unique_fake` re-roll loop.
+/// Re-roll a built-in faker until it is unique within `used ∪ {value}`.
 ///
 /// Each attempt re-seeds with `seed_from_value(seed_input, type_, salt)` → a fresh
 /// [`ShakeRng`] → the faker. On collision the seed input is suffixed `#{attempt}`.
-/// Rejecting the input value itself is the identity-pass guard. Errors after
-/// [`MAX_REROLL_ATTEMPTS`] attempts.
-pub fn generate_unique_fake(
+/// Rejecting the input value itself is the identity-pass guard. Returns
+/// `Ok(None)` when the faker can only produce identity/already-used values (the
+/// caller picks the fallback) — see [`generate_unique_fake_with`].
+pub fn try_generate_unique_fake(
     faker: FakerFn,
     value: &str,
     type_: &str,
     salt: &[u8],
     used: &std::collections::HashSet<String>,
-) -> Result<(String, Vec<String>), String> {
+) -> Result<Option<(String, Vec<String>)>, String> {
     generate_unique_fake_with(
         |master_key| {
             let mut rng = ShakeRng::new(master_key);
@@ -687,39 +687,59 @@ pub fn generate_unique_fake(
     )
 }
 
+/// Fake-or-error convenience over [`try_generate_unique_fake`]: exhaustion
+/// (`Ok(None)`) becomes an `Err`. Used by the `_core.generate_unique_fake`
+/// binding and direct-call tests; the orchestrator uses the Option-returning
+/// forms so it can fail closed to a pseudonym instead of erroring.
+pub fn generate_unique_fake(
+    faker: FakerFn,
+    value: &str,
+    type_: &str,
+    salt: &[u8],
+    used: &std::collections::HashSet<String>,
+) -> Result<(String, Vec<String>), String> {
+    try_generate_unique_fake(faker, value, type_, salt, used)?.ok_or_else(|| {
+        format!("Could not generate unique fake for {type_} after {MAX_REROLL_ATTEMPTS} attempts")
+    })
+}
+
 /// Generic re-roll loop shared by the built-in [`generate_unique_fake`] and a
 /// custom-faker callback. `produce` receives the per-attempt `master_key` and
-/// returns `(fake, aliases)` (or an error string, propagated unchanged).
+/// returns `(fake, aliases)`.
 ///
-/// The collision/re-roll sequence is bit-identity-critical and mirrors
-/// the Python `_generate_unique_fake` re-roll loop: same seed derivation, same
-/// `fake != value && !used.contains(&fake)` predicate, same `#{attempt}` suffix,
-/// same [`MAX_REROLL_ATTEMPTS`] cap, same exhaustion error.
+/// Three outcomes:
+/// * `Ok(Some((fake, aliases)))` — found a unique, non-identity fake.
+/// * `Ok(None)` — *exhaustion*: after [`MAX_REROLL_ATTEMPTS`] the faker could
+///   only ever return the input itself (identity-pass) or already-used values.
+///   This is a faker *limitation*, not a failure; the caller decides the
+///   fallback (the realistic strategy falls back to a pseudonym — fail closed).
+/// * `Err(s)` — `produce` itself failed (e.g. a custom Python faker raised);
+///   propagated unchanged so genuine errors are never masked.
+///
+/// The collision/re-roll sequence is bit-identity-critical: same seed
+/// derivation, same `fake != value && !used.contains(&fake)` predicate, same
+/// `#{attempt}` suffix, same [`MAX_REROLL_ATTEMPTS`] cap.
 pub(crate) fn generate_unique_fake_with<P>(
     mut produce: P,
     value: &str,
     type_: &str,
     salt: &[u8],
     used: &std::collections::HashSet<String>,
-) -> Result<(String, Vec<String>), String>
+) -> Result<Option<(String, Vec<String>)>, String>
 where
     P: FnMut(&[u8]) -> Result<(String, Vec<String>), String>,
 {
     let mut seed_input = value.to_string();
-    let mut last: Option<String> = None;
     for attempt in 0..MAX_REROLL_ATTEMPTS {
         let master_key = seed_from_value(&seed_input, type_, salt);
         let (fake, aliases) = produce(&master_key)?;
         // Reject identity-pass (fake == value) AND any already-used fake.
         if fake != value && !used.contains(&fake) {
-            return Ok((fake, aliases));
+            return Ok(Some((fake, aliases)));
         }
-        last = Some(fake);
         seed_input = format!("{seed_input}#{attempt}");
     }
-    Err(format!(
-        "Could not generate unique fake for {type_} after {MAX_REROLL_ATTEMPTS} attempts (last: {last:?})"
-    ))
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -962,5 +982,29 @@ mod tests {
         let (fake, _) =
             generate_unique_fake(fake_person_reserved, "卷帘", "person", &[0u8; 8], &used).unwrap();
         assert_ne!(fake, "卷帘");
+    }
+
+    #[test]
+    fn try_generate_unique_fake_signals_none_on_exhaustion() {
+        // The DOB noise faker only shifts a full Y-M-D date; a bare year-month
+        // ("2000年1月", no day) can't be shifted → identity every roll. Exhaustion
+        // must surface as Ok(None) (caller falls back), not an error.
+        let used = std::collections::HashSet::new();
+        let got = try_generate_unique_fake(
+            fake_date_of_birth_noise, "2000年1月", "date_of_birth", &[0u8; 8], &used,
+        )
+        .unwrap();
+        assert!(got.is_none(), "expected exhaustion → None, got {got:?}");
+    }
+
+    #[test]
+    fn generate_unique_fake_still_errors_on_exhaustion() {
+        // The fake-or-error convenience preserves its contract: exhaustion → Err.
+        let used = std::collections::HashSet::new();
+        let err = generate_unique_fake(
+            fake_date_of_birth_noise, "2000年1月", "date_of_birth", &[0u8; 8], &used,
+        )
+        .unwrap_err();
+        assert!(err.contains("unique fake"), "unexpected error: {err}");
     }
 }

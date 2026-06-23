@@ -20,7 +20,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::fakers::{generate_unique_fake, resolve_faker};
+use crate::fakers::{resolve_faker, try_generate_unique_fake};
 use crate::masks::{mask_landline, mask_name, mask_value, resolve_collision};
 use crate::pseudonym::{PseudonymGenerator, RandomSource};
 use crate::seed::{offset_seed, pseudonym_seed_int, resolve_salt, type_seed_offset, Salt};
@@ -299,7 +299,12 @@ pub fn replace<F: PseudoFactory>(
             let resolution = info
                 .map(|i| &i.faker_resolution)
                 .unwrap_or(&FakerResolution::None);
-            match resolution {
+            // Resolve a fake via the configured faker. `None` means either "no
+            // faker configured" or "the faker exhausted its re-rolls" (it could
+            // only ever produce the input itself or an already-used value) —
+            // both fall back to the pseudonym path below. A genuine faker error
+            // (custom Python callable raised, unknown built-in) still `?`-aborts.
+            let produced: Option<(String, Vec<String>)> = match resolution {
                 FakerResolution::Builtin(name) => {
                     // Built-in faker resolvable in Rust.
                     let faker = resolve_faker(name).ok_or_else(|| {
@@ -309,12 +314,7 @@ pub fn replace<F: PseudoFactory>(
                         resolved_salt = Some(resolve_salt(salt)?);
                     }
                     let salt_bytes = resolved_salt.as_deref().expect("resolved_salt set above");
-                    let (fake, alias_list) =
-                        generate_unique_fake(faker, &entity.text, &entity.type_, salt_bytes, &used_labels)?;
-                    if !alias_list.is_empty() {
-                        aliases.insert(fake.clone(), alias_list);
-                    }
-                    fake
+                    try_generate_unique_fake(faker, &entity.text, &entity.type_, salt_bytes, &used_labels)?
                 }
                 FakerResolution::Custom => {
                     // Custom Python `faker_reserved`. Route through the
@@ -326,18 +326,25 @@ pub fn replace<F: PseudoFactory>(
                         resolved_salt = Some(resolve_salt(salt)?);
                     }
                     let salt_bytes = resolved_salt.as_deref().expect("resolved_salt set above");
-                    let (fake, alias_list) = crate::fakers::generate_unique_fake_with(
+                    crate::fakers::generate_unique_fake_with(
                         |mk| ff.call_faker(&entity.type_, &entity.text, mk),
                         &entity.text, &entity.type_, salt_bytes, &used_labels,
-                    )?;
+                    )?
+                }
+                FakerResolution::None => None,
+            };
+            match produced {
+                Some((fake, alias_list)) => {
                     if !alias_list.is_empty() {
                         aliases.insert(fake.clone(), alias_list);
                     }
                     fake
                 }
-                FakerResolution::None => {
-                    // No faker → pseudonym fallback (organization → org_gen,
-                    // else the per-type generator).
+                None => {
+                    // No faker, or the faker could not produce a unique non-identity
+                    // fake → fail closed to a pseudonym (organization → org_gen,
+                    // else the per-type generator). The entity stays redacted; the
+                    // whole redaction never crashes on a value a faker can't fake.
                     if entity.type_ == "organization" {
                         org_gen.get(&entity.text)
                     } else {

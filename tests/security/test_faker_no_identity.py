@@ -60,10 +60,12 @@ def test_generate_unique_fake_rejects_value_equal_fake():
         _faker_reserved_cached.cache_clear()
 
 
-def test_generate_unique_fake_raises_when_only_identity_available():
-    """If the faker can only ever return the input, the Rust re-roll loop
-    exhausts its attempts and surfaces the exhaustion error (ValueError on the
-    Rust-callback path)."""
+def test_identity_only_faker_falls_back_to_pseudonym_no_leak():
+    """If the faker can only ever return the input, the re-roll loop exhausts.
+    The realistic strategy must then fail *closed* — fall back to a pseudonym so
+    the entity is still redacted — never echo the identity (a leak) and never
+    crash the whole redaction. The security invariant is "no identity-pass",
+    upheld here by the fallback rather than by raising."""
 
     def identity_faker(value, rng):
         return value, []
@@ -77,13 +79,19 @@ def test_generate_unique_fake_raises_when_only_identity_available():
         )
     )
     try:
-        with pytest.raises(ValueError, match="unique fake"):
-            replace(
-                "John Doe",
-                [make_match("John Doe", "identity_faker_type", 0)],
-                config={"identity_faker_type": {"strategy": "realistic"}},
-                salt=_SALT,
-            )
+        redacted, key, _ = replace(
+            "John Doe",
+            [make_match("John Doe", "identity_faker_type", 0)],
+            config={"identity_faker_type": {"strategy": "realistic"}},
+            salt=_SALT,
+        )
+        # Failed closed: redacted, no crash, and the input is NOT echoed.
+        assert redacted != "John Doe"
+        assert "John Doe" not in redacted
+        fakes = list(key)
+        assert len(fakes) == 1
+        assert fakes[0] != "John Doe", "identity-pass leak via the fallback"
+        assert key[fakes[0]] == "John Doe"
     finally:
         unregister("shared", "identity_faker_type")
         _faker_reserved_cached.cache_clear()

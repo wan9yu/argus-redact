@@ -52,6 +52,50 @@ class TestRealisticStrategy:
         assert len(fakes) == 1
         assert fakes[0].startswith("O-"), f"Got {fakes[0]}"
 
+    @pytest.mark.parametrize(
+        "prefix, token, type_",
+        [
+            # date_of_birth noise only shifts a full Y-M-D date; a bare year-month
+            # "2000年1月" has no day → identity → re-roll exhaustion.
+            ("生日", "2000年1月", "date_of_birth"),
+            # age noise shifts an ASCII-digit run; a Chinese-numeral age "零岁" has
+            # no digits → identity → exhaustion. (Same class as the DOB bug — the
+            # general fallback must cover every "noise" faker, not just dates.)
+            ("年龄", "零岁", "age"),
+        ],
+    )
+    def test_realistic_falls_back_to_pseudonym_when_faker_cannot_fake(self, prefix, token, type_):
+        """A noise faker that can't fake the value must fail closed to a
+        pseudonym, not raise — the entity stays redacted, the original is gone."""
+        text = prefix + token
+        entities = [make_match(token, type_, len(prefix))]
+        config = {type_: {"strategy": "realistic"}}
+        redacted, key, _ = replace(text, entities, config=config, salt=42)
+
+        assert token not in redacted
+        fakes = list(key)
+        assert len(fakes) == 1
+        assert fakes[0] != token
+        assert key[fakes[0]] == token
+
+    def test_redact_pseudonym_llm_does_not_crash_on_unfakeable_date(self):
+        """Regression: year-month / Chinese-numeral DOBs the noise faker can't
+        shift previously crashed redact_pseudonym_llm with a ValueError. They
+        must now fail closed (pseudonym), removing the date from both outputs."""
+        from argus_redact import redact_pseudonym_llm
+
+        for text, token in [
+            ("生日2000年1月", "2000年1月"),
+            ("生日00年1月", "00年1月"),
+            ("出生于十一月十五日", "十一月十五日"),
+            ("生日三月", "三月"),
+        ]:
+            r = redact_pseudonym_llm(text, salt=b"\x00" * 32, lang="zh")
+            assert token not in r.audit_text, f"{token!r} leaked in audit_text: {r.audit_text!r}"
+            assert token not in r.downstream_text, (
+                f"{token!r} leaked in downstream_text: {r.downstream_text!r}"
+            )
+
     def test_realistic_should_re_roll_on_collision(self):
         """Pre-claim the first-attempt fake; re-roll must produce a different one."""
         text = "联系 13912345678"
