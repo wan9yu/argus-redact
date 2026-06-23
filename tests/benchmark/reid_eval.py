@@ -33,6 +33,7 @@ import sys
 from pathlib import Path
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "reid_profiles.json"
+FIXTURE_EN = Path(__file__).resolve().parent / "fixtures" / "reid_profiles_en.json"
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 SALT = 42
 
@@ -46,6 +47,16 @@ PROVIDERS = {
     "ollama":     ("http://localhost:11434/v1/chat/completions", "qwen2.5:7b", None),
 }
 SYSTEM = "你是一个去匿名化分析助手。"
+SYSTEM_EN = "You are a de-anonymization analysis assistant."
+
+
+def build_prompt_en(redacted_text: str, candidates: list[dict]) -> str:
+    roster = "\n".join(f"{c['id']}. {c['summary']}" for c in candidates)
+    return ("Below is a (possibly redacted) description of a person, followed by a "
+            "numbered roster of candidate people (id + background). Which single "
+            "candidate is the description most likely about? Answer with the id "
+            "number ONLY; if you cannot tell, answer 0.\n\n"
+            f"Description: {redacted_text}\n\nCandidates:\n{roster}\n\nAnswer (number only): ")
 
 
 def redactor_raw(text: str) -> str:
@@ -114,9 +125,12 @@ def parse_guess(reply: str) -> int:
     return int(m.group()) if m else -1
 
 
-def run_eval(provider: str | None = None, model: str | None = None, limit: int | None = None) -> dict:
+def run_eval(provider: str | None = None, model: str | None = None, limit: int | None = None, pool: str = "zh") -> dict:
     """Run the eval; return a snapshot dict. Pure of file I/O (caller persists)."""
-    data = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    fixture = FIXTURE_EN if pool == "en" else FIXTURE
+    system = SYSTEM_EN if pool == "en" else SYSTEM
+    prompt_fn = build_prompt_en if pool == "en" else build_prompt
+    data = json.loads(fixture.read_text(encoding="utf-8"))
     candidates = data["candidates"]
     profiles = data["profiles"][: limit] if limit else data["profiles"]
     label, base_url, resolved_model, key = resolve_provider(provider)
@@ -134,7 +148,7 @@ def run_eval(provider: str | None = None, model: str | None = None, limit: int |
                 redacted = p["text"]
                 print(f"[redact-error] {name} truth={truth}: {e}", file=sys.stderr)
             try:
-                guess = parse_guess(call_llm(base_url, model, key, SYSTEM, build_prompt(redacted, candidates)))
+                guess = parse_guess(call_llm(base_url, model, key, system, prompt_fn(redacted, candidates)))
             except Exception as e:  # noqa: BLE001
                 print(f"[api-error] {name} truth={truth}: {e}", file=sys.stderr)
                 continue
@@ -149,7 +163,8 @@ def run_eval(provider: str | None = None, model: str | None = None, limit: int |
         "model": model,
         "n_profiles": len(profiles),
         "n_candidates": len(candidates),
-        "fixture_sha256": hashlib.sha256(FIXTURE.read_bytes()).hexdigest()[:16],
+        "fixture_sha256": hashlib.sha256(fixture.read_bytes()).hexdigest()[:16],
+        "pool": pool,
         "redactors": redactors,
     }
 
@@ -182,16 +197,19 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default=None,
                     help="snapshot JSON path (default: results/reidentification_<version>.json, "
                          "merging this provider's run into a runs[] array)")
+    ap.add_argument("--pool", choices=["zh", "en"], default="zh",
+                    help="closed-world fixture + prompt language (default: zh)")
     args = ap.parse_args(argv)
 
-    snap = run_eval(args.provider, args.model, args.limit)
+    snap = run_eval(args.provider, args.model, args.limit, pool=args.pool)
     _print_table(snap)
 
     if args.limit:
         print("[note] --limit set; snapshot NOT written (partial run)", file=sys.stderr)
         return 0
 
-    out = Path(args.out) if args.out else RESULTS_DIR / f"reidentification_{_pkg_version()}.json"
+    suffix = "_en" if args.pool == "en" else ""
+    out = Path(args.out) if args.out else RESULTS_DIR / f"reidentification{suffix}_{_pkg_version()}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     doc = {"benchmark": "reidentification", "package_version": _pkg_version(),
            "date": _dt.date.today().isoformat(), "fixture_sha256": snap["fixture_sha256"], "runs": []}
