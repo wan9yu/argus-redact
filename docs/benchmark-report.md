@@ -316,24 +316,35 @@ candidate pool? Closed-world synthetic set (N=24 clustered personas with overlap
 quasi-identifiers), `python -m tests.benchmark.reid_eval` (snapshot:
 `tests/benchmark/results/reidentification_0.7.11.json`). **Lower = better.**
 
-| Model | raw (upper bound) | argus `fast` |
-|-------|:-----------------:|:------------:|
-| deepseek-chat | 100% | 83.3% |
-| qwen-plus | 100% | 91.7% |
-| deepseek-chat (via OpenRouter) | 100% | 79.2% |
+| Model | raw (upper bound) | argus `fast` (prior) | argus `fast` (with condition + hobby detection) |
+|-------|:-----------------:|:--------------------:|:-----------------------------------------------:|
+| deepseek-chat | 100% | 83.3% | **79.2%** |
+| qwen-plus | 100% | 91.7% | **79.2%** |
+| deepseek-chat (via OpenRouter) | 100% | 79.2% | **79.2%** |
 
-**Read this honestly:** `fast` removes explicit PII (name / phone / checksum-valid ID,
-plus the age / employer / job-title / condition tokens argus emits) but **leaves
-city/district, sensitive-attribute phrasing, and hobbies** — so the subject
-is usually still re-identifiable (79.2–91.7% across three models on this set). This is a
-**directional indicator on a small closed-world synthetic set, per model — not a
-real-world guarantee.** It reflects a structural limitation: *removing explicit PII is
-not anonymization*. The residual comes from the *combination* of surviving
-quasi-identifiers (age + coarse location + free-text attributes), not any single field —
-coarsening one field (the explored-and-removed `generalize` experiment, see
+**What moved it:** this version added evidence-gated zh **medical-condition/allergy**
+and **hobby** detection (+ a region parent-city recall fix), all feeding the default
+`remove` path. They lowered residual re-id from 83.3% / 91.7% to **79.2% across all
+three models**. The effect is **complementary by provider**: condition removal helped
+DeepSeek (−1 persona, Qwen unchanged); hobby removal helped Qwen (−3 personas, DeepSeek
+unchanged). Different models re-identify via different residual signals, so detection
+*breadth* helps across models even when any single detector is provider-specific.
+(Single `temperature=0` runs on N=24 carry ±1–2 persona noise — directional, not exact.)
+
+**Read this honestly:** even after removing name / phone / ID / age / employer /
+job-title / **condition** / **hobby** / bare-region, the subject is **still
+re-identifiable ~79% of the time** on this set. *Removing explicit PII (and these
+quasi-identifiers) is not anonymization.* The residual is the **combination** of what
+remains (gender, masked-value fragments such as the visible `139****5678` phone digits
+under the default `mask`, and the closely-clustered persona structure), not any single
+field — which is also why coarsening one field (the explored-and-removed `generalize`
+experiment, see
 [why coarsening one field didn't help](design-quasi-identifier-generalization.md))
-did not measurably reduce it; removal is at least as good. The re-identification
-tooling here is eval/defensive only.
+did not help: removal is at least as good. A **directional indicator on a small
+closed-world synthetic set, per model — not a real-world guarantee.** The
+re-identification tooling here is eval/defensive only. A separate research spike
+([streaming cross-turn linkage](design-streaming-cross-turn-linkage.md)) explores the
+multi-turn case.
 
 ---
 

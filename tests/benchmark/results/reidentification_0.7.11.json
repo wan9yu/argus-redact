@@ -1,7 +1,7 @@
 {
   "benchmark": "reidentification",
   "package_version": "0.7.11",
-  "date": "2026-06-22",
+  "date": "2026-06-23",
   "fixture_sha256": "ea307557af8f2fdc",
   "runs": [
     {
@@ -114,13 +114,13 @@
           ]
         },
         "argus_fast": {
-          "reid_rate": 0.8333333333333334,
-          "correct": 20,
+          "reid_rate": 0.7916666666666666,
+          "correct": 19,
           "n": 24,
           "per_profile": [
             {
               "truth": 1,
-              "guess": 1
+              "guess": 13
             },
             {
               "truth": 2,
@@ -160,7 +160,7 @@
             },
             {
               "truth": 11,
-              "guess": 11
+              "guess": 10
             },
             {
               "truth": 12,
@@ -168,7 +168,7 @@
             },
             {
               "truth": 13,
-              "guess": 1
+              "guess": 13
             },
             {
               "truth": 14,
@@ -200,7 +200,7 @@
             },
             {
               "truth": 21,
-              "guess": 6
+              "guess": 4
             },
             {
               "truth": 22,
@@ -328,13 +328,13 @@
           ]
         },
         "argus_fast": {
-          "reid_rate": 0.9166666666666666,
-          "correct": 22,
+          "reid_rate": 0.7916666666666666,
+          "correct": 19,
           "n": 24,
           "per_profile": [
             {
               "truth": 1,
-              "guess": 1
+              "guess": 13
             },
             {
               "truth": 2,
@@ -382,7 +382,7 @@
             },
             {
               "truth": 13,
-              "guess": 13
+              "guess": 0
             },
             {
               "truth": 14,
@@ -414,7 +414,7 @@
             },
             {
               "truth": 21,
-              "guess": 21
+              "guess": 4
             },
             {
               "truth": 22,
@@ -440,8 +440,8 @@
       "redactors": {
         "raw": {
           "reid_rate": 1.0,
-          "correct": 24,
-          "n": 24,
+          "correct": 23,
+          "n": 23,
           "per_profile": [
             {
               "truth": 1,
@@ -532,10 +532,6 @@
               "guess": 22
             },
             {
-              "truth": 23,
-              "guess": 23
-            },
-            {
               "truth": 24,
               "guess": 24
             }
@@ -588,7 +584,7 @@
             },
             {
               "truth": 11,
-              "guess": 11
+              "guess": 10
             },
             {
               "truth": 12,
@@ -596,7 +592,7 @@
             },
             {
               "truth": 13,
-              "guess": 1
+              "guess": 0
             },
             {
               "truth": 14,
@@ -612,7 +608,7 @@
             },
             {
               "truth": 17,
-              "guess": 3
+              "guess": 17
             },
             {
               "truth": 18,
@@ -628,7 +624,7 @@
             },
             {
               "truth": 21,
-              "guess": 6
+              "guess": 4
             },
             {
               "truth": 22,
