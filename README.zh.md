@@ -2,7 +2,7 @@
 
 [English](README.md) · 中文说明
 
-[![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![crates.io](https://img.shields.io/badge/crates.io-v0.7.12-orange)](https://crates.io/crates/argus-redact-core) [![Tests](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml/badge.svg)](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
+[![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![crates.io](https://img.shields.io/badge/crates.io-v0.7.13-orange)](https://crates.io/crates/argus-redact-core) [![Tests](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml/badge.svg)](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
 
 **只加密 PII，不加密含义。在你本地。**
 
@@ -163,7 +163,7 @@ _ai4privacy en，500 样本，v0.6.6。`auto` 模式在维护者硬件上跳过 
 
 ## 北极星
 
-| 维度 | 当前 (v0.7.12) | 下一里程碑 |
+| 维度 | 当前 (v0.7.13) | 下一里程碑 |
 |-----------|:----------------:|:---:|
 | **保护** | 63 类 PII，L1-L3。**在 [PRvL](docs/prvl-standard.md) 参考套件中，`default` profile 在 GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.5 上 PII 泄漏率 0%**。`pseudonym-llm` profile：四个模型中三个 100%；**Claude-Opus-4.5 上 96% / Bronze**（单格重滚）。不保证对抗性输入 — 完整矩阵见 prvl-standard.md。8 语言跨层 hints（zh/en/ja/ko/de/uk/in/br）。SHAKE-256 派生 + 全盐熵 + faker 身份通过守卫。状态导出默认省略 salt；HTTP server 拒绝无认证启动；CLI 写入 O_NOFOLLOW + key 文件 mode 0600；MCP token 存储 TTL+LRU (v0.6.2)。Windows CI + 属性测试不变量 + 变异测试核心 (v0.6.3) + 性能预算 CI 门控 (v0.6.4) + 集成层会话隔离 (v0.6.6) + README pinned-to-doctest + 版本同步 CI 守卫 (v0.6.6) + compose 命名空间 + 纯层纯净守卫 (v0.6.7) + seed→salt API rename + PIITypeDef SSOT + Presidio bridge through public redact + 3 new types (v0.6.8) + compose 辅助函数 (v0.6.9) + Layer 1 冻结守卫/KDF replay 向量/死代码精简/manylinux 摘要锁定 (v0.6.10) + 适配器编写接口（compose.register_pii_type / PIITypeDef / PatternMatch）+ Layer 2 签名快照 (v0.6.11) + 港澳通行证/公积金 zh L1 覆盖 (v0.6.12)。**v0.7.x — 100% Rust 核心 SSOT**：argus-redact-core crate + crates.io 发布，patterns/校验器/归一化/替换+还原/fakers/人名打分 + 完整 L1 redact/restore 引擎迁入 Rust (v0.7.0–v0.7.8) + fail-closed 加固与检测正确性 (v0.7.9–v0.7.10) + 浏览器内 **wasm** 构建 (v0.7.11)。**v0.7.12 — 准标识符检测广度**：证据门控的中文裸地区、职业、医疗病症/过敏、以及新类型 **hobby** 检测（经由共享的 evidence_detector 框架），加上重识别评测（PRvL+ X 轴）；移除未发布的 generalize 策略 | 对抗性测试 |
 | **可用** | PRvL U=100%。假名编码 + 真实模式（zh + en + RFC 共享）+ 按调用策略覆盖 + `keep` 策略（白名单）+ 可续流式会话 + 增量流式默认 + 跨语言别名还原（zh ↔ en） | 任务感知引导 |

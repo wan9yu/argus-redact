@@ -2,6 +2,70 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.7.13 — Faker fail-closed + crate-publish recovery
+
+A bug-fix release. The `date_of_birth` realistic faker could crash redaction on
+date forms it cannot synthesize; it now fails closed. Also restores the
+crates.io publish that the v0.7.12 pipeline missed. **No detection-output
+change.**
+
+### Fixed
+- **`date_of_birth` realistic faker no longer crashes on dates it can't fake.**
+  The detector matches year-month (`生日2000年1月`), 2-digit years, and
+  Chinese-numeral months (`生日三月`, `出生于十一月十五日`), but the date-noise
+  faker only shifts a full Y-M-D date. Previously an unfakeable match exhausted
+  the re-roll loop and raised `ValueError` in realistic / `redact_pseudonym_llm`
+  modes. Now any realistic faker that cannot produce a unique non-identity fake
+  **fails closed to a pseudonym** — the entity stays redacted, the original is
+  never echoed, and redaction never raises. Genuine faker errors (a custom
+  callable that raises, an unknown built-in) still surface. Fast mode (default
+  `remove`) was never affected.
+
+### Internal
+- **The Cargo workspace version is now synced from `pyproject.toml`.** `make
+  sync-docs-version` (and its CI `--check`) now rewrites `[workspace.package]
+  version`, closing the gap that left v0.7.12 on crates.io at 0.7.11 while PyPI
+  shipped 0.7.12. crates.io skips the failed 0.7.12 and resumes at 0.7.13.
+
+## v0.7.12 — zh quasi-identifier detection breadth + re-identification eval
+
+Broadens Chinese quasi-identifier detection and adds a re-identification
+evaluation axis. **New detection output** (region / occupation / condition /
+hobby) feeds the default `remove` path; realistic-fake and pseudonym output for
+existing types is unchanged. One new type (`hobby`), bringing the catalog to 63.
+
+### Added — detection breadth (evidence-gated, Chinese)
+- **Shared evidence-gated detector framework** (`evidence_detector`): cue regex +
+  curated-lexicon confidence + PII-proximity, with a precision threshold and a
+  first-character prefilter. New detectors instantiate it; the existing
+  person/region/occupation detectors are unchanged.
+- **Region detector** — bare administrative regions (not only structured
+  addresses) are caught at L1, and a district match absorbs its leading
+  parent-city prefix (`上海浦东新区` → one span, no bare `上海` left over).
+- **Occupation detector** — bare job titles caught at L1 (honorific-guarded).
+- **Condition / allergy coverage** (`medical`) — free-text conditions and
+  allergies (`对X过敏`, `患有…`) beyond the structured medication pattern, which
+  was also split to gate `吃了/吃的` on a drug suffix and to catch common
+  suffix-less drug names (closing a `吃了<drug>` leak).
+- **`hobby` type** — a re-identification quasi-identifier, default `remove`.
+  Honestly *not* a GDPR special / PIPL sensitive category; included for re-id
+  reduction, not compliance.
+
+### Added — evaluation
+- **Re-identification eval** (`tests/benchmark/reid_eval.py`, off by default,
+  `ARGUS_REID_EVAL=1`) — a closed-world synthetic 24-persona fixture measuring
+  how often an LLM re-identifies a redacted profile, plus an ablation harness to
+  rank which surviving signal carries re-id leverage.
+
+### Notes
+- A `generalize` strategy and Chinese admin-region coarsening were explored,
+  measured against the re-id eval, and **removed before release** — coarsening a
+  quasi-identifier (district → city) did not beat full removal (tie-to-noise).
+  See `docs/design-quasi-identifier-generalization.md`. The region/occupation
+  detectors built alongside it were kept.
+- `DetectL1Result::entities()` renamed to `layer1_and_person()` (honest helper
+  name); detector lexicon loading deduped via `DetectorConfig::from_ron`.
+
 ## v0.7.11 — In-browser WASM build
 
 Adds a WebAssembly build for fully in-browser PII redaction, plus maintenance.

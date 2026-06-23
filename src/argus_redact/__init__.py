@@ -19,7 +19,7 @@ from argus_redact.pure.replacer import SecurityWarning, is_strategy_reversible
 from argus_redact.pure.restore import check_restore_safety, wipe_key
 from argus_redact.pure.risk import assess_risk
 
-__version__ = "0.7.12"
+__version__ = "0.7.13"
 __all__ = [
     # ─── Layer 1 — primitive (frozen at 1.0) ───
     "redact",
