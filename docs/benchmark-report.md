@@ -314,7 +314,7 @@ Streaming hot path (`StreamingRestorer.feed` × N sentences) is the primary bene
 Can an LLM re-identify a redacted subject from residual quasi-identifiers + a known
 candidate pool? Closed-world synthetic set (N=24 clustered personas with overlapping
 quasi-identifiers), `python -m tests.benchmark.reid_eval` (snapshot:
-`tests/benchmark/results/reidentification_0.7.11.json`). **Lower = better.**
+`tests/benchmark/results/reidentification_0.7.12.json`). **Lower = better.**
 
 | Model | raw (upper bound) | argus `fast` (prior) | argus `fast` (with condition + hobby detection) |
 |-------|:-----------------:|:--------------------:|:-----------------------------------------------:|

@@ -16,7 +16,7 @@ _REPO = Path(__file__).parent.parent
 # (not imported) so this docs-sync script stays free of the native `_core`
 # import. Bump this when `make catalog` reports a different total; the README
 # count targets below are then re-asserted by `make sync-docs-version-check`.
-_PII_TYPE_COUNT = 62
+_PII_TYPE_COUNT = 63
 
 _TARGETS = [
     # (path, regex pattern, replacement template — single {v} placeholder)
