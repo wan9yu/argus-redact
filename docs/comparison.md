@@ -8,12 +8,14 @@
 | Per-message keys (default) | **Yes** | Custom code | No (account-scoped vault) | No | No |
 | Chinese-native PII out-of-the-box | **Yes** (HanLP + native validators) | Add via spaCy zh model + custom recognizers | No | Limited | No |
 | Fully local | Yes | Yes | Yes | No (SaaS) | No (calls OpenAI) |
-| Semantic / LLM-assisted detection | Yes (local Ollama, optional) | Via custom recognizer | No | Yes | No |
+| Semantic / LLM-assisted detection | Yes (local Ollama — implicit PII) | Yes (built-in transformer/GLiNER; LLM detection path expanding) | No | Yes | No |
 | Two-line `redact / restore` API | Yes | Multi-step (analyze → anonymize → custom restore) | No | No | Yes |
 | MCP Server | Yes (built-in) | No (community) | No | Commercial only | No |
 | Multi-language | 8 (built-in) | Many via spaCy/Stanza recognizers (configurable) | Limited | 50+ (claimed) | 1 |
 
 **Reading this table:** Presidio is a *toolkit* — most "No" cells against Presidio above mean *"not in the box"*, not *"impossible"*. With custom recognizers and a vault, Presidio can do most of what's listed here. We compare *out-of-the-box behavior for an LLM-pipeline use case* — that's the workload argus-redact is shaped for. If your team already runs a Presidio recognizer fleet, the [Presidio bridge](../docs/integration-frameworks.md) lets you keep it.
+
+Presidio is also **actively expanding** — recent releases add more country recognizers, transformer-based detection (GLiNER via ONNX, run locally), and an emerging LLM-based detection path. So the durable distinction is **not** any single detection capability (those converge); it's the *combination* argus-redact defaults to: **reversible** substitution with **per-message keys**, **native Chinese** out of the box, and a **local semantic tier** for *implicit* PII (symptoms → diagnosis) rather than entity recognition alone.
 
 ## Why Per-Message Keys Matter
 
@@ -27,6 +29,14 @@ argus-redact is **not** a Presidio replacement. They solve different problems:
 
 - **Presidio** detects and masks PII (one-way)
 - **argus-redact** encrypts PII reversibly with per-message keys
+
+The core approach — replacing PII with **realistic, same-type** values using
+**on-premise** models so a downstream LLM keeps its reasoning — is independently
+articulated in *Anonymous-by-Construction* ([arXiv:2603.17217](https://arxiv.org/abs/2603.17217)),
+which formalizes local LLM redaction via type-consistent fakes. We read it as
+convergent external validation of the "encrypt PII, not meaning, locally" thesis;
+argus-redact adds **reversibility + per-message keys** on top, so the substitution
+round-trips back to the original instead of being a one-way synthesis.
 
 Use both together via the [Presidio bridge](../docs/integration-frameworks.md):
 
