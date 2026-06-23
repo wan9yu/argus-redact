@@ -100,9 +100,12 @@ pub struct DetectL1Result {
 }
 
 impl DetectL1Result {
-    /// `layer1 ++ person` — the fast-mode pre-merge entity list, in the same
-    /// order Python builds via `entities.extend(layer1); entities.extend(person)`.
-    pub fn entities(&self) -> Vec<PatternMatch> {
+    /// `layer1 ++ person` ONLY — **not** the full pre-merge L1 entity set. The
+    /// complete fast-mode list also includes `regions`, `job_titles`, and
+    /// `framework`, which the fast path (and each binding) concatenates
+    /// separately; this helper exists for the tests that assert the layer1+person
+    /// slice. Order mirrors Python's `entities.extend(layer1); extend(person)`.
+    pub fn layer1_and_person(&self) -> Vec<PatternMatch> {
         let mut out = Vec::with_capacity(self.layer1.len() + self.person.len());
         out.extend(self.layer1.iter().cloned());
         out.extend(self.person.iter().cloned());
@@ -336,7 +339,7 @@ pub fn detect_l1(
     //    (`re.finditer(re.escape(name), text)`) become person entities at
     //    confidence 1.0, with `text = name` (exactly as Python sets `text=name`,
     //    not the matched slice — equal for a literal match). Appended AFTER layer1
-    //    in `.entities()`, matching Python's `entities.append` order.
+    //    in `.layer1_and_person()`, matching Python's `entities.append` order.
     if !has_zh && !has_en && !scan_names.is_empty() {
         for name in &scan_names {
             // Python `if not name: continue` — skip empty names.
@@ -691,7 +694,7 @@ mod tests {
         // id_number/credit_code fail validation → near-misses.
         let r = run("我叫张伟，电话13800138000，身份证110101199003078888。", &["zh"], &[]);
         assert_entities(
-            &r.entities(),
+            &r.layer1_and_person(),
             &[
                 ("我", "self_reference", 0, 1, 1.0, 1),
                 ("13800138000", "phone", 7, 18, 1.0, 1),
@@ -712,7 +715,7 @@ mod tests {
     fn en_names_neutral() {
         let r = run("Contact John Smith or Mary Johnson at the office.", &["en"], &[]);
         assert_entities(
-            &r.entities(),
+            &r.layer1_and_person(),
             &[
                 ("John Smith", "person", 8, 18, 1.0, 1),
                 ("Mary Johnson", "person", 22, 34, 1.0, 1),
@@ -725,7 +728,7 @@ mod tests {
     #[test]
     fn en_known_name_exact() {
         let r = run("Reach out to Zaphod about the project.", &["en"], &["Zaphod"]);
-        assert_entities(&r.entities(), &[("Zaphod", "person", 13, 19, 1.0, 1)]);
+        assert_entities(&r.layer1_and_person(), &[("Zaphod", "person", 13, 19, 1.0, 1)]);
         assert_hints(&r.hints, &[("neutral", None)]);
     }
 
@@ -735,7 +738,7 @@ mod tests {
         // threshold (surname-list match) so Michael Brown still appears.
         let r = run("Please tell me about Michael Brown's account.", &["en"], &[]);
         assert_entities(
-            &r.entities(),
+            &r.layer1_and_person(),
             &[
                 ("me", "self_reference", 12, 14, 1.0, 1),
                 ("Michael Brown", "person", 21, 34, 1.0, 1),
@@ -748,7 +751,7 @@ mod tests {
     fn kinship_selfref_zh_tier1() {
         let r = run("我妈的电话是13912345678", &["zh"], &[]);
         assert_entities(
-            &r.entities(),
+            &r.layer1_and_person(),
             &[
                 ("我妈", "self_reference", 0, 2, 1.0, 1),
                 ("我", "self_reference", 0, 1, 1.0, 1),
@@ -763,7 +766,7 @@ mod tests {
         // 😀 is a 2-char-wide-in-UTF16 / 4-byte char; offsets are CHAR positions.
         let r = run("联系王芳😀电话13700137000谢谢", &["zh"], &[]);
         assert_entities(
-            &r.entities(),
+            &r.layer1_and_person(),
             &[
                 ("13700137000", "phone", 7, 18, 1.0, 1),
                 ("王芳", "person", 2, 4, 1.0, 1),
@@ -780,7 +783,7 @@ mod tests {
             &[],
         );
         assert_entities(
-            &r.entities(),
+            &r.layer1_and_person(),
             &[
                 (
                     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
@@ -802,7 +805,7 @@ mod tests {
         // ORIGINAL "一三八零零一三八零零零" (map-span rebuilds text[s..e]).
         let r = run("电话一三八零零一三八零零零是我的号码", &["zh"], &[]);
         assert_entities(
-            &r.entities(),
+            &r.layer1_and_person(),
             &[
                 ("一三八零零一三八零零零", "phone", 2, 13, 1.0, 1),
                 ("我的", "self_reference", 14, 16, 1.0, 1),
@@ -816,7 +819,7 @@ mod tests {
         // Both detectors run; person order is zh (张伟) then en (John Smith).
         let r = run("张伟 and John Smith met, phone 13800138000", &["zh", "en"], &[]);
         assert_entities(
-            &r.entities(),
+            &r.layer1_and_person(),
             &[
                 ("13800138000", "phone", 29, 40, 1.0, 1),
                 ("张伟", "person", 0, 2, 0.8, 1),
@@ -832,7 +835,7 @@ mod tests {
         // fullwidth run mapped back.
         let r = run("电话：１３８００１３８０００ 联系我", &["zh"], &[]);
         assert_entities(
-            &r.entities(),
+            &r.layer1_and_person(),
             &[
                 ("１３８００１３８０００", "phone", 3, 14, 1.0, 1),
                 ("我", "self_reference", 17, 18, 1.0, 1),
@@ -861,7 +864,7 @@ mod tests {
         //   [('Zaphod','person',8,14,1.0,1), ('Trillian','person',19,27,1.0,1)]
         let r = run("Talk to Zaphod and Trillian please", &["ja"], &["Zaphod", "Trillian"]);
         assert_entities(
-            &r.entities(),
+            &r.layer1_and_person(),
             &[
                 ("Zaphod", "person", 8, 14, 1.0, 1),
                 ("Trillian", "person", 19, 27, 1.0, 1),
@@ -875,7 +878,7 @@ mod tests {
         //   [('Zaphod','person',0,6,1.0,1), ('Zaphod','person',11,17,1.0,1)]
         let r = run("Zaphod met Zaphod again", &["ja"], &["Zaphod"]);
         assert_entities(
-            &r.entities(),
+            &r.layer1_and_person(),
             &[
                 ("Zaphod", "person", 0, 6, 1.0, 1),
                 ("Zaphod", "person", 11, 17, 1.0, 1),
@@ -888,7 +891,7 @@ mod tests {
         // An empty name in the list is skipped (Python `if not name: continue`):
         // no match, no panic. Python: [('Zaphod','person',0,6,1.0,1)]
         let r = run("Zaphod is here", &["ja"], &["", "Zaphod"]);
-        assert_entities(&r.entities(), &[("Zaphod", "person", 0, 6, 1.0, 1)]);
+        assert_entities(&r.layer1_and_person(), &[("Zaphod", "person", 0, 6, 1.0, 1)]);
     }
 
     #[test]
@@ -897,7 +900,7 @@ mod tests {
         // so it matches "A." and NOT "Ax" in "AxB". Python:
         //   [('A.','person',0,2,1.0,1)]
         let r = run("A. and AxB present", &["ja"], &["A."]);
-        assert_entities(&r.entities(), &[("A.", "person", 0, 2, 1.0, 1)]);
+        assert_entities(&r.layer1_and_person(), &[("A.", "person", 0, 2, 1.0, 1)]);
     }
 
     #[test]
@@ -908,7 +911,7 @@ mod tests {
         // matters is the fallback condition (`!has_zh && !has_en`) excludes this.
         // Python _detect(lang=["zh"]): [('Zaphod','person',0,6,1.0,1)]
         let r = run("Zaphod here", &["zh"], &["Zaphod"]);
-        assert_entities(&r.entities(), &[("Zaphod", "person", 0, 6, 1.0, 1)]);
+        assert_entities(&r.layer1_and_person(), &[("Zaphod", "person", 0, 6, 1.0, 1)]);
     }
 
     #[test]
@@ -916,7 +919,7 @@ mod tests {
         // When "en" is in lang the en person branch handles names; the fallback is
         // suppressed. Python _detect(lang=["en"]): [('Zaphod','person',0,6,1.0,1)]
         let r = run("Zaphod here", &["en"], &["Zaphod"]);
-        assert_entities(&r.entities(), &[("Zaphod", "person", 0, 6, 1.0, 1)]);
+        assert_entities(&r.layer1_and_person(), &[("Zaphod", "person", 0, 6, 1.0, 1)]);
     }
 
     // ── Mutation-kill guard: the oversize input boundary (detect_l1 L178) ─────
