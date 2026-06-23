@@ -116,6 +116,38 @@ impl DetectorConfig {
             data.terms.into_iter().map(|s| &*Box::leak(s.into_boxed_str())).collect();
         Self::new(&lexicon, cue, type_)
     }
+
+    /// English/word-boundary variant: same FIXED v1 weights, but the candidate
+    /// scan is `candidates_word` (word-boundary tokenization — `nurse` never
+    /// matches inside `nursery`) and the lexicon-confidence proxy is MULTI-WORD
+    /// (>= 2 tokens) rather than the zh >= 3-char floor. Terms are lowercased into
+    /// `name_set` / `first_chars` so matching is case-insensitive.
+    pub fn new_word(lexicon: &[&'static str], cue: &'static Regex, type_: &'static str) -> Self {
+        // Lowercase + leak so lowercased terms are 'static (mirrors from_ron's leak).
+        let lowered: Vec<&'static str> = lexicon
+            .iter()
+            .map(|t| &*Box::leak(t.to_lowercase().into_boxed_str()))
+            .collect();
+        debug_assert!(
+            lowered.iter().all(|t| t.split_whitespace().count() <= MAX_TOKEN_RUN),
+            "evidence_detector: a lexicon term exceeds MAX_TOKEN_RUN tokens; raise the cap"
+        );
+        let mut cfg = Self::new(&lowered, cue, type_);
+        cfg.scan = candidates_word;
+        cfg.lexicon_conf_multiword = true;
+        cfg
+    }
+
+    /// English counterpart of [`from_ron`]: parse a `Lexicon(terms: [...])` RON
+    /// file, promote terms to `'static`, and build a word-boundary English config.
+    pub fn from_ron_word(ron_src: &str, cue: &'static Regex, type_: &'static str) -> Self {
+        let data: Lexicon = ron::from_str(ron_src).unwrap_or_else(|e| {
+            panic!("evidence_detector: RON lexicon parse error for type '{type_}': {e}")
+        });
+        let lexicon: Vec<&'static str> =
+            data.terms.into_iter().map(|s| &*Box::leak(s.into_boxed_str())).collect();
+        Self::new_word(&lexicon, cue, type_)
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -146,6 +178,92 @@ fn candidates_cjk(chars: &[char], cfg: &DetectorConfig) -> Vec<(String, usize, u
             }
         }
         i += matched.max(1);
+    }
+    out
+}
+
+/// Longest curated lexicon phrase is a few tokens; cap the per-position run probe
+/// so the scan stays linear in token count (mirrors how `candidates_cjk` is
+/// bounded by `max_len`). 8 comfortably exceeds the longest curated en phrase.
+const MAX_TOKEN_RUN: usize = 8;
+
+/// English candidate scan: WORD-BOUNDARY matching. Tokenize on whitespace/punct
+/// (apostrophe + hyphen kept intra-word, so `crohn's` / `type-2` stay one token),
+/// then greedily match the longest run of consecutive tokens that is a lexicon
+/// entry. A bare `nurse` never matches inside `nursery` because `nursery` is one
+/// token (and `nurse != nursery` in `name_set`). Tokens are lowercased to match
+/// the lowercased `name_set`; the EMITTED text is the verbatim source slice
+/// `chars[start..end]` (matches `candidates_cjk`); the lowercased phrase is only
+/// the lookup key.
+fn candidates_word(chars: &[char], cfg: &DetectorConfig) -> Vec<(String, usize, usize)> {
+    // 1) Tokenize into (lowercased text, start_char_off, end_char_off).
+    let mut tokens: Vec<(String, usize, usize)> = Vec::new();
+    let n = chars.len();
+    let mut i = 0;
+    while i < n {
+        let c = chars[i];
+        let is_word = c.is_alphanumeric() || c == '\'' || c == '-';
+        if !is_word {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        let mut buf = String::new();
+        while i < n && (chars[i].is_alphanumeric() || chars[i] == '\'' || chars[i] == '-') {
+            for lc in chars[i].to_lowercase() {
+                buf.push(lc);
+            }
+            i += 1;
+        }
+        tokens.push((buf, start, i));
+    }
+
+    // 2) Greedy longest-run lexicon match starting at each token.
+    let mut out = Vec::new();
+    let mut t = 0;
+    while t < tokens.len() {
+        // First-char prefilter: skip tokens that cannot start any lexicon term.
+        if tokens[t]
+            .0
+            .chars()
+            .next()
+            .is_none_or(|fc| !cfg.first_chars.contains(&fc))
+        {
+            t += 1;
+            continue;
+        }
+        let hi = MAX_TOKEN_RUN.min(tokens.len() - t);
+        // A multi-token phrase may only span WHITESPACE between its tokens. A
+        // non-whitespace gap means the tokens are a list ("rock, climbing"), not
+        // the compound term ("rock climbing"), and spanning it would also swallow
+        // that punctuation into the emitted verbatim slice. Cap the run at the
+        // first non-whitespace gap.
+        let mut max_run = 1usize;
+        while max_run < hi {
+            let gap_start = tokens[t + max_run - 1].2;
+            let gap_end = tokens[t + max_run].1;
+            if !chars[gap_start..gap_end].iter().all(|c| c.is_whitespace()) {
+                break;
+            }
+            max_run += 1;
+        }
+        let mut matched_run = 0usize;
+        for run in (1..=max_run).rev() {
+            let phrase: String = tokens[t..t + run]
+                .iter()
+                .map(|(s, _, _)| s.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            if cfg.name_set.contains(phrase.as_str()) {
+                let start = tokens[t].1;
+                let end = tokens[t + run - 1].2;
+                let surface: String = chars[start..end].iter().collect(); // verbatim source
+                out.push((surface, start, end));
+                matched_run = run;
+                break;
+            }
+        }
+        t += matched_run.max(1);
     }
     out
 }
@@ -325,5 +443,107 @@ mod tests {
         let org = vec![pm("华为公司", "organization", 0, 4)];
         let hits = detect_with("华为公司旁边有马拉松", &org, test_cfg());
         assert!(hits.is_empty(), "organization must not corroborate: {hits:?}");
+    }
+
+    fn word_cfg() -> &'static DetectorConfig {
+        static CELL: OnceLock<DetectorConfig> = OnceLock::new();
+        CELL.get_or_init(|| {
+            static CUE: LazyLock<Regex> =
+                LazyLock::new(|| Regex::new(r"(?i)works as|enjoys").unwrap());
+            // "nurse"/"chess" single-word (no multi-word lexicon weight);
+            // "software engineer"/"rock climbing" multi-word (carry corroboration).
+            DetectorConfig::new_word(
+                &["nurse", "chess", "software engineer", "rock climbing"],
+                &CUE,
+                "job_title",
+            )
+        })
+    }
+
+    #[test]
+    fn word_no_substring_match() {
+        // PRECISION: "nurse" must NOT match inside "nursery" (word-boundary scan).
+        let hits = detect_with("She works as a nursery assistant.", &[], word_cfg());
+        assert!(
+            !hits.iter().any(|h| h.text.to_lowercase() == "nurse"),
+            "must not match nurse inside nursery: {hits:?}"
+        );
+    }
+
+    #[test]
+    fn word_cue_alone_fires() {
+        // A cue ("works as") fires a single-word term: 0.6 >= 0.5.
+        let hits = detect_with("She works as a nurse.", &[], word_cfg());
+        let hit = hits.iter().find(|h| h.text.to_lowercase() == "nurse");
+        assert!(hit.is_some(), "{hits:?}");
+        assert!((hit.unwrap().confidence - 0.6).abs() < 1e-9, "cue-only {:?}", hit);
+    }
+
+    #[test]
+    fn word_case_insensitive_match() {
+        // Mixed-case source matches the lowercased name_set; emitted text is the
+        // verbatim source slice.
+        let hits = detect_with("She works as a Nurse.", &[], word_cfg());
+        assert!(hits.iter().any(|h| h.text == "Nurse"), "verbatim source text: {hits:?}");
+    }
+
+    #[test]
+    fn word_multiword_longest_run() {
+        // "software engineer" (2-token run) wins; span covers both tokens.
+        let hits = detect_with("He works as a software engineer.", &[], word_cfg());
+        let hit = hits.iter().find(|h| h.text.to_lowercase() == "software engineer");
+        assert!(hit.is_some(), "multi-word run: {hits:?}");
+    }
+
+    #[test]
+    fn word_multiword_alone_insufficient() {
+        // PRECISION: a multi-word term with NO cue / NO PII keeps only lexicon 0.3
+        // < 0.5 → skip (multi-word proxy corroborates, does not fire).
+        let hits = detect_with("Software engineer is a common role.", &[], word_cfg());
+        assert!(hits.is_empty(), "bare multi-word must not fire: {hits:?}");
+    }
+
+    #[test]
+    fn word_multiword_plus_proximity_fires() {
+        // multi-word lexicon 0.3 + PII proximity 0.3 = 0.6 → fire.
+        let pii = vec![pm("555-0100", "phone", 0, 8)];
+        let hits = detect_with("555-0100 software engineer", &pii, word_cfg());
+        let hit = hits.iter().find(|h| h.text.to_lowercase() == "software engineer");
+        assert!(hit.is_some(), "{hits:?}");
+        assert!((hit.unwrap().confidence - 0.6).abs() < 1e-9, "multiword+prox {:?}", hit);
+    }
+
+    #[test]
+    fn word_single_term_proximity_alone_insufficient() {
+        // PRECISION: single-word "chess" (no multi-word weight) merely near PII
+        // gets only proximity 0.3 < 0.5 → skip.
+        let pii = vec![pm("555-0100", "phone", 0, 8)];
+        let hits = detect_with("555-0100 chess", &pii, word_cfg());
+        assert!(hits.is_empty(), "single word + proximity-only must not fire: {hits:?}");
+    }
+
+    #[test]
+    fn word_punct_between_tokens_not_spanned() {
+        // PRECISION: "rock, climbing" is a LIST, not the compound "rock climbing".
+        // The non-whitespace gap caps the run, so the phrase neither falsely
+        // matches nor swallows the comma into the emitted span.
+        let hits = detect_with("She enjoys rock, climbing.", &[], word_cfg());
+        assert!(
+            !hits.iter().any(|h| h.text.contains(',') || h.text.to_lowercase() == "rock climbing"),
+            "punctuation gap must not be spanned: {hits:?}"
+        );
+    }
+
+    #[test]
+    fn word_whitespace_run_between_tokens_matches() {
+        // Multiple spaces are still the compound term (whitespace-only gap): it
+        // matches, and the emitted surface is verbatim (original spacing preserved).
+        let hits = detect_with("He works as a software  engineer.", &[], word_cfg());
+        assert!(
+            hits.iter().any(|h|
+                h.text.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
+                    == "software engineer"),
+            "whitespace-run multi-word should still match: {hits:?}"
+        );
     }
 }
