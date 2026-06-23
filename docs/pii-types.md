@@ -3,9 +3,9 @@
 Auto-generated from `argus_redact.specs.list_types()`. Do not hand-edit.
 Regenerate via: `make catalog`
 
-Total: 62 types (35 zh / 15 en / 12 shared)
+Total: 63 types (36 zh / 15 en / 12 shared)
 
-## Chinese (zh) — 35 types
+## Chinese (zh) — 36 types
 
 ### `address`
 
@@ -160,6 +160,19 @@ Financial info (salary/debt/credit score with amounts)
 | Source | Hong Kong Immigration Department; Wikipedia HKID |
 
 Hong Kong Identity Card — 1-2 letter + 6 digit + parenthesized check
+
+### `hobby`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 2 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| Examples | `喜欢攀岩`, `爱好书法`, `经常钓鱼` |
+| Source | re-identification quasi-identifier (NOT a regulated PII category) |
+
+Hobby/interest — a re-id quasi-identifier; no PIPL/GDPR/HIPAA category.
 
 ### `housing_fund`
 

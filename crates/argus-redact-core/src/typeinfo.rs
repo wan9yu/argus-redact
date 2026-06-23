@@ -59,6 +59,7 @@ fn default_prefix(type_: &str) -> Option<&'static str> {
         "school" => "SCH",
         "ethnicity" => "ETH",
         "workplace" => "WORK",
+        "hobby" => "HOBBY",
         "criminal_record" => "CRIM",
         "financial" => "FIN",
         "biometric" => "BIO",

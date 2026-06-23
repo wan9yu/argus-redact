@@ -108,9 +108,11 @@ class TestSpecExamples:
         from argus_redact.pure.patterns import match_patterns
 
         for typedef in list_types("zh"):
-            if typedef.name in ("phone_landline", "person"):
+            if typedef.name in ("phone_landline", "person", "hobby"):
                 # phone_landline has separate examples tested elsewhere
                 # person names are detected by person.py, not by PATTERNS regex
+                # hobby is framework-detected (evidence_detector), no regex —
+                # validated by tests/core/test_hobby_detect.py
                 continue
             for example in typedef.examples:
                 results, _ = match_patterns(example, ZH_PATTERNS + SHARED)

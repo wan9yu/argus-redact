@@ -103,6 +103,7 @@ DEFAULT_PREFIXES = {
     "school": "SCH",
     "ethnicity": "ETH",
     "workplace": "WORK",
+    "hobby": "HOBBY",
     "criminal_record": "CRIM",
     "financial": "FIN",
     "biometric": "BIO",

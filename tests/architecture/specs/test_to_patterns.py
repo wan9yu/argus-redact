@@ -52,7 +52,9 @@ class TestToPatterns:
     #   - age     : zh has no core `age` pattern (age is a shared/core type)
     #   - phone_landline : its core pattern is keyed under type="phone", not
     #                      "phone_landline", so filtering by its own name is empty
-    _NO_CORE_PATTERN = {"person", "age", "phone_landline"}
+    #   - hobby          : framework-detected (evidence_detector + hobbies.rs),
+    #                      no regex pattern — validated by tests/core/test_hobby_detect.py
+    _NO_CORE_PATTERN = {"person", "age", "phone_landline", "hobby"}
 
     # Types whose detection is exercised at the `phone`/shared level rather than
     # under their own typedef name — excluded from the cross-pattern parity check

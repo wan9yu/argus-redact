@@ -27,6 +27,7 @@
         (lang: "zh", name: "school", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.56"], gdpr_special_category: false, hipaa_phi_category: None),
         (lang: "zh", name: "ethnicity", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.51", "PIPL Art.29", "PIPL Art.56"], gdpr_special_category: true, hipaa_phi_category: None),
         (lang: "zh", name: "workplace", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.56"], gdpr_special_category: false, hipaa_phi_category: None),
+        (lang: "zh", name: "hobby", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.56"], gdpr_special_category: false, hipaa_phi_category: None),
         (lang: "zh", name: "criminal_record", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.51", "PIPL Art.29", "PIPL Art.55", "PIPL Art.56"], gdpr_special_category: true, hipaa_phi_category: None),
         (lang: "zh", name: "financial", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.51", "PIPL Art.29", "PIPL Art.55", "PIPL Art.56"], gdpr_special_category: false, hipaa_phi_category: Some("account_numbers")),
         (lang: "zh", name: "biometric", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.51", "PIPL Art.29", "PIPL Art.55", "PIPL Art.56"], gdpr_special_category: true, hipaa_phi_category: Some("biometric")),

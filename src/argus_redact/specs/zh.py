@@ -695,6 +695,24 @@ register(
     )
 )
 
+register(
+    PIITypeDef(
+        name="hobby",
+        lang="zh",
+        format="爱好/兴趣关键词",
+        charset="cjk",
+        structure={"trigger": "爱好/喜欢/经常", "content": "活动名"},
+        prefixes=("爱好", "喜欢", "经常"),
+        strategy="remove",
+        label="[兴趣爱好已脱敏]",
+        examples=("喜欢攀岩", "爱好书法", "经常钓鱼"),
+        counterexamples=("今天天气不错",),
+        sensitivity=2,
+        source="re-identification quasi-identifier (NOT a regulated PII category)",
+        description="Hobby/interest — a re-id quasi-identifier; no PIPL/GDPR/HIPAA category.",
+    )
+)
+
 # ── Level 3: Sensitive Attributes ──
 
 register(

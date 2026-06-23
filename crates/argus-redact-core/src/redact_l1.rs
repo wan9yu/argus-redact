@@ -418,11 +418,12 @@ pub fn detect_l1(
         orig_len,
     );
 
-    // 12. Evidence-gated framework detectors (zh only): conditions (+ hobbies in
-    //     a later release). Combined into one `framework` vec.
+    // 12. Evidence-gated framework detectors (zh only): conditions + hobbies.
+    //     Combined into one `framework` vec.
     let mut framework: Vec<PatternMatch> = Vec::new();
     if has_zh {
         framework.extend(crate::conditions::detect_conditions_zh(person_detect_text, &layer1_raw));
+        framework.extend(crate::hobbies::detect_hobbies_zh(person_detect_text, &layer1_raw));
         tag_layer(&mut framework, LAYER_REGEX);
     }
     let framework = map_matches_to_original(&framework, text, person_offset_map.as_deref(), orig_len);
