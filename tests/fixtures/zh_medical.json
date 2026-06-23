@@ -1,89 +1,105 @@
 [
-    {
-        "id": "med_quezhen",
-        "input": "确诊糖尿病",
-        "should_match": true,
-        "type": "medical",
-        "expected_text": "糖尿病",
-        "description": "确诊+疾病（触发词保留，只脱敏疾病名）"
-    },
-    {
-        "id": "med_gaoxueya",
-        "input": "患有高血压",
-        "should_match": true,
-        "type": "medical",
-        "expected_text": "高血压",
-        "description": "患有+疾病"
-    },
-    {
-        "id": "med_fuyong",
-        "input": "服用阿莫西林",
-        "should_match": true,
-        "type": "medical",
-        "expected_text": "阿莫西林",
-        "description": "服用+药物"
-    },
-    {
-        "id": "med_aizi",
-        "input": "HIV阳性",
-        "should_match": true,
-        "type": "medical",
-        "expected_text": "HIV阳性",
-        "description": "HIV阳性（standalone）"
-    },
-    {
-        "id": "med_shoushu",
-        "input": "做了心脏搭桥手术",
-        "should_match": true,
-        "type": "medical",
-        "expected_text": "做了心脏搭桥手术",
-        "description": "手术（standalone）"
-    },
-    {
-        "id": "med_zhenduan",
-        "input": "诊断为抑郁症",
-        "should_match": true,
-        "type": "medical",
-        "expected_text": "抑郁症",
-        "description": "诊断+疾病"
-    },
-    {
-        "id": "plain_text",
-        "input": "今天天气不错",
-        "should_match": false,
-        "type": "medical",
-        "description": "无PII"
-    },
-    {
-        "id": "med_dele",
-        "input": "得了高血压",
-        "should_match": true,
-        "type": "medical",
-        "expected_text": "高血压",
-        "description": "得了+疾病（常见口语表达）"
-    },
-    {
-        "id": "med_chachulai",
-        "input": "查出来是糖尿病",
-        "should_match": true,
-        "type": "medical",
-        "expected_text": "糖尿病",
-        "description": "查出来+疾病"
-    },
-    {
-        "id": "med_chide",
-        "input": "吃的降压药",
-        "should_match": true,
-        "type": "medical",
-        "expected_text": "降压药",
-        "description": "吃的+药物（口语用法）"
-    },
-    {
-        "id": "med_kaile",
-        "input": "开了阿司匹林",
-        "should_match": true,
-        "type": "medical",
-        "expected_text": "阿司匹林",
-        "description": "开了+药物（医生开药）"
-    }
+  {
+    "id": "med_quezhen",
+    "input": "确诊糖尿病",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "糖尿病",
+    "description": "确诊+疾病（触发词保留，只脱敏疾病名）"
+  },
+  {
+    "id": "med_gaoxueya",
+    "input": "患有高血压",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "高血压",
+    "description": "患有+疾病"
+  },
+  {
+    "id": "med_fuyong",
+    "input": "服用阿莫西林",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "阿莫西林",
+    "description": "服用+药物"
+  },
+  {
+    "id": "med_aizi",
+    "input": "HIV阳性",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "HIV阳性",
+    "description": "HIV阳性（standalone）"
+  },
+  {
+    "id": "med_shoushu",
+    "input": "做了心脏搭桥手术",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "做了心脏搭桥手术",
+    "description": "手术（standalone）"
+  },
+  {
+    "id": "med_zhenduan",
+    "input": "诊断为抑郁症",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "抑郁症",
+    "description": "诊断+疾病"
+  },
+  {
+    "id": "plain_text",
+    "input": "今天天气不错",
+    "should_match": false,
+    "type": "medical",
+    "description": "无PII"
+  },
+  {
+    "id": "med_dele",
+    "input": "得了高血压",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "高血压",
+    "description": "得了+疾病（常见口语表达）"
+  },
+  {
+    "id": "med_chachulai",
+    "input": "查出来是糖尿病",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "糖尿病",
+    "description": "查出来+疾病"
+  },
+  {
+    "id": "med_chide",
+    "input": "吃的降压药",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "降压药",
+    "description": "吃的+药物（口语用法）"
+  },
+  {
+    "id": "med_kaile",
+    "input": "开了阿司匹林",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "阿司匹林",
+    "description": "开了+药物（医生开药）"
+  },
+  {
+    "id": "med_drug_ibuprofen",
+    "input": "我吃了布洛芬",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "布洛芬",
+    "description": "吃了+无后缀标准药名（不能漏检）"
+  },
+  {
+    "id": "med_drug_metformin",
+    "input": "他吃的二甲双胍",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "二甲双胍",
+    "description": "吃的+无后缀药名（揭示糖尿病）"
+  }
 ]

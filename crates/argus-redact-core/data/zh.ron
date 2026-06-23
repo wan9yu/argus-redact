@@ -230,8 +230,8 @@
     PatternData(
         type_: r"medical",
         label: r"[医疗信息已脱敏]",
-        pattern: r"HIV[阳阴]性|(?:乙肝|丙肝|艾滋病|癌症|肿瘤|白血病|糖尿病|高血压|冠心病|抑郁症|精神分裂|癫痫|肺结核|梅毒|淋病|尿毒症)|[\u4e00-\u9fff]{2,6}手术",
-        description: r"Medical standalone (HIV/disease names/surgery)",
+        pattern: r"HIV[阳阴]性|(?:乙肝|丙肝|艾滋病|癌症|肿瘤|白血病|糖尿病|高血压|冠心病|抑郁症|精神分裂|癫痫|肺结核|梅毒|淋病|尿毒症)|(?:布洛芬|阿司匹林|二甲双胍|阿莫西林|头孢|青霉素|胰岛素|奥美拉唑|氯雷他定|对乙酰氨基酚|感冒灵|板蓝根|连花清瘟)|[\u4e00-\u9fff]{2,6}手术",
+        description: r"Medical standalone (HIV/disease names/common drug names/surgery)",
     ),
     PatternData(
         type_: r"religion",
