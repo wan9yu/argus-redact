@@ -1,6 +1,6 @@
 // Curated common Chinese hobbies / sports / activities. NOT exhaustive; the
 // 爱好/喜欢/经常 cues + this lexicon. DO NOT treat as a coverage guarantee.
-ZhLexicon(
+Lexicon(
     terms: [
         "攀岩", "钓鱼", "书法", "绘画", "摄影", "马拉松", "滑雪", "潜水", "瑜伽",
         "围棋", "象棋", "登山", "骑行", "羽毛球", "篮球", "足球", "乒乓球",

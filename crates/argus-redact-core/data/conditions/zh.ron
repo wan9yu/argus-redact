@@ -1,7 +1,7 @@
 // Curated common Chinese health conditions + allergens — informed by ICD-11
 // common-diagnosis terms + frequent allergens. NOT exhaustive; the 过敏/患有
 // cues + this lexicon. DO NOT treat as a coverage guarantee.
-ZhLexicon(
+Lexicon(
     terms: [
         // ── allergens (pair with the 过敏 cue) ──
         "花生", "海鲜", "鸡蛋", "牛奶", "乳糖", "麸质", "芒果", "尘螨", "花粉", "青霉素",

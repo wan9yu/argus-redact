@@ -86,7 +86,7 @@ impl DetectorConfig {
         }
     }
 
-    /// Build a config from a `ZhLexicon` RON file's CONTENTS: parse it, promote the
+    /// Build a config from a `Lexicon` RON file's CONTENTS: parse it, promote the
     /// terms to `'static` for the process lifetime, and index them, then apply the
     /// cue regex + emitted type. Detector modules call this with their
     /// `include_str!`'d data inside a `OnceLock`, so the parse + leak happen once.
@@ -94,7 +94,7 @@ impl DetectorConfig {
     /// calling file. (Shared loader for the per-detector modules, which otherwise
     /// each duplicate the parse + `Box::leak` + index boilerplate.)
     pub fn from_ron(ron_src: &str, cue: &'static Regex, type_: &'static str) -> Self {
-        let data: ZhLexicon = ron::from_str(ron_src).unwrap_or_else(|e| {
+        let data: Lexicon = ron::from_str(ron_src).unwrap_or_else(|e| {
             panic!("evidence_detector: RON lexicon parse error for type '{type_}': {e}")
         });
         let lexicon: Vec<&'static str> =
@@ -104,7 +104,7 @@ impl DetectorConfig {
 }
 
 #[derive(serde::Deserialize)]
-pub struct ZhLexicon {
+pub struct Lexicon {
     pub terms: Vec<String>,
 }
 
