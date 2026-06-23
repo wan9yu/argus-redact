@@ -1,0 +1,174 @@
+{
+  "benchmark": "reidentification",
+  "package_version": "0.7.13",
+  "date": "2026-06-23",
+  "fixture_sha256": "20ff7c0c0874ff6a",
+  "runs": [
+    {
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "n_profiles": 18,
+      "n_candidates": 18,
+      "redactors": {
+        "raw": {
+          "reid_rate": 1.0,
+          "correct": 18,
+          "n": 18,
+          "per_profile": [
+            {
+              "truth": 1,
+              "guess": 1
+            },
+            {
+              "truth": 2,
+              "guess": 2
+            },
+            {
+              "truth": 3,
+              "guess": 3
+            },
+            {
+              "truth": 4,
+              "guess": 4
+            },
+            {
+              "truth": 5,
+              "guess": 5
+            },
+            {
+              "truth": 6,
+              "guess": 6
+            },
+            {
+              "truth": 7,
+              "guess": 7
+            },
+            {
+              "truth": 8,
+              "guess": 8
+            },
+            {
+              "truth": 9,
+              "guess": 9
+            },
+            {
+              "truth": 10,
+              "guess": 10
+            },
+            {
+              "truth": 11,
+              "guess": 11
+            },
+            {
+              "truth": 12,
+              "guess": 12
+            },
+            {
+              "truth": 13,
+              "guess": 13
+            },
+            {
+              "truth": 14,
+              "guess": 14
+            },
+            {
+              "truth": 15,
+              "guess": 15
+            },
+            {
+              "truth": 16,
+              "guess": 16
+            },
+            {
+              "truth": 17,
+              "guess": 17
+            },
+            {
+              "truth": 18,
+              "guess": 18
+            }
+          ]
+        },
+        "argus_fast": {
+          "reid_rate": 1.0,
+          "correct": 18,
+          "n": 18,
+          "per_profile": [
+            {
+              "truth": 1,
+              "guess": 1
+            },
+            {
+              "truth": 2,
+              "guess": 2
+            },
+            {
+              "truth": 3,
+              "guess": 3
+            },
+            {
+              "truth": 4,
+              "guess": 4
+            },
+            {
+              "truth": 5,
+              "guess": 5
+            },
+            {
+              "truth": 6,
+              "guess": 6
+            },
+            {
+              "truth": 7,
+              "guess": 7
+            },
+            {
+              "truth": 8,
+              "guess": 8
+            },
+            {
+              "truth": 9,
+              "guess": 9
+            },
+            {
+              "truth": 10,
+              "guess": 10
+            },
+            {
+              "truth": 11,
+              "guess": 11
+            },
+            {
+              "truth": 12,
+              "guess": 12
+            },
+            {
+              "truth": 13,
+              "guess": 13
+            },
+            {
+              "truth": 14,
+              "guess": 14
+            },
+            {
+              "truth": 15,
+              "guess": 15
+            },
+            {
+              "truth": 16,
+              "guess": 16
+            },
+            {
+              "truth": 17,
+              "guess": 17
+            },
+            {
+              "truth": 18,
+              "guess": 18
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
