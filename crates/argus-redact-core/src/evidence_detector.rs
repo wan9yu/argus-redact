@@ -85,6 +85,22 @@ impl DetectorConfig {
             excludes: DEFAULT_EXCLUDES,
         }
     }
+
+    /// Build a config from a `ZhLexicon` RON file's CONTENTS: parse it, promote the
+    /// terms to `'static` for the process lifetime, and index them, then apply the
+    /// cue regex + emitted type. Detector modules call this with their
+    /// `include_str!`'d data inside a `OnceLock`, so the parse + leak happen once.
+    /// `include_str!` must stay at the call site — its path is relative to the
+    /// calling file. (Shared loader for the per-detector modules, which otherwise
+    /// each duplicate the parse + `Box::leak` + index boilerplate.)
+    pub fn from_ron(ron_src: &str, cue: &'static Regex, type_: &'static str) -> Self {
+        let data: ZhLexicon = ron::from_str(ron_src).unwrap_or_else(|e| {
+            panic!("evidence_detector: RON lexicon parse error for type '{type_}': {e}")
+        });
+        let lexicon: Vec<&'static str> =
+            data.terms.into_iter().map(|s| &*Box::leak(s.into_boxed_str())).collect();
+        Self::new(&lexicon, cue, type_)
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -144,7 +160,9 @@ pub fn detect_with(
         // Every candidate is, by construction, a lexicon hit (the scan only emits
         // gazetteer/lexicon names), so the framework analogue of occupation's
         // `is_lexicon && multi_char` gate is just the char-count check here.
-        if name.chars().count() >= cfg.lexicon_conf_min {
+        // `end - start` IS the candidate's char length (char offsets) — no need to
+        // re-scan `name`.
+        if (end - start) >= cfg.lexicon_conf_min {
             evidence += cfg.w_lexicon;
         }
         for pii in pii_entities {

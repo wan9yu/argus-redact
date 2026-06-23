@@ -8,7 +8,7 @@ use std::sync::{LazyLock, OnceLock};
 
 use fancy_regex::Regex;
 
-use crate::evidence_detector::{detect_with, DetectorConfig, ZhLexicon};
+use crate::evidence_detector::{detect_with, DetectorConfig};
 use crate::types::PatternMatch;
 
 static CONDITION_CUE: LazyLock<Regex> = LazyLock::new(|| {
@@ -16,18 +16,11 @@ static CONDITION_CUE: LazyLock<Regex> = LazyLock::new(|| {
         .unwrap_or_else(|e| panic!("conditions: cue compile failed: {e}"))
 });
 
-fn lexicon() -> &'static Vec<&'static str> {
-    static CELL: OnceLock<Vec<&'static str>> = OnceLock::new();
-    CELL.get_or_init(|| {
-        let data: ZhLexicon = ron::from_str(include_str!("../data/conditions/zh.ron"))
-            .unwrap_or_else(|e| panic!("RON parse error in data/conditions/zh.ron: {e}"));
-        data.terms.into_iter().map(|s| &*Box::leak(s.into_boxed_str())).collect()
-    })
-}
-
 fn config() -> &'static DetectorConfig {
     static CELL: OnceLock<DetectorConfig> = OnceLock::new();
-    CELL.get_or_init(|| DetectorConfig::new(lexicon(), &CONDITION_CUE, "medical"))
+    CELL.get_or_init(|| {
+        DetectorConfig::from_ron(include_str!("../data/conditions/zh.ron"), &CONDITION_CUE, "medical")
+    })
 }
 
 /// Detect Chinese health conditions / allergies, gated on a health cue or PII

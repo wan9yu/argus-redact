@@ -708,8 +708,8 @@ register(
         examples=("喜欢攀岩", "爱好书法", "经常钓鱼"),
         counterexamples=("今天天气不错",),
         sensitivity=2,
-        source="re-identification quasi-identifier (NOT a regulated PII category)",
-        description="Hobby/interest — a re-id quasi-identifier; no PIPL/GDPR/HIPAA category.",
+        source="re-identification quasi-identifier (not a GDPR special / PIPL sensitive category)",
+        description="Hobby/interest — a re-id quasi-identifier; not a GDPR special category or PIPL sensitive-PI type (only the universal PIPL baseline applies).",
     )
 )
 

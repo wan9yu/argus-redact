@@ -251,8 +251,8 @@ def _detect(
     # also tagged LAYER_REGEX), ``regions`` (evidence-gated zh admin-region
     # ``location`` matches, also tagged LAYER_REGEX), ``job_titles`` (evidence-gated
     # zh occupation ``job_title`` matches, also tagged LAYER_REGEX), ``framework``
-    # (evidence-gated zh framework detectors — conditions/``medical`` now, hobbies
-    # later — also tagged LAYER_REGEX), the internal L1 hints, and validator
+    # (evidence-gated zh framework detectors — conditions/``medical`` + hobbies/
+    # ``hobby`` — also tagged LAYER_REGEX), the internal L1 hints, and validator
     # ``near_misses``. detect_l1 takes the ORIGINAL text (it normalizes internally).
     t0 = time.perf_counter()
     layer1, person, regions, job_titles, framework, l1_hints, near_misses = _core.detect_l1(

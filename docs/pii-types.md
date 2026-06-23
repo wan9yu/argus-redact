@@ -170,9 +170,9 @@ Hong Kong Identity Card — 1-2 letter + 6 digit + parenthesized check
 | Reversible | ✓ |
 | PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
 | Examples | `喜欢攀岩`, `爱好书法`, `经常钓鱼` |
-| Source | re-identification quasi-identifier (NOT a regulated PII category) |
+| Source | re-identification quasi-identifier (not a GDPR special / PIPL sensitive category) |
 
-Hobby/interest — a re-id quasi-identifier; no PIPL/GDPR/HIPAA category.
+Hobby/interest — a re-id quasi-identifier; not a GDPR special category or PIPL sensitive-PI type (only the universal PIPL baseline applies).
 
 ### `housing_fund`
 

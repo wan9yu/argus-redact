@@ -7,7 +7,7 @@ use std::sync::{LazyLock, OnceLock};
 
 use fancy_regex::Regex;
 
-use crate::evidence_detector::{detect_with, DetectorConfig, ZhLexicon};
+use crate::evidence_detector::{detect_with, DetectorConfig};
 use crate::types::PatternMatch;
 
 static HOBBY_CUE: LazyLock<Regex> = LazyLock::new(|| {
@@ -15,18 +15,11 @@ static HOBBY_CUE: LazyLock<Regex> = LazyLock::new(|| {
         .unwrap_or_else(|e| panic!("hobbies: cue compile failed: {e}"))
 });
 
-fn lexicon() -> &'static Vec<&'static str> {
-    static CELL: OnceLock<Vec<&'static str>> = OnceLock::new();
-    CELL.get_or_init(|| {
-        let data: ZhLexicon = ron::from_str(include_str!("../data/hobbies/zh.ron"))
-            .unwrap_or_else(|e| panic!("RON parse error in data/hobbies/zh.ron: {e}"));
-        data.terms.into_iter().map(|s| &*Box::leak(s.into_boxed_str())).collect()
-    })
-}
-
 fn config() -> &'static DetectorConfig {
     static CELL: OnceLock<DetectorConfig> = OnceLock::new();
-    CELL.get_or_init(|| DetectorConfig::new(lexicon(), &HOBBY_CUE, "hobby"))
+    CELL.get_or_init(|| {
+        DetectorConfig::from_ron(include_str!("../data/hobbies/zh.ron"), &HOBBY_CUE, "hobby")
+    })
 }
 
 pub(crate) fn detect_hobbies_zh(text: &str, pii: &[PatternMatch]) -> Vec<PatternMatch> {
