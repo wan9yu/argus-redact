@@ -145,55 +145,16 @@ jobs:
             --title "${{ github.ref_name }}" \
             --generate-notes
 
-  # Build the --target web wasm into demo/pkg-web (gitignored), then upload the
-  # static demo/ to the HF Space. Separate from `release` because that job has no
-  # Rust/wasm toolchain. Runs after the GitHub Release + PyPI publish succeed; it
-  # is independent of publish-crate (a Space update must never gate crates.io).
+  # The HF Space deploy lives in its own workflow (deploy-demo.yml) so it can also run
+  # on demo/wasm pushes and manual dispatch — decoupled from releases. We invoke it
+  # here after a successful publish so a release refreshes the Space too. `needs:
+  # release` gates it on PyPI + GitHub Release success; it stays independent of
+  # publish-crate (a Space update must never gate crates.io). `secrets: inherit`
+  # passes HF_TOKEN through to the reusable workflow.
   deploy-demo:
     needs: release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - name: Set up Rust (wasm target)
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable @ 2026-05-03
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Install wasm-pack
-        run: command -v wasm-pack >/dev/null || cargo install wasm-pack --locked
-
-      - name: Install binaryen (wasm-opt)
-        run: sudo apt-get update && sudo apt-get install -y binaryen
-
-      - name: Build demo web artifact + size-optimize
-        shell: bash
-        run: |
-          set -euo pipefail
-          # --out-dir is resolved relative to the CRATE dir, so an absolute path is
-          # required to land the artifact at repo-root/demo/pkg-web (where upload_folder
-          # reads it) rather than crates/argus-redact-wasm/demo/pkg-web.
-          wasm-pack build crates/argus-redact-wasm --release --target web --out-dir "$GITHUB_WORKSPACE/demo/pkg-web"
-          wasm-opt -Oz \
-            --enable-bulk-memory \
-            --enable-nontrapping-float-to-int \
-            --enable-sign-ext \
-            --enable-mutable-globals \
-            --enable-reference-types \
-            --enable-multivalue \
-            demo/pkg-web/argus_redact_wasm_bg.wasm -o demo/pkg-web/argus_redact_wasm_bg.wasm
-          echo "demo wasm gzipped: $(gzip -c demo/pkg-web/argus_redact_wasm_bg.wasm | wc -c) bytes"
-
-      - name: Deploy HF Space (static)
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          pip install huggingface_hub
-          python -c "
-          from huggingface_hub import HfApi
-          HfApi().upload_folder(folder_path='demo', repo_id='wan9yu/argus-redact', repo_type='space')
-          print('HF static Space deployed')
-          "
+    uses: ./.github/workflows/deploy-demo.yml
+    secrets: inherit
 
   # crates.io publish runs LAST and only after PyPI + GitHub Release succeed.
   # crates.io versions are irreversible (a yanked version can't be reused), so we

@@ -1,0 +1,68 @@
+name: Deploy demo
+
+# The HF Space is a static, fully client-side WASM demo. Its deploy is decoupled
+# from version releases on purpose: a demo-content or wasm change should refresh the
+# Space WITHOUT a PyPI/crates release, and a release should refresh the Space without
+# bundling demo edits. This workflow owns the build + upload in ONE place:
+#   * release.yml calls it (workflow_call) after a successful publish;
+#   * it self-triggers on demo/wasm-crate pushes to main;
+#   * and on manual dispatch (e.g. to push the latest core into the Space on demand).
+# A Space update must never gate crates.io — keeping this separate preserves that.
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    branches: [main]
+    paths:
+      - "demo/**"
+      - "crates/argus-redact-wasm/**"
+      - ".github/workflows/deploy-demo.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Rust (wasm target)
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable @ 2026-05-03
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: command -v wasm-pack >/dev/null || cargo install wasm-pack --locked
+
+      - name: Install binaryen (wasm-opt)
+        run: sudo apt-get update && sudo apt-get install -y binaryen
+
+      - name: Build demo web artifact + size-optimize
+        shell: bash
+        run: |
+          set -euo pipefail
+          # --out-dir is resolved relative to the CRATE dir, so an absolute path is
+          # required to land the artifact at repo-root/demo/pkg-web (where upload_folder
+          # reads it) rather than crates/argus-redact-wasm/demo/pkg-web.
+          wasm-pack build crates/argus-redact-wasm --release --target web --out-dir "$GITHUB_WORKSPACE/demo/pkg-web"
+          wasm-opt -Oz \
+            --enable-bulk-memory \
+            --enable-nontrapping-float-to-int \
+            --enable-sign-ext \
+            --enable-mutable-globals \
+            --enable-reference-types \
+            --enable-multivalue \
+            demo/pkg-web/argus_redact_wasm_bg.wasm -o demo/pkg-web/argus_redact_wasm_bg.wasm
+          echo "demo wasm gzipped: $(gzip -c demo/pkg-web/argus_redact_wasm_bg.wasm | wc -c) bytes"
+
+      - name: Deploy HF Space (static)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install huggingface_hub
+          python -c "
+          from huggingface_hub import HfApi
+          HfApi().upload_folder(folder_path='demo', repo_id='wan9yu/argus-redact', repo_type='space')
+          print('HF static Space deployed')
+          "
