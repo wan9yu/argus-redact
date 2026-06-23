@@ -1,5 +1,12 @@
 """Sync version strings from pyproject.toml into doc surfaces.
 
+pyproject.toml's `version` is the single source of truth. This propagates it to
+every other place a version literal lives — including the Cargo **workspace**
+manifest (`Cargo.toml` `[workspace.package] version`), which the three crates
+inherit via `version.workspace = true`. Keeping Cargo in lockstep here is what
+stops the PyPI/crates.io split that broke the v0.7.12 crate publish (pyproject
+bumped, Cargo left behind → `cargo publish` hit "version already exists").
+
 Run: `make sync-docs-version`
 CI check: `make sync-docs-version-check` (exit 1 if any drift)
 """
@@ -24,6 +31,16 @@ _TARGETS = [
         _REPO / "src/argus_redact/__init__.py",
         r'^__version__ = "([0-9.]+)"',
         '__version__ = "{v}"',
+    ),
+    # Cargo workspace version (the three crates inherit it via
+    # `version.workspace = true`). `^version` anchors to the
+    # `[workspace.package]` line only — dependency `version = ` lives after a
+    # crate name and `rust-version`/`edition` start with other words. `\g<1>`
+    # preserves the column alignment so re-sync is idempotent.
+    (
+        _REPO / "Cargo.toml",
+        r'^version(\s+)= "([0-9.]+)"',
+        r'version\g<1>= "{v}"',
     ),
     (
         _REPO / "README.md",

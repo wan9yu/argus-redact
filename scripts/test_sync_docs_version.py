@@ -38,6 +38,15 @@ def fake_repo(tmp_path: Path) -> Path:
     (tmp_path / "README.md").write_text("Current (v0.0.0) something\n")
     (tmp_path / "docs" / "cli-reference.md").write_text("argus-redact v0.0.0 (info)\n")
     (tmp_path / "docs" / "benchmark-report.md").write_text("argus-redact v0.0.0 on Apple M1\n")
+    # Cargo workspace manifest — version line plus a dependency `version` and a
+    # `rust-version` that must NOT be rewritten (anchor specificity guard).
+    (tmp_path / "Cargo.toml").write_text(
+        "[workspace.package]\n"
+        'version      = "0.0.0"\n'
+        'rust-version = "1.85"\n\n'
+        "[workspace.dependencies]\n"
+        'pyo3 = { version = "0.28" }\n'
+    )
     # Copy the script into the fake repo's scripts/ dir
     (tmp_path / "scripts").mkdir()
     shutil.copy(_SCRIPT, tmp_path / "scripts" / "sync_docs_version.py")
@@ -58,6 +67,10 @@ def test_sync_writes_pyproject_version_to_all_targets(fake_repo: Path):
     assert "v9.9.9" in (fake_repo / "README.md").read_text()
     assert "v9.9.9" in (fake_repo / "docs/cli-reference.md").read_text()
     assert "v9.9.9 on" in (fake_repo / "docs/benchmark-report.md").read_text()
+    cargo = (fake_repo / "Cargo.toml").read_text()
+    assert 'version      = "9.9.9"' in cargo, "workspace version not synced (alignment preserved)"
+    assert 'rust-version = "1.85"' in cargo, "rust-version must not be rewritten"
+    assert 'pyo3 = { version = "0.28" }' in cargo, "dependency version must not be rewritten"
 
 
 def test_check_passes_after_sync(fake_repo: Path):
