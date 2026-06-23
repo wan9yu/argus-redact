@@ -66,6 +66,11 @@ pub struct DetectorConfig {
     /// How candidates are generated. `candidates_cjk` (default) is byte-for-byte
     /// today's scan; `candidates_word` is the English word-boundary scan.
     scan: CandidateScan,
+    /// Lexicon-confidence proxy selector. `false` (zh default): a candidate
+    /// corroborates (+w_lexicon) iff char-length `(end - start) >= lexicon_conf_min`.
+    /// `true` (English): corroborates iff the term is MULTI-WORD (>= 2 whitespace
+    /// tokens); `lexicon_conf_min` is ignored on that path.
+    lexicon_conf_multiword: bool,
 }
 
 impl DetectorConfig {
@@ -92,6 +97,7 @@ impl DetectorConfig {
             lexicon_conf_min: DEFAULT_LEXICON_CONF_MIN,
             excludes: DEFAULT_EXCLUDES,
             scan: candidates_cjk, // zh default — byte-identical to today's behavior
+            lexicon_conf_multiword: false, // zh default — char-count proxy
         }
     }
 
@@ -144,6 +150,15 @@ fn candidates_cjk(chars: &[char], cfg: &DetectorConfig) -> Vec<(String, usize, u
     out
 }
 
+/// True if the candidate span contains >= 2 whitespace-separated tokens — the
+/// English lexicon-confidence proxy ("a specific multi-word term corroborates").
+fn is_multiword(span: &[char]) -> bool {
+    span.split(|c: &char| c.is_whitespace())
+        .filter(|run| !run.is_empty())
+        .count()
+        >= 2
+}
+
 pub fn detect_with(
     text: &str,
     pii_entities: &[PatternMatch],
@@ -169,12 +184,17 @@ pub fn detect_with(
         if cue_hit {
             evidence += cfg.w_cue;
         }
-        // Every candidate is, by construction, a lexicon hit (the scan only emits
-        // gazetteer/lexicon names), so the framework analogue of occupation's
-        // `is_lexicon && multi_char` gate is just the char-count check here.
-        // `end - start` IS the candidate's char length (char offsets) — no need to
-        // re-scan `name`.
-        if (end - start) >= cfg.lexicon_conf_min {
+        // Lexicon-confidence corroboration (0.3). zh proxy: char-length >=
+        // lexicon_conf_min (a multi-CHAR term). en proxy: MULTI-WORD (>= 2 tokens)
+        // — 3 chars is trivial in English, so only a specific multi-word phrase
+        // (`software engineer`) corroborates; a bare ambiguous word (`nurse`,
+        // `chess`) must rely on a cue / PII proximity to clear the gate.
+        let lexicon_conf = if cfg.lexicon_conf_multiword {
+            is_multiword(&chars[start.min(n)..end.min(n)])
+        } else {
+            (end - start) >= cfg.lexicon_conf_min
+        };
+        if lexicon_conf {
             evidence += cfg.w_lexicon;
         }
         for pii in pii_entities {
