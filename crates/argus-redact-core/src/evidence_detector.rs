@@ -44,6 +44,11 @@ const DEFAULT_THRESHOLD: f64 = 0.5;
 const DEFAULT_LEXICON_CONF_MIN: usize = 3;
 const DEFAULT_EXCLUDES: &[&str] = &["self_reference", "organization"];
 
+/// Candidate-generation strategy: scans `chars` for lexicon hits, returning
+/// `(matched_term, start_char_offset, end_char_offset)`. Language-specific —
+/// CJK uses a char-substring scan; English uses word-boundary tokenization.
+type CandidateScan = fn(&[char], &DetectorConfig) -> Vec<(String, usize, usize)>;
+
 pub struct DetectorConfig {
     name_set: HashSet<&'static str>,
     first_chars: HashSet<char>,
@@ -58,6 +63,9 @@ pub struct DetectorConfig {
     threshold: f64,
     lexicon_conf_min: usize,
     excludes: &'static [&'static str],
+    /// How candidates are generated. `candidates_cjk` (default) is byte-for-byte
+    /// today's scan; `candidates_word` is the English word-boundary scan.
+    scan: CandidateScan,
 }
 
 impl DetectorConfig {
@@ -83,6 +91,7 @@ impl DetectorConfig {
             threshold: DEFAULT_THRESHOLD,
             lexicon_conf_min: DEFAULT_LEXICON_CONF_MIN,
             excludes: DEFAULT_EXCLUDES,
+            scan: candidates_cjk, // zh default — byte-identical to today's behavior
         }
     }
 
@@ -108,7 +117,10 @@ pub struct Lexicon {
     pub terms: Vec<String>,
 }
 
-fn candidates(chars: &[char], cfg: &DetectorConfig) -> Vec<(String, usize, usize)> {
+/// CJK candidate scan: char-by-char, greedy longest-first, first-char-prefiltered
+/// substring lookup against `name_set`. Chinese has no word delimiters, so a
+/// substring scan is correct here. UNCHANGED body from the original `candidates`.
+fn candidates_cjk(chars: &[char], cfg: &DetectorConfig) -> Vec<(String, usize, usize)> {
     let n = chars.len();
     let mut out = Vec::new();
     let mut i = 0;
@@ -144,7 +156,7 @@ pub fn detect_with(
     let n = chars.len();
     let mut out = Vec::new();
 
-    for (name, start, end) in candidates(&chars, cfg) {
+    for (name, start, end) in (cfg.scan)(&chars, cfg) {
         let before_start = start.saturating_sub(cfg.window);
         let before: String = chars[before_start..start.min(n)].iter().collect();
         let after_end = (end + cfg.window).min(n);
