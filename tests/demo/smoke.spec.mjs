@@ -34,7 +34,9 @@ test('hero: prefilled example redacts to realistic fakes and restores exactly', 
   const after = await page.locator('#hero-redacted').innerText();
   expect(after).not.toContain('黄芳');
   expect(after).not.toContain('13912345678');
-  await expect(page.locator('#hero-redacted mark')).toHaveCount(3);
+  // The prefill showcases the v0.7.x breadth: person + phone (realistic fakes),
+  // plus occupation / medical / hobby (removed to codes). 我 is kept. → 5 marks.
+  await expect(page.locator('#hero-redacted mark')).toHaveCount(5);
   await expect(page.locator('#hero-restore')).toContainText('还原');
 });
 
