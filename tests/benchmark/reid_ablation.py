@@ -26,11 +26,37 @@ _STRIP = {
     "city": [r"上海|北京|广州|深圳|杭州|成都|武汉|西安"],
 }
 
+# English survivor strip patterns (case-insensitive), keyed to reid_profiles_en.json.
+# Eval-only (NOT detection) — isolate each signal's re-id contribution.
+_STRIP_EN = {
+    "occupation": [
+        r"(?i)pastry chef", r"(?i)software engineer", r"(?i)data scientist",
+        r"(?i)(?:high-school|high school) (?:mathematics|physics|english) teacher",
+        r"(?i)teaches? (?:high-school|high school) (?:mathematics|physics|english)",
+        r"(?i)(?:icu|emergency-room|registered) nurse", r"(?i)accountant",
+        r"(?i)lawyer", r"(?i)graphic designer", r"(?i)civil engineer",
+        r"(?i)electrician", r"(?i)project manager", r"(?i)physical therapist",
+    ],
+    "condition": [
+        r"(?i)celiac disease", r"(?i)gluten intolerance", r"(?i)type 2 diabetes",
+        r"(?i)asthma", r"(?i)anxiety", r"(?i)hypertension|high blood pressure",
+        r"(?i)hypothyroidism", r"(?i)migraines?", r"(?i)eczema", r"(?i)anemia",
+        r"(?i)psoriasis", r"(?i)allergic to penicillin",
+        r"(?i)knee .{0,20}surgery|injured my knee",
+    ],
+    "hobby": [
+        r"(?i)salsa dancing", r"(?i)restor\w* .{0,12}motorcycles", r"(?i)rock climbing",
+        r"(?i)playing chess", r"(?i)gardening", r"(?i)playing the piano",
+        r"(?i)running marathons?", r"(?i)surfing", r"(?i)photography",
+        r"(?i)cycling", r"(?i)baking", r"(?i)fishing", r"(?i)hiking",
+    ],
+}
 
-def _strip(text: str, which: str) -> str:
+
+def _strip(text: str, which: str, table: dict) -> str:
     if which == "(none)":
         return text
-    for pat in _STRIP[which]:
+    for pat in table[which]:
         text = re.sub(pat, "", text)
     return text
 
@@ -50,6 +76,8 @@ def main() -> int:
                     help="LLM backend (default: first with a key in env)")
     ap.add_argument("--model", default=None, help="override model id")
     ap.add_argument("--limit", type=int, default=None, help="evaluate only the first N profiles")
+    ap.add_argument("--pool", choices=["zh", "en"], default="zh",
+                    help="closed-world fixture + prompt + strip table (default: zh)")
     args = ap.parse_args()
 
     # 1. Resolve provider (CLI arg, else reid_eval's "first with a key" logic).
@@ -57,9 +85,15 @@ def main() -> int:
     model = args.model or resolved_model
 
     # 2. Load the fixture via reid_eval's path constant + field layout.
-    data = json.loads(E.FIXTURE.read_text(encoding="utf-8"))
+    fixture_path = E.FIXTURE_EN if args.pool == "en" else E.FIXTURE
+    data = json.loads(fixture_path.read_text(encoding="utf-8"))
     candidates = data["candidates"]
     profiles = data["profiles"][: args.limit] if args.limit else data["profiles"]
+    system = E.SYSTEM_EN if args.pool == "en" else E.SYSTEM
+    prompt_fn = E.build_prompt_en if args.pool == "en" else E.build_prompt
+    strip_table = _STRIP_EN if args.pool == "en" else _STRIP
+    variants = ["(none)", "occupation", "condition", "hobby"] if args.pool == "en" \
+        else ["(none)", "condition", "hobby", "city"]
 
     # 3. argus_fast baseline: redact each profile once, reuse the redacted strings
     #    across every ablation variant (reid_eval handles the (text, key) tuple).
@@ -71,15 +105,14 @@ def main() -> int:
     print("-" * 56)
 
     # 4. For each survivor, strip from the redacted text and re-run the re-id ask.
-    variants = ["(none)", "condition", "hobby", "city"]
     rates: dict[str, float | None] = {}
     drops: dict[str, float] = {}
     for which in variants:
         correct = n = 0
         for truth, redacted in baseline:
-            ablated = _strip(redacted, which)
+            ablated = _strip(redacted, which, strip_table)
             try:
-                reply = E.call_llm(base_url, model, key, E.SYSTEM, E.build_prompt(ablated, candidates))
+                reply = E.call_llm(base_url, model, key, system, prompt_fn(ablated, candidates))
             except Exception as e:  # noqa: BLE001
                 print(f"[api-error] strip={which} truth={truth}: {e}", file=sys.stderr)
                 continue
