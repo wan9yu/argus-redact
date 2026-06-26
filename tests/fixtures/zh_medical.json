@@ -101,5 +101,93 @@
     "type": "medical",
     "expected_text": "二甲双胍",
     "description": "吃的+无后缀药名（揭示糖尿病）"
+  },
+  {
+    "id": "med_drug_amoxicillin",
+    "input": "我吃了阿莫西林",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "阿莫西林",
+    "description": "口语无后缀药名（leak-guard：仅 standalone 药名臂可接，去掉则 吃了<药> 漏检）"
+  },
+  {
+    "id": "med_drug_aspirin_chi",
+    "input": "每天吃阿司匹林",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "阿司匹林",
+    "description": "无动词触发的无后缀药名（leak-guard：不靠 服用/开了，单测 standalone 药名臂）"
+  },
+  {
+    "id": "med_drug_cephalosporin",
+    "input": "吃了头孢",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "头孢",
+    "description": "无后缀药名（leak-guard：仅 standalone 药名臂）"
+  },
+  {
+    "id": "med_drug_penicillin",
+    "input": "吃了青霉素",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "青霉素",
+    "description": "无后缀药名（leak-guard：仅 standalone 药名臂）"
+  },
+  {
+    "id": "med_drug_insulin",
+    "input": "打了胰岛素",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "胰岛素",
+    "description": "无后缀药名·打了（leak-guard：打了∉强触发，仅 standalone 药名臂）"
+  },
+  {
+    "id": "med_drug_omeprazole",
+    "input": "吃了奥美拉唑",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "奥美拉唑",
+    "description": "无后缀药名（leak-guard：仅 standalone 药名臂）"
+  },
+  {
+    "id": "med_drug_loratadine",
+    "input": "吃了氯雷他定",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "氯雷他定",
+    "description": "无后缀药名（leak-guard：仅 standalone 药名臂）"
+  },
+  {
+    "id": "med_drug_paracetamol",
+    "input": "吃了对乙酰氨基酚",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "对乙酰氨基酚",
+    "description": "无后缀药名（leak-guard：仅 standalone 药名臂）"
+  },
+  {
+    "id": "med_drug_ganmaoling",
+    "input": "喝了感冒灵",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "感冒灵",
+    "description": "无后缀中成药·喝了（leak-guard：喝了∉强触发，仅 standalone 药名臂）"
+  },
+  {
+    "id": "med_drug_banlangen",
+    "input": "喝了板蓝根",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "板蓝根",
+    "description": "无后缀中成药（leak-guard：仅 standalone 药名臂）"
+  },
+  {
+    "id": "med_drug_lianhua",
+    "input": "吃了连花清瘟",
+    "should_match": true,
+    "type": "medical",
+    "expected_text": "连花清瘟",
+    "description": "无后缀中成药（leak-guard：仅 standalone 药名臂）"
   }
 ]
