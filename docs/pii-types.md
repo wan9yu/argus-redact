@@ -3,7 +3,7 @@
 Auto-generated from `argus_redact.specs.list_types()`. Do not hand-edit.
 Regenerate via: `make catalog`
 
-Total: 63 types (36 zh / 15 en / 12 shared)
+Total: 73 types (36 zh / 15 en / 12 shared / 10 international)
 
 ## Chinese (zh) — 36 types
 
@@ -869,4 +869,128 @@ SSH private key PEM block (RSA, OPENSSH, DSA, EC variants)
 | PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
 
 URL / web address — detected via NER or Presidio; removed because query parameters may carry PII
+
+## International — 10 types
+
+### `cnpj`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 2 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| Source | Receita Federal — Cadastro Nacional da Pessoa Jurídica |
+
+Brazilian company taxpayer registry (legal-entity identifier)
+
+### `cpf`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Source | Receita Federal — Cadastro de Pessoas Físicas |
+
+Brazilian individual taxpayer registry — de facto national ID (11 digits)
+
+### `tax_id`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 3 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Source | Bundeszentralamt für Steuern — Steuerliche Identifikationsnummer |
+
+German national tax identification number (11 digits)
+
+### `aadhaar`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Source | UIDAI — Aadhaar number |
+
+Indian Aadhaar national identification number (12 digits)
+
+### `pan`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 3 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Source | Income Tax Department — Permanent Account Number |
+
+Indian Permanent Account Number (tax identifier)
+
+### `my_number`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Source | Japan My Number (Individual Number) Act |
+
+Japanese national identification number (My Number, 12 digits)
+
+### `rrn`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Source | Korea Resident Registration Number (주민등록번호) |
+
+Korean resident registration number — national ID encoding DOB + sex
+
+### `nhs_number`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| GDPR Art.9 special category | ✓ |
+| HIPAA Safe Harbor | `medical_record` |
+| Source | NHS Digital — NHS Number (patient health identifier) |
+
+UK National Health Service number (health identifier)
+
+### `nino`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 3 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Source | HMRC — National Insurance Number |
+
+UK National Insurance number (tax / benefits identifier)
+
+### `postcode`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 2 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| Source | Royal Mail — UK postcode |
+
+UK postcode (geographic identifier)
 

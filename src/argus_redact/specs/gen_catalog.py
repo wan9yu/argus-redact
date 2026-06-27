@@ -83,9 +83,15 @@ def render_catalog() -> str:
     lines.append("Auto-generated from `argus_redact.specs.list_types()`. Do not hand-edit.")
     lines.append("Regenerate via: `make catalog`")
     lines.append("")
+    _core_langs = {code for code, _ in _LANG_LABELS}
+    intl = sorted(
+        (td for td in types if td.lang not in _core_langs),
+        key=lambda t: (t.lang, t.name),
+    )
     lines.append(
         f"Total: {len(types)} types ({len(by_lang['zh'])} zh / "
-        f"{len(by_lang['en'])} en / {len(by_lang['shared'])} shared)"
+        f"{len(by_lang['en'])} en / {len(by_lang['shared'])} shared / "
+        f"{len(intl)} international)"
     )
     lines.append("")
 
@@ -96,6 +102,15 @@ def render_catalog() -> str:
         lines.append(f"## {lang_label} — {len(bucket)} types")
         lines.append("")
         for td in bucket:
+            lines.extend(_render_type(td))
+
+    # International locales (national / health / tax IDs) — every lang beyond the
+    # core three, grouped together since each carries only a few types. Sorted by
+    # (lang, name) so same-jurisdiction types stay adjacent.
+    if intl:
+        lines.append(f"## International — {len(intl)} types")
+        lines.append("")
+        for td in intl:
             lines.extend(_render_type(td))
 
     if _OUT_OF_SCOPE:
