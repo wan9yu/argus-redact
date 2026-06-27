@@ -111,7 +111,7 @@ class TestOllamaAdapter:
 
     @patch("argus_redact.impure.ollama_adapter.requests.post")
     def test_should_recover_all_occurrences_of_repeated_entity(self, mock_post):
-        # Run-10 #70ad56954a17: when the LLM returns wrong CJK offsets, the
+        # When the LLM returns wrong CJK offsets, the
         # string-match fallback must recover ALL occurrences of a repeated
         # entity, not collapse every entry onto the first span (which leaves the
         # other occurrences un-redacted = leak). 老王 occurs at (0,2),(7,9),(17,19).
