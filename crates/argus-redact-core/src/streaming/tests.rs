@@ -553,6 +553,58 @@ fn region_evidence_at_exact_prox_boundary_not_orphaned() {
     assert!(!out.contains("13812345678"), "phone leaked: {out:?}");
 }
 
+fn pem_key(body_lines: usize) -> String {
+    let line = "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAA";
+    let body: Vec<&str> = (0..body_lines).map(|_| line).collect();
+    format!(
+        "-----BEGIN OPENSSH PRIVATE KEY-----\n{}\n-----END OPENSSH PRIVATE KEY-----",
+        body.join("\n")
+    )
+}
+
+#[test]
+fn ssh_private_key_streamed_line_by_line_not_leaked() {
+    // A multi-line PEM key fed line-by-line: each `\n` is an always-boundary that
+    // would commit the BEGIN line + body lines BEFORE END arrives (neither half
+    // matches ssh_private_key alone) → plaintext leak. The opener pending span must
+    // hold the cut before BEGIN so the whole key is carried + redacted on END.
+    let key = pem_key(3);
+    let text = format!("my key:\n{key}\ndone.");
+    let chunks: Vec<String> = text.split('\n').map(|l| format!("{l}\n")).collect();
+    let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let (out, _) = stream(&refs, &["en"]);
+    assert!(!out.contains("-----BEGIN OPENSSH PRIVATE KEY-----"), "BEGIN line leaked: {out:?}");
+    assert!(!out.contains("b3BlbnNzaC1"), "key body leaked: {out:?}");
+}
+
+#[test]
+fn ssh_private_key_larger_than_buffer_not_leaked() {
+    // A COMPLETE key (END present) whose total length exceeds DEFAULT_MAX_BUFFER but
+    // stays within the 10000 body bound (so batch redacts it) must NOT be
+    // force-flush-split. The dangerous shape is END with NO trailing boundary after
+    // it: the last boundary is the '\n' INSIDE the key, so the snap lands at cut==0
+    // and — once END closes the opener — the bounded drain would split the key head
+    // unless the ceiling stays raised while ANY BEGIN is present. Fed line-by-line
+    // (END is the final chunk, no trailing newline) AND as a single feed.
+    let key = pem_key(90); // ~5400 chars > DEFAULT_MAX_BUFFER, body < 10000
+    assert!(key.chars().count() > DEFAULT_MAX_BUFFER);
+    let lines: Vec<String> = key.split('\n').map(String::from).collect();
+    let chunks: Vec<String> = lines
+        .iter()
+        .enumerate()
+        .map(|(i, l)| if i + 1 < lines.len() { format!("{l}\n") } else { l.clone() })
+        .collect();
+    let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let (out, _) = stream(&refs, &["en"]);
+    assert!(!out.contains("-----BEGIN OPENSSH PRIVATE KEY-----"), "BEGIN leaked (line-by-line, no trailing boundary)");
+    assert!(!out.contains("b3BlbnNzaC1"), "body leaked (line-by-line, no trailing boundary)");
+
+    // Single feed of the whole key, then flush — same guarantee.
+    let (out2, _) = stream(&[&key], &["en"]);
+    assert!(!out2.contains("-----BEGIN OPENSSH PRIVATE KEY-----"), "BEGIN leaked (single feed)");
+    assert!(!out2.contains("b3BlbnNzaC1"), "body leaked (single feed)");
+}
+
 #[test]
 fn dense_boundaryless_forceflush_does_not_split_region() {
     // Bounded-drain split guard: a dense, boundary-less stream of region+phone

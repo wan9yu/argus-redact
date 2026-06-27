@@ -24,7 +24,7 @@ use pyo3::prelude::*;
 use argus_redact_core::streaming::{
     bounded_carry as core_bounded_carry, consume_to_boundary as core_consume_to_boundary,
     last_boundary_index as core_last_boundary_index, restorer_split as core_restorer_split,
-    snap_cut as core_snap_cut,
+    snap_cut as core_snap_cut, unclosed_pem_opener_start as core_unclosed_pem_opener_start,
 };
 
 /// Index *after* the rightmost REAL sentence-boundary char (`-1` if none).
@@ -120,6 +120,18 @@ pub fn streaming_consume_to_boundary(
 #[pyfunction]
 pub fn streaming_snap_cut(spans: Vec<(usize, usize, String)>, target: usize, widen: bool) -> usize {
     core_snap_cut(&spans, target, widen)
+}
+
+/// CHAR offset of the start of the last UNCLOSED PEM private-key opener in
+/// `combined` (`-----BEGIN … PRIVATE KEY-----` with no matching `-----END …`
+/// after it), else `None`. The Python snap (`_carry_cut_index`) appends a
+/// `(begin, len, "ssh_private_key")` pending span when this returns a start, so a
+/// multi-line key in flight is carried whole (never emitted line-by-line in
+/// plaintext) until END arrives. Single-sourced with the core engine's own
+/// force-flush-ceiling check, so wheel + wasm agree.
+#[pyfunction]
+pub fn streaming_unclosed_pem_opener_start(combined: &str) -> Option<usize> {
+    core_unclosed_pem_opener_start(combined)
 }
 
 /// Split a restorer buffer at its last REAL sentence boundary → `(complete, residual)`.

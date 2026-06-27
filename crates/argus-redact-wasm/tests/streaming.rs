@@ -251,6 +251,29 @@ fn zh_region_evidence_cross_cut_no_leak() {
     assert!(!ds.contains("13800138000"), "phone leaked in wasm streaming: {ds}");
 }
 
+/// Multi-line SSH private key streamed line-by-line: each `\n` is an always-boundary
+/// that would commit the BEGIN line + body before END arrives (neither half matches
+/// `ssh_private_key` alone) → plaintext leak. The opener pending span (+ raised
+/// force-flush ceiling) must hold the in-flight key whole until END so it is
+/// redacted, never emitted line-by-line. Proves the Bug-1 fix across the wasm runtime.
+#[wasm_bindgen_test]
+fn ssh_private_key_line_by_line_no_leak() {
+    let line = "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAA";
+    let key = format!(
+        "-----BEGIN OPENSSH PRIVATE KEY-----\n{l}\n{l}\n{l}\n-----END OPENSSH PRIVATE KEY-----",
+        l = line
+    );
+    let text = format!("my key:\n{key}\ndone.");
+    let chunks: Vec<String> = text.split('\n').map(|l| format!("{l}\n")).collect();
+    let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let (ds, _key) = stream(&refs, &Opts::new("en"));
+    assert!(
+        !ds.contains("-----BEGIN OPENSSH PRIVATE KEY-----"),
+        "SSH BEGIN line leaked in wasm streaming: {ds}"
+    );
+    assert!(!ds.contains("b3BlbnNzaC1"), "SSH key body leaked in wasm streaming: {ds}");
+}
+
 // ── CROSS-RUNTIME PARITY (the SSOT proof) ────────────────────────────────────
 //
 // Expected values captured from the Python one-shot redact path driven through

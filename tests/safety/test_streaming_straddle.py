@@ -141,6 +141,49 @@ def test_dense_boundaryless_forceflush_does_not_split_region():
     assert region not in out, "region split/leaked across the bounded drain"
 
 
+def _pem_key(body_lines: int = 3) -> str:
+    """A syntactically valid OPENSSH PEM private key with ``body_lines`` b64 lines."""
+    body = "\n".join("b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAA" for _ in range(body_lines))
+    return f"-----BEGIN OPENSSH PRIVATE KEY-----\n{body}\n-----END OPENSSH PRIVATE KEY-----"
+
+
+def test_ssh_private_key_streamed_line_by_line_not_leaked():
+    # A multiline PEM private key fed line-by-line: every '\n' is an always-boundary
+    # that would commit the BEGIN line + each body line BEFORE the END marker arrives
+    # (neither half matches the ssh_private_key pattern alone) → plaintext leak. The
+    # opener detector must hold the cut before BEGIN so the whole key is carried and
+    # redacted once END is seen (matching batch).
+    key = _pem_key(3)
+    text = f"my key:\n{key}\ndone."
+    chunks = [line + "\n" for line in text.split("\n")]
+    out, _ = _stream(chunks, lang="en")
+    assert "-----BEGIN OPENSSH PRIVATE KEY-----" not in out, f"BEGIN line leaked: {out[:80]!r}"
+    assert "b3BlbnNzaC1" not in out, f"key body leaked: {out[:120]!r}"
+
+
+def test_ssh_private_key_larger_than_buffer_not_leaked():
+    # A COMPLETE key (END present) whose total length exceeds DEFAULT_MAX_BUFFER but
+    # stays within the 10000 body bound (so batch redacts it) must NOT be
+    # force-flush-split. The dangerous shape is END with NO trailing boundary after
+    # it: the last boundary is the '\n' INSIDE the key, so the snap lands at cut==0
+    # and — once END closes the opener — the bounded drain would split the key head
+    # unless the ceiling stays raised while ANY BEGIN is present.
+    key = _pem_key(90)  # ~5400 chars > DEFAULT_MAX_BUFFER, body < 10000
+    assert len(key) > DEFAULT_MAX_BUFFER  # precondition
+
+    # Line-by-line, END the final chunk with NO trailing newline.
+    lines = key.split("\n")
+    chunks = [(l + "\n" if i + 1 < len(lines) else l) for i, l in enumerate(lines)]
+    out, _ = _stream(chunks, lang="en")
+    assert "-----BEGIN OPENSSH PRIVATE KEY-----" not in out, "BEGIN leaked (line-by-line, no trailing boundary)"
+    assert "b3BlbnNzaC1" not in out, "body leaked (line-by-line, no trailing boundary)"
+
+    # Single feed of the whole key, then flush — same guarantee.
+    out2, _ = _stream([key], lang="en")
+    assert "-----BEGIN OPENSSH PRIVATE KEY-----" not in out2, "BEGIN leaked (single feed)"
+    assert "b3BlbnNzaC1" not in out2, "body leaked (single feed)"
+
+
 def test_unbounded_token_longer_than_window_is_the_documented_edge():
     # (c) Documented residual edge: a contiguous run LONGER than _CARRY_WINDOW
     # that is not a single detected entity can still split at the force-flush

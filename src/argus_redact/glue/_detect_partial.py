@@ -121,6 +121,15 @@ def _carry_cut_index(
         types_exclude=types_exclude,
     )
     spans = [(ent.start, ent.end, ent.type) for ent in entities]
+    # An in-flight multi-line PEM private key (BEGIN seen, END not yet) is not a
+    # detected entity, so add it as an open-ended pending span; the snap then holds
+    # the cut before BEGIN and the whole key is carried until END (never emitted
+    # line-by-line in plaintext). Single-sourced with the core force-flush ceiling.
+    begin = _core.streaming_unclosed_pem_opener_start(combined)
+    if begin is not None:
+        # Open-ended: end one PAST the buffer so a cut AT the buffer end (the
+        # trailing-newline boundary of an in-flight key line) still snaps to BEGIN.
+        spans.append((begin, len(combined) + 1, "ssh_private_key"))
     return _core.streaming_snap_cut(spans, target, widen)
 
 

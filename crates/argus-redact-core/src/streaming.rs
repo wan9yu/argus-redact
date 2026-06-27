@@ -52,6 +52,9 @@
 //! a snap defect.
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
+
+use fancy_regex::Regex;
 
 use crate::hints::{filter_self_reference, Hint};
 use crate::merger::merge_entities_with_text;
@@ -299,6 +302,88 @@ pub fn snap_cut(spans: &[(usize, usize, String)], target: usize, widen: bool) ->
     }
 }
 
+/// PEM private-key BEGIN / END markers. These MIRROR the `ssh_private_key` pattern
+/// in `data/shared.ron` (parity-by-convention — keep both in sync). A multi-line
+/// PEM key is the one bounded entity whose interior contains `\n` ALWAYS_BOUNDARIES,
+/// so the carry/snap must treat an in-flight (BEGIN-but-no-END) key specially or it
+/// emits the head line-by-line in plaintext before the END marker ever arrives.
+static PEM_BEGIN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"-----BEGIN (?:RSA |OPENSSH |DSA |EC )?PRIVATE KEY-----")
+        .unwrap_or_else(|e| panic!("streaming: PEM_BEGIN_RE compile failed: {e}"))
+});
+static PEM_END_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"-----END (?:RSA |OPENSSH |DSA |EC )?PRIVATE KEY-----")
+        .unwrap_or_else(|e| panic!("streaming: PEM_END_RE compile failed: {e}"))
+});
+
+/// The pending-span type label for an in-flight PEM opener. Any NON-evidence-gated
+/// type works — [`snap_cut`] then treats the `[begin, len)` span with the strict
+/// closed-entity rule (snap the cut back to `begin`), which is exactly what carrying
+/// an unterminated key whole requires.
+const PEM_OPENER_TYPE: &str = "ssh_private_key";
+
+/// Extra CHARS of force-flush headroom granted while a PEM opener is in flight, on
+/// top of `max_buffer`. Covers the `ssh_private_key` body bound (10000) + the
+/// markers + slack, so a valid key accumulates WHOLE before `END` arrives instead
+/// of being force-flush-split. Bounded (a CAP): past `max_buffer + this`, an
+/// unterminated BEGIN is treated as malformed/adversarial and bounded-drained (the
+/// documented head-leak edge) rather than growing the buffer without bound.
+const PEM_OPENER_CEILING_EXTRA: usize = 11_000;
+
+/// CHAR offset of the start of the last UNCLOSED PEM private-key opener in
+/// `combined` (a `-----BEGIN … PRIVATE KEY-----` with no matching `-----END …`
+/// after it), or `None`. Used to (a) hold the carry cut before an in-flight
+/// multi-line key so it is never emitted line-by-line in plaintext, and (b) raise
+/// the force-flush ceiling so a key up to the pattern's body bound accumulates
+/// whole. A cheap literal `contains` short-circuits the common (no-key) case.
+pub fn unclosed_pem_opener_start(combined: &str) -> Option<usize> {
+    if !combined.contains("-----BEGIN ") {
+        return None;
+    }
+    let mut last_begin: Option<(usize, usize)> = None;
+    for m in PEM_BEGIN_RE.find_iter(combined).flatten() {
+        last_begin = Some((m.start(), m.end()));
+    }
+    let (begin_byte_start, begin_byte_end) = last_begin?;
+    // Closed iff an END marker appears anywhere at/after the last BEGIN's end.
+    if PEM_END_RE.is_match(&combined[begin_byte_end..]).unwrap_or(false) {
+        return None;
+    }
+    // Byte offset → CHAR offset (the snap works in char-space).
+    Some(combined[..begin_byte_start].chars().count())
+}
+
+/// True if the buffer holds a PEM private-key BEGIN marker (complete OR in-flight).
+/// Drives the force-flush ceiling raise. The open-ended carry span (for an UNCLOSED
+/// opener) keeps the cut before BEGIN while the key streams in, but a COMPLETE key
+/// larger than `max_buffer` is a detected entity that the bounded drain would still
+/// SPLIT into a plaintext head once `END` arrives and the ceiling drops. Keeping the
+/// ceiling raised while ANY BEGIN is present lets such a key be carried whole and
+/// redacted as one unit (or, past the CAP, bounded-drained — the documented edge,
+/// which a key within the 10000 body bound never reaches).
+fn pem_begin_present(combined: &str) -> bool {
+    combined.contains("-----BEGIN ") && PEM_BEGIN_RE.is_match(combined).unwrap_or(false)
+}
+
+/// Build the snap-input spans: the normalized detect set PLUS, when the buffer
+/// holds an in-flight (unclosed) PEM private-key opener, an open-ended pending span
+/// `[begin_start, len)` (typed as a closed entity) so [`snap_cut`] pulls the cut
+/// back before BEGIN and the whole multi-line key is carried until END arrives.
+fn snap_input_spans<D>(combined: &str, detect: &D) -> Vec<(usize, usize, String)>
+where
+    D: Fn(&str) -> DetectSpans,
+{
+    let mut spans = normalize_snap_spans(detect(combined), combined);
+    if let Some(begin) = unclosed_pem_opener_start(combined) {
+        // Open-ended: end is one PAST the buffer so a cut AT the buffer end (the
+        // trailing `\n` boundary of an in-flight key line) still counts as a
+        // straddle and snaps back to BEGIN. The key continues into future chunks.
+        let open_end = combined.chars().count() + 1;
+        spans.push((begin, open_end, PEM_OPENER_TYPE.to_string()));
+    }
+    spans
+}
+
 /// Pick a force-flush / boundary emit cut at or before `target` (a CHAR index)
 /// that neither splits a detected entity NOR orphans an evidence-gated candidate
 /// from its evidence, by detecting on the FULL combined text and snapping the cut
@@ -308,25 +393,25 @@ pub fn snap_cut(spans: &[(usize, usize, String)], target: usize, widen: bool) ->
 /// job_titles ++ framework` + hints) over `combined`; the snap NORMALIZES them
 /// (merge + self-reference filter) to the exact set Python's `_detect` (fast)
 /// produces BEFORE the cascading snap, so the cut is order/overlap-invariant
-/// regardless of whether the caller threaded raw or merged spans. Mirrors
+/// regardless of whether the caller threaded raw or merged spans. An in-flight PEM
+/// opener is added as an open-ended pending span (see [`snap_input_spans`]). Mirrors
 /// `_carry_cut_index`. Returns the CHAR cut index (`0` means carry everything).
 pub fn carry_cut_index<D>(combined: &str, target: usize, detect: &D) -> usize
 where
     D: Fn(&str) -> DetectSpans,
 {
-    let spans = normalize_snap_spans(detect(combined), combined);
-    snap_cut(&spans, target, true)
+    snap_cut(&snap_input_spans(combined, detect), target, true)
 }
 
-/// Closed-only counterpart of [`carry_cut_index`]: the same detect + normalize,
-/// but [`snap_cut`] runs without the evidence-gated widening (`widen = false`). Used
-/// ONLY as the boundary-less force-flush drain fallback — see [`bounded_drain`].
+/// Closed-only counterpart of [`carry_cut_index`]: the same detect + normalize (+
+/// PEM opener span), but [`snap_cut`] runs without the evidence-gated widening
+/// (`widen = false`). Used ONLY as the force-flush drain fallback — see
+/// [`bounded_drain`].
 fn carry_cut_index_closed<D>(combined: &str, target: usize, detect: &D) -> usize
 where
     D: Fn(&str) -> DetectSpans,
 {
-    let spans = normalize_snap_spans(detect(combined), combined);
-    snap_cut(&spans, target, false)
+    snap_cut(&snap_input_spans(combined, detect), target, false)
 }
 
 /// Split `prev_buffer + chunk` at the last SAFE cut. Returns `(emit_text,
@@ -368,6 +453,20 @@ where
     if force_flush {
         return (combined, "".to_string());
     }
+
+    // While a multi-line PEM private key is present (in-flight OR a complete key
+    // larger than max_buffer), raise the force-flush ceiling so the whole key (body
+    // bound 10000) is carried and redacted as one unit instead of being
+    // force-flush-split into a plaintext head leak. An in-flight key is held before
+    // BEGIN by the opener pending span; a complete >max_buffer key is a detected
+    // entity but the bounded drain would still split it once END closes the opener
+    // (dropping the ceiling) — so the raise is gated on ANY BEGIN, not just unclosed.
+    // Bounded by the CAP — past it an unterminated/oversized key is bounded-drained.
+    let max_buffer = if pem_begin_present(&combined) {
+        max_buffer.saturating_add(PEM_OPENER_CEILING_EXTRA)
+    } else {
+        max_buffer
+    };
 
     let chars: Vec<char> = combined.chars().collect();
     let boundary = last_boundary_index_chars(&chars);
