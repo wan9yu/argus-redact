@@ -48,7 +48,7 @@ class TestRedactBody:
         assert key == {}
 
     def test_should_fail_closed_when_field_present_but_not_str(self):
-        # Run-10 #ef3f3460ff0: a present-but-non-str field must fail CLOSED
+        # A present-but-non-str field must fail CLOSED
         # (raise), not silently return the body un-redacted with an empty key —
         # that fail-open path leaks the PII inside the list/dict.
         body = {"text": ["电话13812345678"]}
