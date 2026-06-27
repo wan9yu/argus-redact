@@ -187,6 +187,14 @@ pub fn replace<F: PseudoFactory>(
 
     let mut result_key: HashMap<String, String> = key.cloned().unwrap_or_default();
     let mut used_labels: HashSet<String> = result_key.keys().cloned().collect();
+    // Reserve every ORIGINAL value too — this document's entity texts plus any
+    // originals already in the key — so a generated fake can never equal another
+    // entity's real value. Otherwise that real value would surface verbatim in
+    // the redacted output as some OTHER entity's fake (a cross-entity leak: e.g.
+    // person A's fake == person B's real name). The faker re-roll loop rejects
+    // anything in `used_labels`, so this makes it skip all real originals.
+    used_labels.extend(entities.iter().map(|e| e.text.clone()));
+    used_labels.extend(result_key.values().cloned());
 
     // reverse_index: original → replacement (for existing-key reuse).
     let mut reverse_index: HashMap<String, String> = HashMap::new();

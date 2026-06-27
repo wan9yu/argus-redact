@@ -5,6 +5,7 @@ import re
 
 import pytest
 
+from argus_redact import redact
 from argus_redact.pure.replacer import (
     VALID_STRATEGIES,
     _faker_reserved_cached,
@@ -229,3 +230,23 @@ class TestRealisticNumeric:
         n = int(re.search(r"\d+", fake).group())
         assert n != 32, "Identity mapping not avoided"
         assert 27 <= n <= 37, f"Expected 32 ±5, got {n}"
+
+
+class TestRealisticFakerNoOriginalCollision:
+    """A realistic fake must never equal ANOTHER entity's real original."""
+
+    def test_fake_must_not_equal_another_entitys_original(self):
+        # 王涛 and 彩云 are both persons. With this salt the faker for 王涛 rolls
+        # 彩云 — the OTHER person's real name. If the uniqueness predicate ignores
+        # other originals, 彩云 appears verbatim in the output as 王涛's fake: a
+        # real name leaked. The fake must re-roll off ALL entity originals.
+        text = "王涛和彩云是同事，一起去北京出差。"
+        redacted, key = redact(
+            text,
+            salt=b"0" * 32,
+            mode="fast",
+            names=["王涛", "彩云"],
+            config={"person": {"strategy": "realistic"}},
+        )
+        for original in ("王涛", "彩云"):
+            assert original not in redacted, f"real name {original!r} leaked: {redacted!r}"
