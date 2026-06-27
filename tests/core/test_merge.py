@@ -318,3 +318,24 @@ def test_priority_trim_drops_u001c_only_remainder():
         text="我\x1c\x1c",
     )
     assert [(e.text, e.type, e.start, e.end) for e in out] == [("我", "self_reference", 0, 1)]
+
+
+class TestSelfReferenceContainerHeadGuard:
+    """An interior self_reference must not drop the head of its container entity."""
+
+    def test_should_keep_container_whole_when_interior_sr_overruns_tail(self):
+        # person "公司我"[0,3] + self_reference "我们"[2,4]: the sr starts interior
+        # (2>0) and overruns the tail (4>3). The container must win WHOLE —
+        # replacing it with the sr drops the head "公司" and, once the sr is
+        # tier-filtered, leaks the entire name the caller asked to redact.
+        text = "公司我们裁员了"
+        entities = [
+            _m("公司我", "person", 0, 3),
+            _m("我们", "self_reference", 2, 4),
+        ]
+
+        result = merge_entities(entities, text)
+
+        assert [(e.text, e.type, e.start, e.end) for e in result] == [
+            ("公司我", "person", 0, 3)
+        ]

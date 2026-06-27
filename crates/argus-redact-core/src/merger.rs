@@ -103,20 +103,24 @@ fn merge_priority(
         let cur_priority = is_priority(&current.type_);
         if cur_priority && !last_priority {
             let last = final_.last().unwrap();
-            // A self_reference strictly INTERIOR to a non-priority entity (it starts
-            // after the entity start) is part of that entity's name, not a standalone
-            // pronoun: the container wins (whole-entity redaction) and the interior
-            // self_reference is dropped. Prevents the leading slice
-            // [last.start, current.start] from leaking
-            // (自我管理咨询有限公司 with interior 我[1,2] -> [ORG], not 自我[ORG]).
+            // A self_reference that starts strictly INTERIOR to a non-priority
+            // entity (after the entity start) is part of that entity's name, not a
+            // standalone pronoun: the container wins WHOLE (the full entity span is
+            // redacted) and the interior self_reference is dropped. This holds
+            // whether the sr is contained (自我管理咨询有限公司 with interior 我[1,2]
+            // -> [ORG]) OR overruns the tail (公司我[0,3] with sr 我们[2,4] -> the
+            // whole "公司我" is redacted, not replaced by the sr). Without this, the
+            // overrun case would replace the container with the sr, drop the head
+            // [last.start, current.start], and — once the sr is tier-filtered —
+            // leak the entire name the caller asked to redact.
             //
             // The guard is strict (`>`, not `>=`): a self_reference at the entity
             // START (current.start == last.start) is NOT swallowed — that is the
             // "keep the leading pronoun" case (我在阿里巴巴有限公司 -> 我[ORG]), where
             // the sr must keep splitting the over-greedy entity so the pronoun
             // survives. Only an interior sr (a head exists to leak) yields here.
-            if current.start > last.start && current.end <= last.end {
-                continue; // drop the contained self_reference; keep the container
+            if current.start > last.start {
+                continue; // interior self_reference is part of the name; keep the container whole
             }
             let last = last.clone();
             let trimmed = trim_entity(&last, current.end, text);
@@ -258,9 +262,10 @@ mod tests {
 
     #[test]
     fn priority_partial_overlap_sr_second() {
-        // `other` [0,4] precedes the overlapping sr [2,6]; sr wins. The trim of
-        // `other` to start at sr.end=6 yields nothing (6 >= other.end=4), so only
-        // sr remains. Live Python: ('cdef','self_reference',2,6,1.0,1)
+        // `other` [0,4] precedes an sr [2,6] that starts INTERIOR (2>0) and
+        // overruns the tail (6>4). The interior sr is part of the entity name, so
+        // `other` wins WHOLE — replacing it with the sr would drop the head [0,2]
+        // and leak it. The sr is dropped.
         let out = merge_entities_with_text(
             vec![
                 pmt("abcd", "other", 0, 4, 1.0, 1),
@@ -268,7 +273,7 @@ mod tests {
             ],
             "abcdefghij",
         );
-        assert_merged(&out, &[("cdef", "self_reference", 2, 6, 1.0, 1)]);
+        assert_merged(&out, &[("abcd", "other", 0, 4, 1.0, 1)]);
     }
 
     #[test]
@@ -286,6 +291,26 @@ mod tests {
             "abcdefghij",
         );
         assert_merged(&out, &[("abcdef", "other", 0, 6, 1.0, 1)]);
+    }
+
+    #[test]
+    fn overrun_interior_self_reference_keeps_container_whole() {
+        // A self_reference that starts INTERIOR to a non-priority entity (start >
+        // entity.start) but overruns its tail (end > entity.end) must NOT replace
+        // the container. Doing so drops the container head [entity.start,
+        // sr.start] and, once the sr is later tier-filtered, leaks the whole name
+        // the caller asked to redact. The container wins WHOLE (the full
+        // requested name is redacted); the interior sr is dropped.
+        // person "公司我"[0,3] + sr "我们"[2,4] -> person[0,3] intact.
+        let text = "公司我们裁员了";
+        let out = merge_entities_with_text(
+            vec![
+                pmt("公司我", "person", 0, 3, 1.0, 0),
+                pmt("我们", "self_reference", 2, 4, 1.0, 0),
+            ],
+            text,
+        );
+        assert_merged(&out, &[("公司我", "person", 0, 3, 1.0, 0)]);
     }
 
     #[test]
@@ -311,11 +336,11 @@ mod tests {
     }
 
     #[test]
-    fn partial_overlap_sr_not_contained_keeps_split() {
-        // org [0,10] is followed by an sr [8,12] that extends PAST the org end —
-        // the sr is NOT fully contained, so the old priority-split behavior holds:
-        // the sr wins and the org is trimmed to start at sr.end=12 (nothing left,
-        // 12 >= 10), leaving the sr alone.
+    fn overrun_self_reference_does_not_drop_container_head() {
+        // org [0,10] followed by an sr [8,12] that starts interior (8>0) and
+        // extends PAST the org end. The sr must NOT win-and-trim the org to
+        // nothing — that drops the org head [0,8] in plaintext. The interior sr is
+        // part of the name region; the container wins WHOLE and the sr is dropped.
         let text = "organizatio我我";
         let out = merge_entities_with_text(
             vec![
@@ -324,7 +349,7 @@ mod tests {
             ],
             text,
         );
-        assert_merged(&out, &[("o我我", "self_reference", 8, 12, 1.0, 0)]);
+        assert_merged(&out, &[("organizati", "organization", 0, 10, 1.0, 0)]);
     }
 
     #[test]
