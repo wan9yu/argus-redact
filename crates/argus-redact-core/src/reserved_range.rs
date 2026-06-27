@@ -152,6 +152,34 @@ pub(crate) fn escaped_alternation<S: AsRef<str>>(ordered_keys: &[S]) -> String {
         .join("|")
 }
 
+/// Like `escaped_alternation`, but wraps any **purely-numeric** key (all ASCII
+/// digits) with `(?<!\d)…(?!\d)` digit boundaries. This stops a realistic
+/// bare-number fake (e.g. a phone-shaped "19999123456") from matching INSIDE a
+/// longer digit run ("199991234560") during restore — which would splice a real
+/// original into an unrelated number. Mirrors the forward patterns' own digit
+/// boundaries.
+///
+/// Only ALL-DIGIT keys are bounded. Alphanumeric pseudonyms (e.g. "P-83811",
+/// "LOCA-26767") are left unbounded: their trailing digits are opaque id chars
+/// that legitimately abut other digits in surrounding text (e.g. an
+/// un-redacted "...P-838113栋..."), so bounding them would break their restore.
+pub(crate) fn escaped_alternation_digit_bounded<S: AsRef<str>>(ordered_keys: &[S]) -> String {
+    ordered_keys
+        .iter()
+        .map(|k| {
+            let k = k.as_ref();
+            let esc = fancy_regex::escape(k).into_owned();
+            let all_digits = !k.is_empty() && k.chars().all(|c| c.is_ascii_digit());
+            if all_digits {
+                format!(r"(?<!\d){esc}(?!\d)")
+            } else {
+                esc
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
 /// Build `滨海市(district1|district2|...)` from reserved_cities.
 fn build_address_zh_alternation(cities: &[(String, String, Vec<String>)]) -> String {
     // Collect unique districts (sorted), mirror Python `sorted({district ...})`.

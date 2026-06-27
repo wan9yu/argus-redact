@@ -3,7 +3,7 @@ use fancy_regex::Regex;
 
 use crate::display_marker::{DISPLAY_MARKER_PRESETS, strip_display_markers};
 use crate::grammar::{is_self_ref, restore_grammar_en};
-use crate::reserved_range::{byte_to_char_offset, escaped_alternation, scan_for_pollution};
+use crate::reserved_range::{byte_to_char_offset, escaped_alternation_digit_bounded, scan_for_pollution};
 
 #[derive(Debug)]
 pub struct RestoreError(pub String);
@@ -23,8 +23,9 @@ pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, Rest
     let mut keys: Vec<&String> = key.keys().collect();
     keys.sort_by(|a, b| b.len().cmp(&a.len()));
 
-    // Build alternation pattern from escaped keys
-    let pattern_str = escaped_alternation(&keys);
+    // Build alternation pattern from escaped keys (digit-bounded so a numeric
+    // key cannot match inside a longer number).
+    let pattern_str = escaped_alternation_digit_bounded(&keys);
 
     let re = Regex::new(&pattern_str)
         .map_err(|e| RestoreError(format!("Invalid restore pattern: {e}")))?;
@@ -120,7 +121,7 @@ pub fn restore_full(
             // Build longest-first alternation of all flat keys.
             let mut sorted_keys: Vec<&String> = flat.keys().collect();
             sorted_keys.sort_by(|a, b| b.len().cmp(&a.len()));
-            let keys_alt = escaped_alternation(&sorted_keys);
+            let keys_alt = escaped_alternation_digit_bounded(&sorted_keys);
 
             let pattern_str = format!("({})((?:{})+)", keys_alt, marker_alt);
             match Regex::new(&pattern_str) {
@@ -497,6 +498,22 @@ mod tests {
             rr_warn,
             "LLM output contains 2 additional reserved-range value(s) not in input — \
 possible hallucination or fabrication"
+        );
+    }
+
+    #[test]
+    fn restore_numeric_key_respects_digit_boundary() {
+        // A numeric key (e.g. a realistic phone-shaped fake) must not match
+        // inside a longer digit run — otherwise restore splices a real original
+        // into an unrelated number. key 19999123456→13912345678: the longer
+        // token "199991234560" must stay literal, not become "139123456780".
+        let mut k = HashMap::new();
+        k.insert("19999123456".to_string(), "13912345678".to_string());
+        assert_eq!(restore("199991234560", &k).unwrap(), "199991234560");
+        // The exact, digit-bounded token still restores normally.
+        assert_eq!(
+            restore("call 19999123456 now", &k).unwrap(),
+            "call 13912345678 now"
         );
     }
 

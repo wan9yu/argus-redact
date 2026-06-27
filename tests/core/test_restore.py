@@ -41,6 +41,16 @@ class TestRestoreBasic:
 
         assert result == "李明(经理)"
 
+    def test_should_not_match_numeric_key_inside_a_longer_number(self):
+        # A numeric pseudonym must respect digit boundaries: it must not match
+        # inside a longer digit run and splice a real original into an unrelated
+        # number. "199991234560" contains the key 19999123456 but is a different
+        # token, so it must be left literal.
+        key = {"19999123456": "13912345678"}
+
+        assert restore("199991234560", key) == "199991234560"
+        assert restore("call 19999123456 now", key) == "call 13912345678 now"
+
     def test_should_replace_pseudonym_when_at_end_of_text(self):
         key = {"P-037": "王五"}
 
