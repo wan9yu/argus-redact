@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from argus_redact.integrations.fastapi_middleware import (
     redact_body,
     restore_body,
@@ -44,6 +46,15 @@ class TestRedactBody:
 
         assert redacted == body
         assert key == {}
+
+    def test_should_fail_closed_when_field_present_but_not_str(self):
+        # Run-10 #ef3f3460ff0: a present-but-non-str field must fail CLOSED
+        # (raise), not silently return the body un-redacted with an empty key —
+        # that fail-open path leaks the PII inside the list/dict.
+        body = {"text": ["电话13812345678"]}
+
+        with pytest.raises(TypeError):
+            redact_body(body, mode="fast", lang="zh", salt=42)
 
     def test_should_handle_messages_array(self):
         body = {

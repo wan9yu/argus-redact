@@ -29,6 +29,27 @@ class TestExportStateShape:
         assert "version" in state
         assert state["version"] == _STATE_SCHEMA_VERSION
 
+    def test_export_before_flush_preserves_in_flight_tail(self):
+        # Run-10 #b2aa0c320e2f: exporting with an un-flushed in-flight buffer
+        # must NOT drop the buffered tail. Text with no trailing sentence
+        # boundary stays in _inc_buffer (not yet emitted); a checkpoint there
+        # previously lost it, so the tail's PII vanished from the pipeline
+        # instead of being redacted on the resumed flush.
+        salt = bytes(range(32))
+        r1 = StreamingRedactor(salt=salt)
+        r1.feed("张明的电话是13912345678")  # no boundary → stays buffered
+        baseline = StreamingRedactor(salt=salt)
+        baseline.feed("张明的电话是13912345678")
+        expected_tail = baseline.flush().downstream_text
+        assert expected_tail and "13912345678" not in expected_tail  # sanity
+
+        state = json.loads(json.dumps(r1.export_state()))
+        r2 = StreamingRedactor.from_state(state, salt=salt)
+        resumed_tail = r2.flush().downstream_text
+
+        assert resumed_tail == expected_tail  # tail carried across the checkpoint
+        assert "13912345678" not in resumed_tail
+
     def test_salt_passed_out_of_band_round_trips_with_edge_bytes(self):
         # v0.6.2: export_state() omits salt by default; caller passes it
         # out-of-band to from_state(state, salt=...).

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import csv
 import io
+import warnings
 from typing import Any
 
 from argus_redact import redact, restore
+from argus_redact.pure.replacer import SecurityWarning
 
 
 def _parse_paths(paths: list[str]) -> list[list[str]]:
@@ -21,18 +23,18 @@ def _parse_paths(paths: list[str]) -> list[list[str]]:
 
 
 def _path_matches(current_path: list[str], target_paths: list[list[str]]) -> bool:
-    """Check if current_path matches any of the target paths."""
+    """Check if current_path is at or below any target path (subtree match).
+
+    A target matches when it is a *prefix* of current_path, so scoping to
+    ``messages[*].content`` redacts every string leaf in that subtree —
+    including the block form ``content=[{"type":"text","text": ...}]`` where the
+    leaf sits deeper than the path. An exact-depth match would silently skip the
+    block form and leak its text.
+    """
     for target in target_paths:
-        if len(current_path) != len(target):
+        if len(current_path) < len(target):
             continue
-        match = True
-        for c, t in zip(current_path, target):
-            if t == "*":
-                continue
-            if c != t:
-                match = False
-                break
-        if match:
+        if all(t == "*" or c == t for c, t in zip(current_path, target)):
             return True
     return False
 
@@ -112,6 +114,22 @@ def restore_json(data: dict | list, key: dict) -> dict | list:
     return _walk(data)
 
 
+def _row_has_pii(
+    row: list[str],
+    *,
+    mode: str,
+    lang: str | list[str],
+    salt: int | bytes | None,
+    config: dict | None,
+) -> bool:
+    """True if any cell in the row changes under redaction (i.e. carries PII)."""
+    for cell in row:
+        redacted, _ = redact(cell, mode=mode, lang=lang, salt=salt, config=config)
+        if redacted != cell:
+            return True
+    return False
+
+
 def redact_csv(
     csv_text: str,
     *,
@@ -119,8 +137,20 @@ def redact_csv(
     lang: str | list[str] = "zh",
     salt: int | bytes | None = None,
     config: dict | None = None,
+    has_header: bool = True,
 ) -> tuple[str, dict]:
-    """Redact PII in a CSV string. Header row preserved, each cell redacted."""
+    """Redact PII in a CSV string.
+
+    Args:
+        has_header: When True (default) the first row is treated as a header and
+            preserved verbatim. Pass ``has_header=False`` for a headerless CSV so
+            the first row is redacted too — otherwise its data leaks. When the
+            preserved header row itself carries detectable PII (a sign the CSV is
+            actually headerless), a ``SecurityWarning`` is emitted.
+
+    Returns:
+        (redacted_csv, key).
+    """
     reader = csv.reader(io.StringIO(csv_text))
     rows = list(reader)
 
@@ -128,9 +158,22 @@ def redact_csv(
         return csv_text, {}
 
     combined_key: dict = {}
-    output_rows = [rows[0]]  # preserve header
+    output_rows: list[list[str]] = []
+    data_rows = rows
 
-    for row in rows[1:]:
+    if has_header:
+        output_rows.append(rows[0])  # preserve header verbatim
+        data_rows = rows[1:]
+        if _row_has_pii(rows[0], mode=mode, lang=lang, salt=salt, config=config):
+            warnings.warn(
+                "redact_csv: the preserved header row (row 0) contains detectable "
+                "PII and was NOT redacted. If this CSV has no header row, pass "
+                "has_header=False so the first row is redacted too.",
+                SecurityWarning,
+                stacklevel=2,
+            )
+
+    for row in data_rows:
         redacted_row = []
         for cell in row:
             redacted_cell, combined_key = redact(

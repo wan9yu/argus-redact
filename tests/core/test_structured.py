@@ -1,5 +1,8 @@
 """Tests for structured data redaction — JSON (flat, nested, paths) and CSV."""
 
+import pytest
+
+from argus_redact import SecurityWarning
 from argus_redact.structured import redact_csv, redact_json, restore_csv, restore_json
 
 # ══════════════════════════════════════════════════════════════
@@ -163,6 +166,26 @@ class TestRedactJsonPaths:
         assert result["name"] == "张三"
         assert len(key) == 0
 
+    def test_should_redact_block_form_content_under_scoped_path(self):
+        # The Anthropic/OpenAI block form
+        # content=[{"type":"text","text":...}] must be redacted when scoping to
+        # messages[*].content. The leaf sits at depth 5; an exact-depth gate
+        # silently skips it and leaks the PII. Scoping to a path means "this
+        # subtree", so every string leaf below it must be redacted.
+        data = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "张三的手机13812345678"}],
+                }
+            ]
+        }
+        result, key = redact_json(data, paths=["messages[*].content"], mode="fast", salt=42)
+
+        leaf = result["messages"][0]["content"][0]["text"]
+        assert "13812345678" not in leaf
+        assert len(key) >= 1
+
 
 # ══════════════════════════════════════════════════════════════
 # CSV
@@ -189,3 +212,22 @@ class TestRedactCSV:
         restored = restore_csv(redacted, key)
 
         assert "13812345678" in restored
+
+    def test_should_redact_first_row_when_headerless(self):
+        # A headerless CSV must not leak its first data
+        # row. With has_header=False every row is data and must be redacted.
+        csv_text = "张三,13812345678\n李四,15900001234"
+        redacted, key = redact_csv(csv_text, has_header=False, mode="fast", salt=42)
+
+        assert "13812345678" not in redacted
+        assert "15900001234" not in redacted
+
+    def test_should_warn_when_preserved_header_carries_pii(self):
+        # Default has_header=True preserves row 0. If that
+        # row actually carries detectable PII the caller likely passed a
+        # headerless CSV and is silently leaking it — warn loudly.
+        csv_text = "张三,13812345678\n李四,15900001234"
+        # match= pins this to the header warning — a high-entropy salt avoids the
+        # unrelated low-entropy-salt SecurityWarning masking a vacuous pass.
+        with pytest.warns(SecurityWarning, match="header"):
+            redact_csv(csv_text, mode="fast", salt=bytes(range(32)))

@@ -110,6 +110,27 @@ class TestOllamaAdapter:
         assert results[0].text == "老王"
 
     @patch("argus_redact.impure.ollama_adapter.requests.post")
+    def test_should_recover_all_occurrences_of_repeated_entity(self, mock_post):
+        # Run-10 #70ad56954a17: when the LLM returns wrong CJK offsets, the
+        # string-match fallback must recover ALL occurrences of a repeated
+        # entity, not collapse every entry onto the first span (which leaves the
+        # other occurrences un-redacted = leak). 老王 occurs at (0,2),(7,9),(17,19).
+        text = "老王是我邻居，老王上周生病了，听说老王在住院。"
+        mock_post.return_value = self._mock_response(
+            [
+                {"text": "老王", "type": "person", "start": 1, "end": 3},
+                {"text": "老王", "type": "person", "start": 2, "end": 4},
+                {"text": "老王", "type": "person", "start": 3, "end": 5},
+            ]
+        )
+        adapter = self._make_adapter()
+
+        results = adapter.detect(text)
+
+        spans = {(r.start, r.end) for r in results if r.text == "老王"}
+        assert spans == {(0, 2), (7, 9), (17, 19)}
+
+    @patch("argus_redact.impure.ollama_adapter.requests.post")
     def test_should_use_custom_model(self, mock_post):
         mock_post.return_value = self._mock_response([])
         adapter = self._make_adapter(model="qwen2.5:7b")

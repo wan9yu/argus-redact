@@ -253,6 +253,11 @@ class StreamingRedactor:
         state = {
             "version": _STATE_SCHEMA_VERSION,
             "accumulated_key": dict(self._accumulated_key),
+            # In-flight tail accumulated past the last sentence boundary. Must be
+            # carried across a checkpoint or end-of-stream text is silently lost
+            # on resume. Additive field — older (field-less) dumps load fine via
+            # the .get("inc_buffer", "") default in from_state, so no version bump.
+            "inc_buffer": self._inc_buffer,
             "lang": self._lang,
             "mode": self._mode,
             "display_marker": self._display_marker,
@@ -314,4 +319,5 @@ class StreamingRedactor:
             ),
         )
         instance._accumulated_key = dict(state.get("accumulated_key", {}))
+        instance._inc_buffer = state.get("inc_buffer", "")
         return instance

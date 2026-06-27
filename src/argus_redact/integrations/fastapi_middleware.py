@@ -57,9 +57,19 @@ def redact_body(
             else:
                 redacted_messages.append(msg)
         result["messages"] = redacted_messages
-    elif field in body and isinstance(body[field], str):
+    elif field in body:
+        value = body[field]
+        if not isinstance(value, str):
+            # Fail CLOSED: a present-but-non-str field would otherwise be returned
+            # un-redacted, silently leaking any PII inside the list/dict. Raise so
+            # the caller fixes the field or uses redact_json() for nested shapes.
+            raise TypeError(
+                f"redact_body: body[{field!r}] is {type(value).__name__}, not str; "
+                f"nothing was redacted. Pass a string field, or use redact_json() "
+                f"for nested/list structures."
+            )
         redacted_text, combined_key = redact(
-            body[field],
+            value,
             mode=mode,
             lang=lang,
             salt=salt,

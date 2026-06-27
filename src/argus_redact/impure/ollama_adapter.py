@@ -18,6 +18,19 @@ from argus_redact.pure.replacer import SecurityWarning
 
 logger = logging.getLogger(__name__)
 
+
+def _find_all(haystack: str, needle: str) -> list[tuple[int, int]]:
+    """All non-overlapping (start, end) spans of needle in haystack."""
+    spans: list[tuple[int, int]] = []
+    if not needle:
+        return spans
+    i = haystack.find(needle)
+    while i != -1:
+        spans.append((i, i + len(needle)))
+        i = haystack.find(needle, i + len(needle))
+    return spans
+
+
 # Named hosts treated as loopback (IP literals are checked via `ipaddress` below,
 # which covers 127.0.0.0/8 + ::1 precisely and rejects look-alikes like 127.evil.com).
 _LOOPBACK_NAMES = {"localhost"}
@@ -151,6 +164,7 @@ class OllamaAdapter(SemanticAdapter):
             return []
 
         entities = []
+        seen: set[tuple[int, int]] = set()
         for item in raw_entities:
             if not isinstance(item, dict):
                 continue
@@ -162,29 +176,35 @@ class OllamaAdapter(SemanticAdapter):
             if not entity_text or not entity_type:
                 continue
 
-            # Validate span against original text
-            if start is not None and end is not None:
-                if end > len(text) or start < 0:
-                    continue
-                if text[start:end] != entity_text:
-                    idx = text.find(entity_text)
-                    if idx == -1:
-                        continue
-                    start, end = idx, idx + len(entity_text)
+            # Trust the LLM's offsets only when they are in-bounds AND actually
+            # point at entity_text. Otherwise fall back to string search — and
+            # recover EVERY occurrence, not just the first: an N-times-repeated
+            # name with wrong offsets would otherwise collapse onto one span and
+            # leak the other occurrences (missed detection > false positive).
+            if (
+                start is not None
+                and end is not None
+                and 0 <= start <= end <= len(text)
+                and text[start:end] == entity_text
+            ):
+                spans = [(start, end)]
             else:
-                idx = text.find(entity_text)
-                if idx == -1:
+                spans = _find_all(text, entity_text)
+                if not spans:
                     continue
-                start, end = idx, idx + len(entity_text)
 
-            entities.append(
-                NEREntity(
-                    text=entity_text,
-                    type=entity_type,
-                    start=start,
-                    end=end,
-                    confidence=self._profile.confidence,
+            for s, e in spans:
+                if (s, e) in seen:
+                    continue
+                seen.add((s, e))
+                entities.append(
+                    NEREntity(
+                        text=entity_text,
+                        type=entity_type,
+                        start=s,
+                        end=e,
+                        confidence=self._profile.confidence,
+                    )
                 )
-            )
 
         return entities
