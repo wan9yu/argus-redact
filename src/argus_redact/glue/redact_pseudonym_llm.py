@@ -5,7 +5,7 @@ Returns a PseudonymLLMResult dataclass with three text forms sharing one key dic
 
 from __future__ import annotations
 
-from argus_redact._types import PseudonymLLMResult
+from argus_redact._types import PatternMatch, PseudonymLLMResult
 from argus_redact.glue import redact as _redact_module
 from argus_redact.pure.display_marker import mark_for_display, resolve_marker
 from argus_redact.pure.normalize import MAX_INPUT_SIZE
@@ -57,6 +57,7 @@ def redact_pseudonym_llm(
     reserved_names: dict[str, tuple[str, ...]] | None = None,
     strategy_overrides: dict[str, str] | None = None,
     unified_prefix: str | None = None,
+    _pre_detected: "list[PatternMatch] | None" = None,
 ) -> PseudonymLLMResult:
     """Redact `text` with the pseudonym-llm profile, returning three text forms.
 
@@ -79,6 +80,8 @@ def redact_pseudonym_llm(
     `existing_key` (advanced) — pre-existing fake→original mappings to honor.
     Same original value present in both `text` and `existing_key.values()` reuses
     the same fake. Used by ``StreamingRedactor`` for cross-chunk consistency.
+
+    `_pre_detected` (advanced) — entities already detected over `text`; skips internal detection (used by streaming detect-once).
 
     `reserved_names` — overrides the canonical fake-name tables on a per-type
     basis. Pass ``{"person_zh": ()}`` to disable zh canonical-name pollution
@@ -143,14 +146,19 @@ def redact_pseudonym_llm(
 
         resolved_lang = detect_languages(text)
 
-    entities, langs, timing, _layer_stats = _redact_module._detect(
-        text,
-        lang=resolved_lang,
-        mode=mode,
-        names=names,
-        types=types,
-        types_exclude=types_exclude,
-    )
+    if _pre_detected is not None:
+        entities = _pre_detected
+        langs = resolved_lang if isinstance(resolved_lang, list) else [resolved_lang]
+        timing = {}
+    else:
+        entities, langs, timing, _layer_stats = _redact_module._detect(
+            text,
+            lang=resolved_lang,
+            mode=mode,
+            names=names,
+            types=types,
+            types_exclude=types_exclude,
+        )
 
     downstream_text, key, realistic_aliases = _redact_module._replace_and_emit(
         text,
