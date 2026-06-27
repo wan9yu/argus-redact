@@ -30,6 +30,17 @@ class TestRestoreBasic:
 
         assert result == "王五说了话"
 
+    def test_should_not_double_replace_when_bare_paren_follows_key(self):
+        # A bare '(' (one char of the "(假)" display marker) after a key must not
+        # trigger the marker pass, which would replace the key twice and disclose
+        # a different entity's original. 张三→李明, 李明→王芳; "张三(经理)" must
+        # restore to "李明(经理)", never "王芳(经理)".
+        key = {"张三": "李明", "李明": "王芳"}
+
+        result = restore("张三(经理)", key)
+
+        assert result == "李明(经理)"
+
     def test_should_replace_pseudonym_when_at_end_of_text(self):
         key = {"P-037": "王五"}
 
