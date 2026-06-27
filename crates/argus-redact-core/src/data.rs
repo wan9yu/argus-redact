@@ -53,6 +53,11 @@ pub fn builtin_patterns(lang: &str) -> &'static [PatternData] {
     parsed().get(lang).map(|v| v.as_slice()).unwrap_or(&[])
 }
 
+/// All embedded language codes in deterministic file order (incl. "shared").
+pub(crate) fn all_langs() -> impl Iterator<Item = &'static str> {
+    RAW.iter().map(|(lang, _)| *lang)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

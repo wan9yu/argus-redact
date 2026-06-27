@@ -3,7 +3,9 @@ use fancy_regex::Regex;
 
 use crate::display_marker::{DISPLAY_MARKER_PRESETS, strip_display_markers};
 use crate::grammar::{is_self_ref, restore_grammar_en};
-use crate::reserved_range::{byte_to_char_offset, escaped_alternation_digit_bounded, scan_for_pollution};
+use crate::reserved_range::{
+    byte_to_char_offset, escaped_alternation, escaped_alternation_digit_bounded, scan_for_pollution,
+};
 
 #[derive(Debug)]
 pub struct RestoreError(pub String);
@@ -63,7 +65,9 @@ pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, Rest
 /// 2. If key empty → return text.
 /// 3. Alias merge: build flat lookup = key ∪ {alias → key[fake]'s original}.
 /// 4. Auto-detect decoration markers (only when display_marker is None): compile
-///    `(key_alt)(PRESET_MARKER_CHARS+)`, replace each match with `value + markers`.
+///    `(key_alt)((?:marker_alt)+)` where `marker_alt` is the alternation of the
+///    WHOLE preset marker strings (DISPLAY_MARKER_PRESETS), and replace each
+///    match with `value + markers`.
 /// 5. Core substitution (longest-first).
 /// 6. If any key VALUE is self-ref → `restore_grammar_en(result)`.
 pub fn restore_full(
@@ -110,13 +114,12 @@ pub fn restore_full(
         // key that the Step-5 core pass then replaces AGAIN — a double
         // replacement that can disclose a different entity's original. Matching
         // only complete markers (e.g. "(假)", "ⓕ") makes a bare '(' inert.
-        let marker_alt: String = DISPLAY_MARKER_PRESETS
+        let markers: Vec<&str> = DISPLAY_MARKER_PRESETS
             .iter()
             .map(|(_, v)| *v)
             .filter(|v| !v.is_empty())
-            .map(|v| fancy_regex::escape(v).into_owned())
-            .collect::<Vec<_>>()
-            .join("|");
+            .collect();
+        let marker_alt = escaped_alternation(&markers);
         if !marker_alt.is_empty() && !flat.is_empty() {
             // Build longest-first alternation of all flat keys.
             let mut sorted_keys: Vec<&String> = flat.keys().collect();

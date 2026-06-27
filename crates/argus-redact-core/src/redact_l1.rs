@@ -49,7 +49,7 @@
 
 use std::collections::HashSet;
 
-use crate::data::builtin_patterns;
+use crate::data::{all_langs, builtin_patterns};
 use crate::grammar::normalize_grammar_en;
 use crate::hints::{filter_self_reference, get_person_threshold, produce_hints_l1, Hint};
 use crate::merger::merge_entities_with_text;
@@ -139,13 +139,14 @@ fn load_patterns(lang: &[String]) -> Vec<PatternConfig> {
             push(p);
         }
     }
-    // Always also load language-neutral patterns (CN structured numeric IDs) from
-    // any source lang the caller did NOT request — a CN phone/ID/bank number is
+    // Always also load `language_neutral` patterns (CN structured numeric IDs)
+    // from any source lang the caller did NOT request — a CN phone/ID number is
     // the same digits regardless of surrounding script, so it must be detectable
-    // in en/ja/ko/… text too. When the source lang IS requested its neutral
-    // patterns already loaded above, so skip it to avoid a duplicate.
-    for &src in NEUTRAL_SOURCE_LANGS {
-        if lang.iter().any(|l| l == src) {
+    // in en/ja/ko/… text too. The per-pattern flag is the single source of truth:
+    // scan every embedded lang, skipping "shared" (already loaded above) and any
+    // requested lang (whose neutral patterns already loaded in the loop above).
+    for src in all_langs() {
+        if src == "shared" || lang.iter().any(|l| l == src) {
             continue;
         }
         for p in builtin_patterns(src) {
@@ -156,10 +157,6 @@ fn load_patterns(lang: &[String]) -> Vec<PatternConfig> {
     }
     configs
 }
-
-/// Source languages that may carry `language_neutral` patterns loaded regardless
-/// of the requested language. Currently only zh (CN structured numeric IDs).
-const NEUTRAL_SOURCE_LANGS: &[&str] = &["zh"];
 
 /// Tag entities with `layer` if not already tagged (port of `_tag_layer`:
 /// `layer if e.layer == 0 else e.layer`).

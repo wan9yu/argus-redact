@@ -159,10 +159,13 @@ pub(crate) fn escaped_alternation<S: AsRef<str>>(ordered_keys: &[S]) -> String {
 /// original into an unrelated number. Mirrors the forward patterns' own digit
 /// boundaries.
 ///
-/// Only ALL-DIGIT keys are bounded. Alphanumeric pseudonyms (e.g. "P-83811",
-/// "LOCA-26767") are left unbounded: their trailing digits are opaque id chars
-/// that legitimately abut other digits in surrounding text (e.g. an
-/// un-redacted "...P-838113栋..."), so bounding them would break their restore.
+/// Only ALL-DIGIT keys are bounded — deliberately NARROW. Anything with a
+/// non-digit char is left unbounded: prefixed pseudonyms ("P-83811") and masked
+/// values ("138****5678") routinely abut digits from an adjacent token (e.g.
+/// "P-83811138****5678"), so bounding them would break their restore. The
+/// narrowness is the safe choice; a digit-bounded numeric fake with inner
+/// separators (e.g. a landline "099-12345678") is not bounded, but that is an
+/// accepted theoretical gap, not a reproduced leak.
 pub(crate) fn escaped_alternation_digit_bounded<S: AsRef<str>>(ordered_keys: &[S]) -> String {
     ordered_keys
         .iter()
