@@ -17,6 +17,12 @@ pub struct PatternData {
     pub check_context: bool,
     #[serde(default)]
     pub description: String,
+    /// Load this pattern regardless of the requested/detected language. Used for
+    /// CN structured numeric identifiers (phone/ID/bank) whose digits are the
+    /// same in any surrounding script, so they must be detectable in en/ja/ko/…
+    /// text too — not only when zh is requested. Default false (language-gated).
+    #[serde(default)]
+    pub language_neutral: bool,
 }
 
 macro_rules! lang_ron {

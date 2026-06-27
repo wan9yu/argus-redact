@@ -6,12 +6,14 @@
         pattern: r"(?<!\d)(?:\+86)?1[3-9]\d(?:[\s-]?\d){8}(?!\d)",
         check_context: true,
         description: r"Chinese mobile phone number (with optional spaces/dashes)",
+        language_neutral: true,
     ),
     PatternData(
         type_: r"phone",
         label: r"[电话号已脱敏]",
         pattern: r"(?<!\d)0[1-9]\d{1,2}-?\d{7,8}(?!\d)",
         description: r"Chinese landline phone number",
+        language_neutral: true,
     ),
     PatternData(
         type_: r"id_number",
@@ -19,12 +21,14 @@
         pattern: r"(?<!\d)[1-9]\d{5}[\s-]?(?:19|20)\d{2}[\s-]?(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])[\s-]?\d{3}[\dXx](?!\d)",
         validator: Some(r"gb11643_mod11"),
         description: r"Chinese 18-digit national ID (MOD 11-2)",
+        language_neutral: true,
     ),
     PatternData(
         type_: r"id_number",
         label: r"[身份证号已脱敏]",
         pattern: r"(?<!\d)[1-9]\d{5}(?:[2-9]\d)(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}(?!\d)",
         description: r"Chinese 15-digit national ID (pre-1999, no checksum)",
+        language_neutral: true,
     ),
     PatternData(
         type_: r"hk_id",

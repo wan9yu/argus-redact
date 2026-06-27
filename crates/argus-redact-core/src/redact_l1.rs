@@ -139,8 +139,27 @@ fn load_patterns(lang: &[String]) -> Vec<PatternConfig> {
             push(p);
         }
     }
+    // Always also load language-neutral patterns (CN structured numeric IDs) from
+    // any source lang the caller did NOT request — a CN phone/ID/bank number is
+    // the same digits regardless of surrounding script, so it must be detectable
+    // in en/ja/ko/… text too. When the source lang IS requested its neutral
+    // patterns already loaded above, so skip it to avoid a duplicate.
+    for &src in NEUTRAL_SOURCE_LANGS {
+        if lang.iter().any(|l| l == src) {
+            continue;
+        }
+        for p in builtin_patterns(src) {
+            if p.language_neutral {
+                push(p);
+            }
+        }
+    }
     configs
 }
+
+/// Source languages that may carry `language_neutral` patterns loaded regardless
+/// of the requested language. Currently only zh (CN structured numeric IDs).
+const NEUTRAL_SOURCE_LANGS: &[&str] = &["zh"];
 
 /// Tag entities with `layer` if not already tagged (port of `_tag_layer`:
 /// `layer if e.layer == 0 else e.layer`).
@@ -602,6 +621,32 @@ pub fn redact_l1<F: PseudoFactory>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn en_load_includes_language_neutral_cn_numeric() {
+        // CN structured numeric identifiers must be detectable even when only en
+        // is requested — their digits are script-independent. The CN mobile
+        // pattern lives in zh data but is flagged language_neutral.
+        let configs = load_patterns(&["en".to_string()]);
+        assert!(
+            configs
+                .iter()
+                .any(|c| c.type_ == "phone" && c.pattern.contains("1[3-9]")),
+            "en pattern load must include the language-neutral CN mobile pattern"
+        );
+    }
+
+    #[test]
+    fn zh_load_does_not_duplicate_language_neutral_patterns() {
+        // When zh IS requested, the neutral patterns load via the normal zh pass;
+        // the always-load step must not add a second copy.
+        let configs = load_patterns(&["zh".to_string()]);
+        let cn_mobile = configs
+            .iter()
+            .filter(|c| c.type_ == "phone" && c.pattern.contains("1[3-9]"))
+            .count();
+        assert_eq!(cn_mobile, 1, "CN mobile must appear exactly once for zh");
+    }
 
     // ── Golden fixtures captured from LIVE Python ─────────────────────────────
     //

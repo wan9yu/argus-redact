@@ -60,6 +60,7 @@ pub fn builtin_patterns(py: Python<'_>, lang: &str) -> PyResult<Py<PyList>> {
         if p.check_context { d.set_item("check_context", true)?; }
         if let Some(g) = &p.group { d.set_item("group", g)?; }
         if let Some(v) = &p.validator { d.set_item("validator", v)?; }
+        if p.language_neutral { d.set_item("language_neutral", true)?; }
         list.append(d)?;
     }
     Ok(list.into())

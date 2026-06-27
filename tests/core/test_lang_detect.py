@@ -131,3 +131,31 @@ class TestDetectLanguagesReturnShape:
         result = detect_languages("客户Apple 张三 Microsoft 李四")
         assert result.count("zh") == 1
         assert result.count("en") == 1
+
+
+class TestCnNumericPiiIsLanguageNeutral:
+    """CN structured numeric IDs must be detected regardless of requested lang."""
+
+    def test_cn_phone_redacted_in_english_text_under_auto(self):
+        from argus_redact import redact
+
+        # pure-ASCII English text + lang="auto" → routes to en; the CN mobile
+        # must still be redacted (it is language-neutral).
+        redacted, _ = redact("Contact me at 13800138000", lang="auto", mode="fast", salt=42)
+        assert "13800138000" not in redacted
+
+    def test_cn_id_redacted_under_explicit_ja(self):
+        from argus_redact import redact
+
+        # Even with an explicit non-zh lang, the CN national ID is caught — its
+        # digits are script-independent. (Cards in en text are already covered by
+        # the en credit_card pattern, so bank_card is intentionally NOT neutral.)
+        text = "ID 110101199003078515"
+        redacted, _ = redact(text, lang=["ja"], mode="fast", salt=42)
+        assert "110101199003078515" not in redacted
+
+    def test_cn_phone_redacted_in_kana_text_under_auto(self):
+        from argus_redact import redact
+
+        redacted, _ = redact("こんにちは 13800138000", lang="auto", mode="fast", salt=42)
+        assert "13800138000" not in redacted

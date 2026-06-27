@@ -142,6 +142,10 @@ VALID_MODES = ("auto", "fast", "ner")
 
 _pattern_cache: dict[tuple[str, ...], list[dict]] = {}
 
+# Source languages that may carry `language_neutral` patterns, loaded regardless
+# of the requested language. Mirrors NEUTRAL_SOURCE_LANGS in the Rust core.
+_NEUTRAL_SOURCE_LANGS: tuple[str, ...] = ("zh",)
+
 
 def _load_patterns(lang: str | list[str]) -> list[dict]:
     """Load regex patterns for the given language(s). Cached per language combo.
@@ -169,6 +173,16 @@ def _load_patterns(lang: str | list[str]) -> list[dict]:
         if code == "shared":
             continue
         all_patterns.extend(core_patterns(code))
+
+    # Always also load language-neutral patterns (CN structured numeric IDs) from
+    # any source lang not requested — a CN phone/ID/bank number is the same digits
+    # regardless of surrounding script, so it must be detectable in en/ja/ko/…
+    # text too. Mirrors argus_redact_core::redact_l1::load_patterns (the live
+    # path); kept in parity so the _load_patterns-based detection tests match.
+    for src in _NEUTRAL_SOURCE_LANGS:
+        if src in langs:
+            continue
+        all_patterns.extend(p for p in core_patterns(src) if p.get("language_neutral"))
 
     _pattern_cache[langs] = all_patterns
     return all_patterns
