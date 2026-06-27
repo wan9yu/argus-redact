@@ -30,7 +30,7 @@ class TestExportStateShape:
         assert state["version"] == _STATE_SCHEMA_VERSION
 
     def test_export_before_flush_preserves_in_flight_tail(self):
-        # Run-10 #b2aa0c320e2f: exporting with an un-flushed in-flight buffer
+        # Exporting with an un-flushed in-flight buffer
         # must NOT drop the buffered tail. Text with no trailing sentence
         # boundary stays in _inc_buffer (not yet emitted); a checkpoint there
         # previously lost it, so the tail's PII vanished from the pipeline
