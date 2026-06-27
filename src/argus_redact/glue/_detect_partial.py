@@ -86,22 +86,31 @@ def _carry_cut_index(
     names: list[str] | None,
     types: list[str] | None,
     types_exclude: list[str] | None,
+    widen: bool = True,
 ) -> int:
-    """Pick a force-flush emit cut at or before ``target`` that splits no entity.
+    """Pick a force-flush emit cut at or before ``target`` that neither splits an
+    entity NOR orphans an evidence-gated candidate from its evidence.
 
     The carry-window keeps ``combined[target:]`` for the next round, but an
     entity whose span crosses ``target`` (head before it, tail after it) would
     have its head emitted in ``combined[:target]`` and never matched in
-    isolation → a leak. Detecting on the *full* ``combined`` lets us snap the
-    cut back to the start of any entity that straddles ``target`` so the whole
-    entity is carried instead. Returns the emit cut index (``0`` means carry
-    everything — the unbounded-token residual edge where an entity covers the
-    region from the buffer start past ``target``).
+    isolation → a leak. Likewise an evidence-gated L1 candidate (region /
+    occupation / condition / hobby) fires only on a nearby cue or proximate PII;
+    if the cut falls between the candidate and that evidence, the candidate is
+    emitted (or carried) alone, re-detected below threshold, and the bare term
+    leaks. Detecting on the *full* ``combined`` lets the core ``snap_cut`` pull
+    the cut back off any straddling entity AND past an evidence-gated candidate's
+    margin so candidate + evidence are carried together. Returns the emit cut
+    index (``0`` means carry everything — the unbounded-token residual edge).
 
-    Stays in Python (the detection SSOT lives here): it threads the full Python
+    Detection stays in Python (the SSOT lives here): it threads the full Python
     ``_detect`` with the caller's exact params, and the streaming tests
-    monkeypatch this function directly. The core engine calls it back as a
-    ``(combined, target) -> cut`` callable.
+    monkeypatch this function directly. The snap RULE itself is single-sourced in
+    the Rust core (``_core.streaming_snap_cut``) so the wheel and the wasm path
+    pick byte-identical cuts. The core engine calls this back as a
+    ``(combined, target) -> cut`` callable. ``widen=False`` is the closed-only
+    drain variant (split-avoidance without the evidence ±margin), used by the
+    engine only for the ``cut == 0`` bounded drain.
     """
     entities, _langs, _timing, _stats = _detect(
         combined,
@@ -111,14 +120,8 @@ def _carry_cut_index(
         types=types,
         types_exclude=types_exclude,
     )
-    cut = target
-    for ent in entities:
-        # An entity straddles the cut iff it starts strictly before it and ends
-        # strictly after it. Snap the cut back to its start so head+tail are
-        # carried together and re-detected next round.
-        if ent.start < cut < ent.end:
-            cut = ent.start
-    return max(cut, 0)
+    spans = [(ent.start, ent.end, ent.type) for ent in entities]
+    return _core.streaming_snap_cut(spans, target, widen)
 
 
 def _consume_to_boundary(
@@ -162,10 +165,25 @@ def _consume_to_boundary(
             types_exclude=types_exclude,
         )
 
+    def carry_cut_drain(combined: str, target: int) -> int:
+        # Closed-only twin used ONLY for the cut==0 bounded drain, so a forced
+        # drain never SPLITS an entity even when the widened snap chained to 0.
+        return _carry_cut_index(
+            combined,
+            target,
+            lang=lang,
+            mode=mode,
+            names=names,
+            types=types,
+            types_exclude=types_exclude,
+            widen=False,
+        )
+
     return _core.streaming_consume_to_boundary(
         prev_buffer,
         chunk,
         carry_cut,
+        carry_cut_drain,
         max_buffer=max_buffer,
         force_flush=force_flush,
     )

@@ -234,6 +234,23 @@ fn multi_chunk_redact_restore_roundtrip() {
     );
 }
 
+/// zh evidence-gated cross-cut: a bare region (西湖区) fires ONLY because a phone
+/// sits within its proximity window. A sentence boundary lands between them, so a
+/// naive cut emits the phone and carries the region alone — re-detected below
+/// threshold, the bare region would leak. The widened snap (SSOT `snap_cut`) must
+/// carry candidate + evidence together, so the region is redacted, not leaked.
+/// Proves the Bug-2 fix holds across the wasm runtime (same leak the Rust/Python
+/// regression tests pin).
+#[wasm_bindgen_test]
+fn zh_region_evidence_cross_cut_no_leak() {
+    let input = "我的电话13800138000。西湖区";
+    let chunks = chunk(input, 100); // single chunk → feed + flush
+    let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let (ds, _key) = stream(&refs, &Opts::new("zh"));
+    assert!(!ds.contains("西湖区"), "bare region leaked in wasm streaming: {ds}");
+    assert!(!ds.contains("13800138000"), "phone leaked in wasm streaming: {ds}");
+}
+
 // ── CROSS-RUNTIME PARITY (the SSOT proof) ────────────────────────────────────
 //
 // Expected values captured from the Python one-shot redact path driven through

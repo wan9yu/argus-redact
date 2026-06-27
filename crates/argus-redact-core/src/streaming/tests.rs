@@ -56,8 +56,15 @@ fn keep_whitelist() -> HashSet<String> {
 fn make_detect(lang: Vec<String>) -> impl Fn(&str) -> DetectSpans {
     move |text: &str| {
         let r = detect_l1(text, &lang, &[]).expect("detect_l1");
+        // Mirror production (wasm `redact_segment` / streaming closure + Python
+        // `_detect`): the snap must see the evidence-gated L1 detectors too, or a
+        // region/occupation/condition/hobby candidate could be cut from its
+        // corroborating evidence and leak.
         let mut entities = r.layer1.clone();
         entities.extend(r.person.clone());
+        entities.extend(r.regions.clone());
+        entities.extend(r.job_titles.clone());
+        entities.extend(r.framework.clone());
         DetectSpans { entities, hints: r.hints }
     }
 }
@@ -72,6 +79,9 @@ fn make_redact(lang: Vec<String>) -> impl Fn(&str) -> Result<RedactSegment, Stri
         let detected = detect_l1(text, &lang, &[]).map_err(|e| e.to_string())?;
         let mut entities = detected.layer1;
         entities.extend(detected.person);
+        entities.extend(detected.regions);
+        entities.extend(detected.job_titles);
+        entities.extend(detected.framework);
         // Realistic-strategy config for the PII types under test (phone / email /
         // ip_address / organization / person), so downstream gets reserved-range
         // fakes — the same shapes the Python downstream_text carries.
@@ -237,15 +247,37 @@ fn merged_detect_cut(combined: &str, target: usize, lang: &[&str]) -> usize {
     let d = detect_l1(combined, &lang_v, &[]).expect("detect_l1");
     let mut entities = d.layer1.clone();
     entities.extend(d.person.clone());
+    entities.extend(d.regions.clone());
+    entities.extend(d.job_titles.clone());
+    entities.extend(d.framework.clone());
     let merged = crate::merge_entities_with_text(entities, combined);
     let filtered = crate::filter_self_reference(merged, &d.hints);
+    // Independent re-derivation of the snap rule the SSOT `snap_cut` implements: a
+    // closed entity snaps on a strict straddle; an evidence-gated candidate snaps
+    // on a ±51-char widened danger zone (max sole-sufficient evidence window 50,
+    // +1 so a PII at exactly distance 50 is pulled back). Iterate to a fixed point.
+    // Hand-rolled here so a bug in `snap_cut` is caught, not mirrored.
+    const MARGIN: usize = 51;
+    let gated = ["location", "job_title", "medical", "hobby"];
     let mut cut = target;
-    for e in &filtered {
-        if e.start < cut && cut < e.end {
-            cut = e.start;
+    loop {
+        let mut next = cut;
+        for e in &filtered {
+            if gated.contains(&e.type_.as_str()) {
+                let lo = e.start.saturating_sub(MARGIN);
+                let hi = e.end + MARGIN;
+                if lo <= cut && cut <= hi && lo < next {
+                    next = lo;
+                }
+            } else if e.start < cut && cut < e.end && e.start < next {
+                next = e.start;
+            }
         }
+        if next == cut {
+            return cut;
+        }
+        cut = next;
     }
-    cut
 }
 
 #[test]
@@ -478,6 +510,61 @@ fn unbounded_token_longer_than_window_is_the_documented_edge() {
         !emit.contains(&token) && !residual.contains(&token),
         "expected the >window run to be split (documented limitation)"
     );
+}
+
+#[test]
+fn region_evidence_before_cut_not_orphaned() {
+    // Evidence-gated leak: a bare zh region (西湖区) fires ONLY via proximity to a
+    // phone. A sentence boundary lands between the phone (prefix) and the region
+    // (residual); without the widened snap the region is carried alone, re-detected
+    // below threshold, and emitted bare. The snap must carry candidate + evidence.
+    let (out, _) = stream(&["我的电话13800138000。西湖区"], &["zh"]);
+    assert!(!out.contains("西湖区"), "bare region leaked across the evidence cut: {out:?}");
+    assert!(!out.contains("13800138000"), "phone leaked: {out:?}");
+}
+
+#[test]
+fn region_evidence_after_cut_not_orphaned() {
+    // Mirror direction: region in the prefix, its proximate phone in the residual.
+    let (out, _) = stream(&["西湖区。我的电话13800138000"], &["zh"]);
+    assert!(!out.contains("西湖区"), "bare region leaked across the evidence cut: {out:?}");
+}
+
+#[test]
+fn hobby_cue_across_cut_not_orphaned() {
+    // The cue-window variant: a hobby (攀岩) fires only because the cue 喜欢 is in
+    // its window. A cue is NOT a detected entity, so the closed straddle-snap can't
+    // rescue it — the widened snap must carry the whole margin (cue + term).
+    let (out, _) = stream(&["我喜欢。攀岩"], &["zh"]);
+    assert!(!out.contains("攀岩"), "bare hobby leaked across the cue cut: {out:?}");
+}
+
+#[test]
+fn region_evidence_at_exact_prox_boundary_not_orphaned() {
+    // Off-by-one guard: the region fires on a phone at EXACTLY distance 50 (the
+    // inclusive REGION_PROX_NEAR boundary). The carry margin must exceed 50 by one
+    // so the snap's left edge lands strictly inside the phone (not on its end) and
+    // the strict closed-straddle pulls the phone back with the region. At margin 50
+    // the region was orphaned and leaked. (phone[0,11], 50-char filler, region[61,64].)
+    let filler = "啊".repeat(50);
+    let input = format!("13812345678{filler}西湖区。");
+    let (out, _) = stream(&[&input], &["zh"]);
+    assert!(!out.contains("西湖区"), "region at exact prox distance 50 leaked: {out:?}");
+    assert!(!out.contains("13812345678"), "phone leaked: {out:?}");
+}
+
+#[test]
+fn dense_boundaryless_forceflush_does_not_split_region() {
+    // Bounded-drain split guard: a dense, boundary-less stream of region+phone
+    // repeats hits the max_buffer force-flush. The evidence-widening chains the snap
+    // all the way to 0, so the engine must drain — and the drain must be snapped
+    // CLOSED-ONLY so it never splits a region straddling the drain point (a split
+    // would recombine downstream into a verbatim leak). The region must not appear.
+    let region = "上海浦东新区";
+    let chunk = format!("我住在{region}，电话13800138000，");
+    let big: String = chunk.repeat(500); // dense, no sentence boundary
+    let (out, _) = stream(&[&big], &["zh"]);
+    assert!(!out.contains(region), "region split/leaked across the bounded drain: present in output");
 }
 
 #[test]

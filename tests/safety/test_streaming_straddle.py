@@ -87,6 +87,60 @@ def test_entity_before_carry_window_emitted_exactly_once():
     assert out.count(fakes[0]) == 1, "the fake must appear exactly once (no double-emit)"
 
 
+def test_region_evidence_before_cut_not_orphaned():
+    # Evidence-gated leak: a bare zh region (西湖区) fires ONLY because a phone is
+    # within its proximity window. A sentence boundary lands between the phone and
+    # the region, so a naive cut emits the phone in the prefix and carries the bare
+    # region — which, re-detected ALONE next round, has lost its corroborating PII
+    # and is emitted in plaintext. The snap must carry the candidate together with
+    # the evidence that fired it (here: phone BEFORE the region; the region sits in
+    # the residual, its evidence in the prefix).
+    out, _ = _stream(["我的电话13800138000。西湖区"])
+    assert "西湖区" not in out, f"bare region leaked across the evidence cut: {out!r}"
+    assert "13800138000" not in out, f"phone leaked: {out!r}"
+
+
+def test_region_evidence_after_cut_not_orphaned():
+    # Same leak, mirror direction: the region is in the prefix and its proximate
+    # phone is in the residual. Detecting the prefix alone drops the region below
+    # threshold → bare region emitted. The snap must carry the region with the PII.
+    out, _ = _stream(["西湖区。我的电话13800138000"])
+    assert "西湖区" not in out, f"bare region leaked across the evidence cut: {out!r}"
+
+
+def test_hobby_cue_across_cut_not_orphaned():
+    # The cue-window variant: a hobby (攀岩) fires only because the cue 喜欢 sits in
+    # its window. A boundary lands between the cue and the term, so the term is
+    # carried bare and re-detected alone (no cue) → leak. A cue is NOT itself a
+    # detected entity, so the straddle-snap cannot rescue it — the snap must widen
+    # the candidate's danger zone over the cue window and carry both together.
+    out, _ = _stream(["我喜欢。攀岩"])
+    assert "攀岩" not in out, f"bare hobby leaked across the cue cut: {out!r}"
+
+
+def test_region_evidence_at_exact_proximity_boundary_not_orphaned():
+    # Off-by-one guard: the region fires on a phone at EXACTLY proximity distance 50
+    # (the inclusive REGION_PROX_NEAR boundary). The carry margin must exceed 50 by
+    # one so the snap's left edge lands strictly inside the phone (not on its end)
+    # and the closed-straddle pulls the phone back with the region; at margin 50 the
+    # region was orphaned and leaked. phone[0,11] + 50-char filler + region[61,64].
+    out, _ = _stream(["13812345678" + "啊" * 50 + "西湖区。"])
+    assert "西湖区" not in out, f"region at exact prox distance 50 leaked: {out!r}"
+    assert "13812345678" not in out, f"phone leaked: {out!r}"
+
+
+def test_dense_boundaryless_forceflush_does_not_split_region():
+    # Bounded-drain split guard: a dense, boundary-less stream of region+phone
+    # repeats hits the max_buffer force-flush. The evidence-widening chains the snap
+    # to 0, so the engine must drain — and the drain must be snapped CLOSED-ONLY so
+    # it never splits a region straddling the drain point (a split recombines
+    # downstream into a verbatim leak). The region must not appear in the output.
+    region = "上海浦东新区"
+    big = ("我住在" + region + "，电话13800138000，") * 500  # dense, no boundary
+    out, _ = _stream([big])
+    assert region not in out, "region split/leaked across the bounded drain"
+
+
 def test_unbounded_token_longer_than_window_is_the_documented_edge():
     # (c) Documented residual edge: a contiguous run LONGER than _CARRY_WINDOW
     # that is not a single detected entity can still split at the force-flush

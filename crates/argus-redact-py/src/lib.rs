@@ -57,6 +57,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(streaming::streaming_bounded_carry, m)?)?;
     m.add_function(wrap_pyfunction!(streaming::streaming_consume_to_boundary, m)?)?;
     m.add_function(wrap_pyfunction!(streaming::streaming_restorer_split, m)?)?;
+    m.add_function(wrap_pyfunction!(streaming::streaming_snap_cut, m)?)?;
     m.add_function(wrap_pyfunction!(risk::assess_risk, m)?)?;
     m.add_class::<crate::shake_rng::PyShakeRng>()?;
     m.add_function(wrap_pyfunction!(shake_rng::seed_from_value, m)?)?;

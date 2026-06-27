@@ -24,6 +24,7 @@ use pyo3::prelude::*;
 use argus_redact_core::streaming::{
     bounded_carry as core_bounded_carry, consume_to_boundary as core_consume_to_boundary,
     last_boundary_index as core_last_boundary_index, restorer_split as core_restorer_split,
+    snap_cut as core_snap_cut,
 };
 
 /// Index *after* the rightmost REAL sentence-boundary char (`-1` if none).
@@ -51,29 +52,33 @@ pub fn streaming_bounded_carry(combined: &str, max_buffer: usize) -> (String, St
 /// callable `(combined, target) -> cut` (CHAR indices) invoked at the boundary /
 /// force-flush snap — the Python shim passes the module-level `_carry_cut_index`
 /// (which detects on the full combined buffer with the caller's exact detection
-/// params and snaps the cut back off any straddling entity). Threading the cut as
-/// a callable both preserves the carry decision (the A2 invariant) AND keeps the
+/// params and snaps the cut back off any straddling entity / evidence-gated
+/// candidate). `carry_cut_drain` is its CLOSED-ONLY twin, invoked ONLY for the
+/// `cut == 0` bounded drain so a forced drain never SPLITS an entity even when
+/// `carry_cut`'s widening chained the carry back to 0. Threading the cuts as
+/// callables both preserves the carry decision (the A2 invariant) AND keeps the
 /// Python `_carry_cut_index` monkeypatchable (the boundary-path-drain test).
 #[pyfunction]
-#[pyo3(signature = (prev_buffer, chunk, carry_cut, *, max_buffer, force_flush=false))]
+#[pyo3(signature = (prev_buffer, chunk, carry_cut, carry_cut_drain, *, max_buffer, force_flush=false))]
 pub fn streaming_consume_to_boundary(
     py: Python<'_>,
     prev_buffer: &str,
     chunk: &str,
     carry_cut: Py<PyAny>,
+    carry_cut_drain: Py<PyAny>,
     max_buffer: usize,
     force_flush: bool,
 ) -> PyResult<(String, String)> {
-    // The carry_cut callback may raise; capture any error and surface it after the
-    // engine returns (the engine itself is infallible). A RefCell holds the first
-    // Python error so the closure stays `Fn` (the core API takes `&C`).
+    // The carry_cut callbacks may raise; capture the first error and surface it
+    // after the engine returns (the engine itself is infallible). A RefCell holds
+    // the error so the closures stay `Fn` (the core API takes `&C`).
     let err: std::cell::RefCell<Option<PyErr>> = std::cell::RefCell::new(None);
 
-    let cut_fn = |combined: &str, target: usize| -> usize {
+    let call = |cb: &Py<PyAny>, combined: &str, target: usize| -> usize {
         if err.borrow().is_some() {
             return target;
         }
-        match carry_cut.bind(py).call1((combined, target)) {
+        match cb.bind(py).call1((combined, target)) {
             Ok(obj) => match obj.extract::<usize>() {
                 Ok(cut) => cut,
                 Err(e) => {
@@ -88,13 +93,33 @@ pub fn streaming_consume_to_boundary(
         }
     };
 
+    let cut_fn = |combined: &str, target: usize| call(&carry_cut, combined, target);
+    let drain_fn = |combined: &str, target: usize| call(&carry_cut_drain, combined, target);
+
     let (emit, residual) =
-        core_consume_to_boundary(prev_buffer, chunk, max_buffer, force_flush, &cut_fn);
+        core_consume_to_boundary(prev_buffer, chunk, max_buffer, force_flush, &cut_fn, &drain_fn);
 
     if let Some(e) = err.into_inner() {
         return Err(e);
     }
     Ok((emit, residual))
+}
+
+/// Snap an emit `target` back to a SAFE cut over the detected entity spans.
+///
+/// `spans` is the post-merge `(start, end, type_)` entity set Python's `_detect`
+/// produced over the full combined buffer (CHAR offsets); the snap pulls the cut
+/// back off any entity straddling it AND (when `widen`) off any evidence-gated
+/// candidate (region/occupation/condition/hobby) whose corroborating cue /
+/// proximate PII would land on the far side of the cut. `widen = False` is the
+/// closed-only drain fallback (split-avoidance without the ±margin orphan
+/// guard). Mirrors `glue/_detect_partial._carry_cut_index`'s loop — keeping the
+/// snap RULE single-sourced in the core so the Python wheel and the wasm path
+/// pick identical cuts (no silent leak from a drifted duplicate). Returns the
+/// CHAR cut index (`0` = carry everything).
+#[pyfunction]
+pub fn streaming_snap_cut(spans: Vec<(usize, usize, String)>, target: usize, widen: bool) -> usize {
+    core_snap_cut(&spans, target, widen)
 }
 
 /// Split a restorer buffer at its last REAL sentence boundary → `(complete, residual)`.
