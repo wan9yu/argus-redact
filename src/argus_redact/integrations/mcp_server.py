@@ -89,7 +89,12 @@ async def redact_text(
         text: Input text containing PII to redact.
         lang: Language code(s). Use comma-separated for multiple: "zh,en".
         mode: Detection mode — "fast" (regex), "ner" (regex+NER), "auto" (all).
-        salt: Salt for deterministic output (testing only). Accepts int (coerced to bytes) or bytes.
+        salt: Optional int to FORCE deterministic output — testing only. An int
+            salt is low-entropy and grid-searchable, so omit it in production:
+            when absent, the server uses a strong per-call random salt (CSPRNG,
+            equivalent to ``os.urandom(32)``) so pseudonym codes are not
+            grid-searchable or linkable across calls. (MCP args are JSON, so bytes
+            cannot be passed here.)
 
     Returns JSON with two fields:
     - ``redacted``: redacted text
@@ -100,11 +105,16 @@ async def redact_text(
     if "," in lang:
         lang_param = [code.strip() for code in lang.split(",")]
 
+    # No explicit salt → strong per-call random salt (CSPRNG). The library's
+    # default (salt=None) would emit DETERMINISTIC, grid-searchable pseudonym codes
+    # — wrong for an LLM-facing tool. An explicit int stays a determinism override.
+    effective_salt: int | bytes = salt if salt is not None else secrets.token_bytes(32)
+
     redacted_text, key = redact(
         text,
         lang=lang_param,
         mode=mode,
-        salt=salt,
+        salt=effective_salt,
     )
     token = _create_key_token(key)
     return json.dumps(

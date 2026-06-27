@@ -76,6 +76,29 @@ class TestMCPToolExecution:
         assert "13812345678" in restored["restored"]
 
     @pytest.mark.asyncio
+    async def test_default_salt_is_strong_random_not_grid_searchable(self, mcp_app):
+        # Without an explicit salt the server must use a strong per-call random salt
+        # (CSPRNG), so a salted pseudonym code (here a location LOCA-NNNNN) is NOT
+        # deterministic / grid-searchable across calls. An explicit int salt remains
+        # a determinism override. Both must still redact the original.
+        async def red(args):
+            r = await mcp_app._tool_manager.call_tool("redact", args)
+            c = r if isinstance(r, str) else r[0].text
+            return json.loads(c)
+
+        a = await red({"text": "我住在西湖区", "mode": "fast"})
+        b = await red({"text": "我住在西湖区", "mode": "fast"})
+        assert "西湖区" not in a["redacted"] and "西湖区" not in b["redacted"]
+        assert a["redacted"] != b["redacted"], (
+            "default (no-salt) output must be non-deterministic — a strong random "
+            "salt, not the library's grid-searchable salt=None default"
+        )
+
+        c1 = await red({"text": "我住在西湖区", "mode": "fast", "salt": 42})
+        c2 = await red({"text": "我住在西湖区", "mode": "fast", "salt": 42})
+        assert c1["redacted"] == c2["redacted"], "explicit salt must stay deterministic"
+
+    @pytest.mark.asyncio
     async def test_should_return_info(self, mcp_app):
         result = await mcp_app._tool_manager.call_tool("info", {})
 
