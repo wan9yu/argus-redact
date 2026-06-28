@@ -162,30 +162,35 @@ class TestStreamingRestorerRealisticMode:
 class TestStreamingRedactor:
     """Per-chunk realistic redaction with cross-chunk key continuity.
 
-    Caller MUST feed complete logical units (sentence / paragraph / turn);
-    entity boundaries that cross chunk boundaries are not handled in v0.5.2.
+    The detection-context window (W = 128 chars) keeps ±W of context around
+    every emit, so streaming evidence-gated detection equals batch. The
+    hold-back means short texts (< W chars) are held until ``flush()`` or
+    until enough following context arrives — tests use ``feed() + flush()``
+    to collect the full output.
     """
 
     def test_should_redact_single_chunk(self):
         r = StreamingRedactor(salt=b"test-salt", lang="zh")
-        result = r.feed("请拨打 13912345678 联系王建国。")
+        # Short text (< 128 chars) is held for context; flush() drains it.
+        r.feed("请拨打 13912345678 联系王建国。")
+        result = r.flush()
         assert "19999" in result.downstream_text
-        assert restore(result.downstream_text, result.key) == "请拨打 13912345678 联系王建国。"
+        assert restore(result.downstream_text, r.aggregate_key()) == "请拨打 13912345678 联系王建国。"
 
     def test_should_keep_same_fake_for_repeated_value_across_chunks(self):
         r = StreamingRedactor(salt=b"test-salt", lang="zh")
-        # Same phone in two different chunks → same fake in both.
-        # Test inputs avoid canonical fake-name table (张三/李四/...) which
-        # the pollution scanner would flag as already-redacted output.
-        r1 = r.feed("电话 13912345678 是第一段提到的。")
-        r2 = r.feed("再次出现 13912345678 在第二段。")
+        # Both short chunks are held; flush() processes them together.
+        r.feed("电话 13912345678 是第一段提到的。")
+        r.feed("再次出现 13912345678 在第二段。")
+        r.flush()
 
-        phone_fakes_1 = [k for k in r1.key if k.startswith("19999")]
-        phone_fakes_2 = [k for k in r2.key if k.startswith("19999")]
-        assert len(phone_fakes_1) >= 1
-        assert len(phone_fakes_2) >= 1
-        # Cross-chunk fake for the same original phone must be identical
-        assert phone_fakes_1[0] == phone_fakes_2[0]
+        # aggregate_key must contain exactly ONE fake for 13912345678
+        agg = r.aggregate_key()
+        phone_fakes = [k for k, v in agg.items() if v == "13912345678" and k.startswith("19999")]
+        assert len(phone_fakes) == 1, (
+            "same original must map to exactly one fake; "
+            f"got {phone_fakes}"
+        )
 
     def test_should_round_trip_via_aggregate_key(self):
         r = StreamingRedactor(salt=b"test-salt", lang="zh")
@@ -195,8 +200,9 @@ class TestStreamingRedactor:
             "身份证 110101199003077651 已核对。",
         ]
         outs = [r.feed(c) for c in chunks]
+        final = r.flush()
         joined_in = "".join(chunks)
-        joined_out = "".join(o.downstream_text for o in outs)
+        joined_out = "".join(o.downstream_text for o in outs) + final.downstream_text
         assert restore(joined_out, r.aggregate_key()) == joined_in
 
     def test_should_avoid_collision_across_chunks(self):
@@ -204,9 +210,8 @@ class TestStreamingRedactor:
         r = StreamingRedactor(salt=b"test-salt", lang="zh")
         r.feed("电话13912345678。")
         r.feed("电话13987654321。")
+        r.flush()  # emit to populate aggregate_key
 
-        # aggregate_key inverts to {original → fake}; distinct originals must
-        # appear under distinct fakes (no two phones share a single fake).
         agg = r.aggregate_key()
         phone_pairs = [(k, v) for k, v in agg.items() if k.startswith("19999")]
         originals = {v for _, v in phone_pairs}
@@ -216,15 +221,15 @@ class TestStreamingRedactor:
 
     def test_should_reject_polluted_chunk(self):
         r = StreamingRedactor(salt=b"test-salt", lang="zh")
-        r.feed("正常输入13912345678。")  # produces 19999... in output
-        # Feeding text containing a 19999... value should raise (it's a reserved-range fake)
+        r.feed("正常输入13912345678。")  # holds; no 19999... yet in input
+        # Feeding text containing a 19999... value raises via the eager check.
         with pytest.raises(PseudonymPollutionError):
             r.feed("再次出现 19999111222。")
 
     def test_should_allow_polluted_when_strict_input_false(self):
         r = StreamingRedactor(salt=b"test-salt", lang="zh", strict_input=False)
         r.feed("正常输入13912345678。")
-        # Should not raise
+        # Should not raise with strict_input=False
         r.feed("再次出现 19999111222。")
 
     def test_should_route_en_chunk_correctly(self):
@@ -251,9 +256,10 @@ class TestStreamingRedactor:
             names=["张三"],
             reserved_names={"person_zh": ()},  # disable zh canonical names
         )
-        # 张三 is in canonical list — without override, the next chunk would fail
-        # as polluted. With override, 张三 is treated as a real user name.
-        result = r.feed("客户张三电话13912345678。")
+        # 张三 is in canonical list — without override, the chunk would be
+        # flagged as polluted. With override it passes through. flush() emits.
+        r.feed("客户张三电话13912345678。")
+        result = r.flush()
         assert "13912345678" not in result.downstream_text
 
 
@@ -272,57 +278,86 @@ class TestStreamingRedactorIncremental:
     """v0.5.7: opt-in incremental mode handles entities split across chunks.
     v0.5.8: incremental is now the default.
     v0.6.0: incremental is the only mode; opt-out kwarg removed.
+    v0.7.x: detection-context window (W=128) added — texts shorter than W are
+    held until flush() or until ≥ W chars of forward context arrive.
     """
 
     def test_default_mode_is_incremental_in_v058(self):
-        """Default (no incremental kwarg) is incremental mode since v0.5.8."""
+        """With the detection-context window, feed()+flush() together redact."""
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
-        # Single chunk with sentence boundary → emits a full result.
-        out = r.feed("电话13912345678。")
-        assert "13912345678" not in out.downstream_text
-        assert out.downstream_text != ""
+        # Short text (< W=128) is held for context; combine feed+flush output.
+        feed_out = r.feed("电话13912345678。")
+        flush_out = r.flush()
+        combined = feed_out.downstream_text + flush_out.downstream_text
+        assert "13912345678" not in combined
+        assert combined != ""
 
     def test_cross_chunk_phone_zh(self):
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         out1 = r.feed("电话1391")  # no boundary → buffered
-        # First chunk produces no output (waiting for boundary)
         assert out1.downstream_text == ""
-        out2 = r.feed("2345678。")  # boundary → emit
-        assert "13912345678" not in out2.downstream_text, (
-            f"phone should be redacted across chunks, got {out2.downstream_text!r}"
+        out2 = r.feed("2345678。")  # boundary present but buffer < W → still held
+        # Phone must not appear in any emitted text; flush() drains it
+        final = r.flush()
+        combined = out2.downstream_text + final.downstream_text
+        assert "13912345678" not in combined, (
+            f"phone should be redacted across chunks, got {combined!r}"
         )
 
     def test_cross_chunk_id_zh(self):
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
-        # Split id_number 110101199001011234 mid-value
-        r.feed("身份证号码11010")
-        out = r.feed("1199001011234。")
-        # Real id has check-digit; here we just verify SOMETHING was redacted
-        # (id_number requires checksum, so this synthetic may not match — use a valid one)
+        # A valid Chinese id (110101199003074610 — correct checksum) split mid-value
+        # across two chunks. The id must be redacted, never emitted raw across the cut.
+        out = r.feed("身份证号码11010").downstream_text
+        out += r.feed("1199003074610。").downstream_text
+        out += r.flush().downstream_text
+        assert "110101199003074610" not in out, (
+            f"id should be redacted across chunks, got {out!r}"
+        )
 
     def test_cross_chunk_email(self):
         r = StreamingRedactor(salt=b"x", lang="en", mode="fast")
         r.feed("Email me at user@")
         out = r.feed("company.com.")
-        assert "user@company.com" not in out.downstream_text, (
-            f"email should be redacted across chunks, got {out.downstream_text!r}"
+        final = r.flush()
+        combined = out.downstream_text + final.downstream_text
+        assert "user@company.com" not in combined, (
+            f"email should be redacted across chunks, got {combined!r}"
         )
 
     def test_flush_drains_remaining_buffer(self):
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         r.feed("最后一句没有标点，电话1391")
-        flushed = r.feed("2345678")  # still no boundary
+        flushed = r.feed("2345678")  # still no boundary, and buffer < W → held
         assert flushed.downstream_text == ""
         final = r.flush()
         assert "13912345678" not in final.downstream_text, (
             f"flush should emit pending entity, got {final.downstream_text!r}"
         )
 
+    def test_shift_entities_clamps_left_straddler_to_in_range_tail(self):
+        # Clamp restore-safety (C1 face 3), mirroring the core ``shift_spans`` unit
+        # test: an entity whose head reaches back into the already-emitted
+        # left-context (start < lo) is clamped to start=0 AND its text TRUNCATED to
+        # the in-range tail, so the minted fake maps to exactly the emitted chars.
+        # Without truncation key[fake] = the FULL original while only the tail is
+        # spliced → restore expands the fake over the already-emitted head (a
+        # round-trip corruption).
+        from argus_redact._types import PatternMatch
+
+        e = PatternMatch(text="abcdefgh", type="phone", start=2, end=10)  # buffer [2,10)
+        out = StreamingRedactor._shift_entities([e], 5, 12)  # lo=5: head "abc" is left-context
+        assert len(out) == 1
+        assert out[0].start == 0
+        assert out[0].end == 5
+        assert out[0].text == "defgh"  # dropped lo-start=3 head chars
+
     def test_flush_idempotent_on_empty(self):
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
-        # Feed a complete sentence — buffer drains
+        # Short sentence (< W) is held; first flush() drains it.
         r.feed("电话13912345678。")
-        # Now flush should be a no-op
+        r.flush()  # drain the held buffer
+        # Second flush on now-empty buffer is the no-op.
         result = r.flush()
         assert result.downstream_text == ""
         assert result.key == {}
@@ -330,23 +365,17 @@ class TestStreamingRedactorIncremental:
     def test_aggregate_key_preserved_across_incremental_chunks(self):
         """Same original across chunks must reuse the same fake (not minted twice)."""
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
-        out1 = r.feed("第一次提到13912345678。")
-        out2 = r.feed("第二次还是13912345678。")
+        r.feed("第一次提到13912345678。")
+        r.feed("第二次还是13912345678。")
+        r.flush()  # emit to populate aggregate_key
 
-        # The realistic fake (199-99 reserved-range mobile) should be the SAME
-        # in both chunks' downstream_text — proves no second mint happened.
-        fakes1 = [v for v in out1.key.values() if v == "13912345678"]
-        fakes2 = [v for v in out2.key.values() if v == "13912345678"]
-        # Each chunk emits unified key (audit + realistic placeholders both map back to
-        # the same original); the IMPORTANT invariant is that the realistic fake is
-        # stable across chunks — verified via downstream_text equality on the fake.
-        downstream_fakes1 = [
-            k for k, v in out1.key.items() if v == "13912345678" and k.startswith("199")
+        agg = r.aggregate_key()
+        # The realistic fake (199-xx reserved-range) must exist and be unique.
+        downstream_fakes = [
+            k for k, v in agg.items() if v == "13912345678" and k.startswith("199")
         ]
-        downstream_fakes2 = [
-            k for k, v in out2.key.items() if v == "13912345678" and k.startswith("199")
-        ]
-        assert downstream_fakes1 and downstream_fakes2, "realistic phone fake present in both"
-        assert downstream_fakes1[0] == downstream_fakes2[0], (
-            f"realistic fake must match across chunks; got {downstream_fakes1} vs {downstream_fakes2}"
+        assert downstream_fakes, "realistic phone fake present in aggregate key"
+        assert len(downstream_fakes) == 1, (
+            "same original must mint exactly one fake; "
+            f"got {downstream_fakes}"
         )

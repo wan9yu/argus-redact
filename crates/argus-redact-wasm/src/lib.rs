@@ -30,7 +30,9 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
+use argus_redact_core::grammar::normalize_grammar_en;
 use argus_redact_core::redact_l1::{detect_l1, redact_l1, RedactL1Args};
+use argus_redact_core::replace::{replace, ReplaceArgs};
 use argus_redact_core::restore::restore_full;
 use argus_redact_core::seed::Salt;
 use argus_redact_core::streaming::{
@@ -228,9 +230,10 @@ struct RedactParams {
 /// Run the one-shot fast-mode redact path over `text`, optionally threading an
 /// `existing_key` for cross-chunk collision continuity (same original reuses the
 /// same fake — mirrors the Python `existing_key=` / `setdefault` merge). This is
-/// the SSOT for both `redact` and the streaming redact closure: `detect_l1` →
+/// the SSOT for the one-shot [`redact`] entry point: `detect_l1` →
 /// `build_type_info` (`registry_defaults = None`) → `redact_l1` with the wasm
 /// MT19937 pseudo-factory. Returns the `(downstream, key, aliases)` segment.
+/// The streaming path uses a separate replace-based redact closure (no re-detect).
 fn redact_segment(
     params: &RedactParams,
     text: &str,
@@ -386,7 +389,7 @@ pub fn restore(text: &str, key: JsValue) -> Result<String, JsValue> {
 /// generic core engine is monomorphized over these trait objects (the detect
 /// closure for the carry-window entity-snap, the redact closure for the emit).
 type BoxedDetect = Box<dyn Fn(&str) -> DetectSpans>;
-type BoxedRedact = Box<dyn Fn(&str) -> Result<RedactSegment, String>>;
+type BoxedRedact = Box<dyn Fn(&str, &DetectSpans) -> Result<RedactSegment, String>>;
 
 /// The `feed` / `flush` return shape `{ downstreamText, key, aliases }`. Mirrors
 /// the fields the Python `StreamingRedactor` surfaces from its `PseudonymLLMResult`
@@ -405,13 +408,14 @@ struct EmitResultJs {
 /// continuity, over the core carry-window state machine (the SSOT shared with the
 /// Python `StreamingRedactor` and the wasm one-shot `redact`).
 ///
-/// Each [`feed`](StreamingRedactor::feed) buffers input until a SAFE cut (an entity
-/// straddling the cut is carried whole, never emitted half-redacted), then redacts
-/// the committed prefix through the SAME detect → `build_type_info` → `redact_l1`
-/// path the one-shot uses and merges the segment's key into the accumulated key
-/// (first-seen wins). [`flush`](StreamingRedactor::flush) drains the tail at
-/// end-of-stream. Returns `{ downstreamText, key, aliases }`; an empty
-/// `downstreamText` means the buffer hasn't reached a cut yet.
+/// Each [`feed`](StreamingRedactor::feed) detects once over the full ±W buffer,
+/// emits the range up to the last safe sentence boundary (keeping the entity
+/// straddling the cut whole), and redacts via `build_type_info` → `replace` +
+/// en-grammar tail over the GIVEN pre-detected, range-shifted spans — no internal
+/// re-detect. The segment's key is merged into the accumulated key (first-seen
+/// wins). [`flush`](StreamingRedactor::flush) drains the tail at end-of-stream.
+/// Returns `{ downstreamText, key, aliases }`; an empty `downstreamText` means the
+/// buffer hasn't reached a cut yet.
 ///
 /// Construct one per logical session: the accumulated key grows monotonically.
 #[wasm_bindgen]
@@ -496,13 +500,52 @@ impl StreamingRedactor {
             }
         });
 
-        // Redact closure: the same one-shot path, threading the accumulated key as
-        // `existing_key` for cross-chunk collision continuity.
+        // Redact closure: detect-once path — redact the GIVEN pre-detected,
+        // range-shifted entities over `text` via `build_type_info` → `replace` +
+        // en-grammar tail. No internal re-detect (the core engine already detected
+        // once over the full ±W buffer and shifted the spans into the emit range).
+        // Threads the accumulated key for cross-chunk collision continuity so the
+        // same original reuses its existing fake across segments.
         let redact_params = Rc::clone(&params);
         let redact_key = Rc::clone(&accumulated_key);
-        let redact: BoxedRedact = Box::new(move |text: &str| {
+        let redact: BoxedRedact = Box::new(move |text: &str, spans: &DetectSpans| {
             let existing = redact_key.borrow();
-            redact_segment(&redact_params, text, Some(&existing))
+            let info_pairs = build_type_info(
+                &spans.entities,
+                redact_params.config.as_ref(),
+                &redact_params.langs,
+                None,
+            );
+            let person_prefix = lookup_prefix(&info_pairs, "person", "P");
+            let org_prefix = lookup_prefix(&info_pairs, "organization", "O");
+            let info_map: HashMap<String, TypeInfo> = info_pairs.into_iter().collect();
+            let result = replace(
+                ReplaceArgs {
+                    text,
+                    entities: &spans.entities,
+                    salt: redact_params.salt.as_ref(),
+                    key: Some(&*existing),
+                    type_info: &info_map,
+                    person_prefix: &person_prefix,
+                    org_prefix: &org_prefix,
+                    unified_prefix: redact_params.unified_prefix.as_deref(),
+                    keep_whitelist: &redact_params.whitelist,
+                },
+                &WasmPseudoFactory,
+                None,
+            )?;
+            let effective_lang = redact_params.langs.first().map(String::as_str).unwrap_or("zh");
+            let downstream = if effective_lang == "en" {
+                let originals: Vec<String> = result.key.values().cloned().collect();
+                normalize_grammar_en(&result.redacted, &originals)
+            } else {
+                result.redacted
+            };
+            Ok(RedactSegment {
+                downstream_text: downstream,
+                key: result.key,
+                aliases: result.aliases,
+            })
         });
 
         Ok(StreamingRedactor {

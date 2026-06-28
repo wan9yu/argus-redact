@@ -8,7 +8,7 @@
 //! tail into the next round so an entity straddling the cut is never split (which
 //! would leak its head unredacted — neither half matches its pattern alone).
 //!
-//! ## The four carry-window functions (exact Python parity)
+//! ## The carry-window functions
 //!
 //! - [`last_boundary_index`] — index *after* the rightmost REAL sentence boundary.
 //!   `\n` + the CJK full-width `。！？；` ALWAYS count (they never appear inside an
@@ -16,40 +16,53 @@
 //!   `.!?;` count ONLY when the NEXT char is whitespace; at the buffer END (no next
 //!   char) an ASCII boundary is ambiguous (`. ` sentence-end vs `.com` intra-entity)
 //!   and does NOT count — wait for the next chunk.
-//! - [`bounded_carry`] — at `cut <= 0` (a span longer than the window blocks a safe
-//!   cut), once the buffer ≥ `max_buffer` drain to `len - CARRY_WINDOW` so the
-//!   buffer can never grow unbounded; below `max_buffer`, carry everything.
-//! - [`carry_cut_index`] / [`snap_cut`] — at a boundary / force-flush cut, DETECT
-//!   on the FULL combined buffer and snap the cut back so it neither splits an
-//!   entity NOR orphans an evidence-gated candidate (region/occupation/condition/
-//!   hobby) from the cue or proximate PII that fired it (detect-on-full).
-//! - [`consume_to_boundary`] — the orchestrator: `(emit_text, residual)`.
+//! - [`snap_cut`] — snap a proposed cut back to a SAFE position that never splits a
+//!   detected entity (straddle-only). [`StreamingRedactor`] detects once over a
+//!   buffer carrying ±W of context and redacts the emit range with THAT detection —
+//!   so the cut location can no longer strip a candidate of its evidence.
+//! - [`context_cut`] — the [`StreamingRedactor`] cut rule: the last sentence
+//!   boundary that still leaves ≥ `W` (= [`EVIDENCE_CONTEXT_WINDOW`]) chars of
+//!   forward context buffered, snapped off any straddled entity. The buffer also
+//!   retains the last `W` already-emitted chars as left-context (detection only).
 //!
 //! ## Generic over detection + redaction (no PyO3, no registry — like `redact_l1`)
 //!
-//! The state machine's only entity-aware step ([`carry_cut_index`]) needs entity
-//! spans over the combined buffer. To keep this core module free of PyO3 / Python
-//! glue, the spans come from a caller-supplied detect closure (`Fn(&str) ->
-//! Vec<(usize, usize)>`, CHAR-space `[start, end)`). [`StreamingRedactor`] is
-//! likewise generic over a redact closure that turns one emit segment into
-//! `(downstream_text, key, aliases)` — so the Python shim threads the full
-//! `redact_pseudonym_llm` pipeline through it, and wasm can thread `redact_l1`.
+//! The state machine's entity-aware snap step ([`snap_cut`] / [`context_cut`]) needs
+//! entity spans over the combined buffer. To keep this core module free of PyO3 /
+//! Python glue, the spans come from a caller-supplied detect closure (`Fn(&str) ->
+//! DetectSpans`). [`StreamingRedactor`] is likewise generic over a
+//! redact-with-entities closure (`Fn(&str, &DetectSpans) -> Result<RedactSegment,
+//! String>`) that redacts the emit text using the GIVEN pre-detected, range-shifted
+//! spans — no internal re-detect. The Python shim threads `redact_pseudonym_llm`
+//! (with pre-detected entities) through it; wasm threads `replace` + grammar tail
+//! over the pre-detected entities.
 //! The accumulated key + carry-window buffer (the actual streaming STATE) live
 //! here, in the SSOT.
 //!
-//! ## Known limitation: cross-sentence evidence for context-gated detectors
+//! ## Cross-sentence evidence: the detection-context window
 //!
 //! The evidence-gated L1 detectors (region/occupation/condition/hobby) fire only
-//! on a nearby cue or proximate PII. The snap carries a candidate together with
-//! evidence present in the COMBINED buffer at cut time. It cannot carry evidence
-//! that lives in a *separately committed* sentence: if a chunk boundary forces a
-//! flush at a `。`/`.` between a bare candidate and its only cue (e.g.
-//! `"我对花生。" | "过敏很严重。"` — allergen, then its `过敏` cue in the next
-//! chunk), the candidate is emitted before the cue ever shares its buffer, so it
-//! never fires and the bare term passes through. Batch redaction sees the whole
-//! text and catches it; online streaming cannot without speculative cross-sentence
-//! look-ahead (a separate design). This is inherent to single-pass streaming, not
-//! a snap defect.
+//! on a nearby cue or proximate PII. [`StreamingRedactor`] keeps the emitted text
+//! classified with the SAME ±W context batch would give it: it never emits within
+//! `W` of the buffer end (forward hold-back, so a candidate's forward window
+//! always exists before it commits) and retains the last `W` emitted chars as
+//! left-context (so a prior-sentence cue is back in scope when its candidate
+//! arrives). One detect-on-full per round drives both the cut and the redaction,
+//! so the cut location never strips a candidate of its evidence.
+//!
+//! **Guarantee:** `stream(chunks) ≡ batch(concat(chunks))` for every input whose
+//! corroborating evidence lies within `±W` (`W` = [`EVIDENCE_CONTEXT_WINDOW`]).
+//! The single residual edge is a candidate whose *sole* evidence is a corroborator
+//! LONGER than `W` straddling the lookahead: a bounded buffer cannot wait for an
+//! arbitrarily long entity to finish before committing the candidate. PEM/SSH keys
+//! are held whole by the opener mechanism below, but other long corroborators are
+//! not — notably a `url_token` whose `?token=` sits `>W` chars into the URL, which
+//! can leave a proximate region/hobby uncorroborated in the stream while batch,
+//! seeing the whole URL, redacts it. The leaked term is then a low-sensitivity
+//! quasi-identifier (the long corroborator itself is still redacted). Narrowing
+//! this further — by dropping such technical, non-personal PII from the evidence
+//! set — is a detector-precision question, separate from this bounded-streaming
+//! limit. Documented, not a defect of the window.
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -85,6 +98,23 @@ pub const DEFAULT_MAX_BUFFER: usize = 4096;
 /// force-flush. Must be ≥ the longest BOUNDED entity span so a straddling entity
 /// always fits inside the carried region. Mirrors `_CARRY_WINDOW`.
 pub const CARRY_WINDOW: usize = 256;
+
+/// The detection-context window `W` (in CHARS) the [`StreamingRedactor`] holds on
+/// each side of every emit so streaming detection equals batch detection for the
+/// evidence-gated L1 detectors (region/occupation/condition/hobby).
+///
+/// Derived, not a round number: an evidence-gated candidate fires on a cue within
+/// `±40` (the detectors' `*_WINDOW`) OR a corroborating PII within proximity `50`
+/// (`*_PROX_NEAR`) — and the PII must be FULLY present to be detected, so the
+/// proximity reach is `50 + the corroborator's own length`. The realistic
+/// structural corroborators (phone ~15, id 18, bank 19, email ~30-40) cap around
+/// `50 + ~78 ≈ 128`, which also dominates the `40` cue window. A `>128`-char
+/// corroborator is the documented residual edge (see the module-level guarantee).
+///
+/// Parity-by-convention across the snap copies, like [`CARRY_WINDOW`] /
+/// [`DEFAULT_MAX_BUFFER`]. (Alternative considered: reuse `CARRY_WINDOW = 256` —
+/// one fewer constant, more margin, ~one extra sentence of latency.)
+pub const EVIDENCE_CONTEXT_WINDOW: usize = 128;
 
 fn is_always_boundary(c: char) -> bool {
     ALWAYS_BOUNDARIES.contains(&c)
@@ -134,74 +164,13 @@ pub fn last_boundary_index(text: &str) -> isize {
     }
 }
 
-/// `bounded_carry` over a CHAR slice: at `cut <= 0`, once the buffer reaches
-/// `max_buffer` (CHARS) force-emit the prefix down to the trailing carry window so
-/// the buffer is guaranteed to drain (no unbounded growth); below `max_buffer`,
-/// carry everything. Returns `(emit, residual)` as owned strings. Mirrors
-/// `_bounded_carry`.
-fn bounded_carry_chars_mb(combined: &[char], max_buffer: usize) -> (String, String) {
-    // A buffer no longer than the carry window can never drain to `len -
-    // CARRY_WINDOW` (the subtraction would underflow → out-of-range slice panic /
-    // wasm abort). Such a buffer is always safe to carry whole — it will grow past
-    // the window and drain here next round. Mirrors Python's negative-index
-    // `('', combined)` semantics for `len <= CARRY_WINDOW`.
-    if combined.len() <= CARRY_WINDOW {
-        return ("".to_string(), combined.iter().collect());
-    }
-    if combined.len() >= max_buffer {
-        let target = combined.len() - CARRY_WINDOW;
-        let emit: String = combined[..target].iter().collect();
-        let residual: String = combined[target..].iter().collect();
-        (emit, residual)
-    } else {
-        ("".to_string(), combined.iter().collect())
-    }
-}
 
-/// Public string-level `bounded_carry` mirror (for the PyO3 parity binding).
-pub fn bounded_carry(combined: &str, max_buffer: usize) -> (String, String) {
-    let chars: Vec<char> = combined.chars().collect();
-    bounded_carry_chars_mb(&chars, max_buffer)
-}
-
-/// Entity-aware bounded drain: like [`bounded_carry_chars_mb`], but the force-emit
-/// cut at `len - CARRY_WINDOW` is first snapped back off any entity it would SPLIT
-/// (`drain_fn` is the CLOSED-ONLY snap). This is the `cut == 0` fallback: the
-/// widened snap chained the carry all the way to the buffer start, so we cannot
-/// honor it without unbounded growth, but draining at the raw `len - CARRY_WINDOW`
-/// could split an entity straddling exactly that point (head emitted + tail carried
-/// = the two halves recombine downstream = a verbatim leak). Snapping the drain off
-/// that straddle keeps the entity whole. `drain_fn` returning `0` means a single
-/// entity spans from the buffer start past the window (the genuine >window
-/// unbounded-token edge) — splitting is then unavoidable, so fall back to the raw
-/// `len - CARRY_WINDOW` drain (its head is emitted; documented edge).
-fn bounded_drain<C>(chars: &[char], max_buffer: usize, drain_fn: &C) -> (String, String)
-where
-    C: Fn(&str, usize) -> usize,
-{
-    if chars.len() <= CARRY_WINDOW {
-        return ("".to_string(), chars.iter().collect());
-    }
-    if chars.len() >= max_buffer {
-        let target = chars.len() - CARRY_WINDOW;
-        let combined: String = chars.iter().collect();
-        let drain = drain_fn(&combined, target);
-        let cut = if drain == 0 { target } else { drain };
-        let emit: String = chars[..cut].iter().collect();
-        let residual: String = chars[cut..].iter().collect();
-        (emit, residual)
-    } else {
-        ("".to_string(), chars.iter().collect())
-    }
-}
-
-/// The RAW detection input the carry-window snap normalizes before snapping: the
-/// `layer1 ++ person` entities plus the L1 `hints`, exactly as a fast-mode
-/// `detect_l1` produces them. The snap applies the same `merge_entities_with_text`
-/// then `filter_self_reference` that the Python `_detect` (fast) pipeline applies,
-/// so a caller may thread the RAW overlapping set and still get the merged-cut
-/// behavior: the snap is order- and overlap-invariant, which keeps the cut identical
-/// to the Python path (the SSOT requirement for wasm streaming).
+/// Raw detection input for the [`StreamingRedactor`] detect closure: the
+/// `layer1 ++ person` (+ evidence-gated) entities plus the L1 `hints`, exactly as
+/// a fast-mode `detect_l1` produces them. [`StreamingRedactor::detect_final`]
+/// normalizes them internally (`merge_entities_with_text` → `filter_self_reference`)
+/// before the cut and redaction steps, so callers may thread the RAW overlapping
+/// set unchanged.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct DetectSpans {
     /// Raw `layer1 ++ person` entities over the combined buffer (CHAR-space spans).
@@ -210,88 +179,31 @@ pub struct DetectSpans {
     pub hints: Vec<Hint>,
 }
 
-/// Normalize a RAW detect set to the SAME non-overlapping, de-self-referenced span
-/// set Python's `_detect` (fast mode) produces — `merge_entities_with_text` →
-/// `filter_self_reference` (`boost_cross_layer` is a no-op in single-layer fast
-/// mode). Returns CHAR-space `(start, end, type_)` spans (the type drives the
-/// evidence-gated widening in [`snap_cut`]). This is what makes the snap
-/// caller-agnostic: raw-vs-merged input collapses to the same span set here.
-fn normalize_snap_spans(input: DetectSpans, combined: &str) -> Vec<(usize, usize, String)> {
-    let merged = merge_entities_with_text(input.entities, combined);
-    let filtered = filter_self_reference(merged, &input.hints);
-    filtered.into_iter().map(|e| (e.start, e.end, e.type_)).collect()
-}
-
-/// L1 detector output types that fire on CONTEXT rather than a self-contained
-/// pattern: a region / occupation / condition / hobby candidate is emitted only
-/// when a cue (within the detector's `±WINDOW`) or proximate PII corroborates it.
-/// Such a candidate can sit ENTIRELY on one side of a cut while the evidence that
-/// fired it sits on the other — so re-detecting the emitted prefix ALONE drops it
-/// below threshold and emits the bare term in plaintext. The snap widens their
-/// danger zone so candidate + evidence are always carried (and re-scored) as a
-/// unit. Keep in sync with the emitted `type_`s of `regions.rs` (`location`),
-/// `occupation.rs` (`job_title`), and the `evidence_detector` instances
-/// (`conditions.rs` → `medical`, `hobbies.rs` → `hobby`).
-const EVIDENCE_GATED_TYPES: [&str; 4] = ["location", "job_title", "medical", "hobby"];
-
-/// Char margin added on EACH side of an evidence-gated candidate when deciding
-/// whether a cut would orphan it from its evidence. The widest sole-sufficient
-/// evidence window across the L1 evidence detectors is PII proximity NEAR = 50
-/// (regions: weight 0.5 alone clears the 0.5 gate; conditions/hobbies: 0.3,
-/// load-bearing in combination with the lexicon weight), dominating the cue
-/// window 40. We add **+1**: the detectors count proximity INCLUSIVELY
-/// (`distance <= NEAR`, regions.rs / evidence_detector.rs), so a corroborating
-/// closed PII can sit at EXACTLY distance 50. The margin must exceed that by one
-/// char so the snap's left edge (`start - margin`) lands strictly INSIDE the PII
-/// (not on its end), letting the strict closed-entity straddle pull the whole PII
-/// back with the candidate. At margin == 50 a PII at exactly distance 50 was
-/// orphaned (left edge == PII end, not a strict straddle). See `REGION_PROX_NEAR`
-/// / `DEFAULT_PROX_NEAR` (= 50).
-const EVIDENCE_CARRY_MARGIN: usize = 51;
-
-fn is_evidence_gated(type_: &str) -> bool {
-    EVIDENCE_GATED_TYPES.contains(&type_)
-}
-
 /// Snap `target` back to a SAFE cut over the normalized entity spans (each
 /// `(start, end, type_)`, CHAR-space `[start, end)`) of the combined buffer.
 ///
-/// A cut is unsafe if it would (a) split a closed entity span, or (b) — when
-/// `widen` is set — orphan an evidence-gated candidate from the cue / proximate
-/// PII that fired it (anything within [`EVIDENCE_CARRY_MARGIN`] chars on either
-/// side). For (a) the cut snaps back to the entity start (carry it whole); for (b)
-/// it snaps back PAST the candidate's left margin so the candidate AND its
-/// evidence are carried together and re-scored next round — a cue is not itself a
-/// detected entity, so only carrying the whole margin keeps it. Iterates to a
-/// FIXED POINT because snapping one span's cut back can expose a straddle of
-/// another span (e.g. a widened candidate's new cut landing inside a neighbouring
-/// closed entity). The cut strictly decreases each round, bounded below by 0, so
-/// this terminates. `0` means "carry everything" (the unbounded-token residual
-/// edge).
+/// Straddle-only: a cut is unsafe only if it would SPLIT a closed entity span
+/// (`start < cut < end`); it then snaps back to that entity's start so the entity
+/// is carried whole (neither half matches its pattern alone, so a split = a
+/// verbatim leak). The span type is ignored — with the detection-context window
+/// ([`StreamingRedactor`] detects once over ±W of context and redacts the emit
+/// range with that detection), the cut location can no longer orphan an
+/// evidence-gated candidate from its evidence, so the old per-type widening is
+/// gone. Iterates to a FIXED POINT because snapping one span's cut back can expose
+/// a straddle of another (a neighbouring entity the new cut now lands inside). The
+/// cut strictly decreases each round, bounded below by 0, so this terminates. `0`
+/// means "carry everything" (the unbounded-token residual edge / an entity from
+/// the buffer start past the cut).
 ///
-/// `widen = false` is the CLOSED-ONLY mode: every span (including evidence-gated
-/// ones) is treated as a plain entity that may not be SPLIT, but the ±margin
-/// orphan-avoidance is dropped. The boundary-less force-flush drain uses it: when
-/// the widened snap can only return 0 (dense evidence chains the carry all the way
-/// to the buffer start) we must still drain to bound the buffer, and closed-only
-/// gives a drain point that never splits an entity — restoring the pre-widening
-/// drain safety while accepting an orphan (unavoidable below `max_buffer`).
-///
-/// This is the SSOT for the snap rule: the wasm path ([`carry_cut_index`]) and
-/// the Python wheel path (`_carry_cut_index`, via the PyO3 `streaming_snap_cut`
-/// binding) both call it, so the cut is byte-identical across runtimes.
-pub fn snap_cut(spans: &[(usize, usize, String)], target: usize, widen: bool) -> usize {
+/// SSOT for the snap rule: the wasm path and the Python wheel path both call it
+/// (via [`StreamingRedactor`] / the PyO3 `context_cut` binding), so the cut is
+/// byte-identical across runtimes.
+pub fn snap_cut(spans: &[(usize, usize, String)], target: usize) -> usize {
     let mut cut = target;
     loop {
         let mut next = cut;
-        for (start, end, type_) in spans {
-            if widen && is_evidence_gated(type_) {
-                let lo = start.saturating_sub(EVIDENCE_CARRY_MARGIN);
-                let hi = end + EVIDENCE_CARRY_MARGIN;
-                if lo <= cut && cut <= hi && lo < next {
-                    next = lo;
-                }
-            } else if *start < cut && cut < *end && *start < next {
+        for (start, end, _type_) in spans {
+            if *start < cut && cut < *end && *start < next {
                 next = *start;
             }
         }
@@ -299,6 +211,120 @@ pub fn snap_cut(spans: &[(usize, usize, String)], target: usize, widen: bool) ->
             return cut;
         }
         cut = next;
+    }
+}
+
+/// The cut [`StreamingRedactor`] picks on a buffer that always carries ±`w` of
+/// detection context. Result of [`context_cut`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ContextCut {
+    /// CHAR index in the buffer up to which to emit. `cut == ctx_len` means
+    /// "nothing new is safe to emit yet" (the buffer is held).
+    pub cut: usize,
+    /// `true` only on the forced bounded-drain split (a boundary-less buffer that
+    /// grew to `max_buffer` and whose sole entity spans from `ctx_len` past the
+    /// drain point, so the cut MUST split it). The emit range `[ctx_len, cut)` then
+    /// has to be RE-DETECTED in isolation and redacted with those slice-local
+    /// spans — the full-buffer straddler [`shift_spans`] would otherwise DROP
+    /// (`end > cut`) leaks its head raw. A boundary-less mega-buffer carries no
+    /// cross-sentence evidence, so re-detecting the bare slice is correct here
+    /// (it restores the pre-rework drain safety). `false` on every other path
+    /// (boundary cut, clean-snap drain, hold, force-flush): the emit range uses
+    /// the range-shifted full-buffer detection.
+    pub redetect: bool,
+}
+
+/// Pick the [`StreamingRedactor`] emit cut over a buffer of `chars` that retains
+/// the last `w` already-emitted chars (`ctx_len` of them, as left-context) and
+/// holds back the last `w` chars (forward context). `spans` are the normalized
+/// snap spans over the WHOLE buffer (merged + self-ref-filtered entities plus the
+/// in-flight PEM opener pending span, if any — see [`StreamingRedactor::snap_spans`]).
+///
+/// The cut is the LAST real sentence boundary that (a) leaves ≥ `w` tail buffered
+/// (`≤ len − w`) and (b) lies past the already-emitted left-context (`> ctx_len`),
+/// then snapped back off any straddled entity via [`snap_cut`]. `force_flush`
+/// drains everything past `ctx_len` (`cut = len`). When no such boundary exists —
+/// none present, all within the hold-back window, or the snap chained back to/under
+/// `ctx_len` — the buffer is HELD (`cut = ctx_len`), UNLESS it has grown to
+/// `max_buffer`, in which case it is bounded-drained (`len − CARRY_WINDOW`, snapped
+/// off a straddle) so it can never grow without bound.
+///
+/// [`ContextCut::redetect`] is set only when the bounded drain is FORCED to split a
+/// span (so the emit slice must be re-detected, see [`bounded_drain_cut`]); every
+/// boundary / clean-snap / hold / force-flush cut leaves it `false`.
+pub fn context_cut(
+    spans: &[(usize, usize, String)],
+    chars: &[char],
+    ctx_len: usize,
+    max_buffer: usize,
+    w: usize,
+    force_flush: bool,
+) -> ContextCut {
+    let len = chars.len();
+    if force_flush {
+        return ContextCut { cut: len, redetect: false };
+    }
+    let safe_end = len.saturating_sub(w);
+    if safe_end > ctx_len {
+        if let Some(target) = last_boundary_index_chars(&chars[..safe_end]) {
+            if target > ctx_len {
+                let cut = snap_cut(spans, target);
+                if cut > ctx_len {
+                    return ContextCut { cut, redetect: false };
+                }
+                // else: the snap chained back to/under ctx_len (a span straddles
+                // the whole emittable region) — fall through to the bounded drain.
+            }
+        }
+    }
+    // No usable boundary. Hold everything, unless the buffer would otherwise grow
+    // without bound (≥ max_buffer): then force a bounded drain.
+    if len >= max_buffer {
+        let (cut, redetect) = bounded_drain_cut(spans, len, ctx_len);
+        return ContextCut { cut, redetect };
+    }
+    ContextCut { cut: ctx_len, redetect: false }
+}
+
+/// The [`context_cut`] bounded-drain cut: `(cut, redetect)`. Drains at
+/// `len − CARRY_WINDOW`, snapped CLOSED off any straddled entity so the forced
+/// drain never SPLITS a *closed* span that fits. Returns:
+///
+/// - `(ctx_len, false)` — cannot make forward progress (`len ≤ CARRY_WINDOW`, or
+///   the drain target is at/under `ctx_len`): HOLD; it grows past the window and
+///   drains next round. The caller still emits nothing.
+/// - `(drain, false)` — the snap pulled the cut CLEANLY back to a span start above
+///   `ctx_len`: no entity straddles `drain`, so the emit range uses the
+///   range-shifted full-buffer detection like any boundary cut.
+/// - `(target, true)` — the snap chained back to/under `ctx_len`, i.e. a single
+///   entity spans from `ctx_len` (or the buffer start) past the drain point and a
+///   split is unavoidable (the `>window` mega-entity edge: a ≥`max_buffer`
+///   boundary-less JWT / api-key / url_token). We force the raw `len − CARRY_WINDOW`
+///   cut — which is `> ctx_len`, GUARANTEEING forward progress so the buffer can
+///   never grow unbounded — and set `redetect` so the caller RE-DETECTS the emit
+///   slice (its head is a complete typed token that re-detection redacts, instead
+///   of [`shift_spans`] dropping the full-buffer straddler and leaking it raw).
+fn bounded_drain_cut(spans: &[(usize, usize, String)], len: usize, ctx_len: usize) -> (usize, bool) {
+    if len <= CARRY_WINDOW {
+        // Cannot drain below the carry window without underflow; hold (it will grow
+        // past the window and drain next round).
+        return (ctx_len, false);
+    }
+    let target = len - CARRY_WINDOW;
+    if target <= ctx_len {
+        // Draining would underflow into the retained left-context; hold.
+        return (ctx_len, false);
+    }
+    let drain = snap_cut(spans, target);
+    if drain > ctx_len {
+        // Clean snap off a closed straddler (or no straddle): nothing straddles the
+        // cut, so the range-shifted detection is safe — no re-detect needed.
+        (drain, false)
+    } else {
+        // The snap chained to/under ctx_len: a single entity runs from ctx_len past
+        // the drain point. Force the split at the raw target (forward progress) and
+        // re-detect the emit slice so its head is redacted, not dropped.
+        (target, true)
     }
 }
 
@@ -316,10 +342,10 @@ static PEM_END_RE: LazyLock<Regex> = LazyLock::new(|| {
         .unwrap_or_else(|e| panic!("streaming: PEM_END_RE compile failed: {e}"))
 });
 
-/// The pending-span type label for an in-flight PEM opener. Any NON-evidence-gated
-/// type works — [`snap_cut`] then treats the `[begin, len)` span with the strict
-/// closed-entity rule (snap the cut back to `begin`), which is exactly what carrying
-/// an unterminated key whole requires.
+/// The pending-span type label for an in-flight PEM opener. [`snap_cut`] is
+/// type-agnostic and treats the `[begin, len)` span with the closed-entity straddle
+/// rule (snap the cut back to `begin`), which is exactly what carrying an
+/// unterminated key whole requires.
 const PEM_OPENER_TYPE: &str = "ssh_private_key";
 
 /// Extra CHARS of force-flush headroom granted while a PEM opener is in flight, on
@@ -361,184 +387,13 @@ pub fn unclosed_pem_opener_start(combined: &str) -> Option<usize> {
 /// ceiling raised while ANY BEGIN is present lets such a key be carried whole and
 /// redacted as one unit (or, past the CAP, bounded-drained — the documented edge,
 /// which a key within the 10000 body bound never reaches).
-fn pem_begin_present(combined: &str) -> bool {
+///
+/// SSOT for the force-flush ceiling gate: the wheel calls it via the
+/// `streaming_pem_begin_present` PyO3 binding so wheel + wasm pick the SAME cut on a
+/// non-private-key PEM block (a bare `-----BEGIN ` literal is NOT enough — the full
+/// private-key regex must match).
+pub fn pem_begin_present(combined: &str) -> bool {
     combined.contains("-----BEGIN ") && PEM_BEGIN_RE.is_match(combined).unwrap_or(false)
-}
-
-/// Build the snap-input spans: the normalized detect set PLUS, when the buffer
-/// holds an in-flight (unclosed) PEM private-key opener, an open-ended pending span
-/// `[begin_start, len)` (typed as a closed entity) so [`snap_cut`] pulls the cut
-/// back before BEGIN and the whole multi-line key is carried until END arrives.
-fn snap_input_spans<D>(combined: &str, detect: &D) -> Vec<(usize, usize, String)>
-where
-    D: Fn(&str) -> DetectSpans,
-{
-    let mut spans = normalize_snap_spans(detect(combined), combined);
-    if let Some(begin) = unclosed_pem_opener_start(combined) {
-        // Open-ended: end is one PAST the buffer so a cut AT the buffer end (the
-        // trailing `\n` boundary of an in-flight key line) still counts as a
-        // straddle and snaps back to BEGIN. The key continues into future chunks.
-        let open_end = combined.chars().count() + 1;
-        spans.push((begin, open_end, PEM_OPENER_TYPE.to_string()));
-    }
-    spans
-}
-
-/// Pick a force-flush / boundary emit cut at or before `target` (a CHAR index)
-/// that neither splits a detected entity NOR orphans an evidence-gated candidate
-/// from its evidence, by detecting on the FULL combined text and snapping the cut
-/// back via [`snap_cut`].
-///
-/// `detect` returns the RAW [`DetectSpans`] (`layer1 ++ person ++ regions ++
-/// job_titles ++ framework` + hints) over `combined`; the snap NORMALIZES them
-/// (merge + self-reference filter) to the exact set Python's `_detect` (fast)
-/// produces BEFORE the cascading snap, so the cut is order/overlap-invariant
-/// regardless of whether the caller threaded raw or merged spans. An in-flight PEM
-/// opener is added as an open-ended pending span (see [`snap_input_spans`]). Mirrors
-/// `_carry_cut_index`. Returns the CHAR cut index (`0` means carry everything).
-pub fn carry_cut_index<D>(combined: &str, target: usize, detect: &D) -> usize
-where
-    D: Fn(&str) -> DetectSpans,
-{
-    snap_cut(&snap_input_spans(combined, detect), target, true)
-}
-
-/// Closed-only counterpart of [`carry_cut_index`]: the same detect + normalize (+
-/// PEM opener span), but [`snap_cut`] runs without the evidence-gated widening
-/// (`widen = false`). Used ONLY as the force-flush drain fallback — see
-/// [`bounded_drain`].
-fn carry_cut_index_closed<D>(combined: &str, target: usize, detect: &D) -> usize
-where
-    D: Fn(&str) -> DetectSpans,
-{
-    snap_cut(&snap_input_spans(combined, detect), target, false)
-}
-
-/// Split `prev_buffer + chunk` at the last SAFE cut. Returns `(emit_text,
-/// residual)` — `emit_text` is the committed prefix (or `""` if nothing is ready
-/// to emit yet); `residual` is the tail to carry into the next call.
-///
-/// `cut_fn` computes the entity-aware emit cut at or before a CHAR `target` index
-/// over the combined text (`Fn(&str, usize) -> cut`). This is the snap step —
-/// EXACTLY the `_carry_cut_index(combined, target, ...)` call site in the Python
-/// `_consume_to_boundary`. Keeping the cut as a closure (not baking detection in)
-/// preserves the Python structure: the PyO3 shim threads the real (monkeypatchable)
-/// Python `_carry_cut_index` here, and pure-Rust callers build one from a detect
-/// closure via [`consume_to_boundary_detect`]. Mirrors `_consume_to_boundary`.
-///
-/// `drain_fn` is the CLOSED-ONLY snap (no evidence widening), used ONLY for the
-/// `cut == 0` bounded drain via [`bounded_drain`] so the forced drain never SPLITS
-/// an entity even when `cut_fn`'s widening chained the carry back to 0.
-pub fn consume_to_boundary<C, C2>(
-    prev_buffer: &str,
-    chunk: &str,
-    max_buffer: usize,
-    force_flush: bool,
-    cut_fn: &C,
-    drain_fn: &C2,
-) -> (String, String)
-where
-    C: Fn(&str, usize) -> usize,
-    C2: Fn(&str, usize) -> usize,
-{
-    let combined: String = {
-        let mut s = String::with_capacity(prev_buffer.len() + chunk.len());
-        s.push_str(prev_buffer);
-        s.push_str(chunk);
-        s
-    };
-    if combined.is_empty() {
-        return ("".to_string(), "".to_string());
-    }
-    if force_flush {
-        return (combined, "".to_string());
-    }
-
-    // While a multi-line PEM private key is present (in-flight OR a complete key
-    // larger than max_buffer), raise the force-flush ceiling so the whole key (body
-    // bound 10000) is carried and redacted as one unit instead of being
-    // force-flush-split into a plaintext head leak. An in-flight key is held before
-    // BEGIN by the opener pending span; a complete >max_buffer key is a detected
-    // entity but the bounded drain would still split it once END closes the opener
-    // (dropping the ceiling) — so the raise is gated on ANY BEGIN, not just unclosed.
-    // Bounded by the CAP — past it an unterminated/oversized key is bounded-drained.
-    let max_buffer = if pem_begin_present(&combined) {
-        max_buffer.saturating_add(PEM_OPENER_CEILING_EXTRA)
-    } else {
-        max_buffer
-    };
-
-    let chars: Vec<char> = combined.chars().collect();
-    let boundary = last_boundary_index_chars(&chars);
-
-    match boundary {
-        None => {
-            if chars.len() >= max_buffer {
-                // Boundary-less force-flush. Carry a trailing window so a
-                // straddling entity is whole next round. Tiny buffers (≤ window)
-                // carry all rather than slicing a negative index.
-                if chars.len() <= CARRY_WINDOW {
-                    return ("".to_string(), combined);
-                }
-                let target = chars.len() - CARRY_WINDOW;
-                let cut = cut_fn(&combined, target);
-                if cut == 0 {
-                    // The (widened) snap chained the carry all the way to the buffer
-                    // start — either a single entity spans from 0 past the window, or
-                    // dense evidence-gated candidates chained their ±margin zones back
-                    // to 0. We are already at len >= max_buffer, so force a bounded
-                    // drain rather than carrying all (carrying all would let the span
-                    // grow the buffer without bound → O(n^2) re-detect → MAX_INPUT_SIZE
-                    // crash). The drain is snapped CLOSED-ONLY so it never SPLITS an
-                    // entity straddling the drain point (a split would recombine
-                    // downstream into a verbatim leak); only a genuine >window token
-                    // (drain_fn → 0) falls back to the raw window drain.
-                    return bounded_drain(&chars, max_buffer, drain_fn);
-                }
-                let emit: String = chars[..cut].iter().collect();
-                let residual: String = chars[cut..].iter().collect();
-                (emit, residual)
-            } else {
-                ("".to_string(), combined)
-            }
-        }
-        Some(boundary) => {
-            // A real sentence end. Even so it can sit inside a detected entity
-            // (e.g. "123 Main St. Apt 4" where "St. " is a real boundary). Apply
-            // the same entity-aware snap: if an entity straddles the boundary, snap
-            // the cut back to its start and carry it whole. cut <= 0 → carry all
-            // (gated on max_buffer via bounded_carry); it resolves at a later
-            // boundary or the end-of-stream flush.
-            let cut = cut_fn(&combined, boundary);
-            if cut == 0 {
-                return bounded_drain(&chars, max_buffer, drain_fn);
-            }
-            let emit: String = chars[..cut].iter().collect();
-            let residual: String = chars[cut..].iter().collect();
-            (emit, residual)
-        }
-    }
-}
-
-/// [`consume_to_boundary`] with the cut computed from a `detect` closure via
-/// [`carry_cut_index`] — the pure-Rust convenience for callers (wasm,
-/// [`StreamingRedactor`]) that detect directly rather than threading a Python
-/// `_carry_cut_index`. `detect` returns the RAW [`DetectSpans`] over the combined
-/// text (the snap normalizes them) and MUST use the SAME detection params the
-/// caller's redaction uses.
-pub fn consume_to_boundary_detect<D>(
-    prev_buffer: &str,
-    chunk: &str,
-    max_buffer: usize,
-    force_flush: bool,
-    detect: &D,
-) -> (String, String)
-where
-    D: Fn(&str) -> DetectSpans,
-{
-    let cut_fn = |combined: &str, target: usize| carry_cut_index(combined, target, detect);
-    let drain_fn = |combined: &str, target: usize| carry_cut_index_closed(combined, target, detect);
-    consume_to_boundary(prev_buffer, chunk, max_buffer, force_flush, &cut_fn, &drain_fn)
 }
 
 /// One emitted/redacted segment: the realistic downstream text + the key
@@ -562,32 +417,92 @@ pub struct EmitResult {
     pub accumulated_key: HashMap<String, String>,
 }
 
+/// Restrict the FINAL (merged + self-ref-filtered) entity set to the emit range
+/// `[lo, hi)` (CHAR indices) and re-base it onto the emit substring: keep every
+/// entity that ENDS within the range (`lo < end ≤ hi`) and subtract `lo` from its
+/// offsets. [`context_cut`]'s straddle snap guarantees no entity has `end > hi`, so
+/// the forward edge never splits one. An entity whose head reaches back into the
+/// already-emitted left-context (`start < lo`) is CLAMPED to the range
+/// (`start → lo`): its head is committed plaintext we cannot rewrite, but its
+/// in-range tail is still redacted — this is the direct-PII pattern that only
+/// completed once the retained left-context joined it (its head having been emitted
+/// before it was part of any entity).
+///
+/// For a clamped straddler the entity `text` is also TRUNCATED to its in-range tail
+/// (drop the `lo − start` head chars). The redact closure mints the fake from this
+/// text and the key maps `fake → tail`, so restore expands the fake back to exactly
+/// the chars the emit range covers — NOT the full original, which would duplicate
+/// the already-emitted head on restore (a round-trip corruption). Entities are
+/// non-overlapping (merged), so at most one straddles `lo` and the clamp can never
+/// overlap a neighbour. The result carries no hints: the entities are final, and
+/// the redact closure replaces them directly (no re-detect / re-merge / re-filter).
+fn shift_spans(entities: &[PatternMatch], lo: usize, hi: usize) -> DetectSpans {
+    let shifted = entities
+        .iter()
+        .filter(|e| e.end > lo && e.end <= hi)
+        .map(|e| {
+            // Chars of the entity head that fall in the already-emitted left-context
+            // (`[start, lo)`); 0 when the entity starts at/after `lo`.
+            let drop = lo.saturating_sub(e.start);
+            let text = if drop > 0 {
+                e.text.chars().skip(drop).collect::<String>()
+            } else {
+                e.text.clone()
+            };
+            PatternMatch {
+                text,
+                type_: e.type_.clone(),
+                start: e.start.saturating_sub(lo),
+                end: e.end - lo,
+                confidence: e.confidence,
+                layer: e.layer,
+            }
+        })
+        .collect();
+    DetectSpans {
+        entities: shifted,
+        hints: Vec::new(),
+    }
+}
+
 /// Sentence-bounded incremental redaction with cross-chunk key continuity.
 ///
-/// Buffers input until a SAFE cut (via the carry-window state machine), then
-/// redacts the committed prefix through the caller-supplied redact closure and
-/// merges the segment's key into `accumulated_key` (first-seen wins, mirroring the
-/// Python `setdefault`). Generic over:
-///   - `D`: the detect closure (`Fn(&str) -> DetectSpans`) used for the
-///     carry-window entity-snap — MUST match the redact closure's detection params.
-///   - `R`: the redact closure (`Fn(&str) -> Result<RedactSegment, String>`) that
-///     turns one emit segment into its `(downstream_text, key, aliases)`.
+/// Detects ONCE per round over a buffer that always carries ±`W`
+/// ([`EVIDENCE_CONTEXT_WINDOW`]) of context (left-context overlap + forward
+/// hold-back, via [`context_cut`]), then redacts the emit range using THAT
+/// detection (range-shifted pre-detected spans, [`shift_spans`]) — never a
+/// re-detect of the bare slice — so streaming detection equals batch for the
+/// evidence-gated detectors. Merges each segment's key into `accumulated_key`
+/// (first-seen wins, mirroring the Python `setdefault`). Generic over:
+///   - `D`: the detect closure (`Fn(&str) -> DetectSpans`) run once over the whole
+///     buffer; its RAW spans are merged + self-ref-filtered here into the final set
+///     that drives BOTH the cut and the redaction.
+///   - `R`: the redact closure (`Fn(&str, &DetectSpans) -> Result<RedactSegment,
+///     String>`) that redacts the emit text USING the given final, range-shifted
+///     entities — no re-detect, no re-merge, no re-filter (just replace + any
+///     post-step like grammar). The given `DetectSpans` carries no hints.
+///
+/// State: `buffer` is the ORIGINAL text (retained left-context ++ pending) and
+/// `ctx_len` is the length of the already-emitted left-context prefix (`0`
+/// initially; `min(prev_cut, W)` thereafter — that prefix is for detection only and
+/// is never re-emitted).
 pub struct StreamingRedactor<D, R>
 where
     D: Fn(&str) -> DetectSpans,
-    R: Fn(&str) -> Result<RedactSegment, String>,
+    R: Fn(&str, &DetectSpans) -> Result<RedactSegment, String>,
 {
     detect: D,
     redact: R,
     max_buffer: usize,
     buffer: String,
+    ctx_len: usize,
     accumulated_key: HashMap<String, String>,
 }
 
 impl<D, R> StreamingRedactor<D, R>
 where
     D: Fn(&str) -> DetectSpans,
-    R: Fn(&str) -> Result<RedactSegment, String>,
+    R: Fn(&str, &DetectSpans) -> Result<RedactSegment, String>,
 {
     /// Build a redactor with the default max-buffer.
     pub fn new(detect: D, redact: R) -> Self {
@@ -601,37 +516,108 @@ where
             redact,
             max_buffer,
             buffer: String::new(),
+            ctx_len: 0,
             accumulated_key: HashMap::new(),
         }
     }
 
-    /// Buffer until a safe cut, then redact the committed prefix. Returns an
-    /// [`EmitResult`] with an empty `downstream_text` when the buffer hasn't
-    /// reached a cut yet. Mirrors `StreamingRedactor.feed`.
+    /// Append `chunk`, detect once over the whole buffer, and emit the range up to
+    /// the [`context_cut`] (redacted with the range-shifted detection). Returns an
+    /// [`EmitResult`] with an empty `downstream_text` when nothing past the retained
+    /// left-context is safe to emit yet. Mirrors `StreamingRedactor.feed`.
     pub fn feed(&mut self, chunk: &str) -> Result<EmitResult, String> {
-        let (emit_text, residual) = consume_to_boundary_detect(
-            &self.buffer,
-            chunk,
-            self.max_buffer,
+        self.buffer.push_str(chunk);
+        let chars: Vec<char> = self.buffer.chars().collect();
+        let final_entities = self.detect_final(&self.buffer);
+        let cc = context_cut(
+            &self.snap_spans(&final_entities, chars.len()),
+            &chars,
+            self.ctx_len,
+            self.pem_max_buffer(),
+            EVIDENCE_CONTEXT_WINDOW,
             false,
-            &self.detect,
         );
-        self.buffer = residual;
-        if emit_text.is_empty() {
+        let cut = cc.cut;
+        if cut <= self.ctx_len {
             return Ok(self.empty_result());
         }
-        self.redact_and_merge(&emit_text)
+        let emit: String = chars[self.ctx_len..cut].iter().collect();
+        let spans = if cc.redetect {
+            // Forced bounded-drain split (a ≥max_buffer boundary-less mega-entity):
+            // RE-DETECT the bare emit slice and redact with those slice-local spans
+            // (pre-rework drain safety), so the entity head is redacted instead of
+            // dropped+leaked by the range-shifted full-buffer straddler.
+            DetectSpans {
+                entities: self.detect_final(&emit),
+                hints: Vec::new(),
+            }
+        } else {
+            shift_spans(&final_entities, self.ctx_len, cut)
+        };
+        // Carry the last W chars (already emitted, as left-context) plus everything
+        // not yet emitted; `ctx_len` marks the retained prefix.
+        let lo = cut.saturating_sub(EVIDENCE_CONTEXT_WINDOW);
+        self.buffer = chars[lo..].iter().collect();
+        self.ctx_len = cut - lo;
+        self.redact_and_merge(&emit, &spans)
     }
 
-    /// End-of-stream flush — drain the pending buffer through the redact closure.
-    /// Returns an empty [`EmitResult`] if the buffer is empty. Mirrors
-    /// `StreamingRedactor.flush`.
+    /// End-of-stream flush — drain everything past the retained left-context with a
+    /// fresh full-buffer detect and no hold-back (end-of-stream context ≡ batch's
+    /// view of the tail), then reset. Returns an empty [`EmitResult`] when nothing
+    /// is pending. Mirrors `StreamingRedactor.flush`.
     pub fn flush(&mut self) -> Result<EmitResult, String> {
-        if self.buffer.is_empty() {
+        let chars: Vec<char> = self.buffer.chars().collect();
+        if chars.len() <= self.ctx_len {
+            self.buffer.clear();
+            self.ctx_len = 0;
             return Ok(self.empty_result());
         }
-        let emit = std::mem::take(&mut self.buffer);
-        self.redact_and_merge(&emit)
+        let final_entities = self.detect_final(&self.buffer);
+        let emit: String = chars[self.ctx_len..].iter().collect();
+        let shifted = shift_spans(&final_entities, self.ctx_len, chars.len());
+        self.buffer.clear();
+        self.ctx_len = 0;
+        self.redact_and_merge(&emit, &shifted)
+    }
+
+    /// Detect once over `buffer` and reduce to the FINAL entity set (merge →
+    /// self-ref filter), exactly as batch `_detect` does — the set that drives both
+    /// the cut and the redaction.
+    fn detect_final(&self, buffer: &str) -> Vec<PatternMatch> {
+        let DetectSpans { entities, hints } = (self.detect)(buffer);
+        let merged = merge_entities_with_text(entities, buffer);
+        filter_self_reference(merged, &hints)
+    }
+
+    /// The snap input for [`context_cut`]: the final spans as `(start, end, type)`
+    /// tuples PLUS the in-flight PEM opener pending span (so an unterminated key is
+    /// carried whole). `len` is the buffer length in CHARS.
+    fn snap_spans(&self, final_entities: &[PatternMatch], len: usize) -> Vec<(usize, usize, String)> {
+        let mut spans: Vec<(usize, usize, String)> = final_entities
+            .iter()
+            .map(|e| (e.start, e.end, e.type_.clone()))
+            .collect();
+        if let Some(begin) = unclosed_pem_opener_start(&self.buffer) {
+            // Open-ended (end one past the buffer) so a cut at the buffer end still
+            // counts as a straddle and snaps back to BEGIN.
+            spans.push((begin, len + 1, PEM_OPENER_TYPE.to_string()));
+        }
+        spans
+    }
+
+    /// Raise the force-flush ceiling while a multi-line PEM private key is present,
+    /// so the whole key (body bound 10000) accumulates and redacts as one unit
+    /// instead of being bounded-drain-split into a plaintext head leak. Gates on
+    /// [`pem_begin_present`] (the same predicate the wheel calls via
+    /// `streaming_pem_begin_present`); bounded by the CAP, past which an
+    /// unterminated/oversized opener is bounded-drained.
+    fn pem_max_buffer(&self) -> usize {
+        if pem_begin_present(&self.buffer) {
+            self.max_buffer.saturating_add(PEM_OPENER_CEILING_EXTRA)
+        } else {
+            self.max_buffer
+        }
     }
 
     /// A copy of the unified key across all fed chunks. Mirrors `aggregate_key`.
@@ -639,7 +625,8 @@ where
         self.accumulated_key.clone()
     }
 
-    /// The current residual buffer (test/inspection aid; mirrors `_inc_buffer`).
+    /// The current residual buffer — left-context ++ pending (test/inspection aid;
+    /// mirrors `_inc_buffer`).
     pub fn buffer(&self) -> &str {
         &self.buffer
     }
@@ -651,8 +638,12 @@ where
         }
     }
 
-    fn redact_and_merge(&mut self, text: &str) -> Result<EmitResult, String> {
-        let segment = (self.redact)(text)?;
+    fn redact_and_merge(
+        &mut self,
+        text: &str,
+        spans: &DetectSpans,
+    ) -> Result<EmitResult, String> {
+        let segment = (self.redact)(text, spans)?;
         // setdefault: first-seen mapping wins; realistic and audit spaces are
         // disjoint by construction, so collisions are impossible (mirrors the
         // Python `setdefault` merge).

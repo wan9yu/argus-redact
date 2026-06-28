@@ -3,9 +3,10 @@
 Two complementary classes:
 - ``StreamingRestorer`` — buffer streaming LLM output and restore at sentence boundaries.
 - ``StreamingRedactor`` — chunked input redaction with cross-chunk key continuity
-  (same original value across chunks maps to same realistic fake). Buffers chunks
-  until a sentence boundary, then redacts the buffered prefix; ``flush()`` drains
-  the tail at end-of-stream.
+  (same original value across chunks maps to same realistic fake). Detects ONCE over
+  a buffer carrying ±W (``_EVIDENCE_CONTEXT_WINDOW``) of context and redacts the emit
+  range with that detection — so streaming evidence-gated detection equals batch.
+  Call ``flush()`` at end-of-stream to drain the held-back tail.
 
 True byte-level streaming with realistic mode requires complete entity boundaries
 and is roadmapped for a later release.
@@ -13,12 +14,20 @@ and is roadmapped for a later release.
 
 from __future__ import annotations
 
+import dataclasses
 import warnings
 
 from argus_redact._core_loader import _core
-from argus_redact._types import PseudonymLLMResult
-from argus_redact.glue._detect_partial import _consume_to_boundary
-from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
+from argus_redact._types import PatternMatch, PseudonymLLMResult
+from argus_redact.glue._detect_partial import (
+    _EVIDENCE_CONTEXT_WINDOW,
+    DEFAULT_MAX_BUFFER,
+    _context_cut,
+)
+from argus_redact.glue.redact_pseudonym_llm import (
+    _check_input_pollution,
+    redact_pseudonym_llm,
+)
 from argus_redact.pure.restore import restore
 
 
@@ -125,12 +134,15 @@ class StreamingRestorer:
 class StreamingRedactor:
     """Sentence-bounded incremental redaction with cross-chunk key continuity.
 
-    Each ``.feed(chunk)`` accumulates input until a sentence boundary, then
-    runs the full pseudonym-llm pipeline on the buffered prefix and returns a
-    ``PseudonymLLMResult``. Returns an empty result when the buffer hasn't
-    reached a boundary yet. Call ``flush()`` at end-of-stream to drain the
-    tail. Same original value across chunks maps to the same fake (via shared
-    salt + accumulated key dict).
+    Each ``.feed(chunk)`` accumulates input into a buffer that always carries
+    ±W (``_EVIDENCE_CONTEXT_WINDOW`` = 128 chars) of context, then emits the
+    range up to the last sentence boundary that still leaves ≥ W chars of
+    forward context — redacted using a single full-buffer detection pass (not a
+    re-detect of the bare slice). This makes streaming evidence-gated detection
+    equal to batch: a candidate's ±W cue / proximate-PII window is always in
+    scope. Call ``flush()`` at end-of-stream to drain the held-back tail with
+    the same guarantee as batch's view of the end. Same original value across
+    chunks maps to the same fake (via shared salt + accumulated key dict).
 
     Key retention: ``_accumulated_key`` grows monotonically over the session.
     Construct one ``StreamingRedactor`` per logical session and discard it when
@@ -179,43 +191,130 @@ class StreamingRedactor:
         self._strict_input = strict_input
         self._reserved_names = reserved_names
         self._inc_buffer: str = ""
+        # Length (CHARS) of the already-emitted left-context prefix retained at
+        # the front of ``_inc_buffer`` for detection only (never re-emitted).
+        # 0 initially; ``min(prev_cut, _EVIDENCE_CONTEXT_WINDOW)`` after each emit.
+        self._ctx_len: int = 0
         self._accumulated_key: dict[str, str] = {}
 
     def feed(self, chunk: str) -> PseudonymLLMResult:
-        """Buffer until a sentence boundary, then redact the buffered prefix.
+        """Accumulate ``chunk`` and emit up to the context-cut boundary, redacted.
 
-        Returns an empty ``PseudonymLLMResult`` when the buffer hasn't reached
-        a boundary yet. Call ``flush()`` at end-of-stream to drain the tail.
+        Returns an empty ``PseudonymLLMResult`` when the buffer hasn't reached a
+        safe cut yet (less than ``_EVIDENCE_CONTEXT_WINDOW`` chars of forward
+        context available). Call ``flush()`` at end-of-stream to drain the tail.
         Cross-chunk consistency is preserved via the shared accumulated key.
         """
-        emit_text, residual = _consume_to_boundary(
+        # Eager pollution check: run on the incoming chunk before buffering so
+        # re-injected reserved-range values are caught even if the buffer hasn't
+        # reached a cut yet (the check inside redact_pseudonym_llm only fires at
+        # emit time, which may be deferred).
+        if self._strict_input:
+            _check_input_pollution(chunk, reserved_names=self._reserved_names)
+
+        self._inc_buffer += chunk
+        cut, redetect, entities = _context_cut(
             self._inc_buffer,
-            chunk,
+            self._ctx_len,
             lang=self._lang,
             mode=self._mode,
             names=self._names,
             types=self._types,
             types_exclude=self._types_exclude,
+            max_buffer=DEFAULT_MAX_BUFFER,
+            force_flush=False,
         )
-        self._inc_buffer = residual
-        if not emit_text:
+        if cut <= self._ctx_len:
             return _empty_result()
-        return self._redact_and_merge(emit_text)
+
+        ctx = self._ctx_len  # snapshot before mutation
+        emit = self._inc_buffer[ctx:cut]
+        # On the forced bounded-drain split (``redetect``), the full-buffer
+        # straddler would be dropped by ``_shift_entities`` and its head leaked
+        # raw; re-detect the emit slice instead (``shifted=None`` →
+        # ``redact_pseudonym_llm`` detects internally). A boundary-less
+        # mega-buffer carries no cross-sentence evidence, so re-detecting the
+        # bare slice is correct here (pre-rework drain safety).
+        shifted = None if redetect else self._shift_entities(entities, ctx, cut)
+        # Carry the last W chars (already emitted, for left-context) plus pending.
+        lo = max(0, cut - _EVIDENCE_CONTEXT_WINDOW)
+        self._inc_buffer = self._inc_buffer[lo:]
+        self._ctx_len = cut - lo
+        return self._redact_and_merge(emit, shifted)
 
     def flush(self) -> PseudonymLLMResult:
-        """End-of-stream flush — drain pending buffer.
+        """End-of-stream flush — drain pending buffer with no hold-back.
 
-        Drains any text accumulated past the last sentence boundary,
-        running the full redact pipeline on it. Returns an empty
-        ``PseudonymLLMResult`` if the buffer is empty.
+        Detects once on the full retained buffer (left-context ++ pending) with
+        ``force_flush=True`` so the emit range sees end-of-stream context (≡
+        batch's view of the tail). Returns an empty ``PseudonymLLMResult`` if
+        the buffer is empty (no pending text beyond the left-context). Resets
+        state.
         """
-        if not self._inc_buffer:
+        if len(self._inc_buffer) <= self._ctx_len:
+            self._inc_buffer = ""
+            self._ctx_len = 0
             return _empty_result()
-        emit = self._inc_buffer
+        cut, _redetect, entities = _context_cut(
+            self._inc_buffer,
+            self._ctx_len,
+            lang=self._lang,
+            mode=self._mode,
+            names=self._names,
+            types=self._types,
+            types_exclude=self._types_exclude,
+            max_buffer=DEFAULT_MAX_BUFFER,
+            force_flush=True,
+        )
+        # force_flush never sets redetect (it drains to len with full-buffer
+        # context ≡ batch's view of the tail), so always range-shift.
+        ctx = self._ctx_len  # snapshot before reset
+        emit = self._inc_buffer[ctx:cut]
+        shifted = self._shift_entities(entities, ctx, cut)
         self._inc_buffer = ""
-        return self._redact_and_merge(emit)
+        self._ctx_len = 0
+        return self._redact_and_merge(emit, shifted)
 
-    def _redact_and_merge(self, text: str) -> PseudonymLLMResult:
+    @staticmethod
+    def _shift_entities(
+        entities: list[PatternMatch], lo: int, hi: int
+    ) -> list[PatternMatch]:
+        """Re-base the final entity set onto the emit slice ``[lo, hi)``.
+
+        Exact mirror of the core SSOT ``shift_spans`` (see
+        ``crates/argus-redact-core/src/streaming.rs``): keep every entity that
+        ENDS within the range (``lo < end ≤ hi``) and subtract ``lo`` from its
+        offsets. The context-cut straddle snap guarantees no entity has
+        ``end > hi``, so the forward edge never splits one. An entity whose head
+        reaches back into the already-emitted left-context (``start < lo``) is
+        CLAMPED (``start → lo`` via ``max(0, …)``): its head is committed
+        plaintext we cannot rewrite, but its in-range tail is still redacted —
+        the direct-PII pattern that only completed once the retained
+        left-context joined it.
+
+        For a clamped straddler the ``text`` is also TRUNCATED to its in-range
+        tail (drop the ``lo − start`` head chars), so the fake maps to exactly
+        the chars the emit range covers. Without this the key would map
+        ``fake → full original`` while only the tail is spliced, and restore
+        would expand the fake back over the already-emitted head — a round-trip
+        corruption. Entities are non-overlapping (merged), so at most one
+        straddles ``lo`` and the clamp can never overlap a neighbour.
+        """
+        result = []
+        for e in entities:
+            if lo < e.end <= hi:
+                drop = max(0, lo - e.start)  # head chars in the left-context
+                text = e.text[drop:] if drop else e.text
+                result.append(
+                    dataclasses.replace(
+                        e, start=max(0, e.start - lo), end=e.end - lo, text=text
+                    )
+                )
+        return result
+
+    def _redact_and_merge(
+        self, text: str, entities: list[PatternMatch] | None
+    ) -> PseudonymLLMResult:
         result = redact_pseudonym_llm(
             text,
             salt=self._salt,
@@ -228,6 +327,14 @@ class StreamingRedactor:
             strict_input=self._strict_input,
             reserved_names=self._reserved_names,
             existing_key=self._accumulated_key,
+            # ``None`` on the forced bounded-drain split → redact_pseudonym_llm
+            # re-detects the bare emit slice internally (pre-rework drain safety);
+            # otherwise the range-shifted full-buffer detection.
+            _pre_detected=entities,
+            # Mid-stream slices are fresh original text, but pass
+            # _polluted_input_ok=True since the eager check in feed() already
+            # guards against pollution and avoids a redundant scan.
+            _polluted_input_ok=True,
         )
         # setdefault preserves first-seen mapping; realistic and audit spaces
         # are disjoint by construction, so collisions are impossible.
@@ -258,6 +365,10 @@ class StreamingRedactor:
             # on resume. Additive field — older (field-less) dumps load fine via
             # the .get("inc_buffer", "") default in from_state, so no version bump.
             "inc_buffer": self._inc_buffer,
+            # Length of the already-emitted left-context prefix retained at the
+            # front of inc_buffer. Additive field with default 0 — older dumps
+            # load cleanly via .get("ctx_len", 0), no version bump.
+            "ctx_len": self._ctx_len,
             "lang": self._lang,
             "mode": self._mode,
             "display_marker": self._display_marker,
@@ -320,4 +431,5 @@ class StreamingRedactor:
         )
         instance._accumulated_key = dict(state.get("accumulated_key", {}))
         instance._inc_buffer = state.get("inc_buffer", "")
+        instance._ctx_len = state.get("ctx_len", 0)
         return instance

@@ -54,11 +54,10 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(redact_l1::filter_self_reference, m)?)?;
     // ── streaming carry-window engine bindings ──
     m.add_function(wrap_pyfunction!(streaming::streaming_last_boundary_index, m)?)?;
-    m.add_function(wrap_pyfunction!(streaming::streaming_bounded_carry, m)?)?;
-    m.add_function(wrap_pyfunction!(streaming::streaming_consume_to_boundary, m)?)?;
     m.add_function(wrap_pyfunction!(streaming::streaming_restorer_split, m)?)?;
-    m.add_function(wrap_pyfunction!(streaming::streaming_snap_cut, m)?)?;
+    m.add_function(wrap_pyfunction!(streaming::streaming_context_cut, m)?)?;
     m.add_function(wrap_pyfunction!(streaming::streaming_unclosed_pem_opener_start, m)?)?;
+    m.add_function(wrap_pyfunction!(streaming::streaming_pem_begin_present, m)?)?;
     m.add_function(wrap_pyfunction!(risk::assess_risk, m)?)?;
     m.add_class::<crate::shake_rng::PyShakeRng>()?;
     m.add_function(wrap_pyfunction!(shake_rng::seed_from_value, m)?)?;

@@ -69,49 +69,94 @@ fn make_detect(lang: Vec<String>) -> impl Fn(&str) -> DetectSpans {
     }
 }
 
-/// A redact closure mirroring the wasm one-shot (`detect_l1` → `build_type_info`
-/// → `redact_l1`), returning the realistic downstream segment. The `realistic`
-/// strategy is wired via the pseudonym-llm-ish config so the straddle tests assert
-/// raw PII is absent from the downstream text.
-fn make_redact(lang: Vec<String>) -> impl Fn(&str) -> Result<RedactSegment, String> {
+/// A redact closure for the detection-context-window engine: redact the GIVEN
+/// FINAL entities over `text` — NO detect, NO merge, NO filter (the engine already
+/// detected once over the full ±W buffer, merged + self-ref-filtered, and shifted
+/// the spans into range). This is the `replace` + en-grammar tail of `redact_l1`,
+/// fed the pre-detected entities (the Rust mirror of Python's
+/// `redact_pseudonym_llm(_pre_detected=...)`). The `realistic` strategy is wired
+/// via the pseudonym-llm-ish config so the straddle tests assert raw PII is absent.
+fn make_redact(lang: Vec<String>) -> impl Fn(&str, &DetectSpans) -> Result<RedactSegment, String> {
     let wl = keep_whitelist();
-    move |text: &str| {
-        let detected = detect_l1(text, &lang, &[]).map_err(|e| e.to_string())?;
-        let mut entities = detected.layer1;
-        entities.extend(detected.person);
-        entities.extend(detected.regions);
-        entities.extend(detected.job_titles);
-        entities.extend(detected.framework);
+    move |text: &str, spans: &DetectSpans| {
         // Realistic-strategy config for the PII types under test (phone / email /
         // ip_address / organization / person), so downstream gets reserved-range
         // fakes — the same shapes the Python downstream_text carries.
         let config = realistic_config();
-        let info_pairs = build_type_info(&entities, Some(&config), &lang, None);
+        let info_pairs = build_type_info(&spans.entities, Some(&config), &lang, None);
         let info_map: HashMap<String, TypeInfo> = info_pairs.into_iter().collect();
-        let result = redact_l1(
-            RedactL1Args {
+        let result = crate::replace::replace(
+            crate::replace::ReplaceArgs {
                 text,
-                lang: &lang,
-                names: &[],
-                type_info: &info_map,
+                entities: &spans.entities,
                 salt: Some(&Salt::Int(SALT)),
                 key: None,
+                type_info: &info_map,
                 person_prefix: "P",
                 org_prefix: "O",
                 unified_prefix: None,
                 keep_whitelist: &wl,
-                types: None,
-                types_exclude: None,
             },
             &TestPseudoFactory,
             None,
         )?;
+        let effective_lang: &str = lang.first().map(String::as_str).unwrap_or("zh");
+        let downstream = if effective_lang == "en" {
+            let originals: Vec<String> = result.key.values().cloned().collect();
+            crate::grammar::normalize_grammar_en(&result.redacted, &originals)
+        } else {
+            result.redacted
+        };
         Ok(RedactSegment {
-            downstream_text: result.redacted,
+            downstream_text: downstream,
             key: result.key,
             aliases: result.aliases,
         })
     }
+}
+
+/// The batch reference for the fuzz oracle: detect + redact the WHOLE `text` in one
+/// pass via production `redact_l1` (the same realistic config + factory the stream
+/// path uses). `stream(chunk_chars(text, n))` must equal this for every chunking.
+fn one_shot_redact(text: &str, lang: &[&str]) -> String {
+    let lang_v = s(lang);
+    let detected = detect_l1(text, &lang_v, &[]).expect("detect_l1");
+    let mut entities = detected.layer1;
+    entities.extend(detected.person);
+    entities.extend(detected.regions);
+    entities.extend(detected.job_titles);
+    entities.extend(detected.framework);
+    let config = realistic_config();
+    let info_map: HashMap<String, TypeInfo> =
+        build_type_info(&entities, Some(&config), &lang_v, None)
+            .into_iter()
+            .collect();
+    let result = redact_l1(
+        RedactL1Args {
+            text,
+            lang: &lang_v,
+            names: &[],
+            type_info: &info_map,
+            salt: Some(&Salt::Int(SALT)),
+            key: None,
+            person_prefix: "P",
+            org_prefix: "O",
+            unified_prefix: None,
+            keep_whitelist: &keep_whitelist(),
+            types: None,
+            types_exclude: None,
+        },
+        &TestPseudoFactory,
+        None,
+    )
+    .expect("redact_l1");
+    result.redacted
+}
+
+/// Split `text` into CHAR chunks of at most `size` (the fuzz oracle's chunkings).
+fn chunk_chars(text: &str, size: usize) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    chars.chunks(size).map(|c| c.iter().collect()).collect()
 }
 
 /// A pseudonym-llm-ish realistic config for the PII types the straddle tests use.
@@ -198,144 +243,54 @@ fn last_boundary_empty_string() {
     assert_eq!(last_boundary_index(""), -1);
 }
 
-// ── bounded_carry parity (test_streaming_straddle.py) ──────────────────────────
+
+// ── snap_cut / context_cut unit rules ──────────────────────────────────────────
 
 #[test]
-fn bounded_carry_small_buffer_carries_all() {
-    let combined = "x".repeat(100);
-    let (emit, residual) = bounded_carry(&combined, DEFAULT_MAX_BUFFER);
-    assert_eq!(emit, "");
-    assert_eq!(residual, combined);
-}
-
-#[test]
-fn bounded_carry_small_max_buffer_carries_all_no_panic() {
-    // REGRESSION: with a max_buffer SMALLER than the carry window, a combined
-    // buffer of len < CARRY_WINDOW must not compute `combined.len() - CARRY_WINDOW`
-    // (usize underflow → out-of-range slice panic / wasm abort). It carries all,
-    // matching the pre-port Python negative-index ('', combined). Must never panic.
-    let combined = "a".repeat(100);
-    let (emit, residual) = bounded_carry(&combined, 5);
-    assert_eq!(emit, "");
-    assert_eq!(residual, combined);
-}
-
-#[test]
-fn bounded_carry_at_max_buffer_drains_to_len_minus_window() {
-    let combined = "x".repeat(DEFAULT_MAX_BUFFER);
-    let (emit, residual) = bounded_carry(&combined, DEFAULT_MAX_BUFFER);
-    let target = DEFAULT_MAX_BUFFER - CARRY_WINDOW;
-    assert_eq!(emit, "x".repeat(target));
-    assert_eq!(residual, "x".repeat(CARRY_WINDOW));
-    assert_eq!(residual.chars().count(), CARRY_WINDOW);
-    // Above max_buffer too.
-    let bigger = "y".repeat(DEFAULT_MAX_BUFFER + 500);
-    let (emit2, residual2) = bounded_carry(&bigger, DEFAULT_MAX_BUFFER);
-    assert_eq!(emit2, "y".repeat(DEFAULT_MAX_BUFFER + 500 - CARRY_WINDOW));
-    assert_eq!(residual2.chars().count(), CARRY_WINDOW);
-}
-
-// ── Snap-parity SSOT (Rust snap == Python merged _detect snap) ──────────────────
-
-/// The merged-`_detect`-equivalent cut oracle: the cut a SNAP over the SAME
-/// entity set Python's `_detect` (fast) produces (`detect_l1` → `merge_entities_
-/// with_text` → `filter_self_reference`) would pick at `target`. This is what the
-/// Rust `carry_cut_index` MUST now match — regardless of whether a caller threads
-/// raw or merged spans into it.
-fn merged_detect_cut(combined: &str, target: usize, lang: &[&str]) -> usize {
-    let lang_v = s(lang);
-    let d = detect_l1(combined, &lang_v, &[]).expect("detect_l1");
-    let mut entities = d.layer1.clone();
-    entities.extend(d.person.clone());
-    entities.extend(d.regions.clone());
-    entities.extend(d.job_titles.clone());
-    entities.extend(d.framework.clone());
-    let merged = crate::merge_entities_with_text(entities, combined);
-    let filtered = crate::filter_self_reference(merged, &d.hints);
-    // Independent re-derivation of the snap rule the SSOT `snap_cut` implements: a
-    // closed entity snaps on a strict straddle; an evidence-gated candidate snaps
-    // on a ±51-char widened danger zone (max sole-sufficient evidence window 50,
-    // +1 so a PII at exactly distance 50 is pulled back). Iterate to a fixed point.
-    // Hand-rolled here so a bug in `snap_cut` is caught, not mirrored.
-    const MARGIN: usize = 51;
-    let gated = ["location", "job_title", "medical", "hobby"];
-    let mut cut = target;
-    loop {
-        let mut next = cut;
-        for e in &filtered {
-            if gated.contains(&e.type_.as_str()) {
-                let lo = e.start.saturating_sub(MARGIN);
-                let hi = e.end + MARGIN;
-                if lo <= cut && cut <= hi && lo < next {
-                    next = lo;
-                }
-            } else if e.start < cut && cut < e.end && e.start < next {
-                next = e.start;
-            }
-        }
-        if next == cut {
-            return cut;
-        }
-        cut = next;
-    }
-}
-
-#[test]
-fn snap_parity_en_mary_jane_watson_parker() {
-    // REGRESSION: RAW detect_l1 over "Mary Jane Watson Parker" yields
-    // overlapping person spans [(0,16),(10,23)]; MERGED (_detect fast) yields
-    // [(0,16)]. At target 16 the merged snap does NOT straddle (cut=16) but the
-    // RAW snap straddles via (10,23) → cut=10, leaking "Mary Jane " raw. The core
-    // snap MUST now normalize internally and match the merged cut.
-    let combined = "Mary Jane Watson Parker";
-    let target = 16;
-    let detect = make_detect(s(&["en"]));
-    let rust_cut = carry_cut_index(combined, target, &detect);
-    let oracle = merged_detect_cut(combined, target, &["en"]);
-    assert_eq!(rust_cut, oracle, "core snap must match merged _detect cut");
-    assert_eq!(rust_cut, 16, "merged snap does not straddle at 16 → no snap-back");
-}
-
-#[test]
-fn snap_parity_zh_org_run() {
-    // The zh case: a contiguous CJK org/person run. The core snap (normalized)
-    // must match the merged _detect cut at every interior target.
-    let combined = "陈大文张三在北京字节跳动科技有限公司";
-    let detect = make_detect(s(&["zh"]));
-    let n = combined.chars().count();
-    for target in 1..n {
-        let rust_cut = carry_cut_index(combined, target, &detect);
-        let oracle = merged_detect_cut(combined, target, &["zh"]);
-        assert_eq!(
-            rust_cut, oracle,
-            "core snap must match merged _detect cut at target {target}"
-        );
-    }
-}
-
-#[test]
-fn snap_parity_fuzz_en_and_zh() {
-    // Fuzz a range of buffers/targets: the core snap must equal the merged-_detect
-    // cut for every (buffer, target) — order/overlap-invariant.
-    let cases: [(&str, &[&str]); 4] = [
-        ("Mary Jane Watson Parker called Bob Smith Jones.", &["en"]),
-        ("Email jane.doe@company.com or john@x.org now.", &["en"]),
-        ("陈大文张三在北京字节跳动科技有限公司上班。", &["zh"]),
-        ("电话13912345678联系王建国，地址北京市朝阳区。", &["zh"]),
+fn snap_cut_is_straddle_only() {
+    // A closed entity straddling the cut snaps to its start; a NON-straddling span
+    // no longer widens (the evidence-gated widening is gone — the context window
+    // handles cross-cut evidence).
+    let spans = vec![
+        (10usize, 20usize, "phone".to_string()),
+        (61usize, 64usize, "location".to_string()),
     ];
-    for (combined, lang) in cases {
-        let lang_v = s(lang);
-        let detect = make_detect(lang_v.clone());
-        let n = combined.chars().count();
-        for target in 0..=n {
-            let rust_cut = carry_cut_index(combined, target, &detect);
-            let oracle = merged_detect_cut(combined, target, lang);
-            assert_eq!(
-                rust_cut, oracle,
-                "snap mismatch on {combined:?} at target {target}"
-            );
-        }
-    }
+    assert_eq!(snap_cut(&spans, 15), 10); // phone straddles 15 → 10
+    assert_eq!(snap_cut(&spans, 30), 30); // location far from 30, NOT widened → 30
+}
+
+#[test]
+fn context_cut_holds_back_w_and_respects_ctx() {
+    // No entity; W=4; buffer "abcd。efghij" (len 11), boundary after 。 at idx 5.
+    // safe_end = 11-4 = 7; last boundary ≤ 7 is 5 → cut 5 (≥ ctx_len 0).
+    let chars: Vec<char> = "abcd。efghij".chars().collect();
+    let cut = context_cut(&[], &chars, 0, DEFAULT_MAX_BUFFER, 4, false);
+    assert_eq!(cut.cut, 5);
+    // Tail shorter than W → nothing emittable (cut == ctx_len).
+    let short: Vec<char> = "abc".chars().collect();
+    let cut2 = context_cut(&[], &short, 0, DEFAULT_MAX_BUFFER, 4, false);
+    assert_eq!(cut2.cut, 0);
+    // force_flush drains everything past ctx_len.
+    let cut3 = context_cut(&[], &chars, 2, DEFAULT_MAX_BUFFER, 4, true);
+    assert_eq!(cut3.cut, 11);
+}
+
+#[test]
+fn context_cut_no_boundary_under_max_buffer_holds() {
+    // Boundary-less buffer below max_buffer: hold everything (cut == ctx_len), never
+    // emit a half-token.
+    let chars: Vec<char> = "abcdefghij".chars().collect();
+    let cut = context_cut(&[], &chars, 0, DEFAULT_MAX_BUFFER, 4, false);
+    assert_eq!(cut.cut, 0);
+}
+
+#[test]
+fn context_cut_bounded_drain_at_max_buffer() {
+    // Boundary-less buffer AT max_buffer with no straddling span → bounded drain to
+    // len - CARRY_WINDOW (so the buffer can never grow without bound).
+    let chars: Vec<char> = "x".repeat(DEFAULT_MAX_BUFFER).chars().collect();
+    let cut = context_cut(&[], &chars, 0, DEFAULT_MAX_BUFFER, EVIDENCE_CONTEXT_WINDOW, false);
+    assert_eq!(cut.cut, DEFAULT_MAX_BUFFER - CARRY_WINDOW);
 }
 
 // ── A2 straddle / leak oracle (test_streaming_straddle.py) ─────────────────────
@@ -491,33 +446,13 @@ fn entity_before_carry_window_emitted_exactly_once() {
     assert_eq!(count, 1, "the fake must appear exactly once (no double-emit)");
 }
 
-#[test]
-fn unbounded_token_longer_than_window_is_the_documented_edge() {
-    // Documented residual edge: a contiguous run LONGER than CARRY_WINDOW that is
-    // not a single detected entity can still split at the force-flush cut. Pin the
-    // known limitation: the token ends up split between emit and residual.
-    let token = "9".repeat(2 * CARRY_WINDOW); // far longer than the carry window
-    let total = DEFAULT_MAX_BUFFER + CARRY_WINDOW + 100;
-    let target = total - CARRY_WINDOW;
-    let start = target - CARRY_WINDOW; // run crosses target by a full window each side
-    let pad = "x".repeat(start - "code".chars().count());
-    let after = "x".repeat(total - start - token.chars().count());
-    let combined = format!("{pad}code{token}{after}");
-    let detect = make_detect(s(&["en"]));
-    let (emit, residual) =
-        consume_to_boundary_detect("", &combined, DEFAULT_MAX_BUFFER, false, &detect);
-    assert!(
-        !emit.contains(&token) && !residual.contains(&token),
-        "expected the >window run to be split (documented limitation)"
-    );
-}
 
 #[test]
 fn region_evidence_before_cut_not_orphaned() {
     // Evidence-gated leak: a bare zh region (西湖区) fires ONLY via proximity to a
-    // phone. A sentence boundary lands between the phone (prefix) and the region
-    // (residual); without the widened snap the region is carried alone, re-detected
-    // below threshold, and emitted bare. The snap must carry candidate + evidence.
+    // phone. Detection-context window: the whole buffer (phone + region, within ±W)
+    // is detected as a unit and the region redacted with that detection — no
+    // re-detect of a bare slice, so the region can't be emitted below threshold.
     let (out, _) = stream(&["我的电话13800138000。西湖区"], &["zh"]);
     assert!(!out.contains("西湖区"), "bare region leaked across the evidence cut: {out:?}");
     assert!(!out.contains("13800138000"), "phone leaked: {out:?}");
@@ -525,7 +460,8 @@ fn region_evidence_before_cut_not_orphaned() {
 
 #[test]
 fn region_evidence_after_cut_not_orphaned() {
-    // Mirror direction: region in the prefix, its proximate phone in the residual.
+    // Mirror direction: region in the prefix, its proximate phone in the residual —
+    // both within ±W, so detect-on-full fires the region and the window redacts it.
     let (out, _) = stream(&["西湖区。我的电话13800138000"], &["zh"]);
     assert!(!out.contains("西湖区"), "bare region leaked across the evidence cut: {out:?}");
 }
@@ -533,24 +469,107 @@ fn region_evidence_after_cut_not_orphaned() {
 #[test]
 fn hobby_cue_across_cut_not_orphaned() {
     // The cue-window variant: a hobby (攀岩) fires only because the cue 喜欢 is in
-    // its window. A cue is NOT a detected entity, so the closed straddle-snap can't
-    // rescue it — the widened snap must carry the whole margin (cue + term).
+    // its window. A cue is NOT a detected entity, but the context window keeps cue +
+    // term in one detect-on-full, so the hobby is detected and redacted as a unit.
     let (out, _) = stream(&["我喜欢。攀岩"], &["zh"]);
     assert!(!out.contains("攀岩"), "bare hobby leaked across the cue cut: {out:?}");
 }
 
 #[test]
 fn region_evidence_at_exact_prox_boundary_not_orphaned() {
-    // Off-by-one guard: the region fires on a phone at EXACTLY distance 50 (the
-    // inclusive REGION_PROX_NEAR boundary). The carry margin must exceed 50 by one
-    // so the snap's left edge lands strictly inside the phone (not on its end) and
-    // the strict closed-straddle pulls the phone back with the region. At margin 50
-    // the region was orphaned and leaked. (phone[0,11], 50-char filler, region[61,64].)
+    // The region fires on a phone at EXACTLY distance 50 (the inclusive
+    // REGION_PROX_NEAR boundary). W (= 128) covers dist-50, so detect-on-full sees
+    // the corroborating phone and the region is redacted. (Was the old margin
+    // off-by-one guard; with the widening gone the window subsumes it.)
     let filler = "啊".repeat(50);
     let input = format!("13812345678{filler}西湖区。");
     let (out, _) = stream(&[&input], &["zh"]);
     assert!(!out.contains("西湖区"), "region at exact prox distance 50 leaked: {out:?}");
     assert!(!out.contains("13812345678"), "phone leaked: {out:?}");
+}
+
+// ── Cross-sentence evidence (context window) + fuzz oracle ──────────────────────
+
+#[test]
+fn cross_sentence_forward_region_redacted() {
+    // Forward: candidate (花生, a medical condition allergen) in segment 1, its cue
+    // (过敏) in segment 2. The forward hold-back keeps 花生 buffered until 过敏
+    // arrives, so detect-on-full fires it. Must redact ≡ batch (no bare term).
+    let (out, _) = stream(&["我对花生", "过敏很严重。"], &["zh"]);
+    assert!(!out.contains("花生"), "forward cross-sentence leak: {out:?}");
+}
+
+#[test]
+fn cross_sentence_backward_hobby_redacted() {
+    // Backward: cue (喜欢) emitted-region in segment 1, candidate (攀岩) in segment
+    // 2. The retained left-context keeps 喜欢 in scope when 攀岩 arrives.
+    let (out, _) = stream(&["我很喜欢。", "攀岩这项运动。"], &["zh"]);
+    assert!(!out.contains("攀岩"), "backward cross-sentence leak: {out:?}");
+}
+
+#[test]
+fn fuzz_stream_equals_batch_zh_gated() {
+    // The zero-debt proof: for several zh texts mixing a gated candidate with its
+    // evidence, every chunking of the stream must equal the batch redaction
+    // byte-for-byte. This is the safety net for removing the Bug-2 widening.
+    let long = "我的电话是13800138000，请尽快联系。".repeat(15); // > W → real mid-stream cuts
+    let texts = [
+        "我对花生过敏，电话13800138000。",
+        "他住在西湖区，喜欢攀岩。",
+        "我很喜欢。攀岩这项运动。",
+        "电话13812345678。西湖区那边。",
+        long.as_str(),
+    ];
+    for t in texts {
+        let batch = one_shot_redact(t, &["zh"]);
+        for size in [1usize, 2, 3, 5, 7] {
+            let chunks = chunk_chars(t, size);
+            let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+            let (streamed, _) = stream(&refs, &["zh"]);
+            assert_eq!(streamed, batch, "stream≠batch on {t:?} size {size}");
+        }
+    }
+}
+
+#[test]
+fn documented_edge_evidence_beyond_w_not_retained() {
+    // Spec §3 residual edge — a BOUNDED-MEMORY limit, NOT a leak we intend to fix.
+    // The detection-context window retains only the last W (EVIDENCE_CONTEXT_WINDOW)
+    // chars of already-emitted text as left-context, so evidence committed MORE than
+    // W chars before a cut is gone from the buffer and can no longer corroborate a
+    // later candidate. This is precisely the input class `stream ≡ batch` provably
+    // cannot hold for with a bounded buffer (a candidate whose sole evidence is a
+    // >W-distant entity — e.g. a >W-char corroborator straddling the lookahead). Pin
+    // it so the window can neither silently WIDEN (retain more than W → unbounded
+    // memory) nor silently REGRESS (retain less).
+    let lang_v = s(&["zh"]);
+    let mut r = StreamingRedactor::new(make_detect(lang_v.clone()), make_redact(lang_v));
+    // A unique ASCII evidence marker (no entity in zh mode), then > W filler, a
+    // sentence boundary, then a tail long enough that the boundary sits past the
+    // forward hold-back and is emitted (forcing a real cut + carry).
+    let marker = "EVIDENCE-MARK";
+    let input = format!("{marker}{}。{}", "啊".repeat(200), "哦".repeat(200));
+    r.feed(&input).expect("feed");
+
+    let boundary = last_boundary_index(&input);
+    assert!(
+        boundary > EVIDENCE_CONTEXT_WINDOW as isize,
+        "precondition: the cut must land past W so the marker falls outside the window"
+    );
+    // The carry retains exactly the last W chars before the cut plus everything after
+    // it — never more (that would be unbounded growth), never the >W-distant marker.
+    let expected_retained =
+        input.chars().count() - (boundary as usize - EVIDENCE_CONTEXT_WINDOW);
+    assert_eq!(
+        r.buffer().chars().count(),
+        expected_retained,
+        "left-context must be capped at exactly W"
+    );
+    assert!(
+        !r.buffer().contains(marker),
+        "evidence committed >W before the cut must NOT be retained (the §3 bound): {:?}",
+        r.buffer()
+    );
 }
 
 fn pem_key(body_lines: usize) -> String {
@@ -625,9 +644,15 @@ fn open_ended_entity_does_not_grow_buffer_unbounded() {
     // boundary-less chars arrive used to drive carry_cut_index to cut<=0 on EVERY
     // feed, so the buffer never drained — it grew monotonically. The carry must
     // stay bounded.
+    //
+    // C1 no-leak strengthening: the open email "a@b.co.co…" spans the buffer from
+    // index 0; the forced bounded-drain must RE-DETECT its emit slice so the head
+    // "a@b" is REDACTED, not dropped+leaked raw. Accumulate the output and assert
+    // the head never appears (the single assertion that surfaces C1).
     let lang_v = s(&["en"]);
     let mut r = StreamingRedactor::new(make_detect(lang_v.clone()), make_redact(lang_v));
-    r.feed("a@b").unwrap();
+    let mut out = String::new();
+    out.push_str(&r.feed("a@b").unwrap().segment.downstream_text);
     let seg = ".co".repeat(5000); // 15000 boundary-less chars/feed
     let mut emitted_any = false;
     for _ in 0..30 {
@@ -635,43 +660,103 @@ fn open_ended_entity_does_not_grow_buffer_unbounded() {
         if !res.segment.downstream_text.is_empty() {
             emitted_any = true;
         }
+        out.push_str(&res.segment.downstream_text);
         assert!(
             r.buffer().chars().count() < 3 * DEFAULT_MAX_BUFFER,
             "buffer grew unbounded: {} chars",
             r.buffer().chars().count()
         );
     }
+    out.push_str(&r.flush().unwrap().segment.downstream_text);
     assert!(emitted_any, "no downstream text ever emitted — buffer never drained");
+    assert!(
+        !out.contains("a@b"),
+        "open-ended email head leaked raw across the forced bounded drain (C1)"
+    );
+}
+
+/// A boundary-less typed token whose length far exceeds `DEFAULT_MAX_BUFFER` and
+/// whose PREFIX still matches the same pattern: a GitHub token `ghp_` + `n` chars.
+/// No validator, no sentence boundary, so the force-flush bounded drain must split
+/// it — and the split head must be re-detected + redacted, not leaked raw.
+fn mega_github_token(n: usize) -> String {
+    format!("ghp_{}", "A".repeat(n))
 }
 
 #[test]
-fn open_ended_entity_at_boundary_path_drains() {
-    // The boundary path (boundary >= 0) must also drain via bounded_carry when an
-    // open-ended span runs from buffer-start past the boundary (cut<=0). We force
-    // carry_cut_index to 0 via a detect closure that reports one giant span.
-    let combined = format!("{}stop. {}", "x".repeat(DEFAULT_MAX_BUFFER - 6), "y".repeat(100));
-    assert!(last_boundary_index(&combined) >= 0); // precondition: boundary path
-    let total = combined.chars().count();
-    // detect reports a single span [0, total) → straddles ANY interior cut → cut=0.
-    let detect = |_t: &str| DetectSpans {
-        entities: vec![crate::PatternMatch {
-            text: String::new(),
-            type_: "person".to_string(),
-            start: 0,
-            end: total,
-            confidence: 1.0,
-            layer: 1,
-        }],
-        hints: Vec::new(),
-    };
-    let (emit, residual) =
-        consume_to_boundary_detect("", &combined, DEFAULT_MAX_BUFFER, false, &detect);
-    assert_ne!(residual, combined, "boundary-path cut<=0 still carries everything");
-    let combined_chars: Vec<char> = combined.chars().collect();
-    let expected_emit: String = combined_chars[..total - CARRY_WINDOW].iter().collect();
-    assert_eq!(emit, expected_emit);
-    assert_eq!(residual.chars().count(), CARRY_WINDOW);
+fn forceflush_megabuffer_typed_entity_head_not_leaked() {
+    // C1 (CRITICAL leak regression): a >max_buffer boundary-less github_token is fed
+    // in small chunks. The buffer hits DEFAULT_MAX_BUFFER with the token spanning
+    // [0, len); the bounded drain MUST split it. Before the fix the range-shifted
+    // straddler was DROPPED (end > cut) and the ~3840-char head emitted RAW; the fix
+    // re-detects the emit slice so the head (still a valid github_token prefix) is
+    // redacted. Pin: the distinctive head must be ABSENT, and restore round-trips.
+    let token = mega_github_token(5000); // 5004 chars > DEFAULT_MAX_BUFFER + CARRY_WINDOW
+    assert!(token.chars().count() > DEFAULT_MAX_BUFFER + CARRY_WINDOW);
+    let chunks: Vec<String> = chunk_chars(&token, 137); // small chunks, no boundary
+    let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let (out, agg) = stream(&refs, &["en"]);
+
+    let head = format!("ghp_{}", "A".repeat(200));
+    assert!(
+        !out.contains(&head),
+        "github_token head leaked RAW across the forced bounded drain (C1)"
+    );
+    // Restore round-trips: the redacted head expands back and the documented-edge
+    // raw tail is untouched, so the original is reconstructed exactly.
+    let restored = restore_full(&out, &agg, None, None).unwrap();
+    assert_eq!(restored, token, "restore must reconstruct the original token");
 }
+
+#[test]
+fn shift_spans_clamps_left_straddler_to_in_range_tail() {
+    // The clamp restore-safety fix (C1 face 3): an entity whose head reaches back
+    // into the already-emitted left-context (start < lo) is clamped to start=0 AND
+    // its text TRUNCATED to the in-range tail, so the minted fake maps to exactly
+    // the chars the emit range covers. Without truncation key[fake] = the FULL
+    // original while only the tail is spliced → restore expands the fake over the
+    // already-emitted head → a round-trip corruption (duplicated head).
+    let e = PatternMatch {
+        text: "abcdefgh".to_string(), // buffer [2, 10)
+        type_: "phone".to_string(),
+        start: 2,
+        end: 10,
+        confidence: 1.0,
+        layer: 1,
+    };
+    // lo=5: the head "abc" ([2,5)) is already-emitted left-context; emit range ends past end.
+    let out = shift_spans(&[e], 5, 12);
+    assert_eq!(out.entities.len(), 1);
+    let se = &out.entities[0];
+    assert_eq!(se.start, 0, "clamped to the range start");
+    assert_eq!(se.end, 5, "end rebased (10 - lo 5)");
+    assert_eq!(se.text, "defgh", "text truncated to the in-range tail (dropped lo-start=3 head chars)");
+}
+
+#[test]
+fn fuzz_megabuffer_typed_entity_no_leak_en() {
+    // Fuzz oracle extension: a >max_buffer typed entity (EN — the corpus above is
+    // zh-only) fed under several chunkings. For EVERY chunking the FULL token
+    // original (which batch redacts as one unit) must be ABSENT from the streamed
+    // output — before the C1 fix the dropped straddler emitted the head raw and the
+    // tail raw CONTIGUOUSLY, re-forming the whole token. Restore must round-trip too.
+    let token = mega_github_token(6000); // 6004 chars
+    for size in [89usize, 512, 1777] {
+        let chunks = chunk_chars(&token, size);
+        let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+        let (out, agg) = stream(&refs, &["en"]);
+        assert!(
+            !out.contains(&token),
+            "full token re-formed (leaked) in stream output at chunk size {size}"
+        );
+        assert_eq!(
+            restore_full(&out, &agg, None, None).unwrap(),
+            token,
+            "restore round-trip failed at chunk size {size}"
+        );
+    }
+}
+
 
 // ── normal stream (no force-flush) parity ──────────────────────────────────────
 
@@ -695,49 +780,55 @@ fn normal_sentence_boundary_stream_unchanged() {
 
 #[test]
 fn cross_chunk_phone_zh() {
-    // Phone split across two chunks; first buffers, second emits redacted.
+    // Phone split across two chunks. With the forward hold-back (W), a short
+    // sentence is held until flush; the whole-stream output must still redact the
+    // phone with no bare leak.
     let lang_v = s(&["zh"]);
     let mut r = StreamingRedactor::new(make_detect(lang_v.clone()), make_redact(lang_v));
-    let out1 = r.feed("电话1391").unwrap(); // no boundary → buffered
+    let out1 = r.feed("电话1391").unwrap(); // no complete entity → buffered
     assert_eq!(out1.segment.downstream_text, "");
-    let out2 = r.feed("2345678。").unwrap(); // boundary → emit
+    let mut out = out1.segment.downstream_text;
+    out.push_str(&r.feed("2345678。").unwrap().segment.downstream_text);
+    out.push_str(&r.flush().unwrap().segment.downstream_text);
     assert!(
-        !out2.segment.downstream_text.contains("13912345678"),
+        !out.contains("13912345678"),
         "phone should be redacted across chunks"
     );
 }
 
 #[test]
 fn aggregate_key_same_fake_across_chunks() {
-    // Same original across chunks reuses the same fake (accumulated key continuity).
-    let lang_v = s(&["zh"]);
-    let mut r = StreamingRedactor::new(make_detect(lang_v.clone()), make_redact(lang_v));
-    let out1 = r.feed("第一次提到13912345678。").unwrap();
-    let out2 = r.feed("第二次还是13912345678。").unwrap();
-    let f1: Vec<&String> = out1
-        .segment
-        .key
+    // Same original repeated across the stream maps to exactly ONE realistic fake
+    // (accumulated-key continuity). Each chunk carries enough boundary-less filler
+    // (> W) that its sentence is pushed out of the forward hold-back window and
+    // genuinely emitted in a separate redact round, so this exercises cross-round
+    // reuse (deterministic per (salt, value)), not just within-call dedup.
+    let filler = "啊".repeat(200);
+    let chunks = [
+        format!("第一次13912345678。{filler}"),
+        format!("第二次13912345678。{filler}"),
+    ];
+    let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let (_, agg) = stream(&refs, &["zh"]);
+    let fakes: HashSet<&String> = agg
         .iter()
         .filter(|(k, v)| v.as_str() == "13912345678" && k.starts_with("199"))
         .map(|(k, _)| k)
         .collect();
-    let f2: Vec<&String> = out2
-        .segment
-        .key
-        .iter()
-        .filter(|(k, v)| v.as_str() == "13912345678" && k.starts_with("199"))
-        .map(|(k, _)| k)
-        .collect();
-    assert!(!f1.is_empty() && !f2.is_empty(), "realistic phone fake present in both");
-    assert_eq!(f1[0], f2[0], "realistic fake must match across chunks");
+    assert_eq!(fakes.len(), 1, "the repeated phone must map to exactly one fake: {fakes:?}");
 }
 
 #[test]
 fn flush_idempotent_on_empty() {
     let lang_v = s(&["zh"]);
     let mut r = StreamingRedactor::new(make_detect(lang_v.clone()), make_redact(lang_v));
-    r.feed("电话13912345678。").unwrap(); // complete sentence — buffer drains
-    let result = r.flush().unwrap();
+    r.feed("电话13912345678。").unwrap(); // short sentence held by the forward hold-back
+    let drained = r.flush().unwrap(); // end-of-stream drains it (phone redacted)
+    assert!(
+        !drained.segment.downstream_text.contains("13912345678"),
+        "phone redacted at flush"
+    );
+    let result = r.flush().unwrap(); // nothing left → empty, idempotent
     assert_eq!(result.segment.downstream_text, "");
     assert!(result.segment.key.is_empty());
 }

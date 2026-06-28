@@ -12,10 +12,10 @@
 //!   2. CROSS-RUNTIME PARITY (the SSOT proof): for a fixed input + salt + chunking
 //!      the wasm streamed downstream + accumulated key are BYTE-IDENTICAL to what
 //!      the Python one-shot redact path produces when driven through the SAME
-//!      core carry-window. The expected values were captured by driving the Python
-//!      `_consume_to_boundary` (the core carry-window SSOT) + the one-shot
-//!      `redact(mode="fast")` per emitted segment, accumulating the key with
-//!      first-seen-wins — exactly the loop the wasm `StreamingRedactor` runs. This
+//!      core detection-context-window engine. The expected values were captured by
+//!      driving the Python `StreamingRedactor` (`_context_cut` over the core SSOT) +
+//!      the one-shot `redact(mode="fast")` per emitted segment, accumulating the key
+//!      with first-seen-wins — exactly the loop the wasm `StreamingRedactor` runs. This
 //!      pins that the snap-parity fix makes wasm == Python streaming for the
 //!      `Mary Jane` straddle and the email/IPv4 cases.
 
@@ -237,9 +237,10 @@ fn multi_chunk_redact_restore_roundtrip() {
 /// zh evidence-gated cross-cut: a bare region (西湖区) fires ONLY because a phone
 /// sits within its proximity window. A sentence boundary lands between them, so a
 /// naive cut emits the phone and carries the region alone — re-detected below
-/// threshold, the bare region would leak. The widened snap (SSOT `snap_cut`) must
-/// carry candidate + evidence together, so the region is redacted, not leaked.
-/// Proves the Bug-2 fix holds across the wasm runtime (same leak the Rust/Python
+/// threshold, the bare region would leak. The detection-context window (detect once
+/// over ±W of context, redact the emit range with that detection) keeps candidate +
+/// evidence in one pass, so the region is redacted, not leaked. Proves the
+/// cross-sentence fix holds across the wasm runtime (same leak the Rust/Python
 /// regression tests pin).
 #[wasm_bindgen_test]
 fn zh_region_evidence_cross_cut_no_leak() {
@@ -277,8 +278,8 @@ fn ssh_private_key_line_by_line_no_leak() {
 // ── CROSS-RUNTIME PARITY (the SSOT proof) ────────────────────────────────────
 //
 // Expected values captured from the Python one-shot redact path driven through
-// the SAME core carry-window (`_consume_to_boundary` + per-segment
-// `redact(mode="fast")` with first-seen-wins key merge). If the snap or the
+// the SAME core detection-context-window engine (`_context_cut` + per-segment
+// `redact(mode="fast")` with first-seen-wins key merge). If the cut or the
 // MT19937 stream drifts, these byte-comparisons fail.
 
 /// Mary Jane straddle: the Python-streamed downstream is exactly
@@ -369,6 +370,57 @@ fn missing_salt_errors() {
     assert!(
         StreamingRedactor::new(opts).is_err(),
         "constructing without salt must error"
+    );
+}
+
+/// zh cross-sentence context window parity: phone in the first sentence, region
+/// (西湖区) in the second, separated by a CJK sentence boundary. The region only
+/// fires via proximity to the phone (evidence-gated). Input is >W (>128 chars) so
+/// the first boundary falls in the safe zone and feed() emits incrementally —
+/// this is NOT the flush==batch degenerate case that short inputs produce under
+/// W=128. The detection-context window keeps the phone in the retained left-context
+/// when the region is evaluated, so the region must be redacted, not leaked.
+#[wasm_bindgen_test]
+fn zh_cross_sentence_context_window_parity() {
+    // Phone + region within proximity window. Filler makes total > 128 chars so
+    // the sentence boundary is in the safe zone during feed(), not just at flush().
+    let pii_section = "我的电话13800138000。西湖区"; // 19 chars: phone · 。 · region
+    let filler = "啊".repeat(200); // 200 chars → total 219 chars, well above W=128
+    let input = format!("{pii_section}{filler}");
+
+    // Feed in 10-char chunks. After ≥144 chars fed (boundary at char 16 safe once
+    // len−W > 16), feed() must emit the first sentence before flush().
+    let chunks = chunk(&input, 10);
+    let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let opts_js = serde_wasm_bindgen::to_value(&Opts::new("zh")).expect("opts serialize");
+    let mut r = StreamingRedactor::new(opts_js).expect("construct StreamingRedactor");
+
+    let mut out = String::new();
+    let mut fed_any = false;
+    for c in &refs {
+        let emit_js = r.feed(c).expect("feed");
+        let emit: EmitOut = serde_wasm_bindgen::from_value(emit_js).expect("feed result");
+        if !emit.downstream_text.is_empty() {
+            fed_any = true;
+        }
+        out.push_str(&emit.downstream_text);
+    }
+    let flush_js = r.flush().expect("flush");
+    let flush: EmitOut = serde_wasm_bindgen::from_value(flush_js).expect("flush result");
+    out.push_str(&flush.downstream_text);
+
+    // Input is >W, so at least one feed() must emit before flush() (the incremental
+    // path is actually exercised — not just flush==batch).
+    assert!(
+        fed_any,
+        "input is >W={} but no feed() emitted — context window not exercised",
+        128
+    );
+    // Both the phone and the evidence-gated region must be absent from the downstream.
+    assert!(!out.contains("13800138000"), "phone leaked in zh cross-sentence test: {out}");
+    assert!(
+        !out.contains("西湖区"),
+        "evidence-gated region leaked across the sentence boundary (context window failed): {out}"
     );
 }
 

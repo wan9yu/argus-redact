@@ -16,8 +16,6 @@ from __future__ import annotations
 from argus_redact.compose import StreamingRedactor
 from argus_redact.glue._detect_partial import (
     DEFAULT_MAX_BUFFER,
-    _CARRY_WINDOW,
-    _bounded_carry,
 )
 from argus_redact.pure.restore import restore
 
@@ -184,29 +182,6 @@ def test_ssh_private_key_larger_than_buffer_not_leaked():
     assert "b3BlbnNzaC1" not in out2, "body leaked (single feed)"
 
 
-def test_unbounded_token_longer_than_window_is_the_documented_edge():
-    # (c) Documented residual edge: a contiguous run LONGER than _CARRY_WINDOW
-    # that is not a single detected entity can still split at the force-flush
-    # cut. We pin this known limitation so a future change that closes it (or
-    # regresses it further) is noticed. The run here straddles the emit cut by
-    # more than the window, so the carry cannot keep it whole.
-    from argus_redact.glue._detect_partial import _consume_to_boundary
-
-    token = "9" * (2 * _CARRY_WINDOW)  # far longer than the carry window
-    total = DEFAULT_MAX_BUFFER + _CARRY_WINDOW + 100
-    target = total - _CARRY_WINDOW
-    start = target - _CARRY_WINDOW  # run crosses target by a full window on each side
-    pad = "x" * (start - len("code"))
-    after = "x" * (total - start - len(token))
-    combined = pad + "code" + token + after
-    emit, residual = _consume_to_boundary("", combined, lang="en", mode="fast")
-    # The run is longer than the window AND not a single bounded entity, so the
-    # carry-window cannot keep it whole: part stays in emit, part in residual.
-    assert token not in emit and token not in residual, (
-        "expected the >window run to be split (documented limitation); if this "
-        "now holds together, the edge has been closed — update this test"
-    )
-
 
 def test_ipv4_split_at_internal_dot_after_force_flush_no_leak():
     # An IPv4 (8.8.8.8) straddles the force-flush cut, split at an internal dot.
@@ -293,73 +268,231 @@ def test_open_ended_entity_does_not_grow_buffer_unbounded():
     #
     # "a@b" opens an email; ".co"*5000 per feed keeps matching as ONE email
     # [0, end] with no sentence boundary, so each feed extends the same span.
+    #
+    # C1 no-leak strengthening: the email spans the buffer from index 0, so the
+    # forced bounded drain must RE-DETECT its emit slice and REDACT the head "a@b"
+    # (not drop+leak it raw). Accumulate the output and assert the head is absent.
     r = StreamingRedactor(salt=42, mode="fast", lang="en")
-    r.feed("a@b")
+    out = r.feed("a@b").downstream_text
     seg = ".co" * 5000  # 15000 boundary-less chars/feed
     emitted_any = False
     for _ in range(30):
         res = r.feed(seg)  # must NOT raise ValueError (MAX_INPUT_SIZE)
         if res.downstream_text:
             emitted_any = True
+        out += res.downstream_text
         # Buffer stays bounded at ~max_buffer + one chunk; never unbounded.
         assert len(r._inc_buffer) < 3 * DEFAULT_MAX_BUFFER, (
             f"buffer grew unbounded: {len(r._inc_buffer)} chars"
         )
+    out += r.flush().downstream_text
     # Forward progress: across the run SOME downstream text was emitted (the
     # buffer drained at least once), not always "".
     assert emitted_any, "no downstream text ever emitted -- buffer never drained"
+    assert "a@b" not in out, (
+        "open-ended email head leaked raw across the forced bounded drain (C1)"
+    )
 
 
-def test_open_ended_entity_at_boundary_path_drains(monkeypatch):
-    # MINOR (review A2): the boundary path (boundary >= 0) also had a
-    # `if cut <= 0: return "", combined` -- the presence of a real sentence
-    # boundary no longer guaranteed a drain once an open-ended span ran from
-    # buffer-start past the boundary.
-    #
-    # Reaching boundary>=0 AND cut<=0 with a REAL detector is not reliably
-    # constructible: cut<=0 needs a single DETECTED entity spanning [<=0, >
-    # boundary], but a detected span that crosses a real sentence boundary would
-    # have to contain a boundary char followed by whitespace (e.g. ". "), which
-    # no bounded entity pattern includes -- and the only cut<=0-producing spans
-    # are >window unbounded tokens (digit/base64 runs) that contain no such
-    # boundary. So we exercise the boundary call site deterministically by
-    # forcing _carry_cut_index to return 0 (the cut<=0 snap), and assert
-    # _bounded_carry drains once the buffer is at max_buffer. The force-flush
-    # path is covered end-to-end by the unbounded-growth test above; this pins
-    # the boundary call site uses the same bounded-carry guard, not return "".
+def _mega_github_token(n: int) -> str:
+    """A boundary-less github_token (`ghp_` + `n` chars) whose PREFIX still matches.
+
+    No validator, no sentence boundary, length far over DEFAULT_MAX_BUFFER — so the
+    force-flush bounded drain MUST split it, and the split head must be re-detected
+    and redacted rather than leaked raw.
+    """
+    return "ghp_" + "A" * n
+
+
+def test_forceflush_megabuffer_typed_entity_head_not_leaked():
+    # C1 (CRITICAL leak regression): a >max_buffer boundary-less github_token fed in
+    # small chunks. The buffer hits DEFAULT_MAX_BUFFER with the token spanning
+    # [0, len); the bounded drain MUST split it. Before the fix the range-shifted
+    # straddler was DROPPED (end > cut) and the ~3840-char head emitted RAW; the fix
+    # re-detects the emit slice so the head (still a valid github_token prefix) is
+    # redacted. Pin: the distinctive head is ABSENT and restore round-trips.
+    token = _mega_github_token(5000)  # 5004 chars > DEFAULT_MAX_BUFFER + carry
+    chunks = _chunk(token, 137)  # small chunks, no boundary
+    out, r = _stream(chunks, lang="en")
+    head = "ghp_" + "A" * 200
+    assert head not in out, "github_token head leaked RAW across the forced bounded drain (C1)"
+    # Restore round-trips: the redacted head expands back and the documented-edge
+    # raw tail is untouched, so the original token is reconstructed exactly.
+    assert restore(out, r.aggregate_key()) == token
+
+
+def test_forceflush_megabuffer_typed_entity_no_leak_en():
+    # Fuzz oracle extension: a >max_buffer typed entity (EN — the cross-sentence
+    # corpus is zh-only) fed under several chunkings. For EVERY chunking the FULL
+    # token original (which batch redacts as one unit) must be ABSENT from the
+    # streamed output — before the C1 fix the dropped straddler emitted head+tail raw
+    # CONTIGUOUSLY, re-forming the whole token. Restore must round-trip too.
+    token = _mega_github_token(6000)  # 6004 chars
+    for size in (89, 512, 1777):
+        out, r = _stream(_chunk(token, size), lang="en")
+        assert token not in out, (
+            f"full token re-formed (leaked) in stream output at chunk size {size}"
+        )
+        assert restore(out, r.aggregate_key()) == token, (
+            f"restore round-trip failed at chunk size {size}"
+        )
+
+
+
+
+# ---------------------------------------------------------------------------
+# Cross-sentence evidence: detection-context window
+# ---------------------------------------------------------------------------
+
+# No-PII, no-gated-term filler (~19 chars/sentence) used to pad a cross-sentence
+# cluster past the W=128 hold-back so it COMMITS in a real incremental emit
+# (before flush) — not only at end-of-stream. Without enough trailing filler the
+# whole text is < W and holds until flush(), which would make these tests inert
+# (they'd pass even with the window machinery deleted — they'd just be batch).
+_FILLER = "今天天气很好。我们一起去公园散步聊天。"
+
+
+def _stream_tracked(chunks, *, lang="zh", salt=42, **kw):
+    """Stream ``chunks`` and return (full_output, pre_flush_emit_count).
+
+    ``pre_flush_emit_count`` is the number of ``feed()`` calls that returned a
+    non-empty ``downstream_text`` — i.e. proof the INCREMENTAL path actually ran
+    before ``flush()``. A test that asserts this > 0 fails if the forward
+    hold-back / left-context retention is broken in a way that stops incremental
+    emission, or if W is set so large nothing ever commits mid-stream.
+    """
+    r = StreamingRedactor(salt=salt, mode="fast", lang=lang, **kw)
+    pre = []
+    for c in chunks:
+        out = r.feed(c).downstream_text
+        if out:
+            pre.append(out)
+    final = r.flush().downstream_text
+    return "".join(pre) + final, len(pre)
+
+
+def _chunk(text, size):
+    chars = list(text)
+    return ["".join(chars[i : i + size]) for i in range(0, len(chars), size)]
+
+
+def test_cross_sentence_committed_incrementally_no_leak():
+    """Cross-sentence evidence leaks are closed by the detection-context window —
+    PROVEN on inputs longer than W so the gated cluster commits in a real
+    incremental emit (before flush), not only at end-of-stream.
+
+    Each case puts the cue and the candidate in DIFFERENT sentences (split by a
+    boundary), early in a > W (≈260-char) text padded with neutral filler. The
+    window's left-context retention (backward) / forward hold-back (forward) is
+    the ONLY reason the candidate is still detected when its sentence commits
+    mid-stream; delete it and the candidate emits bare → leak (guarded by the
+    W=0 regression in ``test_fuzz_stream_oracle_is_a_real_guard`` below).
+    """
+    cases = [
+        # backward hobby: cue 喜欢 in sentence 1, candidate 攀岩 in sentence 2
+        ("我平时很喜欢。攀岩这项户外运动。" + _FILLER * 12, "攀岩"),
+        # backward location: cue 住在 in sentence 1, region in sentence 2
+        ("我以前就住在那里。上海浦东新区那一带。" + _FILLER * 12, "上海浦东新区"),
+        # forward medical: candidate 花生 in sentence 1, cue 过敏 in sentence 2
+        ("我之前吃过花生。后来过敏很严重。" + _FILLER * 12, "花生"),
+    ]
+    for text, term in cases:
+        assert len(text) > 128  # precondition: longer than W
+        for size in (1, 3, 7):
+            out, pre_emits = _stream_tracked(_chunk(text, size))
+            assert pre_emits > 0, (
+                f"no incremental (pre-flush) emit for {term!r} size={size} — the "
+                f"test would be inert (flush-only); window path not exercised"
+            )
+            assert term not in out, (
+                f"cross-sentence leak: {term!r} in streamed output "
+                f"(term={term!r}, chunk_size={size})"
+            )
+
+
+def _batch_removed_terms(text: str, *, lang: str = "zh") -> list[str]:
+    """Terms that batch ``redact_pseudonym_llm`` makes ABSENT from its output.
+
+    A term is "removed" only if it is absent from the batch downstream text — a
+    term that appears multiple times but is detected at only some positions stays
+    PRESENT in batch output, so it is (correctly) not in the removed set and
+    streaming is allowed to leave its undetected occurrences too. This is the
+    apples-to-apples leak-equivalence reference (same detection + same strategy
+    as streaming), robust to multi-occurrence filler tokens.
+    """
+    from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
+
+    result = redact_pseudonym_llm(text, salt=42, lang=lang, mode="fast")
+    return [orig for orig in set(result.key.values()) if orig not in result.downstream_text]
+
+
+# > W zh texts mixing cross-sentence gated clusters across all four gated types
+# (hobby / location / medical / job_title) + closed PII, padded so each cluster
+# commits incrementally. These are the fuzz corpus AND the window regression
+# fixtures (W=0 below).
+_FUZZ_TEXTS = [
+    # backward hobby + closed phone
+    "我平时很喜欢。攀岩这项户外运动。有事请打电话13800138000。" + _FILLER * 12,
+    # backward location + closed phone
+    "我以前就住在那里。上海浦东新区那一带。他的手机号13987654321。" + _FILLER * 12,
+    # forward medical + job_title cluster + closed phone
+    "我之前吃过花生。后来过敏很严重。我同事是一名软件工程师。联系电话13611112222。"
+    + _FILLER * 12,
+]
+
+
+def test_fuzz_stream_leak_equivalence():
+    """Fuzz oracle: every term batch removes is absent from the streamed output,
+    across random chunk sizes — AND the incremental path actually ran.
+
+    For each > W text and each chunk size, stream it and assert (a) no batch-
+    removed term survives in the concatenated downstream (leak-equivalence vs
+    batch ``redact_pseudonym_llm``) and (b) at least one ``feed()`` emitted
+    before ``flush()`` (the incremental path is exercised, not just flush==batch).
+    """
+    for text in _FUZZ_TEXTS:
+        assert len(text) > 128  # precondition: exercises the incremental path
+        removed = _batch_removed_terms(text)
+        assert removed  # the corpus must contain removable PII to be meaningful
+        for size in (1, 2, 3, 5, 7):
+            out, pre_emits = _stream_tracked(_chunk(text, size))
+            assert pre_emits > 0, (
+                f"no incremental (pre-flush) emit (text len={len(text)}, "
+                f"size={size}) — fuzz oracle inert, window path not exercised"
+            )
+            for term in removed:
+                assert term not in out, (
+                    f"raw term {term!r} leaked in streamed output "
+                    f"(text len={len(text)}, chunk_size={size})"
+                )
+
+
+def test_fuzz_stream_oracle_is_a_real_guard(monkeypatch):
+    """Regression sentinel: the fuzz oracle MUST fail if the detection-context
+    window is broken. Break it (W=0 → no left-context retention AND no forward
+    hold-back) and assert a cross-sentence gated term now leaks — proving the
+    oracle above is not vacuously green.
+
+    The window constant has two read sites: ``_detect_partial._context_cut``
+    drives the cut (forward hold-back) and ``streaming.feed`` computes the
+    retained left-context (``lo = cut - W``). Both must be zeroed for a full
+    break; patching only one leaves the other half of the window intact. This
+    pins the window as load-bearing — a future change removing either half flips
+    this test (the asserted leak disappears), surfacing the regression.
+    """
     import argus_redact.glue._detect_partial as dp
+    import argus_redact.streaming as st
 
-    monkeypatch.setattr(dp, "_carry_cut_index", lambda *a, **k: 0)
-    # A combined string >= max_buffer with a real sentence boundary inside it.
-    combined = "x" * (DEFAULT_MAX_BUFFER - 6) + "stop. " + "y" * 100
-    assert dp._last_boundary_index(combined) >= 0  # precondition: boundary path
-    emit, residual = dp._consume_to_boundary("", combined, lang="en", mode="fast")
-    # The buffer must DRAIN (old code returned ("", combined) -> no drain).
-    assert residual != combined, "boundary-path cut<=0 still carries everything (no drain)"
-    assert emit == combined[: len(combined) - _CARRY_WINDOW]
-    assert len(residual) == _CARRY_WINDOW
-
-
-def test_bounded_carry_small_buffer_carries_all():
-    # Below max_buffer: carry everything (safe -- it will grow to max_buffer and
-    # drain next round). Returns ("", combined).
-    combined = "x" * 100
-    emit, residual = _bounded_carry(combined, DEFAULT_MAX_BUFFER)
-    assert emit == ""
-    assert residual == combined
-
-
-def test_bounded_carry_at_max_buffer_drains_to_len_minus_window():
-    # At/above max_buffer: force-emit the prefix down to the trailing carry
-    # window so the buffer is guaranteed to drain (no unbounded growth).
-    combined = "x" * DEFAULT_MAX_BUFFER
-    emit, residual = _bounded_carry(combined, DEFAULT_MAX_BUFFER)
-    target = len(combined) - _CARRY_WINDOW
-    assert emit == combined[:target]
-    assert residual == combined[target:]
-    assert len(residual) == _CARRY_WINDOW
-    # Above max_buffer too.
-    bigger = "y" * (DEFAULT_MAX_BUFFER + 500)
-    emit2, residual2 = _bounded_carry(bigger, DEFAULT_MAX_BUFFER)
-    assert emit2 == bigger[: len(bigger) - _CARRY_WINDOW]
-    assert len(residual2) == _CARRY_WINDOW
+    monkeypatch.setattr(dp, "_EVIDENCE_CONTEXT_WINDOW", 0)
+    monkeypatch.setattr(st, "_EVIDENCE_CONTEXT_WINDOW", 0)
+    leaked_any = False
+    for text in _FUZZ_TEXTS:
+        removed = _batch_removed_terms(text)
+        out, _ = _stream_tracked(_chunk(text, 3))
+        if any(term in out for term in removed):
+            leaked_any = True
+            break
+    assert leaked_any, (
+        "expected a cross-sentence gated term to leak with the window broken "
+        "(W=0); if nothing leaked, the fuzz oracle no longer guards the window"
+    )

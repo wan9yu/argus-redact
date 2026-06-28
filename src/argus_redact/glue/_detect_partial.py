@@ -1,22 +1,14 @@
-"""Private partial-detection helper for incremental streaming (v0.5.7+).
+"""Private carry-window helpers for incremental streaming.
 
-`_detect_partial(text, prev_buffer="")` accumulates `text` into the buffer
-and emits entities up to the last sentence boundary; the unconsumed tail
-is returned as the new buffer state. `force_flush=True` emits everything
-regardless of boundary state — used by ``StreamingRedactor`` /
-``StreamingRestorer`` internally at end-of-stream.
+The carry-window STATE MACHINE lives in the Rust core
+(``_core.streaming_*``), which is the SSOT — the same engine the wasm
+crate exposes. This module provides Python-level helpers:
 
-Since the v0.7.10 → wasm port, the carry-window STATE MACHINE
-(``_last_boundary_index`` / ``_bounded_carry`` / ``_consume_to_boundary``) is a
-thin shim over the Rust core (``_core.streaming_*``), which is the SSOT — the same
-engine the wasm crate exposes. Only the entity-aware SNAP (``_carry_cut_index``,
-which detects on the full combined buffer with the caller's exact detection
-params) stays in Python: it threads the Python ``_detect`` (the L1+NER+semantic
-SSOT detector) and is monkeypatched by the streaming tests. The core engine calls
-``_carry_cut_index`` back as a ``(combined, target) -> cut`` callable.
+- ``_last_boundary_index`` — thin shim over ``_core.streaming_last_boundary_index``.
+- ``_context_cut`` — detect once over the full buffer and pick the
+  detection-context emit cut (used by ``StreamingRedactor.feed`` / ``flush``).
 
-Used by ``StreamingRedactor`` (which since v0.6.0 runs incremental
-detection unconditionally). See ``docs/design-streaming-incremental.md``.
+Used by ``StreamingRedactor``. See ``docs/design-streaming-incremental.md``.
 """
 
 from __future__ import annotations
@@ -25,24 +17,26 @@ from argus_redact._core_loader import _core
 from argus_redact._types import PatternMatch
 from argus_redact.glue.redact import _detect
 
-# Sentence-boundary chars — last char of a completed unit. Aligned with
-# ``StreamingRestorer.BOUNDARIES`` so the two layers agree on the char set; both
-# now apply the SAME real-boundary rule via ``_last_boundary_index`` (``\n`` + CJK
-# ``。！？；`` always count; ASCII ``.!?;`` only before whitespace, never at the
-# buffer end — so a fake's internal dot is not mistaken for a sentence end). Kept
-# here (not derived from the core) as the documented public-ish surface the
-# streaming tests import; the core mirrors the same set.
-_BOUNDARIES = ("\n", "。", ".", "！", "!", "？", "?", "；", ";")
-
 # Maximum buffer size before forcing a flush on input without sentence
-# punctuation. Shared between ``_detect_partial`` and ``StreamingRedactor``
-# so they enforce the same bound. Mirrors ``_core.streaming`` ``DEFAULT_MAX_BUFFER``.
+# punctuation. Shared with ``StreamingRedactor`` so they enforce the same bound.
+# Mirrors ``_core.streaming`` ``DEFAULT_MAX_BUFFER``.
 DEFAULT_MAX_BUFFER = 4096
 
-# Trailing window carried into the next chunk at a boundary-less force-flush.
-# Mirrors ``_core.streaming`` ``CARRY_WINDOW``; see the core docstring for the
-# straddling-entity rationale and the >window unbounded-token residual edge.
-_CARRY_WINDOW = 256
+# Detection-context window W (CHARS) held on each side of every emit so
+# streaming detection equals batch detection for the evidence-gated L1
+# detectors (region/occupation/condition/hobby). Mirrors
+# ``_core.streaming.EVIDENCE_CONTEXT_WINDOW`` parity-by-convention.
+_EVIDENCE_CONTEXT_WINDOW = 128
+
+# Extra CHARS added to max_buffer while a PEM private-key BEGIN marker is present
+# in the buffer. Mirrors ``PEM_OPENER_CEILING_EXTRA`` in the Rust core. Keeps a
+# complete (BEGIN+END) key whose byte length exceeds DEFAULT_MAX_BUFFER from being
+# force-flush-split by context_cut's bounded-drain. The raise is gated on any
+# private-key BEGIN present (closed OR unclosed) via
+# ``_core.streaming_pem_begin_present`` — the SAME predicate (literal AND
+# private-key regex) the wasm path uses, so wheel and wasm pick the same cut on a
+# non-private-key PEM block (e.g. ``-----BEGIN CERTIFICATE-----``).
+_PEM_OPENER_CEILING_EXTRA = 11_000
 
 
 def _last_boundary_index(text: str) -> int:
@@ -64,53 +58,43 @@ def _last_boundary_index(text: str) -> int:
     return _core.streaming_last_boundary_index(text)
 
 
-def _bounded_carry(combined: str, max_buffer: int) -> tuple[str, str]:
-    """cut<=0: a span longer than the carry window blocks a safe cut. To
-    guarantee the buffer drains (no unbounded growth / O(n^2) / MAX_INPUT_SIZE
-    crash), once the buffer reaches max_buffer force-emit the prefix down to the
-    trailing carry window. Such a span is necessarily longer than _CARRY_WINDOW
-    (a bounded entity would have yielded cut>0) -- i.e. the documented >window
-    unbounded-token edge. A still-small buffer is safe to carry whole; it will
-    grow to max_buffer and drain here next round.
 
-    Thin shim over ``_core.streaming_bounded_carry`` (the SSOT)."""
-    return _core.streaming_bounded_carry(combined, max_buffer)
-
-
-def _carry_cut_index(
+def _context_cut(
     combined: str,
-    target: int,
+    ctx_len: int,
     *,
     lang: str | list[str],
     mode: str,
     names: list[str] | None,
     types: list[str] | None,
     types_exclude: list[str] | None,
-    widen: bool = True,
-) -> int:
-    """Pick a force-flush emit cut at or before ``target`` that neither splits an
-    entity NOR orphans an evidence-gated candidate from its evidence.
+    max_buffer: int = DEFAULT_MAX_BUFFER,
+    force_flush: bool = False,
+) -> tuple[int, bool, list[PatternMatch]]:
+    """Detect once over the full buffer and pick the detection-context emit cut.
 
-    The carry-window keeps ``combined[target:]`` for the next round, but an
-    entity whose span crosses ``target`` (head before it, tail after it) would
-    have its head emitted in ``combined[:target]`` and never matched in
-    isolation → a leak. Likewise an evidence-gated L1 candidate (region /
-    occupation / condition / hobby) fires only on a nearby cue or proximate PII;
-    if the cut falls between the candidate and that evidence, the candidate is
-    emitted (or carried) alone, re-detected below threshold, and the bare term
-    leaks. Detecting on the *full* ``combined`` lets the core ``snap_cut`` pull
-    the cut back off any straddling entity AND past an evidence-gated candidate's
-    margin so candidate + evidence are carried together. Returns the emit cut
-    index (``0`` means carry everything — the unbounded-token residual edge).
+    Returns ``(cut_char_index, redetect, entities)`` where ``cut_char_index`` is
+    the CHAR index in ``combined`` up to which it is safe to emit (``cut ==
+    ctx_len`` means nothing new is safe yet) and ``entities`` are all detected
+    entities over the FULL buffer (with ±W of context) in absolute buffer
+    coordinates.
 
-    Detection stays in Python (the SSOT lives here): it threads the full Python
-    ``_detect`` with the caller's exact params, and the streaming tests
-    monkeypatch this function directly. The snap RULE itself is single-sourced in
-    the Rust core (``_core.streaming_snap_cut``) so the wheel and the wasm path
-    pick byte-identical cuts. The core engine calls this back as a
-    ``(combined, target) -> cut`` callable. ``widen=False`` is the closed-only
-    drain variant (split-avoidance without the evidence ±margin), used by the
-    engine only for the ``cut == 0`` bounded drain.
+    ``redetect`` is ``True`` only on the forced bounded-drain split (a
+    ≥ ``max_buffer`` boundary-less mega-entity whose span runs from ``ctx_len``
+    past the drain point): the caller must RE-DETECT the emit slice rather than
+    range-shift ``entities`` (the full-buffer straddler would be dropped, leaking
+    its head raw). Every other cut leaves it ``False``.
+
+    The cut is the last real sentence boundary that leaves ≥ W chars of forward
+    context (``safe_end = len − W ≥ ctx_len``), snapped off any straddled entity
+    via ``_core.streaming_context_cut``. An in-flight PEM opener is treated as
+    an open-ended entity spanning ``[begin, len+1)`` so the snap holds the cut
+    before BEGIN.
+
+    Used by ``StreamingRedactor.feed`` / ``flush`` for detect-once-then-redact-
+    range: one detection pass per round drives both the cut decision AND the
+    redaction (no re-detect of the bare emit slice — except on the ``redetect``
+    drain path).
     """
     entities, _langs, _timing, _stats = _detect(
         combined,
@@ -120,122 +104,26 @@ def _carry_cut_index(
         types=types,
         types_exclude=types_exclude,
     )
-    spans = [(ent.start, ent.end, ent.type) for ent in entities]
-    # An in-flight multi-line PEM private key (BEGIN seen, END not yet) is not a
-    # detected entity, so add it as an open-ended pending span; the snap then holds
-    # the cut before BEGIN and the whole key is carried until END (never emitted
-    # line-by-line in plaintext). Single-sourced with the core force-flush ceiling.
+    spans = [(e.start, e.end, e.type) for e in entities]
+    # An in-flight PEM private key (BEGIN seen, END not yet) is not a detected
+    # entity; append an open-ended pending span so context_cut holds the cut
+    # before BEGIN and the whole key accumulates until END (never emitted raw).
     begin = _core.streaming_unclosed_pem_opener_start(combined)
     if begin is not None:
-        # Open-ended: end one PAST the buffer so a cut AT the buffer end (the
-        # trailing-newline boundary of an in-flight key line) still snaps to BEGIN.
         spans.append((begin, len(combined) + 1, "ssh_private_key"))
-    return _core.streaming_snap_cut(spans, target, widen)
-
-
-def _consume_to_boundary(
-    prev_buffer: str,
-    chunk: str,
-    *,
-    max_buffer: int = DEFAULT_MAX_BUFFER,
-    force_flush: bool = False,
-    lang: str | list[str] = "zh",
-    mode: str = "fast",
-    names: list[str] | None = None,
-    types: list[str] | None = None,
-    types_exclude: list[str] | None = None,
-) -> tuple[str, str]:
-    """Split ``prev_buffer + chunk`` at the last sentence boundary.
-
-    Returns ``(emit_text, residual)`` — ``emit_text`` is the committed prefix
-    (or ``""`` if nothing is ready to emit yet); ``residual`` is the tail to
-    carry into the next call.
-
-    Thin shim over ``_core.streaming_consume_to_boundary`` (the carry-window SSOT).
-    The entity-aware snap is threaded back as the module-level ``_carry_cut_index``
-    bound to the caller's detection params, so the carry decision agrees with the
-    caller's own detection (and remains monkeypatchable for the regression tests).
-    With ``force_flush=True`` (end-of-stream) the entire combined string emits and
-    residual is empty. With a boundary-less buffer ≥ ``max_buffer`` a trailing
-    ``_CARRY_WINDOW`` is carried instead of emitting everything, so an entity
-    straddling the cut stays whole for next round.
-    """
-
-    def carry_cut(combined: str, target: int) -> int:
-        # Look up the module attribute fresh so a monkeypatch of
-        # ``_carry_cut_index`` (the boundary-path-drain regression test) is honored.
-        return _carry_cut_index(
-            combined,
-            target,
-            lang=lang,
-            mode=mode,
-            names=names,
-            types=types,
-            types_exclude=types_exclude,
-        )
-
-    def carry_cut_drain(combined: str, target: int) -> int:
-        # Closed-only twin used ONLY for the cut==0 bounded drain, so a forced
-        # drain never SPLITS an entity even when the widened snap chained to 0.
-        return _carry_cut_index(
-            combined,
-            target,
-            lang=lang,
-            mode=mode,
-            names=names,
-            types=types,
-            types_exclude=types_exclude,
-            widen=False,
-        )
-
-    return _core.streaming_consume_to_boundary(
-        prev_buffer,
-        chunk,
-        carry_cut,
-        carry_cut_drain,
-        max_buffer=max_buffer,
-        force_flush=force_flush,
+    # Raise the max_buffer ceiling while any PEM private-key BEGIN is present
+    # (opened or closed) so a complete key larger than DEFAULT_MAX_BUFFER is
+    # carried whole rather than force-flush-split. Gated on the SAME predicate the
+    # wasm path uses (literal AND private-key regex) so wheel and wasm pick the
+    # same cut on a non-private-key PEM block.
+    effective_max = (
+        max_buffer + _PEM_OPENER_CEILING_EXTRA
+        if _core.streaming_pem_begin_present(combined)
+        else max_buffer
     )
-
-
-def _detect_partial(
-    text: str,
-    *,
-    prev_buffer: str = "",
-    lang: str | list[str] = "zh",
-    mode: str = "fast",
-    names: list[str] | None = None,
-    types: list[str] | None = None,
-    types_exclude: list[str] | None = None,
-    max_buffer: int = DEFAULT_MAX_BUFFER,
-    force_flush: bool = False,
-) -> tuple[list[PatternMatch], str]:
-    """Detect entities in ``prev_buffer + text`` up to the last sentence boundary.
-
-    Returns ``(complete_entities, residual_buffer)``. Entity offsets are
-    relative to the emitted prefix (``(prev_buffer + text)[:boundary]``).
-    With ``force_flush=True`` or combined length ≥ ``max_buffer``, everything
-    is emitted regardless of boundary state.
-    """
-    emit_text, residual = _consume_to_boundary(
-        prev_buffer,
-        text,
-        max_buffer=max_buffer,
-        force_flush=force_flush,
-        lang=lang,
-        mode=mode,
-        names=names,
-        types=types,
-        types_exclude=types_exclude,
+    cut, redetect = _core.streaming_context_cut(
+        combined, spans, ctx_len, effective_max, _EVIDENCE_CONTEXT_WINDOW, force_flush
     )
-    if not emit_text:
-        return [], residual
-    entities, _langs, _timing, _stats = _detect(
-        emit_text,
-        lang=lang,
-        mode=mode,
-        names=names,
-        types=types,
-        types_exclude=types_exclude,
-    )
-    return entities, residual
+    return cut, redetect, entities
+
+

@@ -1,14 +1,13 @@
-"""Tests for v0.5.7 ``_detect_partial`` — sentence-bounded incremental detection.
+"""Tests for the carry-window boundary helpers in ``_detect_partial``.
 
-Used by ``StreamingRedactor`` / ``StreamingRestorer`` internally. Private
-API; tested here directly.
+Covers ``_last_boundary_index`` and the ``streaming_context_cut`` PyO3 binding.
 """
 
 import pytest
 
+from argus_redact._core_loader import _core
 from argus_redact.glue._detect_partial import (
-    _CARRY_WINDOW,
-    _detect_partial,
+    _EVIDENCE_CONTEXT_WINDOW,
     _last_boundary_index,
 )
 
@@ -50,101 +49,61 @@ class TestLastBoundaryIndex:
         assert _last_boundary_index("") == -1
 
 
-class TestBufferingBehavior:
-    def test_buffers_when_no_boundary(self):
-        entities, residual = _detect_partial("hello 1391", lang="en")
-        assert entities == []
-        assert residual == "hello 1391"
 
-    def test_emits_at_boundary(self):
-        # First call buffers
-        entities, residual = _detect_partial("电话1391", lang="zh")
-        assert entities == []
-        # Second call: combined contains boundary at end → emit + detect
-        entities, residual = _detect_partial(
-            "2345678。", prev_buffer=residual, lang="zh"
+class TestContextCutBinding:
+    """PyO3 ``streaming_context_cut`` binding — char-level cut selection.
+
+    The binding returns ``(cut, redetect)``; ``redetect`` is ``True`` only on the
+    forced bounded-drain split. All the cases here are boundary / hold / force-flush
+    cuts, so each asserts ``redetect`` is ``False``.
+    """
+
+    def test_boundary_within_safe_end_returns_cut(self):
+        # "abcd。efghij" — 11 chars (a=0..d=3, 。=4, e=5..j=10).
+        # W=4: safe_end = 11 - 4 = 7. last boundary ≤ 7 in "abcd。ef" is at index 5
+        # (char after 。). snap([], 5) = 5 (no entities to straddle). cut = 5.
+        text = "abcd。efghij"
+        assert len(text) == 11  # precondition
+        assert _core.streaming_context_cut(text, [], 0, 4096, 4, False) == (5, False)
+
+    def test_tail_shorter_than_w_returns_ctx_len(self):
+        # "abc" — 3 chars, W=4: safe_end = 3 - 4 < 0 → 0 ≤ ctx_len=0 → hold.
+        assert _core.streaming_context_cut("abc", [], 0, 4096, 4, False) == (0, False)
+
+    def test_force_flush_returns_len(self):
+        # force_flush=True → emit everything (cut = len regardless of boundaries).
+        text = "abc"
+        assert _core.streaming_context_cut(text, [], 0, 4096, 4, True) == (3, False)
+
+    def test_evidence_context_window_constant_matches_binding(self):
+        # _EVIDENCE_CONTEXT_WINDOW is the W used by StreamingRedactor.
+        assert _EVIDENCE_CONTEXT_WINDOW == 128
+
+    def test_ctx_len_respected(self):
+        # ctx_len=3 means the first 3 chars are already-emitted left-context.
+        # W=4, "abcd。efghij" (11 chars): safe_end=7, boundary=5 > ctx_len=3 → cut=5.
+        assert _core.streaming_context_cut("abcd。efghij", [], 3, 4096, 4, False) == (5, False)
+
+    def test_entity_straddle_snaps_cut_back(self):
+        # W=4, text has boundary at 5 but an entity spans [3, 8).
+        # snap(target=5) → 3 (entity start); cut = max(3, ctx_len=0) = 3.
+        text = "abcd。efghij"
+        spans = [(3, 8, "phone")]
+        result = _core.streaming_context_cut(text, spans, 0, 4096, 4, False)
+        assert result == (3, False)
+
+    def test_forced_bounded_drain_split_sets_redetect(self):
+        # A boundary-less buffer AT max_buffer whose sole entity spans [0, len) past
+        # the drain point: snap chains to 0 ≤ ctx_len, so the cut is FORCED to the
+        # raw len - CARRY_WINDOW and ``redetect`` is True (the emit slice must be
+        # re-detected). max_buffer=20, W=4, CARRY_WINDOW=256 is too big here, so use
+        # a buffer ≥ DEFAULT_MAX_BUFFER (4096) and CARRY_WINDOW (256).
+        from argus_redact.glue._detect_partial import DEFAULT_MAX_BUFFER
+
+        text = "x" * DEFAULT_MAX_BUFFER
+        spans = [(0, DEFAULT_MAX_BUFFER, "jwt")]  # one entity spanning the whole buffer
+        cut, redetect = _core.streaming_context_cut(
+            text, spans, 0, DEFAULT_MAX_BUFFER, _EVIDENCE_CONTEXT_WINDOW, False
         )
-        phone_hits = [e for e in entities if e.type == "phone"]
-        assert phone_hits, f"phone should be detected after boundary, got {entities}"
-        # The emit_text reached the boundary
-        assert residual == ""
-
-    def test_residual_carries_partial_to_next_call(self):
-        # Three-call sequence — second has boundary, third completes new entity
-        ent1, res1 = _detect_partial("电话1391", lang="zh")
-        assert ent1 == []
-        ent2, res2 = _detect_partial("2345678。然后", prev_buffer=res1, lang="zh")
-        assert any(e.type == "phone" for e in ent2)
-        # res2 == "然后" (carried since no boundary)
-        assert res2 == "然后"
-
-        ent3, res3 = _detect_partial("再加邮箱x@y.com。", prev_buffer=res2, lang="zh")
-        assert any(e.type == "email" for e in ent3)
-
-
-class TestForceFlush:
-    def test_force_flush_emits_partial_buffer(self):
-        # No boundary, but force_flush=True processes everything
-        entities, residual = _detect_partial(
-            "电话13912345678", prev_buffer="", lang="zh", force_flush=True
-        )
-        phone = [e for e in entities if e.type == "phone"]
-        assert phone, "force_flush should emit detected entities even without boundary"
-        assert residual == ""
-
-    def test_force_flush_with_only_residual(self):
-        entities, residual = _detect_partial(
-            "", prev_buffer="电话13912345678", lang="zh", force_flush=True
-        )
-        assert any(e.type == "phone" for e in entities)
-        assert residual == ""
-
-
-class TestMaxBufferOverride:
-    def test_max_buffer_carries_trailing_window_no_boundary(self):
-        # A boundary-less buffer past max_buffer no longer emits everything: it
-        # carries a trailing _CARRY_WINDOW so an entity straddling the cut stays
-        # whole for the next round (the streaming carry-window fix).
-        long_text = "x" * (_CARRY_WINDOW + 50)
-        max_buffer = _CARRY_WINDOW + 10  # > window so an emit prefix exists
-        entities, residual = _detect_partial(
-            long_text, lang="zh", max_buffer=max_buffer
-        )
-        # No PII in the filler → no entity straddles the cut → cut at len-window.
-        assert residual == long_text[-_CARRY_WINDOW:]
-        assert len(residual) == _CARRY_WINDOW
-        assert isinstance(entities, list)
-
-    def test_buffer_at_or_below_window_carries_everything(self):
-        # When the whole buffer fits inside the carry window, carry it all
-        # rather than slicing a negative index — nothing is emitted yet.
-        long_text = "x" * 50  # 50 chars, no boundary, below the window
-        entities, residual = _detect_partial(long_text, lang="zh", max_buffer=20)
-        assert residual == long_text
-        assert entities == []
-
-
-class TestEmptyAndEdgeCases:
-    def test_empty_text_and_buffer(self):
-        entities, residual = _detect_partial("", lang="zh")
-        assert entities == []
-        assert residual == ""
-
-    def test_lang_passthrough_to_detect(self):
-        # Passing lang="en" should detect en-specific patterns (SSN). The trailing
-        # ". " (dot + space) is a real sentence end so the prefix is emitted; a
-        # bare trailing "." would be ambiguous (buffer-end) and emit nothing yet.
-        entities, _ = _detect_partial(
-            "SSN 123-45-6789. ", lang="en"
-        )
-        assert any(e.type == "ssn" for e in entities)
-
-    def test_offsets_in_emit_text_coordinates(self):
-        # Entity offsets should be in (prev_buffer + text)[:boundary] coords.
-        ent, res = _detect_partial("电话13912345678。", lang="zh")
-        phone = [e for e in ent if e.type == "phone"]
-        assert phone, "phone detected"
-        e = phone[0]
-        emit_text = "电话13912345678。"
-        # start/end address into emit_text correctly
-        assert emit_text[e.start : e.end] == "13912345678"
+        assert cut == DEFAULT_MAX_BUFFER - 256  # raw len - CARRY_WINDOW (forced split)
+        assert redetect is True
