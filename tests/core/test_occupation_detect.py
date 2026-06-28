@@ -50,3 +50,38 @@ def test_occupation_precision_floor():
 def test_occupation_recall_floor():
     hits = sum(1 for t in POSITIVES if _detects_occupation(t))
     assert hits >= 4, f"occupation recall floor 4/5: only {hits}/{len(POSITIVES)} detected"
+
+
+# ---------------------------------------------------------------------------
+# Proximity-allowlist fix: technical PII must not corroborate an occupation
+# ---------------------------------------------------------------------------
+
+def test_occupation_technical_pii_only_not_corroborated():
+    # github_token is technical/non-personal; it must not corroborate a bare
+    # occupation title.  护士 (2-char, in honorific-title guard) does not fire
+    # via the lexicon-weight path (W_OCC_LEXICON requires ≥ 3 chars) and has no
+    # cue here, so proximity is the only possible signal.  The occupation
+    # proximity weight (W_OCC_PII_PROX = 0.3) is below OCC_THRESHOLD (0.5) for
+    # ANY PII type, so this test is a GUARD rather than a behavioral flip: the
+    # fix pins that technical PII cannot accidentally become a corroborator even
+    # if weights change.
+    assert not _detects_occupation(
+        "护士 ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    ), "github_token must not corroborate a bare occupation (no cue)"
+
+
+def test_occupation_cue_detection_still_works():
+    # Cue-based detection (是一名 fires W_OCC_CUE = 0.6 ≥ 0.5) must still
+    # work after the allowlist fix.  Uses 护士 with a cue and a phone in
+    # context — the cue alone is the gating signal here.
+    assert _detects_occupation(
+        "他是一名护士 13800138000"
+    ), "cue must still fire occupation detection with personal PII in context"
+
+
+def test_occupation_cue_with_technical_pii():
+    # Cue fires (0.6 ≥ 0.5) regardless of what other PII is present;
+    # a github_token in context must not block or interfere with the cue path.
+    assert _detects_occupation(
+        "他是一名护士 ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 13800138000"
+    ), "cue must still fire occupation detection even when technical PII is present"

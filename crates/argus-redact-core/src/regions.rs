@@ -11,6 +11,8 @@ use std::sync::{LazyLock, OnceLock};
 use fancy_regex::Regex;
 use serde::Deserialize;
 
+use crate::evidence_detector::is_person_identifying;
+
 #[derive(Debug, Deserialize)]
 struct ZhRegionData {
     /// (name, level["province"|"city"|"district"], city_name, province_name)
@@ -276,22 +278,19 @@ pub(crate) fn detect_regions_zh(
             evidence += W_REGION_STRUCT;
         }
 
-        // Proximity to structural PII — first entity within a bucket wins
+        // Proximity to person-identifying PII — first entity within a bucket wins
         // (break). abs_diff over usize char offsets == Python abs() on ints.
         //
-        // Two entity types do NOT corroborate a bare region:
-        //   - `self_reference` (我/我们) is whitelisted non-PII; letting it
-        //     corroborate makes any `我 … <district>` with no address cue
-        //     (`我很喜欢西湖区的风景`) falsely clear the threshold.
-        //   - `organization` co-occurs with place names as a matter of course
-        //     (`海淀区中关村科技园…`, `我们公司在黄浦区…`); an org being near a
-        //     region is NOT evidence the region is a person's address, and the
-        //     org span itself frequently mis-segments and leaves a bare region
-        //     prefix un-absorbed. Org-near-region alone must not fire L1; a
-        //     real address cue or structural suffix still will.
-        // Person-identifying PII (phone/person/id/email) still counts.
+        // Only PII that NAMES, CONTACTS, or LOCATES a specific person corroborates
+        // (phone/person/id/email/…). Technical tokens (url_token/jwt/ip_address/
+        // api-key), org names, weak attributes (age/gender), and sensitive-but-non-
+        // locating attributes do NOT answer "is an identifiable person nearby?" and
+        // must not promote a bare region to redaction by proximity alone. The gate
+        // is an allowlist (is_person_identifying): new technical types are safe by
+        // default. This subsumes the old self_reference/organization denylist —
+        // both are simply absent from the allowlist.
         for pii in pii_entities {
-            if pii.type_ == "self_reference" || pii.type_ == "organization" {
+            if !is_person_identifying(&pii.type_) {
                 continue;
             }
             let distance = start
@@ -426,8 +425,8 @@ mod tests {
     #[test]
     fn real_pii_still_corroborates_region() {
         // A phone number (person-identifying PII) near a bare region SHOULD
-        // still clear the proximity bucket — only self_reference/organization
-        // are excluded.
+        // still clear the proximity bucket — only person-identifying types are
+        // in the allowlist (is_person_identifying), and phone is one of them.
         let t = "西湖区 13812345678";
         let phone = vec![pm("13812345678", "phone", 4, 15)];
         assert!(
@@ -435,6 +434,43 @@ mod tests {
                 .iter()
                 .any(|h| h.text == "西湖区"),
             "real PII (phone) must still corroborate a region by proximity"
+        );
+    }
+
+    #[test]
+    fn region_not_corroborated_by_technical_pii() {
+        // A bare region (西湖区) with NO address cue and NO structural suffix whose
+        // ONLY nearby entity is a url_token: under the old hardcoded denylist,
+        // url_token is not excluded so W_REGION_PII_PROX 0.5 ≥ threshold 0.5 →
+        // wrongly detected. Under the allowlist approach, url_token is absent from
+        // PERSON_IDENTIFYING_PII → excluded from the proximity loop → evidence = 0
+        // → not detected. Pins the allowlist principle for region detection.
+        //
+        // "西湖区 http://x.com": 西湖区 chars 0-3, space 3, url starts at 4.
+        // Distance min(0.abs_diff(16), 4.abs_diff(3)) = 1 ≤ REGION_PROX_NEAR.
+        let t = "西湖区 http://x.com";
+        let url = vec![pm("http://x.com", "url_token", 4, 16)];
+        assert!(
+            detect_regions_zh(t, &url).is_empty(),
+            "technical PII (url_token) must not corroborate a bare region: {:?}",
+            detect_regions_zh(t, &url)
+        );
+    }
+
+    #[test]
+    fn region_mixed_technical_and_personal_fires() {
+        // A bare region near BOTH a url_token (technical, non-corroborating) AND a
+        // phone (personal, corroborating): the url_token must be skipped and the
+        // phone must still clear the proximity bucket. Region is detected.
+        //
+        // "西湖区 http://x.com 13812345678"
+        //   西湖区: 0-3  url_token: 4-16  phone: 17-28
+        let t = "西湖区 http://x.com 13812345678";
+        let url = pm("http://x.com", "url_token", 4, 16);
+        let phone = pm("13812345678", "phone", 17, 28);
+        assert!(
+            detect_regions_zh(t, &[url, phone]).iter().any(|h| h.text == "西湖区"),
+            "phone must still corroborate region even when a url_token precedes it in the list"
         );
     }
 

@@ -27,6 +27,8 @@ use std::sync::{LazyLock, OnceLock};
 use fancy_regex::Regex;
 use serde::Deserialize;
 
+use crate::evidence_detector::is_person_identifying;
+
 #[derive(Debug, Deserialize)]
 struct ZhOccupationData {
     /// Curated common occupations (head + multi-char specifics). The long tail
@@ -123,7 +125,7 @@ static OCC_CUE: LazyLock<Regex> = LazyLock::new(|| {
 // order is auditable. Conservative starting values; task 12 tunes them.
 const W_OCC_CUE: f64 = 0.6; // an occupation-context cue in the ±window
 const W_OCC_LEXICON: f64 = 0.5; // a KNOWN multi-char lexicon occupation (high-confidence)
-const W_OCC_PII_PROX: f64 = 0.3; // near other non-self_ref/non-org PII
+const W_OCC_PII_PROX: f64 = 0.3; // near person-identifying PII (the allowlist)
 const OCC_PROX_NEAR: usize = 50;
 
 /// Chars of context examined on each side of a candidate (matches regions'
@@ -267,9 +269,9 @@ fn productive_suffix_len_ending_at(chars: &[char], j: usize) -> Option<usize> {
 ///     带货主播 / 急诊科护士) — but NOT for a bare ambiguous 2-char title
 ///     (老师/医生 alone still need a cue),
 ///   - one proximity bucket vs `pii_entities` (`<= OCC_PROX_NEAR` →
-///     `W_OCC_PII_PROX`), first match wins (`break`), with `self_reference` AND
-///     `organization` excluded (an org/self-ref near a word is not evidence the
-///     word is a profession — mirrors regions).
+///     `W_OCC_PII_PROX`), first match wins (`break`), with only person-identifying
+///     PII eligible (phone/email/id/…); technical tokens, org names, and weak/
+///     sensitive attributes are excluded via `is_person_identifying` allowlist.
 ///
 /// ## Honorific-person guard (critical FP)
 ///
@@ -352,12 +354,15 @@ pub fn detect_occupation_zh(
             evidence += W_OCC_LEXICON;
         }
 
-        // Proximity to structural PII — first entity within the near bucket wins
-        // (break). self_reference and organization are excluded (mirrors
-        // regions): an org/self-ref co-occurring with a word is not evidence the
-        // word is a profession.
+        // Proximity to person-identifying PII — first entity within the near
+        // bucket wins (break). Only PII that NAMES or CONTACTS a specific person
+        // (phone/email/id/…) answers "is someone identifiable nearby?" and
+        // corroborates. Technical tokens (ip_address/jwt/url_token/api-key), org
+        // names, and weak/sensitive attributes do not. The allowlist gate
+        // (is_person_identifying) enforces this; new technical types are safe by
+        // default. This subsumes the old self_reference/organization denylist.
         for pii in pii_entities {
-            if pii.type_ == "self_reference" || pii.type_ == "organization" {
+            if !is_person_identifying(&pii.type_) {
                 continue;
             }
             let distance = start.abs_diff(pii.end).min(pii.start.abs_diff(end));
@@ -475,6 +480,55 @@ mod tests {
         assert!(
             hits.iter().any(|h| h.text.contains("驯兽师") && h.type_ == "job_title"),
             "bare suffix-run with cue should fire: {hits:?}"
+        );
+    }
+
+    #[test]
+    fn occupation_ip_address_does_not_corroborate_guard() {
+        // STATIC GUARD — not a fail-before/pass-after behavioral proof. Occupation's
+        // W_OCC_PII_PROX=0.3 < OCC_THRESHOLD=0.5, so proximity alone NEVER fires an
+        // occupation regardless of the PII type; this candidate was correctly not
+        // detected both before and after the allowlist change. The test exists to
+        // catch a FUTURE weight increase that would otherwise re-open the gap: if
+        // W_OCC_PII_PROX is ever raised to ≥ 0.5, a technical token like ip_address
+        // must STILL be excluded by the is_person_identifying allowlist and must not
+        // make a bare occupation fire.
+        //
+        // A bare suffix-run occupation (驯兽师 — 3 chars, NOT in lexicon) with NO
+        // cue, whose only nearby entity is an ip_address (technical, non-person-
+        // identifying → absent from PERSON_IDENTIFYING_PII → excluded).
+        let t = "驯兽师 192.168.1.1";
+        // 驯兽师: chars 0-2 (end=3). ip starts at 4.
+        let ip = vec![pm("192.168.1.1", "ip_address", 4, 15)];
+        assert!(
+            detect_occupation_zh(t, &ip)
+                .iter()
+                .all(|h| h.type_ != "job_title"),
+            "technical PII (ip_address) must not corroborate a bare occupation: {:?}",
+            detect_occupation_zh(t, &ip)
+        );
+    }
+
+    #[test]
+    fn phone_not_accidentally_excluded_from_occupation_allowlist() {
+        // EXCLUSION GUARD — confirms `phone` is in the is_person_identifying
+        // allowlist and is NOT accidentally skipped by the proximity gate. It is
+        // NOT a proof that phone proximity DECIDES detection: the candidate 分析师
+        // is a known multi-char LEXICON occupation (3 chars → W_OCC_LEXICON=0.5 ≥
+        // OCC_THRESHOLD=0.5), so it fires on its lexicon weight alone; phone merely
+        // adds corroboration (0.8 total). Given the weight design (W_OCC_PII_PROX=0.3
+        // < threshold) no occupation candidate can ever make proximity the deciding
+        // factor — so this asserts the allowlist does not WRONGLY exclude phone, not
+        // that phone is load-bearing here.
+        let t = "分析师 13812345678";
+        // 分析师: chars 0-2 (end=3). phone starts at char 4.
+        let phone = vec![pm("13812345678", "phone", 4, 15)];
+        assert!(
+            detect_occupation_zh(t, &phone)
+                .iter()
+                .any(|h| h.text == "分析师" && h.type_ == "job_title"),
+            "phone must not prevent occupation detection (personal PII still corroborates): {:?}",
+            detect_occupation_zh(t, &phone)
         );
     }
 }

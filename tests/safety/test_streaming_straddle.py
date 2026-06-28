@@ -467,6 +467,23 @@ def test_fuzz_stream_leak_equivalence():
                 )
 
 
+def test_region_with_long_url_token_sole_evidence_stream_equals_batch():
+    # The url_token's ?token= sits >W(128) chars into the URL. With the
+    # corroborator allowlist, a url_token no longer corroborates a region in
+    # EITHER batch or stream, so the bare region behaves identically in both —
+    # no cross-sentence leak. (Region is left as-is because a URL near a
+    # district is not evidence the district is a personal address.)
+    long_url = "https://corp.example.com/" + ("p" * 160) + "?token=SECRETabc123"
+    text = "西湖区。" + long_url + " 后面是一段中文结尾填充内容。"
+    out, _ = _stream([text[i:i+3] for i in range(0, len(text), 3)])
+    from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
+    batch = redact_pseudonym_llm(text, salt=42, lang="zh", mode="fast", _polluted_input_ok=True).downstream_text
+    # The url_token itself is still redacted in both; the region is treated
+    # identically in both (no stream-only leak).
+    assert ("西湖区" in out) == ("西湖区" in batch), f"stream/batch disagree on region: {out!r} vs {batch!r}"
+    assert "SECRETabc123" not in out and "SECRETabc123" not in batch, "url_token must be redacted in both"
+
+
 def test_fuzz_stream_oracle_is_a_real_guard(monkeypatch):
     """Regression sentinel: the fuzz oracle MUST fail if the detection-context
     window is broken. Break it (W=0 → no left-context retention AND no forward

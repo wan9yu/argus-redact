@@ -15,6 +15,7 @@
 //! framework (they shipped CI-green + adversarially reviewed).
 
 use std::collections::HashSet;
+use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
@@ -31,18 +32,60 @@ const DEFAULT_PROX_NEAR: usize = 50;
 // over-redact. Two weak signals combine to clear the gate (multi-char + PII
 // proximity = 0.6).
 //
-// These weights / window / excludes are the FIXED v1 policy, shared by every
-// framework detector (medical conditions, hobbies) — they all face the same
-// free-text FP risk. What varies per detector is supplied to `new`: the lexicon,
-// the cue regex, and the emitted type. Per-detector tuning of the weights/window
-// is deliberately NOT exposed until a detector demonstrably needs different
-// values — adding speculative knobs now would be unused surface.
+// These weights / window are the FIXED v1 policy, shared by every framework
+// detector (medical conditions, hobbies) — they all face the same free-text FP
+// risk. Proximity corroboration is gated by the shared `is_person_identifying`
+// allowlist (only PII that names/contacts/locates a person counts), so it needs
+// no per-detector configuration. What varies per detector is supplied to `new`:
+// the lexicon, the cue regex, and the emitted type. Per-detector tuning of the
+// weights/window is deliberately NOT exposed until a detector demonstrably needs
+// different values — adding speculative knobs now would be unused surface.
 const DEFAULT_W_CUE: f64 = 0.6;
 const DEFAULT_W_LEXICON: f64 = 0.3;
 const DEFAULT_W_PII_PROX: f64 = 0.3;
 const DEFAULT_THRESHOLD: f64 = 0.5;
 const DEFAULT_LEXICON_CONF_MIN: usize = 3;
-const DEFAULT_EXCLUDES: &[&str] = &["self_reference", "organization"];
+
+/// Person-identifying PII types that may corroborate an evidence-gated
+/// quasi-identifier (region/occupation/condition/hobby) BY PROXIMITY. The
+/// principle: proximity corroboration answers "is a specific person present near
+/// this candidate?" — only PII that names, contacts, or locates a specific
+/// person answers yes. A technical token (url_token/jwt/api-key), an org name, a
+/// weak attribute (age/gender), or a sensitive-but-non-locating attribute (a
+/// disease name) does not identify *which* person, so it must not promote a bare
+/// candidate to redaction by proximity alone.
+///
+/// This is an ALLOWLIST on purpose: a new technical type is safe by default
+/// (it simply isn't here). When adding a NEW person-identifying entity type to
+/// the detectors, add its exact emitted `type_` string HERE too, or it will not
+/// corroborate. The `is_person_identifying_allowlist` test pins every entry.
+///
+/// Subsumes the old `["self_reference", "organization"]` denylist (both are
+/// absent here, so they remain non-corroborators with no special-casing).
+static PERSON_IDENTIFYING_PII: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+    [
+        // names / contacts
+        "person", "email", "phone", "wechat", "qq",
+        // national / personal IDs
+        "id_number", "hk_id", "tw_id", "macau_id", "taiwan_arc", "ssn",
+        "aadhaar", "pan", "cpf", "nino", "nhs_number", "tax_id", "my_number", "rrn",
+        // personal-financial
+        "bank_card", "credit_card", "iban",
+        // travel / border docs
+        "passport", "us_passport", "eep", "hrp",
+        // other personal anchors (incl. personal-location identifiers)
+        "address", "postcode", "license_plate", "military_id", "social_security", "housing_fund",
+        "date_of_birth",
+    ]
+    .into_iter()
+    .collect()
+});
+
+/// True iff `type_` is a person-identifying PII type that may corroborate an
+/// evidence-gated candidate by proximity. See [`PERSON_IDENTIFYING_PII`].
+pub fn is_person_identifying(type_: &str) -> bool {
+    PERSON_IDENTIFYING_PII.contains(type_)
+}
 
 /// Candidate-generation strategy: scans `chars` for lexicon hits, returning
 /// `(matched_term, start_char_offset, end_char_offset)`. Language-specific —
@@ -62,7 +105,6 @@ pub struct DetectorConfig {
     w_pii_prox: f64,
     threshold: f64,
     lexicon_conf_min: usize,
-    excludes: &'static [&'static str],
     /// How candidates are generated. `candidates_cjk` (default) is byte-for-byte
     /// today's scan; `candidates_word` is the English word-boundary scan.
     scan: CandidateScan,
@@ -95,7 +137,6 @@ impl DetectorConfig {
             w_pii_prox: DEFAULT_W_PII_PROX,
             threshold: DEFAULT_THRESHOLD,
             lexicon_conf_min: DEFAULT_LEXICON_CONF_MIN,
-            excludes: DEFAULT_EXCLUDES,
             scan: candidates_cjk, // zh default — byte-identical to today's behavior
             lexicon_conf_multiword: false, // zh default — char-count proxy
         }
@@ -315,8 +356,14 @@ pub fn detect_with(
         if lexicon_conf {
             evidence += cfg.w_lexicon;
         }
+        // Proximity corroboration: a PII that NAMES or CONTACTS a specific person
+        // (phone/email/id/…) answers "is someone identifiable nearby?" and promotes
+        // the candidate. A technical token (jwt/url_token/ip_address/api-key), an
+        // org name, or a weak/sensitive attribute does NOT answer that question and
+        // must not corroborate. The allowlist gate (is_person_identifying) enforces
+        // this; new technical types are safe by default (not present in the list).
         for pii in pii_entities {
-            if cfg.excludes.contains(&pii.type_.as_str()) {
+            if !is_person_identifying(&pii.type_) {
                 continue;
             }
             let distance = start.abs_diff(pii.end).min(pii.start.abs_diff(end));
@@ -437,12 +484,29 @@ mod tests {
 
     #[test]
     fn excluded_organization_does_not_corroborate() {
-        // organization is ALSO excluded (load-bearing for precision): a multi-char
-        // term beside an org PII keeps only lexicon 0.3 < 0.5 → skip. Pins the
-        // second exclude so silently dropping it from DEFAULT_EXCLUDES fails here.
+        // organization is NOT person-identifying (load-bearing for precision): a
+        // multi-char term beside an org PII keeps only lexicon 0.3 < 0.5 → skip.
+        // Pins that organization stays out of PERSON_IDENTIFYING_PII — adding it
+        // to the allowlist would fail here.
         let org = vec![pm("华为公司", "organization", 0, 4)];
         let hits = detect_with("华为公司旁边有马拉松", &org, test_cfg());
         assert!(hits.is_empty(), "organization must not corroborate: {hits:?}");
+    }
+
+    #[test]
+    fn framework_not_corroborated_by_technical_pii() {
+        // A multi-char lexicon term (马拉松, 3 chars → W_LEXICON 0.3) near a jwt
+        // (technical PII, non-person-identifying) with NO cue: under the old denylist
+        // (which excluded only self_reference/organization) jwt corroborated, so
+        // evidence = lexicon 0.3 + proximity 0.3 = 0.6 ≥ 0.5 → wrongly detected. Under
+        // the allowlist, jwt is absent from PERSON_IDENTIFYING_PII → excluded →
+        // evidence = 0.3 < 0.5 → not detected. Pins the allowlist for every framework detector.
+        let jwt = vec![pm("tok", "jwt", 0, 3)];
+        let hits = detect_with("tok马拉松", &jwt, test_cfg());
+        assert!(
+            hits.is_empty(),
+            "technical PII (jwt) must not corroborate a framework candidate: {hits:?}"
+        );
     }
 
     fn word_cfg() -> &'static DetectorConfig {
@@ -545,5 +609,33 @@ mod tests {
                     == "software engineer"),
             "whitespace-run multi-word should still match: {hits:?}"
         );
+    }
+
+    #[test]
+    fn is_person_identifying_allowlist() {
+        // Person-identifying types corroborate (representative across categories).
+        for t in [
+            "person", "email", "phone", "wechat", "qq",
+            "id_number", "hk_id", "tw_id", "macau_id", "taiwan_arc", "ssn",
+            "aadhaar", "pan", "cpf", "nino", "nhs_number", "tax_id", "my_number", "rrn",
+            "bank_card", "credit_card", "iban",
+            "passport", "us_passport", "eep", "hrp",
+            "address", "postcode", "license_plate", "military_id", "social_security", "housing_fund",
+            "date_of_birth",
+        ] {
+            assert!(is_person_identifying(t), "{t} must be a person-identifying corroborator");
+        }
+        // Technical / org-context / weak / sensitive / candidate types do NOT corroborate.
+        for t in [
+            "url_token", "ip_address", "mac_address", "jwt", "ssh_private_key",
+            "openai_api_key", "anthropic_api_key", "aws_access_key", "github_token", "imei",
+            "organization", "workplace", "school", "credit_code", "cnpj",
+            "age", "gender",
+            "medical", "biometric", "ethnicity", "political", "religion",
+            "sexual_orientation", "financial", "criminal_record",
+            "location", "job_title", "hobby", "self_reference",
+        ] {
+            assert!(!is_person_identifying(t), "{t} must NOT corroborate an evidence-gated candidate");
+        }
     }
 }
