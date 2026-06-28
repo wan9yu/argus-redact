@@ -2,6 +2,74 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.7.14 — PII-leak hardening + streaming cross-sentence correctness
+
+A security and correctness release: a batch of PII-leak and restore fixes, plus
+streaming detection that now matches batch for evidence-gated quasi-identifiers.
+**This release changes detection output** (see Changed) — review before upgrading
+if you pin on exact redaction results.
+
+### Changed
+- **Evidence-gated quasi-identifiers are corroborated only by person-identifying
+  PII.** A region / occupation / condition / hobby candidate is no longer promoted
+  to redaction just because a *technical* PII (a URL token, IP address, JWT, API
+  key, MAC) sits nearby — a URL near a district is not evidence the district is
+  someone's home. Person-identifying PII (phone, person, email, national IDs,
+  address, …) and contextual cues still corroborate. A precision improvement:
+  fewer false positives on bare quasi-identifiers.
+- **Streaming detection now matches batch for cross-sentence evidence.** The
+  incremental `StreamingRedactor` carries a bounded context window (±128 chars: a
+  left-context overlap plus a forward hold-back) and detects once over it, so an
+  evidence-gated candidate whose corroborating cue/PII lands in an adjacent chunk
+  or sentence is classified the same way batch redaction would classify it. The
+  one residual is a single entity larger than the streaming buffer — a documented
+  bounded-memory limit.
+- **Chinese numeric identifiers (phone, ID number) are detected regardless of the
+  requested language.** These patterns are language-neutral; they previously
+  required `lang` to include `zh`. Locale-specific Chinese patterns (names,
+  addresses, etc.) stay language-gated.
+
+### Fixed
+- **Structured redaction no longer leaks** a headerless-CSV first row or block-form
+  JSON content.
+- **`redact_body` fails closed** on non-string fields instead of returning them
+  un-redacted.
+- **Restore is collision-safe:** purely-numeric restore keys are digit-bounded so a
+  fake can never match inside a longer number; a bare marker character following a
+  key no longer triggers double-replacement; and the realistic faker re-rolls off
+  every entity's original, so one fake can never expose another real value.
+- **A container entity stays whole** when an interior self-reference overruns it —
+  no unredacted head fragment leaks.
+- **Streaming carries multi-line SSH/PEM private keys whole** (the key head is never
+  emitted before its `END` line) and, via the cross-sentence rework above, carries
+  evidence-gated candidates together with the evidence that fired them.
+- **`StreamingRedactor` preserves its in-flight buffer** across `export_state` /
+  `from_state`.
+- **The ollama adapter recovers every occurrence** of a repeated entity, not just
+  the first; a failed ollama request never logs the raw prompt.
+- **The MCP server defaults to a strong random salt**, so pseudonym codes are not
+  grid-searchable when no salt is supplied.
+
+### Added
+- **International ID compliance reporting.** Japanese, Korean, German, UK, Indian,
+  and Brazilian national/health IDs (My Number, RRN, tax ID, NHS number / NINO /
+  postcode, Aadhaar / PAN, CPF / CNPJ) are reported with the correct sensitivity
+  and GDPR / HIPAA flags. (These were already redacted; this corrects the
+  compliance-report metadata, which previously understated them.)
+- **`redact_pseudonym_llm` accepts pre-detected entities** (`_pre_detected`),
+  enabling detect-once streaming.
+- **A re-identification evaluation benchmark** (closed-world zh + en persona
+  fixtures) under `tests/benchmark/`, off by default.
+
+### Internal
+- A language-neutral evidence-detector framework plus a word-boundary candidate
+  scan. (English free-text detection was evaluated against the re-identification
+  eval and not shipped; the framework is in place for future language work.)
+- Restore marker-alternation dedup; `language_neutral` is the single pattern-load
+  gate.
+- The Hugging Face Space demo deploy is a standalone workflow, decoupled from
+  releases.
+
 ## v0.7.13 — Faker fail-closed + crate-publish recovery
 
 A bug-fix release. The `date_of_birth` realistic faker could crash redaction on
