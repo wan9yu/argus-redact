@@ -5,6 +5,7 @@ A long-running conversation session can be serialized to JSON, persisted
 to map to the same fakes.
 """
 
+import inspect
 import json
 
 import pytest
@@ -152,6 +153,32 @@ class TestRoundTripThroughJson:
         r_resumed.flush()
 
         assert r_uninterrupted.aggregate_key() == r_resumed.aggregate_key()
+
+
+class TestExportStateCompleteness:
+    """Guard: every redaction-affecting __init__ parameter is persisted by export_state.
+
+    A future ctor param that is threaded through feed() but forgotten in
+    export_state() reverts to its DEFAULT on resume, producing under-redaction
+    or cross-checkpoint inconsistency.  This introspection guard fails CI the
+    moment the param is added to __init__ but not serialised.
+    """
+
+    def test_all_init_params_persisted_in_export_state(self):
+        """set(__init__ params) - {"self", "salt"} must be a subset of export_state keys."""
+        r = StreamingRedactor(salt=b"x")
+        state = r.export_state()
+        exported_keys = set(state.keys())
+
+        sig = inspect.signature(StreamingRedactor.__init__)
+        init_params = set(sig.parameters.keys()) - {"self", "salt"}
+
+        unpersisted = init_params - exported_keys
+        assert not unpersisted, (
+            f"StreamingRedactor.__init__ parameters not persisted in export_state(): "
+            f"{sorted(unpersisted)} — a future resume will revert these to defaults, "
+            f"causing under-redaction or cross-checkpoint inconsistency"
+        )
 
 
 class TestVersionGate:
