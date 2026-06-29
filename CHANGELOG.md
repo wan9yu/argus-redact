@@ -2,6 +2,25 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.7.16 — streaming detect-on-emit (performance)
+
+A pure performance optimization of the incremental `StreamingRedactor`. **No
+behavior change** — streaming output is identical to before (and still equal to
+batch; the stream ≡ batch fuzz oracle is the proof).
+
+### Performance
+- **`feed()` skips detection when no emit is possible.** Previously every
+  `feed()` ran full detection on the whole carried buffer even when no sentence
+  boundary had arrived yet, so token-by-token streaming re-detected the buffer on
+  every token (work scaling with input churn). Now a cheap boundary check
+  (`emit_possible`, single-sourced in the Rust core and shared by the Python and
+  wasm paths) gates detection: a feed that provably can't emit returns
+  immediately without detecting. Detection now runs roughly once per settled
+  sentence instead of once per chunk — work scales with output. A single large
+  feed that does emit is unchanged (its detection is inherent). The streaming
+  perf budget gains a representative small-chunk ("dribble") metric alongside the
+  existing single-feed one.
+
 ## v0.7.15 — audit hardening: fail-open + correctness fixes
 
 A hardening release from an external audit. It closes integration fail-open
