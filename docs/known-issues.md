@@ -117,6 +117,27 @@ Each entry follows three lines:
   in the commit) whenever a deliberate design change shifts a metric — this is
   expected periodic maintenance, not a defect.
 
+### English is best-effort — structured-PII strong, free-text weak, `ner` not recommended
+
+- **What**: argus-redact is Chinese-first. English detection is strong on
+  **structured identifiers** (email, phone, SSN, credit card, ID, passport,
+  postcode, IP — email tests ~99% recall) but **best-effort on free-text
+  entities** (person, location, address), which depend on noisy NER. In English,
+  `mode="ner"` can *reduce* precision — spaCy `en_core_web_sm` over-tags `person`
+  on prose — so `mode="fast"` is the recommended floor for English.
+- **Why we won't fix**: high-precision free-text English entity detection needs a
+  model-grade NER that the "small core, deterministic, audited, fast" SLA does not
+  carry. The L2 person evidence gate (single-sourced with the L1 gate) filters the
+  worst spaCy false positives, but L2 spans lack L1's surname-pool anchor, so a
+  residual prose-FP rate remains; chasing it with stricter heuristics trades recall
+  and balloons the English surface area beyond single-maintainer scope.
+- **What you should do**: use `mode="fast"` for English (structured-PII focused,
+  high precision). Treat English free-text person / location / address as
+  best-effort; for broad English entity coverage, pair argus with a downstream
+  NER-aware gateway. Do not rely on argus for compliance-grade redaction of
+  English *free-text* PII. (Chinese `mode="fast"` covers both structured and
+  free-text at F1 ~93 — the asymmetry is the zh-first product reality.)
+
 ## Recently Fixed
 
 ### v0.7.0 (2026-06-15) — Core Split
