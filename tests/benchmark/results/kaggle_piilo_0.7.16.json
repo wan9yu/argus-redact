@@ -50,12 +50,30 @@
           "fp": 0,
           "fn": 36
         }
+      },
+      "by_class": {
+        "free_text": {
+          "precision": 71.6,
+          "recall": 29.8,
+          "f1": 42.1,
+          "tp": 156,
+          "fp": 62,
+          "fn": 367
+        },
+        "structured": {
+          "precision": 90.0,
+          "recall": 18.9,
+          "f1": 31.3,
+          "tp": 18,
+          "fp": 2,
+          "fn": 77
+        }
       }
     },
     "ner": {
-      "precision": 24.6,
+      "precision": 27.4,
       "recall": 45.0,
-      "f1": 31.8,
+      "f1": 34.1,
       "per_type": {
         "email": {
           "precision": 100.0,
@@ -74,11 +92,11 @@
           "fn": 39
         },
         "person": {
-          "precision": 23.5,
+          "precision": 26.2,
           "recall": 49.7,
-          "f1": 31.9,
+          "f1": 34.3,
           "tp": 260,
-          "fp": 848,
+          "fp": 734,
           "fn": 263
         },
         "phone": {
@@ -96,6 +114,24 @@
           "tp": 0,
           "fp": 0,
           "fn": 36
+        }
+      },
+      "by_class": {
+        "free_text": {
+          "precision": 26.2,
+          "recall": 49.7,
+          "f1": 34.3,
+          "tp": 260,
+          "fp": 734,
+          "fn": 263
+        },
+        "structured": {
+          "precision": 90.0,
+          "recall": 18.9,
+          "f1": 31.3,
+          "tp": 18,
+          "fp": 2,
+          "fn": 77
         }
       }
     }
@@ -142,6 +178,24 @@
       "fn": 36
     }
   },
+  "by_class_fast": {
+    "free_text": {
+      "precision": 71.6,
+      "recall": 29.8,
+      "f1": 42.1,
+      "tp": 156,
+      "fp": 62,
+      "fn": 367
+    },
+    "structured": {
+      "precision": 90.0,
+      "recall": 18.9,
+      "f1": 31.3,
+      "tp": 18,
+      "fp": 2,
+      "fn": 77
+    }
+  },
   "per_type_ner": {
     "email": {
       "precision": 100.0,
@@ -160,11 +214,11 @@
       "fn": 39
     },
     "person": {
-      "precision": 23.5,
+      "precision": 26.2,
       "recall": 49.7,
-      "f1": 31.9,
+      "f1": 34.3,
       "tp": 260,
-      "fp": 848,
+      "fp": 734,
       "fn": 263
     },
     "phone": {
@@ -182,6 +236,24 @@
       "tp": 0,
       "fp": 0,
       "fn": 36
+    }
+  },
+  "by_class_ner": {
+    "free_text": {
+      "precision": 26.2,
+      "recall": 49.7,
+      "f1": 34.3,
+      "tp": 260,
+      "fp": 734,
+      "fn": 263
+    },
+    "structured": {
+      "precision": 90.0,
+      "recall": 18.9,
+      "f1": 31.3,
+      "tp": 18,
+      "fp": 2,
+      "fn": 77
     }
   },
   "date": "2026-06-29"

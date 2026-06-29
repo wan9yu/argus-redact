@@ -42,6 +42,24 @@
           "fp": 0,
           "fn": 246
         }
+      },
+      "by_class": {
+        "free_text": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 51,
+          "fn": 450
+        },
+        "structured": {
+          "precision": 99.6,
+          "recall": 84.0,
+          "f1": 91.1,
+          "tp": 231,
+          "fp": 1,
+          "fn": 44
+        }
       }
     },
     "ner": {
@@ -81,6 +99,24 @@
           "fp": 56,
           "fn": 164
         }
+      },
+      "by_class": {
+        "free_text": {
+          "precision": 44.1,
+          "recall": 18.2,
+          "f1": 25.8,
+          "tp": 82,
+          "fp": 104,
+          "fn": 368
+        },
+        "structured": {
+          "precision": 99.6,
+          "recall": 83.3,
+          "f1": 90.7,
+          "tp": 229,
+          "fp": 1,
+          "fn": 46
+        }
       }
     }
   },
@@ -118,6 +154,24 @@
       "fn": 246
     }
   },
+  "by_class_fast": {
+    "free_text": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 51,
+      "fn": 450
+    },
+    "structured": {
+      "precision": 99.6,
+      "recall": 84.0,
+      "f1": 91.1,
+      "tp": 231,
+      "fp": 1,
+      "fn": 44
+    }
+  },
   "per_type_ner": {
     "address": {
       "precision": 0.0,
@@ -150,6 +204,24 @@
       "tp": 82,
       "fp": 56,
       "fn": 164
+    }
+  },
+  "by_class_ner": {
+    "free_text": {
+      "precision": 44.1,
+      "recall": 18.2,
+      "f1": 25.8,
+      "tp": 82,
+      "fp": 104,
+      "fn": 368
+    },
+    "structured": {
+      "precision": 99.6,
+      "recall": 83.3,
+      "f1": 90.7,
+      "tp": 229,
+      "fp": 1,
+      "fn": 46
     }
   },
   "date": "2026-06-29"
