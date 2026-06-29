@@ -76,6 +76,73 @@ class TestRedactBody:
         assert key is not None
 
 
+class TestMessagesFailClosed:
+    """messages branch must fail CLOSED on non-conforming shapes."""
+
+    def test_tool_call_message_raises_typeerror(self):
+        """A dict message with no 'content' key (e.g. OpenAI tool-call) raises TypeError."""
+        body = {
+            "messages": [
+                {"role": "assistant", "tool_calls": [{"id": "c1", "function": {"name": "f", "arguments": '{"phone":"13812345678"}'}}]},
+            ]
+        }
+        with pytest.raises(TypeError, match="content"):
+            redact_body(body, field="messages", mode="fast", lang="zh", salt=42)
+
+    def test_bare_string_element_raises_typeerror(self):
+        """A bare-string element in messages raises TypeError."""
+        body = {"messages": ["电话13812345678"]}
+        with pytest.raises(TypeError, match="not a dict"):
+            redact_body(body, field="messages", mode="fast", lang="zh", salt=42)
+
+    def test_list_content_raises_typeerror(self):
+        """A message with list content (multimodal) raises TypeError."""
+        body = {
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "电话13812345678"}]},
+            ]
+        }
+        with pytest.raises(TypeError, match="multimodal"):
+            redact_body(body, field="messages", mode="fast", lang="zh", salt=42)
+
+    def test_well_formed_messages_still_redact(self):
+        """Well-formed [{role, content: str}] messages still redact and round-trip."""
+        body = {
+            "messages": [
+                {"role": "system", "content": "You are helpful."},
+                {"role": "user", "content": "我的电话是13812345678，邮箱zhang@example.com"},
+            ]
+        }
+        redacted, key = redact_body(body, field="messages", mode="fast", lang="zh", salt=42)
+        dumped = json.dumps(redacted, ensure_ascii=False)
+        # PII must not appear
+        assert "13812345678" not in dumped
+        assert "zhang@example.com" not in dumped
+        # Same entity aliases survive across messages (shared key)
+        assert key
+
+    def test_repeated_pii_gets_one_alias(self):
+        """The same PII across multiple messages maps to one alias (shared key)."""
+        body = {
+            "messages": [
+                {"role": "user", "content": "电话13812345678"},
+                {"role": "user", "content": "再次确认，电话13812345678"},
+            ]
+        }
+        redacted, key = redact_body(body, field="messages", mode="fast", lang="zh", salt=42)
+        # Both redacted content values should have the same replacement token
+        c1 = redacted["messages"][0]["content"]
+        c2 = redacted["messages"][1]["content"]
+        # Key has exactly one entry for the phone
+        assert len(key) == 1
+        # Restore round-trips
+        from argus_redact import restore
+        r1 = restore(c1, key)
+        r2 = restore(c2, key)
+        assert "13812345678" in r1
+        assert "13812345678" in r2
+
+
 class TestRestoreBody:
     def test_should_restore_text_field(self):
         body = {"text": "电话13812345678"}

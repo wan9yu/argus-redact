@@ -161,6 +161,8 @@ class RedactBodyMiddleware(BaseHTTPMiddleware):
 app.add_middleware(RedactBodyMiddleware)
 ```
 
+**Limitations and future directions:** The `messages` helper requires each message to be a `dict` with a string `content` key. It fails closed (raises `TypeError`) on other shapes — bare-string elements, dicts without a `content` key (such as OpenAI tool/function-call messages whose payload lives in `tool_calls` or `arguments`), and dicts with a list `content` (multimodal messages). Recursive redaction of text parts inside multimodal `content` arrays and tool-call argument strings is a future direction.
+
 ### Endpoint-level (simpler)
 
 If middleware is too broad, redact at the endpoint:
