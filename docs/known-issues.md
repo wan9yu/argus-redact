@@ -92,6 +92,31 @@ Each entry follows three lines:
 - **What you should do**: For deployments that don't need Layer 3, use the
   fast-mode subset image (no PyTorch — typically <1GB).
 
+### Perf-budget baseline is platform-specific and drifts
+
+- **What**: The performance gate (`.github/workflows/perf.yml`) compares each
+  PR's measured timings against the committed `tests/benchmark/baseline.json`
+  with a fixed ±10% threshold. Those numbers are specific to the CI runner
+  (`ubuntu-latest`) and its image, so the baseline legitimately **drifts**: it
+  shifts when the runner image's speed changes, and a deliberate design change
+  can move a single metric (e.g. the v0.7.x streaming "detect-once on a ±W
+  context window" raised the single-large-feed `streaming_feed_per_chunk` cost —
+  the inherent price of cross-sentence-correct streaming). Until the baseline is
+  refreshed after such a shift, the gate reads red on otherwise-unrelated PRs.
+- **Why we won't fix**: a fixed absolute threshold is the simplest reliable
+  regression signal; an auto-/relative baseline would mask the regressions the
+  gate exists to catch. The gate runs on PRs only (a cheap signal on change),
+  and editing `baseline.json` in a PR deliberately **exempts** the gate — the
+  caller-owned escape hatch for an intentional refresh or an accepted-cost
+  change.
+- **What you should do**: refresh the baseline from a **CI (Linux) measurement**,
+  never a local dev machine — the comparison is platform-blind ±10%, so a
+  macOS/laptop baseline will spuriously trip on the Linux runner. A PR that
+  touches `baseline.json` is auto-exempted; the perf job's `Measure` step prints
+  the current Linux `current.json` to copy in. Re-baseline (with a one-line note
+  in the commit) whenever a deliberate design change shifts a metric — this is
+  expected periodic maintenance, not a defect.
+
 ## Recently Fixed
 
 ### v0.7.0 (2026-06-15) — Core Split
