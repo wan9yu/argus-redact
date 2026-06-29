@@ -188,6 +188,68 @@ class TestRedactJsonPaths:
 
 
 # ══════════════════════════════════════════════════════════════
+# Cross-leaf / cross-cell alias-key regression
+# ══════════════════════════════════════════════════════════════
+
+
+class TestCrossLeafAliasKey:
+    """A repeated entity across multiple JSON leaves or CSV cells must map to one alias.
+
+    These tests guard against a `key=None`-per-leaf refactor that would assign a
+    fresh (dangling) alias for every occurrence — breaking cross-leaf restore and
+    obscuring the shared key with spurious duplicates.
+    """
+
+    def test_repeated_entity_across_json_leaves_maps_to_one_alias(self):
+        """Same phone in two JSON leaves → identical alias + single key entry."""
+        data = {
+            "message1": "电话13812345678",
+            "message2": "再次确认，电话13812345678",
+        }
+        redacted, key = redact_json(data, mode="fast", salt=42)
+
+        assert "13812345678" not in str(redacted)
+        # One key entry for the one unique PII value
+        assert len(key) == 1, (
+            f"Expected 1 key entry for one unique phone, got {len(key)}: {key}"
+        )
+        # Both leaves carry the same alias
+        alias = next(iter(key))
+        assert alias in redacted["message1"], "alias absent from first leaf"
+        assert alias in redacted["message2"], "alias absent from second leaf"
+
+    def test_repeated_entity_across_json_leaves_restores_fully(self):
+        """restore_json recovers the original phone from both leaves."""
+        data = {
+            "first": "电话13812345678",
+            "second": "再次确认，电话13812345678",
+        }
+        redacted, key = redact_json(data, mode="fast", salt=42)
+        restored = restore_json(redacted, key)
+
+        assert "13812345678" in restored["first"]
+        assert "13812345678" in restored["second"]
+
+    def test_repeated_entity_across_csv_cells_maps_to_one_alias(self):
+        """Same phone in two CSV cells → identical alias + single key entry."""
+        csv_text = "col1,col2\n电话13812345678,再次确认13812345678"
+        redacted_csv, key = redact_csv(csv_text, mode="fast", salt=42, has_header=True)
+
+        assert "13812345678" not in redacted_csv
+        assert len(key) == 1, (
+            f"Expected 1 key entry for one unique phone, got {len(key)}: {key}"
+        )
+
+    def test_repeated_entity_across_csv_cells_restores_fully(self):
+        """restore_csv recovers the original phone from both cells."""
+        csv_text = "col1,col2\n电话13812345678,再次确认13812345678"
+        redacted_csv, key = redact_csv(csv_text, mode="fast", salt=42, has_header=True)
+        restored = restore_csv(redacted_csv, key)
+
+        assert "13812345678" in restored
+
+
+# ══════════════════════════════════════════════════════════════
 # CSV
 # ══════════════════════════════════════════════════════════════
 
