@@ -188,7 +188,8 @@ async def assess_text(
                 "reasons": list(report.risk.reasons),
                 "pipl_articles": list(report.risk.pipl_articles),
             },
-            "entities_found": report.stats.get("total", 0),
+            # redact() always sets stats["total"] — contract pinned by test_mcp.py
+            "entities_found": report.stats["total"],
             "redacted": report.redacted_text,
         },
         ensure_ascii=False,

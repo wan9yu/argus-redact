@@ -34,6 +34,11 @@ class TestMCPServer:
 
         assert "info" in tool_names
 
+    def test_should_expose_assess_tool(self, mcp_app):
+        tool_names = [t.name for t in mcp_app._tool_manager.list_tools()]
+
+        assert "assess" in tool_names
+
 
 class TestMCPToolExecution:
     @pytest.fixture
@@ -97,6 +102,33 @@ class TestMCPToolExecution:
         c1 = await red({"text": "我住在西湖区", "mode": "fast", "salt": 42})
         c2 = await red({"text": "我住在西湖区", "mode": "fast", "salt": 42})
         assert c1["redacted"] == c2["redacted"], "explicit salt must stay deterministic"
+
+    @pytest.mark.asyncio
+    async def test_should_assess_and_return_entities_found(self, mcp_app):
+        # Phone number guarantees at least one entity; entities_found must match
+        # the actual detection count (non-vacuous: would fail if assess broke or
+        # stats["total"] silently returned 0 instead of raising on a missing key).
+        text = "联系电话：13812345678"
+        result = await mcp_app._tool_manager.call_tool(
+            "assess",
+            {"text": text, "mode": "fast"},
+        )
+
+        content = result if isinstance(result, str) else result[0].text
+        data = json.loads(content)
+
+        assert "entities_found" in data
+        assert data["entities_found"] > 0, (
+            "expected at least one entity for a phone-number input, got 0 — "
+            "assess may be broken or entities_found is silently defaulting"
+        )
+        assert "risk" in data
+
+        # Cross-check: entities_found must equal what redact() actually counted
+        from argus_redact.glue.redact import redact
+
+        report = redact(text, lang="zh", mode="fast", report=True)
+        assert data["entities_found"] == report.stats["total"]
 
     @pytest.mark.asyncio
     async def test_should_return_info(self, mcp_app):
