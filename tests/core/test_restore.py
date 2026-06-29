@@ -41,6 +41,17 @@ class TestRestoreBasic:
 
         assert result == "李明(经理)"
 
+    def test_should_not_chain_replace_when_complete_marker_follows_key(self):
+        # Residual sibling of the bare-paren case: a COMPLETE display marker
+        # ("(假)") following a key must still not let the key be replaced twice
+        # under a chained map. 张三→李明, 李明→王芳; "张三(假)" must restore to
+        # "李明(假)", never "王芳(假)" (李明 re-scanned = cross-entity leak).
+        key = {"张三": "李明", "李明": "王芳"}
+
+        result = restore("张三(假)", key)
+
+        assert result == "李明(假)"
+
     def test_should_not_match_numeric_key_inside_a_longer_number(self):
         # A numeric pseudonym must respect digit boundaries: it must not match
         # inside a longer digit run and splice a real original into an unrelated

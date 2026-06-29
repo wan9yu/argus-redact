@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use fancy_regex::Regex;
 
-use crate::display_marker::{DISPLAY_MARKER_PRESETS, strip_display_markers};
+use crate::display_marker::strip_display_markers;
 use crate::grammar::{is_self_ref, restore_grammar_en};
 use crate::reserved_range::{
-    byte_to_char_offset, escaped_alternation, escaped_alternation_digit_bounded, scan_for_pollution,
+    byte_to_char_offset, escaped_alternation_digit_bounded, scan_for_pollution,
 };
 
 #[derive(Debug)]
@@ -58,18 +58,17 @@ pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, Rest
     Ok(result)
 }
 
-/// Full restore path: alias merge + decoration-marker inline sub + core substitution + grammar.
+/// Full restore path: alias merge + core substitution + grammar.
 ///
-/// Mirrors `pure/restore.py:restore()` logic (lines 121–205):
 /// 1. If `display_marker` is Some → strip that marker from text.
 /// 2. If key empty → return text.
 /// 3. Alias merge: build flat lookup = key ∪ {alias → key[fake]'s original}.
-/// 4. Auto-detect decoration markers (only when display_marker is None): compile
-///    `(key_alt)((?:marker_alt)+)` where `marker_alt` is the alternation of the
-///    WHOLE preset marker strings (DISPLAY_MARKER_PRESETS), and replace each
-///    match with `value + markers`.
-/// 5. Core substitution (longest-first).
-/// 6. If any key VALUE is self-ref → `restore_grammar_en(result)`.
+/// 4. Core substitution (`restore`, single-pass longest-first).
+/// 5. If any key VALUE is self-ref → `restore_grammar_en(result)`.
+///
+/// Decoration markers (`ⓕ`, `(假)`, `ˢ`, `*`) need no dedicated pass: a marker
+/// trailing a key is ordinary non-key text, so the single `restore` pass leaves
+/// it verbatim right after the restored value (e.g. `"P-1ⓕ"` → `"<value>ⓕ"`).
 pub fn restore_full(
     text: &str,
     key: &HashMap<String, String>,
@@ -105,72 +104,21 @@ pub fn restore_full(
         key.clone()
     };
 
-    // Step 4: auto-detect decoration markers (only when display_marker is None).
-    let text_owned2: String;
-    let text: &str = if display_marker.is_none() {
-        // Alternation of the WHOLE preset marker strings — NOT a character class
-        // of their individual chars. A char class lets a lone '(' (one char of
-        // the "(假)" preset) match as a "marker", so Step-4 consumes+replaces a
-        // key that the Step-5 core pass then replaces AGAIN — a double
-        // replacement that can disclose a different entity's original. Matching
-        // only complete markers (e.g. "(假)", "ⓕ") makes a bare '(' inert.
-        let markers: Vec<&str> = DISPLAY_MARKER_PRESETS
-            .iter()
-            .map(|(_, v)| *v)
-            .filter(|v| !v.is_empty())
-            .collect();
-        let marker_alt = escaped_alternation(&markers);
-        if !marker_alt.is_empty() && !flat.is_empty() {
-            // Build longest-first alternation of all flat keys.
-            let mut sorted_keys: Vec<&String> = flat.keys().collect();
-            sorted_keys.sort_by(|a, b| b.len().cmp(&a.len()));
-            let keys_alt = escaped_alternation_digit_bounded(&sorted_keys);
-
-            let pattern_str = format!("({})((?:{})+)", keys_alt, marker_alt);
-            match Regex::new(&pattern_str) {
-                Ok(re) => {
-                    // Replace each match with value + trailing markers.
-                    let mut result = String::with_capacity(text.len());
-                    let mut last_end = 0;
-                    let mut search_start = 0;
-                    while search_start <= text.len() {
-                        let m = match re.find_from_pos(text, search_start) {
-                            Ok(Some(m)) => m,
-                            Ok(None) => break,
-                            Err(_) => break,
-                        };
-                        result.push_str(&text[last_end..m.start()]);
-                        // Re-run captures to get group 1 and 2.
-                        let caps = re.captures(&text[m.start()..]).ok().flatten();
-                        if let Some(caps) = caps {
-                            let g1 = caps.get(1).map(|c| c.as_str()).unwrap_or("");
-                            let g2 = caps.get(2).map(|c| c.as_str()).unwrap_or("");
-                            let replacement = flat.get(g1).map(|v| v.as_str()).unwrap_or(g1);
-                            result.push_str(replacement);
-                            result.push_str(g2);
-                        } else {
-                            result.push_str(m.as_str());
-                        }
-                        last_end = m.end();
-                        search_start = if m.end() > m.start() { m.end() } else { m.start() + 1 };
-                    }
-                    result.push_str(&text[last_end..]);
-                    text_owned2 = result;
-                    text_owned2.as_str()
-                }
-                Err(_) => text,
-            }
-        } else {
-            text
-        }
-    } else {
-        text
-    };
-
-    // Step 5: core substitution over flat lookup.
+    // Step 4: core substitution over the flat lookup.
+    //
+    // No separate decoration-marker pass runs here. `restore` is a single
+    // left-to-right longest-key-match pass that replaces each source span
+    // exactly once and advances PAST each replacement (never re-scanning the
+    // value it just emitted). A trailing marker is non-key text, so it survives
+    // verbatim after the restored value — the same result the old marker pass
+    // produced, minus its hazard: that pass wrote `value + markers` into a
+    // buffer this scan then re-read, so under a CHAINED key map (a value that is
+    // itself another key) the value got replaced a SECOND time — a cross-entity
+    // disclosure. Folding the marker handling into the single no-rescan pass
+    // closes that double-replace by construction.
     let result = restore(text, &flat)?;
 
-    // Step 6: grammar restore if any value is self-ref.
+    // Step 5: grammar restore if any value is self-ref.
     let result = if key.values().any(|v| is_self_ref(v)) {
         restore_grammar_en(&result)
     } else {
@@ -394,17 +342,43 @@ mod tests {
 
     #[test]
     fn full_bare_marker_char_does_not_cause_double_replacement() {
-        // A bare '(' (a single char of the "(假)" preset)
-        // following a key must NOT trigger the decoration-marker pass. If it
-        // does, Step-4 replaces the key AND the Step-5 core pass replaces it
-        // again — disclosing a DIFFERENT entity's original (cross-entity leak).
-        // key: 张三→李明, 李明→王芳. "张三(经理)" must restore to "李明(经理)"
-        // (single-pass-correct), NOT "王芳(经理)" (double-replaced).
+        // A bare '(' (a single char of the "(假)" preset) following a key is
+        // ordinary non-key text: the single-pass restore must leave it verbatim
+        // after the restored value, never treat it as a marker that re-triggers
+        // a replacement of the value (which would disclose a DIFFERENT entity's
+        // original — a cross-entity leak). key: 张三→李明, 李明→王芳. "张三(经理)"
+        // must restore to "李明(经理)" (single-pass-correct), NOT "王芳(经理)".
         let mut k = HashMap::new();
         k.insert("张三".to_string(), "李明".to_string());
         k.insert("李明".to_string(), "王芳".to_string());
         let result = restore_full("张三(经理)", &k, None, None).unwrap();
         assert_eq!(result, "李明(经理)");
+    }
+
+    #[test]
+    fn full_complete_marker_does_not_cause_chained_double_replacement_zh() {
+        // Residual of the bare-char fix: a COMPLETE marker following a key must
+        // not let the key be replaced twice under a CHAINED map (where a value
+        // emitted for one key is itself another key). key: 张三→李明, 李明→王芳.
+        // "张三(假)" must restore to "李明(假)" (single-pass-correct), NOT
+        // "王芳(假)" (李明 re-scanned and re-replaced — a cross-entity leak).
+        let mut k = HashMap::new();
+        k.insert("张三".to_string(), "李明".to_string());
+        k.insert("李明".to_string(), "王芳".to_string());
+        let result = restore_full("张三(假)", &k, None, None).unwrap();
+        assert_eq!(result, "李明(假)");
+    }
+
+    #[test]
+    fn full_complete_marker_does_not_cause_chained_double_replacement_pseudonym() {
+        // Same chained-map double-replace, with the circled-f marker and a
+        // pseudonym chain: P-1→P-2, P-2→SECRET. "P-1ⓕ" must restore to "P-2ⓕ"
+        // (single-pass-correct), NOT "SECRETⓕ" (P-2 re-scanned and re-replaced).
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "P-2".to_string());
+        k.insert("P-2".to_string(), "SECRET".to_string());
+        let result = restore_full("P-1ⓕ", &k, None, None).unwrap();
+        assert_eq!(result, "P-2ⓕ");
     }
 
     #[test]
