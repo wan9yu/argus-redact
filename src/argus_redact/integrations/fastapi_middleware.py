@@ -24,6 +24,33 @@ from __future__ import annotations
 from argus_redact import redact, restore
 
 
+def _validate_message(i: int, msg: object) -> None:
+    """Raise TypeError if msg is not a valid chat message dict with a str content.
+
+    Called per-element in the messages loop; centralises the three inline guards
+    so the loop body stays focused on redaction logic.
+    """
+    if not isinstance(msg, dict):
+        raise TypeError(
+            f"redact_body: messages[{i}] is {type(msg).__name__}, not a dict; "
+            f"each message must be a dict with a string 'content' key. "
+            f"Bare-string message elements are not supported — nothing was redacted."
+        )
+    if "content" not in msg:
+        raise TypeError(
+            f"redact_body: messages[{i}] has no 'content' key "
+            f"(keys present: {list(msg.keys())}); "
+            f"tool/function-call messages and other non-content shapes are not "
+            f"supported — nothing was redacted."
+        )
+    if not isinstance(msg["content"], str):
+        raise TypeError(
+            f"redact_body: messages[{i}]['content'] is "
+            f"{type(msg['content']).__name__}, not str; "
+            f"multimodal (list) content is not supported — nothing was redacted."
+        )
+
+
 def redact_body(
     body: dict,
     *,
@@ -43,25 +70,7 @@ def redact_body(
     if field == "messages" and "messages" in body:
         redacted_messages = []
         for i, msg in enumerate(body["messages"]):
-            if not isinstance(msg, dict):
-                raise TypeError(
-                    f"redact_body: messages[{i}] is {type(msg).__name__}, not a dict; "
-                    f"each message must be a dict with a string 'content' key. "
-                    f"Bare-string message elements are not supported — nothing was redacted."
-                )
-            if "content" not in msg:
-                raise TypeError(
-                    f"redact_body: messages[{i}] has no 'content' key "
-                    f"(keys present: {list(msg.keys())}); "
-                    f"tool/function-call messages and other non-content shapes are not "
-                    f"supported — nothing was redacted."
-                )
-            if not isinstance(msg["content"], str):
-                raise TypeError(
-                    f"redact_body: messages[{i}]['content'] is "
-                    f"{type(msg['content']).__name__}, not str; "
-                    f"multimodal (list) content is not supported — nothing was redacted."
-                )
+            _validate_message(i, msg)
             new_msg = dict(msg)
             redacted_text, combined_key = redact(
                 msg["content"],
