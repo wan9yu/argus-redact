@@ -244,6 +244,49 @@ class TestCrossLeafAliasKey:
 
         assert "13812345678" in restored
 
+    def test_distinct_entities_across_csv_cells_accumulate_key(self):
+        """Two DISTINCT PII values in separate CSV cells → key has 2 entries + both restore.
+
+        Non-vacuity: a broken per-cell accumulation that resets the key dict before
+        processing each cell would end up with only the last cell's entry (len==1) and
+        fail to restore the phone from the first cell — this test catches that bug
+        while the same-PII tests above cannot.
+        """
+        csv_text = "phone,id\n13812345678,110101199003074610"
+        redacted_csv, key = redact_csv(csv_text, mode="fast", salt=42, has_header=True)
+
+        assert "13812345678" not in redacted_csv
+        assert "110101199003074610" not in redacted_csv
+        assert len(key) == 2, (
+            f"Expected 2 key entries for 2 distinct PII values, got {len(key)}: {key}"
+        )
+        restored = restore_csv(redacted_csv, key)
+        assert "13812345678" in restored, "phone not restored from CSV cell"
+        assert "110101199003074610" in restored, "id number not restored from CSV cell"
+
+    def test_distinct_entities_across_json_leaves_accumulate_key(self):
+        """Two DISTINCT PII values in separate JSON leaves → key has 2 entries + both restore.
+
+        Non-vacuity: a broken per-leaf accumulation that resets the key dict before
+        processing each leaf would end up with only the last leaf's entry (len==1) and
+        fail to restore the phone from the first leaf — this test catches that bug
+        while the same-PII tests above cannot.
+        """
+        data = {
+            "contact": "电话13812345678",
+            "identity": "身份证110101199003074610",
+        }
+        redacted, key = redact_json(data, mode="fast", salt=42)
+
+        assert "13812345678" not in str(redacted)
+        assert "110101199003074610" not in str(redacted)
+        assert len(key) == 2, (
+            f"Expected 2 key entries for 2 distinct PII values, got {len(key)}: {key}"
+        )
+        restored = restore_json(redacted, key)
+        assert "13812345678" in str(restored), "phone not restored from JSON leaf"
+        assert "110101199003074610" in str(restored), "id number not restored from JSON leaf"
+
 
 # ══════════════════════════════════════════════════════════════
 # CSV
