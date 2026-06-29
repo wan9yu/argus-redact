@@ -24,20 +24,22 @@ _RUST_FILE = (
 )
 
 
-def _read_python_value() -> int:
-    """Parse _PEM_OPENER_CEILING_EXTRA from the Python source."""
-    src = _PYTHON_FILE.read_text(encoding="utf-8")
-    m = re.search(r"_PEM_OPENER_CEILING_EXTRA\s*=\s*([\d_]+)", src)
-    assert m, f"_PEM_OPENER_CEILING_EXTRA not found in {_PYTHON_FILE}"
+def _parse_int_const(path: Path, pattern: str) -> int:
+    """Read the first integer constant matched by *pattern* in *path*."""
+    src = path.read_text(encoding="utf-8")
+    m = re.search(pattern, src)
+    assert m, f"pattern {pattern!r} not found in {path}"
     return int(m.group(1).replace("_", ""))
+
+
+def _read_python_value() -> int:
+    return _parse_int_const(_PYTHON_FILE, r"_PEM_OPENER_CEILING_EXTRA\s*=\s*([\d_]+)")
 
 
 def _read_rust_value() -> int:
-    """Parse PEM_OPENER_CEILING_EXTRA from the Rust source."""
-    src = _RUST_FILE.read_text(encoding="utf-8")
-    m = re.search(r"const\s+PEM_OPENER_CEILING_EXTRA\s*:\s*\w+\s*=\s*([\d_]+)", src)
-    assert m, f"PEM_OPENER_CEILING_EXTRA not found in {_RUST_FILE}"
-    return int(m.group(1).replace("_", ""))
+    return _parse_int_const(
+        _RUST_FILE, r"const\s+PEM_OPENER_CEILING_EXTRA\s*:\s*\w+\s*=\s*([\d_]+)"
+    )
 
 
 def test_pem_opener_ceiling_extra_python_rust_parity():

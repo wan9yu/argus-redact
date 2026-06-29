@@ -5,6 +5,7 @@ import pytest
 from argus_redact.lang.zh.patterns import PATTERNS as ZH_PATTERNS
 from argus_redact.specs import get, list_types, lookup
 from argus_redact.specs import zh as _zh_import  # noqa: F401 — trigger registration
+from tests.architecture.test_risk_data_parity import EXPECTED_TYPE_COUNT
 
 
 class TestRegistryBasics:
@@ -202,14 +203,14 @@ class TestSpecModuleCompleteness:
         )
 
     def test_registered_type_count_matches_expected(self):
-        """Type count must not drift from the frozen baseline (73).
+        """Type count must not drift from the frozen baseline in test_risk_data_parity.py.
 
         This mirrors the half-1 check in test_risk_data_parity.py but lives in
         the specs tests so it fails fast before the heavier parity check runs.
         """
         count = len(list_types())
-        assert count == 73, (
-            f"Expected 73 registered PII types, got {count}. "
+        assert count == EXPECTED_TYPE_COUNT, (
+            f"Expected {EXPECTED_TYPE_COUNT} registered PII types, got {count}. "
             f"A specs module may have been silently dropped or a new one added "
             f"without updating the frozen baseline in test_risk_data_parity.py."
         )

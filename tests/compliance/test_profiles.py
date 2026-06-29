@@ -1,5 +1,7 @@
 """Tests for compliance profiles and per-type filtering."""
 
+import pytest
+
 from argus_redact import redact
 
 
@@ -90,26 +92,11 @@ class TestProfileStrategy:
         assert "123-456-7890" not in redacted
         assert "****" not in redacted
 
-    def test_pipl_should_not_use_mask_for_phone_landline(self):
-        """PIPL profile: landline should be fully redacted, not partially masked."""
+    @pytest.mark.parametrize("profile", ["pipl", "gdpr", "hipaa"])
+    def test_compliance_profile_should_not_use_mask_for_phone_landline(self, profile):
+        """Compliance profiles: landline should be fully redacted, not partially masked."""
         text = "座机010-12345678"
-        redacted, key = redact(text, lang="zh", mode="fast", profile="pipl")
-
-        assert "010-12345678" not in redacted
-        assert "****" not in redacted
-
-    def test_gdpr_should_not_use_mask_for_phone_landline(self):
-        """GDPR profile: landline should be fully redacted, not partially masked."""
-        text = "座机010-12345678"
-        redacted, key = redact(text, lang="zh", mode="fast", profile="gdpr")
-
-        assert "010-12345678" not in redacted
-        assert "****" not in redacted
-
-    def test_hipaa_should_not_use_mask_for_phone_landline(self):
-        """HIPAA profile: landline should be fully redacted, not partially masked."""
-        text = "座机010-12345678"
-        redacted, key = redact(text, lang="zh", mode="fast", profile="hipaa")
+        redacted, key = redact(text, lang="zh", mode="fast", profile=profile)
 
         assert "010-12345678" not in redacted
         assert "****" not in redacted

@@ -12,16 +12,11 @@ import inspect
 
 import pytest
 
-# Shipped NER adapter module paths (mirrors _LANG_NER_ADAPTERS in glue/redact.py).
-_ADAPTER_MOD_PATHS = [
-    "argus_redact.lang.zh.ner_adapter",
-    "argus_redact.lang.en.ner_adapter",
-    "argus_redact.lang.ja.ner_adapter",
-    "argus_redact.lang.ko.ner_adapter",
-    "argus_redact.lang.de.ner_adapter",
-    "argus_redact.lang.uk.ner_adapter",
-    "argus_redact.lang.in_.ner_adapter",
-]
+from argus_redact.glue.redact import _LANG_NER_ADAPTERS
+
+# Shipped NER adapter module paths — derived from the glue/redact.py SSOT so a
+# newly-added adapter is automatically covered without a second hand-edit here.
+_ADAPTER_MOD_PATHS = list(_LANG_NER_ADAPTERS.values())
 
 
 class TestNERAdapterConfidenceFloors:
