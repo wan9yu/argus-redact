@@ -277,11 +277,31 @@ class TestServerInputValidation:
         assert resp.status_code == 400
         assert "key" in resp.json()["error"].lower()
 
+    def test_should_reject_key_as_list_on_redact(self, client):
+        """Key passed as a JSON list to /redact should be rejected (non-dict)."""
+        resp = client.post(
+            "/redact",
+            json={"text": "test", "mode": "fast", "key": ["not", "a", "dict"]},
+        )
+
+        assert resp.status_code == 400
+        assert "key" in resp.json()["error"].lower()
+
     def test_should_reject_key_as_file_path_on_restore(self, client):
         """Key passed as string path to /restore should be rejected (security)."""
         resp = client.post(
             "/restore",
             json={"text": "test", "key": "/tmp/secret.json"},
+        )
+
+        assert resp.status_code == 400
+        assert "key" in resp.json()["error"].lower()
+
+    def test_should_reject_key_as_list_on_restore(self, client):
+        """Key passed as a JSON list to /restore should be rejected (non-dict)."""
+        resp = client.post(
+            "/restore",
+            json={"text": "test", "key": ["not", "a", "dict"]},
         )
 
         assert resp.status_code == 400

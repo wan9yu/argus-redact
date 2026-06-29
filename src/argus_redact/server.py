@@ -47,10 +47,10 @@ async def handle_redact(request: Request) -> JSONResponse:
             status_code=400,
         )
     key = body.get("key")
-    # Security: reject key as file path string (only dicts allowed via HTTP)
-    if isinstance(key, str):
+    # Security: reject any non-dict, non-None key (str path, list, int, etc.)
+    if key is not None and not isinstance(key, dict):
         return JSONResponse(
-            {"error": "key must be a JSON object, not a file path"},
+            {"error": "key must be a JSON object"},
             status_code=400,
         )
     detailed = body.get("detailed", False)
@@ -110,10 +110,10 @@ async def handle_restore(request: Request) -> JSONResponse:
     body = await request.json()
     text = body.get("text", "")
     key = body.get("key", {})
-    # Security: reject key as file path string (only dicts allowed via HTTP)
-    if isinstance(key, str):
+    # Security: reject any non-dict, non-None key (str path, list, int, etc.)
+    if key is not None and not isinstance(key, dict):
         return JSONResponse(
-            {"error": "key must be a JSON object, not a file path"},
+            {"error": "key must be a JSON object"},
             status_code=400,
         )
 
