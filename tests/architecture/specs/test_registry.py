@@ -136,6 +136,106 @@ class TestSpecExamples:
                 )
 
 
+class TestSpecModuleCompleteness:
+    """Guard: auto-discovery in specs/__init__.py covers every register()-calling module.
+
+    With pkgutil.iter_modules any new specs/*.py that calls register() is
+    automatically imported.  This test verifies (a) every register()-calling
+    spec module is in the set the auto-discovery actually imports — so a bad
+    exclusion rule that drops a module is caught immediately — and (b) the
+    current type count is stable.
+    """
+
+    def test_every_register_module_is_discovered(self):
+        """Every register()-calling spec module must be imported by the auto-discovery.
+
+        ``register_modules`` is computed from the source text with a FIXED,
+        independent exclusion set (``__init__``, ``_*``, ``gen_*``, and the
+        ``registry`` module that DEFINES — not calls — register).  It is
+        deliberately NOT coupled to the discovery's own ``_EXCLUDED_*`` rules:
+        coupling them would let a wrong discovery exclusion shrink BOTH sides
+        together and silently pass (the tautology this guard replaces).
+
+        ``imported`` reuses the SAME ``_discover_spec_modules()`` helper that
+        ``specs/__init__.py`` runs at import time.  So a future register()-
+        module that a wrong discovery rule drops appears in ``register_modules``
+        but NOT in ``imported`` → the subset assertion fails.
+        """
+        import re
+        from pathlib import Path
+
+        import argus_redact.specs as _specs_pkg
+        from argus_redact.specs import _discover_spec_modules
+
+        # Independent definition of "a type-registering spec module" — kept
+        # separate from the discovery's exclusion constants on purpose.
+        _IGNORE_PREFIXES = ("_", "gen_")
+        _IGNORE_NAMES = frozenset({"__init__", "registry"})  # registry DEFINES register()
+        # Match a register() CALL, not the `def register(` definition or
+        # `unregister(` — avoids false positives from any module that only
+        # mentions the symbol without calling it to register a type.
+        _REGISTER_CALL = re.compile(r"(?<!un)(?<!def )register\s*\(")
+
+        specs_dir = Path(_specs_pkg.__file__).parent
+        register_modules = set()
+        for py in sorted(specs_dir.glob("*.py")):
+            stem = py.stem
+            if stem in _IGNORE_NAMES:
+                continue
+            if any(stem.startswith(p) for p in _IGNORE_PREFIXES):
+                continue
+            if _REGISTER_CALL.search(py.read_text(encoding="utf-8")):
+                register_modules.add(stem)
+
+        # Sanity: the known type-registering modules must be detected (non-vacuous).
+        assert {"zh", "en", "shared", "intl"} <= register_modules, (
+            f"expected the canonical register-modules to be detected, "
+            f"got {sorted(register_modules)}"
+        )
+
+        imported = set(_discover_spec_modules())
+        missing = register_modules - imported
+        assert not missing, (
+            f"register()-calling spec module(s) NOT imported by auto-discovery: "
+            f"{sorted(missing)} — these would silently never register their PII "
+            f"types (silent type absence + understated coverage)"
+        )
+
+    def test_registered_type_count_matches_expected(self):
+        """Type count must not drift from the frozen baseline (73).
+
+        This mirrors the half-1 check in test_risk_data_parity.py but lives in
+        the specs tests so it fails fast before the heavier parity check runs.
+        """
+        count = len(list_types())
+        assert count == 73, (
+            f"Expected 73 registered PII types, got {count}. "
+            f"A specs module may have been silently dropped or a new one added "
+            f"without updating the frozen baseline in test_risk_data_parity.py."
+        )
+
+
+class TestRegistryStrategyValidity:
+    """Guard: every registered type's strategy is a member of VALID_STRATEGIES.
+
+    register() does not validate the strategy literal (unlike user-facing
+    _validate_config). A typo (e.g. "pseudonum") would be silently accepted and
+    then crash or no-op at runtime when replace() encounters it.
+    """
+
+    def test_all_registered_strategies_are_valid(self):
+        from argus_redact.pure._strategy_kind import VALID_STRATEGIES
+
+        invalid = [
+            f"{td.lang}/{td.name}: strategy={td.strategy!r}"
+            for td in list_types()
+            if td.strategy not in VALID_STRATEGIES
+        ]
+        assert not invalid, (
+            f"Registered types with invalid strategy: {invalid}"
+        )
+
+
 class TestSpecCompleteness:
     """Every spec should have minimum required fields."""
 
