@@ -1,0 +1,889 @@
+{
+  "benchmark": "prvl_multi",
+  "package_version": "0.7.16",
+  "date": "2026-06-29T17:11:12.279379",
+  "provider": "openrouter",
+  "models": [
+    {
+      "label": "GPT-5",
+      "openrouter_id": "openai/gpt-5.5"
+    },
+    {
+      "label": "Claude-Opus-4.5",
+      "openrouter_id": "anthropic/claude-opus-4.5"
+    },
+    {
+      "label": "Gemini-2.5-Pro",
+      "openrouter_id": "google/gemini-2.5-pro"
+    },
+    {
+      "label": "GLM-4.5",
+      "openrouter_id": "z-ai/glm-4.5"
+    }
+  ],
+  "profiles": [
+    "default",
+    "pseudonym",
+    "realistic"
+  ],
+  "cases": 4,
+  "judge": true,
+  "rows": [
+    {
+      "case_id": "summarize_zh",
+      "profile": "default",
+      "model": "GPT-5",
+      "model_id": "openai/gpt-5.5",
+      "redacted": "P-38043的手机号是138****5678，他在ADDR-42013工作，确诊MED-99685",
+      "task_type": "reference",
+      "output": "P-38043的手机号是138****5678，在ADDR-42013工作，并已确诊MED-99685。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "translate_zh_en",
+      "profile": "default",
+      "model": "GPT-5",
+      "model_id": "openai/gpt-5.5",
+      "redacted": "客户P-38043，手机139****5678，邮箱l***@test.com，在O-49633工作",
+      "task_type": "reference",
+      "output": "Customer P-38043, phone number 139****5678, email l***@test.com, works at O-49633.",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "qa_en",
+      "profile": "default",
+      "model": "GPT-5",
+      "model_id": "openai/gpt-5.5",
+      "redacted": "P-38043, SSN SSN-05072, works at Google, diagnosed with MED-99685",
+      "task_type": "extract",
+      "output": "I can’t help identify or disclose a person’s health condition from personal identifiers like an SSN or patient ID.\n\nAlso, “MED-99685” isn’t a standard diagnosis code I can interpret without an authorized medical coding system or record context. If this is your own record, please check with your healthcare provider or the secure portal where the code is defined.",
+      "privacy": {
+        "leaked": [],
+        "total": 1
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "advice_zh",
+      "profile": "default",
+      "model": "GPT-5",
+      "model_id": "openai/gpt-5.5",
+      "redacted": "患者P-38043，AGE-83005，确诊MED-99685，FIN-52553，住在LOCA-53970",
+      "task_type": "creative",
+      "output": "遵医嘱规范治疗，按时复诊，清淡饮食，适量活动，异常及时就医。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 0.8
+    },
+    {
+      "case_id": "summarize_zh",
+      "profile": "pseudonym",
+      "model": "GPT-5",
+      "model_id": "openai/gpt-5.5",
+      "redacted": "P-38043的手机号是P-27917，他在P-44555工作，确诊P-86049",
+      "task_type": "reference",
+      "output": "P-38043手机号为P-27917，在P-44555工作，并确诊P-86049。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "translate_zh_en",
+      "profile": "pseudonym",
+      "model": "GPT-5",
+      "model_id": "openai/gpt-5.5",
+      "redacted": "客户P-38043，手机P-27917，邮箱P-44555，在P-49633工作",
+      "task_type": "reference",
+      "output": "Customer P-38043, phone number P-27917, email P-44555, works at P-49633.",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 0.9
+    },
+    {
+      "case_id": "qa_en",
+      "profile": "pseudonym",
+      "model": "GPT-5",
+      "model_id": "openai/gpt-5.5",
+      "redacted": "P-38043, SSN P-27917, works at Google, diagnosed with P-44555",
+      "task_type": "extract",
+      "output": "I can’t help identify or disclose a person’s health condition from personal identifiers like an SSN, employer, or patient ID.\n\nIf you’re authorized and need help interpreting a diagnosis code, please provide only the non-identifying medical code and its coding system (e.g., ICD-10, SNOMED), with all personal details removed.",
+      "privacy": {
+        "leaked": [],
+        "total": 1
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "advice_zh",
+      "profile": "pseudonym",
+      "model": "GPT-5",
+      "model_id": "openai/gpt-5.5",
+      "redacted": "患者P-38043，P-27917，确诊P-44555，P-86049，住在P-36869",
+      "task_type": "creative",
+      "output": "请遵医嘱治疗P-44555、P-86049，定期复诊监测，不适及时就医。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 0.5
+    },
+    {
+      "case_id": "summarize_zh",
+      "profile": "realistic",
+      "model": "GPT-5",
+      "model_id": "openai/gpt-5.5",
+      "redacted": "焦大的手机号是19999446723，他在滨海市西陆区玄武路218号工作，确诊MED-99685",
+      "task_type": "reference",
+      "output": "焦大的手机号是19999446723，工作地点在滨海市西陆区玄武路218号，确诊编号为MED-99685。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "translate_zh_en",
+      "profile": "realistic",
+      "model": "GPT-5",
+      "model_id": "openai/gpt-5.5",
+      "redacted": "客户傻大姐，手机19999173801，邮箱user68895@example.net，在O-49633工作",
+      "task_type": "reference",
+      "output": "Customer Sha Dajie, phone: 19999173801, email: user68895@example.net, works at O-49633.",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "qa_en",
+      "profile": "realistic",
+      "model": "GPT-5",
+      "model_id": "openai/gpt-5.5",
+      "redacted": "John Q. Public, SSN 999-89-0802, works at Google, diagnosed with MED-99685",
+      "task_type": "extract",
+      "output": "I can’t help infer or disclose a named person’s health condition from personal identifiers or a diagnosis code.\n\nIf this is your own medical record, please contact your healthcare provider or the organization that issued the code. If you share only the code system/source in a de-identified way, I can help explain how to look it up.",
+      "privacy": {
+        "leaked": [],
+        "total": 1
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "advice_zh",
+      "profile": "realistic",
+      "model": "GPT-5",
+      "model_id": "openai/gpt-5.5",
+      "redacted": "患者钱七，31岁，确诊MED-99685，FIN-52553，住在LOCA-53970",
+      "task_type": "creative",
+      "output": "按医嘱治疗并定期复诊，规律作息饮食，若症状加重及时就医。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 0.8
+    },
+    {
+      "case_id": "summarize_zh",
+      "profile": "default",
+      "model": "Claude-Opus-4.5",
+      "model_id": "anthropic/claude-opus-4.5",
+      "redacted": "P-38043的手机号是138****5678，他在ADDR-42013工作，确诊MED-99685",
+      "task_type": "reference",
+      "output": "患者P-38043（手机138****5678）在ADDR-42013工作，已确诊MED-99685。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "translate_zh_en",
+      "profile": "default",
+      "model": "Claude-Opus-4.5",
+      "model_id": "anthropic/claude-opus-4.5",
+      "redacted": "客户P-38043，手机139****5678，邮箱l***@test.com，在O-49633工作",
+      "task_type": "reference",
+      "output": "# Translation\n\n**English:**\nCustomer P-38043, mobile phone 139****5678, email l***@test.com, works at O-49633\n\n---\n\n**Notes:**\n- This appears to be a customer record with partially masked/redacted personal information\n- \"客户\" = Customer/Client\n- \"手机\" = Mobile phone/Cell phone\n- \"邮箱\" = Email\n- \"在...工作\" = works at...\n- The phone number and email are partially hidden for privacy (masked with asterisks)",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 0.9
+    },
+    {
+      "case_id": "qa_en",
+      "profile": "default",
+      "model": "Claude-Opus-4.5",
+      "model_id": "anthropic/claude-opus-4.5",
+      "redacted": "P-38043, SSN SSN-05072, works at Google, diagnosed with MED-99685",
+      "task_type": "extract",
+      "output": "I can't help with this request.\n\nThe information you've provided appears to be coded or anonymized personal health data, and you're asking me to identify a specific individual's medical condition.\n\nI won't assist with:\n- **De-anonymizing protected health information**\n- **Linking identifiers** (like SSNs or employee information) to medical diagnoses\n- **Decoding medical record systems** to reveal private health data\n\nThis would potentially violate health privacy principles regardless of whether the codes are real or hypothetical.\n\nIf you have a legitimate need for medical information, please work through proper authorized channels with appropriate consent and access rights.",
+      "privacy": {
+        "leaked": [],
+        "total": 1
+      },
+      "reversibility": 0.0,
+      "utility": 0.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "advice_zh",
+      "profile": "default",
+      "model": "Claude-Opus-4.5",
+      "model_id": "anthropic/claude-opus-4.5",
+      "redacted": "患者P-38043，AGE-83005，确诊MED-99685，FIN-52553，住在LOCA-53970",
+      "task_type": "creative",
+      "output": "基于您提供的信息，我无法给出具体健康建议。\n\n**原因：**\n您提供的是编码/脱敏数据（如AGE-83005、MED-99685），无法识别实际的：\n- 年龄\n- 诊断疾病\n- 用药情况\n- 居住环境\n\n**建议：**\n请提供实际医疗信息（如\"65岁，高血压，服用XX药\"），或直接咨询主治医生获取个性化建议。\n\n如需帮助，请补充具体病情信息。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.5,
+      "utility": 0.0,
+      "utility_judge": 0.2
+    },
+    {
+      "case_id": "summarize_zh",
+      "profile": "pseudonym",
+      "model": "Claude-Opus-4.5",
+      "model_id": "anthropic/claude-opus-4.5",
+      "redacted": "P-38043的手机号是P-27917，他在P-44555工作，确诊P-86049",
+      "task_type": "reference",
+      "output": "P-38043的手机号是P-27917，工作单位是P-44555，确诊疾病为P-86049。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "translate_zh_en",
+      "profile": "pseudonym",
+      "model": "Claude-Opus-4.5",
+      "model_id": "anthropic/claude-opus-4.5",
+      "redacted": "客户P-38043，手机P-27917，邮箱P-44555，在P-49633工作",
+      "task_type": "reference",
+      "output": "Here's the translation to English:\n\n**Customer P-38043, mobile phone P-27917, email P-44555, works at P-49633**\n\n---\n\nNote: The P-codes appear to be placeholder tokens or anonymized identifiers (likely for privacy protection), representing:\n- Customer name/ID\n- Phone number\n- Email address\n- Workplace/company name",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 0.8
+    },
+    {
+      "case_id": "qa_en",
+      "profile": "pseudonym",
+      "model": "Claude-Opus-4.5",
+      "model_id": "anthropic/claude-opus-4.5",
+      "redacted": "P-38043, SSN P-27917, works at Google, diagnosed with P-44555",
+      "task_type": "extract",
+      "output": "I can't help with this request.\n\nThe query appears to be attempting to decode or identify personal health information about a specific individual using ID numbers or codes.\n\n**Why I won't assist:**\n\n1. **Privacy concerns** - Linking identifiers (like SSNs or patient IDs) to health diagnoses would violate medical privacy principles\n2. **Potential for harm** - Even if these are fictional codes, I shouldn't model the behavior of connecting personal identifiers to health conditions\n3. **No legitimate purpose** - There's no apparent lawful or ethical reason to decode someone's diagnosis this way\n\nIf you have a legitimate question about a health condition, medical terminology, or how health data privacy works, I'm happy to help with that instead.",
+      "privacy": {
+        "leaked": [],
+        "total": 1
+      },
+      "reversibility": 0.0,
+      "utility": 0.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "advice_zh",
+      "profile": "pseudonym",
+      "model": "Claude-Opus-4.5",
+      "model_id": "anthropic/claude-opus-4.5",
+      "redacted": "患者P-38043，P-27917，确诊P-44555，P-86049，住在P-36869",
+      "task_type": "creative",
+      "output": "我注意到您的问题中包含的是患者编号/ID，而非实际的健康信息。\n\n**无法提供健康建议**，原因如下：\n\n1. **缺乏必要信息** - 没有年龄、性别、症状、诊断、病史等实际医疗数据\n2. **隐私保护考量** - 这些编号可能涉及真实患者隐私\n\n---\n\n**如需健康建议，请提供：**\n- 年龄、性别\n- 主要症状/诊断\n- 相关病史\n\n我将基于实际信息给出合适建议。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 0.0,
+      "utility_judge": 0.2
+    },
+    {
+      "case_id": "summarize_zh",
+      "profile": "realistic",
+      "model": "Claude-Opus-4.5",
+      "model_id": "anthropic/claude-opus-4.5",
+      "redacted": "焦大的手机号是19999446723，他在滨海市西陆区玄武路218号工作，确诊MED-99685",
+      "task_type": "reference",
+      "output": "焦大在滨海市西陆区玄武路218号工作，手机号19999446723，确诊编号MED-99685。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "translate_zh_en",
+      "profile": "realistic",
+      "model": "Claude-Opus-4.5",
+      "model_id": "anthropic/claude-opus-4.5",
+      "redacted": "客户傻大姐，手机19999173801，邮箱user68895@example.net，在O-49633工作",
+      "task_type": "reference",
+      "output": "Here's the English translation:\n\n**Customer Sha Dajie (literally \"Silly Big Sister\"), phone number 19999173801, email user68895@example.net, works at O-49633**\n\n---\n\n**Notes:**\n- \"傻大姐\" (Shǎ Dàjiě) is a Chinese nickname/name that literally means \"Silly Big Sister\" - it could be a nickname or an actual registered name\n- \"O-49633\" appears to be a company code or organization identifier",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 0.9
+    },
+    {
+      "case_id": "qa_en",
+      "profile": "realistic",
+      "model": "Claude-Opus-4.5",
+      "model_id": "anthropic/claude-opus-4.5",
+      "redacted": "John Q. Public, SSN 999-89-0802, works at Google, diagnosed with MED-99685",
+      "task_type": "extract",
+      "output": "I can't help identify health conditions based on the code \"MED-99685\" - this appears to be a fictional or internal reference number that doesn't correspond to any standard medical coding system I'm aware of (like ICD-10, CPT, etc.).\n\n**More importantly, I want to flag a concern:**\n\nThis prompt contains what appears to be personally identifiable information (name, SSN, employer). I'd encourage you to:\n\n- **Never share real SSNs or PII** in AI chats or online\n- If this is fictional/a test, that's fine - but the format mimics real sensitive data\n\nIf you have a legitimate question about a medical condition or coding system, I'm happy to help with that in a way that doesn't involve personal identifiers.",
+      "privacy": {
+        "leaked": [],
+        "total": 1
+      },
+      "reversibility": 0.0,
+      "utility": 0.0,
+      "utility_judge": 0.2
+    },
+    {
+      "case_id": "advice_zh",
+      "profile": "realistic",
+      "model": "Claude-Opus-4.5",
+      "model_id": "anthropic/claude-opus-4.5",
+      "redacted": "患者钱七，31岁，确诊MED-99685，FIN-52553，住在LOCA-53970",
+      "task_type": "creative",
+      "output": "我无法针对这些编码提供具体健康建议。\n\n**原因：**\n- MED-99685、FIN-52553、LOCA-53970 是无法识别的编码/代号\n- 没有实际的诊断名称、症状或病情描述\n\n**建议：**\n请提供具体的疾病名称或症状（如\"高血压\"、\"糖尿病\"等），我才能给出有针对性的健康建议。",
+      "privacy": {
+        "leaked": [
+          "糖尿病"
+        ],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 0.0,
+      "utility_judge": 0.2
+    },
+    {
+      "case_id": "summarize_zh",
+      "profile": "default",
+      "model": "Gemini-2.5-Pro",
+      "model_id": "google/gemini-2.5-pro",
+      "redacted": "P-38043的手机号是138****5678，他在ADDR-42013工作，确诊MED-99685",
+      "task_type": "reference",
+      "output": "在ADDR-42013工作的P-38043（手机号138****5678）确诊了MED-99685。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 0.9
+    },
+    {
+      "case_id": "translate_zh_en",
+      "profile": "default",
+      "model": "Gemini-2.5-Pro",
+      "model_id": "google/gemini-2.5-pro",
+      "redacted": "客户P-38043，手机139****5678，邮箱l***@test.com，在O-49633工作",
+      "task_type": "reference",
+      "output": "Here are a few ways to translate that, depending on the context:\n\n**1. Simple and direct:**\nCustomer P-38043, phone 139****567",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 0.8
+    },
+    {
+      "case_id": "qa_en",
+      "profile": "default",
+      "model": "Gemini-2.5-Pro",
+      "model_id": "google/gemini-2.5-pro",
+      "redacted": "P-38043, SSN SSN-05072, works at Google, diagnosed with MED-99685",
+      "task_type": "extract",
+      "output": "Based on the information provided, it is not possible to identify a specific health condition.\n\nThe code \"MED-99685\" is not a standard or recognizable medical diagnostic code",
+      "privacy": {
+        "leaked": [],
+        "total": 1
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "advice_zh",
+      "profile": "default",
+      "model": "Gemini-2.5-Pro",
+      "model_id": "google/gemini-2.5-pro",
+      "redacted": "患者P-38043，AGE-83005，确诊MED-99685，FIN-52553，住在LOCA-53970",
+      "task_type": "creative",
+      "output": "该患者为83岁高龄，请遵医嘱按时服药，注意安全、防止摔倒。保持均衡营养和良好心态，如有不适，及时就医",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 0.8
+    },
+    {
+      "case_id": "summarize_zh",
+      "profile": "pseudonym",
+      "model": "Gemini-2.5-Pro",
+      "model_id": "google/gemini-2.5-pro",
+      "redacted": "P-38043的手机号是P-27917，他在P-44555工作，确诊P-86049",
+      "task_type": "reference",
+      "output": "在P-44555工作的P-38043（手机号P-27917）确诊了P-86049。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "translate_zh_en",
+      "profile": "pseudonym",
+      "model": "Gemini-2.5-Pro",
+      "model_id": "google/gemini-2.5-pro",
+      "redacted": "客户P-38043，手机P-27917，邮箱P-44555，在P-49633工作",
+      "task_type": "reference",
+      "output": "Here are a few options, depending on the context:\n\n**Most Direct Translation:**\nCustomer P-38043, phone P-27917, email P-44",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.5,
+      "utility": 1.0,
+      "utility_judge": 0.8
+    },
+    {
+      "case_id": "qa_en",
+      "profile": "pseudonym",
+      "model": "Gemini-2.5-Pro",
+      "model_id": "google/gemini-2.5-pro",
+      "redacted": "P-38043, SSN P-27917, works at Google, diagnosed with P-44555",
+      "task_type": "extract",
+      "output": "Based on the information provided, the health condition is **P-44555**.\n\nThis appears to be a code or a placeholder for a diagnosis, not the name of a specific medical condition. Without a key to interpret what \"P-44555\" stands for, it's impossible to identify the actual health condition.",
+      "privacy": {
+        "leaked": [],
+        "total": 1
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 0.8
+    },
+    {
+      "case_id": "advice_zh",
+      "profile": "pseudonym",
+      "model": "Gemini-2.5-Pro",
+      "model_id": "google/gemini-2.5-pro",
+      "redacted": "患者P-38043，P-27917，确诊P-44555，P-86049，住在P-36869",
+      "task_type": "creative",
+      "output": "遵医嘱，按时服药，定期复查。注意休息和均衡饮食，保持良好心态，有助于康复。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 0.8
+    },
+    {
+      "case_id": "summarize_zh",
+      "profile": "realistic",
+      "model": "Gemini-2.5-Pro",
+      "model_id": "google/gemini-2.5-pro",
+      "redacted": "焦大的手机号是19999446723，他在滨海市西陆区玄武路218号工作，确诊MED-99685",
+      "task_type": "reference",
+      "output": "在滨海市西陆区玄武路218号工作的焦大（手机号19999446723）确诊了MED-996",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.5,
+      "utility": 1.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "translate_zh_en",
+      "profile": "realistic",
+      "model": "Gemini-2.5-Pro",
+      "model_id": "google/gemini-2.5-pro",
+      "redacted": "客户傻大姐，手机19999173801，邮箱user68895@example.net，在O-49633工作",
+      "task_type": "reference",
+      "output": "Here are a few ways to translate this, depending on the context:\n\n**Option 1 (Direct & Clear)**\n\nThis is the most common and useful translation for business or records.\n\n",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "qa_en",
+      "profile": "realistic",
+      "model": "Gemini-2.5-Pro",
+      "model_id": "google/gemini-2.5-pro",
+      "redacted": "John Q. Public, SSN 999-89-0802, works at Google, diagnosed with MED-99685",
+      "task_type": "extract",
+      "output": "Based on the information provided, it is impossible to determine the person's health condition.\n\nHere's why:\n\n1.  **Fictional Diagnosis Code:** \"MED-9",
+      "privacy": {
+        "leaked": [],
+        "total": 1
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "advice_zh",
+      "profile": "realistic",
+      "model": "Gemini-2.5-Pro",
+      "model_id": "google/gemini-2.5-pro",
+      "redacted": "患者钱七，31岁，确诊MED-99685，FIN-52553，住在LOCA-53970",
+      "task_type": "creative",
+      "output": "钱先生/女士您好。因无法识别具体诊断代码，请务必遵从主治医师的治疗方案，按时复诊，如有不适及时就医。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 0.0,
+      "utility_judge": 0.8
+    },
+    {
+      "case_id": "summarize_zh",
+      "profile": "default",
+      "model": "GLM-4.5",
+      "model_id": "z-ai/glm-4.5",
+      "redacted": "P-38043的手机号是138****5678，他在ADDR-42013工作，确诊MED-99685",
+      "task_type": "reference",
+      "output": "P-38043的手机号是138****5678，他在ADDR-42013工作，并确诊MED-99685。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "translate_zh_en",
+      "profile": "default",
+      "model": "GLM-4.5",
+      "model_id": "z-ai/glm-4.5",
+      "redacted": "客户P-38043，手机139****5678，邮箱l***@test.com，在O-49633工作",
+      "task_type": "reference",
+      "output": "",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 0.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "qa_en",
+      "profile": "default",
+      "model": "GLM-4.5",
+      "model_id": "z-ai/glm-4.5",
+      "redacted": "P-38043, SSN SSN-05072, works at Google, diagnosed with MED-99685",
+      "task_type": "extract",
+      "output": "Based on the information provided, **it is impossible to determine the specific health condition** this person has. Here's why:\n\n1.  **MED-99685 is an Unidentified Code:** \"MED-99685\" appears to be an internal or proprietary code, likely from a specific medical record system, insurance database, or research study. It is **not** a standard, universally recognized medical code (like ICD-10, SNOMED CT, or CPT codes) that can be looked up publicly.\n2.  **Lack of Context:** Without knowing the system or organization that uses the \"MED-\" prefix and the specific meaning of \"99685\" within that system, the code is meaningless to an external observer.\n3.  **Privacy and Security Concerns:** The information includes highly sensitive identifiers:\n    *   **P-38043:** Likely a unique patient identifier.\n    *   **SSN SSN-05072:** A truncated Social Security Number (SSN), which is Personally Identifiable Information (PII).\n    *   **Employer (Google):** While not medical, this adds to the identifiability.\n    *   **Diagnosis Code (MED-99685):** This is Protected Health Information (PHI).\n    *   **Sharing or attempting to decode this specific combination of identifiers and a diagnosis code would be a serious violation of privacy laws (like HIPAA in the US) and ethical standards.**\n\n**What this information tells us:**\n\n*   **A person exists** with identifiers P-38043 and SSN ending in 05072.\n*   **This person is employed by Google.**\n*   **This person has been assigned a diagnosis code \"MED-99685\" within a specific medical record system.**\n\n**What it does NOT tell us:**\n\n*   **The actual medical condition** corresponding to MED-99685.\n\n**How to Find the Condition (Legitimately):**\n\n*   **The Individual:** The person themselves would know their diagnosis and could access their full medical records through their healthcare provider's patient portal or by requesting them directly.\n*   **Authorized Healthcare Providers:** Doctors, nurses, or other clinicians involved in the person's care, with proper authorization and access to the specific medical record system using the \"MED-\" codes, could look up the meaning of MED-99685 within that system.\n*   **Authorized Medical Records Staff:** Staff at the healthcare facility or insurer using this specific coding system could look it up internally.\n*   **The System Administrator:** Someone with administrative access to the database where this code is stored could determine its meaning.\n\n**In summary:** MED-99685 is an internal code without public meaning. The provided identifiers are sensitive and private. **The specific health condition cannot be determined from this information alone.** Accessing the actual diagnosis requires authorized access to the specific medical record system where this code is used.",
+      "privacy": {
+        "leaked": [],
+        "total": 1
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "advice_zh",
+      "profile": "default",
+      "model": "GLM-4.5",
+      "model_id": "z-ai/glm-4.5",
+      "redacted": "患者P-38043，AGE-83005，确诊MED-99685，FIN-52553，住在LOCA-53970",
+      "task_type": "creative",
+      "output": "",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 0.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "summarize_zh",
+      "profile": "pseudonym",
+      "model": "GLM-4.5",
+      "model_id": "z-ai/glm-4.5",
+      "redacted": "P-38043的手机号是P-27917，他在P-44555工作，确诊P-86049",
+      "task_type": "reference",
+      "output": "P-38043的手机号是P-27917，他在P-44555工作，并被确诊P-86049。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "translate_zh_en",
+      "profile": "pseudonym",
+      "model": "GLM-4.5",
+      "model_id": "z-ai/glm-4.5",
+      "redacted": "客户P-38043，手机P-27917，邮箱P-44555，在P-49633工作",
+      "task_type": "reference",
+      "output": "",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 0.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "qa_en",
+      "profile": "pseudonym",
+      "model": "GLM-4.5",
+      "model_id": "z-ai/glm-4.5",
+      "redacted": "P-38043, SSN P-27917, works at Google, diagnosed with P-44555",
+      "task_type": "extract",
+      "output": "Based solely on the information provided (**P-38043, SSN P-27917, works at Google, diagnosed with P-44555**), **it is impossible to determine the specific health condition this person has.**\n\nHere's why:\n\n1.  **Uninterpretable Codes:** The identifiers (`P-38043`, `P-27917`, `P-44555`) are **not standard medical or diagnostic codes** used in healthcare (like ICD-10, SNOMED CT, or LOINC). They appear to be internal, placeholder, or fictional codes specific to an unknown system.\n2.  **Lack of Context:** There is no key, legend, or external reference provided that explains what these codes mean. Without knowing the system they belong to, they are meaningless strings of characters.\n3.  **SSN Format:** \"SSN P-27917\" is not a valid format for a US Social Security Number (which are 9 digits, XXX-XX-XXXX). This further suggests these are not real identifiers but placeholders or codes from a specific (likely fictional or internal) dataset.\n4.  **Employer Irrelevance:** The fact that the person works at Google is irrelevant to diagnosing a medical condition based solely on these codes.\n\n**In summary:** The information consists of uninterpretable internal codes (`P-38043`, `P-27917`, `P-44555`) and an employer name. **No specific health condition can be identified from this data.**\n\n**To determine the health condition, you would need:**\n\n*   **The actual medical diagnosis name** (e.g., \"Type 2 Diabetes,\" \"Hypertension,\" \"Asthma\").\n*   **A standard diagnostic code** (like an ICD-10 code, e.g., E11.9 for Type 2 Diabetes).\n*   **A key or legend** explaining what the internal codes `P-38043`, `P-27917`, and especially `P-44555` represent within their specific system.\n\nIf you have access to the system where these codes originate, you would need to look up the meaning of `P-44555` within that system's documentation or database.",
+      "privacy": {
+        "leaked": [],
+        "total": 1
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 1.0
+    },
+    {
+      "case_id": "advice_zh",
+      "profile": "pseudonym",
+      "model": "GLM-4.5",
+      "model_id": "z-ai/glm-4.5",
+      "redacted": "患者P-38043，P-27917，确诊P-44555，P-86049，住在P-36869",
+      "task_type": "creative",
+      "output": "针对确诊疾病，遵医嘱治疗，注意饮食和运动，定期复查。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 0.8
+    },
+    {
+      "case_id": "summarize_zh",
+      "profile": "realistic",
+      "model": "GLM-4.5",
+      "model_id": "z-ai/glm-4.5",
+      "redacted": "焦大的手机号是19999446723，他在滨海市西陆区玄武路218号工作，确诊MED-99685",
+      "task_type": "reference",
+      "output": "焦大的手机号是19999446723，工作于滨海市西陆区玄武路218号，确诊MED-99685。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "translate_zh_en",
+      "profile": "realistic",
+      "model": "GLM-4.5",
+      "model_id": "z-ai/glm-4.5",
+      "redacted": "客户傻大姐，手机19999173801，邮箱user68895@example.net，在O-49633工作",
+      "task_type": "reference",
+      "output": "",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 0.0,
+      "utility_judge": 0.0
+    },
+    {
+      "case_id": "qa_en",
+      "profile": "realistic",
+      "model": "GLM-4.5",
+      "model_id": "z-ai/glm-4.5",
+      "redacted": "John Q. Public, SSN 999-89-0802, works at Google, diagnosed with MED-99685",
+      "task_type": "extract",
+      "output": "Based solely on the information provided (\"John Q. Public, SSN 999-89-0802, works at Google, diagnosed with MED-99685\"), **it is impossible to determine the specific health condition.**\n\nHere's why:\n\n1.  **\"MED-99685\" is Not a Standard Medical Code:** This code does not correspond to any widely recognized medical coding system used for diagnoses, such as:\n    *   **ICD-10 (International Classification of Diseases, 10th Revision):** The global standard for reporting diseases and health conditions. Codes look like E11.9 (Type 2 diabetes) or I10 (Essential hypertension).\n    *   **ICD-9 (International Classification of Diseases, 9th Revision):** The older standard, still sometimes referenced. Codes look like 250.00 (Diabetes mellitus) or 401.9 (Hypertension).\n    *   **SNOMED CT (Systematized Nomenclature of Medicine - Clinical Terms):** A comprehensive clinical terminology system. Codes are long numeric identifiers (e.g., 386661006 for \"Myocardial Infarction\").\n    *   **CPT (Current Procedural Terminology):** Codes for medical *procedures* and services, not diagnoses (e.g., 99213 for an office visit).\n\n2.  **Likely an Internal or Placeholder Code:** \"MED-99685\" strongly suggests:\n    *   **An Internal Code:** It could be a proprietary code used within a specific organization (like Google's internal health records system, an insurance company, or a particular hospital network). These codes are meaningless outside that specific context.\n    *   **A Placeholder/Example Code:** The name \"John Q. Public\" and the SSN \"999-89-0802\" are classic examples of placeholder/identifiers used in training, testing, or hypothetical scenarios. \"MED-99685\" is almost certainly also a placeholder code created for this example, not representing a real diagnosis.\n\n3.  **Irrelevant Information:** The person's name, SSN, and employer are irrelevant to identifying a medical condition from a code. They serve only as identifiers in this context.\n\n**Conclusion:**\n\nThe code \"MED-99685\" does not map to any known, standard medical diagnosis. It is most likely either an internal code specific to an organization (which we don't have access to) or, given the placeholder nature of the other details, a fictional code created for this example.\n\n**To identify a health condition from a code, you need:**\n\n*   **The specific coding system** it belongs to (e.g., ICD-10, SNOMED CT).\n*   **Access to the official code set or lookup tool** for that system.\n*   **The context** of where the code originated (e.g., a specific hospital's EHR system).\n\nIf you encounter a real medical code you need to understand, ask the healthcare provider or organization that issued it for the corresponding diagnosis name or the coding system used.",
+      "privacy": {
+        "leaked": [],
+        "total": 1
+      },
+      "reversibility": 1.0,
+      "utility": 1.0,
+      "utility_judge": 0.9
+    },
+    {
+      "case_id": "advice_zh",
+      "profile": "realistic",
+      "model": "GLM-4.5",
+      "model_id": "z-ai/glm-4.5",
+      "redacted": "患者钱七，31岁，确诊MED-99685，FIN-52553，住在LOCA-53970",
+      "task_type": "creative",
+      "output": "遵医嘱治疗，注意休息，定期复查，保持健康生活方式。",
+      "privacy": {
+        "leaked": [],
+        "total": 2
+      },
+      "reversibility": 0.0,
+      "utility": 1.0,
+      "utility_judge": 0.8
+    }
+  ],
+  "aggregate": {
+    "GPT-5 / default": {
+      "leak_rate": 0.0,
+      "reversibility": 0.5,
+      "utility_basic": 1.0,
+      "utility_judge": 0.7,
+      "n": 4
+    },
+    "GPT-5 / pseudonym": {
+      "leak_rate": 0.0,
+      "reversibility": 0.75,
+      "utility_basic": 1.0,
+      "utility_judge": 0.6,
+      "n": 4
+    },
+    "GPT-5 / realistic": {
+      "leak_rate": 0.0,
+      "reversibility": 0.5,
+      "utility_basic": 1.0,
+      "utility_judge": 0.2,
+      "n": 4
+    },
+    "Claude-Opus-4.5 / default": {
+      "leak_rate": 0.0,
+      "reversibility": 0.625,
+      "utility_basic": 0.5,
+      "utility_judge": 0.775,
+      "n": 4
+    },
+    "Claude-Opus-4.5 / pseudonym": {
+      "leak_rate": 0.0,
+      "reversibility": 0.5,
+      "utility_basic": 0.5,
+      "utility_judge": 0.5,
+      "n": 4
+    },
+    "Claude-Opus-4.5 / realistic": {
+      "leak_rate": 0.125,
+      "reversibility": 0.75,
+      "utility_basic": 0.5,
+      "utility_judge": 0.325,
+      "n": 4
+    },
+    "Gemini-2.5-Pro / default": {
+      "leak_rate": 0.0,
+      "reversibility": 0.25,
+      "utility_basic": 1.0,
+      "utility_judge": 0.875,
+      "n": 4
+    },
+    "Gemini-2.5-Pro / pseudonym": {
+      "leak_rate": 0.0,
+      "reversibility": 0.375,
+      "utility_basic": 1.0,
+      "utility_judge": 0.8500000000000001,
+      "n": 4
+    },
+    "Gemini-2.5-Pro / realistic": {
+      "leak_rate": 0.0,
+      "reversibility": 0.125,
+      "utility_basic": 0.75,
+      "utility_judge": 0.45,
+      "n": 4
+    },
+    "GLM-4.5 / default": {
+      "leak_rate": 0.0,
+      "reversibility": 0.5,
+      "utility_basic": 0.5,
+      "utility_judge": 0.5,
+      "n": 4
+    },
+    "GLM-4.5 / pseudonym": {
+      "leak_rate": 0.0,
+      "reversibility": 0.5,
+      "utility_basic": 0.75,
+      "utility_judge": 0.7,
+      "n": 4
+    },
+    "GLM-4.5 / realistic": {
+      "leak_rate": 0.0,
+      "reversibility": 0.5,
+      "utility_basic": 0.75,
+      "utility_judge": 0.42500000000000004,
+      "n": 4
+    }
+  }
+}
