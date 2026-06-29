@@ -47,6 +47,12 @@ async def handle_redact(request: Request) -> JSONResponse:
             status_code=400,
         )
     key = body.get("key")
+    # Security: reject key as file path string (only dicts allowed via HTTP)
+    if isinstance(key, str):
+        return JSONResponse(
+            {"error": "key must be a JSON object, not a file path"},
+            status_code=400,
+        )
     detailed = body.get("detailed", False)
     report = body.get("report", False)
     profile = body.get("profile")
@@ -104,6 +110,12 @@ async def handle_restore(request: Request) -> JSONResponse:
     body = await request.json()
     text = body.get("text", "")
     key = body.get("key", {})
+    # Security: reject key as file path string (only dicts allowed via HTTP)
+    if isinstance(key, str):
+        return JSONResponse(
+            {"error": "key must be a JSON object, not a file path"},
+            status_code=400,
+        )
 
     try:
         restored = restore(text, key)
