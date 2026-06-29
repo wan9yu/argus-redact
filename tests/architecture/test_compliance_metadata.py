@@ -117,6 +117,16 @@ class TestGDPRSpecialCategory:
 
 
 class TestHIPAACategories:
+    def test_safe_harbor_set_has_exactly_18_categories(self):
+        """The official HIPAA Safe Harbor standard enumerates 18 PHI identifiers.
+        This test pins the count so a stale-label or accidental deletion is caught
+        immediately (the set is the standard reference, not an argus coverage set).
+        """
+        assert len(HIPAA_SAFE_HARBOR_CATEGORIES) == 18, (
+            f"HIPAA Safe Harbor 18 set has {len(HIPAA_SAFE_HARBOR_CATEGORIES)} categories "
+            f"(expected 18 per 45 CFR 164.514(b)(2)(i))"
+        )
+
     def test_hipaa_categories_are_valid_safe_harbor_values(self):
         for td in list_types():
             if td.hipaa_phi_category is not None:

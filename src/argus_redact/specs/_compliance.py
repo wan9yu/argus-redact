@@ -39,28 +39,33 @@ PIPL_SORT_ORDER: dict[str, int] = {
     PIPL_ART_56: 5,
 }
 
-# HIPAA Safe Harbor 18 PHI categories. Test suites and `_HIPAA_MAP` validate
-# against this set. Adding a new category requires a corresponding mapping
-# in `_HIPAA_MAP` below, otherwise it's a dead category.
+# HIPAA Safe Harbor 18 PHI identifiers per 45 CFR 164.514(b)(2)(i)(A)–(R).
+# This set is the official standard reference. `_HIPAA_MAP` maps argus
+# detector types to categories; not every category needs a detector (e.g.
+# health_plan_beneficiary — argus ships no detector for it, but the category
+# belongs in the standard's list). Test suites validate that typedef
+# hipaa_phi_category values are IN this set; they do not require every
+# category to have a mapping.
 HIPAA_SAFE_HARBOR_CATEGORIES: frozenset[str] = frozenset(
     {
-        "names",
-        "geographic",
-        "dates",
-        "phone_numbers",
-        "fax_numbers",
-        "email_addresses",
-        "ssn",
-        "medical_record",
-        "account_numbers",
-        "certificate_number",
-        "vehicle_identifier",
-        "device_identifier",
-        "biometric",
-        "ip_address",
-        "url",
-        "full_face_photo",
-        "other_unique_identifier",
+        "names",                    # (A) Names
+        "geographic",               # (B) Geographic data smaller than state
+        "dates",                    # (C) Dates (except year) related to individual
+        "phone_numbers",            # (D) Telephone numbers
+        "fax_numbers",              # (E) Fax numbers
+        "email_addresses",          # (F) Email addresses
+        "ssn",                      # (G) Social security numbers
+        "medical_record",           # (H) Medical record numbers
+        "health_plan_beneficiary",  # (I) Health plan beneficiary numbers
+        "account_numbers",          # (J) Account numbers
+        "certificate_number",       # (K) Certificate/license numbers
+        "vehicle_identifier",       # (L) Vehicle identifiers and serial numbers
+        "device_identifier",        # (M) Device identifiers and serial numbers
+        "url",                      # (N) Web universal resource locators
+        "ip_address",               # (O) Internet protocol address numbers
+        "biometric",                # (P) Biometric identifiers
+        "full_face_photo",          # (Q) Full-face photographs and comparable images
+        "other_unique_identifier",  # (R) Any other unique identifying number/code
     }
 )
 
