@@ -109,5 +109,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // ── person-name detectors (zh, en) ──
     m.add_function(wrap_pyfunction!(person::detect_person_names_zh, m)?)?;
     m.add_function(wrap_pyfunction!(person::detect_person_names_en, m)?)?;
+    m.add_function(wrap_pyfunction!(person::score_person_candidates_en, m)?)?;
     Ok(())
 }

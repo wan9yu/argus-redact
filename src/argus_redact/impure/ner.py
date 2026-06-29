@@ -9,7 +9,14 @@ class NERAdapter:
     """Base class for NER model adapters.
 
     Subclass and implement load() and detect() for each language backend.
+
+    ``lang`` is the language code an adapter detects for (``None`` on the base).
+    The L2 glue reads it to apply language-specific candidate gating — currently
+    only the English (``"en"``) adapter, whose high-recall spaCy ``person`` spans
+    are routed through the L1 evidence gate before they enter the result set.
     """
+
+    lang: str | None = None
 
     def load(self) -> None:
         raise NotImplementedError

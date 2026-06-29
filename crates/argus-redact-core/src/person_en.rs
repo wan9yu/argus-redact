@@ -467,6 +467,67 @@ pub fn detect_person_names(
     results
 }
 
+/// Score a single externally-supplied person candidate span — e.g. an L2 spaCy
+/// English `person` entity — through the SAME evidence gate `detect_person_names`
+/// applies to its bare-surname candidates. The scoring WEIGHTS live ONLY in
+/// [`score_bare_surname`] (single source); this fn just prepares the candidate
+/// and routes it exactly as Phase 2 does for its leading token:
+///   - extract the candidate's leading capitalized token via the shared
+///     [`TOKEN_PAT`] tokenizer (so `Mr. Smith` → `Mr`, `Marco Rossi` → `Marco`);
+///   - a **known given name** lead bypasses the gate at 1.0 (the strong NAME
+///     signal — mirrors the L1 given-name-led path so a real `Given Surname`
+///     whose given name is a common word like `Grace` is never dropped);
+///   - otherwise the bare-surname evidence score (title / name-like / proximity)
+///     from [`score_bare_surname`].
+///
+/// This exists so L2 English NER `person` candidates obey the same policy as L1
+/// instead of entering the result set ungated. `start`/`end` are the candidate's
+/// CHAR offsets in `text`; `pii_entities` are the L1 structural PII (the
+/// `self_reference` entries are dropped here, matching `detect_person_names`)
+/// supplying the proximity signal. A span with no capitalized leading token, or
+/// an empty / out-of-range span, scores 0.0. The CALLER keeps the candidate iff
+/// the returned score `>= threshold`, so the keep/drop policy stays single-
+/// sourced in Rust.
+///
+/// English-only by construction (English titles + `common_words_en` name-like
+/// lexicon). The mechanism generalizes — a future `score_person_candidate_zh`
+/// could route through `person_zh` — but only the English adapter is wired now.
+pub fn score_person_candidate(
+    text: &str,
+    start: usize,
+    end: usize,
+    pii_entities: &[PatternMatch],
+) -> f64 {
+    let text_chars: Vec<char> = text.chars().collect();
+    if start >= end || end > text_chars.len() {
+        return 0.0;
+    }
+
+    // Leading capitalized token of the candidate span, via the SAME tokenizer the
+    // L1 surname look-back uses. A span with no such token (non-Latin script,
+    // all-lowercase, punctuation-only) is not a person at L1's standard → 0.0.
+    let candidate: String = text_chars[start..end].iter().collect();
+    let Some(lead) = TOKEN_PAT.find_iter(&candidate).map_while(Result::ok).next() else {
+        return 0.0;
+    };
+    let lead_clean = rstrip_dot(lead.as_str());
+
+    // Given-name-led → strong NAME signal, bypass the gate at 1.0 (mirrors the L1
+    // given-name-led path so a pooled given name keeps the candidate even when it
+    // is also a common word).
+    if given_names_en_set().contains(lead_clean) {
+        return 1.0;
+    }
+
+    // Bare candidate → the ONE evidence gate. Drop `self_reference` PII exactly as
+    // `detect_person_names` does (a nearby "me" / "I" must not grant proximity).
+    let structural_pii: Vec<&PatternMatch> = pii_entities
+        .iter()
+        .filter(|p| p.type_ != "self_reference")
+        .collect();
+    score_bare_surname(lead_clean, start, end, &structural_pii)
+}
+
 /// Python `text[a:b].strip(" \t.") == ""` over a char slice — true when the
 /// gap is empty or contains only spaces, tabs, and dots. `a`/`b` are char
 /// offsets; `a <= b` always holds for adjacent forward tokens.
@@ -999,6 +1060,93 @@ mod tests {
             detect("Bo Smith arrived.", &[]),
             vec![row("Bo Smith", 0, 8, 0.8)]
         );
+    }
+
+    // ── score_person_candidate (L2 NER gating) ──────────────────────────────
+    //
+    // The exposed scorer must reuse the SAME gate as `detect_person_names` so an
+    // externally-supplied span (e.g. spaCy English `person`) obeys the L1 policy.
+    // These mirror the L1 cases: a zero-evidence bare span is suppressed; a
+    // title-led / name-like / PII-proximate / given-name-led span is kept.
+
+    #[test]
+    fn score_person_candidate_suppresses_zero_evidence_bare_span() {
+        // L2 spaCy proposes "Central Park" in prose: lead "Central" is a common /
+        // place word (not name-like), no title, no PII → 0.0 < threshold → drop.
+        assert_eq!(
+            score_person_candidate("Central Park hosted it.", 0, 12, &[]),
+            0.0
+        );
+    }
+
+    #[test]
+    fn score_person_candidate_keeps_name_like_lead() {
+        // "Marco Rossi" — lead "Marco" is name-like → base 0.3 + 0.5 = 0.8.
+        assert_eq!(
+            score_person_candidate("Marco Rossi called.", 0, 11, &[]),
+            0.8
+        );
+    }
+
+    #[test]
+    fn score_person_candidate_keeps_single_name_like_token() {
+        // spaCy single-token "Obama": lead "Obama" is name-like (not a common
+        // word, not pooled) → 0.8. This is L2 recall L1 cannot reach (a lone
+        // surname-less token never anchors at L1), now evidence-gated.
+        assert_eq!(score_person_candidate("Obama spoke today.", 0, 5, &[]), 0.8);
+    }
+
+    #[test]
+    fn score_person_candidate_keeps_title_led_span() {
+        // spaCy span INCLUDING the honorific "Mr. Smith": leading token "Mr" is a
+        // title → base 0.3 + 0.6 = 0.9.
+        assert_eq!(
+            score_person_candidate("Mr. Smith arrived.", 0, 9, &[]),
+            0.8999999999999999
+        );
+    }
+
+    #[test]
+    fn score_person_candidate_given_name_led_bypasses_gate() {
+        // "John Smith" — lead "John" is a pooled given name → 1.0 bypass, exactly
+        // like the L1 given-name-led path.
+        assert_eq!(
+            score_person_candidate("John Smith called.", 0, 10, &[]),
+            1.0
+        );
+    }
+
+    #[test]
+    fn score_person_candidate_pii_proximity_corroborates() {
+        // Bare common-word lead "Lake Park" but a phone within the near window →
+        // the proximity signal ALONE clears the gate (base 0.3 + near 0.5 = 0.8).
+        // "Lake Park, " is 11 chars; the phone spans 11..21 (distance 2 → near).
+        let p = pii("phone", 11, 21);
+        assert_eq!(
+            score_person_candidate("Lake Park, 4155551234", 0, 9, &[p]),
+            0.8
+        );
+    }
+
+    #[test]
+    fn score_person_candidate_self_reference_pii_grants_no_bonus() {
+        // A `self_reference` entity adjacent to the bare common-word lead must NOT
+        // grant a proximity bonus — parity with `detect_person_names`. With it
+        // filtered out there is no signal → 0.0.
+        let p = pii("self_reference", 11, 13);
+        assert_eq!(
+            score_person_candidate("Lake Park, me here.", 0, 9, &[p]),
+            0.0
+        );
+    }
+
+    #[test]
+    fn score_person_candidate_no_capital_or_out_of_range_is_zero() {
+        // No capitalized leading token (spaCy noise over lowercase text) → 0.0.
+        assert_eq!(score_person_candidate("the meeting room", 0, 16, &[]), 0.0);
+        // Empty / out-of-range spans must not panic and score 0.0.
+        assert_eq!(score_person_candidate("Smith", 0, 0, &[]), 0.0);
+        assert_eq!(score_person_candidate("Smith", 0, 99, &[]), 0.0);
     }
 
     #[test]

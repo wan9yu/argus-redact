@@ -20,6 +20,12 @@ _DEFAULT_CONFIDENCE = 0.85
 class SpaCyAdapter(NERAdapter):
     """English NER using spaCy (en_core_web_sm)."""
 
+    # Marks this adapter's `person` candidates for L1-evidence gating in the L2
+    # glue. spaCy English NER is high-recall/noisy on prose; ungated, its `person`
+    # spans wreck precision. The glue routes them through the SAME Rust evidence
+    # scorer L1 uses (`person_en::score_person_candidate`).
+    lang = "en"
+
     def __init__(self):
         self._nlp = None
 

@@ -219,6 +219,40 @@ def _get_ner_adapters(lang: str | list[str]) -> list:
     return adapters
 
 
+def _gate_en_ner_person(
+    text: str,
+    matches: list[PatternMatch],
+    pii_entities: list,
+) -> list[PatternMatch]:
+    """Evidence-gate English L2 NER ``person`` candidates through the L1 scorer.
+
+    spaCy English NER (``en_core_web_sm``) is high-recall/noisy on prose; ungated,
+    its ``person`` spans enter the result set raw and destroy precision while L1
+    English person detection is rigorously evidence-gated. This closes that
+    asymmetry by routing each L2 ``person`` candidate through the SAME Rust
+    evidence scorer L1 uses (``_core.score_person_candidates_en`` →
+    ``person_en::score_person_candidate``): a title / name-like lead / PII
+    proximity keeps it, an uncorroborated bare-prose span is dropped. The
+    scoring AND the keep/drop threshold are single-sourced in Rust — no scoring is
+    duplicated here.
+
+    ``pii_entities`` are the L1 structural-PII matches (the proximity signal,
+    matching what L1 person detection receives). Non-``person`` candidates
+    (location / organization) pass through untouched.
+    """
+    person_pos = [i for i, m in enumerate(matches) if m.type == "person"]
+    if not person_pos:
+        return matches
+    candidates = [(matches[i].start, matches[i].end) for i in person_pos]
+    keep_mask = _core.score_person_candidates_en(
+        text, candidates, pii_entities or None, None
+    )
+    dropped = {pos for pos, keep in zip(person_pos, keep_mask) if not keep}
+    if not dropped:
+        return matches
+    return [m for i, m in enumerate(matches) if i not in dropped]
+
+
 def _get_semantic_adapter():
     """Create an Ollama semantic adapter. Returns None if unavailable."""
     try:
@@ -334,6 +368,12 @@ def _detect(
             for adapter in adapters:
                 ner_entities = detect_ner(text, adapter=adapter, min_confidence=ner_confidence)
                 layer2_matches = [e.to_pattern_match(layer=LAYER_NER) for e in ner_entities]
+                # English spaCy `person` candidates are evidence-gated through the
+                # SAME L1 Rust scorer (proximity signal = the L1a regex matches),
+                # so noisy bare-prose spans are dropped instead of entering raw.
+                # Other languages / non-person types are unaffected.
+                if getattr(adapter, "lang", None) == "en":
+                    layer2_matches = _gate_en_ner_person(text, layer2_matches, layer1)
                 entities.extend(layer2_matches)
                 layer2_count += len(layer2_matches)
             layer2_status = "ok"
