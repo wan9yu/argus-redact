@@ -27,8 +27,9 @@ _REPO_SRC = str(Path(__file__).resolve().parent.parent.parent / "src")
 if _REPO_SRC not in sys.path:
     sys.path.insert(0, _REPO_SRC)
 
-# Reuse the canonical throughput corpora + fixed salt — no third copy of the corpus.
-from bench_l1_rust_vs_python import _BENCH_SALT, _THROUGHPUT_CORPUS  # noqa: E402
+# Reuse the canonical throughput corpora (from _corpus) + the fixed salt.
+from _corpus import _THROUGHPUT_CORPUS  # noqa: E402
+from bench_l1_rust_vs_python import _BENCH_SALT  # noqa: E402
 
 
 def _distribution(fn, *, iterations: int, warmup: int = 20) -> dict:

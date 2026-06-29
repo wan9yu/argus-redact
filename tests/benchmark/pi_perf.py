@@ -1,25 +1,26 @@
-"""Self-contained Pi Zero 2W perf snapshot for argus-redact (no repo needed).
+"""Self-contained perf snapshot for argus-redact on a repo-less aarch64 device.
 
 Mirrors the repo's throughput corpora + redact(mode="fast") / _core.detect_l1
 timing so the numbers line up with bench_l1_rust_vs_python / perf_profile.
+
+STANDALONE ON PURPOSE: it runs on a device (e.g. a Raspberry Pi Zero 2 W) that
+has only the installed wheel and no repo, so the corpora are inlined rather than
+imported from ``_corpus``. ``test_corpus_parity.py`` pins this inline copy equal
+to ``_corpus`` so it cannot silently drift.
+
+    pip install argus-redact==<version>
+    python pi_perf.py        # prints a JSON perf snapshot to stdout
 """
+
+from __future__ import annotations
 
 import json
 import platform
 import statistics
 import time
 
-import argus_redact
-from argus_redact import redact
-
-try:
-    from argus_redact._core_loader import _core
-except Exception:  # pragma: no cover
-    try:
-        import argus_redact._core as _core
-    except Exception:
-        _core = None
-
+# Corpora MIRROR tests/benchmark/_corpus.py (inlined for repo-less devices; the
+# mirror is pinned byte-equal by tests/benchmark/test_corpus_parity.py).
 _ZH_1KB = (
     "客户王五，手机13812345678，邮箱wang@corp.com，"
     "身份证110101199003074610，银行卡4111111111111111，"
@@ -49,7 +50,7 @@ ITERS = 30
 WARMUP = 5
 
 
-def dist(fn):
+def _dist(fn):
     for _ in range(WARMUP):
         fn()
     s = []
@@ -73,7 +74,7 @@ def dist(fn):
     }
 
 
-def cpu_model():
+def _device():
     try:
         with open("/proc/device-tree/model") as f:
             return f.read().strip("\x00")
@@ -81,30 +82,48 @@ def cpu_model():
         return platform.platform()
 
 
-redact("warm-up", salt=_SALT)
+def main() -> None:
+    import argus_redact
+    from argus_redact import redact
 
-workloads = {}
-for label, (lang, text) in CORPORA.items():
-    entry = {
-        "lang": lang,
-        "bytes": len(text.encode("utf-8")),
-        "redact_fast": dist(lambda t=text, lg=lang: redact(t, salt=_SALT, mode="fast", lang=lg)),
-    }
-    if _core is not None:
+    try:
+        from argus_redact._core_loader import _core
+    except Exception:
         try:
-            entry["detect_l1"] = dist(lambda t=text, lg=lang: _core.detect_l1(t, [lg], []))
-        except Exception as e:
-            entry["detect_l1_error"] = str(e)
-    workloads[label] = entry
+            import argus_redact._core as _core
+        except Exception:
+            _core = None
 
-result = {
-    "benchmark": "pi_perf",
-    "package_version": argus_redact.__version__,
-    "device": cpu_model(),
-    "platform": platform.platform(),
-    "machine": platform.machine(),
-    "python": platform.python_version(),
-    "iterations": ITERS,
-    "workloads": workloads,
-}
-print(json.dumps(result, indent=2, ensure_ascii=False))
+    redact("warm-up", salt=_SALT)
+
+    workloads = {}
+    for label, (lang, text) in CORPORA.items():
+        entry = {
+            "lang": lang,
+            "bytes": len(text.encode("utf-8")),
+            "redact_fast": _dist(
+                lambda t=text, lg=lang: redact(t, salt=_SALT, mode="fast", lang=lg)
+            ),
+        }
+        if _core is not None:
+            try:
+                entry["detect_l1"] = _dist(lambda t=text, lg=lang: _core.detect_l1(t, [lg], []))
+            except Exception as e:  # noqa: BLE001
+                entry["detect_l1_error"] = str(e)
+        workloads[label] = entry
+
+    result = {
+        "benchmark": "pi_perf",
+        "package_version": argus_redact.__version__,
+        "device": _device(),
+        "platform": platform.platform(),
+        "machine": platform.machine(),
+        "python": platform.python_version(),
+        "iterations": ITERS,
+        "workloads": workloads,
+    }
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()

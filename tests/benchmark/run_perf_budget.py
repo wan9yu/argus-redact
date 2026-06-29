@@ -23,18 +23,9 @@ _REPO_SRC = str(Path(__file__).parent.parent.parent / "src")
 
 
 # ── Test inputs ──
-
-_ZH_1KB = (
-    "客户王五，手机13812345678，邮箱wang@corp.com，"
-    "身份证110101199003074610，银行卡4111111111111111，"
-    "车牌京A88888，住在北京市朝阳区建国路100号。"
-) * 8  # ~1KB
-
-_EN_1KB = (
-    "Patient John Smith called at (415) 555-1234. "
-    "SSN 123-45-6789. Email john.smith@hospital.com. "
-    "Address: 1234 Market Street, San Francisco, CA. "
-) * 6  # ~1KB
+# The zh/en perf corpora live in _corpus (shared with bench_l1 + perf_profile so
+# all three measure the same bytes — byte-identical to the prior inline copies).
+from _corpus import _EN_1KB, _ZH_1KB  # noqa: E402
 
 _SALT_FOR_PSEUDONYM_LLM = b"perf-budget-fixed-salt-32-bytes!"
 

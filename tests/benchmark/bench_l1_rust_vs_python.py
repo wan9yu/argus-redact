@@ -43,28 +43,13 @@ if _REPO_SRC not in sys.path:
 
 
 # ── Fixed representative corpus ──
-#
-# Short ~1KB texts mirror the perf-budget corpus (run_perf_budget.py) so the
-# component A/B and the throughput profile share a comparable density of PII.
-# Medium/long are the same text repeated to reach roughly the stated size.
-
-_ZH_1KB = (
-    "客户王五，手机13812345678，邮箱wang@corp.com，"
-    "身份证110101199003074610，银行卡4111111111111111，"
-    "车牌京A88888，住在北京市朝阳区建国路100号。"
-) * 8  # ~1KB
-
-_EN_1KB = (
-    "Patient John Smith called at (415) 555-1234. "
-    "SSN 123-45-6789. Email john.smith@hospital.com. "
-    "Address: 1234 Market Street, San Francisco, CA. "
-) * 6  # ~1KB
-
-_ZH_SHORT = _ZH_1KB[: len(_ZH_1KB) // 8]  # ~one repetition, ~120 chars
-_EN_SHORT = _EN_1KB[: len(_EN_1KB) // 6]  # ~one repetition
-
-_ZH_LONG = _ZH_1KB * 10  # ~10KB
-_EN_LONG = _EN_1KB * 10  # ~10KB
+# Shared with run_perf_budget + perf_profile via _corpus (single source) so all
+# three measure the same bytes.
+from _corpus import (  # noqa: E402
+    _EN_1KB,
+    _THROUGHPUT_CORPUS,
+    _ZH_1KB,
+)
 
 # Fixed 32-byte salt — high-entropy so the bench doesn't trip the low-entropy
 # SecurityWarning (the value is irrelevant to timing).
@@ -162,15 +147,7 @@ def component_ab(*, iterations: int = 2000) -> dict:
 
 
 # ── Part 3: current throughput profile ──
-
-_THROUGHPUT_CORPUS = {
-    "en_short": ("en", _EN_SHORT),
-    "en_1kb": ("en", _EN_1KB),
-    "en_long": ("en", _EN_LONG),
-    "zh_short": ("zh", _ZH_SHORT),
-    "zh_1kb": ("zh", _ZH_1KB),
-    "zh_long": ("zh", _ZH_LONG),
-}
+# (_THROUGHPUT_CORPUS is imported from _corpus at the top.)
 
 
 def throughput_profile(*, iterations: int = 500) -> dict:
