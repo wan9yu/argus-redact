@@ -165,7 +165,7 @@ def _compute_prvl(texts: list[dict], mode: str = "fast"):
 class TestPRvLBenchmark:
     """Fast PRvL benchmark — no LLM required."""
 
-    def test_should_achieve_high_privacy(self):
+    def test_should_achieve_gold_privacy(self):
         scores = _compute_prvl(BENCHMARK_TEXTS)
 
         print(f"\n  PRvL Privacy (P):       {scores['privacy']:.2%}")
