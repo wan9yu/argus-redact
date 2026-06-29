@@ -202,21 +202,12 @@ async def redact_info() -> str:
     import importlib
     import importlib.util
 
+    from argus_redact.glue.redact import _LANG_DISPLAY_NAMES, _LANG_PATTERNS
     from argus_redact.lang.shared.patterns import PATTERNS as SHARED
 
-    langs = {
-        "zh": "Chinese",
-        "en": "English",
-        "ja": "Japanese",
-        "ko": "Korean",
-        "de": "German",
-        "uk": "British English",
-        "in": "Indian",
-        "br": "Brazilian Portuguese",
-    }
     lang_info = {}
 
-    for code, name in langs.items():
+    for code in _LANG_PATTERNS:
         mod_code = "in_" if code == "in" else code
         try:
             mod = importlib.import_module(f"argus_redact.lang.{mod_code}.patterns")
@@ -225,7 +216,7 @@ async def redact_info() -> str:
             count = 0
         has_ner = importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
         lang_info[code] = {
-            "name": name,
+            "name": _LANG_DISPLAY_NAMES.get(code, code),
             "patterns": count,
             "ner": has_ner,
         }
