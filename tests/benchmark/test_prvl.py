@@ -181,7 +181,7 @@ class TestPRvLBenchmark:
             if d["tokens_lost"]:
                 print(f"  ⚠ {d['id']}: tokens lost {d['tokens_lost']}")
 
-        assert scores["privacy"] >= 0.9, f"Privacy score {scores['privacy']:.2%} below 90%"
+        assert scores["privacy"] >= 1.0, f"Privacy score {scores['privacy']:.2%} below PRvL-Gold 100%"
 
     def test_should_achieve_full_reversibility(self):
         scores = _compute_prvl(BENCHMARK_TEXTS)
@@ -192,10 +192,9 @@ class TestPRvLBenchmark:
 
     def test_should_preserve_language(self):
         scores = _compute_prvl(BENCHMARK_TEXTS)
-        # Current baseline: 70%. Target: ≥85% (requires pattern refinement
-        # to avoid consuming semantic trigger words like 确诊/diagnosed/salary)
-        assert scores["language"] >= 0.65, (
-            f"Language score {scores['language']:.2%} — "
+        # PRvL-Gold threshold: U-structural >= 98%.
+        assert scores["language"] >= 0.98, (
+            f"Language score {scores['language']:.2%} below PRvL-Gold 98% — "
             f"tokens lost: {[d for d in scores['details'] if d['tokens_lost']]}"
         )
 
