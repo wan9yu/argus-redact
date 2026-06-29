@@ -1,0 +1,188 @@
+{
+  "version": "0.7.16",
+  "package_version_string": "0.7.16",
+  "dataset": "kaggle_piilo",
+  "language": "en",
+  "samples": 500,
+  "modes": {
+    "fast": {
+      "precision": 73.1,
+      "recall": 28.2,
+      "f1": 40.7,
+      "per_type": {
+        "email": {
+          "precision": 100.0,
+          "recall": 100.0,
+          "f1": 100.0,
+          "tp": 17,
+          "fp": 0,
+          "fn": 0
+        },
+        "id_number": {
+          "precision": 100.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 39
+        },
+        "person": {
+          "precision": 71.6,
+          "recall": 29.8,
+          "f1": 42.1,
+          "tp": 156,
+          "fp": 62,
+          "fn": 367
+        },
+        "phone": {
+          "precision": 33.3,
+          "recall": 33.3,
+          "f1": 33.3,
+          "tp": 1,
+          "fp": 2,
+          "fn": 2
+        },
+        "url": {
+          "precision": 100.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 36
+        }
+      }
+    },
+    "ner": {
+      "precision": 24.6,
+      "recall": 45.0,
+      "f1": 31.8,
+      "per_type": {
+        "email": {
+          "precision": 100.0,
+          "recall": 100.0,
+          "f1": 100.0,
+          "tp": 17,
+          "fp": 0,
+          "fn": 0
+        },
+        "id_number": {
+          "precision": 100.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 39
+        },
+        "person": {
+          "precision": 23.5,
+          "recall": 49.7,
+          "f1": 31.9,
+          "tp": 260,
+          "fp": 848,
+          "fn": 263
+        },
+        "phone": {
+          "precision": 33.3,
+          "recall": 33.3,
+          "f1": 33.3,
+          "tp": 1,
+          "fp": 2,
+          "fn": 2
+        },
+        "url": {
+          "precision": 100.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 36
+        }
+      }
+    }
+  },
+  "per_type_fast": {
+    "email": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1": 100.0,
+      "tp": 17,
+      "fp": 0,
+      "fn": 0
+    },
+    "id_number": {
+      "precision": 100.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 39
+    },
+    "person": {
+      "precision": 71.6,
+      "recall": 29.8,
+      "f1": 42.1,
+      "tp": 156,
+      "fp": 62,
+      "fn": 367
+    },
+    "phone": {
+      "precision": 33.3,
+      "recall": 33.3,
+      "f1": 33.3,
+      "tp": 1,
+      "fp": 2,
+      "fn": 2
+    },
+    "url": {
+      "precision": 100.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 36
+    }
+  },
+  "per_type_ner": {
+    "email": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1": 100.0,
+      "tp": 17,
+      "fp": 0,
+      "fn": 0
+    },
+    "id_number": {
+      "precision": 100.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 39
+    },
+    "person": {
+      "precision": 23.5,
+      "recall": 49.7,
+      "f1": 31.9,
+      "tp": 260,
+      "fp": 848,
+      "fn": 263
+    },
+    "phone": {
+      "precision": 33.3,
+      "recall": 33.3,
+      "f1": 33.3,
+      "tp": 1,
+      "fp": 2,
+      "fn": 2
+    },
+    "url": {
+      "precision": 100.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 36
+    }
+  },
+  "date": "2026-06-29"
+}

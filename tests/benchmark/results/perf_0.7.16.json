@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "platform": "macos-dev-ref",
+  "python": "3.11",
+  "commit": "e09629c",
+  "measurements": {
+    "import_time_ms": 51.3512,
+    "redact_zh_fast_1kb_p50_ms": 2.0289,
+    "redact_en_fast_1kb_p50_ms": 0.9653,
+    "redact_pseudonym_llm_zh_1kb_p50_ms": 2.5744,
+    "restore_1kb_p50_ms": 2.3929,
+    "streaming_feed_per_chunk_p50_ms": 1.9491,
+    "streaming_dribble_total_ms": 8.8981
+  }
+}

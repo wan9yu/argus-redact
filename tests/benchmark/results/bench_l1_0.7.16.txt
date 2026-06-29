@@ -1,0 +1,24 @@
+argus-redact v0.7.16 — Layer-1 Rust-vs-Python micro-benchmark + throughput
+machine: Apple M1 Max (arm64, macOS 26.5.1), 10 cores, 64 GB RAM, Python 3.11.3
+commit: e09629c   (dev-reference machine; the Raspberry Pi Zero 2W rerun is pending)
+
+── Part 1: component A/B (Rust vs Python oracle) ──
+component         python p50      rust p50    rust speedup
+patterns_en        1.01662ms     0.32987ms          3.08x
+hints_en           0.00187ms     0.00425ms          0.44x
+patterns_zh        1.00337ms     0.90904ms          1.10x
+hints_zh           0.00262ms     0.00688ms          0.38x
+
+caveat: covers the regex hot path (+hints) only. Named validators and person
+detection are Rust-only (no Python oracle). Rust match_patterns also runs the
+named validator the Python oracle skips, so the ratio is a conservative lower
+bound for regex+context.
+
+── Part 3: current throughput (mode='fast') ──
+input          bytes    redact p50      docs/s   detect_l1 p50      docs/s
+en_short         141      0.2213ms      4519.3        0.1474ms      6783.5
+en_1kb           846      0.9544ms      1047.8        0.8035ms      1244.6
+en_long         8460      9.3171ms       107.3        8.4006ms       119.0
+zh_short         175      0.3422ms      2922.4        0.2398ms      4169.6
+zh_1kb          1400      2.0449ms       489.0        1.7649ms       566.6
+zh_long        14000     20.7615ms        48.2       18.7685ms        53.3
