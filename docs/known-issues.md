@@ -24,6 +24,23 @@ Each entry follows three lines:
 - **Why we won't fix**: each requires an NLP/LLM-mediated solution incompatible with the primitive's "small core, deterministic, audited, fast" SLA. Trying to own them would balloon the surface area beyond single-maintainer capacity. See [architecture-layers.md](architecture-layers.md) for the layered identity argus-redact has codified.
 - **What you should do**: use the `pseudonym` strategy (`P-NNNNN`-style codes; LLMs treat them opaquely, fewer variants) for higher restore fidelity; use the `compose` layer's `prompt_anchor()` and `expand_aliases()` (namespace stubs since v0.6.7; helpers ship v0.6.9) for best-effort coverage of common variants; or run a downstream coref-aware gateway (e.g., Argus Gateway) for fuller semantic round-trip.
 
+### Contextual-integrity judgment is out of scope — argus redacts mandatory/structural PII
+
+- **What**: argus detects and redacts **mandatory / structural PII** — identifiers
+  sensitive regardless of context (names, IDs, phones, emails, cards, addresses, …).
+  It does **not** make **contextual-integrity** judgments: whether a given datum is a
+  privacy violation depending on *who* holds it, *why*, and *in what context* (a phone
+  number in a medical record vs a public directory).
+- **Why we won't fix**: contextual judgment is inherently subjective and LLM-mediated —
+  human annotators agree ~89% on mandatory redactions but only ~48% on contextual ones
+  (RedactionBench, Brynjólfsson et al. 2026, arXiv:2606.18782, grounded in Nissenbaum's
+  contextual-integrity theory). A deterministic, audited, fast primitive cannot and
+  should not adjudicate that — it would trade a verifiable contract for an opaque model
+  judgment.
+- **What you should do**: use argus for the mandatory/structural layer (its strength) and
+  route contextual-integrity decisions to a downstream LLM-aware gateway. argus is the
+  deterministic floor, not the context adjudicator.
+
 ### Force-rebuild on major version pin bump
 
 - **What**: Upgrading the argus-redact pin across a major version boundary (e.g., `0.5.x` → `0.6.0`) requires a clean rebuild of any caller cache that holds pseudonym mappings.
