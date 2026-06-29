@@ -26,11 +26,22 @@ def print_report(result: Result) -> None:
 
     if result.per_type:
         print(
-            f"  {'Type':<15s} {'Prec':>7s} {'Recall':>7s} {'F1':>7s}  {'TP':>4s} {'FP':>4s} {'FN':>4s}"
+            f"  {'Type':<15s} {'Prec':>7s} {'Recall':>7s} {'F1':>7s} "
+            f" {'TP':>4s} {'FP':>4s} {'FN':>4s}"
         )
         for etype, m in sorted(result.per_type.items()):
             print(
                 f"  {etype:<15s} {m.precision:>6.1%} {m.recall:>6.1%} {m.f1:>6.1%}"
+                f"  {m.tp:>4d} {m.fp:>4d} {m.fn:>4d}"
+            )
+
+    classes = result.by_class()
+    if len(classes) > 1:  # only meaningful when both structured + free-text present
+        print(f"{'-' * 60}")
+        print("  By PII class (structured identifiers vs free-text entities):")
+        for cls, m in sorted(classes.items()):
+            print(
+                f"  {cls:<15s} {m.precision:>6.1%} {m.recall:>6.1%} {m.f1:>6.1%}"
                 f"  {m.tp:>4d} {m.fp:>4d} {m.fn:>4d}"
             )
     print()

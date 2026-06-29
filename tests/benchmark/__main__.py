@@ -43,6 +43,27 @@ def _per_type_dict(result) -> dict:
     }
 
 
+def _by_class_dict(result) -> dict:
+    """Per-PII-class {precision,recall,f1 (as %), tp,fp,fn} for one Result.
+
+    structured = identifiers (email / phone / id / ...); free_text = NER-dependent
+    entities (person / location / address / organization). Reported alongside the
+    blended overall so the English structured-vs-free-text split is visible rather
+    than hidden in one number.
+    """
+    return {
+        cls: {
+            "precision": round(m.precision * 100, 1),
+            "recall": round(m.recall * 100, 1),
+            "f1": round(m.f1 * 100, 1),
+            "tp": m.tp,
+            "fp": m.fp,
+            "fn": m.fn,
+        }
+        for cls, m in sorted(result.by_class().items())
+    }
+
+
 def build_payload(ds_name: str, ds_results: list) -> dict:
     """Build the saved-result JSON for one dataset's runs (one per mode).
 
@@ -59,13 +80,16 @@ def build_payload(ds_name: str, ds_results: list) -> dict:
     per_type_flat: dict = {}
     for r in ds_results:
         per_type = _per_type_dict(r)
+        by_class = _by_class_dict(r)
         modes[r.mode] = {
             "precision": round(r.precision * 100, 1),
             "recall": round(r.recall * 100, 1),
             "f1": round(r.f1 * 100, 1),
             "per_type": per_type,
+            "by_class": by_class,
         }
         per_type_flat[f"per_type_{r.mode}"] = per_type
+        per_type_flat[f"by_class_{r.mode}"] = by_class
     return {
         "version": __version__,
         "package_version_string": __version__,

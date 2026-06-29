@@ -46,6 +46,18 @@ class TypeMetrics:
         return 2 * p * r / (p + r) if (p + r) > 0 else 0.0
 
 
+# PII classes for honest recall reporting. argus is strong on STRUCTURED
+# identifiers and best-effort on FREE-TEXT entities (which depend on NER), so a
+# single blended recall hides that split — especially for English. Single source:
+# free-text is the small explicit set; every other type is structured.
+FREE_TEXT_TYPES = frozenset({"person", "location", "address", "organization"})
+
+
+def pii_class(pii_type: str) -> str:
+    """'free_text' for NER-dependent entity types, else 'structured'."""
+    return "free_text" if pii_type in FREE_TEXT_TYPES else "structured"
+
+
 @dataclass
 class Result:
     """Evaluation result for one benchmark run."""
@@ -77,6 +89,21 @@ class Result:
     def docs_per_sec(self) -> float:
         return self.n_samples / self.elapsed_s if self.elapsed_s > 0 else 0.0
 
+    def by_class(self) -> dict[str, TypeMetrics]:
+        """Aggregate per-type counters into PII classes (structured / free_text).
+
+        Honest reporting: lets a reader see that (e.g. for English) structured-
+        identifier recall is high while free-text-entity recall is low, instead of
+        one blended number that hides the split.
+        """
+        classes: dict[str, TypeMetrics] = {}
+        for etype, m in self.per_type.items():
+            c = classes.setdefault(pii_class(etype), TypeMetrics())
+            c.tp += m.tp
+            c.fp += m.fp
+            c.fn += m.fn
+        return classes
+
     def to_dict(self) -> dict:
         return {
             "dataset": self.dataset,
@@ -101,5 +128,16 @@ class Result:
                     "f1": round(v.f1, 4),
                 }
                 for k, v in sorted(self.per_type.items())
+            },
+            "by_class": {
+                cls: {
+                    "tp": v.tp,
+                    "fp": v.fp,
+                    "fn": v.fn,
+                    "precision": round(v.precision, 4),
+                    "recall": round(v.recall, 4),
+                    "f1": round(v.f1, 4),
+                }
+                for cls, v in sorted(self.by_class().items())
             },
         }
