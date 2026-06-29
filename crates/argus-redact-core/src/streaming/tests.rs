@@ -293,6 +293,96 @@ fn context_cut_bounded_drain_at_max_buffer() {
     assert_eq!(cut.cut, DEFAULT_MAX_BUFFER - CARRY_WINDOW);
 }
 
+// ── emit_possible gate parity (the detect-on-emit perf gate) ───────────────────
+
+#[test]
+fn emit_possible_is_a_superset_of_context_cut_emit() {
+    // CORRECTNESS INVARIANT for the perf gate: `emit_possible` must be TRUE whenever
+    // `context_cut` would EMIT (cut > ctx_len). `feed` skips the expensive
+    // detect + `context_cut` when `emit_possible` is false, so an over-aggressive
+    // gate (false on a real emit) is an under-redaction LEAK. Sweep a spread of
+    // buffer shapes × ctx_len × max_buffer and, for the EXACT spans + params `feed`
+    // passes to `context_cut`, assert the superset relation holds.
+    let w = EVIDENCE_CONTEXT_WINDOW;
+    let filler200 = "y".repeat(200);
+    let pem_short = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n".to_string();
+    let pem_long = format!("-----BEGIN OPENSSH PRIVATE KEY-----\n{}", "b3BlbnNz\n".repeat(40));
+    // (label, buffer, ctx_len, max_buffer)
+    let cases: Vec<(&str, String, usize, usize)> = vec![
+        ("no boundary, below max → hold", "q".repeat(60), 0, DEFAULT_MAX_BUFFER),
+        ("boundary inside [ctx_len, len-w] → emit", format!("first part. {filler200}"), 0, DEFAULT_MAX_BUFFER),
+        ("boundary only in the last w → hold", format!("{} end. ", "z".repeat(200)), 0, DEFAULT_MAX_BUFFER),
+        ("len just below max, boundaryless → hold", "q".repeat(63), 0, 64),
+        ("len == max > carry, boundaryless → drain emit", "q".repeat(300), 0, 300),
+        ("len == max < carry, boundaryless → drain holds (gate conservative-true)", "q".repeat(64), 0, 64),
+        ("len > max, boundaryless → drain emit", "q".repeat(400), 0, 300),
+        ("PEM in-flight, short (< w) → hold", pem_short, 0, DEFAULT_MAX_BUFFER),
+        ("PEM in-flight, long (> w, has \\n boundaries) → snap-to-BEGIN holds (gate conservative-true)", pem_long, 0, DEFAULT_MAX_BUFFER),
+        ("boundary at/under ctx_len → hold", format!("abcdefgh. {filler200}"), 50, DEFAULT_MAX_BUFFER),
+        ("boundary past ctx_len > 0 → emit", format!("{}. {}", "y".repeat(60), "z".repeat(200)), 30, DEFAULT_MAX_BUFFER),
+    ];
+
+    let mut emit_seen = 0usize;
+    for (label, buffer, ctx_len, max_buffer) in cases {
+        let lang_v = s(&["en"]);
+        let mut r = StreamingRedactor::with_max_buffer(
+            make_detect(lang_v.clone()),
+            make_redact(lang_v),
+            max_buffer,
+        );
+        // `snap_spans` + `pem_max_buffer` read `self.buffer`, so mirror `feed`'s state.
+        r.buffer = buffer.clone();
+        let chars: Vec<char> = buffer.chars().collect();
+        // Reproduce `feed` EXACTLY: same final spans, same PEM-aware max_buffer, same W.
+        let final_entities = r.detect_final(&buffer);
+        let spans = r.snap_spans(&final_entities, chars.len());
+        let max = r.pem_max_buffer();
+        let cc = context_cut(&spans, &chars, ctx_len, max, w, false);
+        let ep = emit_possible(&chars, ctx_len, max, w, false);
+        if cc.cut > ctx_len {
+            emit_seen += 1;
+            assert!(
+                ep,
+                "LEAK: context_cut emits (cut={} > ctx_len={}) but emit_possible=false — case [{}]",
+                cc.cut, ctx_len, label
+            );
+        }
+    }
+    // Guard against a vacuous pass: the spread must actually exercise real emits
+    // (boundary cut + bounded drain + ctx_len>0), not only hold cases.
+    assert!(emit_seen >= 3, "spread must exercise real emits; saw only {emit_seen}");
+}
+
+#[test]
+fn feed_holds_without_emit_unchanged() {
+    // The gate is behavior-preserving on a HOLD: a boundary-less, sub-max_buffer feed
+    // has no possible emit, so `feed` takes the cheap gate path and returns an empty
+    // result, leaving `buffer`/`ctx_len` exactly as the pre-gate detect+context_cut
+    // hold path did.
+    let lang_v = s(&["en"]);
+    let mut r = StreamingRedactor::new(make_detect(lang_v.clone()), make_redact(lang_v));
+    let filler = "no boundary here just filler text";
+    let res = r.feed(filler).expect("feed");
+    assert_eq!(res.segment.downstream_text, "", "boundary-less sub-max feed must hold");
+    assert!(res.segment.key.is_empty(), "a held feed mints no key");
+    assert_eq!(r.buffer(), filler, "held buffer is exactly the input");
+    assert_eq!(r.ctx_len, 0, "ctx_len unchanged on a hold");
+
+    // A follow-up feed adds a real boundary AND enough tail to push it past the W
+    // forward hold-back, so the engine now emits the committed prefix correctly.
+    let tail = format!(". {}", "x".repeat(200));
+    let res2 = r.feed(&tail).expect("feed");
+    assert!(
+        !res2.segment.downstream_text.is_empty(),
+        "a boundary past the hold-back must emit"
+    );
+    assert!(
+        res2.segment.downstream_text.starts_with("no boundary here"),
+        "emits the committed prefix: {:?}",
+        res2.segment.downstream_text
+    );
+}
+
 // ── A2 straddle / leak oracle (test_streaming_straddle.py) ─────────────────────
 
 #[test]

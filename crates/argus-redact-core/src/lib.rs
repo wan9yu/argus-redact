@@ -70,7 +70,7 @@ pub use replace::{replace, FakerFactory, FakerResolution, PseudoFactory, Replace
 pub use typeinfo::{build_type_info, Config, EntityConfig};
 pub use redact_l1::{detect_l1, redact_l1, DetectL1Result, RedactL1Args};
 pub use streaming::{
-    context_cut, pem_begin_present,
+    context_cut, emit_possible, pem_begin_present,
     last_boundary_index, restorer_split, ContextCut, DetectSpans, EmitResult, RedactSegment,
     RestoreStrategy, StreamingRedactor, StreamingRestorer, CARRY_WINDOW, DEFAULT_MAX_BUFFER,
     EVIDENCE_CONTEXT_WINDOW,
