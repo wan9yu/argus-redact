@@ -27,7 +27,8 @@
 use pyo3::prelude::*;
 
 use argus_redact_core::streaming::{
-    context_cut as core_context_cut, last_boundary_index as core_last_boundary_index,
+    context_cut as core_context_cut, emit_possible as core_emit_possible,
+    last_boundary_index as core_last_boundary_index,
     pem_begin_present as core_pem_begin_present, restorer_split as core_restorer_split,
     unclosed_pem_opener_start as core_unclosed_pem_opener_start,
 };
@@ -69,6 +70,25 @@ pub fn streaming_context_cut(
     let chars: Vec<char> = text.chars().collect();
     let cc = core_context_cut(&spans, &chars, ctx_len, max_buffer, w, force_flush);
     (cc.cut, cc.redetect)
+}
+
+/// `true` when the streaming buffer MIGHT emit on the next cut — a
+/// spans-INDEPENDENT conservative upper bound. Converts `text` to `Vec<char>` and
+/// delegates to `argus_redact_core::streaming::emit_possible`. Returns `false` only
+/// when `context_cut` is GUARANTEED to hold regardless of spans (no sentence boundary
+/// in the safe window, buffer below `max_buffer`, and `force_flush` is `false`).
+/// Mirrors the gate added to `core::StreamingRedactor::feed` so the Python
+/// `_context_cut` can skip the expensive `_detect` on a provably-holding feed.
+#[pyfunction]
+pub fn streaming_emit_possible(
+    text: &str,
+    ctx_len: usize,
+    max_buffer: usize,
+    w: usize,
+    force_flush: bool,
+) -> bool {
+    let chars: Vec<char> = text.chars().collect();
+    core_emit_possible(&chars, ctx_len, max_buffer, w, force_flush)
 }
 
 /// `true` if `combined` holds a PEM private-key BEGIN marker (the literal

@@ -1,13 +1,17 @@
 """Tests for the carry-window boundary helpers in ``_detect_partial``.
 
-Covers ``_last_boundary_index`` and the ``streaming_context_cut`` PyO3 binding.
+Covers ``_last_boundary_index``, the ``streaming_context_cut`` PyO3 binding, and
+the ``streaming_emit_possible`` gate that lets ``_context_cut`` skip ``_detect``
+on provably-holding feeds.
 """
 
 import pytest
+from unittest.mock import patch
 
 from argus_redact._core_loader import _core
 from argus_redact.glue._detect_partial import (
     _EVIDENCE_CONTEXT_WINDOW,
+    DEFAULT_MAX_BUFFER,
     _last_boundary_index,
 )
 
@@ -98,8 +102,6 @@ class TestContextCutBinding:
         # raw len - CARRY_WINDOW and ``redetect`` is True (the emit slice must be
         # re-detected). max_buffer=20, W=4, CARRY_WINDOW=256 is too big here, so use
         # a buffer ≥ DEFAULT_MAX_BUFFER (4096) and CARRY_WINDOW (256).
-        from argus_redact.glue._detect_partial import DEFAULT_MAX_BUFFER
-
         text = "x" * DEFAULT_MAX_BUFFER
         spans = [(0, DEFAULT_MAX_BUFFER, "jwt")]  # one entity spanning the whole buffer
         cut, redetect = _core.streaming_context_cut(
@@ -107,3 +109,62 @@ class TestContextCutBinding:
         )
         assert cut == DEFAULT_MAX_BUFFER - 256  # raw len - CARRY_WINDOW (forced split)
         assert redetect is True
+
+
+class TestEmitPossibleBinding:
+    """PyO3 ``streaming_emit_possible`` binding."""
+
+    def test_short_buffer_no_boundary_returns_false(self):
+        # Buffer shorter than W with no boundary → emit_possible is False.
+        assert _core.streaming_emit_possible("hello world", 0, DEFAULT_MAX_BUFFER, 128, False) is False
+
+    def test_force_flush_returns_true(self):
+        assert _core.streaming_emit_possible("x", 0, DEFAULT_MAX_BUFFER, 128, True) is True
+
+    def test_buffer_at_max_returns_true(self):
+        text = "x" * DEFAULT_MAX_BUFFER
+        assert _core.streaming_emit_possible(text, 0, DEFAULT_MAX_BUFFER, 128, False) is True
+
+    def test_boundary_in_safe_window_returns_true(self):
+        # 256 chars of filler + 。 + 128 more chars → safe_end = 385 - 128 = 257;
+        # boundary at 257 > ctx_len=0 → emit_possible True.
+        text = "啊" * 256 + "。" + "啊" * 128
+        assert _core.streaming_emit_possible(text, 0, DEFAULT_MAX_BUFFER, 128, False) is True
+
+
+class TestDetectSkipGate:
+    """Non-vacuous proof that ``_detect`` is NOT called on a provably-holding feed.
+
+    The gate in ``_context_cut`` must skip ``_detect`` when ``streaming_emit_possible``
+    returns False, and must still call ``_detect`` when an emit IS possible.
+    """
+
+    def test_detect_not_called_on_hold_feed(self):
+        # A short boundary-less buffer (< W chars, no sentence boundary) provably
+        # holds → emit_possible=False → _detect must NOT be called.
+        from argus_redact.glue._detect_partial import _context_cut
+        import argus_redact.glue._detect_partial as _dp
+
+        short = "hello world"  # 11 chars, no boundary, W=128 → provably holds
+        with patch.object(_dp, "_detect") as mock_detect:
+            cut, redetect, entities = _context_cut(
+                short, 0, lang="en", mode="fast", names=None, types=None, types_exclude=None
+            )
+        mock_detect.assert_not_called()
+        assert cut == 0
+        assert redetect is False
+        assert entities == []
+
+    def test_detect_called_when_emit_possible(self):
+        # A buffer with a sentence boundary in the safe window → emit_possible=True
+        # → _detect MUST be called (the gate must not over-skip).
+        from argus_redact.glue._detect_partial import _context_cut
+        import argus_redact.glue._detect_partial as _dp
+
+        # 256 chars filler + 。 + 128 chars → safe_end = 385 - 128 = 257; boundary at
+        # 257 > ctx_len=0 → emit_possible True → _detect runs.
+        text = "啊" * 256 + "。" + "啊" * 128
+        sentinel = ([], [], {}, {})  # (_detect returns (entities, langs, timing, stats))
+        with patch.object(_dp, "_detect", return_value=sentinel) as mock_detect:
+            _context_cut(text, 0, lang="zh", mode="fast", names=None, types=None, types_exclude=None)
+        mock_detect.assert_called_once()

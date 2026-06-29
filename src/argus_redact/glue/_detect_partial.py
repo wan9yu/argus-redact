@@ -96,6 +96,26 @@ def _context_cut(
     redaction (no re-detect of the bare emit slice — except on the ``redetect``
     drain path).
     """
+    # Raise the max_buffer ceiling while any PEM private-key BEGIN is present
+    # (opened or closed) so a complete key larger than DEFAULT_MAX_BUFFER is
+    # carried whole rather than force-flush-split. Gated on the SAME predicate the
+    # wasm path uses (literal AND private-key regex) so wheel and wasm pick the
+    # same cut on a non-private-key PEM block.
+    effective_max = (
+        max_buffer + _PEM_OPENER_CEILING_EXTRA
+        if _core.streaming_pem_begin_present(combined)
+        else max_buffer
+    )
+    # Spans-independent conservative gate: skip the expensive _detect when
+    # context_cut is GUARANTEED to hold regardless of entity layout (no sentence
+    # boundary in the safe window, buffer below effective_max, force_flush=False).
+    # emit_possible is a strict superset of the emit set — returning False here
+    # implies context_cut would return cut==ctx_len (hold) for ANY spans, so
+    # returning (ctx_len, False, []) is behavior-preserving.
+    if not _core.streaming_emit_possible(
+        combined, ctx_len, effective_max, _EVIDENCE_CONTEXT_WINDOW, force_flush
+    ):
+        return ctx_len, False, []          # provably holds — skip the expensive _detect
     entities, _langs, _timing, _stats = _detect(
         combined,
         lang=lang,
@@ -111,16 +131,6 @@ def _context_cut(
     begin = _core.streaming_unclosed_pem_opener_start(combined)
     if begin is not None:
         spans.append((begin, len(combined) + 1, "ssh_private_key"))
-    # Raise the max_buffer ceiling while any PEM private-key BEGIN is present
-    # (opened or closed) so a complete key larger than DEFAULT_MAX_BUFFER is
-    # carried whole rather than force-flush-split. Gated on the SAME predicate the
-    # wasm path uses (literal AND private-key regex) so wheel and wasm pick the
-    # same cut on a non-private-key PEM block.
-    effective_max = (
-        max_buffer + _PEM_OPENER_CEILING_EXTRA
-        if _core.streaming_pem_begin_present(combined)
-        else max_buffer
-    )
     cut, redetect = _core.streaming_context_cut(
         combined, spans, ctx_len, effective_max, _EVIDENCE_CONTEXT_WINDOW, force_flush
     )

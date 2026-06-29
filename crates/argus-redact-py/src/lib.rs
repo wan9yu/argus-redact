@@ -56,6 +56,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(streaming::streaming_last_boundary_index, m)?)?;
     m.add_function(wrap_pyfunction!(streaming::streaming_restorer_split, m)?)?;
     m.add_function(wrap_pyfunction!(streaming::streaming_context_cut, m)?)?;
+    m.add_function(wrap_pyfunction!(streaming::streaming_emit_possible, m)?)?;
     m.add_function(wrap_pyfunction!(streaming::streaming_unclosed_pem_opener_start, m)?)?;
     m.add_function(wrap_pyfunction!(streaming::streaming_pem_begin_present, m)?)?;
     m.add_function(wrap_pyfunction!(risk::assess_risk, m)?)?;
