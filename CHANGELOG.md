@@ -2,6 +2,64 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.7.15 — audit hardening: fail-open + correctness fixes
+
+A hardening release from an external audit. It closes integration fail-open
+paths and correctness gaps, corrects documentation/metadata drift, and adds
+regression guards. **No L1 detection-output change** — `mode="fast"` redaction
+of plain text is byte-for-byte unchanged. A few integration *contracts* tighten
+(see Changed); review those if you call the FastAPI middleware, the HTTP server,
+or the compliance profiles directly.
+
+### Changed
+- **The HTTP server rejects a non-object `key` with 400** on `/redact` and
+  `/restore`. Previously a string `key` was treated as a server-side key-file
+  path (and a non-string/non-dict value errored uncontrolled); over HTTP a key
+  is always an in-memory JSON object, so anything else is now a clean 400. (This
+  closes a post-auth cross-session key-file disclosure/overwrite path.)
+- **The FastAPI middleware fails closed on non-conforming `messages`.** A
+  message that is not `{role, content: str}` — a bare string, a dict without a
+  `content` key (e.g. a tool/function-call message), or list/multimodal content —
+  now raises a clear `TypeError` instead of being passed through unredacted.
+  (Recursive redaction of multimodal/tool-call message parts is noted as a future
+  direction in `docs/integration-frameworks.md`.)
+- **The strict compliance profiles (`pipl`/`gdpr`/`hipaa`) fully redact
+  `phone_landline`.** It was previously left on the partial-reveal mask the strict
+  profiles exist to override.
+
+### Fixed
+- **`restore` no longer double-replaces under a chained key map.** A redundant
+  marker pass could rewrite an already-restored value a second time when one
+  entity's original equalled another's fake (reachable only via an
+  adversarial/externally-merged key map, not a single redact pass). The pass was
+  fully redundant with the single-pass restore and was removed.
+- **Discovery surfaces enumerate every shipped language pack and its NER model.**
+  The CLI `info`/`setup`, the HTTP `/info` endpoint, and the MCP `redact_info`
+  tool now derive the language list + display names from one registry source
+  (previously `br` was omitted, and `de`/`uk`/`in` were mislabelled "regex only"
+  despite shipping spaCy models).
+- **HIPAA Safe Harbor metadata enumerates all 18 categories** (the set was
+  labelled "18" but held 17 — the health-plan-beneficiary category is now present
+  as a recognized category).
+
+### Docs / honesty
+- Corrected `seed=` → `salt=` in examples across the docs (the parameter was
+  renamed to `salt` in v0.6.8); the doc-example test harness now scans `docs/`
+  pinned blocks, not just the README.
+- Corrected a misleading comment that called the MCP redact tool's default salt
+  "deterministic" — an absent salt already uses a fresh CSPRNG per call; the
+  explicit default is defense-in-depth, not a leak fix.
+- Refreshed stale deprecation version targets in the streaming module docstrings.
+
+### Internal
+- Spec modules are auto-discovered, so a newly added language/type pack cannot
+  silently fail to register.
+- Added regression guards: the PRvL-Gold benchmark floors are pinned to the Gold
+  grade (was below Bronze); detector confidence-floor invariants; a Python↔Rust
+  PEM-ceiling constant parity check; `StreamingRedactor.export_state` completeness;
+  cross-message / cross-leaf alias-key consistency; and a pyproject↔Cargo↔package
+  version-parity check.
+
 ## v0.7.14 — PII-leak hardening + streaming cross-sentence correctness
 
 A security and correctness release: a batch of PII-leak and restore fixes, plus
