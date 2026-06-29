@@ -25,10 +25,9 @@ DISPLAY_MARKER_PRESETS: dict[str, str] = {
     "none": "",
 }
 
-# Characters that may appear in any preset marker label. Used by `restore()` to
-# auto-detect and strip known preset markers attached to keys when the caller
-# omitted `display_marker=`. Custom markers (not in DISPLAY_MARKER_PRESETS) are
-# NOT included — those still require explicit pass-through.
+# Characters that may appear in any preset marker label, mirrored verbatim from
+# the Rust core (`_core_preset_chars`). Custom markers (not in
+# DISPLAY_MARKER_PRESETS) are NOT included.
 PRESET_MARKER_CHARS: frozenset[str] = frozenset(_core_preset_chars())
 
 

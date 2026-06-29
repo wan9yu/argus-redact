@@ -56,13 +56,13 @@ def restore(
     or English addresses into 中文.
 
     If `display_marker` is provided, strip THAT marker from `text` before key
-    lookup. If omitted (v0.6.0+), `restore` auto-detects known preset markers
-    from `DISPLAY_MARKER_PRESETS` (`ⓕ`, `*`, `(假)`, `ˢ`) attached after a
-    key token: the marker stays in the output but the key is restored
-    underneath (e.g. `"19999123456ⓕ"` -> `"13800138000ⓕ"`). Custom markers
-    not in the preset list still require explicit `display_marker=`
-    pass-through. See `PRESET_MARKER_CHARS` in `pure/display_marker.py` for
-    the canonical preset character set.
+    lookup. If omitted, no separate marker pass runs: substitution is a single
+    left-to-right, longest-key-first scan that advances past each replacement
+    (never re-scanning what it just emitted). A decoration marker trailing a
+    key token (`ⓕ`, `(假)`, `ˢ`, `*`) is ordinary non-key text, so it survives
+    verbatim right after the restored value (e.g. `"19999123456ⓕ"` ->
+    `"13800138000ⓕ"`). Pass `display_marker=` only when you want the marker
+    removed from the output.
     """
     if not isinstance(key, Mapping):
         raise TypeError(f"key must be a Mapping, got {type(key).__name__}")
