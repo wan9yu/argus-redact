@@ -105,7 +105,19 @@ def main() -> None:
             )
         ),
         "restore_1kb_p50_ms": _measure_p50(_restore_workload),
+        # Single 256-char feed that reaches a sentence boundary and EMITS — measures
+        # the irreducible detect-once cost of the v0.7.14 correctness design. The
+        # emit_possible gate does NOT speed this up (the feed always emits); the
+        # value reflects the inherent cost of one _detect call over ~256 chars.
         "streaming_feed_per_chunk_p50_ms": _measure_p50(_streaming_workload),
+        # Realistic small-chunk "dribble": ~1KB fed in 4-char increments through one
+        # StreamingRedactor, plus flush(). The MAJORITY of feeds are boundary-less
+        # holds that the emit_possible gate short-circuits before _detect runs; only
+        # the feeds that reach a sentence boundary run detection. Reported as the
+        # TOTAL wall-time of the whole dribble+flush run (ms-scale, stable) rather
+        # than a per-chunk p50 (which is µs-scale and noise-flaky against the ±10%
+        # gate). Captures the gate optimization as a number that won't flap.
+        "streaming_dribble_total_ms": _measure_p50(_streaming_dribble_workload),
     }
 
     output = {
@@ -136,6 +148,24 @@ def _streaming_workload() -> None:
     r = StreamingRedactor(salt=_SALT_FOR_PSEUDONYM_LLM, strict_input=False)
     chunk = _ZH_1KB[:256]
     r.feed(chunk)
+    r.flush()
+
+
+def _streaming_dribble_workload() -> None:
+    """Feed ~1KB in 4-char chunks through one StreamingRedactor, then flush().
+
+    The emit_possible gate makes the majority of feeds (boundary-less holds) cheap:
+    the gate fires before _detect runs; only the feeds that reach a sentence boundary
+    trigger detection. Timed by _measure_p50 as one ms-scale unit (total run time) —
+    stable against the ±10% regression gate, unlike a µs-scale per-chunk p50.
+    """
+    from argus_redact.compose import StreamingRedactor
+
+    text = _ZH_1KB  # ~1KB, contains sentence boundaries
+    chunk_size = 4
+    r = StreamingRedactor(salt=_SALT_FOR_PSEUDONYM_LLM, lang="zh", strict_input=False)
+    for i in range(0, len(text), chunk_size):
+        r.feed(text[i : i + chunk_size])
     r.flush()
 
 
