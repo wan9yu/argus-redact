@@ -17,7 +17,12 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).parents[1]
+# Primary README files (always scanned).
 _README_PATHS = [_REPO_ROOT / "README.md", _REPO_ROOT / "README.zh.md"]
+# Narrative docs in docs/ are also scanned so that any `<!-- pin -->` block
+# added there is automatically picked up by CI.
+_DOCS_PATHS = sorted((_REPO_ROOT / "docs").glob("*.md"))
+_SCAN_PATHS = _README_PATHS + _DOCS_PATHS
 
 _PIN_BLOCK = re.compile(
     r"<!--\s*pin\s*-->\s*\n```python\n(.*?)\n```",
@@ -53,7 +58,7 @@ def _expected_lines(code: str) -> list[str]:
 
 _PARAMS = [
     (code, label, line)
-    for md in _README_PATHS
+    for md in _SCAN_PATHS
     for code, label, line in _extract_pinned(md)
 ]
 

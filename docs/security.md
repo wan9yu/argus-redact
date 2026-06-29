@@ -108,8 +108,8 @@ The realistic / pseudonym-llm path resolves the salt as follows:
 
 1. **Explicit `salt=<bytes>`** kwarg: used verbatim. Recommended; preserves
    full entropy.
-2. **Explicit `seed=<int>`** kwarg: encoded as 8-byte big-endian (back-compat;
-   provides 64-bit entropy).
+2. **Explicit `salt=<int>`** kwarg: encoded as 8-byte big-endian (provides
+   64-bit entropy — lower than a full byte salt).
 3. **`ARGUS_REDACT_PSEUDONYM_SALT` env var**: bytes of the UTF-8 encoded
    string. Convenient for deployments; document the value as an operator
    secret.

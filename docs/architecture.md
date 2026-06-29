@@ -467,11 +467,11 @@ Not all parts of argus-redact are equal. The codebase is structured into three l
 │  produce_hints(entities, text) → [Hint, ...]                │
 │  filter_self_reference(entities, hints) → entities          │
 │  boost_cross_layer(merged, pre_merge) → entities            │
-│  replace(text, entities, strategy, seed) → (redacted, key)  │
+│  replace(text, entities, strategy, salt) → (redacted, key)  │
 │  restore(text, key) → plaintext                             │
 │  merge_entities(layer_results) → deduplicated_entities      │
 │  normalize_grammar_en / restore_grammar_en                  │
-│  PseudonymGenerator(prefix, range, seed).get(entity) → code │
+│  PseudonymGenerator(prefix, range, salt).get(entity) → code │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -489,8 +489,8 @@ Not all parts of argus-redact are equal. The codebase is structured into three l
 │  Glue (composes pure + impure)                              │
 │  → End-to-end testable, property-based                      │
 │                                                             │
-│  redact(text, *, key, lang, mode, seed, ...)                │
-│    1. seed = seed or generate_random_seed()    [impure]     │
+│  redact(text, *, key, lang, mode, salt, ...)                │
+│    1. salt = salt or generate_random_seed()    [impure]     │
 │    2. entities = match_patterns(text)          [pure]       │
 │    3. hints = produce_hints(entities, text)    [pure]       │
 │    4. entities += detect_person_names(hints)   [pure]       │
@@ -499,7 +499,7 @@ Not all parts of argus-redact are equal. The codebase is structured into three l
 │    7. entities = merge_entities(entities)      [pure]       │
 │    8. entities = boost_cross_layer(entities)   [pure]       │
 │    9. entities = filter_self_reference(hints)  [pure]       │
-│    6. redacted, key = replace(text, ..., seed)  [pure]       │
+│    6. redacted, key = replace(text, ..., salt)  [pure]       │
 │    7. write_key_file(path, key) if needed       [impure]     │
 │    8. return (redacted, key)                                 │
 └─────────────────────────────────────────────────────────────┘
@@ -509,9 +509,9 @@ Not all parts of argus-redact are equal. The codebase is structured into three l
 
 | Layer | Test type | Speed | Deterministic? | Example |
 |-------|-----------|-------|---------------|---------|
-| Pure | Unit test | < 1ms | Yes (with seed) | `assert replace("张三", [...], seed=42) == ("P-037", {...})` |
+| Pure | Unit test | < 1ms | Yes (with salt) | `assert replace("张三", [...], salt=42) == ("P-037", {...})` |
 | Impure | Integration | 1-5s | Model-dependent | `assert len(detect_ner("张三在北京", "zh")) >= 1` |
-| Glue | End-to-end | 1-5s | With seed + mode="fast" | `assert "张三" not in redact("张三 138...", seed=42)[0]` |
+| Glue | End-to-end | 1-5s | With salt + mode="fast" | `assert "张三" not in redact("张三 138...", salt=42)[0]` |
 
 ### Why this matters for Rust
 
@@ -536,24 +536,24 @@ The Pure layer handles all hot paths (regex matching, string replacement, key ma
 
 The Impure layer stays in Python because model loading (HanLP, spaCy, llama.cpp bindings) is already Python-native, and Python startup overhead doesn't matter when model inference takes 10-2000ms.
 
-### seed parameter flow
+### salt parameter flow
 
 ```
-redact(text, seed=42)
+redact(text, salt=42)
   │
-  ├── seed=42 passed to PseudonymGenerator
-  │   └── RNG initialized with seed=42 → deterministic codes
+  ├── salt=42 passed to PseudonymGenerator
+  │   └── RNG initialized with salt=42 → deterministic codes
   │
-  ├── seed=42 does NOT affect:
+  ├── salt=42 does NOT affect:
   │   ├── Pattern matching (already deterministic)
   │   ├── NER detection (model-deterministic)
   │   └── File I/O (orthogonal)
   │
-  └── Result: same text + same seed = same output
+  └── Result: same text + same salt = same output
       (assuming same model version and same installed layers)
 ```
 
-When `seed=None` (default, production):
+When `salt=None` (default, production):
 - Pseudonym codes use `secrets.randbelow()` — cryptographically random
 - Each `redact()` call is unique and unpredictable
 - This is what makes per-message keys unlinkable

@@ -76,7 +76,7 @@ underlying `specs` registry plus the **PRvL evaluation standard**
 
 | Aspect | Promise |
 |---|---|
-| `redact()` signature | Frozen at 1.0. Same call, same params → same observable behavior (modulo `seed=` non-determinism). |
+| `redact()` signature | Frozen at 1.0. Same call, same params → same observable behavior (modulo `salt=` non-determinism). |
 | `restore()` semantics | **Literal substring inverse** of `redact()`'s substitution. Pure function. Not coreference-aware. Not paraphrase-aware. |
 | Key schema | `dict[str, str]` mapping fake → original. Stable across versions. |
 | PII type registry | Names stable; new types added (additive). |

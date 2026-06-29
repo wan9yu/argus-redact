@@ -29,7 +29,7 @@ These also work standalone without LangChain installed:
 ```python
 from argus_redact.integrations.langchain import RedactRunnable, RestoreRunnable
 
-redact_r = RedactRunnable(mode="fast", lang="zh", seed=42)
+redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
 restore_r = RestoreRunnable(redact_r)
 
 redacted = redact_r.invoke("张三的电话是13812345678")

@@ -11,7 +11,7 @@ redact(
     key: dict | str | None = None,
     lang: str | list[str] = "zh",
     mode: str = "fast",
-    seed: int | None = None,
+    salt: int | bytes | None = None,
     config: dict | None = None,
     names: list[str] | None = None,
     detailed: bool = False,
@@ -32,7 +32,7 @@ Detect and replace PII in the input text. Returns `(redacted_text, key)`, or `(r
 | `key` | `dict \| str \| None` | `None` | `None` = generate fresh key. `dict` = reuse this mapping (new entities are added, existing preserved). `str` = **file path** — if file exists, load and reuse; after redaction, file is updated with new entries. Behaves like CLI `-k`. |
 | `lang` | `str \| list[str]` | `"zh"` | Language(s). `"zh"`, `"en"`, `"ja"`, `"ko"`, or list like `["zh", "en"]`. Pass `"auto"` to let argus-redact pick language(s) from the text (script-based detection: Hiragana/Katakana → ja, Hangul → ko, CJK → zh, Latin letters → en; fallback `["zh"]`). |
 | `mode` | `str` | `"fast"` | `"fast"` = regex only (zero deps, sub-ms). `"ner"` = regex + NER. `"auto"` = all installed layers (regex + NER + semantic LLM). |
-| `seed` | `int \| None` | `None` | Random seed for pseudonym generation.
+| `salt` | `int \| bytes \| None` | `None` | Salt for deterministic pseudonym generation. Integers and short byte values are low-entropy; prefer `os.urandom(32)` in production.
 | `config` | `dict \| str \| None` | `None` | Per-entity-type config. Dict, JSON file, or YAML file path. See [Configuration](configuration.md). |
 | `names` | `list[str] \| None` | `None` | Known names to always redact (no NER needed). Combined with NER for best results. |
 | `detailed` | `bool` | `False` | If `True`, return a 3-tuple with detection details (entities, stats). |
@@ -111,7 +111,7 @@ redacted, key, details = redact("张三在星巴克", detailed=True)
 
 | Aspect | Pure? | Why | How to control |
 |--------|-------|-----|---------------|
-| Pseudonym generation | No — random | Different codes each call | `seed=42` makes it deterministic |
+| Pseudonym generation | No — random | Different codes each call | `salt=42` makes it deterministic |
 | Pattern matching (Layer 1) | Yes | Same regex, same input → same matches | — |
 | NER detection (Layer 2) | Mostly | Same model, same input → same output. But model loading is a side effect. | Mock or use real model |
 | LLM detection (Layer 3) | No | LLM output may vary | Mock LLM response |
@@ -119,11 +119,11 @@ redacted, key, details = redact("张三在星巴克", detailed=True)
 | `key=str` (file path) | No — file I/O | Reads and writes the file system | Use `key=dict` in tests |
 | `restore()` | **Yes** | Pure string replacement, fully deterministic | — |
 
-**Rule for tests:** Use `seed` + `key=dict` + `mode="fast"` and your tests become fully deterministic with zero side effects:
+**Rule for tests:** Use `salt` + `key=dict` + `mode="fast"` and your tests become fully deterministic with zero side effects:
 
 ```python
 # Fully pure, fully testable
-text, key = redact("张三 13812345678", seed=42, mode="fast")
+text, key = redact("张三 13812345678", salt=42, mode="fast")
 assert text == "张三 [手机号已脱敏]"  # deterministic
 assert key == {"[手机号已脱敏]": "13812345678"}  # deterministic
 
@@ -135,7 +135,7 @@ assert restored == "张三 13812345678"  # pure
 
 - **Same entity in one call → same pseudonym.** "张三...张三" → "P-012...P-012"
 - **Different calls without key → different pseudonyms.** Fresh random codes each time.
-- **With same seed → same pseudonyms.** `seed=42` always produces the same mapping.
+- **With same salt → same pseudonyms.** `salt=42` always produces the same mapping.
 - **Pseudonym codes are random, not sequential.** P-037 and P-012, not P-001 and P-002. The code numbers reveal nothing about entity count or order.
 - **Layers run bottom-up.** Layer 1 (regex) first, then Layer 2 (NER), then Layer 3 (semantic). Later layers don't re-detect what earlier layers already caught.
 - **Overlapping detections are deduplicated.** If regex and NER both catch the same span, the higher-confidence match wins.
@@ -176,7 +176,7 @@ text, key = redact("今天天气不错", key={"P-037": "王五"})
 
 ### Testable Invariants
 
-These properties should hold in all cases. Tests use `seed` for determinism and `mode="fast"` to avoid model dependencies:
+These properties should hold in all cases. Tests use `salt` for determinism and `mode="fast"` to avoid model dependencies:
 
 ```python
 import pytest
@@ -187,13 +187,13 @@ from argus_redact import redact, restore
 def test_roundtrip():
     """redact → restore recovers all PII."""
     original = "张三的手机号是13812345678"
-    redacted, key = redact(original, seed=42, mode="fast")
+    redacted, key = redact(original, salt=42, mode="fast")
     restored = restore(redacted, key)
     assert "13812345678" in restored
 
 def test_pii_removed_from_output():
     """Original PII must not appear in redacted text."""
-    redacted, key = redact("手机号13812345678", seed=42, mode="fast")
+    redacted, key = redact("手机号13812345678", salt=42, mode="fast")
     for replacement, original in key.items():
         assert original in "手机号13812345678"    # was in input
         assert original not in redacted           # NOT in output
@@ -208,26 +208,26 @@ def test_no_pii():
 
 def test_key_uniqueness():
     """All replacement strings in key must be unique."""
-    _, key = redact("身份证110101199003071234和220102198805061234", seed=42, mode="fast")
+    _, key = redact("身份证110101199003071234和220102198805061234", salt=42, mode="fast")
     assert len(key) == len(set(key.keys()))
 
-def test_seed_determinism():
-    """Same seed + same input = same output."""
-    r1 = redact("张三 13812345678", seed=42, mode="fast")
-    r2 = redact("张三 13812345678", seed=42, mode="fast")
+def test_salt_determinism():
+    """Same salt + same input = same output."""
+    r1 = redact("张三 13812345678", salt=42, mode="fast")
+    r2 = redact("张三 13812345678", salt=42, mode="fast")
     assert r1 == r2
 
 def test_session_isolation():
-    """Different seeds (or no seed) = different pseudonyms."""
-    _, key1 = redact("张三", seed=42)
-    _, key2 = redact("张三", seed=99)
+    """Different salts (or no salt) = different pseudonyms."""
+    _, key1 = redact("张三", salt=42)
+    _, key2 = redact("张三", salt=99)
     assert key1 != key2
 
 def test_key_reuse():
     """Reusing key preserves existing pseudonyms and adds new ones."""
-    _, key = redact("张三和李四", seed=42)
+    _, key = redact("张三和李四", salt=42)
     original_key_size = len(key)
-    text2, key = redact("张三和王五", key=key, seed=42)
+    text2, key = redact("张三和王五", key=key, salt=42)
     assert len(key) >= original_key_size  # only grows
 
 def test_restore_is_pure():
@@ -243,7 +243,7 @@ def test_restore_empty_key():
     assert restore("any text", {}) == "any text"
 
 def test_detailed_returns_3tuple():
-    result = redact("13812345678", detailed=True, seed=42, mode="fast")
+    result = redact("13812345678", detailed=True, salt=42, mode="fast")
     assert len(result) == 3
     text, key, details = result
     assert "entities" in details
@@ -933,7 +933,7 @@ Sentence-bounded incremental detection runs unconditionally: chunks may split en
 - `feed(chunk: str) -> PseudonymLLMResult` — redact one chunk. Cross-chunk consistency preserved via internal accumulated key.
 - `flush() -> PseudonymLLMResult` *(v0.5.7+)* — drain any text accumulated past the last sentence boundary.
 - `aggregate_key() -> dict[str, str]` — copy of the unified key across all fed chunks (for batched restore).
-- `export_state(*, include_salt: bool = False) -> dict` *(v0.5.5+; v0.6.2 default no longer includes salt)* — serialize redactor state (accumulated key, all constructor options) to a JSON-friendly dict. Persist to Redis / disk to survive process restarts. The salt is the cryptographic root and is held out-of-band by the caller; pass `include_salt=True` only for trusted-channel handoff (deprecated, removed in v0.7.0).
+- `export_state(*, include_salt: bool = False) -> dict` *(v0.5.5+; v0.6.2 default no longer includes salt)* — serialize redactor state (accumulated key, all constructor options) to a JSON-friendly dict. Persist to Redis / disk to survive process restarts. The salt is the cryptographic root and is held out-of-band by the caller; pass `include_salt=True` only for trusted-channel handoff (deprecated; will be removed in a future release).
 - `from_state(state: dict, *, salt: bytes | None = None) -> StreamingRedactor` *(classmethod, v0.5.5+; v0.6.2 added `salt=` kwarg)* — rebuild an instance from a previously exported state. Pass `salt=` explicitly. Legacy v0.6.0/0.6.1 dumps with embedded salt still load (with `DeprecationWarning`). Subsequent `feed()` calls reuse the same fake values for already-seen originals.
 
 ### Incremental mode (v0.5.7 opt-in → v0.5.8 default → v0.6.0 only mode)
