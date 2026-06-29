@@ -109,6 +109,78 @@ class TestPerfHook:
 
 
 class TestPerfLogFile:
+    def test_slow_call_written_despite_zero_sample_rate(self):
+        """Slow records bypass sampling and are written even at ARGUS_PERF_SAMPLE=0.0.
+
+        Non-vacuous: if the ``if not record.slow`` bypass in _file_hook were
+        removed, sample_rate=0 would suppress the record and len(lines)==1
+        would fail.  The test therefore fails if the slow-always-logged
+        contract breaks.
+        """
+        with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as f:
+            path = f.name
+
+        try:
+            os.environ["ARGUS_PERF_LOG"] = path
+            os.environ["ARGUS_PERF_SAMPLE"] = "0.0"  # never sample fast calls
+            os.environ["ARGUS_PERF_SLOW_MS"] = "0"  # threshold=0 → every call is slow
+
+            from argus_redact.telemetry import _init_file_hook
+
+            _init_file_hook()
+
+            redact("电话13812345678", salt=42, mode="fast")
+
+            set_perf_hook(None)
+
+            with open(path, encoding="utf-8") as f:
+                lines = f.readlines()
+
+            assert len(lines) == 1, "slow record must be written even at sample_rate=0"
+            record = json.loads(lines[0])
+            assert record["slow"] is True, "record.slow must be True when total_ms >= threshold"
+            assert record["sampled"] is False, "slow records must not be tagged sampled"
+        finally:
+            os.environ.pop("ARGUS_PERF_LOG", None)
+            os.environ.pop("ARGUS_PERF_SAMPLE", None)
+            os.environ.pop("ARGUS_PERF_SLOW_MS", None)
+            set_perf_hook(None)
+            os.unlink(path)
+
+    def test_fast_call_not_written_at_zero_sample_rate(self):
+        """Fast records at ARGUS_PERF_SAMPLE=0.0 must NOT be written.
+
+        Non-vacuous: if the sampling guard in _file_hook were removed so that
+        every record was always written, len(lines)==0 would fail.  The test
+        therefore fails if the fast-call sampling contract breaks.
+        """
+        with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as f:
+            path = f.name
+
+        try:
+            os.environ["ARGUS_PERF_LOG"] = path
+            os.environ["ARGUS_PERF_SAMPLE"] = "0.0"  # never sample fast calls
+            os.environ["ARGUS_PERF_SLOW_MS"] = "999999"  # nothing qualifies as slow
+
+            from argus_redact.telemetry import _init_file_hook
+
+            _init_file_hook()
+
+            redact("电话13812345678", salt=42, mode="fast")
+
+            set_perf_hook(None)
+
+            with open(path, encoding="utf-8") as f:
+                lines = f.readlines()
+
+            assert len(lines) == 0, "fast record must not be written at sample_rate=0"
+        finally:
+            os.environ.pop("ARGUS_PERF_LOG", None)
+            os.environ.pop("ARGUS_PERF_SAMPLE", None)
+            os.environ.pop("ARGUS_PERF_SLOW_MS", None)
+            set_perf_hook(None)
+            os.unlink(path)
+
     def test_should_write_jsonl_when_env_var_set(self):
         with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as f:
             path = f.name
