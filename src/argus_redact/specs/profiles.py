@@ -16,6 +16,7 @@ strategies over *all* detected identifiers rather than reducing coverage.)
 # reveals 3+4 digits, narrowing search space to ~10,000 numbers).
 _STRICT_STRATEGIES = {
     "phone": {"strategy": "remove"},
+    "phone_landline": {"strategy": "remove"},
     "email": {"strategy": "remove"},
     "bank_card": {"strategy": "remove"},
     "credit_card": {"strategy": "remove"},

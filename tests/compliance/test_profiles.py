@@ -89,3 +89,46 @@ class TestProfileStrategy:
 
         assert "123-456-7890" not in redacted
         assert "****" not in redacted
+
+    def test_pipl_should_not_use_mask_for_phone_landline(self):
+        """PIPL profile: landline should be fully redacted, not partially masked."""
+        text = "座机010-12345678"
+        redacted, key = redact(text, lang="zh", mode="fast", profile="pipl")
+
+        assert "010-12345678" not in redacted
+        assert "****" not in redacted
+
+    def test_gdpr_should_not_use_mask_for_phone_landline(self):
+        """GDPR profile: landline should be fully redacted, not partially masked."""
+        text = "座机010-12345678"
+        redacted, key = redact(text, lang="zh", mode="fast", profile="gdpr")
+
+        assert "010-12345678" not in redacted
+        assert "****" not in redacted
+
+    def test_hipaa_should_not_use_mask_for_phone_landline(self):
+        """HIPAA profile: landline should be fully redacted, not partially masked."""
+        text = "座机010-12345678"
+        redacted, key = redact(text, lang="zh", mode="fast", profile="hipaa")
+
+        assert "010-12345678" not in redacted
+        assert "****" not in redacted
+
+
+class TestStrictStrategyCoverage:
+    """_STRICT_STRATEGIES must cover every mask-default type in the registry."""
+
+    def test_strict_strategies_covers_all_mask_default_types(self):
+        """Any type whose default strategy is 'mask' must have a non-leaky override
+        in _STRICT_STRATEGIES — so compliance profiles never silently leave a
+        partial-reveal mask in place.
+        """
+        from argus_redact.specs.profiles import _STRICT_STRATEGIES
+        from argus_redact.specs.registry import list_types
+
+        mask_type_names = {t.name for t in list_types() if t.strategy == "mask"}
+        missing = mask_type_names - set(_STRICT_STRATEGIES.keys())
+        assert not missing, (
+            f"_STRICT_STRATEGIES is missing overrides for mask-default types: {sorted(missing)}. "
+            f"Add each to _STRICT_STRATEGIES with a non-leaky strategy ('remove' or 'pseudonym')."
+        )
