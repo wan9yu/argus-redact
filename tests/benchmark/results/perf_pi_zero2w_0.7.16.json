@@ -1,0 +1,119 @@
+{
+  "benchmark": "pi_perf",
+  "package_version": "0.7.16",
+  "device": "Raspberry Pi Zero 2 W Rev 1.0",
+  "platform": "Linux-6.18.34+rpt-rpi-v8-aarch64-with-glibc2.41",
+  "machine": "aarch64",
+  "python": "3.13.5",
+  "iterations": 30,
+  "workloads": {
+    "en_short": {
+      "lang": "en",
+      "bytes": 141,
+      "redact_fast": {
+        "min_ms": 4.5832,
+        "p50_ms": 4.6191,
+        "p90_ms": 4.6927,
+        "max_ms": 4.9241,
+        "docs_per_s": 216.5
+      },
+      "detect_l1": {
+        "min_ms": 3.0058,
+        "p50_ms": 3.0626,
+        "p90_ms": 3.2474,
+        "max_ms": 3.3377,
+        "docs_per_s": 326.5
+      }
+    },
+    "en_1kb": {
+      "lang": "en",
+      "bytes": 846,
+      "redact_fast": {
+        "min_ms": 19.3462,
+        "p50_ms": 19.416,
+        "p90_ms": 19.5664,
+        "max_ms": 19.7146,
+        "docs_per_s": 51.5
+      },
+      "detect_l1": {
+        "min_ms": 16.5701,
+        "p50_ms": 16.644,
+        "p90_ms": 16.799,
+        "max_ms": 16.931,
+        "docs_per_s": 60.1
+      }
+    },
+    "en_long": {
+      "lang": "en",
+      "bytes": 8460,
+      "redact_fast": {
+        "min_ms": 183.9317,
+        "p50_ms": 184.3018,
+        "p90_ms": 184.718,
+        "max_ms": 184.9625,
+        "docs_per_s": 5.4
+      },
+      "detect_l1": {
+        "min_ms": 165.5206,
+        "p50_ms": 165.9682,
+        "p90_ms": 166.2174,
+        "max_ms": 166.599,
+        "docs_per_s": 6.0
+      }
+    },
+    "zh_short": {
+      "lang": "zh",
+      "bytes": 175,
+      "redact_fast": {
+        "min_ms": 6.4842,
+        "p50_ms": 6.5494,
+        "p90_ms": 6.6793,
+        "max_ms": 6.7914,
+        "docs_per_s": 152.7
+      },
+      "detect_l1": {
+        "min_ms": 4.5946,
+        "p50_ms": 4.6306,
+        "p90_ms": 4.7175,
+        "max_ms": 4.8209,
+        "docs_per_s": 216.0
+      }
+    },
+    "zh_1kb": {
+      "lang": "zh",
+      "bytes": 1400,
+      "redact_fast": {
+        "min_ms": 35.2884,
+        "p50_ms": 35.5221,
+        "p90_ms": 35.8365,
+        "max_ms": 36.0402,
+        "docs_per_s": 28.2
+      },
+      "detect_l1": {
+        "min_ms": 30.803,
+        "p50_ms": 30.9948,
+        "p90_ms": 31.1266,
+        "max_ms": 31.3143,
+        "docs_per_s": 32.3
+      }
+    },
+    "zh_long": {
+      "lang": "zh",
+      "bytes": 14000,
+      "redact_fast": {
+        "min_ms": 353.6973,
+        "p50_ms": 354.6894,
+        "p90_ms": 355.4082,
+        "max_ms": 356.2097,
+        "docs_per_s": 2.8
+      },
+      "detect_l1": {
+        "min_ms": 315.1289,
+        "p50_ms": 316.111,
+        "p90_ms": 316.8872,
+        "max_ms": 317.0516,
+        "docs_per_s": 3.2
+      }
+    }
+  }
+}
