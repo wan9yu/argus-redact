@@ -62,7 +62,7 @@ def _resolve_state_salt(state: dict, salt: bytes | None) -> bytes:
         )
     warnings.warn(
         "Loading state with embedded salt is deprecated; pass salt= kwarg "
-        "explicitly. Will be rejected in v0.7.0.",
+        "explicitly. Embedded-salt state will be rejected in a future release.",
         DeprecationWarning,
         stacklevel=3,
     )
@@ -354,8 +354,8 @@ class StreamingRedactor:
         plaintext originals; encrypt the dict at rest if persisted.
 
         Pass ``include_salt=True`` for v0.6.0/v0.6.1-shaped exports (deprecated;
-        will be removed in v0.7.0). Prefer storing the salt out-of-band and
-        passing it to ``from_state(state, salt=...)`` on resume.
+        will be removed in a future release). Prefer storing the salt out-of-band
+        and passing it to ``from_state(state, salt=...)`` on resume.
         """
         state = {
             "version": _STATE_SCHEMA_VERSION,
@@ -387,7 +387,7 @@ class StreamingRedactor:
         if include_salt:
             warnings.warn(
                 "export_state(include_salt=True) is deprecated and will be "
-                "removed in v0.7.0; pass salt to from_state(state, salt=...) "
+                "removed in a future release; pass salt to from_state(state, salt=...) "
                 "instead. Embedding the salt in the serialized dict makes the "
                 "cryptographic root of trust trivially recoverable from any "
                 "leaked dump.",

@@ -105,9 +105,12 @@ async def redact_text(
     if "," in lang:
         lang_param = [code.strip() for code in lang.split(",")]
 
-    # No explicit salt → strong per-call random salt (CSPRNG). The library's
-    # default (salt=None) would emit DETERMINISTIC, grid-searchable pseudonym codes
-    # — wrong for an LLM-facing tool. An explicit int stays a determinism override.
+    # No explicit salt → strong per-call random salt (CSPRNG). Making the
+    # CSPRNG explicit here keeps this tool's security boundary auditable:
+    # salt=None already triggers non-deterministic per-call codes in the
+    # library, and the explicit token_bytes(32) documents that intent clearly.
+    # An explicit int salt forces determinism — testing only; low-entropy
+    # ints are grid-searchable on small PII domains.
     effective_salt: int | bytes = salt if salt is not None else secrets.token_bytes(32)
 
     redacted_text, key = redact(
