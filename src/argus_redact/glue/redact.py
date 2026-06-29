@@ -114,6 +114,21 @@ _LANG_PATTERNS = {
     "br": "argus_redact.lang.br.patterns",
 }
 
+# Human-readable display names for each shipped pack, keyed by the same codes
+# as _LANG_PATTERNS. Single source for the `info` surfaces (CLI `cmd_info` and
+# HTTP `/info`) so the two can't drift. A code present in _LANG_PATTERNS but
+# absent here falls back to the code itself at the display site.
+_LANG_DISPLAY_NAMES = {
+    "zh": "Chinese",
+    "en": "English",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "de": "German",
+    "uk": "British English",
+    "in": "Indian",
+    "br": "Brazilian Portuguese",
+}
+
 
 def _validate_langs(langs: tuple[str, ...] | list[str]) -> None:
     """Raise ValueError for any requested language code not in the known set.

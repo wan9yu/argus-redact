@@ -126,36 +126,29 @@ async def handle_restore(request: Request) -> JSONResponse:
 
 
 async def handle_info(request: Request) -> JSONResponse:
+    # Derive the language list from the shipped-pack SSOT (_LANG_PATTERNS) and
+    # display names from the same single source the CLI `cmd_info` uses, so a
+    # newly-added pack appears on both surfaces without a second hand-edit.
+    from argus_redact.glue.redact import _LANG_DISPLAY_NAMES, _LANG_PATTERNS
     from argus_redact.lang.shared.patterns import PATTERNS as SHARED
 
-    langs: dict[str, str] = {
-        "zh": "Chinese",
-        "en": "English",
-        "ja": "Japanese",
-        "ko": "Korean",
-        "de": "German",
-        "uk": "British English",
-        "in": "Indian",
-        "br": "Brazilian Portuguese",
-    }
     lang_info: dict[str, Any] = {}
 
-    for code, name in langs.items():
-        mod_path = f"argus_redact.lang.{code}.patterns"
-        if code == "in":
-            mod_path = "argus_redact.lang.in_.patterns"
+    for code in _LANG_PATTERNS:
+        mod_code = "in_" if code == "in" else code
         try:
-            mod = importlib.import_module(mod_path)
+            mod = importlib.import_module(f"argus_redact.lang.{mod_code}.patterns")
             count = len(mod.PATTERNS) + len(SHARED)
         except ModuleNotFoundError:
             count = 0
 
-        ner_path = f"argus_redact.lang.{code}.ner_adapter"
-        if code == "in":
-            ner_path = "argus_redact.lang.in_.ner_adapter"
-        has_ner = importlib.util.find_spec(ner_path) is not None
+        has_ner = importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
 
-        lang_info[code] = {"name": name, "patterns": count, "ner": has_ner}
+        lang_info[code] = {
+            "name": _LANG_DISPLAY_NAMES.get(code, code),
+            "patterns": count,
+            "ner": has_ner,
+        }
 
     return JSONResponse(
         {

@@ -172,7 +172,12 @@ class TestServerInfo:
         data = resp.json()
         assert "version" in data
         assert "languages" in data
-        assert set(data["languages"].keys()) == {"zh", "en", "ja", "ko", "de", "uk", "in", "br"}
+        # Expected set is COMPUTED from the shipped-pack SSOT, not a frozen
+        # literal — so adding a 9th pack must surface here (and on /info) or
+        # this assertion fails, instead of silently passing at 8.
+        from argus_redact.glue.redact import _LANG_PATTERNS
+
+        assert set(data["languages"].keys()) == set(_LANG_PATTERNS.keys())
         for code, info in data["languages"].items():
             assert info["patterns"] > 0, f"{code}: expected non-zero patterns"
             assert isinstance(info["ner"], bool), f"{code}: ner field should be a bool"

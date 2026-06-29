@@ -154,22 +154,8 @@ def cmd_info(args):
     import importlib.util
 
     from argus_redact import __version__
-    from argus_redact.glue.redact import _LANG_PATTERNS
+    from argus_redact.glue.redact import _LANG_DISPLAY_NAMES, _LANG_PATTERNS
     from argus_redact.lang.shared.patterns import PATTERNS as SHARED
-
-    # Human-readable names for each language code. Falls back to the code
-    # itself if a new entry is added to _LANG_PATTERNS before this dict is
-    # updated — output stays correct, display name just shows the code.
-    _display = {
-        "zh": "Chinese",
-        "en": "English",
-        "ja": "Japanese",
-        "ko": "Korean",
-        "de": "German",
-        "uk": "British English",
-        "in": "Indian English",
-        "br": "Brazilian Portuguese",
-    }
 
     print(f"argus-redact v{__version__}")
     print()
@@ -183,7 +169,7 @@ def cmd_info(args):
             count = 0
         has_ner = importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
         ner_label = " + NER" if has_ner else ""
-        name = _display.get(code, code)
+        name = _LANG_DISPLAY_NAMES.get(code, code)
         print(f"  {code}  {name:20s} regex ({count} patterns){ner_label}")
 
     print()
