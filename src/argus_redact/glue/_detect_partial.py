@@ -28,6 +28,12 @@ DEFAULT_MAX_BUFFER = 4096
 # ``_core.streaming.EVIDENCE_CONTEXT_WINDOW`` parity-by-convention.
 _EVIDENCE_CONTEXT_WINDOW = 128
 
+# Trailing carry window (in CHARS) kept in the buffer at a boundary-less
+# force-flush.  Must be ≥ the longest BOUNDED entity span so a straddling
+# entity always fits inside the carried region.  Mirrors ``CARRY_WINDOW`` in
+# ``crates/argus-redact-core/src/streaming.rs``.
+_CARRY_WINDOW = 256
+
 # Extra CHARS added to max_buffer while a PEM private-key BEGIN marker is present
 # in the buffer. Mirrors ``PEM_OPENER_CEILING_EXTRA`` in the Rust core. Keeps a
 # complete (BEGIN+END) key whose byte length exceeds DEFAULT_MAX_BUFFER from being

@@ -339,6 +339,50 @@ def test_forceflush_megabuffer_typed_entity_no_leak_en():
         )
 
 
+def test_carry_window_range_token_straddle_not_leaked():
+    # A ~150-char github_token (length in the 128-256 CARRY_WINDOW range) whose
+    # prefix straddles the force-flush chunk boundary. The 'ghp_' prefix (4 chars)
+    # sits in the last 256 chars of chunk1 (the carry window); the remaining
+    # 'A'*150 arrive in chunk2. CARRY_WINDOW=256 guarantees the prefix is carried
+    # so the full 154-char entity is assembled and redacted.
+    #
+    # Non-vacuity: 'ghp_' alone is not a valid github_token (too short — minimum
+    # 36+ alphanumeric chars required after the prefix); 'A'*150 alone is not
+    # detected either (no prefix). Without the carry mechanism, neither half would
+    # be detected, and the full token would appear reconstructed (consecutively) in
+    # the output — so both the `token not in out` assertion AND the aggregate_key
+    # check (token IS detected) would fail.
+    from argus_redact.glue._detect_partial import _CARRY_WINDOW
+
+    token = "ghp_" + "A" * 150  # 154 chars: 128 < 154 <= 256 = _CARRY_WINDOW
+    assert 128 < len(token) <= _CARRY_WINDOW, (
+        f"token length {len(token)} must be in (128, _CARRY_WINDOW={_CARRY_WINDOW}]"
+    )
+    head = token[:4]  # 'ghp_' — not a valid token alone
+    tail = token[4:]  # 'A'*150 — no prefix, not detected alone
+
+    # chunk1 is exactly DEFAULT_MAX_BUFFER chars (no sentence boundary), so the
+    # force-flush fires. 'ghp_' sits at positions [4092, 4096], entirely within
+    # the carry window [DEFAULT_MAX_BUFFER - _CARRY_WINDOW, DEFAULT_MAX_BUFFER].
+    pad = "x" * (DEFAULT_MAX_BUFFER - len(head))
+    chunk1 = pad + head
+    assert len(chunk1) == DEFAULT_MAX_BUFFER  # precondition: triggers force-flush
+    chunk2 = tail + " done."
+
+    out, r = _stream([chunk1, chunk2], lang="en")
+    assert token not in out, (
+        f"raw ~150-char github_token in carry-window range leaked across "
+        f"the force-flush boundary: {out[-60:]!r}"
+    )
+    # Positive guard: the token must have been DETECTED (in aggregate_key), not
+    # just absent because it was never assembled. Without carry the token would be
+    # absent from aggregate_key AND present (raw) in the output.
+    assert token in r.aggregate_key().values(), (
+        "token not in aggregate_key — carry failed to assemble the entity"
+    )
+    assert restore(out, r.aggregate_key()) == chunk1 + chunk2
+
+
 # ---------------------------------------------------------------------------
 # Cross-sentence evidence: detection-context window
 # ---------------------------------------------------------------------------
