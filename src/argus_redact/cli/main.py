@@ -153,24 +153,28 @@ def cmd_info(args):
     import importlib
     import importlib.util
 
+    from argus_redact import __version__
+    from argus_redact.glue.redact import _LANG_PATTERNS
     from argus_redact.lang.shared.patterns import PATTERNS as SHARED
 
-    langs = {
+    # Human-readable names for each language code. Falls back to the code
+    # itself if a new entry is added to _LANG_PATTERNS before this dict is
+    # updated — output stays correct, display name just shows the code.
+    _display = {
         "zh": "Chinese",
         "en": "English",
         "ja": "Japanese",
         "ko": "Korean",
         "de": "German",
-        "uk": "British",
-        "in": "Indian",
+        "uk": "British English",
+        "in": "Indian English",
+        "br": "Brazilian Portuguese",
     }
-
-    from argus_redact import __version__
 
     print(f"argus-redact v{__version__}")
     print()
     print("Languages:")
-    for code, name in langs.items():
+    for code in _LANG_PATTERNS:
         mod_code = "in_" if code == "in" else code
         try:
             mod = importlib.import_module(f"argus_redact.lang.{mod_code}.patterns")
@@ -179,7 +183,8 @@ def cmd_info(args):
             count = 0
         has_ner = importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
         ner_label = " + NER" if has_ner else ""
-        print(f"  {code}  {name:10s} regex ({count} patterns){ner_label}")
+        name = _display.get(code, code)
+        print(f"  {code}  {name:20s} regex ({count} patterns){ner_label}")
 
     print()
     print("Layers:")
@@ -238,13 +243,16 @@ def cmd_setup(args):
                 print("  Downloading HanLP MSRA NER model...")
                 hanlp.load(hanlp.pretrained.mtl.CLOSE_TOK_POS_NER_SRL_DEP_SDP_CON_ELECTRA_BASE_ZH)
                 print("  Done.")
-            elif code in ("en", "ja", "ko"):
+            elif code in ("en", "ja", "ko", "de", "uk", "in"):
                 import spacy
 
                 model_map = {
                     "en": "en_core_web_sm",
                     "ja": "ja_core_news_sm",
                     "ko": "ko_core_news_sm",
+                    "de": "de_core_news_sm",
+                    "uk": "en_core_web_sm",
+                    "in": "xx_ent_wiki_sm",
                 }
                 model = model_map[code]
                 print(f"  Downloading spaCy model {model}...")

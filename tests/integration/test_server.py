@@ -172,7 +172,10 @@ class TestServerInfo:
         data = resp.json()
         assert "version" in data
         assert "languages" in data
-        assert "zh" in data["languages"]
+        assert set(data["languages"].keys()) == {"zh", "en", "ja", "ko", "de", "uk", "in", "br"}
+        for code, info in data["languages"].items():
+            assert info["patterns"] > 0, f"{code}: expected non-zero patterns"
+            assert isinstance(info["ner"], bool), f"{code}: ner field should be a bool"
 
 
 class TestServerHealth:

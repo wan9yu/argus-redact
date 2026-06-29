@@ -232,6 +232,29 @@ class TestInfoCommand:
         assert "de" in stdout
         assert "uk" in stdout
         assert "in" in stdout
+        assert "br" in stdout
+        # Per-lang info must survive: regex pattern-count marker + NER marker.
+        # Guards against a regression that drops the per-language detail line.
+        assert "regex (" in stdout
+        assert "+ NER" in stdout
+
+
+class TestSetupCommand:
+    def test_de_uk_in_not_described_as_regex_only(self):
+        """de/uk/in ship NER adapters — setup must not print 'regex only'."""
+        for lang in ("de", "uk", "in"):
+            _, stdout, stderr = run_cli("setup", "-l", lang)
+            combined = stdout + stderr
+            assert "regex only, no model to download" not in combined, (
+                f"setup for '{lang}' incorrectly claimed regex-only "
+                f"(it ships a spaCy NER adapter)"
+            )
+
+    def test_br_is_regex_only(self):
+        """br has no NER adapter — setup correctly says regex only."""
+        _, stdout, stderr = run_cli("setup", "-l", "br")
+        combined = stdout + stderr
+        assert "regex only, no model to download" in combined
 
 
 class TestAssessCommand:
