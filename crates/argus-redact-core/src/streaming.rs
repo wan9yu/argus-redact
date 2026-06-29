@@ -286,6 +286,42 @@ pub fn context_cut(
     ContextCut { cut: ctx_len, redetect: false }
 }
 
+/// True iff [`context_cut`] could possibly emit for this buffer — the
+/// spans-INDEPENDENT triggers of [`context_cut`] (force-flush, a real sentence
+/// boundary leaving ≥ `w` forward context, or the `>= max_buffer` drain).
+/// Lets [`StreamingRedactor::feed`] skip the expensive detect + [`context_cut`] on
+/// a feed that provably holds. CONSERVATIVE: it must be `true` whenever
+/// [`context_cut`] would emit (it may be `true` and then [`context_cut`] still
+/// holds when the snap pulls the boundary back — that just costs a wasted detect,
+/// never a wrong skip).
+///
+/// Mirrors [`context_cut`]'s emit triggers EXACTLY: same `force_flush`, same
+/// `len >= max_buffer` drain check, and the same `last_boundary_index_chars` scan
+/// over `chars[..len - w]` requiring `target > ctx_len`. The ONLY part of
+/// [`context_cut`] it omits is the spans-dependent [`snap_cut`] refinement, which
+/// can only pull a cut BACK to `ctx_len` (hold) — never the other way — so the
+/// omission keeps `emit_possible` a strict superset of the emit set. Callers MUST
+/// pass the SAME `max_buffer` ([`StreamingRedactor::pem_max_buffer`]) and `w`
+/// ([`EVIDENCE_CONTEXT_WINDOW`]) they pass to [`context_cut`].
+pub fn emit_possible(
+    chars: &[char],
+    ctx_len: usize,
+    max_buffer: usize,
+    w: usize,
+    force_flush: bool,
+) -> bool {
+    if force_flush {
+        return true;
+    }
+    let len = chars.len();
+    if len >= max_buffer {
+        return true;
+    }
+    let safe_end = len.saturating_sub(w);
+    safe_end > ctx_len
+        && last_boundary_index_chars(&chars[..safe_end]).is_some_and(|t| t > ctx_len)
+}
+
 /// The [`context_cut`] bounded-drain cut: `(cut, redetect)`. Drains at
 /// `len − CARRY_WINDOW`, snapped CLOSED off any straddled entity so the forced
 /// drain never SPLITS a *closed* span that fits. Returns:
@@ -528,6 +564,14 @@ where
     pub fn feed(&mut self, chunk: &str) -> Result<EmitResult, String> {
         self.buffer.push_str(chunk);
         let chars: Vec<char> = self.buffer.chars().collect();
+        // Cheap emit gate: if no spans-independent trigger of `context_cut` can fire
+        // for this buffer, the cut provably holds (≤ ctx_len), so skip the expensive
+        // full-buffer detect + cut. CONSERVATIVE — `emit_possible` is a strict
+        // superset of `context_cut`'s emit set (same max_buffer + W), so a buffer
+        // that would emit is never skipped.
+        if !emit_possible(&chars, self.ctx_len, self.pem_max_buffer(), EVIDENCE_CONTEXT_WINDOW, false) {
+            return Ok(self.empty_result());
+        }
         let final_entities = self.detect_final(&self.buffer);
         let cc = context_cut(
             &self.snap_spans(&final_entities, chars.len()),
