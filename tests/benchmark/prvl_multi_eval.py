@@ -70,6 +70,12 @@ _REFUSAL_MARKERS = (
     "无法", "抱歉", "对不起",
 )
 
+# Cases that ask for a person's HEALTH condition / medical advice: a frontier
+# model declining these on privacy grounds is CORRECT behavior, not a redaction
+# failure — tagged so the aggregate separates "expected safety refusal" from a
+# task argus actually broke. (health-extract qa_en + health-advice advice_zh.)
+_EXPECTED_REFUSAL_CASES = frozenset({"qa_en", "advice_zh"})
+
 
 def call_llm(base_url: str, model: str, api_key: str, system: str, user: str,
              timeout: float = 60.0) -> str:
@@ -128,6 +134,7 @@ def _default_cases() -> list[dict]:
                 "lang": c["lang"],
                 "pii": list(c.get("pii", [])),
                 "task_type": c.get("task_type", "unknown"),
+                "expected_safety_refusal": cid in _EXPECTED_REFUSAL_CASES,
             }
     return list(merged.values())
 
@@ -173,14 +180,25 @@ def redact_profile(profile: str, text: str, lang: str | list[str]):
 
 # ── PRvL+ metrics (OUR canonical definitions) ──
 
+def _classify_output(output: str) -> str:
+    """Classify a model reply: ``'refusal'`` | ``'empty'`` | ``'completed'``.
+
+    Separating refusal from empty matters for PRvL+ utility: a safety refusal on a
+    health-privacy task is correct model behavior, NOT a redaction failure, so it
+    must not be conflated with a null/empty (API / length-cap) miss or with a
+    genuine completion. Refusal is checked first (a refusal can be >10 chars).
+    """
+    stripped = output.strip()
+    if any(m in stripped.lower() for m in _REFUSAL_MARKERS):
+        return "refusal"
+    if len(stripped) < 10:
+        return "empty"
+    return "completed"
+
+
 def _utility_basic(output: str) -> float:
-    """1.0 iff answered (>=10 non-space chars) AND not a refusal, else 0.0."""
-    if len(output.strip()) < 10:
-        return 0.0
-    low = output.lower()
-    if any(m in low for m in _REFUSAL_MARKERS):
-        return 0.0
-    return 1.0
+    """1.0 iff the reply COMPLETED the task (neither refusal nor empty)."""
+    return 1.0 if _classify_output(output) == "completed" else 0.0
 
 
 def _privacy(pii: list[str], output: str) -> dict:
@@ -205,15 +223,32 @@ def _reversibility(pii: list[str], output: str, key: dict,
     return sum(1 for p in pii if p in restored) / len(pii)
 
 
-def _judge_utility(case: dict, output: str, *, base_url: str, judge_model: str,
-                   api_key: str, timeout: float) -> float | None:
-    """Optional LLM-judge utility in [0,1]; None on parse failure."""
+def _judge_utility(case: dict, output: str, *, profile: str, base_url: str,
+                   judge_model: str, api_key: str, timeout: float) -> float | None:
+    """Optional LLM-judge utility in [0,1]; None on parse failure.
+
+    Profile-aware: under the ``realistic`` profile the input was redacted with
+    realistic FAKE substitutions, so the judge must grade task completion ONLY and
+    not penalize the output for relying on values that look like real PII — that is
+    the point of the profile, and reversibility is recovered locally via the key.
+    Without this note the judge marks realistic output down as "unverifiable real
+    PII", confounding utility with a trust judgment.
+    """
     task = case["prompt"].replace("{text}", "[redacted input omitted]")
+    realistic_note = (
+        " NOTE: the input was redacted with REALISTIC FAKE substitutions (fake but "
+        "real-looking names/numbers); grade ONLY whether the task is accomplished, "
+        "and do NOT penalize the output for containing or relying on substituted "
+        "values that look like real PII."
+        if profile == "realistic"
+        else ""
+    )
     prompt = (
         "You are grading whether an AI assistant completed a task. "
         f"TASK: {task}. The assistant was given a privacy-redacted version of the "
-        f"input. ASSISTANT OUTPUT: {output}. Does the output correctly accomplish "
-        "the task despite redaction? Reply with ONLY a number 0.0-1.0."
+        f"input.{realistic_note} ASSISTANT OUTPUT: {output}. Does the output "
+        "correctly accomplish the task despite redaction? Reply with ONLY a number "
+        "0.0-1.0."
     )
     try:
         reply = call_llm(base_url, judge_model, api_key, "", prompt, timeout)
@@ -249,19 +284,26 @@ def _score_row(case: dict, profile: str, label: str, model_id: str, *,
         print(f"[api-error] {label}/{profile}/{case['id']}: {e}", file=sys.stderr)
         privacy = _privacy(case["pii"], "")
         row.update(output="", error=str(e), privacy=privacy,
-                   reversibility=0.0, utility=0.0, utility_judge=None)
+                   reversibility=0.0, utility=0.0, completion="empty",
+                   is_refusal=False,
+                   expected_safety_refusal=case.get("expected_safety_refusal", False),
+                   utility_judge=None)
         return row
 
     output = output or ""  # null content (finish_reason=length/filter) → empty answer
     privacy = _privacy(case["pii"], output)
+    completion = _classify_output(output)
     row.update(
         output=output,
         privacy=privacy,
         reversibility=_reversibility(case["pii"], output, key, aliases),
-        utility=_utility_basic(output),
+        utility=1.0 if completion == "completed" else 0.0,
+        completion=completion,                       # completed | refusal | empty
+        is_refusal=(completion == "refusal"),
+        expected_safety_refusal=case.get("expected_safety_refusal", False),
         utility_judge=(
-            _judge_utility(case, output, base_url=base_url, judge_model=judge_model,
-                           api_key=api_key, timeout=timeout)
+            _judge_utility(case, output, profile=profile, base_url=base_url,
+                           judge_model=judge_model, api_key=api_key, timeout=timeout)
             if judge else None
         ),
     )
@@ -281,7 +323,8 @@ def _aggregate(rows: list[dict]) -> dict:
         out[k] = {
             "leak_rate": sum(_leak_rate(r["privacy"]) for r in grp) / n,
             "reversibility": sum(r["reversibility"] for r in grp) / n,
-            "utility_basic": sum(r["utility"] for r in grp) / n,
+            "utility_completed": sum(r["utility"] for r in grp) / n,
+            "refusal_rate": sum(1 for r in grp if r.get("is_refusal")) / n,
             "utility_judge": (sum(judged) / len(judged)) if judged else None,
             "n": n,
         }
@@ -355,12 +398,15 @@ def _pkg_version() -> str:
 
 def _print_table(snap: dict) -> None:
     print(f"\n[provider] {snap['provider']}  (cases={snap['cases']}, judge={snap['judge']})")
-    print(f"{'model / profile':<30}{'leak':<10}{'revers':<10}{'util':<10}{'judge':<8}{'n'}")
-    print("-" * 76)
+    print(
+        f"{'model / profile':<30}{'leak':<9}{'revers':<9}"
+        f"{'compl':<9}{'refuse':<9}{'judge':<8}{'n'}"
+    )
+    print("-" * 82)
     for k, a in snap["aggregate"].items():
         judge = "n/a" if a["utility_judge"] is None else f"{a['utility_judge']:.2f}"
-        print(f"{k:<30}{a['leak_rate']:<10.2%}{a['reversibility']:<10.2%}"
-              f"{a['utility_basic']:<10.2%}{judge:<8}{a['n']}")
+        print(f"{k:<30}{a['leak_rate']:<9.1%}{a['reversibility']:<9.1%}"
+              f"{a['utility_completed']:<9.1%}{a['refusal_rate']:<9.1%}{judge:<8}{a['n']}")
     print()
 
 

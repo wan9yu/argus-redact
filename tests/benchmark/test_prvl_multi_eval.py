@@ -23,6 +23,7 @@ _LEAKED_PII = "13812345678"
 _REQUIRED_ROW_FIELDS = {
     "case_id", "profile", "model", "redacted", "output",
     "privacy", "reversibility", "utility", "utility_judge", "task_type",
+    "completion", "is_refusal", "expected_safety_refusal",
 }
 
 
@@ -52,7 +53,10 @@ def test_schema_and_aggregate(tmp_path, monkeypatch):
 
     assert "GPT-5 / default" in snap["aggregate"]
     agg = snap["aggregate"]["GPT-5 / default"]
-    assert set(agg) >= {"leak_rate", "reversibility", "utility_basic", "utility_judge", "n"}
+    assert set(agg) >= {
+        "leak_rate", "reversibility", "utility_completed", "refusal_rate",
+        "utility_judge", "n",
+    }
     assert agg["n"] == 2
 
     # snapshot file is real, parseable JSON
@@ -80,11 +84,25 @@ def test_utility_basic_non_vacuous(tmp_path, monkeypatch):
                       reply="I'm sorry, I cannot help with that request.",
                       name="refusal")
     assert all(r["utility"] == 0.0 for r in refusal["rows"]), "refusal scored as usable"
+    # T2: refusal is classified distinctly (not conflated with empty) + surfaced.
+    assert all(r["completion"] == "refusal" and r["is_refusal"] for r in refusal["rows"])
+    assert all(a["refusal_rate"] == 1.0 for a in refusal["aggregate"].values())
 
     answered, _ = _run(tmp_path=tmp_path, monkeypatch=monkeypatch,
                        reply="Here is a concise and complete summary of the record.",
                        name="answer")
     assert all(r["utility"] == 1.0 for r in answered["rows"]), "normal answer scored unusable"
+    assert all(r["completion"] == "completed" and not r["is_refusal"] for r in answered["rows"])
+    assert all(a["refusal_rate"] == 0.0 for a in answered["aggregate"].values())
+
+
+def test_expected_safety_refusal_tag():
+    # T2: health-extract / health-advice cases are tagged so a frontier-model safety
+    # refusal there is separable from a task argus actually broke.
+    cases = {c["id"]: c for c in prvl_multi_eval._default_cases()}
+    assert cases["qa_en"]["expected_safety_refusal"] is True
+    assert cases["advice_zh"]["expected_safety_refusal"] is True
+    assert cases["summarize_zh"]["expected_safety_refusal"] is False
 
 
 def test_null_content_does_not_crash(tmp_path, monkeypatch):
@@ -96,4 +114,5 @@ def test_null_content_does_not_crash(tmp_path, monkeypatch):
     for r in snap["rows"]:
         assert r["output"] == ""
         assert r["utility"] == 0.0
+        assert r["completion"] == "empty" and not r["is_refusal"]
         assert r["privacy"]["leaked"] == []
