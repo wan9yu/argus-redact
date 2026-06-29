@@ -2,13 +2,14 @@
   "schema_version": 1,
   "platform": "ubuntu-latest",
   "python": "3.12",
-  "commit": "refresh-2026-06-01-runner-drift",
+  "commit": "refresh-2026-06-29-detect-on-emit",
   "measurements": {
-    "import_time_ms": 80.09,
-    "redact_zh_fast_1kb_p50_ms": 2.78,
-    "redact_en_fast_1kb_p50_ms": 1.28,
-    "redact_pseudonym_llm_zh_1kb_p50_ms": 3.60,
-    "restore_1kb_p50_ms": 2.90,
-    "streaming_feed_per_chunk_p50_ms": 1.41
+    "import_time_ms": 56.60,
+    "redact_zh_fast_1kb_p50_ms": 2.23,
+    "redact_en_fast_1kb_p50_ms": 1.22,
+    "redact_pseudonym_llm_zh_1kb_p50_ms": 2.56,
+    "restore_1kb_p50_ms": 2.34,
+    "streaming_feed_per_chunk_p50_ms": 2.36,
+    "streaming_dribble_total_ms": 10.58
   }
 }
