@@ -17,6 +17,7 @@ The expected values below were captured from the pre-port pipeline (the path
 re-attaching the Python validators) — the same behavior the T1 golden froze for
 its jwt/org/school cases.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -48,9 +49,10 @@ def _detect(text: str, lang: str):
     """Run the full match_patterns path; return (results, near_misses) as
     comparable (text, type, start, end, confidence) tuples."""
     results, near_misses = match_patterns(text, _load_patterns(lang))
-    to_tup = lambda ms: sorted(
-        (m.text, m.type, m.start, m.end, m.confidence) for m in ms
-    )
+
+    def to_tup(ms):
+        return sorted((m.text, m.type, m.start, m.end, m.confidence) for m in ms)
+
     return to_tup(results), to_tup(near_misses)
 
 
@@ -70,39 +72,46 @@ def _types(results):
 # T1 golden pins; the Rust port must reproduce it byte-for-byte.
 CASES = [
     # jwt: valid → detected as a clean result (confidence 1.0)
-    ("jwt_valid", f"token is {_JWT_VALID}", "en",
-     [(_JWT_VALID, "jwt", 9, 52, 1.0)], []),
+    ("jwt_valid", f"token is {_JWT_VALID}", "en", [(_JWT_VALID, "jwt", 9, 52, 1.0)], []),
     # jwt: header object but no "alg" → near-miss (confidence 0.3), not a result
-    ("jwt_noalg", f"token is {_JWT_NOALG}", "en",
-     [], [(_JWT_NOALG, "jwt", 9, 50, 0.3)]),
+    ("jwt_noalg", f"token is {_JWT_NOALG}", "en", [], [(_JWT_NOALG, "jwt", 9, 50, 0.3)]),
     # jwt: 2 segments → regex requires 3 → no match at all (no result, no near-miss)
     ("jwt_2seg", f"token is {_JWT_2SEG}", "en", [], []),
     # jwt: NON-CANONICAL header (trailing bits set) → pre-port Python's lenient
     # base64 ACCEPTED → clean result at 1.0 (no near-miss). PARITY-RESTORING: under
     # the old strict engine this was a 0.3 near-miss that leaked in fast mode.
-    ("jwt_noncanon", f"token is {_JWT_NONCANON}", "en",
-     [(_JWT_NONCANON, "jwt", 9, 51, 1.0)], []),
-
+    ("jwt_noncanon", f"token is {_JWT_NONCANON}", "en", [(_JWT_NONCANON, "jwt", 9, 51, 1.0)], []),
     # organization: valid → detected; span includes the greedily-captured "我在"
-    ("org_valid", "我在阿里巴巴有限公司上班", "zh",
-     [("我在阿里巴巴有限公司", "organization", 0, 10, 1.0)], []),
+    (
+        "org_valid",
+        "我在阿里巴巴有限公司上班",
+        "zh",
+        [("我在阿里巴巴有限公司", "organization", 0, 10, 1.0)],
+        [],
+    ),
     # organization near-miss: "这是公司" matched whole; after stripping "这是"
     # nothing precedes "公司" → validator rejects → near-miss
-    ("org_nearmiss", "这是公司", "zh",
-     [], [("这是公司", "organization", 0, 4, 0.3)]),
+    ("org_nearmiss", "这是公司", "zh", [], [("这是公司", "organization", 0, 4, 0.3)]),
     # organization embedded with a verb prefix → detected, prefix in span
-    ("org_verbprefix", "他就职于腾讯科技有限公司", "zh",
-     [("他就职于腾讯科技有限公司", "organization", 0, 12, 1.0)], []),
-
+    (
+        "org_verbprefix",
+        "他就职于腾讯科技有限公司",
+        "zh",
+        [("他就职于腾讯科技有限公司", "organization", 0, 12, 1.0)],
+        [],
+    ),
     # school: valid → detected; span includes "我毕业于"
-    ("school_valid", "我毕业于北京大学", "zh",
-     [("我毕业于北京大学", "school", 0, 8, 1.0)], []),
+    ("school_valid", "我毕业于北京大学", "zh", [("我毕业于北京大学", "school", 0, 8, 1.0)], []),
     # school near-miss: "这是大学" → after stripping "这是", nothing before "大学"
-    ("school_nearmiss", "这是大学", "zh",
-     [], [("这是大学", "school", 0, 4, 0.3)]),
+    ("school_nearmiss", "这是大学", "zh", [], [("这是大学", "school", 0, 4, 0.3)]),
     # school embedded → detected; "我考入清华大学" (trailing 读书 not CJK-captured)
-    ("school_verbprefix", "我考入清华大学读书", "zh",
-     [("我考入清华大学", "school", 0, 7, 1.0)], []),
+    (
+        "school_verbprefix",
+        "我考入清华大学读书",
+        "zh",
+        [("我考入清华大学", "school", 0, 7, 1.0)],
+        [],
+    ),
 ]
 
 _PORTED_TYPES = {"jwt", "organization", "school"}
@@ -127,9 +136,5 @@ def test_jwt_routes_through_rust_not_python():
     for lang in ("en", "zh"):
         for p in _load_patterns(lang):
             if p.get("type") in _PORTED_TYPES:
-                assert p.get("validator") == p["type"], (
-                    f"{p['type']} must name a Rust validator"
-                )
-                assert "validate" not in p, (
-                    f"{p['type']} must not carry a Python validate callback"
-                )
+                assert p.get("validator") == p["type"], f"{p['type']} must name a Rust validator"
+                assert "validate" not in p, f"{p['type']} must not carry a Python validate callback"

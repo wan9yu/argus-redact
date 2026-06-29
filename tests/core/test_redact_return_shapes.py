@@ -22,6 +22,7 @@ from argus_redact import redact
 def call():
     def _call(**kw):
         return redact("Alice: 555-1234", lang="en", salt=42, **kw)
+
     return _call
 
 

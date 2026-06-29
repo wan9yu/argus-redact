@@ -22,9 +22,9 @@ def test_pii_class_split():
 def test_by_class_aggregation_and_json():
     r = Result(dataset="d", mode="fast", lang="en", n_samples=1)
     r.per_type = {
-        "email": TypeMetrics(tp=99, fp=1, fn=1),        # structured, strong
+        "email": TypeMetrics(tp=99, fp=1, fn=1),  # structured, strong
         "credit_card": TypeMetrics(tp=4, fp=0, fn=44),  # structured, weak recall
-        "person": TypeMetrics(tp=10, fp=50, fn=20),     # free_text
+        "person": TypeMetrics(tp=10, fp=50, fn=20),  # free_text
         "location": TypeMetrics(tp=82, fp=56, fn=164),  # free_text
     }
     bc = r.by_class()

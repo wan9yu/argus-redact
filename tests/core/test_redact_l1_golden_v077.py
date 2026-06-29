@@ -30,6 +30,7 @@ Regenerate (only when the change in behavior is intended and reviewed)::
 
 which rewrites BOTH fixtures from the current Python pipeline.
 """
+
 import json
 from pathlib import Path
 
@@ -57,30 +58,76 @@ _JWT_INVALID_NOALG = "eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiIxMjMifQ.sig"
 CASES = [
     # ── 12 reused engine-parity CASES (verbatim) ──
     ("zh_default", "张三的电话13812345678，身份证110101199003074610", "zh", None, None, None),
-    ("zh_realistic", "张三的电话13812345678，身份证110101199003074610",
-        "zh", {"person": {"strategy": "realistic"}, "phone": {"strategy": "realistic"},
-               "id_number": {"strategy": "realistic"}}, None, None),
-    ("zh_mask", "电话13812345678 银行卡6217000000000000", "zh",
-        {"phone": {"strategy": "mask"}, "bank_card": {"strategy": "mask"}}, None, None),
-    ("zh_landline_mask", "座机 010-12345678", "zh",
+    (
+        "zh_realistic",
+        "张三的电话13812345678，身份证110101199003074610",
+        "zh",
+        {
+            "person": {"strategy": "realistic"},
+            "phone": {"strategy": "realistic"},
+            "id_number": {"strategy": "realistic"},
+        },
+        None,
+        None,
+    ),
+    (
+        "zh_mask",
+        "电话13812345678 银行卡6217000000000000",
+        "zh",
+        {"phone": {"strategy": "mask"}, "bank_card": {"strategy": "mask"}},
+        None,
+        None,
+    ),
+    (
+        "zh_landline_mask",
+        "座机 010-12345678",
+        "zh",
         {"phone_landline": {"strategy": "landline_mask"}, "phone": {"strategy": "landline_mask"}},
-        None, None),
-    ("zh_name_mask", "张三和欧阳明", "zh", {"person": {"strategy": "name_mask"}},
-        ["张三", "欧阳明"], None),
+        None,
+        None,
+    ),
+    (
+        "zh_name_mask",
+        "张三和欧阳明",
+        "zh",
+        {"person": {"strategy": "name_mask"}},
+        ["张三", "欧阳明"],
+        None,
+    ),
     ("zh_category", "北京市朝阳区三里屯", "zh", {"address": {"strategy": "category"}}, None, None),
     ("zh_keep", "我妈说她13812345678", "zh", None, None, None),
-    ("zh_collision", "张三 张三 李四 张三", "zh", {"person": {"strategy": "name_mask"}},
-        ["张三", "李四"], None),
-    ("en_realistic", "John Smith SSN 123-45-6789 card 4111111111111111", "en",
-        {"person": {"strategy": "realistic"}, "ssn": {"strategy": "realistic"},
-         "credit_card": {"strategy": "realistic"}}, None, None),
-    ("en_address", "lives at 1600 Pennsylvania Ave", "en",
-        {"address": {"strategy": "realistic"}}, None, None),
+    (
+        "zh_collision",
+        "张三 张三 李四 张三",
+        "zh",
+        {"person": {"strategy": "name_mask"}},
+        ["张三", "李四"],
+        None,
+    ),
+    (
+        "en_realistic",
+        "John Smith SSN 123-45-6789 card 4111111111111111",
+        "en",
+        {
+            "person": {"strategy": "realistic"},
+            "ssn": {"strategy": "realistic"},
+            "credit_card": {"strategy": "realistic"},
+        },
+        None,
+        None,
+    ),
+    (
+        "en_address",
+        "lives at 1600 Pennsylvania Ave",
+        "en",
+        {"address": {"strategy": "realistic"}},
+        None,
+        None,
+    ),
     ("shared_email_ip", "mail a@b.com from 8.8.8.8", "en", None, None, None),
     ("unified", "张三 13812345678 110101199003074610", "zh", None, None, None),
     # unified_prefix kwarg case (mirrors the parity test's separate snapshot entry)
     ("unified_prefix", "张三 13812345678 110101199003074610", "zh", None, None, "R"),
-
     # ── text_intent x4 (drives the zh person threshold) ──
     # instruction (zh command prefix 帮我) — should suppress a borderline name
     ("intent_instruction_zh", "帮我查一下张三的电话号码", "zh", None, None, None),
@@ -92,7 +139,6 @@ CASES = [
     ("intent_casual_zh", "我今天很开心", "zh", None, None, None),
     # neutral (no self-ref, no PII)
     ("intent_neutral_zh", "今天天气不错", "zh", None, None, None),
-
     # ── self_reference tiers x3 ──
     # tier 1: kinship self-ref kept (我妈) alongside other PII
     ("selfref_tier1_kinship", "我妈说她的电话是13812345678", "zh", None, None, None),
@@ -100,13 +146,11 @@ CASES = [
     ("selfref_tier2_pronoun", "我在这里", "zh", None, None, None),
     # tier 3: interaction-command self-ref, no kinship, no PII
     ("selfref_tier3_command", "帮我看看我说的对不对", "zh", None, None, None),
-
     # ── person-threshold flip (same borderline name, two phrasings) ──
     # instruction-intent (threshold 1.2) suppresses 王芳
     ("threshold_flip_instruction", "帮我查一下王芳的资料", "zh", None, None, None),
     # narrative-intent (threshold 0.8) keeps 王芳
     ("threshold_flip_narrative", "王芳的电话是13812345678", "zh", None, None, None),
-
     # ── deferred validators: jwt / organization / school (Task 2 Rust port) ──
     # valid jwt → detected
     ("jwt_valid", f"token is {_JWT_VALID}", "en", None, None, None),
@@ -122,7 +166,6 @@ CASES = [
     ("school_valid", "我毕业于北京大学", "zh", None, None, None),
     # near-miss school: regex matches "这是大学" but validator rejects
     ("school_nearmiss", "这是大学", "zh", None, None, None),
-
     # ── misc edge cases ──
     # multi-byte / emoji-prefixed text (offset mapping over a 4-byte prefix)
     ("emoji_prefix", "🎉张三的电话13812345678", "zh", None, ["张三"], None),
@@ -130,15 +173,26 @@ CASES = [
     ("near_miss_id", "身份证110101199003074611", "zh", None, None, None),
     # known_names: multi-char surnames only detectable via names= hint
     ("known_names", "欧阳明和司马光开会", "zh", None, ["欧阳明", "司马光"], None),
-
     # ── redact→restore round-trips (exercise the cross-language alias path) ──
     # zh name, realistic strategy, en-first lang order → English faker name;
     # restore() recovers the original (key maps fake→original).
-    ("roundtrip_en_faker", "张三给我发了邮件", ["en", "zh"],
-        {"person": {"strategy": "realistic"}}, ["张三"], None),
+    (
+        "roundtrip_en_faker",
+        "张三给我发了邮件",
+        ["en", "zh"],
+        {"person": {"strategy": "realistic"}},
+        ["张三"],
+        None,
+    ),
     # zh name, realistic strategy, default zh lang; restore round-trips a phone too.
-    ("roundtrip_zh_realistic", "张三的电话13812345678", "zh",
-        {"person": {"strategy": "realistic"}}, ["张三"], None),
+    (
+        "roundtrip_zh_realistic",
+        "张三的电话13812345678",
+        "zh",
+        {"person": {"strategy": "realistic"}},
+        ["张三"],
+        None,
+    ),
 ]
 
 # Round-trip cases additionally assert restore() recovers the original.
@@ -179,8 +233,7 @@ def _capture_hints(text, lang):
     l1_hints = [
         h
         for h in hints
-        if h.type
-        in ("pii_density", "near_miss_format", "text_intent", "self_reference_tier")
+        if h.type in ("pii_density", "near_miss_format", "text_intent", "self_reference_tier")
     ]
     return [
         {

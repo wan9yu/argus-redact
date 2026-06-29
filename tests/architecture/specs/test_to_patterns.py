@@ -171,19 +171,15 @@ class TestToPatternsEn:
         )
         for typedef in list_types("en"):
             for text in typedef.examples:
-                spec = {
-                    (r.type, r.text) for r in match_patterns(text, built)[0]
-                }
-                core = {
-                    (r.type, r.text) for r in match_patterns(text, EN_PATTERNS)[0]
-                }
+                spec = {(r.type, r.text) for r in match_patterns(text, built)[0]}
+                core = {(r.type, r.text) for r in match_patterns(text, EN_PATTERNS)[0]}
                 assert spec == core, (
                     f"detection drift on '{text[:40]}...': "
                     f"spec-only={spec - core} core-only={core - spec}"
                 )
 
 
-from tests.conftest import load_examples
+from tests.conftest import load_examples  # noqa: E402
 
 # Inputs for the shared parity test: positive fixtures + one negative sanity check.
 CREDENTIAL_INPUTS = [

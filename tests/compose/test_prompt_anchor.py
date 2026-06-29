@@ -1,4 +1,5 @@
 """compose.prompt_anchor tests — structural + snapshot."""
+
 from __future__ import annotations
 
 from argus_redact.compose import prompt_anchor
@@ -46,7 +47,7 @@ def test_zh_template_snapshot():
     result = prompt_anchor({"P-001": "test"}, lang="zh")
     expected = (
         "以下对话中出现的标识符是脱敏占位符。请遵循三条规则：\n"
-        "1. **完整保留**这些标识符 — 不要替换为称谓（如\"先生/女士/总\"），不要省略为缩写。\n"
+        '1. **完整保留**这些标识符 — 不要替换为称谓（如"先生/女士/总"），不要省略为缩写。\n'
         "2. 不要主动猜测或还原它们对应的真实身份。\n"
         "3. 标识符之间的语义关系可按上下文正常推理。\n"
         "\n"
@@ -61,7 +62,8 @@ def test_en_template_snapshot():
     result = prompt_anchor({"P-001": "test"}, lang="en")
     expected = (
         "The following identifiers are redaction placeholders. Please follow three rules:\n"
-        "1. **Preserve these identifiers verbatim** — do not substitute with titles (e.g., \"Mr./Ms./Sir\"), do not abbreviate.\n"
+        "1. **Preserve these identifiers verbatim** — do not substitute with titles"
+        ' (e.g., "Mr./Ms./Sir"), do not abbreviate.\n'
         "2. Do not attempt to guess or restore their original identities.\n"
         "3. Reasoning about relationships between identifiers from context is fine.\n"
         "\n"

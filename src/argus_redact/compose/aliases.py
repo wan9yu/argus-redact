@@ -21,10 +21,20 @@ _EN_TITLES = ("Mr.", "Mrs.", "Ms.", "Dr.", "Prof.")
 # Compound Chinese surnames (2-char). When original starts with one of these,
 # use 2 chars as surname; otherwise use 1 char. Coverage: top compound surnames
 # from《百家姓》— not exhaustive, conservative.
-_ZH_COMPOUND_SURNAMES = frozenset({
-    "欧阳", "司马", "诸葛", "上官", "夏侯",
-    "公孙", "皇甫", "尉迟", "东方", "西门",
-})
+_ZH_COMPOUND_SURNAMES = frozenset(
+    {
+        "欧阳",
+        "司马",
+        "诸葛",
+        "上官",
+        "夏侯",
+        "公孙",
+        "皇甫",
+        "尉迟",
+        "东方",
+        "西门",
+    }
+)
 
 
 def _extract_surname_zh(name: str) -> str | None:

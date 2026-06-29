@@ -232,9 +232,7 @@ class TestRegistryStrategyValidity:
             for td in list_types()
             if td.strategy not in VALID_STRATEGIES
         ]
-        assert not invalid, (
-            f"Registered types with invalid strategy: {invalid}"
-        )
+        assert not invalid, f"Registered types with invalid strategy: {invalid}"
 
 
 class TestSpecCompleteness:

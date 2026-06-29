@@ -115,8 +115,7 @@ class TestReplaceAttachesAliasesToResult:
         r = redact_pseudonym_llm("联系王建国", lang="zh", salt=b"x")
         # Find any fake whose original is 王建国 with aliases attached
         person_fakes_with_aliases = [
-            f for f, orig in r.key.items()
-            if orig == "王建国" and r.aliases.get(f)
+            f for f, orig in r.key.items() if orig == "王建国" and r.aliases.get(f)
         ]
         assert person_fakes_with_aliases, (
             f"expected aliases on realistic person fake; key={r.key}, aliases={r.aliases}"

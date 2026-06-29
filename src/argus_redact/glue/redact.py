@@ -33,7 +33,8 @@ from argus_redact.telemetry import PerfRecord, emit, get_perf_hook
 logger = logging.getLogger(__name__)
 
 # Cached telemetry constants (resolved once at import, not per-call)
-from argus_redact._core_loader import HAS_CORE as _RUST_CORE, _core
+from argus_redact._core_loader import HAS_CORE as _RUST_CORE  # noqa: E402
+from argus_redact._core_loader import _core  # noqa: E402
 
 
 @functools.lru_cache(maxsize=1)
@@ -137,9 +138,7 @@ def _validate_langs(langs: tuple[str, ...] | list[str]) -> None:
     """
     for code in langs:
         if code not in _LANG_PATTERNS:
-            raise ValueError(
-                f"Unknown language '{code}'. Available: {list(_LANG_PATTERNS.keys())}"
-            )
+            raise ValueError(f"Unknown language '{code}'. Available: {list(_LANG_PATTERNS.keys())}")
 
 
 _LANG_NER_ADAPTERS = {
@@ -244,9 +243,7 @@ def _gate_en_ner_person(
     if not person_pos:
         return matches
     candidates = [(matches[i].start, matches[i].end) for i in person_pos]
-    keep_mask = _core.score_person_candidates_en(
-        text, candidates, pii_entities or None, None
-    )
+    keep_mask = _core.score_person_candidates_en(text, candidates, pii_entities or None, None)
     dropped = {pos for pos, keep in zip(person_pos, keep_mask) if not keep}
     if not dropped:
         return matches
@@ -356,9 +353,7 @@ def _detect(
             )
             layer2_status = "no_model"
             if strict:
-                raise LayerUnavailableError(
-                    "mode='auto' + strict=True: no NER model available."
-                )
+                raise LayerUnavailableError("mode='auto' + strict=True: no NER model available.")
         elif not should_skip_ner(hints):
             # Model present AND not hint-skipped → run L2 detection.
             from argus_redact.impure.ner import detect_ner
@@ -399,9 +394,7 @@ def _detect(
             except Exception as exc:
                 # Type only, never exc_info=True: a full traceback can embed
                 # input fragments from the adapter call frames.
-                logger.warning(
-                    "Layer 3 semantic detection failed: %s", type(exc).__name__
-                )
+                logger.warning("Layer 3 semantic detection failed: %s", type(exc).__name__)
                 layer3_status = "error"
                 warnings.warn(
                     "mode='auto': Layer-3 semantic detection failed; continuing "
@@ -563,8 +556,7 @@ def redact(
         raise ValueError("types and types_exclude are mutually exclusive")
 
     if salt is not None and (
-        isinstance(salt, int)
-        or (isinstance(salt, (bytes, bytearray)) and len(salt) < 16)
+        isinstance(salt, int) or (isinstance(salt, (bytes, bytearray)) and len(salt) < 16)
     ):
         warnings.warn(
             "low-entropy salt: an integer or short salt is grid-searchable on small "
@@ -605,9 +597,7 @@ def redact(
     if isinstance(key, str):
         key_file = key
         path = Path(key_file)
-        existing_key = (
-            json.loads(_safe_read_text(path)) if path.exists() else {}
-        )
+        existing_key = json.loads(_safe_read_text(path)) if path.exists() else {}
     elif isinstance(key, dict):
         existing_key = dict(key)
 

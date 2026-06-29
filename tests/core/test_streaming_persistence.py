@@ -76,12 +76,8 @@ class TestRoundTripThroughJson:
         r2.flush()  # emit
 
         # Both sessions must map the same phone to the same fake.
-        r1_phone_fake = next(
-            (k for k, v in r1.aggregate_key().items() if v == "13912345678"), None
-        )
-        r2_phone_fake = next(
-            (k for k, v in r2.aggregate_key().items() if v == "13912345678"), None
-        )
+        r1_phone_fake = next((k for k, v in r1.aggregate_key().items() if v == "13912345678"), None)
+        r2_phone_fake = next((k for k, v in r2.aggregate_key().items() if v == "13912345678"), None)
         assert r1_phone_fake is not None, "phone should be redacted post-flush in r1"
         assert r2_phone_fake is not None, "phone should be redacted post-flush in r2"
         assert r1_phone_fake == r2_phone_fake, (

@@ -3,6 +3,7 @@
 Run once after a fresh PRvL benchmark; point SRC at your run JSON. The baked
 cache is committed under demo/ and consumed by the static demo page.
 """
+
 from __future__ import annotations
 
 import json
@@ -28,10 +29,7 @@ def main() -> None:
         rows_raw = json.loads(SRC.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         raise SystemExit(f"Source file is not valid JSON: {SRC}\n{e}") from e
-    matched = [
-        r for r in rows_raw
-        if r["case_id"] == CASE_ID and r["profile"] == PROFILE
-    ]
+    matched = [r for r in rows_raw if r["case_id"] == CASE_ID and r["profile"] == PROFILE]
     if len(matched) != len(MODEL_ORDER):
         raise SystemExit(
             f"Expected {len(MODEL_ORDER)} rows for {CASE_ID}/{PROFILE}, got {len(matched)}"
@@ -43,14 +41,16 @@ def main() -> None:
             raise SystemExit(f"Missing row for model {model}")
         r = by_model[model]
         try:
-            rows_out.append({
-                "model": model,
-                "downstream_text": r["redacted"],
-                "llm_reply": r["output"],
-                "leaked": r["privacy"]["leaked"],
-                "total_pii": r["privacy"]["total"],
-                "utility": r["utility"],
-            })
+            rows_out.append(
+                {
+                    "model": model,
+                    "downstream_text": r["redacted"],
+                    "llm_reply": r["output"],
+                    "leaked": r["privacy"]["leaked"],
+                    "total_pii": r["privacy"]["total"],
+                    "utility": r["utility"],
+                }
+            )
         except KeyError as e:
             raise SystemExit(
                 f"Malformed source row for model {model}: missing field {e}\n"

@@ -58,9 +58,7 @@ def _render_type(td) -> list[str]:
         out.append(f"| Checksum | {td.checksum} |")
     if td.examples:
         # Markdown table cells can't span lines; collapse multi-line examples.
-        rendered = ", ".join(
-            f"`{_collapse(e)}`" for e in td.examples[:3]
-        )
+        rendered = ", ".join(f"`{_collapse(e)}`" for e in td.examples[:3])
         out.append(f"| Examples | {rendered} |")
     if td.source:
         out.append(f"| Source | {td.source} |")
@@ -117,7 +115,7 @@ def render_catalog() -> str:
         lines.append("## Out of scope")
         lines.append("")
         lines.append("Listed types are roadmapped but not shipped. Do not configure")
-        lines.append("`lang=\"zh\"` expecting these to redact. Use explicit `names=[...]`")
+        lines.append('`lang="zh"` expecting these to redact. Use explicit `names=[...]`')
         lines.append("patterns until they ship.")
         lines.append("")
         for name, label, fmt in _OUT_OF_SCOPE:

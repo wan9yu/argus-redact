@@ -7,6 +7,7 @@ canonical snapshot captured from the original Python dict (modulo harmless
 cosmetic differences: Python 3.11 ``re.escape`` unnecessarily escapes spaces;
 ``fancy_regex::escape`` does not — both patterns match the same strings).
 """
+
 import argus_redact._core as _core
 
 
@@ -16,7 +17,14 @@ def test_core_reserved_range_patterns_match_python_dict():
     # Python 3.11 re.escape() over-escapes spaces ("\\ ") while fancy_regex::escape
     # correctly omits the backslash. The patterns are functionally identical.
     EXPECTED = {
-        "address_en": "1313 Mockingbird Lane, Springfield, USA|742 Evergreen Terrace, Springfield, USA|221B Baker Street, London, UK|12 Grimmauld Place, London, UK|1630 Revello Drive, Sunnydale, USA|31 Spooner Street, Quahog, USA",
+        "address_en": (
+            "1313 Mockingbird Lane, Springfield, USA"
+            "|742 Evergreen Terrace, Springfield, USA"
+            "|221B Baker Street, London, UK"
+            "|12 Grimmauld Place, London, UK"
+            "|1630 Revello Drive, Sunnydale, USA"
+            "|31 Spooner Street, Quahog, USA"
+        ),
         "address_zh": "滨海市(?:东江区|北原区|西陆区)",
         "bank_card_zh": r"(?<!\d)999999\d{10}(?!\d)",
         "credit_card_en": r"(?<!\d)999999\d{10}(?!\d)",
@@ -29,7 +37,10 @@ def test_core_reserved_range_patterns_match_python_dict():
         "mac_shared": r"(?<![0-9A-Fa-f:])00:00:5E:00:53:[0-9A-Fa-f]{2}(?![0-9A-Fa-f:])",
         "macau_id_zh": r"(?<!\d)9/\d{6}/\d(?!\d)",
         "passport_zh": r"(?<![A-Z])[EG]99999\d{3}(?![0-9A-Z])",
-        "person_en": r"John Doe|Jane Doe|Jane Roe|John Roe|Richard Roe|Mary Roe|John Q\. Public|Alice Liddell|Pat Roe|Sandy Doe",
+        "person_en": (
+            r"John Doe|Jane Doe|Jane Roe|John Roe|Richard Roe"
+            r"|Mary Roe|John Q\. Public|Alice Liddell|Pat Roe|Sandy Doe"
+        ),
         "person_zh": "张三|李四|王五|赵六|钱七|焦大|茗烟|傻大姐|彩云|佩凤|偕鸳|卷帘|毕马温",
         "phone_en": r"\(555\)\s*555-01\d{2}",
         "phone_landline_zh": r"(?<!\d)099-?\d{8}(?!\d)",

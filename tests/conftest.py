@@ -18,13 +18,13 @@ if os.environ.get("MUTANT_UNDER_TEST"):
 
     class _BlockArgusCoreFinder(importlib.abc.MetaPathFinder):
         def find_spec(self, fullname, path, target=None):
-            if fullname == "argus_redact._core" or fullname.startswith(
-                "argus_redact._core."
-            ):
+            if fullname == "argus_redact._core" or fullname.startswith("argus_redact._core."):
                 raise ImportError("argus_redact._core blocked under mutmut")
             return None
 
-    for _cached in [n for n in sys.modules if n == "argus_redact._core" or n.startswith("argus_redact._core.")]:
+    for _cached in [
+        n for n in sys.modules if n == "argus_redact._core" or n.startswith("argus_redact._core.")
+    ]:
         sys.modules.pop(_cached, None)
     sys.meta_path.insert(0, _BlockArgusCoreFinder())
 

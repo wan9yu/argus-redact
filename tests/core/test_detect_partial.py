@@ -5,7 +5,6 @@ the ``streaming_emit_possible`` gate that lets ``_context_cut`` skip ``_detect``
 on provably-holding feeds.
 """
 
-import pytest
 from unittest.mock import patch
 
 from argus_redact._core_loader import _core
@@ -51,7 +50,6 @@ class TestLastBoundaryIndex:
 
     def test_empty_string(self):
         assert _last_boundary_index("") == -1
-
 
 
 class TestContextCutBinding:
@@ -116,7 +114,9 @@ class TestEmitPossibleBinding:
 
     def test_short_buffer_no_boundary_returns_false(self):
         # Buffer shorter than W with no boundary → emit_possible is False.
-        assert _core.streaming_emit_possible("hello world", 0, DEFAULT_MAX_BUFFER, 128, False) is False
+        assert (
+            _core.streaming_emit_possible("hello world", 0, DEFAULT_MAX_BUFFER, 128, False) is False
+        )
 
     def test_force_flush_returns_true(self):
         assert _core.streaming_emit_possible("x", 0, DEFAULT_MAX_BUFFER, 128, True) is True
@@ -142,8 +142,8 @@ class TestDetectSkipGate:
     def test_detect_not_called_on_hold_feed(self):
         # A short boundary-less buffer (< W chars, no sentence boundary) provably
         # holds → emit_possible=False → _detect must NOT be called.
-        from argus_redact.glue._detect_partial import _context_cut
         import argus_redact.glue._detect_partial as _dp
+        from argus_redact.glue._detect_partial import _context_cut
 
         short = "hello world"  # 11 chars, no boundary, W=128 → provably holds
         with patch.object(_dp, "_detect") as mock_detect:
@@ -158,13 +158,15 @@ class TestDetectSkipGate:
     def test_detect_called_when_emit_possible(self):
         # A buffer with a sentence boundary in the safe window → emit_possible=True
         # → _detect MUST be called (the gate must not over-skip).
-        from argus_redact.glue._detect_partial import _context_cut
         import argus_redact.glue._detect_partial as _dp
+        from argus_redact.glue._detect_partial import _context_cut
 
         # 256 chars filler + 。 + 128 chars → safe_end = 385 - 128 = 257; boundary at
         # 257 > ctx_len=0 → emit_possible True → _detect runs.
         text = "啊" * 256 + "。" + "啊" * 128
         sentinel = ([], [], {}, {})  # (_detect returns (entities, langs, timing, stats))
         with patch.object(_dp, "_detect", return_value=sentinel) as mock_detect:
-            _context_cut(text, 0, lang="zh", mode="fast", names=None, types=None, types_exclude=None)
+            _context_cut(
+                text, 0, lang="zh", mode="fast", names=None, types=None, types_exclude=None
+            )
         mock_detect.assert_called_once()

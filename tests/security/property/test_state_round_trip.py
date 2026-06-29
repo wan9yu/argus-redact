@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import json
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from argus_redact.compose import StreamingRedactor
 from argus_redact.pure.reserved_range_scanner import scan_for_pollution
@@ -31,9 +32,9 @@ def _is_unpolluted(chunks: list[str]) -> bool:
 
 @settings(parent=PROPERTY_SETTINGS, max_examples=50)
 @given(
-    chunks=st.lists(
-        st.text(min_size=1, max_size=80), min_size=1, max_size=5
-    ).filter(_is_unpolluted),
+    chunks=st.lists(st.text(min_size=1, max_size=80), min_size=1, max_size=5).filter(
+        _is_unpolluted
+    ),
     salt=st.binary(min_size=32, max_size=32),
 )
 def test_state_round_trip_preserves_aggregate_key(chunks, salt):

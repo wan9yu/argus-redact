@@ -36,7 +36,5 @@ def is_strategy_reversible(strategy: str) -> bool:
     when the LLM response must be restored to original PII for follow-up.
     """
     if strategy not in VALID_STRATEGIES:
-        raise ValueError(
-            f"Unknown strategy '{strategy}'. Valid: {', '.join(VALID_STRATEGIES)}"
-        )
+        raise ValueError(f"Unknown strategy '{strategy}'. Valid: {', '.join(VALID_STRATEGIES)}")
     return strategy in _REVERSIBLE_STRATEGIES

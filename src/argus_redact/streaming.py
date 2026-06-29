@@ -39,6 +39,7 @@ def _empty_result() -> PseudonymLLMResult:
         audit_text="", downstream_text="", display_text="", key={}, aliases={}
     )
 
+
 # Integer schema version stamped into export_state() output. Decoupled from
 # the package version on purpose — bumped only when the state shape itself
 # changes, so most package releases leave it untouched.
@@ -276,9 +277,7 @@ class StreamingRedactor:
         return self._redact_and_merge(emit, shifted)
 
     @staticmethod
-    def _shift_entities(
-        entities: list[PatternMatch], lo: int, hi: int
-    ) -> list[PatternMatch]:
+    def _shift_entities(entities: list[PatternMatch], lo: int, hi: int) -> list[PatternMatch]:
         """Re-base the final entity set onto the emit slice ``[lo, hi)``.
 
         Exact mirror of the core SSOT ``shift_spans`` (see
@@ -306,9 +305,7 @@ class StreamingRedactor:
                 drop = max(0, lo - e.start)  # head chars in the left-context
                 text = e.text[drop:] if drop else e.text
                 result.append(
-                    dataclasses.replace(
-                        e, start=max(0, e.start - lo), end=e.end - lo, text=text
-                    )
+                    dataclasses.replace(e, start=max(0, e.start - lo), end=e.end - lo, text=text)
                 )
         return result
 
@@ -424,9 +421,7 @@ class StreamingRedactor:
             types_exclude=state.get("types_exclude"),
             strict_input=state.get("strict_input", True),
             reserved_names=(
-                {k: tuple(v) for k, v in reserved.items()}
-                if reserved is not None
-                else None
+                {k: tuple(v) for k, v in reserved.items()} if reserved is not None else None
             ),
         )
         instance._accumulated_key = dict(state.get("accumulated_key", {}))

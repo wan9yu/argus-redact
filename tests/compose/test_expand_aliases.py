@@ -1,4 +1,5 @@
 """compose.expand_aliases tests — structural + round-trip."""
+
 from __future__ import annotations
 
 from argus_redact.compose import expand_aliases

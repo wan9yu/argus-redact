@@ -10,16 +10,22 @@ from __future__ import annotations
 
 from argus_redact._core import (
     mark_for_display as _core_mark,
-    strip_display_markers as _core_strip,
-    resolve_marker as _core_resolve,
+)
+from argus_redact._core import (
     preset_marker_chars as _core_preset_chars,
+)
+from argus_redact._core import (
+    resolve_marker as _core_resolve,
+)
+from argus_redact._core import (
+    strip_display_markers as _core_strip,
 )
 
 DEFAULT_DISPLAY_MARKER = "ⓕ"  # U+24D5
 
 DISPLAY_MARKER_PRESETS: dict[str, str] = {
-    "circled_f": "ⓕ",       # default, U+24D5
-    "superscript_s": "ˢ",   # U+02E2
+    "circled_f": "ⓕ",  # default, U+24D5
+    "superscript_s": "ˢ",  # U+02E2
     "asterisk": "*",
     "chinese": "(假)",
     "none": "",

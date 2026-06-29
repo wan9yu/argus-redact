@@ -35,9 +35,8 @@ from __future__ import annotations
 
 import hashlib
 
-import pytest
-
 import argus_redact._core as _core
+import pytest
 
 # ── Frozen fingerprints (captured from the live aggregated tables at port time) ──
 
@@ -103,9 +102,9 @@ def test_core_pools_match_frozen_counts():
         # RON list pools carry no duplicates.
         assert len(set(pools[key])) == EXPECTED_COUNTS[key], f"{key} has duplicates"
     assert len(pools["command_patterns"]) == EXPECTED_COUNTS["command_patterns"]
-    assert (
-        len(set(pools["command_patterns"])) == EXPECTED_COUNTS["command_patterns"]
-    ), "command_patterns has duplicates"
+    assert len(set(pools["command_patterns"])) == EXPECTED_COUNTS["command_patterns"], (
+        "command_patterns has duplicates"
+    )
 
 
 def test_core_pools_match_frozen_sha256():

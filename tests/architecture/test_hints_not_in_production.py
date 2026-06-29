@@ -1,4 +1,5 @@
 """produce_hints is a parity-test-only oracle; no production module may import it."""
+
 import pathlib
 import re
 

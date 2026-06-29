@@ -9,6 +9,7 @@ Each faker must:
 import re
 
 import argus_redact._core as _core
+
 from argus_redact.lang.shared.patterns import validate_luhn
 
 _SALT = _core.resolve_salt(b"test-fakers-zh-reserved-salt!!")
@@ -85,6 +86,4 @@ class TestFakeAddressReserved:
 class TestFakePersonReserved:
     def test_should_use_canonical_fake_name(self):
         result, _ = _fake("fake_person_reserved", "王建国", "person")
-        assert result in _core.reserved_person_names_zh(), (
-            f"{result} not in canonical fake names"
-        )
+        assert result in _core.reserved_person_names_zh(), f"{result} not in canonical fake names"

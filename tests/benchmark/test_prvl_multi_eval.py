@@ -11,6 +11,7 @@ network access (no real OpenRouter request) and asserts:
     answer scores ``1.0``,
   * a parseable JSON snapshot is written to the requested ``--out`` path.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,25 +22,36 @@ from tests.benchmark import prvl_multi_eval
 _LEAKED_PII = "13812345678"
 
 _REQUIRED_ROW_FIELDS = {
-    "case_id", "profile", "model", "redacted", "output",
-    "privacy", "reversibility", "utility", "utility_judge", "task_type",
-    "completion", "is_refusal", "expected_safety_refusal",
+    "case_id",
+    "profile",
+    "model",
+    "redacted",
+    "output",
+    "privacy",
+    "reversibility",
+    "utility",
+    "utility_judge",
+    "task_type",
+    "completion",
+    "is_refusal",
+    "expected_safety_refusal",
 }
 
 
 def _run(monkeypatch, tmp_path, reply: str, name: str) -> tuple[dict, "object"]:
     monkeypatch.setattr(prvl_multi_eval, "call_llm", lambda *a, **k: reply)
     out = tmp_path / f"prvl_{name}.json"
-    snap = prvl_multi_eval.run(
-        models=["GPT-5"], profiles=["default"], limit=2, out=out
-    )
+    snap = prvl_multi_eval.run(models=["GPT-5"], profiles=["default"], limit=2, out=out)
     return snap, out
 
 
 def test_schema_and_aggregate(tmp_path, monkeypatch):
-    snap, out = _run(tmp_path=tmp_path, monkeypatch=monkeypatch,
-                     reply="This is a clean, useful answer with no secrets at all.",
-                     name="schema")
+    snap, out = _run(
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+        reply="This is a clean, useful answer with no secrets at all.",
+        name="schema",
+    )
 
     assert snap["benchmark"] == "prvl_multi"
     assert snap["provider"] == "openrouter"
@@ -54,8 +66,12 @@ def test_schema_and_aggregate(tmp_path, monkeypatch):
     assert "GPT-5 / default" in snap["aggregate"]
     agg = snap["aggregate"]["GPT-5 / default"]
     assert set(agg) >= {
-        "leak_rate", "reversibility", "utility_completed", "refusal_rate",
-        "utility_judge", "n",
+        "leak_rate",
+        "reversibility",
+        "utility_completed",
+        "refusal_rate",
+        "utility_judge",
+        "n",
     }
     assert agg["n"] == 2
 
@@ -67,9 +83,12 @@ def test_schema_and_aggregate(tmp_path, monkeypatch):
 def test_privacy_non_vacuous(tmp_path, monkeypatch):
     # The stub echoes case[0]'s original PII but NOT case[1]'s → leak in one,
     # clean in the other, proving the privacy metric reacts both directions.
-    snap, _ = _run(tmp_path=tmp_path, monkeypatch=monkeypatch,
-                   reply=f"Patient contact number is {_LEAKED_PII}, please follow up.",
-                   name="leak")
+    snap, _ = _run(
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+        reply=f"Patient contact number is {_LEAKED_PII}, please follow up.",
+        name="leak",
+    )
     by_case = {r["case_id"]: r for r in snap["rows"]}
 
     leaking = by_case["summarize_zh"]
@@ -80,17 +99,23 @@ def test_privacy_non_vacuous(tmp_path, monkeypatch):
 
 
 def test_utility_basic_non_vacuous(tmp_path, monkeypatch):
-    refusal, _ = _run(tmp_path=tmp_path, monkeypatch=monkeypatch,
-                      reply="I'm sorry, I cannot help with that request.",
-                      name="refusal")
+    refusal, _ = _run(
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+        reply="I'm sorry, I cannot help with that request.",
+        name="refusal",
+    )
     assert all(r["utility"] == 0.0 for r in refusal["rows"]), "refusal scored as usable"
     # T2: refusal is classified distinctly (not conflated with empty) + surfaced.
     assert all(r["completion"] == "refusal" and r["is_refusal"] for r in refusal["rows"])
     assert all(a["refusal_rate"] == 1.0 for a in refusal["aggregate"].values())
 
-    answered, _ = _run(tmp_path=tmp_path, monkeypatch=monkeypatch,
-                       reply="Here is a concise and complete summary of the record.",
-                       name="answer")
+    answered, _ = _run(
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+        reply="Here is a concise and complete summary of the record.",
+        name="answer",
+    )
     assert all(r["utility"] == 1.0 for r in answered["rows"]), "normal answer scored unusable"
     assert all(r["completion"] == "completed" and not r["is_refusal"] for r in answered["rows"])
     assert all(a["refusal_rate"] == 0.0 for a in answered["aggregate"].values())

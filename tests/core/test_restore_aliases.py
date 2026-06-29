@@ -65,13 +65,10 @@ class TestEndToEndCrossLanguage:
     def test_zh_address_redact_then_en_alias_in_llm_output(self):
         text = "我住在北京市朝阳区建国路100号"
         r = redact_pseudonym_llm(text, salt=b"fixed-addr", lang="zh")
-        addr_fakes = {
-            f: r.key[f]
-            for f in r.aliases
-            if r.key.get(f) == "北京市朝阳区建国路100号"
-        }
+        addr_fakes = {f: r.key[f] for f in r.aliases if r.key.get(f) == "北京市朝阳区建国路100号"}
         if not addr_fakes:
             import pytest
+
             pytest.skip("seed picked address w/o aliases — re-run other tests cover this")
         fake = next(iter(addr_fakes))
         alias = r.aliases[fake][0]

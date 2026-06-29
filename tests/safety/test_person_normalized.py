@@ -1,4 +1,5 @@
 """Person names obfuscated via fullwidth/confusable must be detected after normalization."""
+
 from argus_redact import redact
 
 

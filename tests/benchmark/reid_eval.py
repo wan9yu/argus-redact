@@ -21,6 +21,7 @@ Run (needs an LLM backend; key from env, never committed):
     python -m tests.benchmark.reid_eval --provider qwen
     python -m tests.benchmark.reid_eval --provider ollama --model qwen2.5:7b
 """
+
 from __future__ import annotations
 
 import argparse
@@ -39,12 +40,24 @@ SALT = 42
 
 # provider -> (base_url, default_model, env_key_or_None)
 PROVIDERS = {
-    "deepseek":   ("https://api.deepseek.com/chat/completions", "deepseek-chat", "DEEPSEEK_API_KEY"),
-    "qwen":       ("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "qwen-plus", "QWEN_API_KEY"),
-    "doubao":     ("https://ark.cn-beijing.volces.com/api/v3/chat/completions", os.environ.get("DOUBAO_MODEL", "doubao-pro-32k"), "DOUBAO_API_KEY"),
-    "openrouter": ("https://openrouter.ai/api/v1/chat/completions", "deepseek/deepseek-chat", "OPENROUTER_API_KEY"),
-    "poe":        ("https://api.poe.com/v1/chat/completions", "GPT-4o", "POE_API_KEY"),
-    "ollama":     ("http://localhost:11434/v1/chat/completions", "qwen2.5:7b", None),
+    "deepseek": ("https://api.deepseek.com/chat/completions", "deepseek-chat", "DEEPSEEK_API_KEY"),
+    "qwen": (
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "qwen-plus",
+        "QWEN_API_KEY",
+    ),
+    "doubao": (
+        "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
+        os.environ.get("DOUBAO_MODEL", "doubao-pro-32k"),
+        "DOUBAO_API_KEY",
+    ),
+    "openrouter": (
+        "https://openrouter.ai/api/v1/chat/completions",
+        "deepseek/deepseek-chat",
+        "OPENROUTER_API_KEY",
+    ),
+    "poe": ("https://api.poe.com/v1/chat/completions", "GPT-4o", "POE_API_KEY"),
+    "ollama": ("http://localhost:11434/v1/chat/completions", "qwen2.5:7b", None),
 }
 SYSTEM = "你是一个去匿名化分析助手。"
 SYSTEM_EN = "You are a de-anonymization analysis assistant."
@@ -52,11 +65,13 @@ SYSTEM_EN = "You are a de-anonymization analysis assistant."
 
 def build_prompt_en(redacted_text: str, candidates: list[dict]) -> str:
     roster = "\n".join(f"{c['id']}. {c['summary']}" for c in candidates)
-    return ("Below is a (possibly redacted) description of a person, followed by a "
-            "numbered roster of candidate people (id + background). Which single "
-            "candidate is the description most likely about? Answer with the id "
-            "number ONLY; if you cannot tell, answer 0.\n\n"
-            f"Description: {redacted_text}\n\nCandidates:\n{roster}\n\nAnswer (number only): ")
+    return (
+        "Below is a (possibly redacted) description of a person, followed by a "
+        "numbered roster of candidate people (id + background). Which single "
+        "candidate is the description most likely about? Answer with the id "
+        "number ONLY; if you cannot tell, answer 0.\n\n"
+        f"Description: {redacted_text}\n\nCandidates:\n{roster}\n\nAnswer (number only): "
+    )
 
 
 def redactor_raw(text: str) -> str:
@@ -65,6 +80,7 @@ def redactor_raw(text: str) -> str:
 
 def redactor_argus_fast(text: str) -> str:
     from argus_redact import redact
+
     out = redact(text, mode="fast", lang=["zh", "en"], salt=SALT)
     return out[0] if isinstance(out, tuple) else out
 
@@ -96,17 +112,23 @@ def resolve_provider(name: str | None) -> tuple[str, str, str, str]:
     )
 
 
-def call_llm(base_url: str, model: str, api_key: str, system: str, user: str, timeout: float = 60.0) -> str:
+def call_llm(
+    base_url: str, model: str, api_key: str, system: str, user: str, timeout: float = 60.0
+) -> str:
     import httpx
+
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     resp = httpx.post(
-        base_url, headers=headers,
-        json={"model": model,
-              "messages": [{"role": "system", "content": system},
-                           {"role": "user", "content": user}],
-              "temperature": 0, "max_tokens": 20},
+        base_url,
+        headers=headers,
+        json={
+            "model": model,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "temperature": 0,
+            "max_tokens": 20,
+        },
         timeout=timeout,
     )
     resp.raise_for_status()
@@ -115,9 +137,11 @@ def call_llm(base_url: str, model: str, api_key: str, system: str, user: str, ti
 
 def build_prompt(redacted_text: str, candidates: list[dict]) -> str:
     roster = "\n".join(f"{c['id']}. {c['summary']}" for c in candidates)
-    return ("以下是一段（可能已脱敏的）人物描述，以及一个候选人物名单（编号 + 背景信息）。"
-            "这段描述最可能在说名单里的哪一位？只回答编号数字；若无法确定回答 0。\n\n"
-            f"描述：{redacted_text}\n\n候选名单：\n{roster}\n\n答案（只回答编号）：")
+    return (
+        "以下是一段（可能已脱敏的）人物描述，以及一个候选人物名单（编号 + 背景信息）。"
+        "这段描述最可能在说名单里的哪一位？只回答编号数字；若无法确定回答 0。\n\n"
+        f"描述：{redacted_text}\n\n候选名单：\n{roster}\n\n答案（只回答编号）："
+    )
 
 
 def parse_guess(reply: str) -> int:
@@ -125,14 +149,19 @@ def parse_guess(reply: str) -> int:
     return int(m.group()) if m else -1
 
 
-def run_eval(provider: str | None = None, model: str | None = None, limit: int | None = None, pool: str = "zh") -> dict:
+def run_eval(
+    provider: str | None = None,
+    model: str | None = None,
+    limit: int | None = None,
+    pool: str = "zh",
+) -> dict:
     """Run the eval; return a snapshot dict. Pure of file I/O (caller persists)."""
     fixture = FIXTURE_EN if pool == "en" else FIXTURE
     system = SYSTEM_EN if pool == "en" else SYSTEM
     prompt_fn = build_prompt_en if pool == "en" else build_prompt
     data = json.loads(fixture.read_text(encoding="utf-8"))
     candidates = data["candidates"]
-    profiles = data["profiles"][: limit] if limit else data["profiles"]
+    profiles = data["profiles"][:limit] if limit else data["profiles"]
     label, base_url, resolved_model, key = resolve_provider(provider)
     model = model or resolved_model
 
@@ -148,14 +177,21 @@ def run_eval(provider: str | None = None, model: str | None = None, limit: int |
                 redacted = p["text"]
                 print(f"[redact-error] {name} truth={truth}: {e}", file=sys.stderr)
             try:
-                guess = parse_guess(call_llm(base_url, model, key, system, prompt_fn(redacted, candidates)))
+                guess = parse_guess(
+                    call_llm(base_url, model, key, system, prompt_fn(redacted, candidates))
+                )
             except Exception as e:  # noqa: BLE001
                 print(f"[api-error] {name} truth={truth}: {e}", file=sys.stderr)
                 continue
             n += 1
             correct += int(guess == truth)
             per_profile.append({"truth": truth, "guess": guess})
-        redactors[name] = {"reid_rate": (correct / n if n else None), "correct": correct, "n": n, "per_profile": per_profile}
+        redactors[name] = {
+            "reid_rate": (correct / n if n else None),
+            "correct": correct,
+            "n": n,
+            "per_profile": per_profile,
+        }
 
     return {
         "benchmark": "reidentification",
@@ -172,6 +208,7 @@ def run_eval(provider: str | None = None, model: str | None = None, limit: int |
 def _pkg_version() -> str:
     try:
         import argus_redact
+
         return getattr(argus_redact, "__version__", "dev")
     except Exception:  # noqa: BLE001
         return "dev"
@@ -190,15 +227,26 @@ def _print_table(snap: dict) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="re-identification risk eval (PRvL+ X axis)")
-    ap.add_argument("--provider", choices=list(PROVIDERS), default=None,
-                    help="LLM backend (default: first with a key in env)")
+    ap.add_argument(
+        "--provider",
+        choices=list(PROVIDERS),
+        default=None,
+        help="LLM backend (default: first with a key in env)",
+    )
     ap.add_argument("--model", default=None, help="override model id")
     ap.add_argument("--limit", type=int, default=None, help="evaluate only the first N profiles")
-    ap.add_argument("--out", default=None,
-                    help="snapshot JSON path (default: results/reidentification_<version>.json, "
-                         "merging this provider's run into a runs[] array)")
-    ap.add_argument("--pool", choices=["zh", "en"], default="zh",
-                    help="closed-world fixture + prompt language (default: zh)")
+    ap.add_argument(
+        "--out",
+        default=None,
+        help="snapshot JSON path (default: results/reidentification_<version>.json, "
+        "merging this provider's run into a runs[] array)",
+    )
+    ap.add_argument(
+        "--pool",
+        choices=["zh", "en"],
+        default="zh",
+        help="closed-world fixture + prompt language (default: zh)",
+    )
     args = ap.parse_args(argv)
 
     snap = run_eval(args.provider, args.model, args.limit, pool=args.pool)
@@ -209,18 +257,33 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     suffix = "_en" if args.pool == "en" else ""
-    out = Path(args.out) if args.out else RESULTS_DIR / f"reidentification{suffix}_{_pkg_version()}.json"
+    out = (
+        Path(args.out)
+        if args.out
+        else RESULTS_DIR / f"reidentification{suffix}_{_pkg_version()}.json"
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
-    doc = {"benchmark": "reidentification", "package_version": _pkg_version(),
-           "date": _dt.date.today().isoformat(), "fixture_sha256": snap["fixture_sha256"], "runs": []}
+    doc = {
+        "benchmark": "reidentification",
+        "package_version": _pkg_version(),
+        "date": _dt.date.today().isoformat(),
+        "fixture_sha256": snap["fixture_sha256"],
+        "runs": [],
+    }
     if out.exists():
         try:
             doc = json.loads(out.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
             pass
     doc.setdefault("runs", [])
-    doc["runs"] = [r for r in doc["runs"] if not (r.get("provider") == snap["provider"] and r.get("model") == snap["model"])]
-    doc["runs"].append({k: snap[k] for k in ("provider", "model", "n_profiles", "n_candidates", "redactors")})
+    doc["runs"] = [
+        r
+        for r in doc["runs"]
+        if not (r.get("provider") == snap["provider"] and r.get("model") == snap["model"])
+    ]
+    doc["runs"].append(
+        {k: snap[k] for k in ("provider", "model", "n_profiles", "n_candidates", "redactors")}
+    )
     doc["date"] = _dt.date.today().isoformat()
     out.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[snapshot] wrote {out} ({len(doc['runs'])} run(s))")

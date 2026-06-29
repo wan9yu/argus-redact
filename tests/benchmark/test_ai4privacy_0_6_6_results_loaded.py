@@ -3,6 +3,7 @@
 Pinned in v0.6.6 to ensure README's ai4privacy compact table cannot
 silently drift from the actual result file.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,9 +24,7 @@ def test_result_file_schema_valid():
     assert "modes" in data
     assert set(data["modes"]) >= {"fast", "ner"}, "fast and ner modes are mandatory"
     for mode, vals in data["modes"].items():
-        assert set(vals) >= {"precision", "recall", "f1"}, (
-            f"mode {mode!r} missing required fields"
-        )
+        assert set(vals) >= {"precision", "recall", "f1"}, f"mode {mode!r} missing required fields"
         for k, v in vals.items():
             assert isinstance(v, (int, float)), f"mode {mode!r} field {k!r} not numeric"
             assert 0 <= v <= 100, f"mode {mode!r} field {k!r}={v} out of [0,100]"

@@ -14,7 +14,6 @@ prevent silent drift.
 
 from __future__ import annotations
 
-
 _TEMPLATE_ZH = """以下对话中出现的标识符是脱敏占位符。请遵循三条规则：
 1. **完整保留**这些标识符 — 不要替换为称谓（如"先生/女士/总"），不要省略为缩写。
 2. 不要主动猜测或还原它们对应的真实身份。
@@ -24,13 +23,15 @@ _TEMPLATE_ZH = """以下对话中出现的标识符是脱敏占位符。请遵�
 {identifier_list}"""
 
 
-_TEMPLATE_EN = """The following identifiers are redaction placeholders. Please follow three rules:
-1. **Preserve these identifiers verbatim** — do not substitute with titles (e.g., "Mr./Ms./Sir"), do not abbreviate.
-2. Do not attempt to guess or restore their original identities.
-3. Reasoning about relationships between identifiers from context is fine.
-
-Redaction placeholder list:
-{identifier_list}"""
+_TEMPLATE_EN = (
+    "The following identifiers are redaction placeholders. Please follow three rules:\n"
+    '1. **Preserve these identifiers verbatim** — do not substitute with titles (e.g., "Mr./Ms./Sir"), do not abbreviate.\n'  # noqa: E501
+    "2. Do not attempt to guess or restore their original identities.\n"
+    "3. Reasoning about relationships between identifiers from context is fine.\n"
+    "\n"
+    "Redaction placeholder list:\n"
+    "{identifier_list}"
+)
 
 
 def prompt_anchor(key: dict, lang: str = "zh") -> str:

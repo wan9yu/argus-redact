@@ -7,13 +7,14 @@ collapsed via earlier truncation bugs (audit H1).
 
 from __future__ import annotations
 
-from hypothesis import assume, given, settings, strategies as st
-
 import argus_redact._core as _core
+from hypothesis import assume, given, settings
+from hypothesis import strategies as st
+
+from tests.security.property.conftest import PROPERTY_SETTINGS
 
 _seed_from_value = _core.seed_from_value
 _ShakeRng = _core.ShakeRng
-from tests.security.property.conftest import PROPERTY_SETTINGS
 
 
 @settings(parent=PROPERTY_SETTINGS, max_examples=200)

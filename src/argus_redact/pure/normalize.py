@@ -4,6 +4,7 @@ normalize_text strips invisibles, folds Cyrillic/Greek confusables, applies NFKC
 and converts Chinese-digit sequences; returns (normalized, offset_map). The heavy
 lifting is in argus-redact-core; this module preserves the public API + MAX_INPUT_SIZE.
 """
+
 from __future__ import annotations
 
 from argus_redact._core import map_spans_to_original as _core_map

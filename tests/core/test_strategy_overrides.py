@@ -33,7 +33,9 @@ class TestStrategyOverridesBasic:
         text = "地址北京市朝阳区建国路100号"
         baseline = redact_pseudonym_llm(text, lang="zh", salt=b"fixed")
         result = redact_pseudonym_llm(
-            text, lang="zh", salt=b"fixed",
+            text,
+            lang="zh",
+            salt=b"fixed",
             strategy_overrides={"address": "mask"},
         )
         # Override changed the downstream shape relative to baseline

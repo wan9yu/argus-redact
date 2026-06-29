@@ -7,6 +7,7 @@ block's `# expected:` comment lines (in order). Mismatch → fail with diff.
 This is the long-term guard for the "every claim a stranger reads must
 reproduce" contract introduced in v0.6.6.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -56,11 +57,7 @@ def _expected_lines(code: str) -> list[str]:
     return [m.group(1) for m in _EXPECTED.finditer(code)]
 
 
-_PARAMS = [
-    (code, label, line)
-    for md in _SCAN_PATHS
-    for code, label, line in _extract_pinned(md)
-]
+_PARAMS = [(code, label, line) for md in _SCAN_PATHS for code, label, line in _extract_pinned(md)]
 
 
 @pytest.mark.parametrize(

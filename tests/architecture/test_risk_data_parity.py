@@ -14,11 +14,7 @@ from pathlib import Path
 import pytest
 
 _RON = (
-    Path(__file__).resolve().parents[2]
-    / "crates"
-    / "argus-redact-core"
-    / "data"
-    / "risk_data.ron"
+    Path(__file__).resolve().parents[2] / "crates" / "argus-redact-core" / "data" / "risk_data.ron"
 )
 
 

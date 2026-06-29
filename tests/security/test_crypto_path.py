@@ -12,8 +12,6 @@ from __future__ import annotations
 import subprocess
 import sys
 
-import pytest
-
 
 def test_full_salt_bytes_used_in_hmac():
     """Salt bytes after position 8 must change the derivation output.
@@ -43,10 +41,7 @@ def test_entity_type_seed_offset_stable_across_processes(tmp_path):
     import os
 
     repo_src = os.path.join(os.path.dirname(__file__), "..", "..", "src")
-    code = (
-        "import argus_redact._core as _core; "
-        "print(_core.type_seed_offset('phone'))"
-    )
+    code = "import argus_redact._core as _core; print(_core.type_seed_offset('phone'))"
     base_env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "PYTHONPATH": os.path.abspath(repo_src),

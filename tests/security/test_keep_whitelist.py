@@ -10,8 +10,6 @@ from __future__ import annotations
 
 import warnings
 
-import pytest
-
 from argus_redact._types import PatternMatch
 from argus_redact.pure.replacer import replace
 
@@ -55,9 +53,7 @@ def test_l3_misclassified_ssn_as_self_reference_still_redacted():
     with warnings.catch_warnings(record=True) as captured:
         warnings.simplefilter("always")
         text, _key, _ = replace("patient SSN 123-45-6789", entities, salt=42)
-        assert "123-45-6789" not in text, (
-            "L3 misclassification leaked SSN via keep — H6 regression"
-        )
+        assert "123-45-6789" not in text, "L3 misclassification leaked SSN via keep — H6 regression"
         # Must have warned the user
         assert any("keep" in str(w.message).lower() for w in captured)
 

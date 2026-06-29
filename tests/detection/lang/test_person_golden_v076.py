@@ -289,11 +289,7 @@ def _en_cases() -> list[dict]:
 
 
 def _build_zh_corpus() -> list[dict]:
-    return (
-        _existing_zh_fixture_cases()
-        + _zh_edge_cases()
-        + _zh_surname_sweep_cases()
-    )
+    return _existing_zh_fixture_cases() + _zh_edge_cases() + _zh_surname_sweep_cases()
 
 
 def _build_en_corpus() -> list[dict]:
@@ -338,12 +334,8 @@ def _regenerate() -> None:
     _FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
     zh = _capture(_build_zh_corpus(), _run_zh_case)
     en = _capture(_build_en_corpus(), _run_en_case)
-    _ZH_FIXTURE.write_text(
-        json.dumps(zh, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    _EN_FIXTURE.write_text(
-        json.dumps(en, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    _ZH_FIXTURE.write_text(json.dumps(zh, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _EN_FIXTURE.write_text(json.dumps(en, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {len(zh)} zh cases → {_ZH_FIXTURE.name}")
     print(f"wrote {len(en)} en cases → {_EN_FIXTURE.name}")
 

@@ -16,12 +16,8 @@ from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
-_PYTHON_FILE = (
-    _REPO_ROOT / "src" / "argus_redact" / "glue" / "_detect_partial.py"
-)
-_RUST_FILE = (
-    _REPO_ROOT / "crates" / "argus-redact-core" / "src" / "streaming.rs"
-)
+_PYTHON_FILE = _REPO_ROOT / "src" / "argus_redact" / "glue" / "_detect_partial.py"
+_RUST_FILE = _REPO_ROOT / "crates" / "argus-redact-core" / "src" / "streaming.rs"
 
 
 def _parse_int_const(path: Path, pattern: str) -> int:

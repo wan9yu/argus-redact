@@ -127,9 +127,7 @@ _OUT = (
 
 def fetch_top_words() -> list[str]:
     """Fetch the pinned frequency list and return the lowercased top-N words."""
-    req = urllib.request.Request(
-        GOOGLE_10K_URL, headers={"User-Agent": "argus-redact-gen/1.0"}
-    )
+    req = urllib.request.Request(GOOGLE_10K_URL, headers={"User-Agent": "argus-redact-gen/1.0"})
     with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 (pinned https URL)
         body = resp.read().decode("utf-8")
     words = [w.strip().lower() for w in body.splitlines() if w.strip()]
@@ -161,32 +159,18 @@ def _ron_str(s: str) -> str:
 
 def build_ron(words: list[str]) -> str:
     lines: list[str] = []
-    lines.append(
-        "// en common-words lexicon (SSOT) — pool-INDEPENDENT corroboration for the"
-    )
+    lines.append("// en common-words lexicon (SSOT) — pool-INDEPENDENT corroboration for the")
     lines.append("// person detector's name-like leading-token signal.")
     lines.append("//")
-    lines.append(
-        "// A bare-surname candidate's leading token (the given-name slot) is treated as"
-    )
-    lines.append(
-        '// "name-like" when its lowercase form (trailing dot stripped) is NOT in this'
-    )
-    lines.append(
-        "// set, it is alphabetic, and its length is >= 2. Name-like adds W_NAME_LIKE"
-    )
-    lines.append(
-        "// evidence, so a real Given+Surname pair whose given name is outside the SSA"
-    )
-    lines.append(
-        '// pool ("Marco Rossi", "Wei Chen") still corroborates, while a place / common-'
-    )
+    lines.append("// A bare-surname candidate's leading token (the given-name slot) is treated as")
+    lines.append('// "name-like" when its lowercase form (trailing dot stripped) is NOT in this')
+    lines.append("// set, it is alphabetic, and its length is >= 2. Name-like adds W_NAME_LIKE")
+    lines.append("// evidence, so a real Given+Surname pair whose given name is outside the SSA")
+    lines.append('// pool ("Marco Rossi", "Wei Chen") still corroborates, while a place / common-')
     lines.append('// word pair ("Central Park", "Lake Park") does not. This removes the SSA')
     lines.append("// pool's Anglo bias from the gate WITHOUT reviving the place/noise FPs.")
     lines.append("//")
-    lines.append(
-        "// Hand-maintained curated set: the most frequent English words plus place /"
-    )
+    lines.append("// Hand-maintained curated set: the most frequent English words plus place /")
     lines.append("// geographic / directional terms that collide with surnames (the FP drivers).")
     lines.append("// Regenerate / refresh from a pinned word-frequency source via:")
     lines.append("//   python -m argus_redact.specs.gen_en_common_words")
@@ -195,9 +179,13 @@ def build_ron(words: list[str]) -> str:
     lines.append("//")
     lines.append("// ── Design tension: this list does DOUBLE DUTY ──")
     lines.append("//")
-    lines.append('// It is BOTH (1) the place / common-word FP-suppression set (a leading "Central"')
+    lines.append(
+        '// It is BOTH (1) the place / common-word FP-suppression set (a leading "Central"'
+    )
     lines.append('// in "Central Park" must not look name-like) AND (2) the name-like NEGATIVE')
-    lines.append("// filter (any leading token in this set is declared NOT-a-name). A token that is")
+    lines.append(
+        "// filter (any leading token in this set is declared NOT-a-name). A token that is"
+    )
     lines.append("// genuinely BOTH a real given name AND a common/place word is therefore")
     lines.append("// irreducibly ambiguous in this single-list design — including it suppresses a")
     lines.append("// real name, omitting it revives a place / prose FP. There is no curation that")
@@ -219,12 +207,18 @@ def build_ron(words: list[str]) -> str:
     lines.append("//     liberty, victory, march, july, ...) stay in as FP drivers even when they")
     lines.append("//     are an occasional name; the rare-name reading is the residual.")
     lines.append("//")
-    lines.append("// FUTURE WORK: split this into TWO lists — a place / function FP-SUPPRESSION set")
+    lines.append(
+        "// FUTURE WORK: split this into TWO lists — a place / function FP-SUPPRESSION set"
+    )
     lines.append('//   (used only to keep "Central Park" non-name-like) and a strictly')
     lines.append("//   NOT-A-NAME set (used only as the name-like negative filter). A token could")
     lines.append("//   then suppress a place FP WITHOUT also vetoing a real given name, dissolving")
-    lines.append("//   the ambiguity above. Until then the principle is: predominantly-name -> omit;")
-    lines.append("//   predominantly-common-word -> include and accept the L2-recovered recall miss.")
+    lines.append(
+        "//   the ambiguity above. Until then the principle is: predominantly-name -> omit;"
+    )
+    lines.append(
+        "//   predominantly-common-word -> include and accept the L2-recovered recall miss."
+    )
     lines.append("EnCommonWords(")
     lines.append("    words: [")
     for w in words:

@@ -6,6 +6,7 @@ regex AND the validation run entirely in the Rust core. No builtin pattern needs
 a Python ``validate`` callback re-attached here. The compiled ``_core`` is
 required. (Adapter / non-builtin patterns may still carry a Python ``validate``;
 those are handled by ``pure/patterns.py``, not here.)"""
+
 from __future__ import annotations
 
 

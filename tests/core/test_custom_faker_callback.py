@@ -68,14 +68,10 @@ def test_custom_faker_routes_through_rust_callback():
     entities = [make_match(_INPUT_VALUE, _ENTITY_TYPE, text.index(_INPUT_VALUE))]
     config = {_ENTITY_TYPE: {"strategy": "realistic"}}
 
-    redacted, key, aliases = replace(
-        text, entities, config=config, salt=_SALT, langs=["en"]
-    )
+    redacted, key, aliases = replace(text, entities, config=config, salt=_SALT, langs=["en"])
 
     # Entity was replaced (not left as original)
-    assert _INPUT_VALUE not in redacted, (
-        f"Input value must be redacted but found in: {redacted!r}"
-    )
+    assert _INPUT_VALUE not in redacted, f"Input value must be redacted but found in: {redacted!r}"
 
     # Key maps fake → original
     assert len(key) == 1, f"Expected 1 key entry, got {key}"
@@ -87,9 +83,7 @@ def test_custom_faker_routes_through_rust_callback():
     assert len(fake) == len("TEST-") + 10, f"Unexpected length for {fake!r}"
 
     # Golden: same salt → same fake (deterministic)
-    assert fake == _GOLDEN_FAKE, (
-        f"Golden mismatch: expected {_GOLDEN_FAKE!r}, got {fake!r}"
-    )
+    assert fake == _GOLDEN_FAKE, f"Golden mismatch: expected {_GOLDEN_FAKE!r}, got {fake!r}"
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")

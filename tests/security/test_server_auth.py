@@ -8,11 +8,9 @@ container deployments routinely override to ``0.0.0.0``.
 
 from __future__ import annotations
 
-import os
 import warnings
 
 import pytest
-
 
 # Skip this module if starlette isn't installed (server[serve] extra)
 pytest.importorskip("starlette", reason="server tests require starlette")
@@ -38,9 +36,9 @@ def test_create_app_with_allow_no_auth_works():
         warnings.simplefilter("always")
         app = create_app(allow_no_auth=True)
     assert app is not None
-    assert any(
-        issubclass(w.category, SecurityWarning) for w in captured
-    ), "no SecurityWarning emitted when running without auth"
+    assert any(issubclass(w.category, SecurityWarning) for w in captured), (
+        "no SecurityWarning emitted when running without auth"
+    )
 
 
 def test_create_app_with_api_key_set_works(monkeypatch):

@@ -48,9 +48,7 @@ import urllib.request
 from pathlib import Path
 
 CONFUSABLES_VERSION = "16.0.0"
-CONFUSABLES_URL = (
-    f"https://www.unicode.org/Public/security/{CONFUSABLES_VERSION}/confusables.txt"
-)
+CONFUSABLES_URL = f"https://www.unicode.org/Public/security/{CONFUSABLES_VERSION}/confusables.txt"
 
 # First-token allowlist for the SOURCE codepoint's Unicode name.
 ALLOW = {"LATIN", "CYRILLIC", "GREEK", "COPTIC"}
@@ -63,24 +61,67 @@ ALLOW = {"LATIN", "CYRILLIC", "GREEK", "COPTIC"}
 # we fold it to "l" to close that homoglyph path.
 CURATED: dict[int, str] = {
     # Cyrillic -> Latin
-    0x0430: "a", 0x0435: "e", 0x043E: "o", 0x0440: "p", 0x0441: "c",
-    0x0443: "y", 0x0445: "x", 0x0456: "i", 0x04BB: "h", 0x0432: "b",
-    0x043A: "k", 0x043C: "m", 0x0442: "t", 0x043D: "h", 0x0410: "A",
-    0x0412: "B", 0x0415: "E", 0x041A: "K", 0x041C: "M", 0x041D: "H",
-    0x041E: "O", 0x0420: "P", 0x0421: "C", 0x0422: "T", 0x0425: "X", 0x0423: "Y",
+    0x0430: "a",
+    0x0435: "e",
+    0x043E: "o",
+    0x0440: "p",
+    0x0441: "c",
+    0x0443: "y",
+    0x0445: "x",
+    0x0456: "i",
+    0x04BB: "h",
+    0x0432: "b",
+    0x043A: "k",
+    0x043C: "m",
+    0x0442: "t",
+    0x043D: "h",
+    0x0410: "A",
+    0x0412: "B",
+    0x0415: "E",
+    0x041A: "K",
+    0x041C: "M",
+    0x041D: "H",
+    0x041E: "O",
+    0x0420: "P",
+    0x0421: "C",
+    0x0422: "T",
+    0x0425: "X",
+    0x0423: "Y",
     # Greek -> Latin
-    0x03BF: "o", 0x03B1: "a", 0x03B5: "e", 0x03B9: "i", 0x03BA: "k",
-    0x03BD: "v", 0x03C1: "p", 0x03C4: "t", 0x039F: "O", 0x0391: "A",
-    0x0392: "B", 0x0395: "E", 0x0397: "H", 0x0399: "I", 0x039A: "K",
-    0x039C: "M", 0x039D: "N", 0x03A1: "P", 0x03A4: "T", 0x03A7: "X", 0x0396: "Z",
+    0x03BF: "o",
+    0x03B1: "a",
+    0x03B5: "e",
+    0x03B9: "i",
+    0x03BA: "k",
+    0x03BD: "v",
+    0x03C1: "p",
+    0x03C4: "t",
+    0x039F: "O",
+    0x0391: "A",
+    0x0392: "B",
+    0x0395: "E",
+    0x0397: "H",
+    0x0399: "I",
+    0x039A: "K",
+    0x039C: "M",
+    0x039D: "N",
+    0x03A1: "P",
+    0x03A4: "T",
+    0x03A7: "X",
+    0x0396: "Z",
     # audit-driven correction (see module docstring)
     0x04CF: "l",
 }
 
 # Audit examples that MUST be covered by the final map (sanity self-check).
 AUDIT_EXAMPLES: dict[int, str] = {
-    0x0405: "S", 0x0408: "J", 0x0455: "s", 0x0458: "j",
-    0x0501: "d", 0x04CF: "l", 0x03F3: "j",
+    0x0405: "S",
+    0x0408: "J",
+    0x0455: "s",
+    0x0458: "j",
+    0x0501: "d",
+    0x04CF: "l",
+    0x03F3: "j",
 }
 
 _OUT = (
@@ -98,9 +139,7 @@ def _is_ascii_letter(cp: int) -> bool:
 
 def fetch_confusables() -> str:
     """Fetch the pinned confusables.txt. Raises on network failure."""
-    req = urllib.request.Request(
-        CONFUSABLES_URL, headers={"User-Agent": "argus-redact-gen/1.0"}
-    )
+    req = urllib.request.Request(CONFUSABLES_URL, headers={"User-Agent": "argus-redact-gen/1.0"})
     with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310 (pinned https URL)
         return resp.read().decode("utf-8-sig")
 
@@ -148,14 +187,10 @@ def build_map(text: str) -> dict[int, str]:
 
     # Invariant 1: every curated source maps to its curated target.
     for src, tgt in CURATED.items():
-        assert final.get(src) == tgt, (
-            f"curated U+{src:04X} -> {final.get(src)!r}, expected {tgt!r}"
-        )
+        assert final.get(src) == tgt, f"curated U+{src:04X} -> {final.get(src)!r}, expected {tgt!r}"
     # Invariant 2: every audit example is covered with its expected target.
     for src, tgt in AUDIT_EXAMPLES.items():
-        assert final.get(src) == tgt, (
-            f"audit U+{src:04X} -> {final.get(src)!r}, expected {tgt!r}"
-        )
+        assert final.get(src) == tgt, f"audit U+{src:04X} -> {final.get(src)!r}, expected {tgt!r}"
     return final
 
 

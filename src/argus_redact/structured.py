@@ -12,7 +12,10 @@ from argus_redact.pure.replacer import SecurityWarning
 
 
 def _parse_paths(paths: list[str]) -> list[list[str]]:
-    """Parse dot-notation paths into segments. 'messages[*].content' → ['messages', '*', 'content']."""
+    """Parse dot-notation paths into segments.
+
+    Example: ``'messages[*].content'`` → ``['messages', '*', 'content']``.
+    """
     parsed = []
     for path in paths:
         segments = []

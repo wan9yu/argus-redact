@@ -18,18 +18,18 @@ recommended but not enforced in v0.6.7.
 
 from __future__ import annotations
 
-from argus_redact.compose.aliases import expand_aliases
-from argus_redact.compose.anchor import prompt_anchor
-from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
-from argus_redact.streaming import StreamingRedactor, StreamingRestorer
-
 # ─── v0.6.11: adapter-author Layer 2 surface ─────────────────────────────
 # Re-exports of internal primitives, now part of the documented Layer 2 SLA.
 # Stable since v0.6.6 (register) / v0.6.5 (PIITypeDef) / v0.6.8 (PatternMatch);
 # Layer 2 best-effort means signatures may evolve in minor releases with a
 # deprecation cycle.
 from argus_redact._types import PatternMatch
-from argus_redact.specs.registry import PIITypeDef, register as register_pii_type
+from argus_redact.compose.aliases import expand_aliases
+from argus_redact.compose.anchor import prompt_anchor
+from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
+from argus_redact.specs.registry import PIITypeDef
+from argus_redact.specs.registry import register as register_pii_type
+from argus_redact.streaming import StreamingRedactor, StreamingRestorer
 
 __all__ = [
     "StreamingRedactor",

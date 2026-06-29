@@ -15,7 +15,6 @@ from argus_redact.pure.replacer import (
 )
 from argus_redact.specs import zh as _zh  # noqa: F401  ensure registration
 from argus_redact.specs.registry import PIITypeDef, register, unregister
-
 from tests.conftest import make_match
 
 
@@ -110,9 +109,7 @@ class TestRealisticStrategy:
         # Now seed the replace() with a key that already claims first_fake for a different original
         # → forces _generate_unique_fake to re-roll
         pre_claimed = {first_fake: "13900000000"}
-        _, second_key, _ = replace(
-            text, entities, config=config, salt=7, key=pre_claimed
-        )
+        _, second_key, _ = replace(text, entities, config=config, salt=7, key=pre_claimed)
 
         # Find the new fake (anything NOT first_fake)
         new_fakes = [k for k in second_key if k != first_fake]

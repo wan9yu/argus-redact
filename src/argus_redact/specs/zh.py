@@ -84,7 +84,9 @@ register(
         length=18,
         charset="digits+X",
         structure={
-            "area_code": "6 digits — administrative division code (GB/T 2260), first digit non-zero",
+            "area_code": (
+                "6 digits — administrative division code (GB/T 2260), first digit non-zero"
+            ),
             "birth_date": "8 digits — YYYYMMDD, year 1900-2099",
             "sequence": "3 digits — sequence code, odd=male even=female",
             "check": "1 char — MOD 11-2 checksum, 0-9 or X",
@@ -205,7 +207,15 @@ register(
             "body": "旧号段=8位数字；新号段(2018-12-03起)=1字母(排除I/O)+7位数字",
         },
         checksum=None,  # 无公开校验算法（官方文档未列校验位）
-        prefixes=("往来港澳通行证", "电子往来港澳通行证", "港澳通行证", "双程证", "通行证号码", "证件号码", "EEP"),
+        prefixes=(
+            "往来港澳通行证",
+            "电子往来港澳通行证",
+            "港澳通行证",
+            "双程证",
+            "通行证号码",
+            "证件号码",
+            "EEP",
+        ),
         strategy="remove",
         label="[往来港澳通行证已脱敏]",
         examples=(
@@ -215,16 +225,19 @@ register(
             "双程证 C87654321",
         ),
         counterexamples=(
-            "C12345678",            # 无锚点裸格式 -> 不应命中
+            "C12345678",  # 无锚点裸格式 -> 不应命中
             "往来港澳通行证CI1234567",  # 第二位 I 非法
             "往来港澳通行证CO1234567",  # 第二位 O 非法
-            "往来港澳通行证C1234567",   # 总长不足 9
-            "回乡证H12345678",         # H 前缀属于另一类型，绝不能命中此类型
-            "订单号C12345678",         # 干扰前缀
+            "往来港澳通行证C1234567",  # 总长不足 9
+            "回乡证H12345678",  # H 前缀属于另一类型，绝不能命中此类型
+            "订单号C12345678",  # 干扰前缀
         ),
         sensitivity=4,
         source="国家移民管理局《出入境证件简明手册》; 电子往来港澳通行证号码编制规则调整公告(2018)",
-        description="往来港澳通行证 (Exit-Entry Permit for Travelling to/from HK and Macao, EEP) — 大陆居民赴港澳；C 前缀；无公开校验；须上下文锚点",
+        description=(
+            "往来港澳通行证 (Exit-Entry Permit for Travelling to/from HK and Macao, EEP)"
+            " — 大陆居民赴港澳；C 前缀；无公开校验；须上下文锚点"
+        ),
     )
 )
 
@@ -245,24 +258,37 @@ register(
             "renewal": "可选 2 位换证次数（卡面独立字段 / 1999版原生末2位）",
         },
         checksum=None,  # 无公开校验算法（官方文档未列校验位）
-        prefixes=("港澳居民来往内地通行证", "来往内地通行证", "回乡证", "回乡卡", "港澳居民", "Home Return Permit"),
+        prefixes=(
+            "港澳居民来往内地通行证",
+            "来往内地通行证",
+            "回乡证",
+            "回乡卡",
+            "港澳居民",
+            "Home Return Permit",
+        ),
         strategy="remove",
         label="[回乡证已脱敏]",
         examples=(
             "港澳居民来往内地通行证H12345678",
             "回乡证 M87654321",
-            "回乡卡H1234567801",        # 9位号 + 2位换证次数
+            "回乡卡H1234567801",  # 9位号 + 2位换证次数
             "Home Return Permit H00000001",
         ),
         counterexamples=(
-            "H12345678",              # 无锚点裸格式 -> 不应命中
-            "回乡证H1234567",          # 位数不足
+            "H12345678",  # 无锚点裸格式 -> 不应命中
+            "回乡证H1234567",  # 位数不足
             "往来港澳通行证C12345678",  # C 前缀属于另一类型，绝不能命中此类型
-            "型号H12345678",          # 干扰前缀
+            "型号H12345678",  # 干扰前缀
         ),
         sensitivity=4,
-        source="公安部《关于启用新版港澳居民来往内地通行证的公告》; 国家移民管理局《出入境证件简明手册》",
-        description="港澳居民来往内地通行证 (Mainland Travel Permit for HK/Macao Residents / Home Return Permit / 回乡证) — 港澳居民来大陆；H/M 前缀；无公开校验；须上下文锚点",
+        source=(
+            "公安部《关于启用新版港澳居民来往内地通行证的公告》;"
+            " 国家移民管理局《出入境证件简明手册》"
+        ),
+        description=(
+            "港澳居民来往内地通行证 (Mainland Travel Permit for HK/Macao Residents"
+            " / Home Return Permit / 回乡证) — 港澳居民来大陆；H/M 前缀；无公开校验；须上下文锚点"
+        ),
     )
 )
 
@@ -286,12 +312,19 @@ register(
             "公积金账号 6001234567",
         ),
         counterexamples=(
-            "110123456789",   # 无锚点裸数字 -> 不应命中
+            "110123456789",  # 无锚点裸数字 -> 不应命中
             "公积金余额12000",  # 余额/金额，不是账号
         ),
         sensitivity=3,
-        source="《住房公积金管理条例》（国务院令第350号）— 账号格式由各地公积金管理中心自定，无全国统一标准",
-        description="住房公积金账号 (housing provident fund account) — 各城市格式不统一，无全国标准，无公开校验；须上下文锚点。理由是格式无全国标准，不是因为未来归集身份证号。",
+        source=(
+            "《住房公积金管理条例》（国务院令第350号）"
+            "— 账号格式由各地公积金管理中心自定，无全国统一标准"
+        ),
+        description=(
+            "住房公积金账号 (housing provident fund account)"
+            " — 各城市格式不统一，无全国标准，无公开校验；须上下文锚点。"
+            "理由是格式无全国标准，不是因为未来归集身份证号。"
+        ),
     )
 )
 
@@ -709,7 +742,10 @@ register(
         counterexamples=("今天天气不错",),
         sensitivity=2,
         source="re-identification quasi-identifier (not a GDPR special / PIPL sensitive category)",
-        description="Hobby/interest — a re-id quasi-identifier; not a GDPR special category or PIPL sensitive-PI type (only the universal PIPL baseline applies).",
+        description=(
+            "Hobby/interest — a re-id quasi-identifier; not a GDPR special category"
+            " or PIPL sensitive-PI type (only the universal PIPL baseline applies)."
+        ),
     )
 )
 
@@ -945,10 +981,16 @@ register(
             "华为公司发布",
             "唐朝是中国历史",
         ),
-          # Person names are detected by lang/zh/person.py, not by regex PATTERNS
+        # Person names are detected by lang/zh/person.py, not by regex PATTERNS
         sensitivity=3,
         source="公安部全国姓名统计, 百家姓",
-        description="Chinese person name (candidate generation + evidence scoring). The detection logic lives in the Rust core (`crates/argus-redact-core/src/person_zh.rs`, with English in `person_en.rs`); the `lang/zh/person.py` module is a thin `_core` FFI shim over it.",
+        description=(
+            "Chinese person name (candidate generation + evidence scoring)."
+            " The detection logic lives in the Rust core"
+            " (`crates/argus-redact-core/src/person_zh.rs`,"
+            " with English in `person_en.rs`);"
+            " the `lang/zh/person.py` module is a thin `_core` FFI shim over it."
+        ),
     )
 )
 

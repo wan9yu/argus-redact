@@ -43,21 +43,24 @@ a known-wrong expectation).
 
 import warnings
 
+import argus_redact._core as _core
 import pytest
 
-import argus_redact._core as _core
 from argus_redact import redact
-from argus_redact._types import PatternMatch as PyPM
 from argus_redact.glue.redact import _detect, _load_patterns
 from argus_redact.pure.hints import (
     filter_self_reference as py_filter_self_reference,
+)
+from argus_redact.pure.hints import (
     get_person_threshold as py_get_person_threshold,
+)
+from argus_redact.pure.hints import (
     produce_hints as py_produce_hints,
 )
 from argus_redact.pure.patterns import match_patterns
 from argus_redact.pure.replacer import (
-    DEFAULT_PREFIXES,
     _KEEP_WHITELIST,
+    DEFAULT_PREFIXES,
     _build_type_info,
 )
 
@@ -70,8 +73,7 @@ SALT = 42  # matches the T1 fixture freeze.
 def _to_core(matches):
     """Mirror a list of Python PatternMatch into _core.PatternMatch (same fields)."""
     return [
-        _core.PatternMatch(m.text, m.type, m.start, m.end, m.confidence, m.layer)
-        for m in matches
+        _core.PatternMatch(m.text, m.type, m.start, m.end, m.confidence, m.layer) for m in matches
     ]
 
 
@@ -135,7 +137,9 @@ def _core_redact_fast(
     )
 
 
-def _py_redact_fast(text, lang, *, config=None, names=None, types=None, types_exclude=None, unified_prefix=None):
+def _py_redact_fast(
+    text, lang, *, config=None, names=None, types=None, types_exclude=None, unified_prefix=None
+):
     """LIVE Python `redact(mode="fast")` — the independent reference for family B."""
     kw = dict(mode="fast", lang=lang, salt=SALT, config=config)
     if names is not None:
@@ -343,37 +347,122 @@ def test_filter_self_reference_core_equals_python(case):
 # name_mask / keep), validators (jwt / org / school), names-only-ja fallback,
 # multi-byte (emoji prefix), unified_prefix, type whitelist + blacklist.
 _REDACT_CORPUS = [
-    ("default_pseudonym", "张三的电话13812345678，身份证110101199003074610", "zh",
-        None, None, None, None, None),
-    ("realistic", "张三的电话13812345678", "zh",
+    (
+        "default_pseudonym",
+        "张三的电话13812345678，身份证110101199003074610",
+        "zh",
+        None,
+        None,
+        None,
+        None,
+        None,
+    ),
+    (
+        "realistic",
+        "张三的电话13812345678",
+        "zh",
         {"person": {"strategy": "realistic"}, "phone": {"strategy": "realistic"}},
-        None, None, None, None),
-    ("mask", "电话13812345678 银行卡6217000000000000", "zh",
+        None,
+        None,
+        None,
+        None,
+    ),
+    (
+        "mask",
+        "电话13812345678 银行卡6217000000000000",
+        "zh",
         {"phone": {"strategy": "mask"}, "bank_card": {"strategy": "mask"}},
-        None, None, None, None),
-    ("category", "北京市朝阳区三里屯", "zh",
-        {"address": {"strategy": "category"}}, None, None, None, None),
-    ("name_mask", "张三和欧阳明", "zh",
-        {"person": {"strategy": "name_mask"}}, ["张三", "欧阳明"], None, None, None),
-    ("en_realistic", "John Smith SSN 123-45-6789 card 4111111111111111", "en",
-        {"person": {"strategy": "realistic"}, "ssn": {"strategy": "realistic"},
-         "credit_card": {"strategy": "realistic"}}, None, None, None, None),
-    ("validator_jwt", "token is eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.sig", "en",
-        None, None, None, None, None),
-    ("validator_org_school", "我毕业于北京大学，在阿里巴巴有限公司上班", "zh",
-        None, None, None, None, None),
-    ("names_only_ja_fallback", "Talk to Zaphod and Trillian please", "ja",
-        None, ["Zaphod", "Trillian"], None, None, None),
-    ("multibyte_emoji_prefix", "🎉张三的电话13812345678", "zh",
-        None, ["张三"], None, None, None),
-    ("unified_prefix", "张三 13812345678 110101199003074610", "zh",
-        None, None, None, None, "R"),
-    ("type_whitelist", "电话13812345678 银行卡6217000000000000", "zh",
+        None,
+        None,
+        None,
+        None,
+    ),
+    (
+        "category",
+        "北京市朝阳区三里屯",
+        "zh",
+        {"address": {"strategy": "category"}},
+        None,
+        None,
+        None,
+        None,
+    ),
+    (
+        "name_mask",
+        "张三和欧阳明",
+        "zh",
+        {"person": {"strategy": "name_mask"}},
+        ["张三", "欧阳明"],
+        None,
+        None,
+        None,
+    ),
+    (
+        "en_realistic",
+        "John Smith SSN 123-45-6789 card 4111111111111111",
+        "en",
+        {
+            "person": {"strategy": "realistic"},
+            "ssn": {"strategy": "realistic"},
+            "credit_card": {"strategy": "realistic"},
+        },
+        None,
+        None,
+        None,
+        None,
+    ),
+    (
+        "validator_jwt",
+        "token is eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.sig",
+        "en",
+        None,
+        None,
+        None,
+        None,
+        None,
+    ),
+    (
+        "validator_org_school",
+        "我毕业于北京大学，在阿里巴巴有限公司上班",
+        "zh",
+        None,
+        None,
+        None,
+        None,
+        None,
+    ),
+    (
+        "names_only_ja_fallback",
+        "Talk to Zaphod and Trillian please",
+        "ja",
+        None,
+        ["Zaphod", "Trillian"],
+        None,
+        None,
+        None,
+    ),
+    ("multibyte_emoji_prefix", "🎉张三的电话13812345678", "zh", None, ["张三"], None, None, None),
+    ("unified_prefix", "张三 13812345678 110101199003074610", "zh", None, None, None, None, "R"),
+    (
+        "type_whitelist",
+        "电话13812345678 银行卡6217000000000000",
+        "zh",
         {"phone": {"strategy": "mask"}, "bank_card": {"strategy": "mask"}},
-        None, ["bank_card"], None, None),
-    ("type_blacklist", "电话13812345678 银行卡6217000000000000", "zh",
+        None,
+        ["bank_card"],
+        None,
+        None,
+    ),
+    (
+        "type_blacklist",
+        "电话13812345678 银行卡6217000000000000",
+        "zh",
         {"phone": {"strategy": "mask"}, "bank_card": {"strategy": "mask"}},
-        None, None, ["phone"], None),
+        None,
+        None,
+        ["phone"],
+        None,
+    ),
 ]
 
 
@@ -386,12 +475,22 @@ def test_redact_l1_equals_redact_fast(case):
     """
     _label, text, lang, config, names, types, types_exclude, unified_prefix = case
     core_redacted, core_key, _aliases, _kd = _core_redact_fast(
-        text, lang, config=config, names=names, types=types,
-        types_exclude=types_exclude, unified_prefix=unified_prefix,
+        text,
+        lang,
+        config=config,
+        names=names,
+        types=types,
+        types_exclude=types_exclude,
+        unified_prefix=unified_prefix,
     )
     py_redacted, py_key = _py_redact_fast(
-        text, lang, config=config, names=names, types=types,
-        types_exclude=types_exclude, unified_prefix=unified_prefix,
+        text,
+        lang,
+        config=config,
+        names=names,
+        types=types,
+        types_exclude=types_exclude,
+        unified_prefix=unified_prefix,
     )
     assert core_redacted == py_redacted, f"redacted drift for {_label!r}"
     assert dict(core_key) == dict(py_key), f"key drift for {_label!r}"
@@ -551,8 +650,12 @@ def test_threshold_constants_are_distinct():
     so the threshold-flip gate cannot pass vacuously. If 1.2 and 0.8 were ever
     collapsed to one value, the suppress/redact behaviors would no longer diverge.
     """
-    instr_hints = _core.produce_hints_l1(_to_core(_real_entities("帮我查资料 我在这", "zh")), "帮我查资料 我在这")
-    narr_hints = _core.produce_hints_l1(_to_core(_real_entities("我的电话是13800138000", "zh")), "我的电话是13800138000")
+    instr_hints = _core.produce_hints_l1(
+        _to_core(_real_entities("帮我查资料 我在这", "zh")), "帮我查资料 我在这"
+    )
+    narr_hints = _core.produce_hints_l1(
+        _to_core(_real_entities("我的电话是13800138000", "zh")), "我的电话是13800138000"
+    )
     instr_th = _core.get_person_threshold(instr_hints)
     narr_th = _core.get_person_threshold(narr_hints)
     assert instr_th == 1.2

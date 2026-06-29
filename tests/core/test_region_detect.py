@@ -5,13 +5,15 @@ quasi-identifiers are removed (the default `location` strategy) while region
 names in non-PII contexts (time/org/food/landmark) are NOT over-redacted. Floors,
 not exact match (the gate is a heuristic). cf. the person-detector floors.
 """
+
 from argus_redact import redact
 
 
 def _detects_region(text: str) -> bool:
     # category strategy → a detected location becomes "[location]"; visible marker.
-    out, _ = redact(text, mode="fast", lang=["zh"], salt=42,
-                    config={"location": {"strategy": "category"}})
+    out, _ = redact(
+        text, mode="fast", lang=["zh"], salt=42, config={"location": {"strategy": "category"}}
+    )
     return "[location]" in out or "[LOCATION]" in out
 
 
@@ -67,8 +69,13 @@ def test_region_recall_floor():
 
 def test_parent_city_prefix_absorbed():
     # 上海浦东新区 must redact as ONE location, not leave bare 上海.
-    out, _ = redact("我住在上海浦东新区，平时很忙。", mode="fast", lang=["zh"],
-                    salt=42, config={"location": {"strategy": "category"}})
+    out, _ = redact(
+        "我住在上海浦东新区，平时很忙。",
+        mode="fast",
+        lang=["zh"],
+        salt=42,
+        config={"location": {"strategy": "category"}},
+    )
     assert "上海" not in out, f"bare parent city leaked: {out!r}"
     assert "[location]" in out or "[LOCATION]" in out
 
@@ -77,27 +84,26 @@ def test_parent_city_prefix_absorbed():
 # Proximity-allowlist fix: technical PII must not corroborate a bare region
 # ---------------------------------------------------------------------------
 
+
 def test_region_technical_pii_only_not_corroborated():
     # url_token and ip_address are technical/non-personal PII; after the
     # proximity-allowlist fix they no longer corroborate a bare region.
     # A district with ONLY a url_token or ip_address nearby (no cue) must
     # NOT be redacted.  Before the fix both would fire via lexicon 0.3 +
     # (now-excluded) proximity 0.3 = 0.6 ≥ 0.5 threshold.
-    assert not _detects_region(
-        "西湖区 https://api.example.com/v1/资源?token=abc123def456"
-    ), "url_token must not corroborate a bare region (no cue)"
-    assert not _detects_region(
-        "海淀区 192.168.10.20"
-    ), "ip_address must not corroborate a bare region (no cue)"
+    assert not _detects_region("西湖区 https://api.example.com/v1/资源?token=abc123def456"), (
+        "url_token must not corroborate a bare region (no cue)"
+    )
+    assert not _detects_region("海淀区 192.168.10.20"), (
+        "ip_address must not corroborate a bare region (no cue)"
+    )
 
 
 def test_region_personal_pii_still_corroborates():
     # phone IS in the person-identifying allowlist; it must still promote a
     # bare region to redaction (lexicon 0.3 + phone-prox 0.3 = 0.6 ≥ 0.5).
     # Regression guard: the fix must not break the existing phone-proximity path.
-    assert _detects_region(
-        "西湖区 13800138000"
-    ), "phone must still corroborate a bare region"
+    assert _detects_region("西湖区 13800138000"), "phone must still corroborate a bare region"
 
 
 def test_region_mixed_technical_and_personal_pii():

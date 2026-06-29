@@ -24,6 +24,7 @@ from argus_redact.specs.registry import PIITypeDef
 
 def _match(text, type_name, start):
     from argus_redact._types import PatternMatch
+
     return PatternMatch(text=text, type=type_name, start=start, end=start + len(text), layer=1)
 
 
@@ -32,9 +33,7 @@ class TestStrategyClassification:
     def test_reversible_strategies(self, strategy):
         assert is_strategy_reversible(strategy) is True
 
-    @pytest.mark.parametrize(
-        "strategy", ["mask", "name_mask", "landline_mask", "category"]
-    )
+    @pytest.mark.parametrize("strategy", ["mask", "name_mask", "landline_mask", "category"])
     def test_irreversible_strategies(self, strategy):
         assert is_strategy_reversible(strategy) is False
 
@@ -45,8 +44,7 @@ class TestStrategyClassification:
         irreversible = {"mask", "name_mask", "landline_mask", "category"}
         reversible = {s for s in VALID_STRATEGIES if is_strategy_reversible(s)}
         assert reversible | irreversible == set(VALID_STRATEGIES), (
-            "Every VALID_STRATEGIES member must be classified as either "
-            "reversible or irreversible."
+            "Every VALID_STRATEGIES member must be classified as either reversible or irreversible."
         )
         assert reversible.isdisjoint(irreversible)
 

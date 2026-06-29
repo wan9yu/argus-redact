@@ -25,6 +25,7 @@ Run (needs OPENROUTER_API_KEY in env, never committed):
     python -m tests.benchmark.prvl_multi_eval --models GPT-5 --profiles realistic --limit 1
     python -m tests.benchmark.prvl_multi_eval --judge                 # add LLM-judge utility
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,10 +54,10 @@ SALT = b"prvl-multi-eval-fixed-salt!!!!!!"
 # Friendly (paper / baker) label → exact OpenRouter model id. The label is the
 # paper-facing name kept stable across endpoint churn; the id is what call_llm gets.
 MODELS: list[tuple[str, str]] = [
-    ("GPT-5",           "openai/gpt-5.5"),
+    ("GPT-5", "openai/gpt-5.5"),
     ("Claude-Opus-4.5", "anthropic/claude-opus-4.5"),
-    ("Gemini-2.5-Pro",  "google/gemini-2.5-pro"),
-    ("GLM-4.5",         "z-ai/glm-4.5"),
+    ("Gemini-2.5-Pro", "google/gemini-2.5-pro"),
+    ("GLM-4.5", "z-ai/glm-4.5"),
 ]
 _MODEL_BY_LABEL = dict(MODELS)
 
@@ -66,8 +67,14 @@ JUDGE_MODEL_DEFAULT = "openai/gpt-5.5"
 # Refusal markers (case-insensitive for ASCII; CJK markers match as-is). An output
 # containing any of these is NOT counted as a usable answer.
 _REFUSAL_MARKERS = (
-    "i cannot", "i can't", "i'm sorry", "i am sorry", "unable to",
-    "无法", "抱歉", "对不起",
+    "i cannot",
+    "i can't",
+    "i'm sorry",
+    "i am sorry",
+    "unable to",
+    "无法",
+    "抱歉",
+    "对不起",
 )
 
 # Cases that ask for a person's HEALTH condition / medical advice: a frontier
@@ -77,8 +84,9 @@ _REFUSAL_MARKERS = (
 _EXPECTED_REFUSAL_CASES = frozenset({"qa_en", "advice_zh"})
 
 
-def call_llm(base_url: str, model: str, api_key: str, system: str, user: str,
-             timeout: float = 60.0) -> str:
+def call_llm(
+    base_url: str, model: str, api_key: str, system: str, user: str, timeout: float = 60.0
+) -> str:
     """Single OpenAI-compatible chat completion → reply text.
 
     Mirrors ``reid_eval.call_llm``'s signature so callers (and the offline test's
@@ -99,9 +107,9 @@ def call_llm(base_url: str, model: str, api_key: str, system: str, user: str,
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": user})
     resp = httpx.post(
-        base_url, headers=headers,
-        json={"model": model, "messages": messages,
-              "temperature": 0, "max_tokens": 1024},
+        base_url,
+        headers=headers,
+        json={"model": model, "messages": messages, "temperature": 0, "max_tokens": 1024},
         timeout=timeout,
     )
     resp.raise_for_status()
@@ -143,6 +151,7 @@ def _default_cases() -> list[dict]:
 # Each returns (downstream_text, key, aliases). ``downstream_text`` is what the
 # model sees; ``key`` (+ aliases) is what restore() uses locally.
 
+
 def redact_profile(profile: str, text: str, lang: str | list[str]):
     """Apply one redaction profile. Documented exact calls per profile:
 
@@ -180,6 +189,7 @@ def redact_profile(profile: str, text: str, lang: str | list[str]):
 
 # ── PRvL+ metrics (OUR canonical definitions) ──
 
+
 def _classify_output(output: str) -> str:
     """Classify a model reply: ``'refusal'`` | ``'empty'`` | ``'completed'``.
 
@@ -209,8 +219,7 @@ def _leak_rate(privacy: dict) -> float:
     return len(privacy["leaked"]) / privacy["total"] if privacy["total"] else 0.0
 
 
-def _reversibility(pii: list[str], output: str, key: dict,
-                   aliases: dict | None) -> float:
+def _reversibility(pii: list[str], output: str, key: dict, aliases: dict | None) -> float:
     """Fraction of original PII recoverable by restoring the model output.
 
     We ``restore(output, key)`` (with realistic-strategy aliases when present) and
@@ -223,8 +232,16 @@ def _reversibility(pii: list[str], output: str, key: dict,
     return sum(1 for p in pii if p in restored) / len(pii)
 
 
-def _judge_utility(case: dict, output: str, *, profile: str, base_url: str,
-                   judge_model: str, api_key: str, timeout: float) -> float | None:
+def _judge_utility(
+    case: dict,
+    output: str,
+    *,
+    profile: str,
+    base_url: str,
+    judge_model: str,
+    api_key: str,
+    timeout: float,
+) -> float | None:
     """Optional LLM-judge utility in [0,1]; None on parse failure.
 
     Profile-aware: under the ``realistic`` profile the input was redacted with
@@ -264,9 +281,18 @@ def _judge_utility(case: dict, output: str, *, profile: str, base_url: str,
         return None
 
 
-def _score_row(case: dict, profile: str, label: str, model_id: str, *,
-               base_url: str, api_key: str, timeout: float, judge: bool,
-               judge_model: str) -> dict:
+def _score_row(
+    case: dict,
+    profile: str,
+    label: str,
+    model_id: str,
+    *,
+    base_url: str,
+    api_key: str,
+    timeout: float,
+    judge: bool,
+    judge_model: str,
+) -> dict:
     """Redact → query → score one (model, profile, case). Never raises on an API
     error: records the row with output="" + error=<msg> so one failure can't abort
     the whole matrix."""
@@ -274,20 +300,31 @@ def _score_row(case: dict, profile: str, label: str, model_id: str, *,
     downstream, key, aliases = redact_profile(profile, case["text"], lang)
 
     row: dict = {
-        "case_id": case["id"], "profile": profile, "model": label,
-        "model_id": model_id, "redacted": downstream, "task_type": case["task_type"],
+        "case_id": case["id"],
+        "profile": profile,
+        "model": label,
+        "model_id": model_id,
+        "redacted": downstream,
+        "task_type": case["task_type"],
     }
     try:
-        output = call_llm(base_url, model_id, api_key, "",
-                          case["prompt"].format(text=downstream), timeout)
+        output = call_llm(
+            base_url, model_id, api_key, "", case["prompt"].format(text=downstream), timeout
+        )
     except Exception as e:  # noqa: BLE001 — one failed call must not abort the run
         print(f"[api-error] {label}/{profile}/{case['id']}: {e}", file=sys.stderr)
         privacy = _privacy(case["pii"], "")
-        row.update(output="", error=str(e), privacy=privacy,
-                   reversibility=0.0, utility=0.0, completion="empty",
-                   is_refusal=False,
-                   expected_safety_refusal=case.get("expected_safety_refusal", False),
-                   utility_judge=None)
+        row.update(
+            output="",
+            error=str(e),
+            privacy=privacy,
+            reversibility=0.0,
+            utility=0.0,
+            completion="empty",
+            is_refusal=False,
+            expected_safety_refusal=case.get("expected_safety_refusal", False),
+            utility_judge=None,
+        )
         return row
 
     output = output or ""  # null content (finish_reason=length/filter) → empty answer
@@ -298,13 +335,21 @@ def _score_row(case: dict, profile: str, label: str, model_id: str, *,
         privacy=privacy,
         reversibility=_reversibility(case["pii"], output, key, aliases),
         utility=1.0 if completion == "completed" else 0.0,
-        completion=completion,                       # completed | refusal | empty
+        completion=completion,  # completed | refusal | empty
         is_refusal=(completion == "refusal"),
         expected_safety_refusal=case.get("expected_safety_refusal", False),
         utility_judge=(
-            _judge_utility(case, output, profile=profile, base_url=base_url,
-                           judge_model=judge_model, api_key=api_key, timeout=timeout)
-            if judge else None
+            _judge_utility(
+                case,
+                output,
+                profile=profile,
+                base_url=base_url,
+                judge_model=judge_model,
+                api_key=api_key,
+                timeout=timeout,
+            )
+            if judge
+            else None
         ),
     )
     return row
@@ -331,11 +376,19 @@ def _aggregate(rows: list[dict]) -> dict:
     return out
 
 
-def run(*, models: list[str] | None = None, profiles: list[str] | None = None,
-        limit: int | None = None, cases: list[dict] | None = None,
-        judge: bool = False, judge_model: str = JUDGE_MODEL_DEFAULT,
-        timeout: float = 60.0, out: str | Path | None = None,
-        api_key: str | None = None, write: bool = True) -> dict:
+def run(
+    *,
+    models: list[str] | None = None,
+    profiles: list[str] | None = None,
+    limit: int | None = None,
+    cases: list[dict] | None = None,
+    judge: bool = False,
+    judge_model: str = JUDGE_MODEL_DEFAULT,
+    timeout: float = 60.0,
+    out: str | Path | None = None,
+    api_key: str | None = None,
+    write: bool = True,
+) -> dict:
     """Run the PRvL+ matrix and return the snapshot dict (also writing it when
     ``write`` and an ``out`` path resolve). Importable so the offline test can call
     it directly with ``call_llm`` monkeypatched."""
@@ -361,11 +414,19 @@ def run(*, models: list[str] | None = None, profiles: list[str] | None = None,
         model_id = _MODEL_BY_LABEL[lbl]
         for profile in profs:
             for case in all_cases:
-                rows.append(_score_row(
-                    case, profile, lbl, model_id,
-                    base_url=OPENROUTER_URL, api_key=key, timeout=timeout,
-                    judge=judge, judge_model=judge_model,
-                ))
+                rows.append(
+                    _score_row(
+                        case,
+                        profile,
+                        lbl,
+                        model_id,
+                        base_url=OPENROUTER_URL,
+                        api_key=key,
+                        timeout=timeout,
+                        judge=judge,
+                        judge_model=judge_model,
+                    )
+                )
 
     snap = {
         "benchmark": "prvl_multi",
@@ -391,6 +452,7 @@ def run(*, models: list[str] | None = None, profiles: list[str] | None = None,
 def _pkg_version() -> str:
     try:
         import argus_redact
+
         return getattr(argus_redact, "__version__", "dev")
     except Exception:  # noqa: BLE001
         return "dev"
@@ -399,14 +461,15 @@ def _pkg_version() -> str:
 def _print_table(snap: dict) -> None:
     print(f"\n[provider] {snap['provider']}  (cases={snap['cases']}, judge={snap['judge']})")
     print(
-        f"{'model / profile':<30}{'leak':<9}{'revers':<9}"
-        f"{'compl':<9}{'refuse':<9}{'judge':<8}{'n'}"
+        f"{'model / profile':<30}{'leak':<9}{'revers':<9}{'compl':<9}{'refuse':<9}{'judge':<8}{'n'}"
     )
     print("-" * 82)
     for k, a in snap["aggregate"].items():
         judge = "n/a" if a["utility_judge"] is None else f"{a['utility_judge']:.2f}"
-        print(f"{k:<30}{a['leak_rate']:<9.1%}{a['reversibility']:<9.1%}"
-              f"{a['utility_completed']:<9.1%}{a['refusal_rate']:<9.1%}{judge:<8}{a['n']}")
+        print(
+            f"{k:<30}{a['leak_rate']:<9.1%}{a['reversibility']:<9.1%}"
+            f"{a['utility_completed']:<9.1%}{a['refusal_rate']:<9.1%}{judge:<8}{a['n']}"
+        )
     print()
 
 
@@ -414,16 +477,22 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="PRvL+ multi-model runner (Privacy / Reversibility / Utility)"
     )
-    ap.add_argument("--models", default=None,
-                    help=f"comma list of labels (default: all). choices: {[m[0] for m in MODELS]}")
-    ap.add_argument("--profiles", default=None,
-                    help=f"comma list (default: {','.join(PROFILES)})")
+    ap.add_argument(
+        "--models",
+        default=None,
+        help=f"comma list of labels (default: all). choices: {[m[0] for m in MODELS]}",
+    )
+    ap.add_argument("--profiles", default=None, help=f"comma list (default: {','.join(PROFILES)})")
     ap.add_argument("--limit", type=int, default=None, help="evaluate only the first N cases")
     ap.add_argument("--judge", action="store_true", help="add LLM-judge utility (extra calls)")
-    ap.add_argument("--judge-model", default=JUDGE_MODEL_DEFAULT,
-                    help="OpenRouter id of the judge model")
-    ap.add_argument("--out", default=None,
-                    help="snapshot JSON path (default: results/prvl_multi_<version>.json)")
+    ap.add_argument(
+        "--judge-model", default=JUDGE_MODEL_DEFAULT, help="OpenRouter id of the judge model"
+    )
+    ap.add_argument(
+        "--out",
+        default=None,
+        help="snapshot JSON path (default: results/prvl_multi_<version>.json)",
+    )
     ap.add_argument("--timeout", type=float, default=60.0, help="per-call timeout (seconds)")
     args = ap.parse_args(argv)
 

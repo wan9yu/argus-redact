@@ -54,10 +54,14 @@ class TestCliEndToEnd:
 
         code, stdout, stderr = run_cli(
             "redact",
-            "-k", str(key_file),
-            "--profile", "pseudonym-llm",
-            "--strategy-override", "phone:remove",
-            "-s", "42",
+            "-k",
+            str(key_file),
+            "--profile",
+            "pseudonym-llm",
+            "--strategy-override",
+            "phone:remove",
+            "-s",
+            "42",
             stdin="请拨打 13912345678 联系王建国",
         )
 
@@ -75,8 +79,10 @@ class TestCliEndToEnd:
 
         code, _, stderr = run_cli(
             "redact",
-            "-k", str(key_file),
-            "--strategy-override", "phone:remove",
+            "-k",
+            str(key_file),
+            "--strategy-override",
+            "phone:remove",
             stdin="电话13912345678",
         )
 
@@ -88,9 +94,12 @@ class TestCliEndToEnd:
 
         code, _, stderr = run_cli(
             "redact",
-            "-k", str(key_file),
-            "--profile", "pseudonym-llm",
-            "--strategy-override", "phone-realistic",  # missing colon
+            "-k",
+            str(key_file),
+            "--profile",
+            "pseudonym-llm",
+            "--strategy-override",
+            "phone-realistic",  # missing colon
             stdin="电话13912345678",
         )
 

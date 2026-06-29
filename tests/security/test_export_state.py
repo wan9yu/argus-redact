@@ -67,8 +67,7 @@ def test_from_state_legacy_dump_with_embedded_salt_loads_with_warning(salt):
         r2 = StreamingRedactor.from_state(legacy_state)  # no salt= kwarg
     assert r2 is not None
     assert any(
-        issubclass(w.category, DeprecationWarning) and "salt" in str(w.message)
-        for w in captured
+        issubclass(w.category, DeprecationWarning) and "salt" in str(w.message) for w in captured
     ), "no DeprecationWarning emitted for legacy embedded salt"
 
 

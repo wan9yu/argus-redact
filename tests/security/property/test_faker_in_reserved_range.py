@@ -8,16 +8,14 @@ from __future__ import annotations
 
 import re
 
+import argus_redact._core as _core
 from hypothesis import given
 from hypothesis import strategies as st
 
-import argus_redact._core as _core
-
 _RESERVED_RANGE_PATTERNS = dict(_core.reserved_range_patterns())
-from argus_redact.pure.replacer import _resolve_realistic_faker
-from argus_redact.specs.registry import list_types
-from tests.security.property.conftest import PROPERTY_SETTINGS
-
+from argus_redact.pure.replacer import _resolve_realistic_faker  # noqa: E402
+from argus_redact.specs.registry import list_types  # noqa: E402
+from tests.security.property.conftest import PROPERTY_SETTINGS  # noqa: E402
 
 # Some types map to multiple scanner patterns or have a non-default key
 # shape (e.g. ``ip_address`` can emit ipv4 OR ipv6; ``mac_address`` is keyed
@@ -102,9 +100,7 @@ def test_each_faker_emits_reserved_range(salt, value):
             salt=salt,
             used=set(),
         )
-        matched = any(
-            re.search(_RESERVED_RANGE_PATTERNS[key], fake) for key in pattern_keys
-        )
+        matched = any(re.search(_RESERVED_RANGE_PATTERNS[key], fake) for key in pattern_keys)
         assert matched, (
             f"{faker_name} emitted {fake!r} which does not match any of "
             f"reserved-range patterns {pattern_keys}"

@@ -51,8 +51,7 @@ class TestRedactToolReturnsOnlyToken:
         content = result if isinstance(result, str) else result[0].text
         data = json.loads(content)
         assert "key" not in data, (
-            "raw `key` was removed in v0.5.5 (deprecated v0.5.4); "
-            "callers must use key_token"
+            "raw `key` was removed in v0.5.5 (deprecated v0.5.4); callers must use key_token"
         )
 
 

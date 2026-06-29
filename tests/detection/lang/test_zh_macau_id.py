@@ -1,7 +1,8 @@
 """Macau ID — `[1-9]/\\d{6}/\\d` (format-only validation)."""
-import pytest
-from argus_redact import redact
 
+import pytest
+
+from argus_redact import redact
 
 VALID_MACAU = [
     "1/234567/8",
@@ -9,8 +10,8 @@ VALID_MACAU = [
     "7/000001/2",
 ]
 INVALID_MACAU = [
-    "0/234567/8",   # leading 0 not assigned
-    "1/234567",     # missing check
+    "0/234567/8",  # leading 0 not assigned
+    "1/234567",  # missing check
     "1/2345678/8",  # 7 body digits
 ]
 

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from .registry import PIITypeDef, list_types, register
 
-
 # ── Direct identifiers ──
 
 register(
@@ -99,7 +98,10 @@ register(
             "Detection requires NER (spaCy en_core_web_sm). No fast-mode list "
             "fallback. Faker uses US legal placeholder names (John Doe etc.)"
         ),
-        description="Person name (en) — NER-only detection; realistic mode requires mode='ner' or names=[...] override",
+        description=(
+            "Person name (en) — NER-only detection; realistic mode requires"
+            " mode='ner' or names=[...] override"
+        ),
     )
 )
 

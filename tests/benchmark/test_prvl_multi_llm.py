@@ -17,7 +17,7 @@ try:
 except ImportError:
     HAS_HTTPX = False
 
-from argus_redact import redact
+from argus_redact import redact  # noqa: E402
 
 POE_API_URL = "https://api.poe.com/v1/chat/completions"
 
@@ -54,7 +54,9 @@ TEST_CASES = [
     {
         "id": "qa_en",
         "text": "John Smith, SSN 123-45-6789, works at Google, diagnosed with diabetes",
-        "prompt": "Based on the following info, what health condition does this person have? {text}",
+        "prompt": (
+            "Based on the following info, what health condition does this person have? {text}"
+        ),
         "lang": "en",
         "pii": ["123-45-6789"],
         "task_type": "extract",

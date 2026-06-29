@@ -21,9 +21,9 @@ from argus_redact import redact
 @pytest.mark.parametrize(
     "text",
     [
-        "北京某某科技咨询管理有限公司，" * 8000,   # ~120 KB legit org-heavy
-        "某" * 100000,                               # long CJK run, no org suffix
-        "北京" + "有限责任" * 30000,                  # repeated partial suffix, never completes
+        "北京某某科技咨询管理有限公司，" * 8000,  # ~120 KB legit org-heavy
+        "某" * 100000,  # long CJK run, no org suffix
+        "北京" + "有限责任" * 30000,  # repeated partial suffix, never completes
     ],
     ids=["legit-orgs", "no-suffix", "partial-suffix"],
 )

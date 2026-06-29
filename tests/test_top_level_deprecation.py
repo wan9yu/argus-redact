@@ -3,11 +3,13 @@
 Canonical home is argus_redact.compose.StreamingRedactor (since v0.6.7).
 Top-level symbol still resolves (lazy import); removal deferred to v1.0.
 """
+
 import warnings
 
 
 def test_top_level_streaming_redactor_emits_deprecation():
     import argus_redact
+
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         _ = argus_redact.StreamingRedactor
@@ -23,8 +25,10 @@ def test_top_level_streaming_redactor_still_resolves():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         import argus_redact
+
         cls = argus_redact.StreamingRedactor
         from argus_redact.compose import StreamingRedactor as canonical
+
         assert cls is canonical, "top-level must resolve to compose.StreamingRedactor"
 
 
@@ -33,12 +37,15 @@ def test_compose_streaming_redactor_silent():
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         from argus_redact.compose import StreamingRedactor  # noqa
+
         assert not any(issubclass(wi.category, DeprecationWarning) for wi in w)
 
 
 def test_unknown_top_level_attribute_raises_attributeerror():
     """__getattr__ must still raise AttributeError for genuinely unknown names."""
-    import argus_redact
     import pytest
+
+    import argus_redact
+
     with pytest.raises(AttributeError, match="no attribute"):
         argus_redact.this_does_not_exist  # noqa

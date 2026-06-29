@@ -1,6 +1,7 @@
 """v0.6.8 Presidio bridge routes through public redact(), inheriting
 pipeline guarantees that the previous direct-merger+replace path skipped.
 """
+
 from __future__ import annotations
 
 import pytest

@@ -100,9 +100,9 @@ def test_overclaim_guard_is_not_vacuous():
         "guard failed to catch an unqualified English umbrella claim"
     )
     # A scoped umbrella claim must pass (no false positive on honest docs).
-    assert not _unqualified_claims(
-        "港澳台证件全覆盖（暂未覆盖部分边缘情况，见路线图）。"
-    ), "guard false-flagged a properly-scoped Chinese claim"
+    assert not _unqualified_claims("港澳台证件全覆盖（暂未覆盖部分边缘情况，见路线图）。"), (
+        "guard false-flagged a properly-scoped Chinese claim"
+    )
     # An individual shipped type must never trip the umbrella guard.
     assert not _unqualified_claims("支持香港居民身份证。"), (
         "guard false-flagged an individual (shipped) ID type"

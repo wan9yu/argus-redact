@@ -79,6 +79,7 @@ def _resolve_default_strategy(entity_type: str) -> str:
     """
     # Lazy import to avoid circular: registry imports types, types reference replacer
     from argus_redact.specs.registry import lookup
+
     typedef_list = lookup(entity_type)
     if typedef_list:
         return typedef_list[0].strategy
@@ -301,8 +302,7 @@ def _build_type_info(
     # The core reads only `entity.type`; convert the dataclass entities into the
     # Rust PatternMatch the binding expects (same idiom as `replace()` / merger).
     rust_entities = [
-        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer)
-        for e in entities
+        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
     ]
     # Per-type defaults from the live registry (SSOT; includes runtime adapter
     # types). Resolve once per distinct detected type — the same lookups the
@@ -318,9 +318,7 @@ def _build_type_info(
             "prefix": DEFAULT_PREFIXES.get(e.type, e.type.upper()[:4]),
             "category_label": DEFAULT_CATEGORY_LABEL.get(e.type, f"[{e.type}]"),
         }
-    info: dict[str, dict] = _core.build_type_info(
-        rust_entities, config, langs, registry_defaults
-    )
+    info: dict[str, dict] = _core.build_type_info(rust_entities, config, langs, registry_defaults)
 
     # Custom-adapter faker overlay (the only Python-side piece). For every
     # realistic type, re-run the SAME single lang-preference pass the built-in
@@ -397,8 +395,7 @@ def replace(
     # Convert the dataclass entities into the Rust PatternMatch the binding
     # expects (same idiom as pure/merger.py). `_RustPM` is resolved at import.
     rust_entities = [
-        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer)
-        for e in entities
+        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
     ]
 
     redacted, result_key, aliases, keep_downgraded = _core.replace(

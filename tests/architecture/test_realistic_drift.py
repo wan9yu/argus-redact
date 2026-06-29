@@ -14,11 +14,11 @@ import re
 import argus_redact._core as _core
 
 _RESERVED_RANGE_PATTERNS = dict(_core.reserved_range_patterns())
-from argus_redact.specs import en as _en  # noqa: F401  ensure en registry loaded
-from argus_redact.specs import shared as _shared  # noqa: F401
-from argus_redact.specs import zh as _zh  # noqa: F401
-from argus_redact.specs.profiles import get_profile
-from argus_redact.specs.registry import lookup
+from argus_redact.specs import en as _en  # noqa: E402,F401  ensure en registry loaded
+from argus_redact.specs import shared as _shared  # noqa: E402,F401
+from argus_redact.specs import zh as _zh  # noqa: E402,F401
+from argus_redact.specs.profiles import get_profile  # noqa: E402
+from argus_redact.specs.registry import lookup  # noqa: E402
 
 _BUILTIN_FAKER_NAMES = frozenset(_core.builtin_faker_names())
 
@@ -113,7 +113,8 @@ class TestRealisticDrift:
                 )
                 assert scanner_pattern.search(fake), (
                     f"Faker for ({lang}, {type_name}) salt={seed} produced {fake!r} "
-                    f"which does not match scanner {scanner_key}: {_RESERVED_RANGE_PATTERNS[scanner_key]}"
+                    f"which does not match scanner {scanner_key}: "
+                    f"{_RESERVED_RANGE_PATTERNS[scanner_key]}"
                 )
 
     def test_ipv6_faker_should_match_v6_scanner(self):

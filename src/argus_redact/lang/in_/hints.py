@@ -8,20 +8,20 @@ from __future__ import annotations
 
 import re
 
-KINSHIP_PREFIXES: tuple[str, ...] = (
-    "my ",
-)
+KINSHIP_PREFIXES: tuple[str, ...] = ("my ",)
 
 # Exact-match kinship terms common in Indian English.
-KINSHIP: frozenset[str] = frozenset({
-    "my papa",
-    "my mummy",
-    "my mama",
-    "my didi",
-    "my bhaiya",
-    "my chacha",
-    "my mausi",
-})
+KINSHIP: frozenset[str] = frozenset(
+    {
+        "my papa",
+        "my mummy",
+        "my mama",
+        "my didi",
+        "my bhaiya",
+        "my chacha",
+        "my mausi",
+    }
+)
 
 COMMAND_PATTERNS: tuple[re.Pattern, ...] = (
     re.compile(

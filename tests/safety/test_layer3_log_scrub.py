@@ -5,14 +5,12 @@ catches it and continues with L1+L2. The log line for that failure must record
 only the exception TYPE — never a full traceback (``exc_info=True``), which can
 embed input text passed through the adapter call frames.
 """
+
 from __future__ import annotations
 
 import logging
 
-import pytest
-
 from argus_redact import redact
-
 
 # Marker chosen to look like a secret in the user's input. If a traceback is
 # logged, this string can surface in the exception's args/frames.
@@ -46,9 +44,7 @@ def test_l3_failure_logs_exception_type_not_traceback(monkeypatch, caplog):
             warnings.simplefilter("ignore")
             redact(_SECRET, lang="en", mode="auto", salt=b"\x00" * 32)
 
-    l3_records = [
-        rec for rec in caplog.records if "Layer 3" in rec.getMessage()
-    ]
+    l3_records = [rec for rec in caplog.records if "Layer 3" in rec.getMessage()]
     assert l3_records, "expected a Layer-3 failure log record"
     rec = l3_records[0]
 

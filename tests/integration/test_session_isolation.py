@@ -6,6 +6,7 @@ when their paired Redact helper has not yet produced a key, or has been
 .reset(). This catches the audit HIGH finding about silent cross-session
 PII bridging when the helper is reused across users without reset.
 """
+
 from __future__ import annotations
 
 import re
@@ -18,6 +19,7 @@ from argus_redact.integrations.langchain import RedactRunnable, RestoreRunnable
 from argus_redact.integrations.llamaindex import RedactTransform, RestoreTransform
 
 # ---------- LangChain ----------
+
 
 def test_langchain_happy_path_roundtrip():
     """Single session: redact → restore returns original verbatim."""
@@ -68,6 +70,7 @@ def test_langchain_docstring_states_single_session():
     doc = (RedactRunnable.__doc__ or "") + " " + (RestoreRunnable.__doc__ or "")
     # Module-level docstring also counts
     import argus_redact.integrations.langchain as mod
+
     doc += " " + (mod.__doc__ or "")
     assert re.search(r"single[- ]?session", doc, re.IGNORECASE), (
         "LangChain integration docstrings must explicitly mark single-session "
@@ -90,6 +93,7 @@ def test_langchain_no_dead_contextvar_code():
 
 
 # ---------- LlamaIndex ----------
+
 
 def test_llamaindex_happy_path_roundtrip():
     redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
@@ -118,6 +122,7 @@ def test_llamaindex_restore_after_reset_raises():
 
 def test_llamaindex_docstring_states_single_session():
     import argus_redact.integrations.llamaindex as mod
+
     doc = (
         (mod.__doc__ or "")
         + " "

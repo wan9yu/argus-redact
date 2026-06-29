@@ -61,6 +61,7 @@ _DEPRECATED_TOP_LEVEL = {"StreamingRedactor"}
 def __getattr__(name):
     if name in _DEPRECATED_TOP_LEVEL:
         import warnings
+
         warnings.warn(
             f"argus_redact.{name} top-level import is deprecated and will be "
             f"removed in v1.0. Use `from argus_redact.compose import {name}` instead.",
@@ -68,5 +69,6 @@ def __getattr__(name):
             stacklevel=2,
         )
         from argus_redact.compose import StreamingRedactor
+
         return StreamingRedactor
     raise AttributeError(f"module 'argus_redact' has no attribute {name!r}")

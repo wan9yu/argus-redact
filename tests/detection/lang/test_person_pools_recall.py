@@ -49,8 +49,7 @@ class TestEnRecall:
         # adjacent phone is kept as a belt-and-suspenders signal. The hyphenated
         # token still tokenizes as ONE token (the recall gain being pinned).
         assert any(
-            "Sartre" in t
-            for t in _redacted_names("Jean-Paul Sartre, phone 4155551234", "en")
+            "Sartre" in t for t in _redacted_names("Jean-Paul Sartre, phone 4155551234", "en")
         )
 
     def test_japanese_hiro_suzuki(self):
@@ -62,9 +61,7 @@ class TestEnRecall:
         # pool-independent signal), so fast-mode L1 emits it on its own (Rossi is
         # the pool-growth surname being pinned). The phone is kept as an extra
         # corroborating signal.
-        assert any(
-            "Rossi" in t for t in _redacted_names("Marco Rossi, phone 4155551234", "en")
-        )
+        assert any("Rossi" in t for t in _redacted_names("Marco Rossi, phone 4155551234", "en"))
 
     def test_south_asian_priya_sharma(self):
         assert any("Sharma" in t for t in _redacted_names("Priya Sharma", "en"))

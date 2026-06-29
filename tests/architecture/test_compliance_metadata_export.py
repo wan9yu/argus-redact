@@ -4,6 +4,7 @@ Catches the failure mode: a future contributor adds a new PII type but
 forgets to set pipl_articles, leaking past the smoke test because risk
 assessment still functions on default-empty articles.
 """
+
 from __future__ import annotations
 
 from argus_redact import (
@@ -46,9 +47,7 @@ def test_gdpr_special_categories_covers_every_registered_type():
 
 def test_gdpr_special_categories_values_are_bool():
     for name, flag in GDPR_SPECIAL_CATEGORIES.items():
-        assert isinstance(flag, bool), (
-            f"{name!r} GDPR flag is {type(flag).__name__}, expected bool"
-        )
+        assert isinstance(flag, bool), f"{name!r} GDPR flag is {type(flag).__name__}, expected bool"
 
 
 def test_hipaa_phi_categories_covers_every_registered_type():

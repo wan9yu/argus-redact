@@ -77,7 +77,7 @@ class TestSemanticModelProfileFloors:
         silently drops every semantic detection it makes, rendering the L3 layer
         a no-op for that model.
         """
-        from argus_redact.impure.model_profiles import PROFILES, _DEFAULT_PROFILE
+        from argus_redact.impure.model_profiles import _DEFAULT_PROFILE, PROFILES
         from argus_redact.impure.semantic import detect_semantic
 
         sig = inspect.signature(detect_semantic)

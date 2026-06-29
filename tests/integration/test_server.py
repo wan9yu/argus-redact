@@ -11,15 +11,14 @@ pytestmark = pytest.mark.skipif(not HAS_STARLETTE, reason="starlette not install
 
 @pytest.fixture(scope="module")
 def client():
-    from starlette.testclient import TestClient
-
-    from argus_redact.server import create_app
-
     # v0.6.2: server refuses to start without ARGUS_API_KEY; allow_no_auth=True
     # opts out for local/in-process testing.
     import warnings
 
+    from starlette.testclient import TestClient
+
     from argus_redact import SecurityWarning
+    from argus_redact.server import create_app
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SecurityWarning)

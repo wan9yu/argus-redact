@@ -35,7 +35,9 @@ def test_intl_type_registered_with_compliance(name, expected):
     assert tds, f"{name} is not registered (specs/intl.py not loaded?)"
     td = tds[0]
     assert td.sensitivity == sens, f"{name} sensitivity {td.sensitivity} != {sens}"
-    assert td.gdpr_special_category is gdpr, f"{name} gdpr_special {td.gdpr_special_category} != {gdpr}"
+    assert td.gdpr_special_category is gdpr, (
+        f"{name} gdpr_special {td.gdpr_special_category} != {gdpr}"
+    )
     assert td.hipaa_phi_category == hipaa, f"{name} hipaa {td.hipaa_phi_category!r} != {hipaa!r}"
     # PIPL articles are auto-derived and must be non-empty for any registered type
     # (the bug emitted no articles at all for these foreign IDs).
@@ -63,7 +65,5 @@ def test_foreign_tax_id_no_longer_understated():
     # the any-lang name fallback keeps it working under other langs).
     import argus_redact._core as _core
 
-    _score, _level, _ents, _reasons, pipl, _gdpr, _hipaa = _core.assess_risk(
-        [("tax_id", 3)], "de"
-    )
+    _score, _level, _ents, _reasons, pipl, _gdpr, _hipaa = _core.assess_risk([("tax_id", 3)], "de")
     assert pipl, "de tax_id must carry PIPL articles after registration"

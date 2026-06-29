@@ -9,7 +9,8 @@ byte count and language. It reuses the same throughput corpora as
 
 Usage:
     python tests/benchmark/perf_profile.py --output tests/benchmark/results/perf_profile_0.7.16.json
-    python tests/benchmark/perf_profile.py --output ... --iterations 500 --platform "Apple M1 Max" --commit abc1234
+    python tests/benchmark/perf_profile.py --output ... --iterations 500
+        --platform "Apple M1 Max" --commit abc1234
 """
 
 from __future__ import annotations
@@ -70,11 +71,11 @@ def profile(*, iterations: int = 300, warmup: int = 20) -> dict:
     workloads: dict[str, dict] = {}
     for label, (lang, text) in _THROUGHPUT_CORPUS.items():
 
-        def _redact(t=text, l=lang):
-            return redact(t, salt=_BENCH_SALT, mode="fast", lang=l)
+        def _redact(t=text, lng=lang):
+            return redact(t, salt=_BENCH_SALT, mode="fast", lang=lng)
 
-        def _detect(t=text, l=lang):
-            return _core.detect_l1(t, [l], [])
+        def _detect(t=text, lng=lang):
+            return _core.detect_l1(t, [lng], [])
 
         workloads[label] = {
             "lang": lang,

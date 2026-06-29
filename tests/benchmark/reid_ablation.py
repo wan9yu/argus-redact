@@ -10,6 +10,7 @@ measurement to order the build.
 Run (needs an LLM backend; key from env, never committed):
     ARGUS_REID_EVAL=1 python -m tests.benchmark.reid_ablation --provider deepseek
 """
+
 from __future__ import annotations
 
 import argparse
@@ -30,25 +31,49 @@ _STRIP = {
 # Eval-only (NOT detection) — isolate each signal's re-id contribution.
 _STRIP_EN = {
     "occupation": [
-        r"(?i)pastry chef", r"(?i)software engineer", r"(?i)data scientist",
+        r"(?i)pastry chef",
+        r"(?i)software engineer",
+        r"(?i)data scientist",
         r"(?i)(?:high-school|high school) (?:mathematics|physics|english) teacher",
         r"(?i)teaches? (?:high-school|high school) (?:mathematics|physics|english)",
-        r"(?i)(?:icu|emergency-room|registered) nurse", r"(?i)accountant",
-        r"(?i)lawyer", r"(?i)graphic designer", r"(?i)civil engineer",
-        r"(?i)electrician", r"(?i)project manager", r"(?i)physical therapist",
+        r"(?i)(?:icu|emergency-room|registered) nurse",
+        r"(?i)accountant",
+        r"(?i)lawyer",
+        r"(?i)graphic designer",
+        r"(?i)civil engineer",
+        r"(?i)electrician",
+        r"(?i)project manager",
+        r"(?i)physical therapist",
     ],
     "condition": [
-        r"(?i)celiac disease", r"(?i)gluten intolerance", r"(?i)type 2 diabetes",
-        r"(?i)asthma", r"(?i)anxiety", r"(?i)hypertension|high blood pressure",
-        r"(?i)hypothyroidism", r"(?i)migraines?", r"(?i)eczema", r"(?i)anemia",
-        r"(?i)psoriasis", r"(?i)allergic to penicillin",
+        r"(?i)celiac disease",
+        r"(?i)gluten intolerance",
+        r"(?i)type 2 diabetes",
+        r"(?i)asthma",
+        r"(?i)anxiety",
+        r"(?i)hypertension|high blood pressure",
+        r"(?i)hypothyroidism",
+        r"(?i)migraines?",
+        r"(?i)eczema",
+        r"(?i)anemia",
+        r"(?i)psoriasis",
+        r"(?i)allergic to penicillin",
         r"(?i)knee .{0,20}surgery|injured my knee",
     ],
     "hobby": [
-        r"(?i)salsa dancing", r"(?i)restor\w* .{0,12}motorcycles", r"(?i)rock climbing",
-        r"(?i)playing chess", r"(?i)gardening", r"(?i)playing the piano",
-        r"(?i)running marathons?", r"(?i)surfing", r"(?i)photography",
-        r"(?i)cycling", r"(?i)baking", r"(?i)fishing", r"(?i)hiking",
+        r"(?i)salsa dancing",
+        r"(?i)restor\w* .{0,12}motorcycles",
+        r"(?i)rock climbing",
+        r"(?i)playing chess",
+        r"(?i)gardening",
+        r"(?i)playing the piano",
+        r"(?i)running marathons?",
+        r"(?i)surfing",
+        r"(?i)photography",
+        r"(?i)cycling",
+        r"(?i)baking",
+        r"(?i)fishing",
+        r"(?i)hiking",
     ],
 }
 
@@ -72,12 +97,20 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="re-id ablation — rank surviving quasi-identifiers by re-id leverage"
     )
-    ap.add_argument("--provider", choices=list(E.PROVIDERS), default=None,
-                    help="LLM backend (default: first with a key in env)")
+    ap.add_argument(
+        "--provider",
+        choices=list(E.PROVIDERS),
+        default=None,
+        help="LLM backend (default: first with a key in env)",
+    )
     ap.add_argument("--model", default=None, help="override model id")
     ap.add_argument("--limit", type=int, default=None, help="evaluate only the first N profiles")
-    ap.add_argument("--pool", choices=["zh", "en"], default="zh",
-                    help="closed-world fixture + prompt + strip table (default: zh)")
+    ap.add_argument(
+        "--pool",
+        choices=["zh", "en"],
+        default="zh",
+        help="closed-world fixture + prompt + strip table (default: zh)",
+    )
     args = ap.parse_args()
 
     # 1. Resolve provider (CLI arg, else reid_eval's "first with a key" logic).
@@ -92,15 +125,20 @@ def main() -> int:
     system = E.SYSTEM_EN if args.pool == "en" else E.SYSTEM
     prompt_fn = E.build_prompt_en if args.pool == "en" else E.build_prompt
     strip_table = _STRIP_EN if args.pool == "en" else _STRIP
-    variants = ["(none)", "occupation", "condition", "hobby"] if args.pool == "en" \
+    variants = (
+        ["(none)", "occupation", "condition", "hobby"]
+        if args.pool == "en"
         else ["(none)", "condition", "hobby", "city"]
+    )
 
     # 3. argus_fast baseline: redact each profile once, reuse the redacted strings
     #    across every ablation variant (reid_eval handles the (text, key) tuple).
     baseline = [(p["truth"], E.redactor_argus_fast(p["text"])) for p in profiles]
 
     print(f"\n[provider] {label} (model={model})")
-    print(f"[fixture] {len(candidates)} candidates, {len(baseline)} profiles (argus_fast baseline)\n")
+    print(
+        f"[fixture] {len(candidates)} candidates, {len(baseline)} profiles (argus_fast baseline)\n"
+    )
     print(f"{'strip':<14}{'re-id rate':<14}{'correct/N':<12}{'drop vs (none)'}")
     print("-" * 56)
 
@@ -122,7 +160,11 @@ def main() -> int:
         rate = (correct / n) if n else None
         rates[which] = rate
         base_rate = rates.get("(none)")
-        drop = (base_rate - rate) if (base_rate is not None and rate is not None and which != "(none)") else 0.0
+        drop = (
+            (base_rate - rate)
+            if (base_rate is not None and rate is not None and which != "(none)")
+            else 0.0
+        )
         if which != "(none)":
             drops[which] = drop
         rate_s = "n/a" if rate is None else f"{rate:.2%}"

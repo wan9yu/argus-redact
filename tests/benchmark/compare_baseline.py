@@ -12,7 +12,6 @@ import json
 import sys
 from pathlib import Path
 
-
 _THRESHOLD = 0.10  # regression gate: ±10% per workload (see docs/perf-history.md)
 
 

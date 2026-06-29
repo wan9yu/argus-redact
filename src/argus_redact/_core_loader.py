@@ -21,6 +21,7 @@ reference instead of duplicating the try/except themselves.
 
 try:
     from argus_redact import _core  # type: ignore[attr-defined]
+
     HAS_CORE = True
 except ImportError:
     _core = None  # type: ignore[assignment]

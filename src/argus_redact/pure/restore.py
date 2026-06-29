@@ -23,6 +23,7 @@ def check_restore_safety(
     Delegated to the Rust core (``_core.check_restore_safety``).
     """
     from argus_redact._core import check_restore_safety as _rust_check
+
     return _rust_check(redacted, llm_output, key)
 
 

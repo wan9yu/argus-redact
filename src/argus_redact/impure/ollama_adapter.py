@@ -66,6 +66,7 @@ def _validate_ollama_host(base_url: str) -> None:
             stacklevel=2,
         )
 
+
 SYSTEM_PROMPT = """你是隐私分析专家。分析文本中所有隐含的敏感个人信息。
 
 检测类型（用英文返回 type）：
@@ -76,7 +77,8 @@ SYSTEM_PROMPT = """你是隐私分析专家。分析文本中所有隐含的敏�
 - sexual_orientation: 暗示性取向、亲密关系模式
 - criminal: 暗示违法经历、服刑、释放后处境
 - biometric: 暗示生物特征数据采集（刷脸、指纹等）
-- gender: 通过生理特征推断性别。重要：怀孕/产假/预产期→female；前列腺/精子→male。如果文本同时涉及medical和gender，两个type都要返回
+- gender: 通过生理特征推断性别。重要：怀孕/产假/预产期→female；前列腺/精子→male。
+  如果文本同时涉及medical和gender，两个type都要返回
 - person: 昵称、别名、非正式称呼（如"老王"、"小李"）
 - location: 隐含的地点引用（如"那个地方"、"我们公司"）
 

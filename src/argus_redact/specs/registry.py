@@ -56,7 +56,9 @@ class PIITypeDef:
     # here is invoked mid-loop via the Rust PyFakerFactory callback (receives a
     # _core.ShakeRng, FakerResolution::Custom) and must be deterministic from
     # that rng.  Set faker_reserved only for adapter-defined (custom) types.
-    faker_reserved: Callable | None = None  # (value: str, rng: _core.ShakeRng) -> tuple[str, list[str]]
+    faker_reserved: Callable | None = (
+        None  # (value: str, rng: _core.ShakeRng) -> tuple[str, list[str]]
+    )
 
     # ── Risk / Compliance ──
     sensitivity: int = 2  # 1=low, 2=medium, 3=high, 4=critical
@@ -79,6 +81,7 @@ class PIITypeDef:
         with their `validate` callable already re-attached by the loader.
         """
         from argus_redact.lang._loader import core_patterns
+
         return [dict(p) for p in core_patterns(self.lang) if p.get("type") == self.name]
 
     @property
@@ -177,5 +180,5 @@ def lookup(name: str) -> list[PIITypeDef]:
 def list_types(lang: str | None = None) -> list[PIITypeDef]:
     """List all registered PII types, optionally filtered by language."""
     if lang:
-        return [v for (l, _), v in _REGISTRY.items() if l == lang]
+        return [v for (lng, _), v in _REGISTRY.items() if lng == lang]
     return list(_REGISTRY.values())

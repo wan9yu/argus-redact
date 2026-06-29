@@ -42,23 +42,17 @@ class TestUniversalPIPLArticles:
     def test_every_pii_type_includes_art_13(self):
         # PIPL Art.13: lawful basis for processing — universal for any PII.
         for td in list_types():
-            assert "PIPL Art.13" in td.pipl_articles, (
-                f"{td.lang}/{td.name} missing PIPL Art.13"
-            )
+            assert "PIPL Art.13" in td.pipl_articles, f"{td.lang}/{td.name} missing PIPL Art.13"
 
     def test_every_pii_type_includes_art_28(self):
         # PIPL Art.28: de-identification requirement — universal.
         for td in list_types():
-            assert "PIPL Art.28" in td.pipl_articles, (
-                f"{td.lang}/{td.name} missing PIPL Art.28"
-            )
+            assert "PIPL Art.28" in td.pipl_articles, f"{td.lang}/{td.name} missing PIPL Art.28"
 
     def test_every_pii_type_includes_art_56(self):
         # PIPL Art.56: record-keeping obligation — universal.
         for td in list_types():
-            assert "PIPL Art.56" in td.pipl_articles, (
-                f"{td.lang}/{td.name} missing PIPL Art.56"
-            )
+            assert "PIPL Art.56" in td.pipl_articles, f"{td.lang}/{td.name} missing PIPL Art.56"
 
 
 class TestSensitivityDrivenPIPLArticles:
@@ -145,13 +139,16 @@ class TestHIPAACategories:
     def test_key_hipaa_categories_covered(self):
         # Sanity check: the most important HIPAA categories must have at
         # least one type mapping to them.
-        all_categories = {td.hipaa_phi_category for td in list_types()
-                          if td.hipaa_phi_category}
-        for required in ("names", "phone_numbers", "ssn", "medical_record",
-                         "email_addresses", "geographic"):
-            assert required in all_categories, (
-                f"No type maps to HIPAA category {required!r}"
-            )
+        all_categories = {td.hipaa_phi_category for td in list_types() if td.hipaa_phi_category}
+        for required in (
+            "names",
+            "phone_numbers",
+            "ssn",
+            "medical_record",
+            "email_addresses",
+            "geographic",
+        ):
+            assert required in all_categories, f"No type maps to HIPAA category {required!r}"
 
 
 class TestDefaults:

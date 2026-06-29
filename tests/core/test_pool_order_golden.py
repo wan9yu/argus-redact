@@ -11,14 +11,24 @@ tests survive Task 13's deletion of the Python pool modules.
 
 import argus_redact._core as _core
 
-
 # ── zh person names ──────────────────────────────────────────────────────────
+
 
 def test_reserved_person_names_zh_order():
     assert list(_core.reserved_person_names_zh()) == [
-        "张三", "李四", "王五", "赵六", "钱七",
-        "焦大", "茗烟", "傻大姐", "彩云", "佩凤",
-        "偕鸳", "卷帘", "毕马温",
+        "张三",
+        "李四",
+        "王五",
+        "赵六",
+        "钱七",
+        "焦大",
+        "茗烟",
+        "傻大姐",
+        "彩云",
+        "佩凤",
+        "偕鸳",
+        "卷帘",
+        "毕马温",
     ]
 
 
@@ -41,6 +51,7 @@ def test_reserved_person_names_aliases_zh_order():
 
 
 # ── zh cities ────────────────────────────────────────────────────────────────
+
 
 def test_reserved_cities_zh_order():
     assert list(_core.reserved_cities_zh()) == [
@@ -66,11 +77,19 @@ def test_reserved_addresses_zh_aliases_order():
 
 # ── en person names ──────────────────────────────────────────────────────────
 
+
 def test_reserved_person_names_en_order():
     assert list(_core.reserved_person_names_en()) == [
-        "John Doe", "Jane Doe", "Jane Roe", "John Roe",
-        "Richard Roe", "Mary Roe", "John Q. Public",
-        "Alice Liddell", "Pat Roe", "Sandy Doe",
+        "John Doe",
+        "Jane Doe",
+        "Jane Roe",
+        "John Roe",
+        "Richard Roe",
+        "Mary Roe",
+        "John Q. Public",
+        "Alice Liddell",
+        "Pat Roe",
+        "Sandy Doe",
     ]
 
 
@@ -90,6 +109,7 @@ def test_reserved_person_names_aliases_en_order():
 
 
 # ── en addresses ─────────────────────────────────────────────────────────────
+
 
 def test_reserved_addresses_en_order():
     assert list(_core.reserved_addresses_en()) == [
@@ -115,6 +135,7 @@ def test_reserved_addresses_en_aliases_order():
 
 # ── RFC / shared pools ───────────────────────────────────────────────────────
 
+
 def test_rfc2606_domains_order():
     assert list(_core.rfc2606_domains()) == [
         "example.com",
@@ -136,6 +157,7 @@ def test_rfc7042_mac_prefix():
 
 
 # ── zh document-ID single-value pools ────────────────────────────────────────
+
 
 def test_passport_prefixes_zh_order():
     assert list(_core.passport_prefixes_zh()) == ["E", "G"]

@@ -1,5 +1,8 @@
-import ast, pathlib
+import ast
+import pathlib
+
 PURE = pathlib.Path("src/argus_redact/pure")
+
 
 def test_no_pure_module_has_no_core_redaction_fallback():
     offenders = []

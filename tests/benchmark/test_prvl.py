@@ -181,7 +181,9 @@ class TestPRvLBenchmark:
             if d["tokens_lost"]:
                 print(f"  ⚠ {d['id']}: tokens lost {d['tokens_lost']}")
 
-        assert scores["privacy"] >= 1.0, f"Privacy score {scores['privacy']:.2%} below PRvL-Gold 100%"
+        assert scores["privacy"] >= 1.0, (
+            f"Privacy score {scores['privacy']:.2%} below PRvL-Gold 100%"
+        )
 
     def test_should_achieve_full_reversibility(self):
         scores = _compute_prvl(BENCHMARK_TEXTS)
@@ -223,7 +225,9 @@ LLM_PROMPTS = [
     {
         "id": "qa_en",
         "text": "John Smith, SSN 123-45-6789, works at Google, diagnosed with diabetes",
-        "prompt_template": "Based on the following info, what health condition does this person have? {text}",
+        "prompt_template": (
+            "Based on the following info, what health condition does this person have? {text}"
+        ),
         "lang": "en",
         "pii": ["123-45-6789"],
         "task_type": "extract",
@@ -294,9 +298,6 @@ class TestReversibilityThroughLLM:
 
             # Send to LLM
             llm_output = _query_llm(prompt)
-
-            # Try to restore
-            restored_output = restore(llm_output, key)
 
             # Count pseudonym survival
             for replacement in key.keys():

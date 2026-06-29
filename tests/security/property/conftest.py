@@ -2,7 +2,6 @@
 
 from hypothesis import HealthCheck, settings
 
-
 # Default settings for property tests. Per-test override via:
 #     @settings(parent=PROPERTY_SETTINGS, max_examples=200)
 PROPERTY_SETTINGS = settings(

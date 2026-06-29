@@ -8,6 +8,7 @@ at-1.0 promise depends on this.
 Mechanism: AST-walk every .py under pure/, collect import targets, fail if
 any matches the forbidden set below.
 """
+
 from __future__ import annotations
 
 import ast
@@ -17,29 +18,31 @@ import pytest
 
 _PURE_DIR = Path(__file__).parents[2] / "src" / "argus_redact" / "pure"
 
-_FORBIDDEN = frozenset({
-    # Higher layers in argus-redact's own taxonomy
-    "argus_redact.glue",
-    "argus_redact.impure",
-    "argus_redact.integrations",
-    # Filesystem I/O — the pure layer takes in-memory data only; any
-    # path → bytes/text load belongs in glue. _safe_io is the project's
-    # filesystem helper, so importing it from pure/ is itself a violation.
-    "argus_redact._safe_io",
-    # Network I/O
-    "httpx",
-    "requests",
-    "urllib.request",
-    "urllib3",
-    "http.client",
-    "socket",
-    # Process / subprocess
-    "subprocess",
-    # LLM clients
-    "ollama",
-    "anthropic",
-    "openai",
-})
+_FORBIDDEN = frozenset(
+    {
+        # Higher layers in argus-redact's own taxonomy
+        "argus_redact.glue",
+        "argus_redact.impure",
+        "argus_redact.integrations",
+        # Filesystem I/O — the pure layer takes in-memory data only; any
+        # path → bytes/text load belongs in glue. _safe_io is the project's
+        # filesystem helper, so importing it from pure/ is itself a violation.
+        "argus_redact._safe_io",
+        # Network I/O
+        "httpx",
+        "requests",
+        "urllib.request",
+        "urllib3",
+        "http.client",
+        "socket",
+        # Process / subprocess
+        "subprocess",
+        # LLM clients
+        "ollama",
+        "anthropic",
+        "openai",
+    }
+)
 
 
 def _imported_modules(tree: ast.AST) -> set[str]:

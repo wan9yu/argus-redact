@@ -3,6 +3,7 @@
 C2 deleted DEFAULT_STRATEGIES. Strategy is now read exclusively from
 PIITypeDef.strategy via _resolve_default_strategy(). DEFAULT_PREFIXES stays.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -10,14 +11,18 @@ import pytest
 from argus_redact.specs.registry import lookup
 
 
-@pytest.mark.parametrize("type_name,expected_strategy,expected_prefix", [
-    ("phone_landline", "mask", "LL"),
-    ("date", "remove", "DATE"),
-    ("url", "remove", "URL"),
-])
+@pytest.mark.parametrize(
+    "type_name,expected_strategy,expected_prefix",
+    [
+        ("phone_landline", "mask", "LL"),
+        ("date", "remove", "DATE"),
+        ("url", "remove", "URL"),
+    ],
+)
 def test_type_has_typedef_and_prefix_entries(type_name, expected_strategy, expected_prefix):
     """C2: typedef is the runtime SSOT; DEFAULT_PREFIXES still exists."""
     from argus_redact.pure.replacer import DEFAULT_PREFIXES, _resolve_default_strategy
+
     assert _resolve_default_strategy(type_name) == expected_strategy, (
         f"{type_name}: _resolve_default_strategy says "
         f"{_resolve_default_strategy(type_name)!r}, expected {expected_strategy!r}"
@@ -28,11 +33,14 @@ def test_type_has_typedef_and_prefix_entries(type_name, expected_strategy, expec
     )
 
 
-@pytest.mark.parametrize("type_name,expected_strategy", [
-    ("phone_landline", "mask"),
-    ("date", "remove"),
-    ("url", "remove"),
-])
+@pytest.mark.parametrize(
+    "type_name,expected_strategy",
+    [
+        ("phone_landline", "mask"),
+        ("date", "remove"),
+        ("url", "remove"),
+    ],
+)
 def test_type_has_typedef_entry(type_name, expected_strategy):
     """PIITypeDef.strategy is the single source of truth after C2."""
     typedef_list = lookup(type_name)

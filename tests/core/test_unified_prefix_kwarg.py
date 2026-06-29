@@ -1,4 +1,5 @@
 """v0.6.0: unified_prefix is a real kwarg, not a config-dict sentinel."""
+
 import pytest
 
 from argus_redact import redact

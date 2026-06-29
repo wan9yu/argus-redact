@@ -183,11 +183,11 @@ def throughput_profile(*, iterations: int = 500) -> dict:
     out: dict[str, dict] = {}
     for label, (lang, text) in _THROUGHPUT_CORPUS.items():
 
-        def _redact(t=text, l=lang):
-            return redact(t, salt=_BENCH_SALT, mode="fast", lang=l)
+        def _redact(t=text, lng=lang):
+            return redact(t, salt=_BENCH_SALT, mode="fast", lang=lng)
 
-        def _detect(t=text, l=lang):
-            return _core.detect_l1(t, [l], [])
+        def _detect(t=text, lng=lang):
+            return _core.detect_l1(t, [lng], [])
 
         red_p50 = _timeit_p50(_redact, iterations=iterations, warmup=20)
         det_p50 = _timeit_p50(_detect, iterations=iterations, warmup=20)
@@ -218,8 +218,8 @@ def end_to_end_fast(*, iterations: int = 500) -> dict:
     out: dict[str, dict] = {"_version": argus_redact.__version__}
     for label, (lang, text) in (("en_1kb", ("en", _EN_1KB)), ("zh_1kb", ("zh", _ZH_1KB))):
 
-        def _redact(t=text, l=lang):
-            return redact(t, salt=_BENCH_SALT, mode="fast", lang=l)
+        def _redact(t=text, lng=lang):
+            return redact(t, salt=_BENCH_SALT, mode="fast", lang=lng)
 
         p50 = _timeit_p50(_redact, iterations=iterations, warmup=20)
         out[label] = {
@@ -250,9 +250,7 @@ def main() -> None:
     }
 
     if args.mode in ("all", "component"):
-        report["component_ab"] = component_ab(
-            iterations=args.iterations or 2000
-        )
+        report["component_ab"] = component_ab(iterations=args.iterations or 2000)
     if args.mode in ("all", "throughput"):
         report["throughput"] = throughput_profile(iterations=args.iterations or 500)
     if args.mode == "e2e":

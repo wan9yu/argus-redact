@@ -4,6 +4,7 @@ No national format standard (varies by city) -> the type is anchor-required
 with a generous digit run. The anchor must include 账号/账户, not bare "公积金",
 so it does not match 公积金余额/amounts.
 """
+
 from __future__ import annotations
 
 import argus_redact.specs.zh as _zh  # noqa: F401  ensure registry loaded

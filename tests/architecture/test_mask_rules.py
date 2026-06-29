@@ -1,6 +1,7 @@
 """Tests for enterprise mask rules — configurable per-type masking."""
 
 import argus_redact._core as _core
+
 from argus_redact import redact
 
 

@@ -25,9 +25,7 @@ class TestIssue12VerbatimRepro:
         assert false_positives == [], f"任何评 should not be in key, got {key!r}"
         # "任何评" original text should still be in redacted (not replaced)
         # i.e., the user's "还有任何评论" stays mostly intact
-        assert "任何评论" in redacted, (
-            f"non-name 3-char must remain unredacted, got {redacted!r}"
-        )
+        assert "任何评论" in redacted, f"non-name 3-char must remain unredacted, got {redacted!r}"
 
         # And real PII still works
         assert "张伟" not in redacted, "张伟 must be redacted"

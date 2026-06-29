@@ -20,6 +20,7 @@ To regenerate after an intentional Layer 2 evolution:
     print('PatternMatch:', sorted(f.name for f in dataclasses.fields(c.PatternMatch)))
     "
 """
+
 import dataclasses
 import inspect
 
@@ -28,46 +29,50 @@ import pytest
 import argus_redact.compose as c
 
 COMPOSE_SIGNATURES = {
-    'prompt_anchor': "(key: 'dict', lang: 'str' = 'zh') -> 'str'",
-    'expand_aliases': "(key: 'dict', lang: 'str' = 'zh') -> 'dict'",
-    'register_pii_type': "(typedef: 'PIITypeDef') -> 'PIITypeDef'",
+    "prompt_anchor": "(key: 'dict', lang: 'str' = 'zh') -> 'str'",
+    "expand_aliases": "(key: 'dict', lang: 'str' = 'zh') -> 'dict'",
+    "register_pii_type": "(typedef: 'PIITypeDef') -> 'PIITypeDef'",
 }
 
-PIITYPEDEF_FIELDS = frozenset({
-    '_patterns',
-    'charset',
-    'checksum',
-    'counterexamples',
-    'description',
-    'examples',
-    'faker_reserved',
-    'format',
-    'gdpr_special_category',
-    'hipaa_phi_category',
-    'label',
-    'lang',
-    'length',
-    'mask_rule',
-    'name',
-    'pipl_articles',
-    'prefixes',
-    'sensitivity',
-    'separators',
-    'source',
-    'strategy',
-    'structure',
-    'suffixes',
-    'validate',
-})
+PIITYPEDEF_FIELDS = frozenset(
+    {
+        "_patterns",
+        "charset",
+        "checksum",
+        "counterexamples",
+        "description",
+        "examples",
+        "faker_reserved",
+        "format",
+        "gdpr_special_category",
+        "hipaa_phi_category",
+        "label",
+        "lang",
+        "length",
+        "mask_rule",
+        "name",
+        "pipl_articles",
+        "prefixes",
+        "sensitivity",
+        "separators",
+        "source",
+        "strategy",
+        "structure",
+        "suffixes",
+        "validate",
+    }
+)
 
-PATTERNMATCH_FIELDS = frozenset({
-    'confidence',
-    'end',
-    'layer',
-    'start',
-    'text',
-    'type',
-})
+PATTERNMATCH_FIELDS = frozenset(
+    {
+        "confidence",
+        "end",
+        "layer",
+        "start",
+        "text",
+        "type",
+    }
+)
 
 
 @pytest.mark.parametrize("name,expected", list(COMPOSE_SIGNATURES.items()))

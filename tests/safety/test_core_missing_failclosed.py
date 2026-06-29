@@ -1,5 +1,6 @@
 """If the compiled _core extension is missing, redact() must FAIL CLOSED (raise),
 never silently return the input unredacted (which would leak PII)."""
+
 import pytest
 
 

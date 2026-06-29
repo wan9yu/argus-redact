@@ -14,7 +14,6 @@ from argus_redact.pure.reserved_range_scanner import scan_for_pollution
 from argus_redact.specs.profiles import get_profile
 
 
-
 class PseudonymPollutionError(ValueError):
     """Raised when input to pseudonym-llm already contains reserved-range values.
 
@@ -81,7 +80,8 @@ def redact_pseudonym_llm(
     Same original value present in both `text` and `existing_key.values()` reuses
     the same fake. Used by ``StreamingRedactor`` for cross-chunk consistency.
 
-    `_pre_detected` (advanced) — entities already detected over `text`; skips internal detection (used by streaming detect-once).
+    `_pre_detected` (advanced) — entities already detected over `text`; skips internal detection
+    (used by streaming detect-once).
 
     `reserved_names` — overrides the canonical fake-name tables on a per-type
     basis. Pass ``{"person_zh": ()}`` to disable zh canonical-name pollution

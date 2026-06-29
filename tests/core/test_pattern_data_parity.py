@@ -5,11 +5,12 @@ registry). We freeze the v0.7.0 detection set; every migration step must reprodu
 byte-for-byte. This is the tripwire — structural pattern-dict comparison is unusable
 because `validate` callables become `validator` name strings.
 """
+
 import json
 from pathlib import Path
 
-from argus_redact.pure.patterns import match_patterns
 from argus_redact.glue.redact import _load_patterns
+from argus_redact.pure.patterns import match_patterns
 from argus_redact.specs.registry import list_types
 
 FIXTURE = Path(__file__).parent / "fixtures" / "pattern_detections_v070.json"
@@ -34,11 +35,13 @@ def _corpus_for_lang(lang: str) -> list[str]:
 
 def _detect(lang: str, text: str) -> list[dict]:
     results, near = match_patterns(text, _load_patterns(lang))
+
     def dump(ms, kind):
         return [
             {"kind": kind, "type": m.type, "text": m.text, "start": m.start, "end": m.end}
             for m in ms
         ]
+
     rows = dump(results, "hit") + dump(near, "near")
     rows.sort(key=lambda r: (r["start"], r["end"], r["type"], r["kind"]))
     return rows
@@ -63,7 +66,9 @@ def test_freeze_or_compare_detection_snapshot():
         FIXTURE.write_text(
             json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
         )
-        raise AssertionError("Wrote v0.7.0 detection snapshot — re-run to compare. COMMIT the fixture.")
+        raise AssertionError(
+            "Wrote v0.7.0 detection snapshot — re-run to compare. COMMIT the fixture."
+        )
     frozen = json.loads(FIXTURE.read_text(encoding="utf-8"))
     # A lang that silently drops out of `current` must FAIL, not pass vacuously.
     missing = set(frozen) - set(current)

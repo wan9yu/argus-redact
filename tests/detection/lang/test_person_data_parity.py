@@ -35,14 +35,13 @@ from __future__ import annotations
 
 import hashlib
 
-import pytest
-
 import argus_redact._core as _core
+import pytest
 
 # ── Frozen fingerprints (captured from the live Python sources at port time) ──
 
 EXPECTED_COUNTS = {
-    "surnames_zh": 146,        # distinct chars in SURNAMES string
+    "surnames_zh": 146,  # distinct chars in SURNAMES string
     "compound_surnames_zh": 16,
     "not_names_zh": 7534,
     "common_words_zh": 31257,
@@ -133,10 +132,11 @@ def _load_python_truth() -> dict[str, object] | None:
     from pathlib import Path
 
     try:
-        import argus_redact.lang.zh as _zh_pkg
         from argus_redact.lang.en.given_names import GIVEN_NAME_SET
         from argus_redact.lang.en.surnames import SURNAME_SET
         from argus_redact.lang.zh.surnames import COMPOUND_SURNAMES, SURNAMES
+
+        import argus_redact.lang.zh as _zh_pkg
 
         _zh_dir = Path(_zh_pkg.__file__).parent
         not_names = frozenset(

@@ -1,11 +1,12 @@
 """A Chinese-digit homograph char before an ASCII PII value must NOT break detection."""
+
 from argus_redact import redact
 
 
 def test_name_then_phone_no_separator():
     out, key = redact("张三13800138000", lang="zh", mode="fast", salt=42)
-    assert "13800138000" not in out          # phone redacted
-    assert "张三" not in out                  # name redacted (proximity restored)
+    assert "13800138000" not in out  # phone redacted
+    assert "张三" not in out  # name redacted (proximity restored)
     assert len(key) >= 2
 
 

@@ -83,7 +83,15 @@ class TestMessagesFailClosed:
         """A dict message with no 'content' key (e.g. OpenAI tool-call) raises TypeError."""
         body = {
             "messages": [
-                {"role": "assistant", "tool_calls": [{"id": "c1", "function": {"name": "f", "arguments": '{"phone":"13812345678"}'}}]},
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "c1",
+                            "function": {"name": "f", "arguments": '{"phone":"13812345678"}'},
+                        }
+                    ],
+                },
             ]
         }
         with pytest.raises(TypeError, match="content"):
@@ -137,6 +145,7 @@ class TestMessagesFailClosed:
         assert len(key) == 1
         # Restore round-trips
         from argus_redact import restore
+
         r1 = restore(c1, key)
         r2 = restore(c2, key)
         assert "13812345678" in r1

@@ -8,7 +8,8 @@ support and arbitrary unicode.
 
 from __future__ import annotations
 
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from argus_redact import redact_pseudonym_llm, restore
 from tests.security.property.conftest import PROPERTY_SETTINGS
@@ -21,9 +22,7 @@ from tests.security.property.conftest import PROPERTY_SETTINGS
 )
 def test_round_trip_zh(text, salt):
     """For arbitrary text under zh, full round-trip recovers the original."""
-    r = redact_pseudonym_llm(
-        text, salt=salt, lang="zh", _polluted_input_ok=True
-    )
+    r = redact_pseudonym_llm(text, salt=salt, lang="zh", _polluted_input_ok=True)
     assert restore(r.downstream_text, r.key) == text
 
 
@@ -34,7 +33,5 @@ def test_round_trip_zh(text, salt):
 )
 def test_round_trip_en(text, salt):
     """Same property under en."""
-    r = redact_pseudonym_llm(
-        text, salt=salt, lang="en", _polluted_input_ok=True
-    )
+    r = redact_pseudonym_llm(text, salt=salt, lang="en", _polluted_input_ok=True)
     assert restore(r.downstream_text, r.key) == text

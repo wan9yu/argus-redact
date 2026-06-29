@@ -206,6 +206,7 @@ class TestReplaceReturns3Tuple:
 
     def test_replace_no_aliases_out_kwarg(self):
         import pytest
+
         from argus_redact._types import PatternMatch
         from argus_redact.pure.replacer import replace
 

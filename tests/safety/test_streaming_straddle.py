@@ -141,7 +141,9 @@ def test_dense_boundaryless_forceflush_does_not_split_region():
 
 def _pem_key(body_lines: int = 3) -> str:
     """A syntactically valid OPENSSH PEM private key with ``body_lines`` b64 lines."""
-    body = "\n".join("b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAA" for _ in range(body_lines))
+    body = "\n".join(
+        "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAA" for _ in range(body_lines)
+    )
     return f"-----BEGIN OPENSSH PRIVATE KEY-----\n{body}\n-----END OPENSSH PRIVATE KEY-----"
 
 
@@ -171,16 +173,17 @@ def test_ssh_private_key_larger_than_buffer_not_leaked():
 
     # Line-by-line, END the final chunk with NO trailing newline.
     lines = key.split("\n")
-    chunks = [(l + "\n" if i + 1 < len(lines) else l) for i, l in enumerate(lines)]
+    chunks = [(ln + "\n" if i + 1 < len(lines) else ln) for i, ln in enumerate(lines)]
     out, _ = _stream(chunks, lang="en")
-    assert "-----BEGIN OPENSSH PRIVATE KEY-----" not in out, "BEGIN leaked (line-by-line, no trailing boundary)"
+    assert "-----BEGIN OPENSSH PRIVATE KEY-----" not in out, (
+        "BEGIN leaked (line-by-line, no trailing boundary)"
+    )
     assert "b3BlbnNzaC1" not in out, "body leaked (line-by-line, no trailing boundary)"
 
     # Single feed of the whole key, then flush — same guarantee.
     out2, _ = _stream([key], lang="en")
     assert "-----BEGIN OPENSSH PRIVATE KEY-----" not in out2, "BEGIN leaked (single feed)"
     assert "b3BlbnNzaC1" not in out2, "body leaked (single feed)"
-
 
 
 def test_ipv4_split_at_internal_dot_after_force_flush_no_leak():
@@ -289,9 +292,7 @@ def test_open_ended_entity_does_not_grow_buffer_unbounded():
     # Forward progress: across the run SOME downstream text was emitted (the
     # buffer drained at least once), not always "".
     assert emitted_any, "no downstream text ever emitted -- buffer never drained"
-    assert "a@b" not in out, (
-        "open-ended email head leaked raw across the forced bounded drain (C1)"
-    )
+    assert "a@b" not in out, "open-ended email head leaked raw across the forced bounded drain (C1)"
 
 
 def _mega_github_token(n: int) -> str:
@@ -336,8 +337,6 @@ def test_forceflush_megabuffer_typed_entity_no_leak_en():
         assert restore(out, r.aggregate_key()) == token, (
             f"restore round-trip failed at chunk size {size}"
         )
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -436,8 +435,7 @@ _FUZZ_TEXTS = [
     # backward location + closed phone
     "我以前就住在那里。上海浦东新区那一带。他的手机号13987654321。" + _FILLER * 12,
     # forward medical + job_title cluster + closed phone
-    "我之前吃过花生。后来过敏很严重。我同事是一名软件工程师。联系电话13611112222。"
-    + _FILLER * 12,
+    "我之前吃过花生。后来过敏很严重。我同事是一名软件工程师。联系电话13611112222。" + _FILLER * 12,
 ]
 
 
@@ -475,13 +473,20 @@ def test_region_with_long_url_token_sole_evidence_stream_equals_batch():
     # district is not evidence the district is a personal address.)
     long_url = "https://corp.example.com/" + ("p" * 160) + "?token=SECRETabc123"
     text = "西湖区。" + long_url + " 后面是一段中文结尾填充内容。"
-    out, _ = _stream([text[i:i+3] for i in range(0, len(text), 3)])
+    out, _ = _stream([text[i : i + 3] for i in range(0, len(text), 3)])
     from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
-    batch = redact_pseudonym_llm(text, salt=42, lang="zh", mode="fast", _polluted_input_ok=True).downstream_text
+
+    batch = redact_pseudonym_llm(
+        text, salt=42, lang="zh", mode="fast", _polluted_input_ok=True
+    ).downstream_text
     # The url_token itself is still redacted in both; the region is treated
     # identically in both (no stream-only leak).
-    assert ("西湖区" in out) == ("西湖区" in batch), f"stream/batch disagree on region: {out!r} vs {batch!r}"
-    assert "SECRETabc123" not in out and "SECRETabc123" not in batch, "url_token must be redacted in both"
+    assert ("西湖区" in out) == ("西湖区" in batch), (
+        f"stream/batch disagree on region: {out!r} vs {batch!r}"
+    )
+    assert "SECRETabc123" not in out and "SECRETabc123" not in batch, (
+        "url_token must be redacted in both"
+    )
 
 
 def test_fuzz_stream_oracle_is_a_real_guard(monkeypatch):

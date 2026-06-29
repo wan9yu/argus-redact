@@ -2,7 +2,8 @@
 
 Usage:
     python tests/benchmark/run_perf_budget.py --output current.json
-    python tests/benchmark/run_perf_budget.py --output current.json --platform Linux --commit abc1234
+    python tests/benchmark/run_perf_budget.py --output current.json \
+        --platform Linux --commit abc1234
 
 Output JSON shape lives in `tests/benchmark/baseline.json`.
 """
@@ -17,7 +18,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-
 
 _REPO_SRC = str(Path(__file__).parent.parent.parent / "src")
 

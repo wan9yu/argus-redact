@@ -210,9 +210,7 @@ class TestCrossLeafAliasKey:
 
         assert "13812345678" not in str(redacted)
         # One key entry for the one unique PII value
-        assert len(key) == 1, (
-            f"Expected 1 key entry for one unique phone, got {len(key)}: {key}"
-        )
+        assert len(key) == 1, f"Expected 1 key entry for one unique phone, got {len(key)}: {key}"
         # Both leaves carry the same alias
         alias = next(iter(key))
         assert alias in redacted["message1"], "alias absent from first leaf"
@@ -236,9 +234,7 @@ class TestCrossLeafAliasKey:
         redacted_csv, key = redact_csv(csv_text, mode="fast", salt=42, has_header=True)
 
         assert "13812345678" not in redacted_csv
-        assert len(key) == 1, (
-            f"Expected 1 key entry for one unique phone, got {len(key)}: {key}"
-        )
+        assert len(key) == 1, f"Expected 1 key entry for one unique phone, got {len(key)}: {key}"
 
     def test_repeated_entity_across_csv_cells_restores_fully(self):
         """restore_csv recovers the original phone from both cells."""

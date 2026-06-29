@@ -336,6 +336,4 @@ class TestSelfReferenceContainerHeadGuard:
 
         result = merge_entities(entities, text)
 
-        assert [(e.text, e.type, e.start, e.end) for e in result] == [
-            ("公司我", "person", 0, 3)
-        ]
+        assert [(e.text, e.type, e.start, e.end) for e in result] == [("公司我", "person", 0, 3)]

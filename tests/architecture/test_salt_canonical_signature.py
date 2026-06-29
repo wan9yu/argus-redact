@@ -3,6 +3,7 @@
 Hard-break enforcement: passing salt= to any public entry point must
 raise TypeError (Python's default for unexpected keyword arguments).
 """
+
 from __future__ import annotations
 
 import inspect
@@ -40,9 +41,7 @@ ENTRY_POINTS = [
 )
 def test_entry_point_uses_salt_not_seed(fn, label):
     sig = inspect.signature(fn)
-    assert "salt" in sig.parameters, (
-        f"{label} missing 'salt' parameter (v0.6.8 canonical name)"
-    )
+    assert "salt" in sig.parameters, f"{label} missing 'salt' parameter (v0.6.8 canonical name)"
     assert "seed" not in sig.parameters, (
         f"{label} still has 'seed' parameter. v0.6.8 hard-break: use 'salt'."
     )

@@ -3,7 +3,6 @@
 import json
 
 from argus_redact import __version__
-
 from tests.cli.conftest import run_cli
 
 
@@ -115,9 +114,7 @@ class TestRedactCommand:
 class TestRestoreCommand:
     def test_should_restore_stdin_when_pipe_mode(self, tmp_path):
         key_file = tmp_path / "key.json"
-        key_file.write_text(
-            json.dumps({"P-037": "王五", "P-012": "张三"}), encoding="utf-8"
-        )
+        key_file.write_text(json.dumps({"P-037": "王五", "P-012": "张三"}), encoding="utf-8")
 
         code, stdout, _ = run_cli(
             "restore",
@@ -246,8 +243,7 @@ class TestSetupCommand:
             _, stdout, stderr = run_cli("setup", "-l", lang)
             combined = stdout + stderr
             assert "regex only, no model to download" not in combined, (
-                f"setup for '{lang}' incorrectly claimed regex-only "
-                f"(it ships a spaCy NER adapter)"
+                f"setup for '{lang}' incorrectly claimed regex-only (it ships a spaCy NER adapter)"
             )
 
     def test_br_is_regex_only(self):

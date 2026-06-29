@@ -17,25 +17,30 @@ text_intent, self_reference_tier), and the consumers (`get_person_threshold` /
 import json
 from pathlib import Path
 
+import argus_redact._core as _core
 import pytest
 
-import argus_redact._core as _core
 from argus_redact import redact
 from argus_redact._types import PatternMatch as PyPM
 from argus_redact.glue.redact import _detect
 from argus_redact.pure.hints import (
     filter_self_reference as py_filter_self_reference,
+)
+from argus_redact.pure.hints import (
     get_person_threshold as py_get_person_threshold,
+)
+from argus_redact.pure.hints import (
     produce_hints as py_produce_hints,
 )
 from argus_redact.pure.replacer import (
-    DEFAULT_PREFIXES,
     _KEEP_WHITELIST,
+    DEFAULT_PREFIXES,
     _build_type_info,
 )
 
 FIXTURE_REDACT = Path(__file__).parent / "fixtures" / "redact_l1_v077.json"
 SALT = 42  # matches the T1 fixture freeze.
+
 
 def _tuples(matches):
     """(text, type, start, end, confidence, layer) per match, order-preserving."""
@@ -158,7 +163,10 @@ def test_filter_self_reference_tier1_keeps_all():
     hints = _core.produce_hints_l1(_fents_core(), "me and the 555 number")
     core = _core.filter_self_reference(_fents_core(), hints)
     py = py_filter_self_reference(_fents_py(), hints)
-    assert _tuples(core) == [("me", "self_reference", 0, 2, 1.0, 1), ("555", "phone", 11, 14, 1.0, 1)]
+    assert _tuples(core) == [
+        ("me", "self_reference", 0, 2, 1.0, 1),
+        ("555", "phone", 11, 14, 1.0, 1),
+    ]
     assert _tuples(core) == _tuples(py)
 
 
@@ -234,9 +242,7 @@ def _py_pre_merge_detect(text, langs, names=None):
             if not name:
                 continue
             for m in re.finditer(re.escape(name), text):
-                entities.append(
-                    PyPM(name, "person", m.start(), m.end(), 1.0, LAYER_REGEX)
-                )
+                entities.append(PyPM(name, "person", m.start(), m.end(), 1.0, LAYER_REGEX))
     return entities, near_misses
 
 
@@ -254,7 +260,9 @@ def _py_pre_merge_detect(text, langs, names=None):
     ],
 )
 def test_detect_l1_components_equal_python_pre_merge(text, lang, names):
-    layer1, person, _regions, _job_titles, _framework, hints, near_misses = _core.detect_l1(text, lang, names)
+    layer1, person, _regions, _job_titles, _framework, hints, near_misses = _core.detect_l1(
+        text, lang, names
+    )
     assert all(isinstance(m, _core.PatternMatch) for m in layer1 + person + near_misses)
     py_entities, py_near = _py_pre_merge_detect(text, lang, names)
     # layer1 ++ person == Python pre-merge entities (RAW order).
@@ -288,7 +296,9 @@ def test_detect_l1_default_names_is_empty():
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def _core_redact_fast(text, lang, *, config=None, names=None, types=None, types_exclude=None, unified_prefix=None):
+def _core_redact_fast(
+    text, lang, *, config=None, names=None, types=None, types_exclude=None, unified_prefix=None
+):
     """Drive `_core.redact_l1` the way the Python fast-mode pipeline does.
 
     Builds `type_info` / `custom_fakers` via the SAME `_build_type_info` the
@@ -350,7 +360,14 @@ _FIXTURE_CASES = [
     ),
     ("zh_keep", "我妈说她13812345678", "zh", None, None, None),
     ("zh_category", "北京市朝阳区三里屯", "zh", {"address": {"strategy": "category"}}, None, None),
-    ("zh_name_mask", "张三和欧阳明", "zh", {"person": {"strategy": "name_mask"}}, ["张三", "欧阳明"], None),
+    (
+        "zh_name_mask",
+        "张三和欧阳明",
+        "zh",
+        {"person": {"strategy": "name_mask"}},
+        ["张三", "欧阳明"],
+        None,
+    ),
     (
         "en_realistic",
         "John Smith SSN 123-45-6789 card 4111111111111111",
@@ -436,7 +453,7 @@ def test_redact_l1_type_filter_exclude_listed():
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-@pytest.mark.slow  # ~1MB scan; excluded from the canonical fast suite. Proves the find_iter no-panic fix.
+@pytest.mark.slow  # ~1MB scan; excluded from the canonical fast suite. Proves the find_iter no-panic fix.  # noqa: E501
 def test_redact_pathological_single_token_does_not_raise():
     """A ~1MB single token (within the 1MB cap) tripped fancy_regex's backtrack /
     stack-overflow limit, which used to escape as a PanicException from `redact`.

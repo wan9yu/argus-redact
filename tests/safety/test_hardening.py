@@ -88,10 +88,12 @@ def test_generate_pseudonym_function_gone_but_class_stays():
 
 def test_server_bearer_uses_compare_digest():
     """v0.6.10: constant-time comparison closes the timing side-channel."""
-    src = (Path(__file__).resolve().parents[2] / "src/argus_redact/server.py").read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parents[2] / "src/argus_redact/server.py").read_text(
+        encoding="utf-8"
+    )
     auth_idx = src.find("authorization")
     assert auth_idx != -1, "could not locate auth check in server.py"
-    auth_section = src[auth_idx:auth_idx + 800]
+    auth_section = src[auth_idx : auth_idx + 800]
     assert "compare_digest" in auth_section, (
         "server bearer comparison still uses raw != — must use secrets.compare_digest"
     )

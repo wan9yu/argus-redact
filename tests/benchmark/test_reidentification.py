@@ -10,13 +10,15 @@ have a backend (an API key, or a local Ollama). Asserts the harness runs end-to-
 and produces a well-formed snapshot; does NOT assert exact re-id rates (LLM
 nondeterminism — the directional result raw >= argus_fast is REPORTED, not gated).
 """
+
 import os
+
 import pytest
+
 # NOTE: httpx is imported LAZILY inside _backend_available() — it is not a declared
 # dependency, so a module-top import would crash collection (and red CI) on envs
 # without it, even though this test is deselected there.
-
-from tests.benchmark.reid_eval import PROVIDERS, available_providers, run_eval
+from tests.benchmark.reid_eval import available_providers, run_eval
 
 pytestmark = [pytest.mark.semantic, pytest.mark.slow]
 
@@ -32,6 +34,7 @@ def _backend_available() -> bool:
     if "ollama" in provs:
         try:
             import httpx
+
             httpx.get("http://localhost:11434/api/tags", timeout=2.0)
             return True
         except Exception:  # noqa: BLE001
@@ -41,7 +44,10 @@ def _backend_available() -> bool:
 
 @pytest.mark.skipif(
     not (_OPT_IN and _backend_available()),
-    reason="off by default — set ARGUS_REID_EVAL=1 (+ an LLM API key or local Ollama) to run; makes paid LLM calls",
+    reason=(
+        "off by default — set ARGUS_REID_EVAL=1 (+ an LLM API key or local Ollama)"
+        " to run; makes paid LLM calls"
+    ),
 )
 def test_reid_harness_runs_and_snapshot_is_wellformed():
     snap = run_eval(provider=None, model=None, limit=4)  # tiny subset → cheap

@@ -7,6 +7,7 @@ splitting + consistent-pseudonym linkage changes re-id. cf.
 docs/design-streaming-cross-turn-linkage.md. Off by default; ARGUS_REID_EVAL=1 +
 a provider key required. NO new engine behavior.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -14,7 +15,6 @@ import json
 import os
 import re
 import sys
-
 
 # Split on Chinese sentence/clause punctuation, KEEPING the terminator with its
 # clause so each turn stays a complete sentence-group (the StreamingRedactor
@@ -67,8 +67,7 @@ def _redact_multiturn(text: str, salt: int, n_turns: int = 3) -> tuple[str, int]
 
 def main() -> int:
     if os.environ.get("ARGUS_REID_EVAL") != "1":
-        print("multi-turn linkage measurement skipped "
-              "(set ARGUS_REID_EVAL=1 + a provider key)")
+        print("multi-turn linkage measurement skipped (set ARGUS_REID_EVAL=1 + a provider key)")
         return 0
 
     # REUSE reid_eval.py's real helpers — client, prompt, parser, fixture, salt.
@@ -77,13 +76,17 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="streaming cross-turn linkage measurement (research spike)"
     )
-    ap.add_argument("--provider", choices=list(E.PROVIDERS), default=None,
-                    help="LLM backend (default: first with a key in env)")
+    ap.add_argument(
+        "--provider",
+        choices=list(E.PROVIDERS),
+        default=None,
+        help="LLM backend (default: first with a key in env)",
+    )
     ap.add_argument("--model", default=None, help="override model id")
-    ap.add_argument("--limit", type=int, default=None,
-                    help="evaluate only the first N profiles")
-    ap.add_argument("--turns", type=int, default=3,
-                    help="max turns to split each persona into (default: 3)")
+    ap.add_argument("--limit", type=int, default=None, help="evaluate only the first N profiles")
+    ap.add_argument(
+        "--turns", type=int, default=3, help="max turns to split each persona into (default: 3)"
+    )
     args = ap.parse_args()
 
     # 1. Resolve provider (CLI arg, else reid_eval's "first with a key" logic).
@@ -123,7 +126,10 @@ def main() -> int:
                 redacted = p["text"]
             try:
                 reply = E.call_llm(
-                    base_url, model, key, E.SYSTEM,
+                    base_url,
+                    model,
+                    key,
+                    E.SYSTEM,
                     E.build_prompt(redacted, candidates),
                 )
             except Exception as e:  # noqa: BLE001
@@ -152,19 +158,25 @@ def main() -> int:
         delta = multi - base
         print(f"[delta] multi-turn re-id − single-shot = {delta:+.2%}")
         if abs(delta) < 0.05:
-            print("[interpretation] within noise: on this fixture, splitting across "
-                  "turns + consistent pseudonyms neither materially hides nor "
-                  "amplifies re-id — the signal is the residual quasi-identifier "
-                  "combination surviving both arms (cf. the design doc's linkage "
-                  "discussion).")
+            print(
+                "[interpretation] within noise: on this fixture, splitting across "
+                "turns + consistent pseudonyms neither materially hides nor "
+                "amplifies re-id — the signal is the residual quasi-identifier "
+                "combination surviving both arms (cf. the design doc's linkage "
+                "discussion)."
+            )
         elif delta > 0:
-            print("[interpretation] multi-turn transcript is MORE identifying — "
-                  "cross-turn accumulation / the consistent-pseudonym linkage "
-                  "signal raised re-id above the single-document baseline.")
+            print(
+                "[interpretation] multi-turn transcript is MORE identifying — "
+                "cross-turn accumulation / the consistent-pseudonym linkage "
+                "signal raised re-id above the single-document baseline."
+            )
         else:
-            print("[interpretation] multi-turn transcript is LESS identifying than "
-                  "single-shot on this fixture — likely a per-turn redaction-"
-                  "coverage artifact, not unlinkability; treat with caution.")
+            print(
+                "[interpretation] multi-turn transcript is LESS identifying than "
+                "single-shot on this fixture — likely a per-turn redaction-"
+                "coverage artifact, not unlinkability; treat with caution."
+            )
     else:
         print("[interpretation] no comparable runs (an arm errored or was empty).")
     return 0

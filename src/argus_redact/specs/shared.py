@@ -82,7 +82,10 @@ register(
         ),
         sensitivity=4,
         source="AWS IAM access key ID format",
-        description="AWS IAM access key ID (does not cover the secret access key — that needs keyword context)",
+        description=(
+            "AWS IAM access key ID (does not cover the secret access key"
+            " — that needs keyword context)"
+        ),
     )
 )
 
@@ -107,7 +110,10 @@ register(
         ),
         sensitivity=4,
         source="GitHub personal/OAuth/app token formats",
-        description="GitHub tokens: classic PAT (ghp_), OAuth (gho_), user (ghu_), server (ghs_), refresh (ghr_), fine-grained (github_pat_)",
+        description=(
+            "GitHub tokens: classic PAT (ghp_), OAuth (gho_), user (ghu_),"
+            " server (ghs_), refresh (ghr_), fine-grained (github_pat_)"
+        ),
     )
 )
 
@@ -129,7 +135,9 @@ register(
         ),
         sensitivity=4,
         source="RFC 7519 (JSON Web Token)",
-        description="JWT token (validated: 3 base64url segments, header decodes to JSON with 'alg' field)",
+        description=(
+            "JWT token (validated: 3 base64url segments, header decodes to JSON with 'alg' field)"
+        ),
     )
 )
 
@@ -169,7 +177,10 @@ register(
         counterexamples=("not-an-email",),
         sensitivity=2,
         source="RFC 5321 + RFC 6531 (faker uses RFC 2606 reserved domains)",
-        description="Email address — detection in lang/shared/patterns.py; realistic faker uses example.{com,org,net}",
+        description=(
+            "Email address — detection in lang/shared/patterns.py;"
+            " realistic faker uses example.{com,org,net}"
+        ),
     )
 )
 
@@ -185,7 +196,10 @@ register(
         counterexamples=("999.999.999.999",),
         sensitivity=2,
         source="RFC 791 (v4) / RFC 4291 (v6); faker uses RFC 5737 / RFC 3849 documentation ranges",
-        description="IPv4 or IPv6 address — detection in lang/shared/patterns.py; realistic faker uses doc ranges",
+        description=(
+            "IPv4 or IPv6 address — detection in lang/shared/patterns.py;"
+            " realistic faker uses doc ranges"
+        ),
     )
 )
 
@@ -201,7 +215,10 @@ register(
         counterexamples=("not-a-mac",),
         sensitivity=2,
         source="IEEE 802 OUI; faker uses RFC 7042 documentation block 00:00:5E:00:53:xx",
-        description="MAC address — detection in lang/shared/patterns.py; realistic faker uses RFC 7042 doc block",
+        description=(
+            "MAC address — detection in lang/shared/patterns.py;"
+            " realistic faker uses RFC 7042 doc block"
+        ),
     )
 )
 

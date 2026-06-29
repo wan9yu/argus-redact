@@ -8,6 +8,7 @@ match it field-for-field (confidence compared with exact `==`, no rounding).
 """
 
 import argus_redact._core as _core
+
 from argus_redact.lang.en.person import detect_person_names as py_en
 from argus_redact.lang.zh.person import detect_person_names as py_zh
 
@@ -153,8 +154,6 @@ def test_redact_pathological_name_does_not_raise_panic():
     import argus_redact
 
     huge = "A" * 500_000
-    redacted, _key = argus_redact.redact(
-        "Email Alice please", lang="en", names=[huge, "Alice"]
-    )
+    redacted, _key = argus_redact.redact("Email Alice please", lang="en", names=[huge, "Alice"])
     # No crash; the normal name is redacted (replacement differs from the input).
     assert "Alice" not in redacted

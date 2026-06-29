@@ -58,7 +58,6 @@ def _last_boundary_index(text: str) -> int:
     return _core.streaming_last_boundary_index(text)
 
 
-
 def _context_cut(
     combined: str,
     ctx_len: int,
@@ -115,7 +114,7 @@ def _context_cut(
     if not _core.streaming_emit_possible(
         combined, ctx_len, effective_max, _EVIDENCE_CONTEXT_WINDOW, force_flush
     ):
-        return ctx_len, False, []          # provably holds — skip the expensive _detect
+        return ctx_len, False, []  # provably holds — skip the expensive _detect
     entities, _langs, _timing, _stats = _detect(
         combined,
         lang=lang,
@@ -135,5 +134,3 @@ def _context_cut(
         combined, spans, ctx_len, effective_max, _EVIDENCE_CONTEXT_WINDOW, force_flush
     )
     return cut, redetect, entities
-
-

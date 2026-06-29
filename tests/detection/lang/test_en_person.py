@@ -43,9 +43,7 @@ class TestDetectPersonNames:
         from argus_redact._types import PatternMatch
 
         phone = PatternMatch(text="4155551234", type="phone", start=14, end=24)
-        results = detect_person_names(
-            "Quincy Smith, 4155551234", pii_entities=[phone]
-        )
+        results = detect_person_names("Quincy Smith, 4155551234", pii_entities=[phone])
         assert any("Quincy Smith" in r.text for r in results)
 
     def test_should_skip_unknown_surname(self):

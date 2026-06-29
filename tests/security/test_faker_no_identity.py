@@ -10,14 +10,13 @@ and round-trip tests would still pass. The leak was invisible to any
 
 from __future__ import annotations
 
+import argus_redact._core as _core
 import pytest
 
-import argus_redact._core as _core
 from argus_redact.pure.replacer import _faker_reserved_cached, replace
 from argus_redact.specs import en as _en  # noqa: F401  registry side-effect import
 from argus_redact.specs.registry import PIITypeDef, register, unregister
 from tests.conftest import make_match
-
 
 _SALT = b"identity-pass-test-salt-32-byte!"
 _SALT_BYTES = _core.resolve_salt(_SALT)
@@ -137,6 +136,4 @@ def test_james_smith_removed_from_en_reserved():
 def test_en_reserved_pool_has_at_least_ten_names():
     """Pool size guard: must remain ≥ 10 to satisfy the reroll budget."""
     en_pool = _core.reserved_person_names_en()
-    assert len(en_pool) >= 10, (
-        f"pool shrunk to {len(en_pool)} — under reroll budget"
-    )
+    assert len(en_pool) >= 10, f"pool shrunk to {len(en_pool)} — under reroll budget"

@@ -12,17 +12,18 @@ Spans come from the production path (``_core.detect_l1``) and cover the full
 match (optional prefix + group). Each ``(type, start, end, text)`` is pinned
 from the current engine output.
 """
+
 import argus_redact._core as _core
 import pytest
 
 
 def _org_school(text):
     """Return [(type, start, end, text)] for organization/school L1 matches."""
-    layer1, _person, _regions, _job_titles, _framework, _hints, _near = _core.detect_l1(text, ["zh"], [])
+    layer1, _person, _regions, _job_titles, _framework, _hints, _near = _core.detect_l1(
+        text, ["zh"], []
+    )
     return [
-        (m.type, m.start, m.end, m.text)
-        for m in layer1
-        if m.type in ("organization", "school")
+        (m.type, m.start, m.end, m.text) for m in layer1 if m.type in ("organization", "school")
     ]
 
 

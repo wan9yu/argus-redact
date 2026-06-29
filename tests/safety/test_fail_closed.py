@@ -2,7 +2,7 @@
 
 import pytest
 
-from argus_redact import redact
+from argus_redact import LayerUnavailableError, redact
 
 
 def test_unknown_lang_raises():
@@ -15,11 +15,9 @@ def test_known_lang_still_works():
     assert len(key) >= 1
 
 
-from argus_redact import LayerUnavailableError
-
-
 def test_ner_mode_no_model_raises(monkeypatch):
     import argus_redact.glue.redact as r
+
     monkeypatch.setattr(r, "_get_ner_adapters", lambda lang: [])
     with pytest.raises(LayerUnavailableError):
         redact("Contact John Smith", lang="en", mode="ner", salt=42)
@@ -28,6 +26,7 @@ def test_ner_mode_no_model_raises(monkeypatch):
 def test_auto_mode_no_model_warns_not_raises(monkeypatch):
     import argus_redact.glue.redact as r
     from argus_redact import SecurityWarning
+
     monkeypatch.setattr(r, "_get_ner_adapters", lambda lang: [])
     monkeypatch.setattr(r, "_get_semantic_adapter", lambda: None)
     with pytest.warns(SecurityWarning):
@@ -37,6 +36,7 @@ def test_auto_mode_no_model_warns_not_raises(monkeypatch):
 
 def test_auto_mode_strict_raises(monkeypatch):
     import argus_redact.glue.redact as r
+
     monkeypatch.setattr(r, "_get_ner_adapters", lambda lang: [])
     monkeypatch.setattr(r, "_get_semantic_adapter", lambda: None)
     with pytest.raises(LayerUnavailableError):
@@ -52,6 +52,7 @@ def test_auto_mode_strict_raises(monkeypatch):
 
 def test_ner_no_model_raises_even_for_instruction_intent(monkeypatch):
     import argus_redact.glue.redact as r
+
     monkeypatch.setattr(r, "_get_ner_adapters", lambda lang: [])
     with pytest.raises(LayerUnavailableError):
         redact("Please tell me about myself", mode="ner", lang="en", salt=42)
@@ -60,6 +61,7 @@ def test_ner_no_model_raises_even_for_instruction_intent(monkeypatch):
 def test_auto_no_model_warns_even_for_instruction_intent(monkeypatch):
     import argus_redact.glue.redact as r
     from argus_redact import SecurityWarning
+
     monkeypatch.setattr(r, "_get_ner_adapters", lambda lang: [])
     monkeypatch.setattr(r, "_get_semantic_adapter", lambda: None)
     # Match the no-model degradation message specifically — a bare SecurityWarning
@@ -70,6 +72,7 @@ def test_auto_no_model_warns_even_for_instruction_intent(monkeypatch):
 
 def test_auto_strict_no_model_raises_even_for_instruction_intent(monkeypatch):
     import argus_redact.glue.redact as r
+
     monkeypatch.setattr(r, "_get_ner_adapters", lambda lang: [])
     monkeypatch.setattr(r, "_get_semantic_adapter", lambda: None)
     with pytest.raises(LayerUnavailableError):
@@ -78,13 +81,13 @@ def test_auto_strict_no_model_raises_even_for_instruction_intent(monkeypatch):
 
 def test_low_entropy_int_salt_warns():
     from argus_redact import SecurityWarning
+
     with pytest.warns(SecurityWarning, match="low-entropy salt"):
         redact("电话13800138000", lang="zh", mode="fast", salt=42)
 
 
 def test_strong_salt_no_warning(recwarn):
     import argus_redact
+
     redact("电话13800138000", lang="zh", mode="fast", salt=b"\x00" * 32)
-    assert not any(
-        issubclass(w.category, argus_redact.SecurityWarning) for w in recwarn
-    )
+    assert not any(issubclass(w.category, argus_redact.SecurityWarning) for w in recwarn)

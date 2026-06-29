@@ -36,7 +36,9 @@ def test_profile_emits_full_distribution():
         for part in ("redact_fast", "detect_l1"):
             stats = w[part]
             assert _DIST_KEYS <= set(stats), (label, part, set(stats))
-            assert (
-                stats["min_ms"] <= stats["p50_ms"] <= stats["p99_ms"] <= stats["max_ms"]
-            ), (label, part, stats)
+            assert stats["min_ms"] <= stats["p50_ms"] <= stats["p99_ms"] <= stats["max_ms"], (
+                label,
+                part,
+                stats,
+            )
             assert stats["docs_per_s"] > 0, (label, part)

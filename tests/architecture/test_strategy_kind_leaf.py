@@ -4,6 +4,7 @@ depends on neither ``specs.registry`` nor ``pure.replacer``.
 Both modules import it TOP-LEVEL — the old lazy-import workaround that papered
 over a registry ↔ replacer import cycle for the classification edge is gone.
 """
+
 from __future__ import annotations
 
 import ast
@@ -61,9 +62,7 @@ def test_leaf_has_no_argus_imports():
             if node.module.startswith("argus_redact"):
                 argus_imports.add(node.module)
         elif isinstance(node, ast.Import):
-            argus_imports.update(
-                n.name for n in node.names if n.name.startswith("argus_redact")
-            )
+            argus_imports.update(n.name for n in node.names if n.name.startswith("argus_redact"))
     assert not argus_imports, f"leaf must have no argus imports, found {argus_imports}"
 
 

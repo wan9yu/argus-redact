@@ -217,36 +217,132 @@ _GOLDEN: dict[tuple[int, str, str], tuple] = {
     (2, "42", "zhen"): ("number is 800-815-6779", {"800-815-6779": _PHONE_VALUE}, {}),
     (2, "ab", "en"): ("number is 888-613-7820", {"888-613-7820": _PHONE_VALUE}, {}),
     (2, "ab", "zhen"): ("number is 888-613-7820", {"888-613-7820": _PHONE_VALUE}, {}),
-    (3, "00", "en"): ("Contact Alice for details.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
-    (3, "00", "zhen"): ("Contact Alice for details.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
-    (3, "42", "en"): ("Contact Alice for details.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
-    (3, "42", "zhen"): ("Contact Alice for details.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
-    (3, "ab", "en"): ("Contact Alice for details.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
-    (3, "ab", "zhen"): ("Contact Alice for details.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
-    (4, "00", "en"): ("Alice called Alice again.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
-    (4, "00", "zhen"): ("Alice called Alice again.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
-    (4, "42", "en"): ("Alice called Alice again.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
-    (4, "42", "zhen"): ("Alice called Alice again.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
-    (4, "ab", "en"): ("Alice called Alice again.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
-    (4, "ab", "zhen"): ("Alice called Alice again.", {"Alice": _PERSON_VALUE}, {"Alice": ["alice_alias"]}),
+    (3, "00", "en"): (
+        "Contact Alice for details.",
+        {"Alice": _PERSON_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (3, "00", "zhen"): (
+        "Contact Alice for details.",
+        {"Alice": _PERSON_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (3, "42", "en"): (
+        "Contact Alice for details.",
+        {"Alice": _PERSON_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (3, "42", "zhen"): (
+        "Contact Alice for details.",
+        {"Alice": _PERSON_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (3, "ab", "en"): (
+        "Contact Alice for details.",
+        {"Alice": _PERSON_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (3, "ab", "zhen"): (
+        "Contact Alice for details.",
+        {"Alice": _PERSON_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (4, "00", "en"): (
+        "Alice called Alice again.",
+        {"Alice": _PERSON_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (4, "00", "zhen"): (
+        "Alice called Alice again.",
+        {"Alice": _PERSON_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (4, "42", "en"): (
+        "Alice called Alice again.",
+        {"Alice": _PERSON_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (4, "42", "zhen"): (
+        "Alice called Alice again.",
+        {"Alice": _PERSON_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (4, "ab", "en"): (
+        "Alice called Alice again.",
+        {"Alice": _PERSON_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (4, "ab", "zhen"): (
+        "Alice called Alice again.",
+        {"Alice": _PERSON_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
     (5, "00", "en"): ("Patient record: MRN-BE472253.", {"MRN-BE472253": _MRN_VALUE}, {}),
     (5, "00", "zhen"): ("Patient record: MRN-BE472253.", {"MRN-BE472253": _MRN_VALUE}, {}),
     (5, "42", "en"): ("Patient record: MRN-6F7045CE.", {"MRN-6F7045CE": _MRN_VALUE}, {}),
     (5, "42", "zhen"): ("Patient record: MRN-6F7045CE.", {"MRN-6F7045CE": _MRN_VALUE}, {}),
     (5, "ab", "en"): ("Patient record: MRN-CBEFABEC.", {"MRN-CBEFABEC": _MRN_VALUE}, {}),
     (5, "ab", "zhen"): ("Patient record: MRN-CBEFABEC.", {"MRN-CBEFABEC": _MRN_VALUE}, {}),
-    (6, "00", "en"): ("Call Alice at 800-146-9612.", {"Alice": _PERSON_VALUE, "800-146-9612": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
-    (6, "00", "zhen"): ("Call Alice at 800-146-9612.", {"Alice": _PERSON_VALUE, "800-146-9612": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
-    (6, "42", "en"): ("Call Alice at 800-815-6779.", {"Alice": _PERSON_VALUE, "800-815-6779": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
-    (6, "42", "zhen"): ("Call Alice at 800-815-6779.", {"Alice": _PERSON_VALUE, "800-815-6779": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
-    (6, "ab", "en"): ("Call Alice at 888-613-7820.", {"Alice": _PERSON_VALUE, "888-613-7820": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
-    (6, "ab", "zhen"): ("Call Alice at 888-613-7820.", {"Alice": _PERSON_VALUE, "888-613-7820": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
-    (7, "00", "en"): ("Alice has MRN-BE472253 and phone 800-146-9612.", {"Alice": _PERSON_VALUE, "MRN-BE472253": _MRN_VALUE, "800-146-9612": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
-    (7, "00", "zhen"): ("Alice has MRN-BE472253 and phone 800-146-9612.", {"Alice": _PERSON_VALUE, "MRN-BE472253": _MRN_VALUE, "800-146-9612": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
-    (7, "42", "en"): ("Alice has MRN-6F7045CE and phone 800-815-6779.", {"Alice": _PERSON_VALUE, "MRN-6F7045CE": _MRN_VALUE, "800-815-6779": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
-    (7, "42", "zhen"): ("Alice has MRN-6F7045CE and phone 800-815-6779.", {"Alice": _PERSON_VALUE, "MRN-6F7045CE": _MRN_VALUE, "800-815-6779": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
-    (7, "ab", "en"): ("Alice has MRN-CBEFABEC and phone 888-613-7820.", {"Alice": _PERSON_VALUE, "MRN-CBEFABEC": _MRN_VALUE, "888-613-7820": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
-    (7, "ab", "zhen"): ("Alice has MRN-CBEFABEC and phone 888-613-7820.", {"Alice": _PERSON_VALUE, "MRN-CBEFABEC": _MRN_VALUE, "888-613-7820": _PHONE_VALUE}, {"Alice": ["alice_alias"]}),
+    (6, "00", "en"): (
+        "Call Alice at 800-146-9612.",
+        {"Alice": _PERSON_VALUE, "800-146-9612": _PHONE_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (6, "00", "zhen"): (
+        "Call Alice at 800-146-9612.",
+        {"Alice": _PERSON_VALUE, "800-146-9612": _PHONE_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (6, "42", "en"): (
+        "Call Alice at 800-815-6779.",
+        {"Alice": _PERSON_VALUE, "800-815-6779": _PHONE_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (6, "42", "zhen"): (
+        "Call Alice at 800-815-6779.",
+        {"Alice": _PERSON_VALUE, "800-815-6779": _PHONE_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (6, "ab", "en"): (
+        "Call Alice at 888-613-7820.",
+        {"Alice": _PERSON_VALUE, "888-613-7820": _PHONE_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (6, "ab", "zhen"): (
+        "Call Alice at 888-613-7820.",
+        {"Alice": _PERSON_VALUE, "888-613-7820": _PHONE_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (7, "00", "en"): (
+        "Alice has MRN-BE472253 and phone 800-146-9612.",
+        {"Alice": _PERSON_VALUE, "MRN-BE472253": _MRN_VALUE, "800-146-9612": _PHONE_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (7, "00", "zhen"): (
+        "Alice has MRN-BE472253 and phone 800-146-9612.",
+        {"Alice": _PERSON_VALUE, "MRN-BE472253": _MRN_VALUE, "800-146-9612": _PHONE_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (7, "42", "en"): (
+        "Alice has MRN-6F7045CE and phone 800-815-6779.",
+        {"Alice": _PERSON_VALUE, "MRN-6F7045CE": _MRN_VALUE, "800-815-6779": _PHONE_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (7, "42", "zhen"): (
+        "Alice has MRN-6F7045CE and phone 800-815-6779.",
+        {"Alice": _PERSON_VALUE, "MRN-6F7045CE": _MRN_VALUE, "800-815-6779": _PHONE_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (7, "ab", "en"): (
+        "Alice has MRN-CBEFABEC and phone 888-613-7820.",
+        {"Alice": _PERSON_VALUE, "MRN-CBEFABEC": _MRN_VALUE, "888-613-7820": _PHONE_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
+    (7, "ab", "zhen"): (
+        "Alice has MRN-CBEFABEC and phone 888-613-7820.",
+        {"Alice": _PERSON_VALUE, "MRN-CBEFABEC": _MRN_VALUE, "888-613-7820": _PHONE_VALUE},
+        {"Alice": ["alice_alias"]},
+    ),
     (8, "00", "en"): ("No PII here.", {}, {}),
     (8, "00", "zhen"): ("No PII here.", {}, {}),
     (8, "42", "en"): ("No PII here.", {}, {}),
@@ -280,7 +376,7 @@ def test_custom_faker_callback_golden(scenario_idx: int, salt_name: str, lang_na
     for ent in entities:
         assert text[ent.start : ent.end] == ent.text, (
             f"Scenario {scenario_idx}: entity {ent.type!r} span "
-            f"[{ent.start}:{ent.end}] → {text[ent.start:ent.end]!r} != "
+            f"[{ent.start}:{ent.end}] → {text[ent.start : ent.end]!r} != "
             f"{ent.text!r} in {text!r}"
         )
 
@@ -374,14 +470,10 @@ def test_custom_faker_multi_lang_preference():
 
     try:
         redacted_zh, _, _ = replace(text, entities, salt=salt, langs=["zh"], config=config)
-        assert "ZH-FAKE" in redacted_zh, (
-            f"Expected ZH-FAKE in redacted text, got {redacted_zh!r}"
-        )
+        assert "ZH-FAKE" in redacted_zh, f"Expected ZH-FAKE in redacted text, got {redacted_zh!r}"
 
         redacted_en, _, _ = replace(text, entities, salt=salt, langs=["en"], config=config)
-        assert "EN-FAKE" in redacted_en, (
-            f"Expected EN-FAKE in redacted text, got {redacted_en!r}"
-        )
+        assert "EN-FAKE" in redacted_en, f"Expected EN-FAKE in redacted text, got {redacted_en!r}"
     finally:
         unregister("zh", "test_parity_lang_person")
         unregister("en", "test_parity_lang_person")
@@ -413,20 +505,14 @@ def test_custom_faker_collision_reroll():
     text = f"Call {value} please."
     entities = [make_match(value, etype, 5)]
 
-    redacted, key, _ = replace(
-        text, entities, salt=salt, key=pre_key.copy(), config=config
-    )
+    redacted, key, _ = replace(text, entities, salt=salt, key=pre_key.copy(), config=config)
 
     # The pre-seeded fake must still map to its original (untouched), and the
     # entity must have re-rolled to a *different* unique fake.
     assert key[first_fake] == "some_other_original"
     rerolled = next(k for k, v in key.items() if v == value)
-    assert rerolled != first_fake, (
-        f"Re-roll must produce a different fake than {first_fake!r}"
-    )
-    assert value not in redacted, (
-        f"Original must not appear in redacted text: {redacted!r}"
-    )
+    assert rerolled != first_fake, f"Re-roll must produce a different fake than {first_fake!r}"
+    assert value not in redacted, f"Original must not appear in redacted text: {redacted!r}"
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
@@ -456,7 +542,7 @@ def test_custom_faker_roundtrip():
     text = f"Patient {_MRN_VALUE} needs review."
     entities = [make_match(_MRN_VALUE, "test_parity_mrn", 8)]
     config = {"test_parity_mrn": {"strategy": "realistic"}}
-    salt = b"\xDE\xAD" * 16
+    salt = b"\xde\xad" * 16
 
     redacted, key, aliases = replace(
         text,
@@ -472,6 +558,4 @@ def test_custom_faker_roundtrip():
     assert len(key) == 1, f"Expected 1 key entry, got {key!r}"
 
     restored = restore(redacted, key)
-    assert restored == text, (
-        f"restore() failed: expected {text!r}, got {restored!r}"
-    )
+    assert restored == text, f"restore() failed: expected {text!r}, got {restored!r}"

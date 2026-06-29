@@ -81,6 +81,7 @@ class PresidioBridge:
             raise TypeError(f"text must be a string, got {type(text).__name__}")
 
         from argus_redact.pure.normalize import MAX_INPUT_SIZE
+
         if len(text) > MAX_INPUT_SIZE:
             raise ValueError(
                 f"Input text ({len(text)} chars) exceeds maximum allowed size "
@@ -108,6 +109,7 @@ class PresidioBridge:
 
         # Route through public redact() — inherits all pipeline guarantees
         import argus_redact
+
         redacted, result_key = argus_redact.redact(
             text,
             lang=language,

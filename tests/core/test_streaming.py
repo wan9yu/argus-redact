@@ -175,7 +175,9 @@ class TestStreamingRedactor:
         r.feed("请拨打 13912345678 联系王建国。")
         result = r.flush()
         assert "19999" in result.downstream_text
-        assert restore(result.downstream_text, r.aggregate_key()) == "请拨打 13912345678 联系王建国。"
+        assert (
+            restore(result.downstream_text, r.aggregate_key()) == "请拨打 13912345678 联系王建国。"
+        )
 
     def test_should_keep_same_fake_for_repeated_value_across_chunks(self):
         r = StreamingRedactor(salt=b"test-salt", lang="zh")
@@ -188,8 +190,7 @@ class TestStreamingRedactor:
         agg = r.aggregate_key()
         phone_fakes = [k for k, v in agg.items() if v == "13912345678" and k.startswith("19999")]
         assert len(phone_fakes) == 1, (
-            "same original must map to exactly one fake; "
-            f"got {phone_fakes}"
+            f"same original must map to exactly one fake; got {phone_fakes}"
         )
 
     def test_should_round_trip_via_aggregate_key(self):
@@ -268,6 +269,7 @@ class TestIncrementalKwargRemoved:
 
     def test_incremental_kwarg_no_longer_accepted(self):
         import pytest
+
         from argus_redact.streaming import StreamingRedactor
 
         with pytest.raises(TypeError, match="incremental"):
@@ -311,9 +313,7 @@ class TestStreamingRedactorIncremental:
         out = r.feed("身份证号码11010").downstream_text
         out += r.feed("1199003074610。").downstream_text
         out += r.flush().downstream_text
-        assert "110101199003074610" not in out, (
-            f"id should be redacted across chunks, got {out!r}"
-        )
+        assert "110101199003074610" not in out, f"id should be redacted across chunks, got {out!r}"
 
     def test_cross_chunk_email(self):
         r = StreamingRedactor(salt=b"x", lang="en", mode="fast")
@@ -371,11 +371,8 @@ class TestStreamingRedactorIncremental:
 
         agg = r.aggregate_key()
         # The realistic fake (199-xx reserved-range) must exist and be unique.
-        downstream_fakes = [
-            k for k, v in agg.items() if v == "13912345678" and k.startswith("199")
-        ]
+        downstream_fakes = [k for k, v in agg.items() if v == "13912345678" and k.startswith("199")]
         assert downstream_fakes, "realistic phone fake present in aggregate key"
         assert len(downstream_fakes) == 1, (
-            "same original must mint exactly one fake; "
-            f"got {downstream_fakes}"
+            f"same original must mint exactly one fake; got {downstream_fakes}"
         )

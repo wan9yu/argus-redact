@@ -11,6 +11,7 @@ Each faker outputs values in officially-reserved or convention-reserved ranges:
 import re
 
 import argus_redact._core as _core
+
 from argus_redact.lang.shared.patterns import validate_luhn
 
 _SALT = _core.resolve_salt(b"test-fakers-en-reserved-salt!!")

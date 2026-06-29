@@ -20,11 +20,7 @@ from argus_redact.specs._compliance import PIPL_SENSITIVE_PI, PIPL_SORT_ORDER
 from argus_redact.specs.registry import list_types
 
 _OUT = (
-    Path(__file__).resolve().parents[3]
-    / "crates"
-    / "argus-redact-core"
-    / "data"
-    / "risk_data.ron"
+    Path(__file__).resolve().parents[3] / "crates" / "argus-redact-core" / "data" / "risk_data.ron"
 )
 
 

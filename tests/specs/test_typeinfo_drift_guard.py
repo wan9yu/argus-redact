@@ -21,9 +21,9 @@ A future registry change that diverges from the Rust fallback table fails here.
 
 from __future__ import annotations
 
+import argus_redact._core as _core
 import pytest
 
-import argus_redact._core as _core
 from argus_redact._core_loader import HAS_CORE
 from argus_redact.pure.replacer import (
     DEFAULT_CATEGORY_LABEL,

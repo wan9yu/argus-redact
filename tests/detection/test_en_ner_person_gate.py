@@ -77,9 +77,7 @@ def test_en_ner_gate_is_selective_drop_and_keep_together():
     name-like name is kept — single pass, selective filtering (non-vacuous).
     """
     text = "Central Park is where Obama once walked."
-    stub = _stub_adapter(
-        [_ent(text, "Central Park"), _ent(text, "Obama")], lang="en"
-    )
+    stub = _stub_adapter([_ent(text, "Central Park"), _ent(text, "Obama")], lang="en")
     with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[stub]):
         redacted, key = redact(text, salt=42, mode="ner", lang="en")
     assert "Central Park" in redacted  # FP dropped
@@ -104,9 +102,7 @@ def test_en_ner_non_person_types_unaffected():
     through unchanged even when their text would fail the person gate.
     """
     text = "Central Park is in New York."
-    stub = _stub_adapter(
-        [_ent(text, "Central Park", etype="location")], lang="en"
-    )
+    stub = _stub_adapter([_ent(text, "Central Park", etype="location")], lang="en")
     with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[stub]):
         redacted, key = redact(text, salt=42, mode="ner", lang="en")
     # Kept as a location (the person gate never saw it).
@@ -123,9 +119,7 @@ def test_zh_ner_person_untouched_by_en_gate():
     char would never pass the English name-like test.
     """
     text = "张三去了北京。"
-    stub = _stub_adapter(
-        [NEREntity("张三", "person", 0, 2, 0.95)], lang="zh"
-    )
+    stub = _stub_adapter([NEREntity("张三", "person", 0, 2, 0.95)], lang="zh")
     with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[stub]):
         redacted, key = redact(text, salt=42, mode="ner", lang="zh")
     assert "张三" not in redacted

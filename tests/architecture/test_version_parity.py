@@ -5,6 +5,7 @@ A half-bumped release (e.g. pyproject updated, Cargo.toml not yet) is caught
 here in the pytest-visible CI lane, not only in the make sync-docs-version-check
 gate.
 """
+
 from __future__ import annotations
 
 import re

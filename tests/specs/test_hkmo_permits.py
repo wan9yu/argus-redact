@@ -11,6 +11,7 @@ typed hrp; H/M-input must not be typed eep) are the most important locks here.
 Both types are anchor-required: a bare format with no keyword context must
 survive verbatim (no false positive).
 """
+
 from __future__ import annotations
 
 import pytest
@@ -50,8 +51,7 @@ def test_counterexamples_do_not_fire_this_type(type_name):
     for cx in td.counterexamples:
         _out, _key, types = redact(cx, mode="fast", lang="zh", with_types=True)
         assert type_name not in set(types.values()), (
-            f"{type_name}: counterexample wrongly matched by {type_name}: "
-            f"{cx!r} -> types={types}"
+            f"{type_name}: counterexample wrongly matched by {type_name}: {cx!r} -> types={types}"
         )
 
 
@@ -108,17 +108,13 @@ def test_illegal_second_letter_does_not_match():
 def test_eep_does_not_fire_on_hrp_input():
     """回乡证 H-prefix payload must not be caught by the eep type."""
     _out, _key, types = redact("回乡证H12345678", mode="fast", lang="zh", with_types=True)
-    assert "eep" not in set(types.values()), (
-        f"eep fired on an H-prefix (hrp) input: types={types}"
-    )
+    assert "eep" not in set(types.values()), f"eep fired on an H-prefix (hrp) input: types={types}"
 
 
 def test_hrp_does_not_fire_on_eep_input():
     """双程证 C-prefix payload must not be caught by the hrp type."""
     _out, _key, types = redact("往来港澳通行证C12345678", mode="fast", lang="zh", with_types=True)
-    assert "hrp" not in set(types.values()), (
-        f"hrp fired on a C-prefix (eep) input: types={types}"
-    )
+    assert "hrp" not in set(types.values()), f"hrp fired on a C-prefix (eep) input: types={types}"
 
 
 def test_eep_input_is_typed_eep_not_hrp():

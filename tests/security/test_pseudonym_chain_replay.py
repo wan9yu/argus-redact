@@ -19,6 +19,7 @@ Each vector is a tuple of:
 detector needs to fire). The test looks up ``target_value`` in the result
 ``key`` dict and asserts the deterministic placeholder still matches.
 """
+
 import pytest
 
 from argus_redact import redact_pseudonym_llm
@@ -27,19 +28,76 @@ from argus_redact import redact_pseudonym_llm
 REPLAY_VECTORS = [
     (b"a" * 32, "客户黄芳来访", "黄芳", "zh", "person", "P-24813"),
     (b"\x00" * 32, "13912345678", "13912345678", "zh", "phone", "PHON-61048"),
-    (b"email-replay-salt!!!!!!!!!!!!!!!", "alice@acme.io", "alice@acme.io", "en", "email", "EMAI-26776"),
+    (
+        b"email-replay-salt!!!!!!!!!!!!!!!",
+        "alice@acme.io",
+        "alice@acme.io",
+        "en",
+        "email",
+        "EMAI-26776",
+    ),
     (b"deterministic-salt!!!!!!!!!!!!!!", "John Smith", "John Smith", "en", "person", "P-07850"),
     (b"compound-surname!!!!!!!!!!!!!!!!", "客户欧阳锋来访", "欧阳锋", "zh", "person", "P-07038"),
-    (b"id-number-test!!!!!!!!!!!!!!!!!!", "110101199003074610", "110101199003074610", "zh", "id_number", "ID-39097"),
-    (b"license-plate!!!!!!!!!!!!!!!!!!!", "京A12345", "京A12345", "zh", "license_plate", "PLATE-15042"),
-    (b"passport-salt!!!!!!!!!!!!!!!!!!!", "护照E12345678号", "E12345678", "zh", "passport", "PASS-20713"),
-    (b"bank-card-salt!!!!!!!!!!!!!!!!!!", "6217001234567890", "6217001234567890", "zh", "bank_card", "BANK-59244"),
-    (b"address-salt!!!!!!!!!!!!!!!!!!!!", "北京市朝阳区建国路100号", "北京市朝阳区建国路100号", "zh", "address", "ADDR-25695"),
+    (
+        b"id-number-test!!!!!!!!!!!!!!!!!!",
+        "110101199003074610",
+        "110101199003074610",
+        "zh",
+        "id_number",
+        "ID-39097",
+    ),
+    (
+        b"license-plate!!!!!!!!!!!!!!!!!!!",
+        "京A12345",
+        "京A12345",
+        "zh",
+        "license_plate",
+        "PLATE-15042",
+    ),
+    (
+        b"passport-salt!!!!!!!!!!!!!!!!!!!",
+        "护照E12345678号",
+        "E12345678",
+        "zh",
+        "passport",
+        "PASS-20713",
+    ),
+    (
+        b"bank-card-salt!!!!!!!!!!!!!!!!!!",
+        "6217001234567890",
+        "6217001234567890",
+        "zh",
+        "bank_card",
+        "BANK-59244",
+    ),
+    (
+        b"address-salt!!!!!!!!!!!!!!!!!!!!",
+        "北京市朝阳区建国路100号",
+        "北京市朝阳区建国路100号",
+        "zh",
+        "address",
+        "ADDR-25695",
+    ),
     (b"compound-3char!!!!!!!!!!!!!!!!!!", "客户司马懿来访", "司马懿", "zh", "person", "P-07038"),
-    (b"edge-mid-initial!!!!!!!!!!!!!!!!", "John F. Smith", "John F. Smith", "en", "person", "P-67822"),
-    # v0.6.11 edge vectors: full-FF salt (formerly OverflowError) + 10KB single-entity input (locks HMAC-input-length stability)
+    (
+        b"edge-mid-initial!!!!!!!!!!!!!!!!",
+        "John F. Smith",
+        "John F. Smith",
+        "en",
+        "person",
+        "P-67822",
+    ),
+    # v0.6.11 edge vectors: full-FF salt (formerly OverflowError) + 10KB input
+    # (locks HMAC-input-length stability)
     (b"\xff" * 32, "user@acme.io", "user@acme.io", "en", "email", "EMAI-54564"),
-    (b"long-input-salt-32-byte-padding!", "a" * 9992 + "@acme.io", "a" * 9992 + "@acme.io", "en", "email", "EMAI-62284"),
+    (
+        b"long-input-salt-32-byte-padding!",
+        "a" * 9992 + "@acme.io",
+        "a" * 9992 + "@acme.io",
+        "en",
+        "email",
+        "EMAI-62284",
+    ),
 ]
 
 
@@ -74,6 +132,7 @@ def test_full_ff_salt_no_longer_overflows():
     raised. Fix: modular arithmetic on the sum keeps it in u64.
     """
     from argus_redact import redact_pseudonym_llm
+
     result = redact_pseudonym_llm("user@acme.io", salt=b"\xff" * 32, lang="en")
     assert result.key, "should produce a non-empty key dict"
     # Confirm the entity was detected and got a placeholder

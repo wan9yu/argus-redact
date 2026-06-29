@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import re
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from argus_redact._types import PatternMatch
 from argus_redact.pure.replacer import DEFAULT_PREFIXES, replace
@@ -22,9 +23,7 @@ from tests.security.property.conftest import PROPERTY_SETTINGS
 )
 def test_pseudonym_output_format(text, entity_type, salt):
     """Any pseudonym replacement of any text matches the expected shape."""
-    entity = PatternMatch(
-        text=text, type=entity_type, start=0, end=len(text), layer=1
-    )
+    entity = PatternMatch(text=text, type=entity_type, start=0, end=len(text), layer=1)
     redacted, key, _ = replace(
         f"{text} suffix",
         [entity],
@@ -39,6 +38,4 @@ def test_pseudonym_output_format(text, entity_type, salt):
     prefix = DEFAULT_PREFIXES.get(entity_type, "P")
     pattern = re.compile(rf"^{re.escape(prefix)}-\d{{1,5}}$")
     for fake in fake_codes:
-        assert pattern.match(fake), (
-            f"pseudonym output {fake!r} does not match {pattern.pattern}"
-        )
+        assert pattern.match(fake), f"pseudonym output {fake!r} does not match {pattern.pattern}"
