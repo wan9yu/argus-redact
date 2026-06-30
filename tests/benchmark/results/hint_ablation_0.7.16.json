@@ -1,0 +1,32 @@
+{
+  "benchmark": "hint_ablation",
+  "package_version": "0.7.16",
+  "hint": "text_intent",
+  "mode": "fast",
+  "fixture": "instruction_ablation.json",
+  "samples": 40,
+  "person_fp_per_sample": {
+    "off": 1.0,
+    "on": 0.0,
+    "delta": 1.0
+  },
+  "by_lang": {
+    "en": {
+      "samples": 12,
+      "off": 1.0,
+      "on": 0.0
+    },
+    "zh": {
+      "samples": 28,
+      "off": 1.0,
+      "on": 0.0
+    }
+  },
+  "env_toggle_check": {
+    "description": "ARGUS_ABLATION_HINTS over the instruction fixture, redact() as-is; off vs on are equal because the env hook is post-hoc Python and does not reach the Rust-internal L1b person threshold in fast mode.",
+    "fp_per_sample_off": 0.0,
+    "fp_per_sample_on": 0.0,
+    "changes_person_fp": false
+  },
+  "note": "text_intent=\"instruction\" raises the L1b person threshold 0.8 → 1.2, suppressing name-shaped false positives in command/prompt text. off = plain (non-instruction) frame; on = instruction frame. The off magnitude reflects this fixture (one fireable token per sample, by construction); the reproduced shape is the suppression of instruction person-FP to ~0."
+}
