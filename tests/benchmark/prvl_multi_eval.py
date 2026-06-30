@@ -12,18 +12,20 @@ This repo DEFINES the PRvL+ metrics; the paper follows the repo. The exact,
 canonical metric definitions are implemented inline in ``_score_row`` below — read
 those, not a separate prose spec.
 
-Models run via the ``openrouter`` provider (env ``OPENROUTER_API_KEY``). Each row
-records BOTH the paper/friendly label and the exact OpenRouter model id plus the
-call date, because the paper requires exact model-version strings + dates.
+Models run via ``--provider`` — ``openrouter`` (default, env ``OPENROUTER_API_KEY``)
+or ``poe`` (env ``POE_API_KEY``; ids are Poe bot names). Each row records BOTH the
+paper/friendly label and the exact provider model id plus the call date, because the
+paper requires exact model-version strings + dates.
 
-NOTE on the "GPT-5" label: it maps to the OpenRouter id ``openai/gpt-5.5``. The
-original GPT-5 id is retired on OpenRouter, so gpt-5.5 is the current closest
-GPT-5-family endpoint; the paper-facing label stays "GPT-5".
+NOTE on labels: "GPT-5" maps to ``openai/gpt-5.5`` on openrouter (the original id is
+retired) / the ``GPT-5`` bot on poe. The poe lineup uses ``GLM-4.6`` where openrouter
+uses ``GLM-4.5`` — both Zhipu frontier; the paper-facing label reflects the model
+actually run. (Poe's ``GLM-5.1-FW`` bot serves empty content unreliably — avoid it.)
 
-Run (needs OPENROUTER_API_KEY in env, never committed):
+Run (needs the provider's API key in env, never committed):
     python -m tests.benchmark.prvl_multi_eval                         # 4 models × 3 profiles
+    python -m tests.benchmark.prvl_multi_eval --provider poe --judge  # poe + LLM-judge utility
     python -m tests.benchmark.prvl_multi_eval --models GPT-5 --profiles realistic --limit 1
-    python -m tests.benchmark.prvl_multi_eval --judge                 # add LLM-judge utility
 """
 
 from __future__ import annotations
@@ -52,18 +54,32 @@ OPENROUTER_URL, _OPENROUTER_DEFAULT_MODEL, OPENROUTER_ENV_KEY = PROVIDERS["openr
 # bench_l1's _BENCH_SALT.
 SALT = b"prvl-multi-eval-fixed-salt!!!!!!"
 
-# Friendly (paper / baker) label → exact OpenRouter model id. The label is the
+# Friendly (paper) label → exact provider model id, per provider. The label is the
 # paper-facing name kept stable across endpoint churn; the id is what call_llm gets.
-MODELS: list[tuple[str, str]] = [
-    ("GPT-5", "openai/gpt-5.5"),
-    ("Claude-Opus-4.5", "anthropic/claude-opus-4.5"),
-    ("Gemini-2.5-Pro", "google/gemini-2.5-pro"),
-    ("GLM-4.5", "z-ai/glm-4.5"),
-]
+# openrouter (default) and poe (OpenAI-compatible endpoint; ids are Poe bot names).
+PROVIDER_MODELS: dict[str, list[tuple[str, str]]] = {
+    "openrouter": [
+        ("GPT-5", "openai/gpt-5.5"),
+        ("Claude-Opus-4.5", "anthropic/claude-opus-4.5"),
+        ("Gemini-2.5-Pro", "google/gemini-2.5-pro"),
+        ("GLM-4.5", "z-ai/glm-4.5"),
+    ],
+    "poe": [
+        ("GPT-5", "GPT-5"),
+        ("Claude-Opus-4.5", "Claude-Opus-4.5"),
+        ("Gemini-2.5-Pro", "Gemini-2.5-Pro"),
+        ("GLM-4.6", "GLM-4.6"),
+    ],
+}
+PROVIDER_JUDGE: dict[str, str] = {"openrouter": "openai/gpt-5.5", "poe": "GPT-5"}
+
+# Back-compat defaults (openrouter): existing callers + the offline test see the
+# unchanged openrouter lineup.
+MODELS: list[tuple[str, str]] = PROVIDER_MODELS["openrouter"]
 _MODEL_BY_LABEL = dict(MODELS)
 
 PROFILES = ["default", "pseudonym", "realistic"]
-JUDGE_MODEL_DEFAULT = "openai/gpt-5.5"
+JUDGE_MODEL_DEFAULT = PROVIDER_JUDGE["openrouter"]
 
 # Refusal markers (case-insensitive for ASCII; CJK markers match as-is). An output
 # containing any of these is NOT counted as a usable answer.
@@ -407,12 +423,13 @@ def _aggregate(rows: list[dict]) -> dict:
 
 def run(
     *,
+    provider: str = "openrouter",
     models: list[str] | None = None,
     profiles: list[str] | None = None,
     limit: int | None = None,
     cases: list[dict] | None = None,
     judge: bool = False,
-    judge_model: str = JUDGE_MODEL_DEFAULT,
+    judge_model: str | None = None,
     timeout: float = 60.0,
     out: str | Path | None = None,
     api_key: str | None = None,
@@ -421,11 +438,20 @@ def run(
     """Run the PRvL+ matrix and return the snapshot dict (also writing it when
     ``write`` and an ``out`` path resolve). Importable so the offline test can call
     it directly with ``call_llm`` monkeypatched."""
-    labels = models or [m[0] for m in MODELS]
+    if provider not in PROVIDER_MODELS:
+        raise SystemExit(f"unknown provider {provider!r}; choose from {list(PROVIDER_MODELS)}")
+    prov_models = PROVIDER_MODELS[provider]
+    model_by_label = dict(prov_models)
+    base_url, _, env_key = PROVIDERS[provider]
+    if judge_model is None:
+        judge_model = PROVIDER_JUDGE.get(provider, JUDGE_MODEL_DEFAULT)
+
+    labels = models or [m[0] for m in prov_models]
     profs = profiles or list(PROFILES)
+    _valid_labels = [m[0] for m in prov_models]
     for lbl in labels:
-        if lbl not in _MODEL_BY_LABEL:
-            raise SystemExit(f"unknown model label {lbl!r}; choose from {[m[0] for m in MODELS]}")
+        if lbl not in model_by_label:
+            raise SystemExit(f"unknown model label {lbl!r}; choose from {_valid_labels}")
     for p in profs:
         if p not in PROFILES:
             raise SystemExit(f"unknown profile {p!r}; choose from {PROFILES}")
@@ -436,11 +462,11 @@ def run(
 
     # No raising key resolution: the offline test stubs call_llm and CI may have no
     # key. A real run with an empty key simply records per-row api-errors.
-    key = api_key if api_key is not None else os.environ.get(OPENROUTER_ENV_KEY, "")
+    key = api_key if api_key is not None else os.environ.get(env_key, "")
 
     rows: list[dict] = []
     for lbl in labels:
-        model_id = _MODEL_BY_LABEL[lbl]
+        model_id = model_by_label[lbl]
         for profile in profs:
             for case in all_cases:
                 rows.append(
@@ -449,7 +475,7 @@ def run(
                         profile,
                         lbl,
                         model_id,
-                        base_url=OPENROUTER_URL,
+                        base_url=base_url,
                         api_key=key,
                         timeout=timeout,
                         judge=judge,
@@ -461,8 +487,8 @@ def run(
         "benchmark": "prvl_multi",
         "package_version": _pkg_version(),
         "date": datetime.now().isoformat(),
-        "provider": "openrouter",
-        "models": [{"label": lbl, "openrouter_id": _MODEL_BY_LABEL[lbl]} for lbl in labels],
+        "provider": provider,
+        "models": [{"label": lbl, "model_id": model_by_label[lbl]} for lbl in labels],
         "profiles": profs,
         "cases": len(all_cases),
         "judge": judge,
@@ -507,15 +533,21 @@ def main(argv: list[str] | None = None) -> int:
         description="PRvL+ multi-model runner (Privacy / Reversibility / Utility)"
     )
     ap.add_argument(
+        "--provider",
+        default="openrouter",
+        choices=list(PROVIDER_MODELS),
+        help="LLM provider (default: openrouter; poe avoids OpenRouter credits)",
+    )
+    ap.add_argument(
         "--models",
         default=None,
-        help=f"comma list of labels (default: all). choices: {[m[0] for m in MODELS]}",
+        help="comma list of labels (default: all for the provider)",
     )
     ap.add_argument("--profiles", default=None, help=f"comma list (default: {','.join(PROFILES)})")
     ap.add_argument("--limit", type=int, default=None, help="evaluate only the first N cases")
     ap.add_argument("--judge", action="store_true", help="add LLM-judge utility (extra calls)")
     ap.add_argument(
-        "--judge-model", default=JUDGE_MODEL_DEFAULT, help="OpenRouter id of the judge model"
+        "--judge-model", default=None, help="judge model id (default: the provider's judge)"
     )
     ap.add_argument(
         "--out",
@@ -525,10 +557,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--timeout", type=float, default=60.0, help="per-call timeout (seconds)")
     args = ap.parse_args(argv)
 
-    if not os.environ.get(OPENROUTER_ENV_KEY):
-        print(f"[warn] {OPENROUTER_ENV_KEY} not set — calls will error per-row", file=sys.stderr)
+    _, _, env_key = PROVIDERS[args.provider]
+    if not os.environ.get(env_key):
+        print(f"[warn] {env_key} not set — calls will error per-row", file=sys.stderr)
 
     snap = run(
+        provider=args.provider,
         models=[s.strip() for s in args.models.split(",")] if args.models else None,
         profiles=[s.strip() for s in args.profiles.split(",")] if args.profiles else None,
         limit=args.limit,
