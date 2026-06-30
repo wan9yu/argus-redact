@@ -1,0 +1,126 @@
+{
+  "version": "0.7.16",
+  "package_version_string": "0.7.16",
+  "dataset": "ai4privacy",
+  "language": "en",
+  "samples": 500,
+  "modes": {
+    "presidio": {
+      "precision": 80.9,
+      "recall": 49.1,
+      "f1": 61.1,
+      "per_type": {
+        "address": {
+          "precision": 100.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 204
+        },
+        "credit_card": {
+          "precision": 75.0,
+          "recall": 12.5,
+          "f1": 21.4,
+          "tp": 6,
+          "fp": 2,
+          "fn": 42
+        },
+        "email": {
+          "precision": 100.0,
+          "recall": 100.0,
+          "f1": 100.0,
+          "tp": 227,
+          "fp": 0,
+          "fn": 0
+        },
+        "location": {
+          "precision": 60.0,
+          "recall": 50.0,
+          "f1": 54.5,
+          "tp": 123,
+          "fp": 82,
+          "fn": 123
+        }
+      },
+      "by_class": {
+        "free_text": {
+          "precision": 60.0,
+          "recall": 27.3,
+          "f1": 37.6,
+          "tp": 123,
+          "fp": 82,
+          "fn": 327
+        },
+        "structured": {
+          "precision": 99.1,
+          "recall": 84.7,
+          "f1": 91.4,
+          "tp": 233,
+          "fp": 2,
+          "fn": 42
+        }
+      }
+    }
+  },
+  "per_type_presidio": {
+    "address": {
+      "precision": 100.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 204
+    },
+    "credit_card": {
+      "precision": 75.0,
+      "recall": 12.5,
+      "f1": 21.4,
+      "tp": 6,
+      "fp": 2,
+      "fn": 42
+    },
+    "email": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1": 100.0,
+      "tp": 227,
+      "fp": 0,
+      "fn": 0
+    },
+    "location": {
+      "precision": 60.0,
+      "recall": 50.0,
+      "f1": 54.5,
+      "tp": 123,
+      "fp": 82,
+      "fn": 123
+    }
+  },
+  "by_class_presidio": {
+    "free_text": {
+      "precision": 60.0,
+      "recall": 27.3,
+      "f1": 37.6,
+      "tp": 123,
+      "fp": 82,
+      "fn": 327
+    },
+    "structured": {
+      "precision": 99.1,
+      "recall": 84.7,
+      "f1": 91.4,
+      "tp": 233,
+      "fp": 2,
+      "fn": 42
+    }
+  },
+  "engine": {
+    "engine": "presidio",
+    "presidio_version": "2.2.362",
+    "nlp_engine_lang": "en",
+    "spacy_model": "en_core_web_lg",
+    "note": "out-of-box default recognizers; zh analyzed with the en engine so only language-agnostic regex recognizers fire — custom zh recognizers would improve it"
+  },
+  "date": "2026-06-30"
+}

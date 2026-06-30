@@ -1,0 +1,190 @@
+{
+  "version": "0.7.16",
+  "package_version_string": "0.7.16",
+  "dataset": "pii_bench_zh",
+  "language": "zh",
+  "samples": 1000,
+  "modes": {
+    "presidio": {
+      "precision": 71.8,
+      "recall": 17.3,
+      "f1": 27.9,
+      "per_type": {
+        "address": {
+          "precision": 100.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 286
+        },
+        "bank_card": {
+          "precision": 100.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 166
+        },
+        "email": {
+          "precision": 29.6,
+          "recall": 29.6,
+          "f1": 29.6,
+          "tp": 60,
+          "fp": 143,
+          "fn": 143
+        },
+        "id_number": {
+          "precision": 100.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 373
+        },
+        "license_plate": {
+          "precision": 100.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 0,
+          "fn": 79
+        },
+        "passport": {
+          "precision": 100.0,
+          "recall": 31.8,
+          "f1": 48.2,
+          "tp": 27,
+          "fp": 0,
+          "fn": 58
+        },
+        "person": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 23,
+          "fn": 1066
+        },
+        "phone": {
+          "precision": 90.5,
+          "recall": 51.3,
+          "f1": 65.5,
+          "tp": 458,
+          "fp": 48,
+          "fn": 434
+        }
+      },
+      "by_class": {
+        "free_text": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "tp": 0,
+          "fp": 23,
+          "fn": 1352
+        },
+        "structured": {
+          "precision": 74.0,
+          "recall": 30.3,
+          "f1": 43.0,
+          "tp": 545,
+          "fp": 191,
+          "fn": 1253
+        }
+      }
+    }
+  },
+  "per_type_presidio": {
+    "address": {
+      "precision": 100.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 286
+    },
+    "bank_card": {
+      "precision": 100.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 166
+    },
+    "email": {
+      "precision": 29.6,
+      "recall": 29.6,
+      "f1": 29.6,
+      "tp": 60,
+      "fp": 143,
+      "fn": 143
+    },
+    "id_number": {
+      "precision": 100.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 373
+    },
+    "license_plate": {
+      "precision": 100.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 0,
+      "fn": 79
+    },
+    "passport": {
+      "precision": 100.0,
+      "recall": 31.8,
+      "f1": 48.2,
+      "tp": 27,
+      "fp": 0,
+      "fn": 58
+    },
+    "person": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 23,
+      "fn": 1066
+    },
+    "phone": {
+      "precision": 90.5,
+      "recall": 51.3,
+      "f1": 65.5,
+      "tp": 458,
+      "fp": 48,
+      "fn": 434
+    }
+  },
+  "by_class_presidio": {
+    "free_text": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "tp": 0,
+      "fp": 23,
+      "fn": 1352
+    },
+    "structured": {
+      "precision": 74.0,
+      "recall": 30.3,
+      "f1": 43.0,
+      "tp": 545,
+      "fp": 191,
+      "fn": 1253
+    }
+  },
+  "engine": {
+    "engine": "presidio",
+    "presidio_version": "2.2.362",
+    "nlp_engine_lang": "en",
+    "spacy_model": "en_core_web_lg",
+    "note": "out-of-box default recognizers; zh analyzed with the en engine so only language-agnostic regex recognizers fire — custom zh recognizers would improve it"
+  },
+  "date": "2026-06-30"
+}
