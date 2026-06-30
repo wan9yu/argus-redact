@@ -123,11 +123,39 @@ def test_utility_basic_non_vacuous(tmp_path, monkeypatch):
 
 def test_expected_safety_refusal_tag():
     # T2: health-extract / health-advice cases are tagged so a frontier-model safety
-    # refusal there is separable from a task argus actually broke.
+    # refusal there is separable from a task argus actually broke. Covers both the
+    # legacy pair and the expanded fixture corpus' health cases.
     cases = {c["id"]: c for c in prvl_multi_eval._default_cases()}
-    assert cases["qa_en"]["expected_safety_refusal"] is True
-    assert cases["advice_zh"]["expected_safety_refusal"] is True
+    for cid in ("qa_en", "advice_zh", "extract_condition_zh", "advice_condition_en"):
+        assert cases[cid]["expected_safety_refusal"] is True
     assert cases["summarize_zh"]["expected_safety_refusal"] is False
+
+
+def test_default_cases_expanded_balanced_wellformed():
+    # The PRvL+ matrix must be statistically meaningful, not the legacy N=4 toy set.
+    # Lock in: >=24 unique cases, a {text} slot in every prompt, every declared PII
+    # substring actually present in its own text, and a balanced spread across the
+    # three task families (reference / extract / creative) and the two languages.
+    from collections import Counter
+
+    cases = prvl_multi_eval._default_cases()
+    assert len(cases) >= 24, f"expected >= 24 merged cases, got {len(cases)}"
+
+    ids = [c["id"] for c in cases]
+    assert len(ids) == len(set(ids)), "duplicate case ids after merge"
+
+    for c in cases:
+        assert "{text}" in c["prompt"], f"{c['id']}: prompt missing {{text}} slot"
+        assert c["task_type"] in {"reference", "extract", "creative", "unknown"}
+        for p in c["pii"]:
+            assert p in c["text"], f"{c['id']}: pii {p!r} not present in its text"
+
+    by_type = Counter(c["task_type"] for c in cases)
+    for t in ("reference", "extract", "creative"):
+        assert by_type[t] >= 7, f"task_type {t} underrepresented for balance: {by_type}"
+
+    by_lang = Counter(c["lang"] for c in cases if isinstance(c["lang"], str))
+    assert by_lang["zh"] >= 10 and by_lang["en"] >= 10, f"language skew: {by_lang}"
 
 
 def test_null_content_does_not_crash(tmp_path, monkeypatch):

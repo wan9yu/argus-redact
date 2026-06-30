@@ -44,6 +44,7 @@ from argus_redact import redact, redact_pseudonym_llm, restore
 from tests.benchmark.reid_eval import PROVIDERS
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
+FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 OPENROUTER_URL, _OPENROUTER_DEFAULT_MODEL, OPENROUTER_ENV_KEY = PROVIDERS["openrouter"]
 
 # Fixed 32-byte high-entropy salt so runs are reproducible and no low-entropy
@@ -80,8 +81,18 @@ _REFUSAL_MARKERS = (
 # Cases that ask for a person's HEALTH condition / medical advice: a frontier
 # model declining these on privacy grounds is CORRECT behavior, not a redaction
 # failure — tagged so the aggregate separates "expected safety refusal" from a
-# task argus actually broke. (health-extract qa_en + health-advice advice_zh.)
-_EXPECTED_REFUSAL_CASES = frozenset({"qa_en", "advice_zh"})
+# task argus actually broke. Two from the legacy 4-case set (qa_en, advice_zh) plus
+# the health extract/advice cases in the expanded fixtures/prvl_cases.json corpus.
+_EXPECTED_REFUSAL_CASES = frozenset(
+    {
+        "qa_en",
+        "advice_zh",
+        "extract_condition_zh",
+        "extract_condition_en",
+        "advice_condition_zh",
+        "advice_condition_en",
+    }
+)
 
 
 def call_llm(
@@ -118,19 +129,37 @@ def call_llm(
     return resp.json()["choices"][0]["message"].get("content") or ""
 
 
-def _default_cases() -> list[dict]:
-    """Union (dedup by id) of the two in-repo PRvL case sets, normalized.
+def _load_fixture_cases() -> list[dict]:
+    """Load the expanded PRvL+ case corpus from ``fixtures/prvl_cases.json``.
 
-    Canonical sources: ``test_prvl.LLM_PROMPTS`` (key ``prompt_template``) and
-    ``test_prvl_multi_llm.TEST_CASES`` (key ``prompt``). Both are reused as SSOT so
-    the case corpus can't drift from the existing benchmarks. Fields normalized to:
-    id, text, prompt, lang, pii, task_type. First occurrence of an id wins.
+    The two legacy in-code sets only carry 4 unique cases between them — too small
+    for a meaningful per-(model × profile) matrix (N=4 ⇒ each case moves a rate by
+    25pp). This balanced fixture set (reference / extract / creative, ~half zh /
+    half en) lifts N to ~24. Returns ``[]`` if the file is somehow absent so a
+    partial checkout still runs the legacy cases.
+    """
+    path = FIXTURES_DIR / "prvl_cases.json"
+    if not path.exists():
+        return []
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _default_cases() -> list[dict]:
+    """Union (dedup by id) of all in-repo PRvL case sets, normalized.
+
+    Canonical sources, in priority order: ``test_prvl.LLM_PROMPTS`` (key
+    ``prompt_template``), ``test_prvl_multi_llm.TEST_CASES`` (key ``prompt``), and
+    the expanded ``fixtures/prvl_cases.json`` corpus. All are reused as SSOT so the
+    case corpus can't drift from the existing benchmarks. Fields normalized to: id,
+    text, prompt, lang, pii, task_type. First occurrence of an id wins (the legacy
+    in-code cases lead, so id-stable behaviors like the offline test's ``limit``
+    slice stay deterministic).
     """
     from tests.benchmark.test_prvl import LLM_PROMPTS
     from tests.benchmark.test_prvl_multi_llm import TEST_CASES
 
     merged: dict[str, dict] = {}
-    for src in (LLM_PROMPTS, TEST_CASES):
+    for src in (LLM_PROMPTS, TEST_CASES, _load_fixture_cases()):
         for c in src:
             cid = c["id"]
             if cid in merged:
