@@ -2,6 +2,26 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.7.17 — typed pseudonym output (compliance audit)
+
+Exposes detection-time PII types on the pseudonym-LLM path so audit records match the
+SSOT `redact(with_types=True)` path exactly. Pure-Python; no detection or Rust change.
+
+### Added
+- **`PseudonymLLMResult.types`** — a `fake → PII type` mapping on the result of
+  `redact_pseudonym_llm()`, using the same canonical SSOT type names as
+  `redact(with_types=True)` (e.g. `bank_card`, `person`, `passport`). Covers both the
+  realistic downstream fakes and the `[TYPE-NNNNN]` audit placeholders; populated
+  unconditionally (empty when nothing was detected). Lets a compliance audit read entity
+  types straight from detection instead of parsing placeholder prefixes — which cannot
+  distinguish types that share a prefix (e.g. `passport` vs `us_passport`).
+- **`StreamingRedactor.aggregate_types()`** — the accumulated `fake → PII type` map across
+  all fed chunks, mirroring `aggregate_key()`.
+
+### Internal
+- `redact(with_types=True)` and `redact_pseudonym_llm` now build the type map through one
+  shared `_build_type_map()` helper (no behavior change).
+
 ## v0.7.16 — streaming detect-on-emit (performance)
 
 A pure performance optimization of the incremental `StreamingRedactor`. **No
