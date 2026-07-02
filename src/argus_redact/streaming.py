@@ -197,6 +197,7 @@ class StreamingRedactor:
         # 0 initially; ``min(prev_cut, _EVIDENCE_CONTEXT_WINDOW)`` after each emit.
         self._ctx_len: int = 0
         self._accumulated_key: dict[str, str] = {}
+        self._accumulated_types: dict[str, str] = {}
 
     def feed(self, chunk: str) -> PseudonymLLMResult:
         """Accumulate ``chunk`` and emit up to the context-cut boundary, redacted.
@@ -337,11 +338,17 @@ class StreamingRedactor:
         # are disjoint by construction, so collisions are impossible.
         for fake, original in result.key.items():
             self._accumulated_key.setdefault(fake, original)
+        for fake, t in result.types.items():
+            self._accumulated_types.setdefault(fake, t)
         return result
 
     def aggregate_key(self) -> dict[str, str]:
         """Return a copy of the unified key across all fed chunks."""
         return dict(self._accumulated_key)
+
+    def aggregate_types(self) -> dict[str, str]:
+        """Return a copy of the fake → SSOT PII type map across all fed chunks."""
+        return dict(self._accumulated_types)
 
     def export_state(self, *, include_salt: bool = False) -> dict:
         """Serialize this redactor's state to a JSON-friendly dict.

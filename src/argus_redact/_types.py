@@ -76,6 +76,13 @@ class PseudonymLLMResult:
     - ``result.aliases`` *(v0.6.0+)* — ``str → tuple[str, ...]`` dict mapping a
       fake to alternate transliterations a downstream LLM might emit. Pass
       ``aliases`` to ``restore()`` for cross-language recovery.
+    - ``result.types`` — ``str → str`` dict (fake → SSOT PII type). The SAME
+      canonical type names ``redact(with_types=True)`` returns, e.g.
+      ``"bank_card"``, ``"person"``, ``"passport"`` — never audit-prefix
+      reverse-parse fragments (``"cn_bank_card"``, ``"o"``). Covers BOTH the
+      realistic downstream fakes AND the ``[TYPE-NNNNN]`` audit placeholders.
+      Empty when nothing was detected. (Distinct from the ``types`` *parameter*
+      of ``redact_pseudonym_llm``, which is a detection type filter.)
     """
 
     audit_text: str
@@ -83,3 +90,4 @@ class PseudonymLLMResult:
     display_text: str
     key: dict[str, str] = field(default_factory=dict)
     aliases: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    types: dict[str, str] = field(default_factory=dict)

@@ -194,6 +194,14 @@ def redact_pseudonym_llm(
     # output spaces (realistic digits/Chinese vs [TYPE-NNNNN] placeholders),
     # so a simple union is collision-free by construction.
     unified_key = {**key, **audit_key}
+    # fake → SSOT PII type, built PER PASS then merged. In the unified key each
+    # original has TWO fakes (realistic + [TYPE-NNNNN] audit), so a single
+    # original→fake reverse map would drop one — invert each pass's key
+    # separately (the two fake-spaces are disjoint, like unified_key).
+    unified_types = {
+        **_redact_module._build_type_map(key, entities),
+        **_redact_module._build_type_map(audit_key, entities),
+    }
     # Aliases only attach to realistic-pass fakers; audit placeholders never
     # have transliterations. Skip empty alias lists to keep the dict tight.
     unified_aliases = {
@@ -208,6 +216,7 @@ def redact_pseudonym_llm(
         display_text=display_text,
         key=unified_key,
         aliases=unified_aliases,
+        types=unified_types,
     )
 
 

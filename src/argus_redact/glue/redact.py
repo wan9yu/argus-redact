@@ -487,6 +487,14 @@ def _replace_and_emit(
     return redacted, result_key, aliases
 
 
+def _build_type_map(key: dict[str, str], entities: list[PatternMatch]) -> dict[str, str]:
+    """fake → SSOT PII type: invert ``key`` (fake→original) and read each entity's
+    ``.type``. Single source shared by ``redact(with_types=True)`` and
+    ``redact_pseudonym_llm``'s ``result.types`` (called once per replace pass)."""
+    reverse = {original: fake for fake, original in key.items()}
+    return {reverse[e.text]: e.type for e in entities if e.text in reverse}
+
+
 def redact(
     text: str,
     *,
@@ -714,14 +722,8 @@ def redact(
         return redacted, result_key, {"entities": entity_details, "stats": stats}
 
     if with_types:
-        # Precedence 3: with_types only — build replacement → PII type mapping
-        reverse_key = {v: k for k, v in result_key.items()}
-        type_map = {}
-        for e in entities:
-            replacement = reverse_key.get(e.text, "")
-            if replacement:
-                type_map[replacement] = e.type
-        return redacted, result_key, type_map
+        # Precedence 3: with_types only — replacement → PII type mapping
+        return redacted, result_key, _build_type_map(result_key, entities)
 
     # Precedence 4: default
     return redacted, result_key
