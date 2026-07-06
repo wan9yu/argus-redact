@@ -38,6 +38,20 @@ convergent external validation of the "encrypt PII, not meaning, locally" thesis
 argus-redact adds **reversibility + per-message keys** on top, so the substitution
 round-trips back to the original instead of being a one-way synthesis.
 
+A second, near-simultaneous example is the **Anonymizer SLM series**
+([Eternis AI, 2026](https://huggingface.co/blog/pratyushrt/anonymizerslm)): small
+on-device models (Qwen3 0.6–4B) that detect PII, emit a `replace_entities` tool call
+with semantically-equivalent fakes, route the query to a cloud model, then **restore**
+the originals in the response — the same reversible round-trip argus-redact performs,
+arrived at independently. Their 1.7–4B models report ~GPT-4.1 anonymization quality at
+<250 ms. The difference is *how* the substitution is produced: argus-redact's L1/L2 are
+**deterministic** (regex + validators + NER) — no model to ship, sub-millisecond,
+auditable, and extensible by language pack — whereas the Anonymizer SLM is a **learned**
+replacer. The two are complementary: a learned model is strongest on free-text and
+*implicit* entities (argus-redact's weaker axis, especially in English), which makes it a
+natural fit for argus-redact's optional **semantic (L3) tier**, while the deterministic
+core handles structured PII with no weights or GPU.
+
 Use both together via the [Presidio bridge](../docs/integration-frameworks.md):
 
 ```python
@@ -47,6 +61,30 @@ bridge = PresidioBridge()
 redacted, key = bridge.redact("John Smith called 555-123-4567", language="en")
 restored = bridge.restore(llm_output, key)
 ```
+
+## Recent landscape (2026)
+
+We track this space as it moves. Detection capability is **converging** across tools, so
+we record what's new and, honestly, where argus-redact still differs — and where a
+neighbor does something we don't.
+
+- **Anonymizer SLM series (Eternis AI).** On-device PII replacement *with
+  restoration*; 1.7–4B models report ~GPT-4.1 anonymization quality at <250 ms. The closest
+  neighbor to argus-redact's reversible-substitution design (see Positioning above).
+  **How we differ:** argus-redact's spine is deterministic (no model to ship, sub-millisecond,
+  auditable, 8 language packs); theirs is a learned model. Complementary, not competing — a
+  learned model like this is a candidate backend for argus-redact's optional semantic tier.
+- **Microsoft Presidio — continued recognizer growth.** Recent releases add German (`DE_*`)
+  recognizers and an optional per-country recognizer filter (alongside Swedish/Canadian/UK/Turkish
+  packs). **How we differ:** Presidio keeps broadening its out-of-the-box recognizer set (a
+  direction we welcome and [bridge to](../docs/integration-frameworks.md)); argus-redact's
+  distinction is not any single recognizer but the *combination* it defaults to — reversible
+  substitution, per-message keys, Chinese-native detection, and a local semantic tier for
+  implicit PII.
+
+> A recurring theme: **detection converges, the workflow doesn't.** Neighbors are strong at
+> *finding* PII; argus-redact's bet is on what happens after — reversible, per-message-keyed
+> substitution that a downstream LLM can still reason over, run entirely locally.
 
 ## Benchmark: ai4privacy/pii-masking-400k
 
