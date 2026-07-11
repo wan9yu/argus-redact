@@ -14,6 +14,7 @@ from argus_redact.pure._strategy_kind import (
     is_strategy_reversible,
 )
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS
+from argus_redact.pure.security_events import KEEP_DOWNGRADED, security_event
 
 # Rust PatternMatch class, resolved once at import (same idiom as pure/merger.py).
 _RustPM = _core.PatternMatch
@@ -84,6 +85,48 @@ def _resolve_default_strategy(entity_type: str) -> str:
     if typedef_list:
         return typedef_list[0].strategy
     return "remove"  # fallback for unknown types
+
+
+def _resolved_strategy(entity_type: str, config: dict | None) -> str:
+    """The strategy that applies to ``entity_type`` — explicit config over the
+    registry default. Single source for keep-downgrade + residual-PII."""
+    ec = _get_entity_config(entity_type, config)
+    return ec.get("strategy") or _resolve_default_strategy(entity_type)
+
+
+def _keep_downgraded_entities(entities, config: dict | None):
+    """Entities whose ``keep`` strategy is downgraded — ``keep`` is only valid for
+    whitelisted self_reference pronouns/kinship. Deduped by text. THE predicate
+    shared by the SecurityWarning path and the security_event path (no drift)."""
+    out, seen = [], set()
+    for e in entities:
+        if e.text in seen:
+            continue
+        if _resolved_strategy(e.type, config) != "keep":
+            continue
+        if e.type == "self_reference" and e.text in _KEEP_WHITELIST:
+            continue
+        seen.add(e.text)
+        out.append(e)
+    return out
+
+
+def keep_downgraded_event(entities, config: dict | None) -> dict | None:
+    """A PII-free KEEP_DOWNGRADED security_event, or None if nothing downgraded.
+    count = unique downgraded entity texts; detail names the TYPES only (never raw
+    text) so the event is safe for the PII-free audit ledger."""
+    ents = _keep_downgraded_entities(entities, config)
+    if not ents:
+        return None
+    types = sorted({e.type for e in ents})
+    return security_event(KEEP_DOWNGRADED, count=len(ents), detail="types: " + ", ".join(types))
+
+
+def residual_personal_data(entities, config: dict | None) -> bool:
+    """True if any detected entity uses a reversible strategy (pseudonymised output
+    is still personal data under GDPR Art.4(5)). Derived from the
+    is_strategy_reversible SSOT. Empty entities → False."""
+    return any(is_strategy_reversible(_resolved_strategy(e.type, config)) for e in entities)
 
 
 DEFAULT_PREFIXES = {
@@ -412,23 +455,7 @@ def replace(
     )
 
     if keep_downgraded:
-        # Mirror the Python path's per-entity SecurityWarning. The Rust core
-        # only signals THAT a downgrade happened; reconstruct the per-entity
-        # messages here so the warning surface is unchanged. The Python loop
-        # processes each distinct entity.text once (dedup via entity_replacements
-        # / reverse_index), warning only on a keep entity that is NOT a
-        # whitelisted self_reference. We replay that same dedup + guard.
-        warned: set[str] = set()
-        for entity in entities:
-            if entity.text in warned:
-                continue
-            ec = _get_entity_config(entity.type, config)
-            strategy = ec.get("strategy") or _resolve_default_strategy(entity.type)
-            if strategy != "keep":
-                continue
-            warned.add(entity.text)
-            if entity.type == "self_reference" and entity.text in _KEEP_WHITELIST:
-                continue  # whitelisted → kept verbatim, no warning
+        for entity in _keep_downgraded_entities(entities, config):
             warnings.warn(
                 f"strategy='keep' is only supported for self_reference "
                 f"pronouns and kinship phrases; downgrading to default for "

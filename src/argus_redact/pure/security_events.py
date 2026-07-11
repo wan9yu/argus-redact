@@ -8,6 +8,7 @@ PROVENANCE_FAILED = "provenance_failed"
 OUT_OF_SCOPE_PSEUDONYM = "out_of_scope_pseudonym"
 INJECTION_SUSPECTED = "injection_suspected"
 GUARD_NO_ANCHOR = "guard_no_anchor"
+KEEP_DOWNGRADED = "keep_downgraded"
 
 
 def security_event(reason_code: str, count: int, detail: str | None = None) -> dict:
