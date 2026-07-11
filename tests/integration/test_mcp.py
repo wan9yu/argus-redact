@@ -71,9 +71,15 @@ class TestMCPToolExecution:
         content = result if isinstance(result, str) else result[0].text
         data = json.loads(content)
 
+        # Guard-by-default restore requires the anchor nonce to appear in the text.
+        # Simulate an LLM response that echoes the nonce as instructed by anchor_prompt.
+        # anchor_prompt contains the nonce verbatim, so appending it to the redacted
+        # text is equivalent to the LLM replying with the nonce-echo line.
+        text_with_nonce = data["redacted"] + "\n" + data["anchor_prompt"]
+
         result2 = await mcp_app._tool_manager.call_tool(
             "restore",
-            {"text": data["redacted"], "key_token": data["key_token"]},
+            {"text": text_with_nonce, "key_token": data["key_token"]},
         )
         content2 = result2 if isinstance(result2, str) else result2[0].text
         restored = json.loads(content2)

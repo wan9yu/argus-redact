@@ -52,7 +52,8 @@ class TestLangChainOllamaChain:
         assert redact_r.last_key is not None
         assert len(redact_r.last_key) >= 1
 
-    def test_should_preserve_key_across_multi_turn(self, _check_ollama):
+    def test_should_preserve_key_across_multi_turn(self):
+        # Does not call a live model — simulates LLM nonce-echo for guard-by-default restore.
         redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
         restore_r = RestoreRunnable(redact_r)
 
@@ -65,11 +66,15 @@ class TestLangChainOllamaChain:
         # Key should have both entries
         assert len(redact_r.last_key) >= 2
 
-        # Restore both
-        assert "13812345678" in restore_r.invoke(r1)
-        assert "test@example.com" in restore_r.invoke(r2)
+        # After both redact turns the anchor reflects the latest call.
+        # Simulate LLM echoing the current nonce (as instructed by make_prompt_addendum).
+        # Guard-by-default restore requires the nonce to appear in the response text.
+        nonce = redact_r.last_anchor.nonce
+        assert "13812345678" in restore_r.invoke(r1 + "\n" + nonce)
+        assert "test@example.com" in restore_r.invoke(r2 + "\n" + nonce)
 
-    def test_should_work_with_mixed_language(self, _check_ollama):
+    def test_should_work_with_mixed_language(self):
+        # Does not call a live model — simulates LLM nonce-echo for guard-by-default restore.
         redact_r = RedactRunnable(
             mode="fast",
             lang=["zh", "en"],
@@ -83,6 +88,9 @@ class TestLangChainOllamaChain:
         assert "13812345678" not in redacted
         assert "123-45-6789" not in redacted
 
-        restored = restore_r.invoke(redacted)
+        # Simulate LLM echoing the nonce (as instructed by make_prompt_addendum).
+        # Guard-by-default restore requires the nonce to appear in the response text.
+        nonce = redact_r.last_anchor.nonce
+        restored = restore_r.invoke(redacted + "\n" + nonce)
         assert "13812345678" in restored
         assert "123-45-6789" in restored
