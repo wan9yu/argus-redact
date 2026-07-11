@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Mapping
 
 from argus_redact.pure.display_marker import strip_display_markers
+
+
+class RestoreGuardError(Exception):
+    """Raised when guard=True, strict=True, and one or more security events occur."""
+
+    def __init__(self, events: list[dict]) -> None:
+        self.events = events
+        codes = ", ".join(e["reason_code"] for e in events)
+        super().__init__(f"restore guard failed: {codes}")
 
 
 def check_restore_safety(
@@ -43,7 +53,11 @@ def restore(
     *,
     aliases: dict[str, tuple[str, ...]] | None = None,
     display_marker: str | None = None,
-) -> str:
+    guard: bool | None = None,
+    anchor: object | None = None,
+    strict: bool = False,
+    detailed: bool = False,
+) -> str | tuple[str, dict]:
     """Replace pseudonyms with originals using the key.
 
     `key` must be an in-memory mapping. The public
@@ -64,12 +78,99 @@ def restore(
     verbatim right after the restored value (e.g. `"19999123456ⓕ"` ->
     `"13800138000ⓕ"`). Pass `display_marker=` only when you want the marker
     removed from the output.
+
+    Guard parameters (v0.8.0+):
+        guard: when True, enables deterministic provenance (P) + scope (S) checks.
+               when None (default), emits DeprecationWarning and runs legacy behavior.
+        anchor: Anchor instance produced by make_anchor(); carries nonce + scope.
+        strict: when True and guard=True, raises RestoreGuardError on any security event.
+        detailed: when True, returns (result_text, {"security_events": [...]}) tuple.
     """
     if not isinstance(key, Mapping):
         raise TypeError(f"key must be a Mapping, got {type(key).__name__}")
 
+    if guard is None:
+        warnings.warn(
+            "bare restore without guard= is deprecated; will default to guard=True in v0.8.0",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        result = _do_restore(text, key, aliases=aliases, display_marker=display_marker)
+        if detailed:
+            return result, {"security_events": []}
+        return result
+
+    # guard is truthy — run P + S checks
+    from argus_redact.pure.security_events import (
+        GUARD_NO_ANCHOR,
+        OUT_OF_SCOPE_PSEUDONYM,
+        PROVENANCE_FAILED,
+        security_event,
+    )
+
+    events: list[dict] = []
+
+    # (P) Provenance check: anchor must exist and its nonce must appear in text
+    if anchor is None:
+        events.append(security_event(GUARD_NO_ANCHOR, count=len(key), detail="no anchor provided"))
+        return _fail_closed(text, events, strict=strict, detailed=detailed)
+
+    if anchor.nonce not in text:
+        events.append(
+            security_event(PROVENANCE_FAILED, count=len(key), detail="nonce absent from response")
+        )
+        return _fail_closed(text, events, strict=strict, detailed=detailed)
+
+    # (S) Scope filter: only restore pseudonyms within anchor.scope
+    key_dict = dict(key) if not isinstance(key, dict) else key
+    scoped = {k: v for k, v in key_dict.items() if k in anchor.scope}
+
+    # Detect out-of-scope pseudonyms that appear in text
+    out_of_scope_hits = [k for k in key_dict if k not in anchor.scope and k in text]
+    if out_of_scope_hits:
+        events.append(
+            security_event(
+                OUT_OF_SCOPE_PSEUDONYM,
+                count=len(out_of_scope_hits),
+                detail=f"withheld: {', '.join(sorted(out_of_scope_hits))}",
+            )
+        )
+
+    # Restore only in-scope pseudonyms
+    result = _do_restore(text, scoped, aliases=aliases, display_marker=display_marker)
+
+    if strict and events:
+        raise RestoreGuardError(events)
+
+    if detailed:
+        return result, {"security_events": events}
+    return result
+
+
+def _fail_closed(
+    text: str,
+    events: list[dict],
+    *,
+    strict: bool,
+    detailed: bool,
+) -> str | tuple[str, dict]:
+    """Return un-restored text with security events; raise if strict."""
+    if strict:
+        raise RestoreGuardError(events)
+    if detailed:
+        return text, {"security_events": events}
+    return text
+
+
+def _do_restore(
+    text: str,
+    key: Mapping[str, str],
+    *,
+    aliases: dict[str, tuple[str, ...]] | None = None,
+    display_marker: str | None = None,
+) -> str:
+    """Perform the actual substitution via Rust core."""
     if not key:
-        # Even with an empty key, an explicit display_marker should be stripped.
         if display_marker is not None:
             return strip_display_markers(text, marker=display_marker)
         return text
@@ -77,11 +178,8 @@ def restore(
     if not isinstance(key, dict):
         key = dict(key)
 
-    # Delegate substitution + alias merge + decoration markers + grammar to Rust.
-    # check_restore_safety and wipe_key remain Python (T8 scope).
     from argus_redact._core import restore as _rust_restore
 
-    # Convert aliases values to lists (Rust expects Vec<String>, not tuples).
     rust_aliases: dict[str, list[str]] | None = None
     if aliases:
         rust_aliases = {k: list(v) for k, v in aliases.items()}
