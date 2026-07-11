@@ -62,6 +62,7 @@ def test_compose_dunder_all_is_exactly_eight():
 
     v0.6.7 baseline: 5 names. v0.6.11 added the adapter-author trio
     (register_pii_type / PIITypeDef / PatternMatch).
+    Theme A guard-by-default added Anchor + make_anchor.
     """
     import argus_redact.compose as mod
 
@@ -75,5 +76,8 @@ def test_compose_dunder_all_is_exactly_eight():
         "register_pii_type",
         "PIITypeDef",
         "PatternMatch",
+        # Theme A: guard-by-default restore
+        "Anchor",
+        "make_anchor",
     }
     assert set(mod.__all__) == expected
