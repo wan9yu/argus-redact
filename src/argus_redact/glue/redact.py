@@ -694,8 +694,8 @@ def redact(
         }
 
         # Theme B: PII-free security events (currently keep-downgrade) shared by
-        # both the report and detailed return shapes.
-        from argus_redact.pure.replacer import keep_downgraded_event
+        # both the report and detailed return shapes; residual flag is report-only.
+        from argus_redact.pure.replacer import keep_downgraded_event, residual_personal_data
 
         _kd_event = keep_downgraded_event(entities, config)
         security_events = [_kd_event] if _kd_event else []
@@ -703,7 +703,6 @@ def redact(
         if report:
             # Precedence 1: report wins over everything
             from argus_redact._types import RedactReport
-            from argus_redact.pure.replacer import residual_personal_data
             from argus_redact.pure.risk import assess_risk
             from argus_redact.specs import lookup
 

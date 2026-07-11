@@ -454,6 +454,12 @@ def replace(
         custom_fakers=custom_fakers if custom_fakers else None,
     )
 
+    # `keep_downgraded` is the Rust core's authoritative "a downgrade happened"
+    # signal. The Python-side entity SELECTION (which entities to warn about, and
+    # the structured keep_downgraded security_event built in glue) is single-sourced
+    # through `_keep_downgraded_entities` — so the warning here and the event in
+    # `keep_downgraded_event` cannot drift from each other. If the Rust whitelist
+    # logic (`keep_whitelist=`) ever changes, update `_keep_downgraded_entities` too.
     if keep_downgraded:
         for entity in _keep_downgraded_entities(entities, config):
             warnings.warn(

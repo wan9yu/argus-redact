@@ -136,24 +136,21 @@ class AuditLedger:
         seq = len(self._entries)
         timestamp = self._clock()
         prev_hash = self.head_digest
+        # One copy of the caller's dict (isolates from later mutation); the freshly
+        # built `sanitized` dicts are already isolated. Both are only read from here
+        # on, so `_canonical_bytes` receives them directly (no extra copy) and the
+        # stored entry reuses the same objects — append and verify hash identically.
+        tc = dict(type_counts)
         sanitized = tuple(_sanitize_event(e) for e in security_events)
         entry_hash = _digest(
-            _canonical_bytes(
-                seq,
-                timestamp,
-                kind,
-                dict(type_counts),
-                [dict(e) for e in sanitized],
-                content_digest,
-                prev_hash,
-            ),
+            _canonical_bytes(seq, timestamp, kind, tc, sanitized, content_digest, prev_hash),
             self._hmac_key,
         )
         entry = AuditEntry(
             seq=seq,
             timestamp=timestamp,
             kind=kind,
-            type_counts=dict(type_counts),
+            type_counts=tc,
             security_events=sanitized,
             content_digest=content_digest,
             prev_hash=prev_hash,
@@ -173,13 +170,15 @@ class AuditLedger:
         for i, e in enumerate(self._entries):
             if e.seq != i or e.prev_hash != prev:
                 return False
+            # Stored fields are already isolated (frozen entry) and only read here,
+            # so they hash directly — the same values `append` serialized.
             expected = _digest(
                 _canonical_bytes(
                     e.seq,
                     e.timestamp,
                     e.kind,
-                    dict(e.type_counts),
-                    [dict(x) for x in e.security_events],
+                    e.type_counts,
+                    e.security_events,
                     e.content_digest,
                     e.prev_hash,
                 ),
