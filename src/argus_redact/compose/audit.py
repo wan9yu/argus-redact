@@ -94,7 +94,7 @@ class AuditEntry:
             timestamp=d["timestamp"],
             kind=d["kind"],
             type_counts=dict(d["type_counts"]),
-            security_events=tuple(d.get("security_events", ())),
+            security_events=tuple(dict(e) for e in d.get("security_events", ())),
             content_digest=d.get("content_digest"),
             prev_hash=d.get("prev_hash", ""),
             entry_hash=d.get("entry_hash", ""),
@@ -164,7 +164,11 @@ class AuditLedger:
 
     def verify(self) -> bool:
         """Recompute the chain: seq order, prev_hash links, and each entry_hash.
-        Returns False on any break (reorder / deletion / modification)."""
+        Returns False on any break (reorder / deletion / modification).
+
+        Detects interior modification / reorder / deletion, but NOT tail-truncation
+        (dropping the most-recent entries) on its own — detect that by persisting
+        ``head_digest`` externally and comparing after load."""
         prev = ""
         for i, e in enumerate(self._entries):
             if e.seq != i or e.prev_hash != prev:
@@ -185,3 +189,51 @@ class AuditLedger:
                 return False
             prev = e.entry_hash
         return True
+
+    def record_redact(self, detailed_result, *, content_digest: str | None = None) -> AuditEntry:
+        """Sugar: append a PII-free 'redact' entry from a redact(detailed=True)
+        3-tuple. type_counts counts detections; content_digest defaults to the
+        one-way SHA-256 of the redacted text. The key is never touched."""
+        redacted = detailed_result[0]
+        details = detailed_result[-1]
+        counts: dict[str, int] = {}
+        for e in details.get("entities", []):
+            counts[e["type"]] = counts.get(e["type"], 0) + 1
+        if content_digest is None:
+            content_digest = hashlib.sha256(redacted.encode("utf-8")).hexdigest()
+        return self.append(
+            "redact",
+            type_counts=counts,
+            security_events=collect_security_events(detailed_result),
+            content_digest=content_digest,
+        )
+
+    def record_restore(self, detailed_result, *, content_digest: str | None = None) -> AuditEntry:
+        """Sugar: append a PII-free 'restore' entry from a restore(detailed=True)
+        2-tuple. No type_counts (restore detects nothing); content_digest stays
+        None by default — the restore output is recovered plaintext, never
+        auto-digested (caller may pass one)."""
+        return self.append(
+            "restore",
+            type_counts={},
+            security_events=collect_security_events(detailed_result),
+            content_digest=content_digest,
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "schema_version": _LEDGER_SCHEMA_VERSION,
+            "entries": [e.to_dict() for e in self._entries],
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict, *, hmac_key: bytes | None = None) -> "AuditLedger":
+        version = d.get("schema_version")
+        if version != _LEDGER_SCHEMA_VERSION:
+            raise ValueError(
+                f"unsupported audit ledger schema_version {version!r}; "
+                f"this build supports {_LEDGER_SCHEMA_VERSION}"
+            )
+        ledger = cls(hmac_key=hmac_key)
+        ledger._entries = [AuditEntry.from_dict(e) for e in d.get("entries", [])]
+        return ledger
