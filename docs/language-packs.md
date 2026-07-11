@@ -22,6 +22,19 @@ You can contribute any one of these independently. A pack with only regex patter
 | Indian (in) | Aadhaar, PAN, phone | spaCy | `[in]` |
 | Brazilian (br) | CPF, CNPJ, phone | — | `[br]` |
 
+### Benchmark status
+
+**Only `zh` and `en` have committed recall benchmarks** (see
+[benchmark-report.md](benchmark-report.md)). The other six packs —
+`de`, `uk`, `br`, `in`, `ja`, `ko` — ship L1 patterns and (where noted) NER
+adapters, but have **no measured recall**, so they are **best-effort**: usable,
+but unbenchmarked. Two practical consequences:
+
+- Reach them with an **explicit** `lang="de"` (or a list like `lang=["de", "en"]`).
+- Do **not** rely on them under `lang="auto"`: script-only detection resolves all
+  Latin-script text to `en`, so `de`/`uk`/`br`/`in` are never auto-selected, and
+  `ja`/`ko` are only added when Hiragana/Katakana/Hangul is present.
+
 For per-language pattern details, validation rules, and test cases:
 - **Patterns:** `src/argus_redact/lang/<code>/patterns.py`
 - **Test fixtures:** `tests/fixtures/<code>_*.json` (executable examples with descriptions)

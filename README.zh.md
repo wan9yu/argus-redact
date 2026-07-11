@@ -137,6 +137,8 @@ Unicode 加固：NFKC 规范化、零宽字符剥离、西里尔/希腊伪装字
 
 混合使用：`lang=["zh", "en", "de"]`；提供已知人名：`names=["王一", "张三"]`。
 
+**基准范围：** 只有 **zh** 和 **en** 有已提交的召回率基准。其余六个语言包（**de、uk、br、in、ja、ko**）附带 L1 模式 + NER 适配器，但没有实测召回率 —— 视为 **best-effort**，请通过显式 `lang="…"` 使用。它们不会在 `lang="auto"` 下被自动选中：仅凭脚本的检测会把所有拉丁字母文本判定为 `en`。详见 [language-packs.md](docs/language-packs.md#benchmark-status)。
+
 ## 性能
 
 Rust 核心 (PyO3) — M1 Max 上 `mode="fast"`：

@@ -38,6 +38,13 @@ argus-redact combines PII detection with **reversible encryption and per-message
 | Local / offline | **Yes** | **Yes** |
 | Semantic detection | **Yes** (Layer 3 LLM) | No (add via custom recognizer) |
 
+**Benchmark coverage is `zh` + `en` only.** The other six packs
+(`de`, `uk`, `br`, `in`, `ja`, `ko`) ship L1 patterns and NER adapters but have
+**no measured recall** in this report — they are best-effort and reach them via
+an explicit `lang="…"` (they are not auto-selected under `lang="auto"`; see
+[language-packs.md](language-packs.md#benchmark-status)). The "7 languages" row
+above is a coverage claim, not a benchmarked-recall claim.
+
 ---
 
 ## 1. Chinese PII Detection (pii_bench_zh, 1000 samples)

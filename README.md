@@ -150,6 +150,8 @@ Combine argus-redact with audit logging, rate limiting, and upstream policy — 
 
 Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张三"]`.
 
+**Benchmark scope:** only **zh** and **en** have committed recall benchmarks. The other six packs (**de, uk, br, in, ja, ko**) ship L1 patterns + NER adapters but have no measured recall — treat them as **best-effort** and reach them with an explicit `lang="…"`. They are not auto-selected under `lang="auto"`, whose script-only detection resolves all Latin-script text to `en`. See [language-packs.md](docs/language-packs.md#benchmark-status).
+
 ## Performance
 
 Rust core (PyO3), `mode="fast"` — p50, Apple M-series, Python 3.11. Reproduce

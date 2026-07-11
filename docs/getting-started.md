@@ -151,6 +151,8 @@ Chinese names → Chinese NER. English names → English NER. Phone patterns →
 
 `lang="auto"` routes based on script detection (Hiragana/Katakana → `ja`, Hangul → `ko`, CJK ideographs → `zh`, Latin letters → `en`). If you know the language set in advance, passing an explicit list like `lang=["zh", "en"]` is equivalent and avoids the detection pass.
 
+Because detection is script-only, the Latin-script packs `de`/`uk`/`br`/`in` are **never auto-selected** — all Latin text resolves to `en`. To use them, pass an explicit `lang` (e.g. `lang=["de", "en"]`). Note that only `zh` and `en` have committed recall benchmarks; `de`/`uk`/`br`/`in`/`ja`/`ko` ship patterns + NER adapters but are best-effort (unbenchmarked). See [language-packs.md](language-packs.md#benchmark-status).
+
 ## Detection Modes
 
 `mode="fast"` is the **default** — regex + L1b person scoring only, zero model loading, sub-ms:
