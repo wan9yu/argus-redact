@@ -8,6 +8,7 @@ from argus_redact._metadata import (
 )
 from argus_redact._types import PseudonymLLMResult, RedactReport
 from argus_redact.compose.anchor import Anchor, make_anchor
+from argus_redact.compose.audit import AuditEntry, AuditLedger, collect_security_events
 from argus_redact.exceptions import LayerUnavailableError, SessionStateError
 from argus_redact.glue.redact import redact
 from argus_redact.glue.redact_pseudonym_llm import (
@@ -41,6 +42,10 @@ __all__ = [
     "make_anchor",
     "Anchor",
     "RestoreGuardError",
+    # ─── Compliance-as-artifact (v0.7.18) ───
+    "AuditLedger",
+    "AuditEntry",
+    "collect_security_events",
     # ─── Compliance metadata SSOT (re-exported from _metadata) ───
     "GDPR_SPECIAL_CATEGORIES",
     "HIPAA_PHI_CATEGORIES",

@@ -57,12 +57,12 @@ def test_expand_aliases_real_returns_expanded_dict():
     assert "黄先生" in result and result["黄先生"] == "黄芳"
 
 
-def test_compose_dunder_all_is_exactly_ten():
+def test_compose_dunder_all_is_exactly_thirteen():
     """Lock the namespace surface — any addition is intentional, not accidental.
 
-    v0.6.7 baseline: 5 names. v0.6.11 added the adapter-author trio
-    (register_pii_type / PIITypeDef / PatternMatch).
-    Theme A guard-by-default added Anchor + make_anchor.
+    v0.6.7 baseline: 5 names. v0.6.11 added the adapter-author trio. Theme A
+    guard-by-default added Anchor + make_anchor. Theme B compliance-as-artifact
+    added AuditLedger + AuditEntry + collect_security_events.
     """
     import argus_redact.compose as mod
 
@@ -72,12 +72,14 @@ def test_compose_dunder_all_is_exactly_ten():
         "redact_pseudonym_llm",
         "prompt_anchor",
         "expand_aliases",
-        # v0.6.11 adapter surface
         "register_pii_type",
         "PIITypeDef",
         "PatternMatch",
-        # Theme A: guard-by-default restore
         "Anchor",
         "make_anchor",
+        # Theme B: compliance-as-artifact
+        "AuditLedger",
+        "AuditEntry",
+        "collect_security_events",
     }
     assert set(mod.__all__) == expected
