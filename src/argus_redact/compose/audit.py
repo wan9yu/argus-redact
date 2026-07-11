@@ -10,7 +10,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import time
 from dataclasses import dataclass
+from typing import Callable
 
 _LEDGER_SCHEMA_VERSION = 1
 
@@ -97,3 +99,89 @@ class AuditEntry:
             prev_hash=d.get("prev_hash", ""),
             entry_hash=d.get("entry_hash", ""),
         )
+
+
+class AuditLedger:
+    """Append-only, PII-free, hash-chained audit ledger. One structure = the audit
+    trail (#18) AND the tamper-evident record (#26). Keyless SHA-256 chain by
+    default (append-only integrity); pass ``hmac_key=`` for forge-resistance.
+    Caller-owned (like keys) — no global state, no I/O."""
+
+    def __init__(
+        self,
+        *,
+        hmac_key: bytes | None = None,
+        clock: Callable[[], str] | None = None,
+    ):
+        self._entries: list[AuditEntry] = []
+        self._hmac_key = hmac_key
+        self._clock = clock or (lambda: time.strftime("%Y-%m-%dT%H:%M:%S"))
+
+    @property
+    def entries(self) -> tuple[AuditEntry, ...]:
+        return tuple(self._entries)
+
+    @property
+    def head_digest(self) -> str:
+        return self._entries[-1].entry_hash if self._entries else ""
+
+    def append(
+        self,
+        kind: str,
+        *,
+        type_counts: dict[str, int],
+        security_events=(),
+        content_digest: str | None = None,
+    ) -> AuditEntry:
+        seq = len(self._entries)
+        timestamp = self._clock()
+        prev_hash = self.head_digest
+        sanitized = tuple(_sanitize_event(e) for e in security_events)
+        entry_hash = _digest(
+            _canonical_bytes(
+                seq,
+                timestamp,
+                kind,
+                dict(type_counts),
+                [dict(e) for e in sanitized],
+                content_digest,
+                prev_hash,
+            ),
+            self._hmac_key,
+        )
+        entry = AuditEntry(
+            seq=seq,
+            timestamp=timestamp,
+            kind=kind,
+            type_counts=dict(type_counts),
+            security_events=sanitized,
+            content_digest=content_digest,
+            prev_hash=prev_hash,
+            entry_hash=entry_hash,
+        )
+        self._entries.append(entry)
+        return entry
+
+    def verify(self) -> bool:
+        """Recompute the chain: seq order, prev_hash links, and each entry_hash.
+        Returns False on any break (reorder / deletion / modification)."""
+        prev = ""
+        for i, e in enumerate(self._entries):
+            if e.seq != i or e.prev_hash != prev:
+                return False
+            expected = _digest(
+                _canonical_bytes(
+                    e.seq,
+                    e.timestamp,
+                    e.kind,
+                    dict(e.type_counts),
+                    [dict(x) for x in e.security_events],
+                    e.content_digest,
+                    e.prev_hash,
+                ),
+                self._hmac_key,
+            )
+            if not hmac.compare_digest(expected, e.entry_hash):
+                return False
+            prev = e.entry_hash
+        return True
