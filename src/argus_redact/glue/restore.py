@@ -41,7 +41,8 @@ def restore(
     The ``dict[str, str] | str`` annotation matches the frozen Layer-1 public
     contract; any Mapping is accepted at runtime (delegated to the pure layer).
 
-    Guard parameters (v0.8.0+):
+    Guard parameters (added v0.7.18, additive; the guard=None default flips to
+    guard=True in v0.8.0):
         guard: when True, enables deterministic provenance (P) + scope (S) checks.
                when None (default), emits DeprecationWarning and runs legacy behavior.
         anchor: Anchor instance produced by make_anchor(); carries nonce + scope.
