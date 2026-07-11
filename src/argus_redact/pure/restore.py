@@ -79,7 +79,8 @@ def restore(
     `"13800138000ⓕ"`). Pass `display_marker=` only when you want the marker
     removed from the output.
 
-    Guard parameters (v0.8.0+):
+    Guard parameters (added v0.7.18, additive; the guard=None default flips to
+    guard=True in v0.8.0):
         guard: when True, enables deterministic provenance (P) + scope (S) checks.
                when None (default), emits DeprecationWarning and runs legacy behavior.
         anchor: Anchor instance produced by make_anchor(); carries nonce + scope.

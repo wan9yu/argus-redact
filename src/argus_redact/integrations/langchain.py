@@ -136,13 +136,13 @@ class RestoreRunnable:
         # (H) supplementary heuristic check — runs when we have the redacted prompt
         security_events: list[dict] = []
         if redacted is not None:
-            warnings = check_restore_safety(redacted, text, key)
-            if warnings:
+            hints = check_restore_safety(redacted, text, key)
+            if hints:
                 security_events.append(
                     security_event(
                         INJECTION_SUSPECTED,
-                        count=len(warnings),
-                        detail="; ".join(warnings),
+                        count=len(hints),
+                        detail="; ".join(hints),
                     )
                 )
 
