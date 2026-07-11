@@ -57,7 +57,7 @@ def test_expand_aliases_real_returns_expanded_dict():
     assert "黄先生" in result and result["黄先生"] == "黄芳"
 
 
-def test_compose_dunder_all_is_exactly_eight():
+def test_compose_dunder_all_is_exactly_ten():
     """Lock the namespace surface — any addition is intentional, not accidental.
 
     v0.6.7 baseline: 5 names. v0.6.11 added the adapter-author trio
