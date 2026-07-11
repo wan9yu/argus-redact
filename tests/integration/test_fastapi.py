@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.integrations.fastapi_middleware import (
     redact_body,
     restore_body,
@@ -185,3 +186,86 @@ class TestRoundtrip:
 
         assert "13812345678" in restored["result"]
         assert "zhang@test.com" in restored["result"]
+
+
+class TestRestoreBodyGuard:
+    """Guard-by-default restore for FastAPI (Pattern B)."""
+
+    def test_should_restore_with_guard_and_valid_nonce(self):
+        """guard=True + valid nonce → restores successfully."""
+        body = {"text": "电话13812345678"}
+        redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)
+
+        anchor = make_anchor(key)
+        # Simulate LLM response with nonce echoed
+        llm_output = redacted["text"] + f"\n{anchor.nonce}"
+
+        result = restore_body(llm_output, key, anchor=anchor, guard=True)
+
+        assert "13812345678" in result
+
+    def test_should_fail_closed_when_nonce_missing(self):
+        """guard=True + missing nonce → fail-closed (originals not leaked)."""
+        body = {"text": "电话13812345678"}
+        redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)
+
+        anchor = make_anchor(key)
+        # Response does NOT contain the nonce
+        result = restore_body(redacted["text"], key, anchor=anchor, guard=True)
+
+        assert "13812345678" not in result
+
+    def test_should_fail_closed_on_forged_nonce(self):
+        """guard=True + wrong nonce → fail-closed (zero originals leaked)."""
+        body = {"text": "电话13812345678"}
+        redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)
+
+        anchor = make_anchor(key)
+        forged = redacted["text"] + "\nforged-nonce-99999"
+
+        result = restore_body(forged, key, anchor=anchor, guard=True)
+
+        assert "13812345678" not in result
+
+    def test_should_restore_dict_field_with_guard(self):
+        """guard=True restores a dict field when nonce is present."""
+        body = {"text": "电话13812345678"}
+        redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)
+
+        anchor = make_anchor(key)
+        response = {"result": redacted["text"] + f"\n{anchor.nonce}"}
+
+        restored = restore_body(response, key, field="result", anchor=anchor, guard=True)
+
+        assert "13812345678" in restored["result"]
+
+    def test_detailed_returns_security_events_on_fail(self):
+        """detailed=True surfaces security_events when guard fails."""
+        body = {"text": "电话13812345678"}
+        redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)
+
+        anchor = make_anchor(key)
+        # No nonce — should fail-close
+        result, details = restore_body(
+            redacted["text"], key, anchor=anchor, guard=True, detailed=True
+        )
+
+        assert "13812345678" not in result
+        assert "security_events" in details
+        assert any(e["reason_code"] == "provenance_failed" for e in details["security_events"])
+
+    def test_prompt_anchor_workflow_end_to_end(self):
+        """Full caller workflow: redact_body → make_anchor → prompt_anchor → restore_body."""
+        body = {"text": "联系人张三，电话13812345678"}
+        redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)
+
+        anchor = make_anchor(key)
+        system_prompt = prompt_anchor(key, "zh", anchor=anchor)
+        assert anchor.nonce in system_prompt
+
+        # Simulate LLM including nonce in response
+        llm_output = f"记录: {redacted['text']}\n{anchor.nonce}"
+
+        result = restore_body(llm_output, key, anchor=anchor, guard=True)
+
+        assert "13812345678" in result

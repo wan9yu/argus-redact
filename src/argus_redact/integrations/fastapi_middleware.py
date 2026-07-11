@@ -7,15 +7,19 @@ Recommended pattern: call ``redact_body()`` at the endpoint boundary
 control over which fields are redacted and which are passed through, and
 surfaces the key dict to the caller for later ``restore_body()``.
 
-Usage (endpoint-level):
+Usage (endpoint-level) with guard-by-default restore:
+    from argus_redact.compose import make_anchor, prompt_anchor
     from argus_redact.integrations.fastapi_middleware import redact_body, restore_body
 
     @app.post("/chat")
     async def chat(req: Request):
         body = await req.json()
         redacted, key = redact_body(body, mode="fast", lang="zh")
-        llm_output = call_llm(redacted["text"])
-        restored = restore_body({"result": llm_output}, key, field="result")
+        anchor = make_anchor(key)
+        system_prompt = prompt_anchor(key, anchor=anchor)
+        llm_output = call_llm(redacted["text"], system=system_prompt)
+        restored = restore_body({"result": llm_output}, key, field="result",
+                                anchor=anchor, guard=True)
         return restored
 """
 
@@ -111,22 +115,70 @@ def restore_body(
     key: dict,
     *,
     field: str | None = None,
-) -> dict | str:
+    anchor: object | None = None,
+    guard: bool | None = None,
+    redacted: str | None = None,
+    detailed: bool = False,
+) -> "dict | str | tuple[dict | str, dict]":
     """Restore PII in a response body.
 
     If response is a string, restore directly.
     If response is a dict, restore the specified field.
+
+    Guard-by-default flow (Pattern B):
+        anchor: Anchor instance from make_anchor(key). Required when guard=True.
+        guard: When True, enables nonce-based provenance check (P+S). The LLM
+            response must echo the nonce embedded in the anchor_prompt for
+            restore to succeed; otherwise restore is fail-closed.
+        redacted: Optional — the redacted prompt text. When provided, the
+            supplementary heuristic (H) check fires and an INJECTION_SUSPECTED
+            event is emitted when suspicious patterns are detected.
+        detailed: When True, returns (result, {"security_events": [...]}).
     """
     if not key:
+        if detailed:
+            return response, {"security_events": []}
         return response
 
+    h_events: list[dict] = []
+    if redacted is not None and key:
+        from argus_redact.pure.restore import check_restore_safety
+        from argus_redact.pure.security_events import INJECTION_SUSPECTED, security_event
+
+        response_text = (
+            response if isinstance(response, str) else (response.get(field, "") if field else "")
+        )
+        hints = check_restore_safety(redacted, response_text, key)
+        if hints:
+            h_events.append(
+                security_event(
+                    INJECTION_SUSPECTED,
+                    count=len(hints),
+                    detail="; ".join(hints),
+                )
+            )
+
     if isinstance(response, str):
-        return restore(response, key)
+        result_text, guard_details = restore(
+            response, key, guard=guard, anchor=anchor, detailed=True
+        )
+        all_events = h_events + guard_details.get("security_events", [])
+        if detailed:
+            return result_text, {"security_events": all_events}
+        return result_text
 
     if isinstance(response, dict) and field and field in response:
         result = dict(response)
         if isinstance(response[field], str):
-            result[field] = restore(response[field], key)
-        return result
+            result_text, guard_details = restore(
+                response[field], key, guard=guard, anchor=anchor, detailed=True
+            )
+            all_events = h_events + guard_details.get("security_events", [])
+            result[field] = result_text
+            if detailed:
+                return result, {"security_events": all_events}
+            return result
 
+    if detailed:
+        return response, {"security_events": h_events}
     return response
