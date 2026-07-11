@@ -14,6 +14,24 @@ prevent silent drift.
 
 from __future__ import annotations
 
+import secrets
+from dataclasses import dataclass
+from typing import Mapping
+
+
+@dataclass(frozen=True)
+class Anchor:
+    """Round-trip guard carrier: a fresh provenance nonce + the in-scope pseudonym set."""
+
+    nonce: str
+    scope: frozenset
+
+
+def make_anchor(key: Mapping[str, str]) -> Anchor:
+    """Fresh per-exchange anchor: unpredictable nonce + scope = this call's pseudonyms."""
+    return Anchor(nonce=secrets.token_hex(16), scope=frozenset(key))
+
+
 _TEMPLATE_ZH = """以下对话中出现的标识符是脱敏占位符。请遵循三条规则：
 1. **完整保留**这些标识符 — 不要替换为称谓（如"先生/女士/总"），不要省略为缩写。
 2. 不要主动猜测或还原它们对应的真实身份。
