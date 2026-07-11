@@ -57,3 +57,23 @@ def test_detailed_clean_call_returns_empty_events():
     a, resp = _anchor_ok("P-001 here")
     out, d = restore(resp, KEY, guard=True, anchor=a, detailed=True)
     assert d["security_events"] == []
+
+
+def test_guard_false_restores_legacy():
+    # guard=False is an explicit opt-out: plain legacy restore, no guard checks,
+    # even with no anchor present (must NOT fail-closed).
+    out = restore("P-001 138****5678", KEY, guard=False)
+    assert "张三" in out and "13912345678" in out
+
+
+def test_guard_false_no_deprecation_warning():
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        restore("P-001", KEY, guard=False)
+        assert not any(issubclass(x.category, DeprecationWarning) for x in w)
+
+
+def test_guard_false_detailed_returns_empty_events():
+    out, d = restore("P-001 138****5678", KEY, guard=False, detailed=True)
+    assert "张三" in out  # guard did NOT run → restored
+    assert d == {"security_events": []}

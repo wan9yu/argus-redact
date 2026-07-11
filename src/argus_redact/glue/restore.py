@@ -44,7 +44,9 @@ def restore(
     Guard parameters (added v0.7.18, additive; the guard=None default flips to
     guard=True in v0.8.0):
         guard: when True, enables deterministic provenance (P) + scope (S) checks.
-               when None (default), emits DeprecationWarning and runs legacy behavior.
+               when None (default), emits DeprecationWarning and runs legacy restore.
+               when False, runs legacy restore (guard off) with NO warning — the
+               explicit opt-out for callers that want a plain, unchecked restore.
         anchor: Anchor instance produced by make_anchor(); carries nonce + scope.
         strict: when True and guard=True, raises RestoreGuardError on any security event.
         detailed: when True, returns (result_text, {"security_events": [...]}) tuple.
