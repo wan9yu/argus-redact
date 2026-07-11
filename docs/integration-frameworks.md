@@ -4,7 +4,7 @@
 
 ### Built-in Runnables
 
-argus-redact provides `RedactRunnable` and `RestoreRunnable` that implement the LangChain Runnable protocol:
+argus-redact provides `RedactRunnable` and `RestoreRunnable` that implement the LangChain Runnable protocol. `RestoreRunnable` runs `restore()` with `guard=True` internally — **you must wire `make_prompt_addendum()` into your LLM system message** so the provenance nonce reaches the response; without it, restore fail-closes (returns pseudonyms unchanged + UserWarning, no exception).
 
 ```python
 from argus_redact.integrations.langchain import RedactRunnable, RestoreRunnable
@@ -14,6 +14,9 @@ from langchain_openai import ChatOpenAI
 redact_r = RedactRunnable(mode="fast", lang="zh")
 restore_r = RestoreRunnable(redact_r)
 
+# Build the chain. The nonce-echo instruction must reach the LLM system prompt.
+# With a standalone LLM call you inject it via make_prompt_addendum() (see below).
+# In a chain where you control the prompt template, add it to the system message.
 chain = (
     redact_r
     | ChatOpenAI(model="gpt-4o")
@@ -24,16 +27,22 @@ chain = (
 result = chain.invoke("张三的电话是13812345678")
 ```
 
-These also work standalone without LangChain installed:
+For standalone usage (without LangChain installed) or when you control the system prompt:
 
 ```python
 from argus_redact.integrations.langchain import RedactRunnable, RestoreRunnable
 
-redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
+redact_r = RedactRunnable(mode="fast", lang="zh")
 restore_r = RestoreRunnable(redact_r)
 
 redacted = redact_r.invoke("张三的电话是13812345678")
-restored = restore_r.invoke(redacted)
+
+# Inject the anchor prompt into your LLM system message BEFORE calling the LLM.
+# This embeds the nonce so the guard can verify the response came from this session.
+anchor_prompt = redact_r.make_prompt_addendum()
+llm_output = call_llm(redacted, system=anchor_prompt)
+
+restored = restore_r.invoke(llm_output)
 ```
 
 ### With retrieval (RAG)
@@ -72,43 +81,28 @@ def safe_rag(query: str, retriever, llm) -> str:
 
 ### As a query transform
 
+argus-redact ships `RedactTransform` and `RestoreTransform` in `argus_redact.integrations.llamaindex`. `RestoreTransform` runs `restore()` with `guard=True` internally — **you must inject `make_prompt_addendum()` into the LLM system message**; without it, restore fail-closes (returns pseudonyms unchanged + UserWarning, no exception).
+
 ```python
-from argus_redact import redact, restore
-from llama_index.core.query_pipeline import QueryPipeline
-from llama_index.core.bridge.pydantic import Field
+from argus_redact.integrations.llamaindex import RedactTransform, RestoreTransform
 
-class RedactTransform:
-    """Redact PII before sending to LLM."""
-
-    def __init__(self, lang="zh"):
-        self.lang = lang
-        self._key = {}
-
-    def __call__(self, query_str: str, **kwargs) -> str:
-        redacted, self._key = redact(query_str, lang=self.lang)
-        return redacted
-
-class RestoreTransform:
-    """Restore PII in LLM output."""
-
-    def __init__(self, redact_transform: RedactTransform):
-        self._redact = redact_transform
-
-    def __call__(self, response_str: str, **kwargs) -> str:
-        return restore(response_str, self._redact._key)
-
-# Usage
-redact_t = RedactTransform(lang="zh")
+redact_t = RedactTransform(mode="fast", lang="zh")
 restore_t = RestoreTransform(redact_t)
 
-pipeline = QueryPipeline(chain=[redact_t, llm, restore_t])
-result = pipeline.run("王五在协和医院做了体检")
+redacted = redact_t("王五在协和医院做了体检")
+
+# Inject the anchor prompt into the LLM system message BEFORE calling the LLM.
+anchor_prompt = redact_t.make_prompt_addendum()
+llm_output = call_llm(redacted, system=anchor_prompt)
+
+restored = restore_t(llm_output)
 ```
 
-### With index queries
+If you build a bare pipeline (without the built-in transforms), the guard flow with `make_anchor` and `prompt_anchor` looks like:
 
 ```python
-from argus_redact import redact, restore
+from argus_redact import redact, restore, make_anchor
+from argus_redact.compose import prompt_anchor
 from llama_index.core import VectorStoreIndex
 
 index = VectorStoreIndex.from_documents(documents)
@@ -116,8 +110,10 @@ query_engine = index.as_query_engine()
 
 def safe_query(question: str) -> str:
     redacted, key = redact(question)
-    response = query_engine.query(redacted)
-    return restore(str(response), key)
+    anchor = make_anchor(key)
+    system = prompt_anchor(key, anchor=anchor)
+    response = query_engine.query(redacted, system_prompt=system)
+    return restore(str(response), key, guard=True, anchor=anchor)
 ```
 
 ---
@@ -165,10 +161,11 @@ app.add_middleware(RedactBodyMiddleware)
 
 ### Endpoint-level (simpler)
 
-If middleware is too broad, redact at the endpoint:
+If middleware is too broad, redact at the endpoint. Use the guard flow so injected pseudonyms in LLM output do not silently restore:
 
 ```python
-from argus_redact import redact, restore
+from argus_redact import redact, restore, make_anchor
+from argus_redact.compose import prompt_anchor
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -184,11 +181,14 @@ class AnalyzeResponse(BaseModel):
 @app.post("/analyze")
 async def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     redacted, key = redact(req.text)
+    anchor = make_anchor(key)
 
-    # Call your LLM here
-    llm_output = await call_llm(redacted, req.system_prompt)
+    # Append the nonce-echo instruction to the system prompt
+    system = req.system_prompt + "\n\n" + prompt_anchor(key, anchor=anchor)
 
-    restored = restore(llm_output, key)
+    llm_output = await call_llm(redacted, system)
+
+    restored = restore(llm_output, key, guard=True, anchor=anchor)
     return AnalyzeResponse(result=restored)
 ```
 
@@ -198,17 +198,22 @@ For multi-step endpoints where redact and restore happen in different functions:
 
 ```python
 from contextvars import ContextVar
-from argus_redact import redact, restore
+from argus_redact import redact, restore, make_anchor
+from argus_redact.compose import prompt_anchor
 
 _request_key: ContextVar[dict] = ContextVar("redact_key")
+_request_anchor: ContextVar[object] = ContextVar("redact_anchor")
 
-def redact_for_request(text: str) -> str:
+def redact_for_request(text: str) -> tuple[str, str]:
     redacted, key = redact(text)
+    anchor = make_anchor(key)
     _request_key.set(key)
-    return redacted
+    _request_anchor.set(anchor)
+    # Caller appends the returned addendum to the LLM system prompt
+    return redacted, prompt_anchor(key, anchor=anchor)
 
 def restore_for_request(text: str) -> str:
-    return restore(text, _request_key.get())
+    return restore(text, _request_key.get(), guard=True, anchor=_request_anchor.get())
 ```
 
 ---
@@ -236,10 +241,11 @@ def analyze():
 
 ## General Integration Pattern
 
-For any framework not listed above:
+For any framework not listed above, use the guard flow: redact → build prompt with the nonce-echo addendum → LLM → guarded restore.
 
 ```python
-from argus_redact import redact, restore
+from argus_redact import redact, restore, make_anchor
+from argus_redact.compose import prompt_anchor
 
 # 1. Intercept user input
 user_input = get_input_from_framework()
@@ -247,14 +253,20 @@ user_input = get_input_from_framework()
 # 2. Redact
 redacted, key = redact(user_input)
 
-# 3. Pass redacted text through your pipeline
-output = your_pipeline(redacted)
+# 3. Build a per-session anchor and embed its nonce in the LLM system prompt.
+#    The LLM will echo the nonce back, allowing restore() to verify the response
+#    came from this session (not an injected pseudonym from another context).
+anchor = make_anchor(key)
+system = your_system_prompt + "\n\n" + prompt_anchor(key, anchor=anchor)
 
-# 4. Restore
-result = restore(output, key)
+# 4. Pass redacted text and the annotated system prompt through the LLM
+llm_output = your_llm(redacted, system=system)
 
-# 5. Return to user
+# 5. Restore with guard — fail-closes (returns pseudonyms intact) if nonce missing
+result = restore(llm_output, key, guard=True, anchor=anchor)
+
+# 6. Return to user
 return_to_framework(result)
 ```
 
-The key insight: argus-redact doesn't need framework-specific adapters. `redact()` and `restore()` are plain functions that take and return strings. They slot into any framework at any point.
+The key insight: `redact()`, `make_anchor()`, `prompt_anchor()`, and `restore()` are plain functions that take and return strings. They slot into any framework at any point. The guard check adds deterministic provenance verification without requiring framework-specific adapters.
