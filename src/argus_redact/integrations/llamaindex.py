@@ -88,6 +88,12 @@ class RestoreTransform:
 
     Raises SessionStateError if the paired RedactTransform has not produced
     a key yet (or has been .reset()).
+
+    Guard note: restore() runs with guard=True internally. If
+    make_prompt_addendum() was not injected into the LLM system message,
+    the nonce will be absent from the response and restore fail-closes —
+    returning pseudonyms unchanged and emitting a UserWarning, not raising.
+    Wire make_prompt_addendum() into the system prompt to enable guarded restore.
     """
 
     def __init__(self, redact_transform: RedactTransform):

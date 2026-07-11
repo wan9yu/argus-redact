@@ -3,12 +3,17 @@
 Presidio detects PII entities. argus-redact replaces them with reversible
 pseudonyms and per-message keys.
 
-Usage:
+Usage (guarded Pattern B — recommended):
     from argus_redact.integrations.presidio import PresidioBridge
+    from argus_redact import make_anchor
+    from argus_redact.compose import prompt_anchor
 
     bridge = PresidioBridge()
     redacted, key = bridge.redact("John Smith called 555-123-4567", language="en")
-    restored = bridge.restore(llm_output, key)
+    anchor = make_anchor(key)
+    system = prompt_anchor(key, lang="en", anchor=anchor)
+    llm_output = call_llm(redacted, system=system)
+    restored = bridge.restore(llm_output, key, guard=True, anchor=anchor, redacted=redacted)
 """
 
 from __future__ import annotations
