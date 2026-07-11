@@ -84,9 +84,7 @@ class TestTextSmugglingBypass:
         """Invisible math operators U+2061-U+2064."""
         ops = "\u2061\u2062\u2063\u2064"
         digits = "13800138000"
-        text = "\u7535\u8bdd" + "".join(
-            d + ops[i % len(ops)] for i, d in enumerate(digits)
-        )
+        text = "\u7535\u8bdd" + "".join(d + ops[i % len(ops)] for i, d in enumerate(digits))
         redacted, key = redact(text, salt=42, mode="fast")
 
         assert len(key) >= 1, "Phone with invisible math ops should be detected"
