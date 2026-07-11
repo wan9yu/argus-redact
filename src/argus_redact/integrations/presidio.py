@@ -120,9 +120,57 @@ class PresidioBridge:
         )
         return redacted, result_key
 
-    def restore(self, text: str, key: dict) -> str:
-        """Restore pseudonyms to originals. Same as argus_redact.restore()."""
-        return restore(text, key)
+    def restore(
+        self,
+        text: str,
+        key: dict,
+        *,
+        guard: bool | None = None,
+        anchor: object | None = None,
+        redacted: str | None = None,
+        detailed: bool = False,
+    ) -> "str | tuple[str, dict]":
+        """Restore pseudonyms to originals.
+
+        Mirrors argus_redact.restore() with guard-by-default flow (Pattern B).
+        Callers supply the anchor produced by make_anchor(key) to enable
+        deterministic provenance (P) + scope (S) verification.
+
+        Args:
+            text: LLM output text containing pseudonyms.
+            key: Key dict returned by bridge.redact().
+            guard: When True, enables nonce-based provenance check. Pass
+                anchor= alongside. When None, emits DeprecationWarning.
+            anchor: Anchor instance from make_anchor(key). Required when guard=True.
+            redacted: Optional — the redacted prompt text. When provided, the
+                supplementary heuristic (H) check is applied and an
+                INJECTION_SUSPECTED security event is emitted on suspicion.
+            detailed: When True, returns (result_text, {"security_events": [...]}).
+        """
+        from argus_redact.pure.security_events import INJECTION_SUSPECTED, security_event
+
+        h_events: list[dict] = []
+        if redacted is not None and key:
+            from argus_redact.pure.restore import check_restore_safety
+
+            hints = check_restore_safety(redacted, text, key)
+            if hints:
+                h_events.append(
+                    security_event(
+                        INJECTION_SUSPECTED,
+                        count=len(hints),
+                        detail="; ".join(hints),
+                    )
+                )
+
+        result = restore(text, key, guard=guard, anchor=anchor, detailed=True)
+        _empty: dict = {"security_events": []}
+        result_text, details = result if isinstance(result, tuple) else (result, _empty)
+        all_events = h_events + details.get("security_events", [])
+
+        if detailed:
+            return result_text, {"security_events": all_events}
+        return result_text
 
 
 class PresidioNERAdapter(NERAdapter):
