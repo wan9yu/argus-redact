@@ -1,5 +1,6 @@
 """
-Internal security event schema and reason codes for guard restoration flow.
+Internal security event schema and reason codes — shared by the guard-restore
+flow (Theme A) and redact-side compliance events (Theme B, keep_downgraded).
 
 Not exported via __all__; internal use only.
 """
@@ -17,7 +18,8 @@ def security_event(reason_code: str, count: int, detail: str | None = None) -> d
 
     Args:
         reason_code: One of the PROVENANCE_FAILED, OUT_OF_SCOPE_PSEUDONYM,
-                     INJECTION_SUSPECTED, GUARD_NO_ANCHOR constants.
+                     INJECTION_SUSPECTED, GUARD_NO_ANCHOR, KEEP_DOWNGRADED
+                     constants.
         count: Number of PII items affected by this event.
         detail: Optional context about the event (e.g., "nonce absent").
 
