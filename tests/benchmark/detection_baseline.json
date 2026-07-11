@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "corpus": "pii_bench_zh generator (tests/benchmark/generators/zh.py)",
+  "count": 300,
+  "seed": 42,
+  "mode": "fast",
+  "match": "value",
+  "note": "FAST-mode detection is deterministic (pure regex/validators, no NER, no randomness), so recall/precision on this fixed seed=42 corpus is exactly reproducible run-to-run. The gate floors at these values (minus a tiny tolerance) — it only moves when detection code changes. A recall regression here is a silent PII leak. Refresh with `make detection-update`.",
+  "measurements": {
+    "recall": 0.9015,
+    "precision": 0.9149
+  }
+}

@@ -1,4 +1,4 @@
-.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check gen-confusables gen-confusables-check perf-update perf-check sync-docs-version sync-docs-version-check changelog-version-check mutants-core demo
+.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check gen-confusables gen-confusables-check perf-update perf-check detection-update sync-docs-version sync-docs-version-check changelog-version-check mutants-core demo
 
 install:
 	pip install -e .
@@ -66,6 +66,12 @@ perf-check:
 	@PYTHONPATH=src python tests/benchmark/run_perf_budget.py --output /tmp/argus-perf-current.json && \
 		python tests/benchmark/compare_baseline.py /tmp/argus-perf-current.json tests/benchmark/baseline.json; \
 		status=$$?; rm -f /tmp/argus-perf-current.json; exit $$status
+
+# Refresh the FAST-mode detection recall/precision baseline (deterministic).
+# Run only after an intentional detection change, then commit the diff. The gate
+# itself is tests/benchmark/test_detection_baseline.py (runs in the normal suite).
+detection-update:
+	PYTHONPATH=src python tests/benchmark/update_detection_baseline.py
 
 sync-docs-version:
 	python scripts/sync_docs_version.py
