@@ -2,6 +2,44 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.7.18 — guarded restore + compliance-as-artifact
+
+Two additive security/compliance features. Pure-Python; no detection or Rust change; the
+frozen Layer-1 API (`redact`/`restore` signatures, return shapes) is preserved.
+
+### Added
+
+- **Guard-by-default restore.** `restore(..., guard=True, anchor=...)` adds a deterministic,
+  two-property guard against auto-restore-every-turn prompt-injection exfiltration:
+  - *(P) Provenance* — `make_anchor(key)` produces an `Anchor` carrying a fresh per-call nonce;
+    `prompt_anchor(key, anchor=...)` embeds an "echo this token" instruction, and restore verifies
+    the nonce is present in the response.
+  - *(S) Scope-binding* — only the pseudonyms emitted for this exchange (the anchor's scope) are
+    restored; pseudonyms from other turns/contexts are structurally withheld.
+  - Fail-closed: on any check failing, restore returns the text **un-restored** (zero PII leak) plus
+    structured events via `restore(..., detailed=True)`; `strict=True` raises `RestoreGuardError`.
+  - New exports: `make_anchor`, `Anchor`, `RestoreGuardError`. All five integrations
+    (langchain / llamaindex / mcp / presidio / fastapi) default to `guard=True`.
+- **Compliance-as-artifact.**
+  - **`keep_downgraded`** structured event in `redact(detailed=True)["security_events"]` — the
+    reliable channel for keep-strategy misconfiguration (the `SecurityWarning` remains for humans);
+    the event's `detail` names only the affected *types*, never raw text.
+  - **`RedactReport.residual_personal_data`** (bool) + **`RedactReport.security_events`** —
+    a machine-readable assertion that pseudonymised output remains personal data under GDPR Art.4(5)
+    (True whenever any reversible strategy was used, derived from `is_strategy_reversible`).
+  - **`AuditLedger`** (`from argus_redact import AuditLedger, AuditEntry, collect_security_events`) —
+    an append-only, **PII-free**, hash-chained ledger that is simultaneously the audit trail and the
+    tamper-evident record: `record_redact` / `record_restore`, `verify()`, `head_digest`,
+    `to_dict` / `from_dict`. Keyless SHA-256 chain by default (append-only integrity) with opt-in
+    `hmac_key=` for forge-resistance. Stores only type counts, detail-stripped events, and one-way
+    digests — originals and the pseudonym→original key are never recorded.
+
+### Changed / Deprecated
+
+- Bare `restore(text, key)` without `guard=` now emits `DeprecationWarning`; the default flips to
+  `guard=True` in v0.8.0. `restore(..., guard=False)` is the explicit legacy opt-out (no warning);
+  `restore(..., guard=True)` behavior is unchanged.
+
 ## v0.7.17 — typed pseudonym output (compliance audit)
 
 Exposes detection-time PII types on the pseudonym-LLM path so audit records match the
