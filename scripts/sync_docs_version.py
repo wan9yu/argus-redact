@@ -10,6 +10,7 @@ bumped, Cargo left behind → `cargo publish` hit "version already exists").
 Run: `make sync-docs-version`
 CI check: `make sync-docs-version-check` (exit 1 if any drift)
 """
+
 from __future__ import annotations
 
 import re

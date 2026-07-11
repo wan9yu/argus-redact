@@ -2,6 +2,7 @@
 
 Verifies the script can detect drift and bring drift back to pyproject.toml's version.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -86,6 +87,7 @@ def test_script_imports_under_python_3_10():
     on any version-conditional stdlib module.
     """
     import importlib.util
+
     assert sys.version_info >= (3, 10), "argus-redact requires Python 3.10+"
     spec = importlib.util.spec_from_file_location("sync_docs_version", _SCRIPT)
     mod = importlib.util.module_from_spec(spec)

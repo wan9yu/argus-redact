@@ -26,6 +26,7 @@ Environment variables:
     REDACT_LANG       default "zh,en"  (comma-separated)
     REDACT_MODE       default "fast"   (fast | ner | auto)
 """
+
 from __future__ import annotations
 
 import json
@@ -135,6 +136,7 @@ async def chat_completions(request):
     is_stream = bool(body.get("stream"))
 
     if is_stream:
+
         async def gen():
             async with httpx.AsyncClient(timeout=300) as client:
                 async with client.stream("POST", upstream_url, json=body, headers=headers) as resp:
@@ -174,14 +176,14 @@ app = Starlette(routes=[Route("/v1/chat/completions", chat_completions, methods=
 if __name__ == "__main__":
     import uvicorn
 
-    print(f"argus-redact local CLI proxy")
+    print("argus-redact local CLI proxy")
     print(f"  upstream:  {UPSTREAM_BASE}")
     print(f"  mode:      {REDACT_MODE}")
     print(f"  langs:     {LANGS}")
     print(f"  listening: http://localhost:{PORT}")
     print()
-    print(f"Point any OpenAI-compatible client at this proxy:")
+    print("Point any OpenAI-compatible client at this proxy:")
     print(f"  export OPENAI_API_BASE=http://localhost:{PORT}/v1")
-    print(f"  export OPENAI_API_KEY=anything")
+    print("  export OPENAI_API_KEY=anything")
     print()
     uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")
