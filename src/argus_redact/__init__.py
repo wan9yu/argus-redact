@@ -7,6 +7,7 @@ from argus_redact._metadata import (
     PIPL_REFERENCES,
 )
 from argus_redact._types import PseudonymLLMResult, RedactReport
+from argus_redact.compose.anchor import Anchor, make_anchor
 from argus_redact.exceptions import LayerUnavailableError, SessionStateError
 from argus_redact.glue.redact import redact
 from argus_redact.glue.redact_pseudonym_llm import (
@@ -16,7 +17,7 @@ from argus_redact.glue.redact_pseudonym_llm import (
 from argus_redact.glue.restore import restore
 from argus_redact.pure.pseudonym import max_pseudonym_length
 from argus_redact.pure.replacer import SecurityWarning, is_strategy_reversible
-from argus_redact.pure.restore import check_restore_safety, wipe_key
+from argus_redact.pure.restore import RestoreGuardError, check_restore_safety, wipe_key
 from argus_redact.pure.risk import assess_risk
 
 __version__ = "0.7.17"
@@ -36,6 +37,10 @@ __all__ = [
     # ─── Layer 2 — compose (best-effort; also at argus_redact.compose.*) ───
     "redact_pseudonym_llm",
     "StreamingRedactor",  # deprecated top-level alias — use argus_redact.compose.StreamingRedactor
+    # ─── guard-by-default restore (v0.7.18) ───
+    "make_anchor",
+    "Anchor",
+    "RestoreGuardError",
     # ─── Compliance metadata SSOT (re-exported from _metadata) ───
     "GDPR_SPECIAL_CATEGORIES",
     "HIPAA_PHI_CATEGORIES",
