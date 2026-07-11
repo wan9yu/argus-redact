@@ -22,16 +22,21 @@ from argus_redact.integrations.llamaindex import RedactTransform, RestoreTransfo
 
 
 def test_langchain_happy_path_roundtrip():
-    """Single session: redact → restore returns original verbatim."""
+    """Single session: redact → restore returns original verbatim when nonce is echoed."""
+    import warnings
+
     redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
     restore_r = RestoreRunnable(redact_r)
     redacted = redact_r.invoke("张三的电话13812345678")
     # Sanity: PII is masked
     assert "13812345678" not in redacted
     assert "张三" not in redacted
-    # Round-trip recovers the source
-    restored = restore_r.invoke(redacted)
-    assert restored == "张三的电话13812345678"
+    # Round-trip recovers the source — caller must echo the nonce (guard-by-default)
+    nonce = redact_r.last_anchor.nonce
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        restored = restore_r.invoke(redacted + f"\n{nonce}")
+    assert "张三的电话13812345678" in restored
 
 
 def test_langchain_multi_invoke_accumulates_within_session():

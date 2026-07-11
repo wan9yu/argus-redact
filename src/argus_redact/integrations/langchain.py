@@ -10,7 +10,9 @@ Usage (single session):
     redact_r = RedactRunnable(mode="fast", lang="zh")
     restore_r = RestoreRunnable(redact_r)
     redacted = redact_r.invoke(user_input)
-    llm_output = call_llm(redacted)
+    # Inject the anchor prompt into your LLM system message:
+    anchor_prompt = redact_r.make_prompt_addendum()
+    llm_output = call_llm(redacted, system=anchor_prompt)
     restored = restore_r.invoke(llm_output)
 
 Usage with LangChain (single session per chain instance):
@@ -33,7 +35,10 @@ from __future__ import annotations
 import threading
 
 from argus_redact import redact, restore
+from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.exceptions import SessionStateError
+from argus_redact.pure.restore import check_restore_safety
+from argus_redact.pure.security_events import INJECTION_SUSPECTED, security_event
 
 
 class RedactRunnable:
@@ -54,6 +59,8 @@ class RedactRunnable:
         self._salt = salt
         self._lock = threading.Lock()
         self.last_key: dict | None = None
+        self.last_anchor = None
+        self._last_redacted: str | None = None
 
     def invoke(self, text: str) -> str:
         with self._lock:
@@ -64,16 +71,37 @@ class RedactRunnable:
                 salt=self._salt,
                 key=self.last_key,
             )
+            self.last_anchor = make_anchor(self.last_key)
+            self._last_redacted = redacted
         return redacted
 
     async def ainvoke(self, text: str) -> str:
         """Async version of invoke for LangChain async chains."""
         return self.invoke(text)
 
+    def make_prompt_addendum(self, lang: str | None = None) -> str:
+        """Return a system-prompt addendum embedding the nonce-echo instruction.
+
+        Callers must inject this into the LLM system message so the nonce
+        reaches the response and the anchor round-trip can be verified.
+        Returns an empty string if no redaction has occurred yet.
+        """
+        with self._lock:
+            key = self.last_key
+            anchor = self.last_anchor
+        if not key or anchor is None:
+            return ""
+        effective_lang = (
+            lang if lang is not None else (self._lang if isinstance(self._lang, str) else "zh")
+        )
+        return prompt_anchor(key, effective_lang, anchor=anchor)
+
     def reset(self) -> None:
         """Clear the accumulated key. Call between distinct logical sessions."""
         with self._lock:
             self.last_key = None
+            self.last_anchor = None
+            self._last_redacted = None
 
 
 class RestoreRunnable:
@@ -96,7 +124,32 @@ class RestoreRunnable:
                 "produced a key. Call redact_r.invoke(...) first, or check that "
                 ".reset() was not called between them."
             )
-        return restore(text, key)
+        anchor = self._redact.last_anchor
+        redacted = self._redact._last_redacted
+
+        # (H) supplementary heuristic check — runs when we have the redacted prompt
+        security_events: list[dict] = []
+        if redacted is not None:
+            warnings = check_restore_safety(redacted, text, key)
+            if warnings:
+                security_events.append(
+                    security_event(
+                        INJECTION_SUSPECTED,
+                        count=len(warnings),
+                        detail="; ".join(warnings),
+                    )
+                )
+
+        result, details = restore(text, key, guard=True, anchor=anchor, detailed=True)
+        all_events = security_events + details.get("security_events", [])
+        if all_events:
+            import warnings as _warnings
+
+            _warnings.warn(
+                f"restore security events: {[e['reason_code'] for e in all_events]}",
+                stacklevel=2,
+            )
+        return result
 
     async def ainvoke(self, text: str) -> str:
         """Async version of invoke for LangChain async chains."""
