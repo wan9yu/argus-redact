@@ -67,6 +67,65 @@ class TestZeroWidthBypass:
         assert "zhang@example.com" not in redacted.replace("\u200b", "")
 
 
+class TestTextSmugglingBypass:
+    """Mainstream 2024-26 text-smuggling carriers inserted into PII must be
+    stripped before matching, so the split token still fires (fail-open = leak)."""
+
+    def test_should_detect_phone_with_word_joiner(self):
+        """WORD JOINER U+2060."""
+        j = "\u2060"
+        text = "\u7535\u8bdd1" + j.join("3800138000")
+        redacted, key = redact(text, salt=42, mode="fast")
+
+        assert len(key) >= 1, "Phone with WORD JOINER should be detected"
+        assert "13800138000" not in redacted.replace(j, "")
+
+    def test_should_detect_phone_with_invisible_math_operators(self):
+        """Invisible math operators U+2061-U+2064."""
+        ops = "\u2061\u2062\u2063\u2064"
+        digits = "13800138000"
+        text = "\u7535\u8bdd" + "".join(
+            d + ops[i % len(ops)] for i, d in enumerate(digits)
+        )
+        redacted, key = redact(text, salt=42, mode="fast")
+
+        assert len(key) >= 1, "Phone with invisible math ops should be detected"
+        stripped = redacted
+        for op in ops:
+            stripped = stripped.replace(op, "")
+        assert "13800138000" not in stripped
+
+    def test_should_detect_email_with_variation_selector(self):
+        """Variation selector U+FE0F interior to an email."""
+        vs = "\ufe0f"
+        text = "\u90ae\u7bb1z" + vs + "hang@example.com"
+        redacted, key = redact(text, salt=42, mode="fast")
+
+        assert len(key) >= 1, "Email with variation selector should be detected"
+        assert "zhang@example.com" not in redacted.replace(vs, "")
+
+    def test_should_detect_email_with_ideographic_variation_selector(self):
+        """Ideographic variation selector U+E0100 interior to an email."""
+        vs = "\U000e0100"
+        text = "\u90ae\u7bb1z" + vs + "hang@example.com"
+        redacted, key = redact(text, salt=42, mode="fast")
+
+        assert len(key) >= 1, "Email with ideographic VS should be detected"
+        assert "zhang@example.com" not in redacted.replace(vs, "")
+
+    def test_should_detect_email_with_tag_block(self):
+        """Unicode Tag block U+E0000-U+E007F (ASCII-smuggling carrier)."""
+        # LANGUAGE TAG U+E0001 + CANCEL TAG U+E007F interior to the local part.
+        lang_tag = "\U000e0001"
+        cancel_tag = "\U000e007f"
+        text = "\u90ae\u7bb1z" + lang_tag + "ha" + cancel_tag + "ng@example.com"
+        redacted, key = redact(text, salt=42, mode="fast")
+
+        assert len(key) >= 1, "Email with Tag-block chars should be detected"
+        stripped = redacted.replace(lang_tag, "").replace(cancel_tag, "")
+        assert "zhang@example.com" not in stripped
+
+
 class TestDirectionBypass:
     """RTL/LTR control characters should be stripped."""
 

@@ -2,7 +2,8 @@
 //!
 //! Pipeline:
 //!   1. ASCII fast-path (skip everything if pure ASCII)
-//!   2. Strip invisible / direction-control characters (build char-index offset map)
+//!   2. Strip invisible / zero-width / direction-control / text-smuggling
+//!      characters (build char-index offset map)
 //!   2b. Fold combining accents/diacritics (NFD-decompose, drop the nonspacing mark)
 //!       so ASCII-anchored tokens survive a diacritic; offset map preserved
 //!   3. Replace confusables (Latin/Cyrillic/Greek/Coptic look-alikes -> ASCII), 1:1
@@ -16,10 +17,34 @@ use unicode_normalization::is_nfkc;
 const MIN_DIGIT_SEQ: usize = 7; // shortest PII (phone fragments)
 
 fn is_invisible(c: char) -> bool {
-    // _INVISIBLE (normalize.py:19-38) — 16 codepoints
-    matches!(c,
+    // Invisible / zero-width / direction-control characters stripped BEFORE
+    // detection so text-smuggling can't split a token and fail-open a regex
+    // (→ PII leak). Detection-side only: spans map back to the ORIGINAL text and
+    // the emitted output is char-sliced from the original, so stripping these here
+    // never corrupts legitimate output — a variation selector that is genuinely
+    // part of the surrounding (non-PII) text survives in the output untouched.
+    //
+    // The original 16 zero-width / bidi controls:
+    if matches!(c,
         '\u{200b}'|'\u{200c}'|'\u{200d}'|'\u{00ad}'|'\u{feff}'|'\u{200e}'|'\u{200f}'|
         '\u{202a}'|'\u{202b}'|'\u{202c}'|'\u{202d}'|'\u{202e}'|'\u{2066}'|'\u{2067}'|'\u{2068}'|'\u{2069}')
+    {
+        return true;
+    }
+    // Mainstream 2024-26 text-smuggling carriers (roadmap #67):
+    matches!(c,
+        // WORD JOINER + invisible math operators (FUNCTION APPLICATION /
+        // INVISIBLE TIMES / INVISIBLE SEPARATOR / INVISIBLE PLUS).
+        '\u{2060}'..='\u{2064}'
+        // Variation selectors VS1–VS16 (Mn, ccc=0) — used to hide payload interior
+        // to a token; VS17–VS256 (ideographic) live in the E0100 block below.
+        | '\u{fe00}'..='\u{fe0f}'
+        // Unicode Tag block: LANGUAGE TAG + tag ASCII glyphs + CANCEL TAG. The
+        // modern "ASCII smuggling" carrier — an entire hidden message can ride here.
+        | '\u{e0000}'..='\u{e007f}'
+        // Ideographic variation selectors VS17–VS256.
+        | '\u{e0100}'..='\u{e01ef}'
+    )
 }
 
 fn is_droppable_mark(c: char) -> bool {
@@ -423,6 +448,69 @@ mod tests {
     #[test]
     fn map_spans_identity_when_none() {
         assert_eq!(map_spans_to_original(&[(1, 3)], None, 10), vec![(1, 3)]);
+    }
+
+    // ── Text-smuggling invisible-character classes (roadmap #67) ─────────────
+    // A token split by an interior invisible from any of these classes must
+    // normalize to the CLEAN token so the regex layer still fires (fail-open =
+    // PII leak otherwise). Each class gets its own test; the offset map still
+    // maps every surviving char back to its original index.
+
+    #[test]
+    fn strip_word_joiner_u2060() {
+        // WORD JOINER (U+2060) interior to an email must be stripped so the email
+        // regex sees a contiguous token.
+        let (out, map) = normalize_text("john\u{2060}doe@example.com");
+        assert_eq!(out, "johndoe@example.com");
+        assert!(map.is_some());
+    }
+
+    #[test]
+    fn strip_invisible_math_operators_u2061_u2064() {
+        // U+2061..U+2064 (FUNCTION APPLICATION / INVISIBLE TIMES / INVISIBLE
+        // SEPARATOR / INVISIBLE PLUS) — one per digit boundary of a phone-like run.
+        let (out, map) = normalize_text("13800\u{2061}138\u{2062}00\u{2063}0\u{2064}0");
+        assert_eq!(out, "138001380000");
+        assert!(map.is_some());
+    }
+
+    #[test]
+    fn strip_variation_selectors_fe00_fe0f() {
+        // Variation selectors U+FE00..U+FE0F interior to a token are stripped.
+        let (out, map) = normalize_text("Jo\u{FE00}hn\u{FE0F}Smith");
+        assert_eq!(out, "JohnSmith");
+        assert!(map.is_some());
+    }
+
+    #[test]
+    fn strip_ideographic_variation_selectors_e0100_e01ef() {
+        // Ideographic variation selectors U+E0100..U+E01EF interior to a token.
+        let (out, map) = normalize_text("Jane\u{E0100}Doe\u{E01EF}");
+        assert_eq!(out, "JaneDoe");
+        assert!(map.is_some());
+    }
+
+    #[test]
+    fn strip_tag_block_e0000_e007f() {
+        // Unicode Tag block U+E0000..U+E007F (the modern "ASCII smuggling" carrier)
+        // interior to a token is stripped. Use a LANGUAGE TAG (U+E0001), a TAG
+        // latin letter (U+E0061 = tag 'a'), and CANCEL TAG (U+E007F).
+        let (out, map) = normalize_text("acc\u{E0001}ount\u{E0061}42\u{E007F}99");
+        assert_eq!(out, "account4299");
+        assert!(map.is_some());
+    }
+
+    #[test]
+    fn smuggled_email_offset_maps_back_to_original() {
+        // Offset map must still map each surviving char back to its ORIGINAL index
+        // so redaction spans cover the real token (invisible carrier included).
+        let original = "a\u{2060}b@x.io";
+        let (out, map) = normalize_text(original);
+        assert_eq!(out, "ab@x.io");
+        let m = map.unwrap();
+        assert_eq!(m[0], 0); // 'a' at original index 0
+        assert_eq!(m[1], 2); // 'b' at original index 2 (index 1 was the U+2060)
+        assert_eq!(m.len(), out.chars().count());
     }
 
     #[test]
