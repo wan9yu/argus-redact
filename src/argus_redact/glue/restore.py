@@ -26,16 +26,27 @@ def restore(
     *,
     aliases: dict[str, tuple[str, ...]] | None = None,
     display_marker: str | None = None,
-) -> str:
+    guard: bool | None = None,
+    anchor: object | None = None,
+    strict: bool = False,
+    detailed: bool = False,
+) -> "str | tuple[str, dict]":
     """Replace pseudonyms with originals using ``key``.
 
     ``key`` may be an in-memory mapping or a ``str`` path to a JSON key file.
     A path is loaded here (glue boundary) and the resulting mapping is handed
     to the pure substitution function. See ``pure.restore.restore`` for the
-    full ``aliases`` / ``display_marker`` semantics.
+    full ``aliases`` / ``display_marker`` / guard semantics.
 
     The ``dict[str, str] | str`` annotation matches the frozen Layer-1 public
     contract; any Mapping is accepted at runtime (delegated to the pure layer).
+
+    Guard parameters (v0.8.0+):
+        guard: when True, enables deterministic provenance (P) + scope (S) checks.
+               when None (default), emits DeprecationWarning and runs legacy behavior.
+        anchor: Anchor instance produced by make_anchor(); carries nonce + scope.
+        strict: when True and guard=True, raises RestoreGuardError on any security event.
+        detailed: when True, returns (result_text, {"security_events": [...]}) tuple.
     """
     if isinstance(key, str):
         key = _load_key_file(key)
@@ -44,4 +55,8 @@ def restore(
         key,
         aliases=aliases,
         display_marker=display_marker,
+        guard=guard,
+        anchor=anchor,
+        strict=strict,
+        detailed=detailed,
     )
