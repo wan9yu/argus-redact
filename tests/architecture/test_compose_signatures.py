@@ -29,7 +29,7 @@ import pytest
 import argus_redact.compose as c
 
 COMPOSE_SIGNATURES = {
-    "prompt_anchor": "(key: 'dict', lang: 'str' = 'zh') -> 'str'",
+    "prompt_anchor": "(key: 'dict', lang: 'str' = 'zh', *, anchor: 'Anchor | None' = None) -> 'str'",  # noqa: E501
     "expand_aliases": "(key: 'dict', lang: 'str' = 'zh') -> 'dict'",
     "register_pii_type": "(typedef: 'PIITypeDef') -> 'PIITypeDef'",
 }
