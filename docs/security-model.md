@@ -332,7 +332,9 @@ led.record_redact(redact_result)
 # ... send text to LLM, receive response ...
 
 # Record a restore operation
-restore_result = restore(text, key, detailed=True)
+# guard=False opts out of the guarded round-trip for this illustration;
+# production callers should use the guarded flow (see § Guarded restore).
+restore_result = restore(text, key, guard=False, detailed=True)
 led.record_restore(restore_result)
 
 # Verify the chain has not been modified
