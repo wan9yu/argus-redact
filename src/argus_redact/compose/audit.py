@@ -7,6 +7,13 @@ the shared security_event schema from any redact/restore detailed result.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
+from dataclasses import dataclass
+
+_LEDGER_SCHEMA_VERSION = 1
+
 
 def collect_security_events(result) -> list[dict]:
     """Extract PII-free security events uniformly. Handles a RedactReport
@@ -17,3 +24,76 @@ def collect_security_events(result) -> list[dict]:
     if isinstance(result, tuple) and result and isinstance(result[-1], dict):
         return list(result[-1].get("security_events", []))
     return []
+
+
+def _sanitize_event(e: dict) -> dict:
+    """PII-free projection of a security_event: keep type/reason_code/count; DROP
+    the free-form ``detail`` so the ledger never depends on producer discipline."""
+    return {
+        "type": e.get("type", "security"),
+        "reason_code": e["reason_code"],
+        "count": e["count"],
+    }
+
+
+def _canonical_bytes(
+    seq, timestamp, kind, type_counts, security_events, content_digest, prev_hash
+) -> bytes:
+    payload = {
+        "seq": seq,
+        "timestamp": timestamp,
+        "kind": kind,
+        "type_counts": type_counts,
+        "security_events": security_events,
+        "content_digest": content_digest,
+        "prev_hash": prev_hash,
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
+
+
+def _digest(data: bytes, hmac_key: bytes | None) -> str:
+    if hmac_key is not None:
+        return hmac.new(hmac_key, data, hashlib.sha256).hexdigest()
+    return hashlib.sha256(data).hexdigest()
+
+
+@dataclass(frozen=True)
+class AuditEntry:
+    """One PII-free, hash-chained audit record. Stores counts, detail-stripped
+    events, and one-way digests only — never originals or a pseudonym map."""
+
+    seq: int
+    timestamp: str
+    kind: str
+    type_counts: dict[str, int]
+    security_events: tuple[dict, ...] = ()
+    content_digest: str | None = None
+    prev_hash: str = ""
+    entry_hash: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "seq": self.seq,
+            "timestamp": self.timestamp,
+            "kind": self.kind,
+            "type_counts": dict(self.type_counts),
+            "security_events": [dict(e) for e in self.security_events],
+            "content_digest": self.content_digest,
+            "prev_hash": self.prev_hash,
+            "entry_hash": self.entry_hash,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "AuditEntry":
+        return cls(
+            seq=d["seq"],
+            timestamp=d["timestamp"],
+            kind=d["kind"],
+            type_counts=dict(d["type_counts"]),
+            security_events=tuple(d.get("security_events", ())),
+            content_digest=d.get("content_digest"),
+            prev_hash=d.get("prev_hash", ""),
+            entry_hash=d.get("entry_hash", ""),
+        )
