@@ -222,9 +222,205 @@ This does not replace a Data Protection Impact Assessment (DPIA) or legal review
 
 The EU AI Act (effective August 2026) imposes data minimization requirements on AI systems. GDPR Article 25 requires data protection by design. argus-redact supports both by ensuring that only the minimum necessary data — semantically preserved but identity-removed — is processed by external AI services.
 
+v0.7.18 adds machine-readable compliance artifacts that make the pseudonymization/anonymization boundary explicit: `RedactReport.residual_personal_data` (accessible via `redact(report=True)`) is `True` when any reversible strategy was used, signalling that output remains personal data under GDPR Art.4(5). See [Compliance artifacts (v0.7.18)](#compliance-artifacts-v0718) below for the full artifact set.
+
 ### HIPAA
 
 For healthcare applications in the US, argus-redact can serve as a de-identification step before sending clinical notes to LLM APIs. The key file should be treated as PHI and stored on encrypted, access-controlled volumes. Delete key files after restoration.
+
+---
+
+## Compliance artifacts (v0.7.18)
+
+v0.7.18 ships three machine-readable compliance artifacts that pipeline code can
+consume programmatically. They complement the human-readable `SecurityWarning`
+emitted to Python's warnings system — which remains in place — with structured,
+inspectable data suitable for logging, audit storage, and compliance dashboards.
+
+### `keep_downgraded` security event
+
+When a `keep` strategy is configured for a PII type that is not a self-reference
+(pronoun / kinship phrase), argus-redact downgrades the entity to the type's
+default strategy and emits a `SecurityWarning`. v0.7.18 also surfaces this as a
+structured security event in `redact(detailed=True)["security_events"]` — the
+reliable programmatic channel.
+
+```python
+from argus_redact import redact
+
+text, key, details = redact(
+    "卡号4111111111111111",
+    lang="zh",
+    mode="fast",
+    detailed=True,
+    config={"bank_card": {"strategy": "keep"}},
+)
+
+for event in details["security_events"]:
+    print(event["reason_code"])  # "keep_downgraded"
+    print(event["count"])        # 1 (number of affected entities)
+    print(event["detail"])       # "types: bank_card"  — PII-free; types only
+```
+
+Event shape:
+
+```python
+{
+    "type": "security",
+    "reason_code": "keep_downgraded",
+    "count": 1,          # number of unique entity texts that were downgraded
+    "detail": "types: bank_card",  # sorted type names; never raw PII values
+}
+```
+
+`security_events` is always present in the details dict (empty list when nothing
+noteworthy occurred). The same list of event dicts is also available in
+`RedactReport.security_events` when using `redact(report=True)`.
+
+### `RedactReport.residual_personal_data`
+
+`redact(report=True)` returns a `RedactReport` dataclass. The
+`residual_personal_data` field (`bool`) is a machine-readable signal that the
+redacted output is still personal data under GDPR Art.4(5): pseudonymization
+produces reversible output, so the pseudonymized text can be re-linked to the
+original identity via the key.
+
+`residual_personal_data` is `True` when **any** detected entity uses a reversible
+strategy (`pseudonym`, `realistic`, `remove`, or `keep`). It is `False` only when
+every entity was handled by a lossy, irreversible strategy (`mask`, `name_mask`,
+`landline_mask`, or `category`).
+
+```python
+from argus_redact import redact
+
+# Default pseudonym strategy → output is pseudonymised → still personal data
+report = redact("姓名张伟，手机13812345678", lang="zh", mode="fast", report=True)
+assert report.residual_personal_data is True
+
+# Forcing mask on every type → lossy output → not re-linkable via key
+report_masked = redact(
+    "手机13812345678",
+    lang="zh",
+    mode="fast",
+    report=True,
+    config={"phone": {"strategy": "mask"}},
+)
+assert report_masked.residual_personal_data is False
+```
+
+`RedactReport` also carries `report.security_events` — a tuple of the same
+structured event dicts described above — so a single `redact(report=True)` call
+gives you both the residual-data flag and any security events.
+
+### `AuditLedger`
+
+`AuditLedger` is a caller-owned, append-only, PII-free, hash-chained structure
+that is simultaneously the audit trail and the tamper-evident record. It records
+type counts, detail-stripped security events, and one-way SHA-256 digests of the
+redacted text — never the original text, never a pseudonym map, never a key.
+
+```python
+from argus_redact import redact, restore, AuditLedger
+
+led = AuditLedger()
+
+# Record a redact operation
+redact_result = redact("姓名张伟，手机13812345678", lang="zh", mode="fast", detailed=True)
+text, key = redact_result[0], redact_result[1]
+led.record_redact(redact_result)
+
+# ... send text to LLM, receive response ...
+
+# Record a restore operation
+restore_result = restore(text, key, detailed=True)
+led.record_restore(restore_result)
+
+# Verify the chain has not been modified
+assert led.verify() is True
+
+# Inspect the current chain head (persist this to detect tail-truncation)
+print(led.head_digest)  # 64-char hex SHA-256 string
+
+# Persist across sessions
+import json
+saved = json.dumps(led.to_dict())
+
+# Reload in a later session
+led2 = AuditLedger.from_dict(json.loads(saved))
+assert led2.verify() is True
+assert led2.head_digest == led.head_digest
+```
+
+#### `record_redact` and `record_restore`
+
+`record_redact(detailed_result)` accepts the 3-tuple returned by
+`redact(detailed=True)`. It counts detected entity types, computes a one-way
+SHA-256 digest of the **redacted** text (never the original), and appends a
+`"redact"` entry.
+
+`record_restore(detailed_result)` accepts the 2-tuple returned by
+`restore(detailed=True)`. It records any security events from the restore
+operation. It does **not** auto-digest the restored text (recovered plaintext
+should not be stored in the ledger); pass `content_digest=` explicitly if your
+threat model needs it.
+
+#### `verify()`
+
+`verify()` recomputes every entry hash and checks the `prev_hash` linkage. It
+returns `True` if the chain is intact, `False` on any break. Entry inspection:
+
+```python
+for entry in led.entries:
+    print(entry.seq, entry.kind, entry.type_counts, entry.security_events)
+```
+
+#### Honest integrity boundary
+
+The keyless default (`AuditLedger()`) uses SHA-256 for chaining. This provides
+**append-only integrity**: it detects interior modification, reordering, and
+deletion of entries.
+
+What it does **not** detect on its own:
+
+- **Tail-truncation**: dropping the most-recent entries leaves a valid shorter
+  chain. Detect this by persisting `led.head_digest` externally (e.g., in a
+  separate log, a notary service, or a time-stamped receipt) before each session
+  ends, then comparing the stored digest against `led.head_digest` after reload.
+- **Full-chain forgery**: an adversary who controls the store can recompute the
+  entire chain from scratch, producing a different valid chain. Prevent this with
+  `hmac_key=`.
+
+To add forge-resistance, pass a secret key:
+
+```python
+import secrets
+
+led = AuditLedger(hmac_key=secrets.token_bytes(32))
+```
+
+With `hmac_key=`, each entry hash is HMAC-SHA-256 rather than plain SHA-256.
+An adversary who cannot reproduce the key cannot forge a chain that passes
+`verify()`. Keep the `hmac_key` secret and separate from the ledger storage
+(same principle as keeping the redaction key separate from the redacted text).
+
+argus-redact ships no notarization or timestamp integration. External anchoring
+of `head_digest` — writing it to a trusted log, a blockchain, or a signed
+receipt — is the caller's responsibility. The library gives you the digest; the
+anchoring mechanism is yours to choose.
+
+#### PII-free invariant
+
+The ledger stores:
+
+- PII type names and counts (`type_counts`, e.g. `{"person": 2, "phone": 1}`)
+- Sanitized security events: `reason_code` and `count` only; the free-form
+  `detail` field is stripped at append time so the ledger never depends on
+  producer discipline about what ends up in `detail`
+- One-way SHA-256 digests of redacted text (`content_digest`)
+- Chain hashes (`prev_hash`, `entry_hash`)
+
+It does **not** store: original text, redacted text, pseudonym-to-original
+mappings, or any value that would allow recovery of PII from the ledger alone.
 
 ---
 

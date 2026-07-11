@@ -25,6 +25,27 @@ Each entry follows three lines:
 - **Why we won't fix** — the design / external trade-off it reflects.
 - **What you should do** — caller-side mitigation.
 
+### `AuditLedger` is caller-persisted and keyless by default
+
+- **What**: `AuditLedger` carries no built-in I/O (like the redaction key — no
+  global state, no file is written automatically). Persistence is the caller's
+  responsibility: call `to_dict()` and write the result to durable storage;
+  reload with `AuditLedger.from_dict(d)`. The default constructor uses plain
+  SHA-256 for chaining, which provides append-only integrity (detects interior
+  modification, reorder, deletion) but **not** forge-resistance: an adversary who
+  controls the ledger store can recompute the entire chain from scratch.
+- **Why we won't fix**: Mandatory I/O would impose a storage dependency on every
+  caller, including those running argus in-process or in short-lived containers.
+  The correct persistence and key-management strategy varies too widely across
+  deployment contexts to embed in the library.
+- **What you should do**: Pass `hmac_key=secrets.token_bytes(32)` when the threat
+  model includes an adversary who controls the ledger store, and keep the HMAC key
+  separate from the ledger. For tail-truncation detection, persist `led.head_digest`
+  externally after each session (e.g., in a trusted log or signed receipt) and
+  compare it against `led.head_digest` after reload. See
+  [Compliance artifacts (v0.7.18)](security-model.md#compliance-artifacts-v0718)
+  for the full integrity-boundary discussion.
+
 ### Out of scope — NLP coref, full-fidelity round-trip, multimodal, tool_use, token streaming
 
 - **What**: argus-redact does **not** address these LLM-pipeline UX concerns:
