@@ -51,19 +51,32 @@ _TEMPLATE_EN = (
     "{identifier_list}"
 )
 
+_NONCE_ECHO_EN = "\n\nEnd your reply with this exact verification token on its own line: {nonce}"
 
-def prompt_anchor(key: dict, lang: str = "zh") -> str:
+_NONCE_ECHO_ZH = "\n\n请在回复末尾以独立的一行输出这个验证令牌：{nonce}"
+
+
+def prompt_anchor(key: dict, lang: str = "zh", *, anchor: Anchor | None = None) -> str:
     """Generate a system-prompt addendum.
 
     Args:
         key: redaction key dict (pseudonym → original) from redact().
         lang: "zh" or "en". Unknown values fall back to "en".
+        anchor: optional Anchor instance; when provided, appends a nonce-echo instruction
+                for the LLM to verify its response integrity.
 
     Returns:
         Multi-line string. Empty string if key is empty (no anchoring needed).
+        When anchor is given, appends a nonce-echo line for LLM verification.
     """
     if not key:
         return ""
     template = _TEMPLATE_ZH if lang == "zh" else _TEMPLATE_EN
     identifier_list = "\n".join(f"  - {k}" for k in sorted(key.keys()))
-    return template.format(identifier_list=identifier_list)
+    result = template.format(identifier_list=identifier_list)
+
+    if anchor is not None:
+        nonce_echo = _NONCE_ECHO_ZH if lang == "zh" else _NONCE_ECHO_EN
+        result += nonce_echo.format(nonce=anchor.nonce)
+
+    return result
