@@ -24,6 +24,7 @@ from collections import OrderedDict
 from mcp.server.fastmcp import FastMCP
 
 from argus_redact import RedactReport, __version__, redact, restore
+from argus_redact.compose import make_anchor, prompt_anchor
 
 mcp = FastMCP("argus-redact")
 
@@ -32,9 +33,13 @@ mcp = FastMCP("argus-redact")
 # Pre-fix the store was unbounded and tokens never expired — combined with
 # no per-session binding, a leaked token could be replayed indefinitely.
 # Per-session binding is a v0.7+ candidate (requires FastMCP API survey).
+#
+# Each entry now holds (key, anchor, timestamp) — the anchor carries the
+# per-call nonce and scope for guard-by-default restore (Theme A).
 _TOKEN_TTL_SECONDS = 5 * 60
 _TOKEN_STORE_MAX = 100
-_TOKEN_STORE: "OrderedDict[str, tuple[dict, float]]" = OrderedDict()
+# OrderedDict values: tuple[dict, Anchor | None, float]
+_TOKEN_STORE: "OrderedDict[str, tuple[dict, object, float]]" = OrderedDict()
 
 
 def _now() -> float:
@@ -43,37 +48,36 @@ def _now() -> float:
     return time.monotonic()
 
 
-def _create_key_token(key: dict) -> str:
-    """Mint a 128-bit URL-safe token referencing this key dict.
+def _create_key_token(key: dict, anchor: object) -> str:
+    """Mint a 128-bit URL-safe token referencing this key dict and anchor.
 
     Evicts the oldest entry when the store exceeds ``_TOKEN_STORE_MAX``
     (LRU). Tokens themselves expire ``_TOKEN_TTL_SECONDS`` after their
     last access — see ``_resolve_key_token``.
     """
     token = secrets.token_urlsafe(16)
-    # Fresh token (token_urlsafe collisions are astronomically improbable) —
-    # OrderedDict insertion places at end automatically; no move_to_end needed.
-    _TOKEN_STORE[token] = (key, _now())
+    # Fresh token — OrderedDict insertion places at end automatically.
+    _TOKEN_STORE[token] = (key, anchor, _now())
     while len(_TOKEN_STORE) > _TOKEN_STORE_MAX:
         _TOKEN_STORE.popitem(last=False)
     return token
 
 
-def _resolve_key_token(token: str) -> dict | None:
-    """Look up a key dict by token, returning ``None`` if absent or expired.
+def _resolve_key_token(token: str) -> tuple[dict, object] | None:
+    """Look up a (key, anchor) pair by token, returning ``None`` if absent or expired.
 
     Successful lookup bumps the entry's timestamp (sliding-window TTL).
     """
     entry = _TOKEN_STORE.get(token)
     if entry is None:
         return None
-    key, ts = entry
+    key, anchor, ts = entry
     if _now() - ts > _TOKEN_TTL_SECONDS:
         del _TOKEN_STORE[token]
         return None
-    _TOKEN_STORE[token] = (key, _now())
+    _TOKEN_STORE[token] = (key, anchor, _now())
     _TOKEN_STORE.move_to_end(token)
-    return key
+    return key, anchor
 
 
 @mcp.tool(name="redact")
@@ -83,7 +87,7 @@ async def redact_text(
     mode: str = "fast",
     salt: int | None = None,
 ) -> str:
-    """Redact PII from text. Returns JSON with redacted text and a key_token.
+    """Redact PII from text. Returns JSON with redacted text, a key_token, and anchor_prompt.
 
     Args:
         text: Input text containing PII to redact.
@@ -96,10 +100,14 @@ async def redact_text(
             grid-searchable or linkable across calls. (MCP args are JSON, so bytes
             cannot be passed here.)
 
-    Returns JSON with two fields:
+    Returns JSON with three fields:
     - ``redacted``: redacted text
     - ``key_token``: short-lived token (process-scoped); pass to restore tool
       to recover the original. The raw key never enters the LLM's context.
+    - ``anchor_prompt``: system-prompt addendum to inject before the LLM call;
+      it embeds the nonce-echo instruction so guard-by-default restore can verify
+      the response. Pass as a system message to the LLM. Empty string when no PII
+      was detected.
     """
     lang_param: str | list[str] = lang
     if "," in lang:
@@ -119,9 +127,15 @@ async def redact_text(
         mode=mode,
         salt=effective_salt,
     )
-    token = _create_key_token(key)
+    anchor = make_anchor(key)
+    token = _create_key_token(key, anchor)
+
+    # Build the system-prompt addendum; use the lang string (first code if CSV)
+    prompt_lang = lang_param if isinstance(lang_param, str) else lang_param[0]
+    addendum = prompt_anchor(key, prompt_lang, anchor=anchor)
+
     return json.dumps(
-        {"redacted": redacted_text, "key_token": token},
+        {"redacted": redacted_text, "key_token": token, "anchor_prompt": addendum},
         ensure_ascii=False,
         indent=2,
     )
@@ -134,6 +148,11 @@ async def restore_text(
 ) -> str:
     """Restore redacted text using a key_token returned by the redact tool.
 
+    The restore tool uses guard-by-default: the LLM response must contain the
+    nonce embedded in the ``anchor_prompt`` returned by redact. If the nonce is
+    absent (e.g. a forged or injected response), restore is fail-closed and
+    returns the un-restored text with a ``security_events`` field.
+
     Args:
         text: Redacted text (e.g. LLM output containing pseudonyms).
         key_token: Token returned by the redact tool. Tokens are scoped to
@@ -142,18 +161,21 @@ async def restore_text(
     if not key_token:
         raise ValueError("Must provide key_token (returned by the redact tool)")
 
-    key_dict = _resolve_key_token(key_token)
-    if key_dict is None:
+    resolved = _resolve_key_token(key_token)
+    if resolved is None:
         raise ValueError(
             "Token not found or expired (process restarted?). "
             "Re-run redact to obtain a fresh key_token."
         )
 
-    restored = restore(text, key_dict)
-    return json.dumps(
-        {"restored": restored},
-        ensure_ascii=False,
-    )
+    key_dict, anchor = resolved
+    restored, details = restore(text, key_dict, guard=True, anchor=anchor, detailed=True)
+    events = details.get("security_events", [])
+
+    payload: dict = {"restored": restored}
+    if events:
+        payload["security_events"] = events
+    return json.dumps(payload, ensure_ascii=False)
 
 
 @mcp.tool(name="assess")

@@ -25,12 +25,17 @@ def _reset_store():
 
 def test_token_evicts_after_idle_ttl(monkeypatch):
     import argus_redact.integrations.mcp_server as m
+    from argus_redact.compose import make_anchor
 
     fake_now = [1000.0]
     monkeypatch.setattr(m, "_now", lambda: fake_now[0])
 
-    token = m._create_key_token({"P-001": "Alice"})
-    assert m._resolve_key_token(token) == {"P-001": "Alice"}
+    key = {"P-001": "Alice"}
+    anchor = make_anchor(key)
+    token = m._create_key_token(key, anchor)
+    resolved = m._resolve_key_token(token)
+    assert resolved is not None
+    assert resolved[0] == key
 
     fake_now[0] += 60 * 6  # 6 min later (> 5 min idle TTL)
     assert m._resolve_key_token(token) is None
@@ -38,11 +43,14 @@ def test_token_evicts_after_idle_ttl(monkeypatch):
 
 def test_token_access_extends_ttl(monkeypatch):
     import argus_redact.integrations.mcp_server as m
+    from argus_redact.compose import make_anchor
 
     fake_now = [1000.0]
     monkeypatch.setattr(m, "_now", lambda: fake_now[0])
 
-    token = m._create_key_token({"P-001": "Alice"})
+    key = {"P-001": "Alice"}
+    anchor = make_anchor(key)
+    token = m._create_key_token(key, anchor)
 
     fake_now[0] += 60 * 4  # 4 min later — still alive (under TTL)
     assert m._resolve_key_token(token) is not None  # access bumps timestamp
@@ -53,11 +61,14 @@ def test_token_access_extends_ttl(monkeypatch):
 
 def test_token_store_size_bounded():
     import argus_redact.integrations.mcp_server as m
+    from argus_redact.compose import make_anchor
 
-    first_token = m._create_key_token({"P-1": "first"})
+    key = {"P-1": "first"}
+    first_token = m._create_key_token(key, make_anchor(key))
     # Fill above the cap
     for i in range(m._TOKEN_STORE_MAX + 50):
-        m._create_key_token({"P": f"v{i}"})
+        k = {"P": f"v{i}"}
+        m._create_key_token(k, make_anchor(k))
 
     assert m._resolve_key_token(first_token) is None  # evicted by LRU
     assert len(m._TOKEN_STORE) == m._TOKEN_STORE_MAX

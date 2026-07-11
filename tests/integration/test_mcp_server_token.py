@@ -3,6 +3,10 @@
 The deprecation period started in v0.5.4 and ends here — the raw `key`
 field is gone from the redact response, and the `key` parameter is gone
 from the restore tool.
+
+v0.7.18+: guard-by-default restore — the redact tool now also returns
+``anchor_prompt`` (nonce-echo instruction for the LLM system prompt);
+the restore tool fail-closes when the nonce is absent from the response.
 """
 
 import importlib.util
@@ -54,22 +58,65 @@ class TestRedactToolReturnsOnlyToken:
             "raw `key` was removed in v0.5.5 (deprecated v0.5.4); callers must use key_token"
         )
 
+    @pytest.mark.asyncio
+    async def test_should_return_anchor_prompt(self, mcp_app):
+        """redact tool returns anchor_prompt with nonce for LLM injection."""
+        result = await mcp_app._tool_manager.call_tool(
+            "redact",
+            {"text": "电话13812345678", "mode": "fast", "salt": 42},
+        )
+        content = result if isinstance(result, str) else result[0].text
+        data = json.loads(content)
+        assert "anchor_prompt" in data
+        # anchor_prompt is non-empty when PII was detected
+        assert isinstance(data["anchor_prompt"], str)
+        assert len(data["anchor_prompt"]) > 0
+
 
 class TestRestoreToolViaToken:
     @pytest.mark.asyncio
-    async def test_should_round_trip_via_key_token(self, mcp_app):
+    async def test_should_round_trip_via_key_token_with_nonce(self, mcp_app):
+        """Round-trip succeeds when the LLM response echoes the nonce."""
         result = await mcp_app._tool_manager.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
         data = json.loads(result if isinstance(result, str) else result[0].text)
 
+        # Simulate LLM echoing the nonce (extracted from anchor_prompt)
+        from argus_redact.integrations.mcp_server import _TOKEN_STORE
+
+        token = data["key_token"]
+        _key, anchor, _ts = _TOKEN_STORE[token]
+        simulated_llm_response = data["redacted"] + f"\n{anchor.nonce}"
+
+        result2 = await mcp_app._tool_manager.call_tool(
+            "restore",
+            {"text": simulated_llm_response, "key_token": data["key_token"]},
+        )
+        restored = json.loads(result2 if isinstance(result2, str) else result2[0].text)
+        assert "13812345678" in restored["restored"]
+
+    @pytest.mark.asyncio
+    async def test_should_fail_closed_when_nonce_absent(self, mcp_app):
+        """Restore fail-closes (does not leak originals) when nonce is absent."""
+        result = await mcp_app._tool_manager.call_tool(
+            "redact",
+            {"text": "电话13812345678", "mode": "fast", "salt": 42},
+        )
+        data = json.loads(result if isinstance(result, str) else result[0].text)
+
+        # Response does NOT contain the nonce (no LLM echo)
         result2 = await mcp_app._tool_manager.call_tool(
             "restore",
             {"text": data["redacted"], "key_token": data["key_token"]},
         )
         restored = json.loads(result2 if isinstance(result2, str) else result2[0].text)
-        assert "13812345678" in restored["restored"]
+        # Originals must not leak
+        assert "13812345678" not in restored["restored"]
+        # Security events are surfaced
+        assert "security_events" in restored
+        assert any(e["reason_code"] == "provenance_failed" for e in restored["security_events"])
 
     @pytest.mark.asyncio
     async def test_should_raise_when_token_unknown(self, mcp_app):
