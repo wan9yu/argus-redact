@@ -1,5 +1,7 @@
 """Tests for LlamaIndex integration."""
 
+import warnings
+
 import pytest
 
 from argus_redact.exceptions import SessionStateError
@@ -31,6 +33,27 @@ class TestRedactTransform:
         assert "13812345678" not in result
         assert "123-45-6789" not in result
 
+    def test_should_set_last_anchor_after_call(self):
+        t = RedactTransform(mode="fast", lang="zh", salt=42)
+        t("电话13812345678")
+
+        assert t.last_anchor is not None
+        assert t.last_anchor.nonce
+        assert t.last_anchor.scope
+
+    def test_make_prompt_addendum_includes_nonce(self):
+        t = RedactTransform(mode="fast", lang="zh", salt=42)
+        t("电话13812345678")
+
+        addendum = t.make_prompt_addendum()
+
+        assert t.last_anchor.nonce in addendum
+
+    def test_make_prompt_addendum_empty_before_call(self):
+        t = RedactTransform(mode="fast", lang="zh", salt=42)
+
+        assert t.make_prompt_addendum() == ""
+
 
 class TestRestoreTransform:
     def test_should_restore_when_called(self):
@@ -38,7 +61,9 @@ class TestRestoreTransform:
         restore_t = RestoreTransform(redact_t)
 
         redacted = redact_t("电话13812345678")
-        restored = restore_t(redacted)
+        nonce = redact_t.last_anchor.nonce
+        llm_output = redacted + f"\n{nonce}"
+        restored = restore_t(llm_output)
 
         assert "13812345678" in restored
 
@@ -47,7 +72,9 @@ class TestRestoreTransform:
         restore_t = RestoreTransform(redact_t)
 
         redacted = redact_t("电话13812345678，邮箱test@example.com")
-        restored = restore_t(redacted)
+        nonce = redact_t.last_anchor.nonce
+        llm_output = redacted + f"\n{nonce}"
+        restored = restore_t(llm_output)
 
         assert "13812345678" in restored
         assert "test@example.com" in restored
@@ -59,6 +86,32 @@ class TestRestoreTransform:
         with pytest.raises(SessionStateError):
             restore_t("no redaction happened")
 
+    def test_should_fail_closed_when_nonce_missing(self):
+        """No nonce in response → fail-closed (originals not leaked)."""
+        redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
+        restore_t = RestoreTransform(redact_t)
+
+        redacted = redact_t("电话13812345678")
+        # Response does NOT contain the nonce
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            result = restore_t(redacted)
+
+        assert "13812345678" not in result
+
+    def test_should_fail_closed_when_response_forged(self):
+        """Forged response with wrong nonce must not leak originals."""
+        redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
+        restore_t = RestoreTransform(redact_t)
+
+        redacted = redact_t("电话13812345678")
+        forged = redacted + "\nfake-nonce-xyz"
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            result = restore_t(forged)
+
+        assert "13812345678" not in result
+
 
 class TestResetAndPipeline:
     def test_should_reset_key(self):
@@ -68,6 +121,7 @@ class TestResetAndPipeline:
 
         t.reset()
         assert t.last_key is None
+        assert t.last_anchor is None
 
     def test_should_simulate_pipeline(self):
         redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
@@ -75,7 +129,8 @@ class TestResetAndPipeline:
 
         original = "张三电话13812345678"
         redacted = redact_t(original)
-        llm_output = f"Summary: {redacted}"
+        nonce = redact_t.last_anchor.nonce
+        llm_output = f"Summary: {redacted}\n{nonce}"
         restored = restore_t(llm_output)
 
         assert "13812345678" in restored

@@ -14,14 +14,21 @@ Usage:
     restore_t = RestoreTransform(redact_t)
 
     redacted = redact_t(user_query)
-    llm_output = llm(redacted)
+    # Inject the anchor prompt into your LLM system message:
+    anchor_prompt = redact_t.make_prompt_addendum()
+    llm_output = llm(redacted, system=anchor_prompt)
     restored = restore_t(llm_output)
 """
 
 from __future__ import annotations
 
+import warnings as _warnings
+
 from argus_redact import redact, restore
+from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.exceptions import SessionStateError
+from argus_redact.pure.restore import check_restore_safety
+from argus_redact.pure.security_events import INJECTION_SUSPECTED, security_event
 
 
 class RedactTransform:
@@ -38,6 +45,8 @@ class RedactTransform:
         self._lang = lang
         self._salt = salt
         self.last_key: dict | None = None
+        self.last_anchor = None
+        self._last_redacted: str | None = None
 
     def __call__(self, text: str, **kwargs) -> str:
         redacted, self.last_key = redact(
@@ -47,11 +56,31 @@ class RedactTransform:
             salt=self._salt,
             key=self.last_key,
         )
+        self.last_anchor = make_anchor(self.last_key)
+        self._last_redacted = redacted
         return redacted
+
+    def make_prompt_addendum(self, lang: str | None = None) -> str:
+        """Return a system-prompt addendum embedding the nonce-echo instruction.
+
+        Callers must inject this into the LLM system message so the nonce
+        reaches the response and the anchor round-trip can be verified.
+        Returns an empty string if no redaction has occurred yet.
+        """
+        key = self.last_key
+        anchor = self.last_anchor
+        if not key or anchor is None:
+            return ""
+        effective_lang = (
+            lang if lang is not None else (self._lang if isinstance(self._lang, str) else "zh")
+        )
+        return prompt_anchor(key, effective_lang, anchor=anchor)
 
     def reset(self) -> None:
         """Clear the accumulated key between distinct logical sessions."""
         self.last_key = None
+        self.last_anchor = None
+        self._last_redacted = None
 
 
 class RestoreTransform:
@@ -72,4 +101,27 @@ class RestoreTransform:
                 "a key. Call redact_t(...) first, or check .reset() was not "
                 "called between them."
             )
-        return restore(text, key)
+        anchor = self._redact.last_anchor
+        redacted = self._redact._last_redacted
+
+        # (H) supplementary heuristic check — runs when we have the redacted prompt
+        security_events: list[dict] = []
+        if redacted is not None:
+            hints = check_restore_safety(redacted, text, key)
+            if hints:
+                security_events.append(
+                    security_event(
+                        INJECTION_SUSPECTED,
+                        count=len(hints),
+                        detail="; ".join(hints),
+                    )
+                )
+
+        result, details = restore(text, key, guard=True, anchor=anchor, detailed=True)
+        all_events = security_events + details.get("security_events", [])
+        if all_events:
+            _warnings.warn(
+                f"restore security events: {[e['reason_code'] for e in all_events]}",
+                stacklevel=2,
+            )
+        return result

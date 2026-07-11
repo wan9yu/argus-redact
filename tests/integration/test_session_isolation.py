@@ -10,6 +10,7 @@ PII bridging when the helper is reused across users without reset.
 from __future__ import annotations
 
 import re
+import warnings
 from pathlib import Path
 
 import pytest
@@ -106,7 +107,12 @@ def test_llamaindex_happy_path_roundtrip():
     redacted = redact_t("张三的电话13812345678")
     assert "13812345678" not in redacted
     assert "张三" not in redacted
-    assert restore_t(redacted) == "张三的电话13812345678"
+    # Round-trip requires nonce echo (guard-by-default)
+    nonce = redact_t.last_anchor.nonce
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        restored = restore_t(redacted + f"\n{nonce}")
+    assert "张三的电话13812345678" in restored
 
 
 def test_llamaindex_restore_without_key_raises():
