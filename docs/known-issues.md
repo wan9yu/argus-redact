@@ -5,6 +5,18 @@
 > documented for transparency, not a backlog. New defects discovered post-v0.5.8
 > will reappear in an `## Unresolved` section above.
 
+## Deprecation Notices
+
+### bare `restore()` without `guard=` (v0.7.18)
+
+- **What**: Calling `restore(text, key)` without passing `guard=` emits a `DeprecationWarning`
+  ("bare restore without guard= is deprecated; will default to guard=True in v0.8.0"). The
+  v0.7.18 default (`guard=None`) preserves existing behavior; no immediate breakage.
+- **Action required**: Migrate to `restore(text, key, guard=True, anchor=anchor)` before v0.8.0.
+  See `docs/security-model.md` — Guarded restore (v0.7.18) for the migration pattern. If you
+  intentionally want legacy behavior beyond v0.8.0, pass `guard=False` explicitly.
+- **Timeline**: `guard=None` → `guard=True` default flip is targeted for v0.8.0.
+
 ## Design Constraints
 
 Each entry follows three lines:

@@ -244,6 +244,74 @@ If an attacker controls the LLM output (via prompt injection), they can include 
 - Validate LLM output structure before restoring
 - Use `report=True` to review what was redacted before sending
 - Consider the LLM's output trustworthiness in your threat model
+- Use guarded restore (v0.7.18, described below) to add a deterministic provenance layer
+
+### Guarded restore (v0.7.18)
+
+v0.7.18 adds a deterministic guard layer to `restore()`, enabled by passing `guard=True` alongside an `Anchor`. It does not replace careful output validation, but it closes the mechanical window where a pseudonym injected into LLM output would silently restore.
+
+**How it works:**
+
+1. **Build an anchor** from the key before sending the prompt:
+
+   ```python
+   from argus_redact import redact, restore, make_anchor
+   from argus_redact.compose import prompt_anchor
+
+   redacted, key = redact(user_input)
+   anchor = make_anchor(key)
+   # anchor.nonce is a random 32-hex-char token; anchor.scope = frozenset of pseudonyms
+   ```
+
+2. **Embed the nonce in the LLM system prompt** so the LLM echoes it back:
+
+   ```python
+   system = prompt_anchor(key, lang="zh", anchor=anchor)
+   llm_output = call_llm(redacted, system=system)
+   ```
+
+3. **Restore with guard**:
+
+   ```python
+   restored = restore(llm_output, key, guard=True, anchor=anchor)
+   ```
+
+**Two checks run on every guarded restore:**
+
+- **P (provenance)**: the nonce must appear verbatim in the LLM response. If absent, the
+  response cannot be traced to this redaction session — restore returns pseudonyms
+  unchanged (fail-closed) and emits a `provenance_failed` security event.
+- **S (scope-binding)**: only pseudonyms within `anchor.scope` (the set produced by this
+  redaction call) are substituted. Out-of-scope codes that appear in the response
+  trigger an `out_of_scope_pseudonym` event and are left unreplaced.
+
+**Fail-closed by default:** when a guard check fails, `restore()` returns the text with
+pseudonyms intact — no PII is leaked — and emits a `UserWarning`. Pass `strict=True`
+to raise `RestoreGuardError` instead. Pass `detailed=True` to receive
+`(text, {"security_events": [...]})` for programmatic inspection.
+
+```python
+from argus_redact import RestoreGuardError
+
+try:
+    restored = restore(llm_output, key, guard=True, anchor=anchor, strict=True)
+except RestoreGuardError as e:
+    # e.events is a list of security event dicts
+    handle_guard_failure(e.events)
+
+# Or inspect without raising:
+restored, details = restore(llm_output, key, guard=True, anchor=anchor, detailed=True)
+for event in details["security_events"]:
+    log(event["reason_code"], event["count"], event["detail"])
+```
+
+Security event `reason_code` values: `provenance_failed`, `out_of_scope_pseudonym`,
+`injection_suspected`, `guard_no_anchor`.
+
+**Honest boundary:** the guard operates at the restore layer only. It verifies that a
+response came from the expected session and contains only in-scope pseudonyms. It does
+not inspect network transport, protect against key exfiltration, or prevent the LLM from
+leaking context through paraphrase. Egress and transport security remain separate layers.
 
 ### mask strategy partial leakage
 
