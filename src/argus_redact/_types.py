@@ -65,6 +65,8 @@ class RedactReport:
     entities: tuple[dict, ...] = ()
     stats: dict = field(default_factory=dict)
     risk: RiskResult | None = None
+    residual_personal_data: bool = True
+    security_events: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True)

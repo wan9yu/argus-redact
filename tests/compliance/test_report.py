@@ -53,3 +53,35 @@ class TestRedactReport:
         assert report.risk.score == 0.0
         assert report.risk.level == "none"
         assert len(report.entities) == 0
+
+    def test_report_has_residual_personal_data_true_for_pseudonym(self):
+        # person entity uses pseudonym strategy by default → residual_personal_data=True
+        report = redact("姓名张伟", lang="zh", mode="fast", report=True)
+        assert report.residual_personal_data is True
+
+    def test_report_has_residual_personal_data_false_when_all_masked(self):
+        report = redact(
+            "手机13812345678",
+            lang="zh",
+            mode="fast",
+            report=True,
+            config={"phone": {"strategy": "mask"}},
+        )
+        assert report.residual_personal_data is False
+
+    def test_report_security_events_empty_when_no_keep_misconfig(self):
+        report = redact("手机13812345678", lang="zh", mode="fast", report=True)
+        assert report.security_events == ()
+
+    def test_report_security_events_carries_keep_downgraded(self):
+        report = redact(
+            "卡号4111111111111111",
+            lang="zh",
+            mode="fast",
+            report=True,
+            config={"bank_card": {"strategy": "keep"}},
+        )
+        codes = [e["reason_code"] for e in report.security_events]
+        assert "keep_downgraded" in codes
+        # PII-free: no raw card digits anywhere in the events
+        assert "4111111111111111" not in str(report.security_events)
