@@ -189,3 +189,19 @@ class TestVersionGate:
     def test_missing_version_raises_value_error(self):
         with pytest.raises(ValueError):
             StreamingRedactor.from_state({"accumulated_key": {}}, salt=b"x")
+
+
+def test_export_from_state_roundtrips_accumulated_types():
+    # bug #4: _accumulated_types is populated during feed() (backs aggregate_types)
+    # but was omitted from export_state() / from_state(), so a resumed redactor
+    # under-reported types ({}). It must round-trip like accumulated_key. (Not an
+    # __init__ param, so TestExportStateCompleteness above did not catch it.)
+    salt = bytes(range(32))
+    r1 = StreamingRedactor(salt=salt)
+    r1.feed("客户张明的电话是13912345678，邮箱ming@corp.com。今天天气很好，我们去公园散步。")
+    r1.flush()
+    types1 = r1.aggregate_types()
+    assert types1, "sanity: some fake→type accumulated during feed"
+    state = json.loads(json.dumps(r1.export_state()))  # through JSON, like a real checkpoint
+    r2 = StreamingRedactor.from_state(state, salt=salt)
+    assert r2.aggregate_types() == types1

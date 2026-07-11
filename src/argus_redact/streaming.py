@@ -364,6 +364,10 @@ class StreamingRedactor:
         state = {
             "version": _STATE_SCHEMA_VERSION,
             "accumulated_key": dict(self._accumulated_key),
+            # fake → SSOT PII type accumulated across chunks (backs aggregate_types).
+            # Additive field with a {} default in from_state — older dumps load
+            # cleanly, so no schema bump (same contract as inc_buffer/ctx_len).
+            "accumulated_types": dict(self._accumulated_types),
             # In-flight tail accumulated past the last sentence boundary. Must be
             # carried across a checkpoint or end-of-stream text is silently lost
             # on resume. Additive field — older (field-less) dumps load fine via
@@ -432,6 +436,7 @@ class StreamingRedactor:
             ),
         )
         instance._accumulated_key = dict(state.get("accumulated_key", {}))
+        instance._accumulated_types = dict(state.get("accumulated_types", {}))
         instance._inc_buffer = state.get("inc_buffer", "")
         instance._ctx_len = state.get("ctx_len", 0)
         return instance
