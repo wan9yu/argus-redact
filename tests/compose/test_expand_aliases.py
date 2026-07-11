@@ -150,3 +150,26 @@ def test_round_trip_restore_with_surname_title_in_llm_output():
     assert "黄芳" in restored
     assert "黄先生" not in restored
     assert "13912345678" in restored
+
+
+def test_shared_surname_persons_skip_ambiguous_alias_zh():
+    # bug #39: two DISTINCT Persons share surname 张 → the bare 张先生/... alias is
+    # ambiguous and cannot restore to one identity. It must NOT be emitted, else it
+    # silently binds to the first-iterated Person (a confident wrong-identity
+    # restore). Unique surnames are unaffected.
+    key = {"P-001": "张伟", "P-002": "张强", "P-003": "李明"}
+    expanded = expand_aliases(key, lang="zh")
+    assert expanded["P-001"] == "张伟" and expanded["P-002"] == "张强"
+    for title in ("先生", "女士", "总", "老师", "医生"):
+        assert f"张{title}" not in expanded, f"ambiguous 张{title} must not bind to one identity"
+    # unique surname 李 still expands
+    assert expanded["李先生"] == "李明"
+    assert expanded["李医生"] == "李明"
+
+
+def test_shared_surname_persons_skip_ambiguous_alias_en():
+    key = {"P-001": "John Brown", "P-002": "Alice Brown", "P-003": "Sara Lee"}
+    expanded = expand_aliases(key, lang="en")
+    for title in ("Mr.", "Mrs.", "Ms.", "Dr.", "Prof."):
+        assert f"{title} Brown" not in expanded  # ambiguous — two Browns
+    assert expanded["Dr. Lee"] == "Sara Lee"  # unique surname still expands

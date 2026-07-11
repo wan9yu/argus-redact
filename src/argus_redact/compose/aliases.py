@@ -95,12 +95,26 @@ def expand_aliases(key: dict, lang: str = "zh") -> dict:
     titles = _ZH_TITLES if lang == "zh" else _EN_TITLES
     extract = _extract_surname_zh if lang == "zh" else _extract_surname_en
 
+    # First pass: which surnames are shared by ≥2 DISTINCT Person originals? A bare
+    # {surname}{title} alias for a shared surname is ambiguous — it cannot restore to
+    # one identity — so it must not be emitted at all. Emitting it would silently bind
+    # the alias to the first-iterated Person = a confident wrong-identity restore.
+    surname_originals: dict[str, set[str]] = {}
+    for pseudonym, original in key.items():
+        if not pseudonym.startswith("P-"):
+            continue
+        surname = extract(original)
+        if surname:
+            surname_originals.setdefault(surname, set()).add(original)
+
     for pseudonym, original in key.items():
         if not pseudonym.startswith("P-"):
             continue
         surname = extract(original)
         if not surname:
             continue
+        if len(surname_originals.get(surname, ())) > 1:
+            continue  # ambiguous: ≥2 Persons share this surname — skip its aliases
         for title in titles:
             alias = f"{surname}{title}" if lang == "zh" else f"{title} {surname}"
             if alias not in expanded:
