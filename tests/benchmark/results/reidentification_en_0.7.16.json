@@ -1,8 +1,8 @@
 {
   "benchmark": "reidentification",
-  "package_version": "0.7.16",
-  "date": "2026-06-30",
-  "fixture_sha256": "d42ab996b9bbf5cc",
+  "package_version": "0.7.17",
+  "date": "2026-07-10",
+  "fixture_sha256": "928e35e2f97a7d51",
   "runs": [
     {
       "provider": "deepseek",

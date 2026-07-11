@@ -1,43 +1,169 @@
 {
-  "_note": "Fully synthetic English re-identification-risk eval fixture. No real people. Separate single-language pool (NOT merged with the zh fixture): mixing scripts lets an LLM re-identify trivially by language, inflating the metric. 18 personas, fully NON-CONFOUNDED: EVERY quasi-identifier field individually OVERLAPS across >=2 personas — 6 cities x3 (Chicago, Austin, Seattle, London, Manchester, Bristol), and each occupation, medical condition, hobby and exact age is shared by exactly 2 personas — so NO single field re-identifies anyone. Only the FULL combination (city x occupation x condition x hobby x age) is unique per persona, so identity is recoverable solely by COMBINING >=2 residuals. This deliberately removes two confounds at once: the original unique-city giveaway AND the follow-on unique-occupation giveaway. Each candidate summary lists ONLY quasi-identifiers (age + city/area + occupation + employer-type + a condition + a hobby) and NO explicit PII. Each profile is prose weaving explicit PII (US/UK name + phone + email) plus the SAME quasi-identifiers, so after explicit-PII removal only the partially-discriminating residuals (occupation/condition/hobby/age, with city clustered) remain — exactly the survivors the en detectors target.",
+  "_note": "Fully synthetic English re-identification-risk eval fixture. No real people. Separate single-language pool (NOT merged with the zh fixture): mixing scripts lets an LLM re-identify trivially by language, inflating the metric. 18 personas, each a 9-attribute quasi-identifier vector over the STANDARD inference taxonomy from Staab et al. (the AURA line of work): age, sex, location, occupation, education, relationship_status, income, place_of_birth — PLUS medical_condition as an argus-relevant 9th sensitive attribute. Fully NON-CONFOUNDED: EVERY value of EVERY one of the 9 fields is shared by >=2 personas (9 ages x2, 2 sexes ~x9, 6 locations x3, 9 occupations x2, 3 education levels x6, 3 relationship statuses x6, 3 income bands x6, 3 places of birth x6, 9 medical conditions x2), so NO single field re-identifies anyone. Only the FULL 9-tuple is unique per persona, so identity is recoverable solely by COMBINING >=2 residual quasi-identifiers. Each candidate summary lists ONLY the 9 quasi-identifiers and NO explicit PII. Each profile is prose weaving explicit PII (a varied US/UK name + fictional-range phone + email) plus the SAME 9 residual attributes, so after explicit-PII removal only the partially-discriminating quasi-identifiers remain — exactly the survivors a re-identification attack must combine.",
   "candidates": [
-    {"id": 1,  "summary": "28 years old, lives in Chicago, Illinois, works as a software engineer at a fintech startup, has type 2 diabetes, enjoys gardening."},
-    {"id": 2,  "summary": "34 years old, lives in Chicago, Illinois, teaches high-school mathematics at a public school, has asthma, enjoys rock climbing."},
-    {"id": 3,  "summary": "40 years old, lives in Chicago, Illinois, works as a graphic designer at a design studio, has hypertension, enjoys surfing."},
-    {"id": 4,  "summary": "31 years old, lives in Austin, Texas, works as a software engineer at a fintech startup, has celiac disease, enjoys playing chess."},
-    {"id": 5,  "summary": "37 years old, lives in Austin, Texas, works as a pastry chef at an artisan bakery, has anxiety, enjoys photography."},
-    {"id": 6,  "summary": "43 years old, lives in Austin, Texas, works as a physical therapist at a sports clinic, has migraines, enjoys playing the piano."},
-    {"id": 7,  "summary": "30 years old, lives in Seattle, Washington, works as a pastry chef at an artisan bakery, has hypothyroidism, enjoys running marathons."},
-    {"id": 8,  "summary": "33 years old, lives in Seattle, Washington, teaches high-school mathematics at a public school, has psoriasis, enjoys cycling."},
-    {"id": 9,  "summary": "46 years old, lives in Seattle, Washington, works as an electrician for a contractor, has a knee injury from surgery, enjoys fishing."},
-    {"id": 10, "summary": "28 years old, lives in London, works as a registered nurse at a large hospital, has type 2 diabetes, enjoys rock climbing."},
-    {"id": 11, "summary": "34 years old, lives in London, works as a civil engineer at a construction firm, has celiac disease, enjoys playing chess."},
-    {"id": 12, "summary": "40 years old, lives in London, works as a graphic designer at a design studio, has hypothyroidism, enjoys running marathons."},
-    {"id": 13, "summary": "31 years old, lives in Manchester, England, works as a registered nurse at a large hospital, has asthma, enjoys surfing."},
-    {"id": 14, "summary": "37 years old, lives in Manchester, England, works as an accountant at an accounting firm, has anxiety, enjoys photography."},
-    {"id": 15, "summary": "43 years old, lives in Manchester, England, works as a physical therapist at a sports clinic, has psoriasis, enjoys cycling."},
-    {"id": 16, "summary": "30 years old, lives in Bristol, England, works as an accountant at an accounting firm, has hypertension, enjoys gardening."},
-    {"id": 17, "summary": "33 years old, lives in Bristol, England, works as a civil engineer at a construction firm, has migraines, enjoys playing the piano."},
-    {"id": 18, "summary": "46 years old, lives in Bristol, England, works as an electrician for a contractor, has a knee injury from surgery, enjoys fishing."}
+    {
+      "id": 1,
+      "summary": "28 years old, a woman, lives in Chicago, Illinois, works as a software engineer, holds a bachelor's degree, is single, is in a low income band, born in the United States, has type 2 diabetes."
+    },
+    {
+      "id": 2,
+      "summary": "34 years old, a man, lives in Chicago, Illinois, teaches high-school mathematics at a public school, holds a master's degree, is married, is in a middle income band, born in the United Kingdom, has asthma."
+    },
+    {
+      "id": 3,
+      "summary": "40 years old, a woman, lives in Chicago, Illinois, works as a graphic designer, holds a vocational diploma, is divorced, is in a high income band, born in India, has hypertension."
+    },
+    {
+      "id": 4,
+      "summary": "31 years old, a man, lives in Austin, Texas, works as a software engineer, holds a master's degree, is divorced, is in a high income band, born in the United States, has celiac disease."
+    },
+    {
+      "id": 5,
+      "summary": "37 years old, a woman, lives in Austin, Texas, works as a pastry chef, holds a vocational diploma, is single, is in a low income band, born in the United Kingdom, has anxiety."
+    },
+    {
+      "id": 6,
+      "summary": "43 years old, a man, lives in Austin, Texas, works as a physical therapist, holds a bachelor's degree, is married, is in a middle income band, born in India, has migraines."
+    },
+    {
+      "id": 7,
+      "summary": "30 years old, a man, lives in Seattle, Washington, works as a pastry chef, holds a bachelor's degree, is married, is in a high income band, born in the United Kingdom, has hypothyroidism."
+    },
+    {
+      "id": 8,
+      "summary": "33 years old, a man, lives in Seattle, Washington, teaches high-school mathematics at a public school, holds a vocational diploma, is divorced, is in a low income band, born in India, has psoriasis."
+    },
+    {
+      "id": 9,
+      "summary": "46 years old, a woman, lives in Seattle, Washington, works as an electrician, holds a master's degree, is single, is in a middle income band, born in the United States, has a knee injury."
+    },
+    {
+      "id": 10,
+      "summary": "28 years old, a man, lives in London, works as a registered nurse, holds a vocational diploma, is married, is in a low income band, born in India, has type 2 diabetes."
+    },
+    {
+      "id": 11,
+      "summary": "34 years old, a woman, lives in London, works as a civil engineer, holds a bachelor's degree, is divorced, is in a middle income band, born in the United States, has celiac disease."
+    },
+    {
+      "id": 12,
+      "summary": "40 years old, a man, lives in London, works as a graphic designer, holds a master's degree, is single, is in a high income band, born in the United Kingdom, has hypothyroidism."
+    },
+    {
+      "id": 13,
+      "summary": "31 years old, a woman, lives in Manchester, works as a registered nurse, holds a bachelor's degree, is single, is in a middle income band, born in India, has asthma."
+    },
+    {
+      "id": 14,
+      "summary": "37 years old, a man, lives in Manchester, works as an accountant, holds a master's degree, is married, is in a high income band, born in the United States, has anxiety."
+    },
+    {
+      "id": 15,
+      "summary": "43 years old, a woman, lives in Manchester, works as a physical therapist, holds a vocational diploma, is divorced, is in a low income band, born in the United Kingdom, has psoriasis."
+    },
+    {
+      "id": 16,
+      "summary": "30 years old, a woman, lives in Bristol, works as an accountant, holds a vocational diploma, is married, is in a middle income band, born in the United States, has hypertension."
+    },
+    {
+      "id": 17,
+      "summary": "33 years old, a woman, lives in Bristol, works as a civil engineer, holds a master's degree, is single, is in a low income band, born in the United Kingdom, has migraines."
+    },
+    {
+      "id": 18,
+      "summary": "46 years old, a man, lives in Bristol, works as an electrician, holds a bachelor's degree, is divorced, is in a high income band, born in India, has a knee injury."
+    }
   ],
   "profiles": [
-    {"truth": 1,  "lang": "en", "text": "Hi, I'm Denise Calloway, 28, you can reach me at (312) 555-0147 or denise.calloway@example.com. I live in Chicago, Illinois and work as a software engineer at a fintech startup. I have type 2 diabetes and manage it with diet. My hobby is gardening — I grow vegetables on my balcony."},
-    {"truth": 2,  "lang": "en", "text": "I'm Marco Bellini, 34, phone 312-555-0198, marco.bellini@example.com. I live in Chicago, Illinois and teach high-school mathematics at a public school. I've had asthma since I was a kid and always carry an inhaler. I love rock climbing at the local gym."},
-    {"truth": 3,  "lang": "en", "text": "My name is Priya Raman, I'm 40, reachable at +1 (773) 555-0162 or priya.raman@example.com. I live in Chicago, Illinois and work as a graphic designer at a design studio. I have hypertension and take medication for it. On my days off I go surfing on Lake Michigan."},
-    {"truth": 4,  "lang": "en", "text": "Hey, I'm Brandon Whitaker, 31. Phone: (512) 555-0133, email b.whitaker@example.com. I live in Austin, Texas and work as a software engineer at a fintech startup. I was diagnosed with celiac disease a few years ago, so I cook gluten-free at home. I enjoy playing chess online."},
-    {"truth": 5,  "lang": "en", "text": "I'm Carla Mendez, 37, phone 512-555-0176, carla.mendez@example.com. I live in Austin, Texas and work as a pastry chef at an artisan bakery. I've struggled with anxiety for a while and see a therapist. I'm passionate about photography and shoot on weekends."},
-    {"truth": 6,  "lang": "en", "text": "Hi, I'm Devin Mwangi, 43, you can reach me at +1 (512) 555-0119 or devin.mwangi@example.com. I live in Austin, Texas and work as a physical therapist at a sports clinic. I get migraines fairly often. I unwind by playing the piano."},
-    {"truth": 7,  "lang": "en", "text": "My name is Nathan Choi, I'm 30, mobile (206) 555-0185, nathan.choi@example.com. I live in Seattle, Washington and work as a pastry chef at an artisan bakery. I was diagnosed with hypothyroidism and take a daily tablet. I've been running marathons for years."},
-    {"truth": 8,  "lang": "en", "text": "I'm Gregory Holt, 33, reachable at 206-555-0124 or gholt@example.com. I live in Seattle, Washington and teach high-school mathematics at a public school. I have psoriasis that I manage with treatment. I enjoy cycling around the city."},
-    {"truth": 9,  "lang": "en", "text": "Hi, I'm Hannah Delgado, 46. Phone +1 (206) 555-0157, email hannah.delgado@example.com. I live in Seattle, Washington and work as an electrician for a contractor. I injured my knee and had surgery a couple of years ago. On weekends I go fishing."},
-    {"truth": 10, "lang": "en", "text": "Hi, I'm Oliver Pennington, 28, you can reach me on 07700 900318 or oliver.pennington@example.co.uk. I live in London and work as a registered nurse at a large hospital. I have type 2 diabetes and manage it with diet. I love rock climbing at the local gym."},
-    {"truth": 11, "lang": "en", "text": "My name is Aisha Rahman, I'm 34, landline 020 7946 0241, email aisha.rahman@example.co.uk. I live in London and work as a civil engineer at a construction firm. I was diagnosed with celiac disease a few years ago, so I'm careful about what I eat. I love playing chess in my free time."},
-    {"truth": 12, "lang": "en", "text": "I'm Gareth Fielding, 40, mobile 07700 900462, gareth.fielding@example.co.uk. I live in London and work as a graphic designer at a design studio. I was diagnosed with hypothyroidism and take a daily tablet. I've been running marathons for years."},
-    {"truth": 13, "lang": "en", "text": "Hi, I'm Stuart Hargreaves, 31, call me on 0161 496 0173 or s.hargreaves@example.co.uk. I live in Manchester and work as a registered nurse at a large hospital. I've had asthma since I was a kid and always carry an inhaler. Whenever I can, I head to the coast to go surfing."},
-    {"truth": 14, "lang": "en", "text": "My name is Wayne Dunbar, I'm 37, mobile 07700 900529, email wayne.dunbar@example.co.uk. I live in Manchester and work as an accountant at an accounting firm. I've struggled with anxiety for a while and see a therapist. I'm passionate about photography and shoot on weekends."},
-    {"truth": 15, "lang": "en", "text": "Hi, I'm Chloe Ferreira, 43. You can reach me on 0161 496 0288, chloe.ferreira@example.co.uk. I live in Manchester and work as a physical therapist at a sports clinic. I have psoriasis that I manage with treatment. I enjoy cycling around the countryside."},
-    {"truth": 16, "lang": "en", "text": "I'm Imran Saleh, 30, phone 0117 496 0134, imran.saleh@example.co.uk. I live in Bristol and work as an accountant at an accounting firm. I have hypertension and take medication for it. My hobby is gardening — I grow vegetables in the back garden."},
-    {"truth": 17, "lang": "en", "text": "My name is Bethany Walsh, I'm 33, mobile 07700 900641, email bethany.walsh@example.co.uk. I live in Bristol and work as a civil engineer at a construction firm. I get migraines fairly often. I unwind by playing the piano."},
-    {"truth": 18, "lang": "en", "text": "Hi, I'm Connor Hadley, 46, reachable at 0117 496 0207 or connor.hadley@example.co.uk. I live in Bristol and work as an electrician for a contractor. I injured my knee and had surgery a couple of years ago. On weekends I go fishing."}
+    {
+      "truth": 1,
+      "lang": "en",
+      "text": "Hi, I'm Denise Calloway, 28. You can reach me at (312) 555-0147 or denise.calloway@example.com. I'm a woman and I live in Chicago, Illinois, where I work as a software engineer. I have a bachelor's degree, I'm single, and my earnings put me in a low income band. I was born in the United States. I have type 2 diabetes."
+    },
+    {
+      "truth": 2,
+      "lang": "en",
+      "text": "Hi, I'm Marco Bellini, 34. You can reach me at 312-555-0198 or marco.bellini@example.com. I'm a man and I live in Chicago, Illinois, where I teach high-school mathematics at a public school. I have a master's degree, I'm married, and my earnings put me in a middle income band. I was born in the United Kingdom. I have asthma."
+    },
+    {
+      "truth": 3,
+      "lang": "en",
+      "text": "Hi, I'm Priya Raman, 40. You can reach me at +1 (773) 555-0162 or priya.raman@example.com. I'm a woman and I live in Chicago, Illinois, where I work as a graphic designer. I have a vocational diploma, I'm divorced, and my earnings put me in a high income band. I was born in India. I have hypertension."
+    },
+    {
+      "truth": 4,
+      "lang": "en",
+      "text": "Hi, I'm Brandon Whitaker, 31. You can reach me at (512) 555-0133 or b.whitaker@example.com. I'm a man and I live in Austin, Texas, where I work as a software engineer. I have a master's degree, I'm divorced, and my earnings put me in a high income band. I was born in the United States. I have celiac disease."
+    },
+    {
+      "truth": 5,
+      "lang": "en",
+      "text": "Hi, I'm Carla Mendez, 37. You can reach me at 512-555-0176 or carla.mendez@example.com. I'm a woman and I live in Austin, Texas, where I work as a pastry chef. I have a vocational diploma, I'm single, and my earnings put me in a low income band. I was born in the United Kingdom. I have anxiety."
+    },
+    {
+      "truth": 6,
+      "lang": "en",
+      "text": "Hi, I'm Devin Mwangi, 43. You can reach me at +1 (512) 555-0119 or devin.mwangi@example.com. I'm a man and I live in Austin, Texas, where I work as a physical therapist. I have a bachelor's degree, I'm married, and my earnings put me in a middle income band. I was born in India. I have migraines."
+    },
+    {
+      "truth": 7,
+      "lang": "en",
+      "text": "Hi, I'm Nathan Choi, 30. You can reach me at (206) 555-0185 or nathan.choi@example.com. I'm a man and I live in Seattle, Washington, where I work as a pastry chef. I have a bachelor's degree, I'm married, and my earnings put me in a high income band. I was born in the United Kingdom. I have hypothyroidism."
+    },
+    {
+      "truth": 8,
+      "lang": "en",
+      "text": "Hi, I'm Gregory Holt, 33. You can reach me at 206-555-0124 or gholt@example.com. I'm a man and I live in Seattle, Washington, where I teach high-school mathematics at a public school. I have a vocational diploma, I'm divorced, and my earnings put me in a low income band. I was born in India. I have psoriasis."
+    },
+    {
+      "truth": 9,
+      "lang": "en",
+      "text": "Hi, I'm Hannah Delgado, 46. You can reach me at +1 (206) 555-0157 or hannah.delgado@example.com. I'm a woman and I live in Seattle, Washington, where I work as an electrician. I have a master's degree, I'm single, and my earnings put me in a middle income band. I was born in the United States. I have a knee injury from surgery."
+    },
+    {
+      "truth": 10,
+      "lang": "en",
+      "text": "Hi, I'm Oliver Pennington, 28. You can reach me at 07700 900318 or oliver.pennington@example.co.uk. I'm a man and I live in London, where I work as a registered nurse. I have a vocational diploma, I'm married, and my earnings put me in a low income band. I was born in India. I have type 2 diabetes."
+    },
+    {
+      "truth": 11,
+      "lang": "en",
+      "text": "Hi, I'm Aisha Rahman, 34. You can reach me at 07700 900241 or aisha.rahman@example.co.uk. I'm a woman and I live in London, where I work as a civil engineer. I have a bachelor's degree, I'm divorced, and my earnings put me in a middle income band. I was born in the United States. I have celiac disease."
+    },
+    {
+      "truth": 12,
+      "lang": "en",
+      "text": "Hi, I'm Gareth Fielding, 40. You can reach me at 07700 900462 or gareth.fielding@example.co.uk. I'm a man and I live in London, where I work as a graphic designer. I have a master's degree, I'm single, and my earnings put me in a high income band. I was born in the United Kingdom. I have hypothyroidism."
+    },
+    {
+      "truth": 13,
+      "lang": "en",
+      "text": "Hi, I'm Sinead Hargreaves, 31. You can reach me at 07700 900173 or s.hargreaves@example.co.uk. I'm a woman and I live in Manchester, where I work as a registered nurse. I have a bachelor's degree, I'm single, and my earnings put me in a middle income band. I was born in India. I have asthma."
+    },
+    {
+      "truth": 14,
+      "lang": "en",
+      "text": "Hi, I'm Wayne Dunbar, 37. You can reach me at 07700 900529 or wayne.dunbar@example.co.uk. I'm a man and I live in Manchester, where I work as an accountant. I have a master's degree, I'm married, and my earnings put me in a high income band. I was born in the United States. I have anxiety."
+    },
+    {
+      "truth": 15,
+      "lang": "en",
+      "text": "Hi, I'm Chloe Ferreira, 43. You can reach me at 07700 900288 or chloe.ferreira@example.co.uk. I'm a woman and I live in Manchester, where I work as a physical therapist. I have a vocational diploma, I'm divorced, and my earnings put me in a low income band. I was born in the United Kingdom. I have psoriasis."
+    },
+    {
+      "truth": 16,
+      "lang": "en",
+      "text": "Hi, I'm Nadia Saleh, 30. You can reach me at 07700 900134 or nadia.saleh@example.co.uk. I'm a woman and I live in Bristol, where I work as an accountant. I have a vocational diploma, I'm married, and my earnings put me in a middle income band. I was born in the United States. I have hypertension."
+    },
+    {
+      "truth": 17,
+      "lang": "en",
+      "text": "Hi, I'm Bethany Walsh, 33. You can reach me at 07700 900641 or bethany.walsh@example.co.uk. I'm a woman and I live in Bristol, where I work as a civil engineer. I have a master's degree, I'm single, and my earnings put me in a low income band. I was born in the United Kingdom. I have migraines."
+    },
+    {
+      "truth": 18,
+      "lang": "en",
+      "text": "Hi, I'm Connor Hadley, 46. You can reach me at 07700 900207 or connor.hadley@example.co.uk. I'm a man and I live in Bristol, where I work as an electrician. I have a bachelor's degree, I'm divorced, and my earnings put me in a high income band. I was born in India. I have a knee injury from surgery."
+    }
   ]
 }

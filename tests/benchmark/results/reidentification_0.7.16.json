@@ -1,8 +1,8 @@
 {
   "benchmark": "reidentification",
-  "package_version": "0.7.16",
-  "date": "2026-06-29",
-  "fixture_sha256": "ea307557af8f2fdc",
+  "package_version": "0.7.17",
+  "date": "2026-07-10",
+  "fixture_sha256": "0ff1e4c815676f84",
   "runs": [
     {
       "provider": "deepseek",
@@ -114,13 +114,13 @@
           ]
         },
         "argus_fast": {
-          "reid_rate": 0.7916666666666666,
-          "correct": 19,
+          "reid_rate": 0.875,
+          "correct": 21,
           "n": 24,
           "per_profile": [
             {
               "truth": 1,
-              "guess": 13
+              "guess": 1
             },
             {
               "truth": 2,
@@ -152,7 +152,7 @@
             },
             {
               "truth": 9,
-              "guess": 9
+              "guess": 3
             },
             {
               "truth": 10,
@@ -160,7 +160,7 @@
             },
             {
               "truth": 11,
-              "guess": 10
+              "guess": 11
             },
             {
               "truth": 12,
@@ -172,11 +172,11 @@
             },
             {
               "truth": 14,
-              "guess": 8
+              "guess": 14
             },
             {
               "truth": 15,
-              "guess": 15
+              "guess": 7
             },
             {
               "truth": 16,
@@ -188,7 +188,7 @@
             },
             {
               "truth": 18,
-              "guess": 18
+              "guess": 11
             },
             {
               "truth": 19,
@@ -196,11 +196,11 @@
             },
             {
               "truth": 20,
-              "guess": 7
+              "guess": 20
             },
             {
               "truth": 21,
-              "guess": 4
+              "guess": 21
             },
             {
               "truth": 22,
@@ -328,13 +328,13 @@
           ]
         },
         "argus_fast": {
-          "reid_rate": 0.7916666666666666,
-          "correct": 19,
+          "reid_rate": 1.0,
+          "correct": 24,
           "n": 24,
           "per_profile": [
             {
               "truth": 1,
-              "guess": 13
+              "guess": 1
             },
             {
               "truth": 2,
@@ -382,11 +382,11 @@
             },
             {
               "truth": 13,
-              "guess": 0
+              "guess": 13
             },
             {
               "truth": 14,
-              "guess": 8
+              "guess": 14
             },
             {
               "truth": 15,
@@ -410,11 +410,11 @@
             },
             {
               "truth": 20,
-              "guess": 7
+              "guess": 20
             },
             {
               "truth": 21,
-              "guess": 4
+              "guess": 21
             },
             {
               "truth": 22,
