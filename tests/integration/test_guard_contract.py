@@ -110,6 +110,14 @@ def _adapter_llamaindex():
 
 
 def _adapter_mcp():
+    # The only integration with a hard third-party import: `mcp_server` imports
+    # `mcp.server.fastmcp` at module scope, and the `mcp` extra is not installed in
+    # CI's test job. The other four adapters are duck-typed and need no guard. Same
+    # skip as tests/integration/test_mcp.py — without it this parametrisation is a
+    # collection-time-clean but call-time ModuleNotFoundError, i.e. a red suite on
+    # any machine that has not opted into the extra.
+    pytest.importorskip("mcp", reason="mcp not installed")
+
     from argus_redact.integrations import mcp_server
 
     mcp_server._TOKEN_STORE.clear()
