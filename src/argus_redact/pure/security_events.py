@@ -5,6 +5,11 @@ flow (Theme A) and redact-side compliance events (Theme B, keep_downgraded).
 Not exported via __all__; internal use only.
 """
 
+from __future__ import annotations
+
+import os
+import sys
+
 PROVENANCE_FAILED = "provenance_failed"
 OUT_OF_SCOPE_PSEUDONYM = "out_of_scope_pseudonym"
 INJECTION_SUSPECTED = "injection_suspected"
@@ -37,8 +42,57 @@ def security_event(reason_code: str, count: int, detail: str | None = None) -> d
 # substituted" when the plaintext was in fact handed back is worse than silence.
 _WITHHELD_CODES = frozenset({PROVENANCE_FAILED, GUARD_NO_ANCHOR, OUT_OF_SCOPE_PSEUDONYM})
 
+# The argus_redact package directory, derived from this file's location
+# (.../src/argus_redact/pure/security_events.py -> .../src/argus_redact). Used
+# to tell "library internals" apart from "the caller's own code" when walking
+# the stack — see `_auto_stacklevel` below. The trailing separator prevents a
+# sibling directory with a matching prefix (e.g. `argus_redact_extra`) from
+# being mistaken for a frame inside this package.
+_PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + os.sep
 
-def warn_security_events(events: list[dict], *, stacklevel: int = 3) -> None:
+
+def _auto_stacklevel(default: int = 3) -> int:
+    """Compute the ``warnings.warn`` ``stacklevel`` that attributes to the
+    caller's OWN code, no matter how many argus_redact wrappers sit between it
+    and ``warn_security_events`` (a direct ``restore()``, a fail-closed
+    ``restore()`` one frame deeper via ``_fail_closed``, a call through
+    ``glue.restore``, through ``guarded_restore``, through an integration, or
+    through any wrapper added later).
+
+    Hardcoding a single number tuned to one call shape is exactly the bug this
+    replaces: every new layer of wrapping needs its own magic number, and one
+    number cannot serve every shape at once. Walking the stack for the first
+    frame outside the package is correct for all of them, by construction.
+
+    ``stacklevel=1`` is the frame containing the ``warnings.warn(...)`` call
+    itself — i.e. inside ``warn_security_events``. Each frame further out is
+    one more. This function is called FROM ``warn_security_events``, so
+    ``sys._getframe(n)`` here lands on exactly the frame that ``stacklevel=n``
+    would attribute to: frame 1 is ``warn_security_events``'s own frame, frame
+    2 is its caller, and so on. We start the walk at frame 2 (the caller) and
+    step outward until a frame's source file is not inside the package.
+    """
+    level = 2
+    try:
+        frame = sys._getframe(level)
+    except ValueError:
+        # Stack too shallow to even reach warn_security_events's caller — can
+        # happen in tests that call this helper in isolation. Don't crash the
+        # warning path over an attribution nicety.
+        return default
+    while frame is not None:
+        filename = os.path.realpath(frame.f_code.co_filename)
+        if not filename.startswith(_PACKAGE_DIR):
+            return level
+        frame = frame.f_back
+        level += 1
+    # Ran off the top of the stack without leaving the package (e.g. a test
+    # harness that calls internal functions directly with no external caller
+    # in the chain). Fall back rather than pointing at a nonexistent frame.
+    return default
+
+
+def warn_security_events(events: list[dict], *, stacklevel: int | None = None) -> None:
     """Emit a PII-free SecurityWarning summarising ``events``.
 
     Structured ``security_events`` stay the channel for programs; this is the
@@ -49,12 +103,20 @@ def warn_security_events(events: list[dict], *, stacklevel: int = 3) -> None:
 
     The sentence describing what HAPPENED is derived from the reason codes, so it
     is accurate for withholding events, advisory ones, and a mix of both.
+
+    ``stacklevel``: ``None`` (the default) auto-detects the first frame outside
+    the argus_redact package and attributes the warning there — see
+    ``_auto_stacklevel``. Pass an explicit int to override, e.g. for a caller
+    that knows its own depth is unusual; it is used verbatim, no auto-detection.
     """
     if not events:
         return
     import warnings
 
     from argus_redact.pure.replacer import SecurityWarning
+
+    if stacklevel is None:
+        stacklevel = _auto_stacklevel()
 
     codes = [e["reason_code"] for e in events]
     withheld = any(c in _WITHHELD_CODES for c in codes)

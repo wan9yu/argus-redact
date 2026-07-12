@@ -80,6 +80,23 @@ def test_fail_closed_when_no_anchor():
     assert _PHONE not in out  # fail-closed: nothing substituted
 
 
+def test_fail_closed_warning_is_attributed_to_the_caller_not_guarded_restore():
+    """guarded_restore() sits one frame deeper than a direct restore() call: the
+    chain is warn -> _fail_closed -> pure.restore -> glue.restore -> guarded_restore
+    -> caller. A stacklevel hardcoded for restore()'s own call depth misattributes
+    the warning to guarded_restore.py instead of here — and warnings' dedup on
+    (message, category, module, lineno) would then collapse every fail-closed
+    restore in a caller's loop into a single warning with no pointer back to the
+    caller's own code."""
+    _redacted, key, _anchor, reply = _round_trip()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        guarded_restore(reply, key)  # guard=True default, no anchor -> fail closed
+    assert caught[0].filename == __file__, (
+        f"warning attributed to {caught[0].filename}, not the caller ({__file__})"
+    )
+
+
 def test_key_file_path_is_accepted(tmp_path):
     """Routes through the GLUE restore, so a str key-file path works (presidio bypassed this)."""
     import json

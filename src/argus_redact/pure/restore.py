@@ -177,8 +177,11 @@ def restore(
         # Partial restore: in-scope codes were substituted, out-of-scope ones were
         # withheld. Without this the caller gets a plain str and no hint that some
         # pseudonyms were deliberately left unresolved.
-        # stacklevel: warn_security_events -> restore -> glue.restore -> caller
-        warn_security_events(events, stacklevel=4)
+        # stacklevel is auto-detected (see security_events._auto_stacklevel) so it
+        # is correct whether this is reached via glue.restore, guarded_restore, an
+        # integration, or any future wrapper — a hardcoded number here was tuned to
+        # one call depth and broke the moment a new wrapper was added (v0.7.19).
+        warn_security_events(events)
 
     if detailed:
         return result, {"security_events": events}
@@ -198,9 +201,12 @@ def _fail_closed(
     # The returned str is shape-identical to a successful restore, so without this
     # the caller cannot tell a fail-closed apart from a clean round-trip. Documented
     # in docs/security-model.md ("emits a UserWarning") — this is that warning.
-    # one frame deeper than the direct call in restore():
-    # warn_security_events -> _fail_closed -> restore -> glue.restore -> caller
-    warn_security_events(events, stacklevel=5)
+    # stacklevel is auto-detected (see security_events._auto_stacklevel): this path
+    # is one frame deeper than the direct warn_security_events call in restore()
+    # above, and auto-detection walks past however many wrapper frames (restore,
+    # glue.restore, guarded_restore, integrations, ...) sit between here and the
+    # caller's own code, rather than hardcoding a number tuned to one of them.
+    warn_security_events(events)
     if detailed:
         return text, {"security_events": events}
     return text
