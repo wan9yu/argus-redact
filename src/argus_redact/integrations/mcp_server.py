@@ -26,7 +26,7 @@ from mcp.server.fastmcp import FastMCP
 from argus_redact import RedactReport, __version__, redact
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.glue.guarded_restore import guarded_restore
-from argus_redact.pure.security_events import INJECTION_SUSPECTED, warn_security_events
+from argus_redact.pure.security_events import advisory_events, warn_security_events
 
 mcp = FastMCP("argus-redact")
 
@@ -189,10 +189,12 @@ async def restore_text(
     # guarded_restore's detailed=True path hands the caller the merged events
     # without warning (the caller owns that decision — see guarded_restore's
     # docstring). restore()'s own provenance/scope (P/S) events already warned
-    # inside that call regardless of `detailed`, so only surface the
-    # injection-suspected (H) ones here — warning on both would double-report
-    # the same P/S trip.
-    warn_security_events([e for e in events if e["reason_code"] == INJECTION_SUSPECTED])
+    # inside that call regardless of `detailed`, so only surface the advisory
+    # ones here (currently just H/injection-suspected) — warning on both would
+    # double-report the same P/S trip. Derived via advisory_events() rather than
+    # naming a reason code, so a future advisory code is surfaced automatically
+    # instead of silently dropped.
+    warn_security_events(advisory_events(events))
 
     payload: dict = {"restored": restored}
     if events:

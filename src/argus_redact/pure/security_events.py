@@ -140,6 +140,21 @@ def warn_security_events(events: list[dict], *, stacklevel: int | None = None) -
     )
 
 
+def advisory_events(events: list[dict]) -> list[dict]:
+    """Return the ``events`` that are ADVISORY — i.e. NOT in ``_WITHHELD_CODES``.
+
+    Everything that isn't a withholding code (P/S failures, out-of-scope
+    pseudonyms) is advisory, currently just the H heuristic's
+    ``INJECTION_SUSPECTED``. Callers that already warn about their own P/S
+    events and only need to separately surface the advisory ones (e.g.
+    mcp_server, to avoid double-reporting a P/S trip) should derive the set
+    from this helper rather than naming a reason code directly — naming one
+    is exactly the drift that let a future advisory code go unsurfaced
+    silently.
+    """
+    return [e for e in events if e["reason_code"] not in _WITHHELD_CODES]
+
+
 def raise_if_strict(events: list[dict], strict: bool) -> None:
     """Raise RestoreGuardError when ``strict`` and any event fired.
 
