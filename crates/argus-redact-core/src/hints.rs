@@ -3,8 +3,10 @@
 //!
 //! Byte-for-byte port of `pure/hints.py`'s `produce_hints` (plus the
 //! `get_person_threshold` / `filter_self_reference` consumers). Emission order
-//! mirrors Python exactly: `pii_density`, then `near_miss_format` (per
-//! near-miss), then the `text_intent` / `self_reference_tier` decision tree.
+//! mirrors Python exactly: `pii_density`, then `near_miss_format` (one per
+//! SURVIVING near-miss — a near-miss whose span is already claimed by an accepted
+//! entity of a different type is suppressed), then the `text_intent` /
+//! `self_reference_tier` decision tree.
 //!
 //! ## Cross-engine fidelity (Python `re` / `str` ↔ Rust / fancy_regex)
 //!
@@ -111,8 +113,15 @@ fn is_interaction_command(text: &str) -> bool {
 ///
 /// Exact port of the decision tree in `pure/hints.py::produce_hints`. Emission
 /// order is bit-identity-critical: `pii_density` first (always), then one
-/// `near_miss_format` per near-miss, then either `text_intent` (no self-refs) or
-/// `self_reference_tier` followed by `text_intent`.
+/// `near_miss_format` per SURVIVING near-miss, then either `text_intent` (no
+/// self-refs) or `self_reference_tier` followed by `text_intent`.
+///
+/// A near-miss is NOT surviving — no hint is emitted for it — when its span
+/// overlaps an accepted entity of a DIFFERENT type: the region is already covered
+/// by a real detection, so the "near miss" is only the other type's validator
+/// disagreeing. Overlap is strict (`e.start < nm.end && nm.start < e.end`), so
+/// merely ADJACENT spans (`e.end == nm.start`) keep the hint. A same-type claimer
+/// also keeps it — that is one detector disagreeing with itself.
 pub fn produce_hints_l1(
     entities: &[PatternMatch],
     text: &str,
@@ -451,6 +460,22 @@ mod tests {
         let nms = [pm_at("110101199003078888", "id_number", 15)];
         let h = produce_hints_l1(&ents, "13800138000 id 110101199003078888", &nms);
         assert_eq!(near_miss_count(&h), 1);
+    }
+
+    #[test]
+    fn near_miss_kept_when_other_type_entity_merely_touches_the_span() {
+        // The boundary case: TOUCHING is not OVERLAPPING. The comparison must stay
+        // strict (`<`), never `<=` — an off-by-one there passes every other test in
+        // this module while silently swallowing hints next to any adjacent entity.
+        let text = "13800138000110101199003078888";
+        // e.end == nm.start (entity immediately BEFORE the near-miss).
+        let before = [pm_at("13800138000", "phone", 0)];
+        let nms = [pm_at("110101199003078888", "id_number", 11)];
+        assert_eq!(near_miss_count(&produce_hints_l1(&before, text, &nms)), 1);
+        // nm.end == e.start (entity immediately AFTER the near-miss).
+        let nms_first = [pm_at("13800138000", "id_number", 0)];
+        let after = [pm_at("110101199003078888", "phone", 11)];
+        assert_eq!(near_miss_count(&produce_hints_l1(&after, text, &nms_first)), 1);
     }
 
     // ── get_person_threshold (exact == captured from live Python) ──

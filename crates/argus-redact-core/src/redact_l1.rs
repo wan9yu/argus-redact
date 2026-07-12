@@ -139,21 +139,24 @@ fn load_patterns(lang: &[String]) -> Vec<PatternConfig> {
             push(p);
         }
     }
-    // Always also load `language_neutral` patterns (CN structured numeric IDs)
-    // from any source lang the caller did NOT request — a CN phone/ID number is
-    // the same digits regardless of surrounding script, so it must be detectable
-    // in en/ja/ko/… text too. The per-pattern flag is the single source of truth:
+    // Always also load `language_neutral` patterns (CN structured numeric IDs, the
+    // en card PAN) from any source lang the caller did NOT request — those digits
+    // are the same regardless of surrounding script, so they must be detectable in
+    // en/ja/ko/… text too. The per-pattern flag is the single source of truth:
     // scan every embedded lang, skipping "shared" (already loaded above) and any
     // requested lang (whose neutral patterns already loaded in the loop above).
+    //
+    // A neutral pattern that duplicates a requested lang's native one (en
+    // `credit_card` vs zh `bank_card`, same PAN digits) is loaded anyway: the
+    // overlap merge collapses the two matches into one entity, and the spurious
+    // `near_miss_format` the loser used to raise is suppressed at the hint layer
+    // (a near-miss whose span an accepted entity of another type already claims).
     for src in all_langs() {
         if src == "shared" || lang.iter().any(|l| l == src) {
             continue;
         }
         for p in builtin_patterns(src) {
-            // `neutral_except` opts a neutral pattern out of the langs that already
-            // ship their own pattern for the same value (en `credit_card` → not into
-            // zh, which has `bank_card`) — otherwise both would match one PAN.
-            if p.language_neutral && !lang.iter().any(|l| p.neutral_except.contains(l)) {
+            if p.language_neutral {
                 push(p);
             }
         }
@@ -667,21 +670,20 @@ mod tests {
     }
 
     #[test]
-    fn zh_load_excludes_the_neutral_card_pattern() {
-        // `neutral_except: ["zh"]` — zh has its own `bank_card` for these digits;
-        // cross-loading the en pattern too would double-match one PAN.
+    fn zh_load_also_receives_the_neutral_card_pattern() {
+        // zh ships its own `bank_card` AND receives the neutral en `credit_card`:
+        // the two match the same PAN digits, the overlap merge collapses them to one
+        // entity, and the loser's spurious near-miss is suppressed at the hint layer.
+        // No denylist keeps the neutral pattern out.
         let configs = load_patterns(&["zh".to_string()]);
         assert!(configs.iter().any(|c| c.type_ == "bank_card"));
-        assert!(
-            !configs.iter().any(|c| c.type_ == "credit_card"),
-            "zh must not receive the neutral en card pattern"
-        );
+        assert!(configs.iter().any(|c| c.type_ == "credit_card"));
     }
 
     #[test]
     fn zh_plus_en_load_keeps_one_card_pattern_each() {
-        // Explicitly requesting en alongside zh loads en's own patterns (the
-        // exclusion only gates the cross-load), so exactly one of each type.
+        // Requesting en alongside zh loads en's patterns natively rather than through
+        // the neutral cross-load — still exactly one pattern of each type, no dupes.
         let configs = load_patterns(&["zh".to_string(), "en".to_string()]);
         assert_eq!(configs.iter().filter(|c| c.type_ == "credit_card").count(), 1);
         assert_eq!(configs.iter().filter(|c| c.type_ == "bank_card").count(), 1);

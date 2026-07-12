@@ -2006,6 +2006,13 @@
         "start": 0,
         "text": "4111111111111111",
         "type": "bank_card"
+      },
+      {
+        "end": 16,
+        "kind": "hit",
+        "start": 0,
+        "text": "4111111111111111",
+        "type": "credit_card"
       }
     ],
     "5/123456/0": [
@@ -2040,6 +2047,13 @@
         "start": 0,
         "text": "6217001234567890",
         "type": "bank_card"
+      },
+      {
+        "end": 16,
+        "kind": "near",
+        "start": 0,
+        "text": "6217001234567890",
+        "type": "credit_card"
       }
     ],
     "6222021234567890": [
@@ -2049,6 +2063,13 @@
         "start": 0,
         "text": "6222021234567890",
         "type": "bank_card"
+      },
+      {
+        "end": 16,
+        "kind": "near",
+        "start": 0,
+        "text": "6222021234567890",
+        "type": "credit_card"
       }
     ],
     "7/000001/2": [

@@ -187,21 +187,16 @@ def _load_patterns(lang: str | list[str]) -> list[dict]:
     # Always also load `language_neutral` patterns (CN structured numeric IDs, the
     # en card PAN) from any source lang not requested — those digits are the same
     # regardless of surrounding script, so they must be detectable in en/ja/ko/…
-    # text too. A pattern's `neutral_except` lists the langs that already ship a
-    # native pattern for the same value (en credit_card is not cross-loaded into
-    # zh, which has bank_card) — cross-loading there would double-match. The
-    # per-pattern flags are the single source of truth (no separate allowlist).
+    # text too. The per-pattern flag is the single source of truth (no separate
+    # allowlist, no denylist): a neutral pattern that duplicates a requested lang's
+    # native one (en credit_card vs zh bank_card) is collapsed by the overlap merge,
+    # and the spurious near_miss it used to raise is suppressed at the hint layer.
     # Mirrors argus_redact_core::redact_l1::load_patterns so the
     # _load_patterns-based detection parity tests match.
     for src in _LANG_PATTERNS:
         if src in langs:
             continue
-        all_patterns.extend(
-            p
-            for p in core_patterns(src)
-            if p.get("language_neutral")
-            and not any(lg in p.get("neutral_except", ()) for lg in langs)
-        )
+        all_patterns.extend(p for p in core_patterns(src) if p.get("language_neutral"))
 
     _pattern_cache[langs] = all_patterns
     return all_patterns

@@ -61,7 +61,6 @@ pub fn builtin_patterns(py: Python<'_>, lang: &str) -> PyResult<Py<PyList>> {
         if let Some(g) = &p.group { d.set_item("group", g)?; }
         if let Some(v) = &p.validator { d.set_item("validator", v)?; }
         if p.language_neutral { d.set_item("language_neutral", true)?; }
-        if !p.neutral_except.is_empty() { d.set_item("neutral_except", p.neutral_except.clone())?; }
         list.append(d)?;
     }
     Ok(list.into())

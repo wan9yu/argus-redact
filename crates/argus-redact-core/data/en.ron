@@ -25,18 +25,13 @@
         // ja/ko/de/… text loads NO card pattern at all (zh `bank_card` is not
         // neutral either) and the number passes through verbatim.
         //
-        // zh is excluded because its `bank_card` already covers these digits (and
-        // additionally accepts non-Luhn UnionPay BINs). The exclusion does NOT
-        // prevent a duplicate entity — the overlap merge already collapses both
-        // patterns to one — it prevents a spurious `near_miss_format` hint being
-        // raised into L2 for a BIN-valid, Luhn-invalid UnionPay card, which the en
-        // validator rejects and the zh one accepts. Note this only holds for
-        // zh-alone: an explicit lang=["zh","en"] loads both patterns natively and
-        // still raises that hint. The real fix is to suppress a near_miss whose span
-        // is already claimed by an accepted entity of another type; when that lands,
-        // this field can very likely go away.
+        // It cross-loads into zh too, where `bank_card` already covers these digits:
+        // the overlap merge collapses the two matches to one entity, and a spurious
+        // `near_miss_format` (BIN-valid but Luhn-invalid UnionPay card — the zh
+        // validator accepts it, the en one rejects it) is suppressed at the hint
+        // layer, which drops any near-miss whose span an accepted entity of another
+        // type already claims.
         language_neutral: true,
-        neutral_except: ["zh"],
     ),
     PatternData(
         type_: r"address",
