@@ -478,15 +478,25 @@ v0.7.18 adds a deterministic guard layer to `restore()`, enabled by passing `gua
 
 - **P (provenance)**: the nonce must appear verbatim in the LLM response. If absent, the
   response cannot be traced to this redaction session — restore returns pseudonyms
-  unchanged (fail-closed) and emits a `provenance_failed` security event.
+  unchanged (fail-closed) and emits a `provenance_failed` security event. Once the check
+  passes, the token has done its job and is **stripped from the returned text** — it is
+  not part of the model's answer and never reaches the caller *(v0.7.19)*.
 - **S (scope-binding)**: only pseudonyms within `anchor.scope` (the set produced by this
   redaction call) are substituted. Out-of-scope codes that appear in the response
   trigger an `out_of_scope_pseudonym` event and are left unreplaced.
 
 **Fail-closed by default:** when a guard check fails, `restore()` returns the text with
-pseudonyms intact — no PII is leaked — and emits a `UserWarning`. Pass `strict=True`
+pseudonyms intact — no PII is leaked — and emits a `SecurityWarning` (a `UserWarning`
+subclass), so a fail-closed restore is never silent: the returned `str` is otherwise
+shape-identical to a successful one. The warning carries the reason code and count only —
+never the offending text — so it is safe for a log stream. Pass `strict=True`
 to raise `RestoreGuardError` instead. Pass `detailed=True` to receive
 `(text, {"security_events": [...]})` for programmatic inspection.
+
+The shipped integrations (`presidio`, `fastapi`) also accept `strict=` and surface their
+supplementary injection-heuristic (H) events rather than discarding them. H remains
+**advisory by default** — it is a heuristic, and a heuristic is never promoted to the
+deterministic guarantee, which is P + S. Pass `strict=True` to fail closed on it.
 
 ```python
 from argus_redact import RestoreGuardError

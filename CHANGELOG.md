@@ -2,6 +2,44 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.7.19 — security patch
+
+Fixes five defects found by an external audit of v0.7.18, four of them in the new guarded-restore
+surface that release introduced. **Upgrading is recommended.** No API removals; the only
+behavioural changes are the ones described below.
+
+### Fixed
+
+- **Credit-card numbers were returned in plaintext for most language packs.** In `mode="fast"` a
+  Luhn-valid PAN passed through completely unredacted whenever the surrounding text routed to a
+  pack that ships no card pattern of its own — Japanese, Korean, German, British English, Indian
+  and Brazilian Portuguese. (Chinese and numeric-only text were never affected: they are covered by
+  the `bank_card` pattern.) The card pattern is now cross-loaded into every pack that lacks a native
+  one, so a PAN is detected regardless of the surrounding script. English and Chinese detection —
+  including the `credit_card` / `bank_card` type labels — are unchanged.
+- **The verification nonce leaked into restored output.** Every successful guarded restore returned
+  the plaintext with the 32-hex anchor token appended. The token is now stripped once the provenance
+  check passes.
+- **A fail-closed restore was silent.** With the default `strict=False, detailed=False`, a failed
+  guard check returned a bare `str` indistinguishable from a successful restore, so a caller could
+  ship pseudonymized text believing it had been restored. It now emits a `SecurityWarning`
+  (reason code + count only — never the offending text), as `docs/security-model.md` already
+  documented. The out-of-scope partial-restore path is covered too.
+- **Integrations computed security events and then discarded them.** The `presidio` and `fastapi`
+  wrappers built the event list and dropped it on the default (`detailed=False`) path. Events are
+  now surfaced, and `strict=` is exposed on both so a caller can fail closed on a suspected
+  injection. The injection heuristic (H) remains **advisory by default** — it is a heuristic, and
+  the deterministic guarantee is provenance + scope.
+- **The keep-downgrade warning wrote raw PII to the log stream.** `SecurityWarning` embedded the
+  offending text — which, by construction, is an un-redacted identifier. It now names the PII type
+  only, matching the PII-free `keep_downgraded` security event.
+
+### Internal
+
+- New `neutral_except` flag on core pattern data: a `language_neutral` pattern can now decline to
+  cross-load into packs that already ship a native pattern for the same value, so making the card
+  pattern neutral does not double-match in Chinese.
+
 ## v0.7.18 — guarded restore + compliance-as-artifact
 
 Two additive security/compliance features. Pure-Python; no detection or Rust change; the
