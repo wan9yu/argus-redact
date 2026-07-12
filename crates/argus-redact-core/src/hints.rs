@@ -139,8 +139,18 @@ pub fn produce_hints_l1(
         },
     });
 
-    // near_miss_format (one per near-miss).
+    // near_miss_format (one per surviving near-miss) — but a near-miss whose span is
+    // already claimed by an ACCEPTED entity of a DIFFERENT type is noise: the region is
+    // covered by a real detection, and the "near miss" is only the other type's validator
+    // disagreeing. A same-type claimer is NOT suppressed — that is one detector
+    // disagreeing with itself, which is worth reporting.
     for nm in near_misses {
+        let claimed_by_other_type = entities
+            .iter()
+            .any(|e| e.type_ != nm.type_ && e.start < nm.end && nm.start < e.end);
+        if claimed_by_other_type {
+            continue;
+        }
         hints.push(Hint {
             kind: HintKind::NearMissFormat {
                 original_type: nm.type_.clone(),
@@ -381,6 +391,66 @@ mod tests {
         let h = produce_hints_l1(&ents, "我妈 and me here", &[]);
         let (_, tier, hk) = summarize(&h);
         assert_eq!((tier, hk), (Some(1), Some(true)));
+    }
+
+    // ── near_miss suppression (mirrors pure/hints.py; see the Python-side tests in
+    //    tests/core/test_hint_near_miss_suppression.py) ──
+
+    fn pm_at(text: &str, type_: &str, start: usize) -> PatternMatch {
+        PatternMatch {
+            text: text.to_string(),
+            type_: type_.to_string(),
+            start,
+            end: start + text.chars().count(),
+            confidence: 0.9,
+            layer: 1,
+        }
+    }
+
+    fn near_miss_count(hints: &[Hint]) -> usize {
+        hints
+            .iter()
+            .filter(|h| matches!(h.kind, HintKind::NearMissFormat { .. }))
+            .count()
+    }
+
+    #[test]
+    fn near_miss_suppressed_when_span_claimed_by_another_type() {
+        // The en `credit_card` validator rejects a PAN that zh `bank_card` accepts;
+        // the region is already covered, so the near-miss is noise.
+        let ents = [pm_at("6217000000000001", "bank_card", 3)];
+        let nms = [pm_at("6217000000000001", "credit_card", 3)];
+        let h = produce_hints_l1(&ents, "卡号 6217000000000001", &nms);
+        assert_eq!(near_miss_count(&h), 0);
+        // Suppression must not disturb the bit-critical emission order of the rest.
+        assert!(matches!(h[0].kind, HintKind::PiiDensity { .. }));
+        assert!(matches!(h[1].kind, HintKind::TextIntent { .. }));
+        assert_eq!(h.len(), 2);
+    }
+
+    #[test]
+    fn near_miss_kept_when_nothing_claims_the_span() {
+        let nms = [pm_at("110101199003078888", "id_number", 3)];
+        let h = produce_hints_l1(&[], "id 110101199003078888", &nms);
+        assert_eq!(near_miss_count(&h), 1);
+    }
+
+    #[test]
+    fn near_miss_kept_when_claimer_is_the_same_type() {
+        // Same type = one detector disagreeing with itself; not the case we suppress.
+        let ents = [pm_at("110101199003078888", "id_number", 3)];
+        let nms = [pm_at("110101199003078888", "id_number", 3)];
+        let h = produce_hints_l1(&ents, "id 110101199003078888", &nms);
+        assert_eq!(near_miss_count(&h), 1);
+    }
+
+    #[test]
+    fn near_miss_kept_when_other_type_entity_does_not_overlap() {
+        // A different-type entity elsewhere in the text must not suppress it.
+        let ents = [pm_at("13800138000", "phone", 0)];
+        let nms = [pm_at("110101199003078888", "id_number", 15)];
+        let h = produce_hints_l1(&ents, "13800138000 id 110101199003078888", &nms);
+        assert_eq!(near_miss_count(&h), 1);
     }
 
     // ── get_person_threshold (exact == captured from live Python) ──

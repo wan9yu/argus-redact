@@ -819,18 +819,6 @@
     },
     {
       "data": {
-        "original_type": "credit_code",
-        "text": "110101199003074610"
-      },
-      "region": [
-        15,
-        33
-      ],
-      "source_layer": 1,
-      "type": "near_miss_format"
-    },
-    {
-      "data": {
         "intent": "narrative"
       },
       "region": [
@@ -853,18 +841,6 @@
       ],
       "source_layer": 1,
       "type": "pii_density"
-    },
-    {
-      "data": {
-        "original_type": "credit_code",
-        "text": "110101199003074610"
-      },
-      "region": [
-        15,
-        33
-      ],
-      "source_layer": 1,
-      "type": "near_miss_format"
     },
     {
       "data": {
@@ -940,18 +916,6 @@
       ],
       "source_layer": 1,
       "type": "pii_density"
-    },
-    {
-      "data": {
-        "original_type": "credit_code",
-        "text": "110101199003074610"
-      },
-      "region": [
-        20,
-        38
-      ],
-      "source_layer": 1,
-      "type": "near_miss_format"
     },
     {
       "data": {
@@ -1089,18 +1053,6 @@
       ],
       "source_layer": 1,
       "type": "pii_density"
-    },
-    {
-      "data": {
-        "original_type": "credit_code",
-        "text": "110101199003074610"
-      },
-      "region": [
-        20,
-        38
-      ],
-      "source_layer": 1,
-      "type": "near_miss_format"
     },
     {
       "data": {

@@ -124,9 +124,19 @@ def produce_hints(
         density_level = "none"
     _emit("pii_density", data={"level": density_level, "count": pii_count})
 
-    # Near-miss hints: format matched but validation failed
+    # Near-miss hints: format matched but validation failed.
+    #
+    # A near-miss whose span is already claimed by an ACCEPTED entity of a DIFFERENT
+    # type is noise: the region is covered by a real detection, and the "near miss" is
+    # only the other type's validator disagreeing. A same-type claimer is NOT suppressed
+    # — that is one detector disagreeing with itself, which is worth reporting.
     if near_misses:
         for nm in near_misses:
+            claimed_by_other_type = any(
+                e.type != nm.type and e.start < nm.end and nm.start < e.end for e in entities
+            )
+            if claimed_by_other_type:
+                continue
             _emit(
                 "near_miss_format",
                 region=(nm.start, nm.end),
