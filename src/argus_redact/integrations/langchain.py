@@ -146,15 +146,13 @@ class RestoreRunnable:
                     )
                 )
 
-        result, details = restore(text, key, guard=True, anchor=anchor, detailed=True)
-        all_events = security_events + details.get("security_events", [])
-        if all_events:
-            import warnings as _warnings
+        result, _details = restore(text, key, guard=True, anchor=anchor, detailed=True)
+        # restore() surfaces its own (P/S) guard events; only the supplementary H
+        # events computed above still need a voice here — warning on both would
+        # double-report the same trip.
+        from argus_redact.pure.security_events import warn_security_events
 
-            _warnings.warn(
-                f"restore security events: {[e['reason_code'] for e in all_events]}",
-                stacklevel=2,
-            )
+        warn_security_events(security_events)
         return result
 
     async def ainvoke(self, text: str) -> str:

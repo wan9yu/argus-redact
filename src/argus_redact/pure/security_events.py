@@ -27,3 +27,27 @@ def security_event(reason_code: str, count: int, detail: str | None = None) -> d
         dict with type, reason_code, count, detail.
     """
     return {"type": "security", "reason_code": reason_code, "count": count, "detail": detail}
+
+
+def warn_security_events(events: list[dict], *, stacklevel: int = 3) -> None:
+    """Emit a PII-free SecurityWarning summarising ``events``.
+
+    Structured ``security_events`` stay the channel for programs; this is the
+    backstop for humans, so a caller on the default (non-detailed) path is never
+    left with no signal at all. Carries reason_code + count ONLY — never
+    ``detail``, which may hold raw text or pseudonyms — so it is safe for a log
+    stream.
+    """
+    if not events:
+        return
+    import warnings
+
+    from argus_redact.pure.replacer import SecurityWarning
+
+    summary = ", ".join(f"{e['reason_code']}x{e['count']}" for e in events)
+    warnings.warn(
+        f"restore security events ({summary}); affected pseudonyms were NOT "
+        f"substituted — inspect detailed=True or use strict=True",
+        SecurityWarning,
+        stacklevel=stacklevel,
+    )

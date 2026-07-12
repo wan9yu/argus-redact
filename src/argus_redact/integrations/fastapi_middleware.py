@@ -118,6 +118,7 @@ def restore_body(
     anchor: object | None = None,
     guard: bool | None = None,
     redacted: str | None = None,
+    strict: bool = False,
     detailed: bool = False,
 ) -> "dict | str | tuple[dict | str, dict]":
     """Restore PII in a response body.
@@ -158,25 +159,39 @@ def restore_body(
                 )
             )
 
+    # Opt-in fail-closed on suspected injection: raise BEFORE restoring, so no
+    # original is ever substituted. H stays advisory by default (a heuristic must
+    # not become the guarantee — that is P + S, inside restore()).
+    if strict and h_events:
+        from argus_redact.pure.restore import RestoreGuardError
+
+        raise RestoreGuardError(h_events)
+
+    # restore() already warns about its own (P/S) events; only the H events we
+    # computed here still need a voice on the default path. Never dropped.
+    from argus_redact.pure.security_events import warn_security_events
+
     if isinstance(response, str):
         result_text, guard_details = restore(
-            response, key, guard=guard, anchor=anchor, detailed=True
+            response, key, guard=guard, anchor=anchor, strict=strict, detailed=True
         )
         all_events = h_events + guard_details.get("security_events", [])
         if detailed:
             return result_text, {"security_events": all_events}
+        warn_security_events(h_events)
         return result_text
 
     if isinstance(response, dict) and field and field in response:
         result = dict(response)
         if isinstance(response[field], str):
             result_text, guard_details = restore(
-                response[field], key, guard=guard, anchor=anchor, detailed=True
+                response[field], key, guard=guard, anchor=anchor, strict=strict, detailed=True
             )
             all_events = h_events + guard_details.get("security_events", [])
             result[field] = result_text
             if detailed:
                 return result, {"security_events": all_events}
+            warn_security_events(h_events)
             return result
 
     if detailed:

@@ -22,8 +22,6 @@ Usage:
 
 from __future__ import annotations
 
-import warnings as _warnings
-
 from argus_redact import redact, restore
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.exceptions import SessionStateError
@@ -123,11 +121,11 @@ class RestoreTransform:
                     )
                 )
 
-        result, details = restore(text, key, guard=True, anchor=anchor, detailed=True)
-        all_events = security_events + details.get("security_events", [])
-        if all_events:
-            _warnings.warn(
-                f"restore security events: {[e['reason_code'] for e in all_events]}",
-                stacklevel=2,
-            )
+        result, _details = restore(text, key, guard=True, anchor=anchor, detailed=True)
+        # restore() surfaces its own (P/S) guard events; only the supplementary H
+        # events computed above still need a voice here — warning on both would
+        # double-report the same trip.
+        from argus_redact.pure.security_events import warn_security_events
+
+        warn_security_events(security_events)
         return result

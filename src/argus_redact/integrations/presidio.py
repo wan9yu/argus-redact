@@ -133,6 +133,7 @@ class PresidioBridge:
         guard: bool | None = None,
         anchor: object | None = None,
         redacted: str | None = None,
+        strict: bool = False,
         detailed: bool = False,
     ) -> "str | tuple[str, dict]":
         """Restore pseudonyms to originals.
@@ -150,7 +151,13 @@ class PresidioBridge:
             redacted: Optional — the redacted prompt text. When provided, the
                 supplementary heuristic (H) check is applied and an
                 INJECTION_SUSPECTED security event is emitted on suspicion.
+            strict: When True, raise RestoreGuardError instead of returning —
+                covering both the deterministic guard (P/S) and a suspected
+                injection (H). Opt-in fail-closed; the H layer stays advisory
+                by default.
             detailed: When True, returns (result_text, {"security_events": [...]}).
+                On the default path the events are surfaced as a SecurityWarning
+                rather than discarded.
         """
         from argus_redact.pure.security_events import INJECTION_SUSPECTED, security_event
 
@@ -168,13 +175,28 @@ class PresidioBridge:
                     )
                 )
 
-        result = restore(text, key, guard=guard, anchor=anchor, detailed=True)
+        # Opt-in fail-closed on suspected injection. Raise BEFORE restoring so no
+        # original is ever substituted. The H layer stays advisory by default —
+        # it is a heuristic, and a heuristic must never be promoted to the
+        # deterministic guarantee (that is P + S, inside restore()).
+        if strict and h_events:
+            from argus_redact.pure.restore import RestoreGuardError
+
+            raise RestoreGuardError(h_events)
+
+        result = restore(text, key, guard=guard, anchor=anchor, strict=strict, detailed=True)
         _empty: dict = {"security_events": []}
         result_text, details = result if isinstance(result, tuple) else (result, _empty)
         all_events = h_events + details.get("security_events", [])
 
         if detailed:
             return result_text, {"security_events": all_events}
+
+        # Never drop the events on the floor. restore() already warned about its own
+        # (P/S) events, so only the H events we computed here still need a voice.
+        from argus_redact.pure.security_events import warn_security_events
+
+        warn_security_events(h_events)
         return result_text
 
 

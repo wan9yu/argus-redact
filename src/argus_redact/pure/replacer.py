@@ -462,10 +462,16 @@ def replace(
     # logic (`keep_whitelist=`) ever changes, update `_keep_downgraded_entities` too.
     if keep_downgraded:
         for entity in _keep_downgraded_entities(entities, config):
+            # The offending text is, by construction, an un-redacted identifier — the
+            # whole reason this warning fires. Naming the TYPE only keeps the warning
+            # stream PII-free, matching its sibling `keep_downgraded_event` (which
+            # emits detail="types: ...") and the log-scrub discipline in
+            # tests/safety/test_layer3_log_scrub.py. Use redact(detailed=True) ->
+            # security_events for the structured signal.
             warnings.warn(
                 f"strategy='keep' is only supported for self_reference "
                 f"pronouns and kinship phrases; downgrading to default for "
-                f"type={entity.type!r}, text={entity.text[:40]!r}.",
+                f"type={entity.type!r}.",
                 SecurityWarning,
                 stacklevel=2,
             )
