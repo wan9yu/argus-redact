@@ -23,8 +23,10 @@ from collections import OrderedDict
 
 from mcp.server.fastmcp import FastMCP
 
-from argus_redact import RedactReport, __version__, redact, restore
+from argus_redact import RedactReport, __version__, redact
 from argus_redact.compose import make_anchor, prompt_anchor
+from argus_redact.glue.guarded_restore import guarded_restore
+from argus_redact.pure.security_events import INJECTION_SUSPECTED, warn_security_events
 
 mcp = FastMCP("argus-redact")
 
@@ -34,12 +36,18 @@ mcp = FastMCP("argus-redact")
 # no per-session binding, a leaked token could be replayed indefinitely.
 # Per-session binding is a v0.7+ candidate (requires FastMCP API survey).
 #
-# Each entry now holds (key, anchor, timestamp) — the anchor carries the
-# per-call nonce and scope for guard-by-default restore (Theme A).
+# Each entry now holds (key, anchor, redacted, timestamp) — the anchor carries
+# the per-call nonce and scope for guard-by-default restore (Theme A); the
+# redacted prompt lets restore run the supplementary injection heuristic (H).
 _TOKEN_TTL_SECONDS = 5 * 60
 _TOKEN_STORE_MAX = 100
-# OrderedDict values: tuple[dict, Anchor | None, float]
-_TOKEN_STORE: "OrderedDict[str, tuple[dict, object, float]]" = OrderedDict()
+# OrderedDict values: tuple[dict, Anchor | None, str, float]
+#   (key, anchor, redacted_prompt, created_at)
+# The redacted prompt is retained so restore() can run the supplementary injection
+# heuristic (H) — it holds PSEUDONYMS ONLY. The store already retains `key`, which
+# maps pseudonym -> ORIGINAL, so this is strictly less sensitive than what is
+# already here, under the same TTL / LRU bound.
+_TOKEN_STORE: "OrderedDict[str, tuple[dict, object, str, float]]" = OrderedDict()
 
 
 def _now() -> float:
@@ -48,8 +56,9 @@ def _now() -> float:
     return time.monotonic()
 
 
-def _create_key_token(key: dict, anchor: object) -> str:
-    """Mint a 128-bit URL-safe token referencing this key dict and anchor.
+def _create_key_token(key: dict, anchor: object, redacted: str) -> str:
+    """Mint a 128-bit URL-safe token referencing this key dict, anchor, and
+    the redacted prompt.
 
     Evicts the oldest entry when the store exceeds ``_TOKEN_STORE_MAX``
     (LRU). Tokens themselves expire ``_TOKEN_TTL_SECONDS`` after their
@@ -57,27 +66,28 @@ def _create_key_token(key: dict, anchor: object) -> str:
     """
     token = secrets.token_urlsafe(16)
     # Fresh token — OrderedDict insertion places at end automatically.
-    _TOKEN_STORE[token] = (key, anchor, _now())
+    _TOKEN_STORE[token] = (key, anchor, redacted, _now())
     while len(_TOKEN_STORE) > _TOKEN_STORE_MAX:
         _TOKEN_STORE.popitem(last=False)
     return token
 
 
-def _resolve_key_token(token: str) -> tuple[dict, object] | None:
-    """Look up a (key, anchor) pair by token, returning ``None`` if absent or expired.
+def _resolve_key_token(token: str) -> tuple[dict, object, str] | None:
+    """Look up a (key, anchor, redacted) triple by token, returning ``None``
+    if absent or expired.
 
     Successful lookup bumps the entry's timestamp (sliding-window TTL).
     """
     entry = _TOKEN_STORE.get(token)
     if entry is None:
         return None
-    key, anchor, ts = entry
+    key, anchor, redacted, ts = entry
     if _now() - ts > _TOKEN_TTL_SECONDS:
         del _TOKEN_STORE[token]
         return None
-    _TOKEN_STORE[token] = (key, anchor, _now())
+    _TOKEN_STORE[token] = (key, anchor, redacted, _now())
     _TOKEN_STORE.move_to_end(token)
-    return key, anchor
+    return key, anchor, redacted
 
 
 @mcp.tool(name="redact")
@@ -128,7 +138,7 @@ async def redact_text(
         salt=effective_salt,
     )
     anchor = make_anchor(key)
-    token = _create_key_token(key, anchor)
+    token = _create_key_token(key, anchor, redacted_text)
 
     # Build the system-prompt addendum; use the lang string (first code if CSV)
     prompt_lang = lang_param if isinstance(lang_param, str) else lang_param[0]
@@ -151,7 +161,10 @@ async def restore_text(
     The restore tool uses guard-by-default: the LLM response must contain the
     nonce embedded in the ``anchor_prompt`` returned by redact. If the nonce is
     absent (e.g. a forged or injected response), restore is fail-closed and
-    returns the un-restored text with a ``security_events`` field.
+    returns the un-restored text with a ``security_events`` field. The redacted
+    prompt retained alongside the token (pseudonyms only) also lets restore run
+    the supplementary injection heuristic (H) — advisory, surfaced as a
+    ``SecurityWarning`` and in ``security_events``.
 
     Args:
         text: Redacted text (e.g. LLM output containing pseudonyms).
@@ -168,9 +181,18 @@ async def restore_text(
             "Re-run redact to obtain a fresh key_token."
         )
 
-    key_dict, anchor = resolved
-    restored, details = restore(text, key_dict, guard=True, anchor=anchor, detailed=True)
+    key_dict, anchor, redacted = resolved
+    restored, details = guarded_restore(
+        text, key_dict, redacted=redacted, anchor=anchor, guard=True, detailed=True
+    )
     events = details.get("security_events", [])
+    # guarded_restore's detailed=True path hands the caller the merged events
+    # without warning (the caller owns that decision — see guarded_restore's
+    # docstring). restore()'s own provenance/scope (P/S) events already warned
+    # inside that call regardless of `detailed`, so only surface the
+    # injection-suspected (H) ones here — warning on both would double-report
+    # the same P/S trip.
+    warn_security_events([e for e in events if e["reason_code"] == INJECTION_SUSPECTED])
 
     payload: dict = {"restored": restored}
     if events:

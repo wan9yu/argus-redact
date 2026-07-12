@@ -5,6 +5,10 @@ tokens lived for the lifetime of the MCP server process. Combined with no
 per-session binding, a leaked token from one MCP session could be replayed
 by another consumer of the same server. v0.6.2+ adds a 5-min idle TTL and
 caps the store at 100 entries (LRU).
+
+v0.7.20+: each entry also retains the redacted prompt — ``(key, anchor,
+redacted, timestamp)`` — so restore can run the supplementary injection
+heuristic (H). Same TTL / LRU bound; see ``mcp_server._TOKEN_STORE``.
 """
 
 from __future__ import annotations
@@ -32,7 +36,7 @@ def test_token_evicts_after_idle_ttl(monkeypatch):
 
     key = {"P-001": "Alice"}
     anchor = make_anchor(key)
-    token = m._create_key_token(key, anchor)
+    token = m._create_key_token(key, anchor, "redacted prompt")
     resolved = m._resolve_key_token(token)
     assert resolved is not None
     assert resolved[0] == key
@@ -50,7 +54,7 @@ def test_token_access_extends_ttl(monkeypatch):
 
     key = {"P-001": "Alice"}
     anchor = make_anchor(key)
-    token = m._create_key_token(key, anchor)
+    token = m._create_key_token(key, anchor, "redacted prompt")
 
     fake_now[0] += 60 * 4  # 4 min later — still alive (under TTL)
     assert m._resolve_key_token(token) is not None  # access bumps timestamp
@@ -64,11 +68,11 @@ def test_token_store_size_bounded():
     from argus_redact.compose import make_anchor
 
     key = {"P-1": "first"}
-    first_token = m._create_key_token(key, make_anchor(key))
+    first_token = m._create_key_token(key, make_anchor(key), "redacted prompt")
     # Fill above the cap
     for i in range(m._TOKEN_STORE_MAX + 50):
         k = {"P": f"v{i}"}
-        m._create_key_token(k, make_anchor(k))
+        m._create_key_token(k, make_anchor(k), "redacted prompt")
 
     assert m._resolve_key_token(first_token) is None  # evicted by LRU
     assert len(m._TOKEN_STORE) == m._TOKEN_STORE_MAX
@@ -86,3 +90,25 @@ def test_token_store_constants_set():
 
     assert m._TOKEN_TTL_SECONDS == 5 * 60
     assert m._TOKEN_STORE_MAX == 100
+
+
+def test_store_entry_is_a_four_tuple_with_redacted_prompt():
+    """v0.7.20: the store retains (key, anchor, redacted, timestamp) so restore
+    can run the H heuristic — the redacted prompt (pseudonyms only) is strictly
+    less sensitive than the key (pseudonym -> original) already held here, under
+    the same TTL / LRU bound."""
+    import argus_redact.integrations.mcp_server as m
+    from argus_redact.compose import make_anchor
+
+    key = {"P-001": "Alice"}
+    anchor = make_anchor(key)
+    token = m._create_key_token(key, anchor, "redacted prompt text")
+
+    stored = m._TOKEN_STORE[token]
+    assert len(stored) == 4
+    assert stored[0] == key
+    assert stored[1] is anchor
+    assert stored[2] == "redacted prompt text"
+
+    resolved = m._resolve_key_token(token)
+    assert resolved == (key, anchor, "redacted prompt text")
