@@ -26,6 +26,7 @@ Usage (endpoint-level) with guard-by-default restore:
 from __future__ import annotations
 
 from argus_redact import redact, restore
+from argus_redact.pure.security_events import raise_if_strict, warn_security_events
 
 
 def _validate_message(i: int, msg: object) -> None:
@@ -162,15 +163,10 @@ def restore_body(
     # Opt-in fail-closed on suspected injection: raise BEFORE restoring, so no
     # original is ever substituted. H stays advisory by default (a heuristic must
     # not become the guarantee — that is P + S, inside restore()).
-    if strict and h_events:
-        from argus_redact.pure.restore import RestoreGuardError
+    raise_if_strict(h_events, strict)
 
-        raise RestoreGuardError(h_events)
-
-    # restore() already warns about its own (P/S) events; only the H events we
-    # computed here still need a voice on the default path. Never dropped.
-    from argus_redact.pure.security_events import warn_security_events
-
+    # Below: restore() already warns about its own (P/S) events, so only the H
+    # events computed here still need a voice on the default path. Never dropped.
     if isinstance(response, str):
         result_text, guard_details = restore(
             response, key, guard=guard, anchor=anchor, strict=strict, detailed=True

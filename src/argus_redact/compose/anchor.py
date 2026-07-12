@@ -51,6 +51,12 @@ _TEMPLATE_EN = (
     "{identifier_list}"
 )
 
+# CONTRACT: both instructions ask for the token LAST and ON ITS OWN LINE. That
+# wording is load-bearing — `pure.restore._strip_nonce` removes the token from the
+# model's reply by exactly that shape, and a token left in the reply is handed back
+# to the caller as part of the restored plaintext (the v0.7.19 D0 defect). If you
+# reword these, update `_strip_nonce` with them. Pinned by
+# tests/compose/test_prompt_anchor_nonce.py::test_nonce_echo_instruction_shape.
 _NONCE_ECHO_EN = "\n\nEnd your reply with this exact verification token on its own line: {nonce}"
 
 _NONCE_ECHO_ZH = "\n\n请在回复末尾以独立的一行输出这个验证令牌：{nonce}"

@@ -38,7 +38,11 @@ from argus_redact import redact, restore
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.exceptions import SessionStateError
 from argus_redact.pure.restore import check_restore_safety
-from argus_redact.pure.security_events import INJECTION_SUSPECTED, security_event
+from argus_redact.pure.security_events import (
+    INJECTION_SUSPECTED,
+    security_event,
+    warn_security_events,
+)
 
 
 class RedactRunnable:
@@ -150,8 +154,6 @@ class RestoreRunnable:
         # restore() surfaces its own (P/S) guard events; only the supplementary H
         # events computed above still need a voice here — warning on both would
         # double-report the same trip.
-        from argus_redact.pure.security_events import warn_security_events
-
         warn_security_events(security_events)
         return result
 

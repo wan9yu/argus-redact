@@ -88,3 +88,35 @@ def test_h_layer_is_advisory_by_default_and_still_restores():
         warnings.simplefilter("ignore", SecurityWarning)
         out = bridge.restore(injected, key, guard=True, anchor=anchor, redacted=redacted)
     assert _PHONE in out  # in-scope pseudonym legitimately restored
+
+
+def test_advisory_warning_does_not_claim_pii_was_withheld():
+    """The warning must not LIE. An injection_suspected event is advisory — the restore
+    proceeds and the originals ARE substituted. A message saying 'pseudonyms were NOT
+    substituted' would send an operator investigating an injection in exactly the wrong
+    direction, which is worse than staying silent."""
+    redacted, key, anchor, injected = _injected_round_trip()
+    bridge = PresidioBridge.__new__(PresidioBridge)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        out = bridge.restore(injected, key, guard=True, anchor=anchor, redacted=redacted)
+
+    assert _PHONE in out, "precondition: H is advisory, so the restore really did happen"
+    msg = str(caught[0].message)
+    assert "injection_suspected" in msg
+    assert "NOT substituted" not in msg, f"warning contradicts what happened: {msg!r}"
+    assert "PROCEEDED" in msg
+
+
+def test_warning_is_attributed_to_the_caller_not_library_internals():
+    """stacklevel must point at the caller's line. If it points inside argus, warnings'
+    (message, category, module, lineno) dedup collapses every restore in a loop into one
+    warning and the user gets no pointer to their own code."""
+    redacted, key, anchor, injected = _injected_round_trip()
+    bridge = PresidioBridge.__new__(PresidioBridge)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        bridge.restore(injected, key, guard=True, anchor=anchor, redacted=redacted)
+    assert caught[0].filename == __file__, (
+        f"warning attributed to {caught[0].filename}, not the caller ({__file__})"
+    )

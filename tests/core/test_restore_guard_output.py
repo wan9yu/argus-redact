@@ -79,6 +79,31 @@ def test_fail_closed_bad_nonce_warns():
     assert "13912345678" not in out
 
 
+def test_fail_closed_warning_is_attributed_to_the_caller():
+    """The fail-closed path goes restore() -> _fail_closed() -> warn, one frame deeper
+    than the partial-restore path. A single hardcoded stacklevel cannot serve both; if it
+    points inside argus, warnings' dedup collapses a whole loop into one warning."""
+    _original, key, _anchor, llm_reply = _round_trip()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        restore(llm_reply, key, guard=True)  # no anchor -> fail closed
+    assert caught[0].filename == __file__, (
+        f"warning attributed to {caught[0].filename}, not the caller ({__file__})"
+    )
+
+
+def test_fail_closed_warning_says_pii_was_withheld():
+    """Counterpart to the advisory case: here the pseudonyms really were withheld, and
+    the message must say so."""
+    _original, key, _anchor, llm_reply = _round_trip()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        restore(llm_reply, key, guard=True)
+    msg = str(caught[0].message)
+    assert "guard_no_anchor" in msg
+    assert "NOT substituted" in msg
+
+
 def test_clean_guarded_restore_does_not_warn():
     _original, key, anchor, llm_reply = _round_trip()
     with warnings.catch_warnings():

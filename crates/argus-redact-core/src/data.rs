@@ -27,9 +27,17 @@ pub struct PatternData {
     /// cross-load, because they already ship a native pattern for the same value
     /// (e.g. the en `credit_card` PAN is neutral everywhere EXCEPT zh, whose
     /// `bank_card` covers the same digits and additionally accepts non-Luhn
-    /// UnionPay BINs). Without this, both patterns would match one PAN: a second
-    /// raw detection on the same span and a bogus `near_miss` hint whenever the
-    /// other language's validator disagrees. Empty = neutral for every language.
+    /// UnionPay BINs).
+    ///
+    /// This does NOT prevent a duplicate ENTITY — the overlap merge already
+    /// collapses two patterns matching one span. What it prevents is a spurious
+    /// `near_miss_format` hint reaching L2 when the two validators disagree (a
+    /// BIN-valid, Luhn-invalid card). It is a targeted mitigation, not a general
+    /// mechanism: it is a hand-maintained denylist, so a new pack shipping its own
+    /// pattern for the same value must be added here. The general fix is to suppress
+    /// a near_miss whose span is already claimed by an accepted entity of another
+    /// type — at which point this field should be removed.
+    /// Empty = neutral for every language.
     #[serde(default)]
     pub neutral_except: Vec<String>,
 }

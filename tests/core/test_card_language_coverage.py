@@ -15,10 +15,15 @@ loaded first for zh and wins the overlap on span length / order).
 import pytest
 
 from argus_redact import redact
+from argus_redact.glue.redact import _LANG_PATTERNS
 
 # Canonical Visa test PAN (Luhn-valid, never issued).
 PAN = "4111-1111-1111-1111"
 PAN_DIGITS = "4111111111111111"
+
+# Every shipped language pack — the SSOT, so a 9th pack is covered the day it lands
+# rather than the day someone remembers to add it to a literal list here.
+_SHIPPED_LANGS = set(_LANG_PATTERNS)
 
 
 class TestCardRedactedInNonEnZhScripts:
@@ -34,10 +39,18 @@ class TestCardRedactedInNonEnZhScripts:
         assert PAN not in redacted
         assert PAN_DIGITS not in redacted.replace("-", "")
 
-    @pytest.mark.parametrize("lang", ["ja", "ko"])
-    def test_pan_redacted_under_explicit_lang(self, lang):
+    @pytest.mark.parametrize("lang", sorted(_SHIPPED_LANGS))
+    def test_pan_redacted_in_every_shipped_pack(self, lang):
+        """Iterates the ACTUAL pack list, not a literal.
+
+        `neutral_except` is a hand-maintained denylist: a 9th pack that ships its own
+        card pattern has to be added to it, and a 9th pack that does NOT would silently
+        depend on the cross-load. Driving this off `_LANG_PATTERNS` turns "remember to
+        think about the card pattern" into a CI failure — which is the only thing that
+        makes a hand-maintained list survivable.
+        """
         redacted, _ = redact(f"card {PAN}", lang=[lang], mode="fast", salt=42)
-        assert PAN not in redacted
+        assert PAN not in redacted, f"pack {lang!r} leaks a Luhn-valid PAN in plaintext"
 
     def test_undashed_pan_redacted_in_kana(self):
         redacted, _ = redact(f"カード番号 {PAN_DIGITS}", lang="auto", mode="fast", salt=42)

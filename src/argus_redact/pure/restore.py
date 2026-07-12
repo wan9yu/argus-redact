@@ -6,6 +6,13 @@ import warnings
 from typing import Mapping
 
 from argus_redact.pure.display_marker import strip_display_markers
+from argus_redact.pure.security_events import (
+    GUARD_NO_ANCHOR,
+    OUT_OF_SCOPE_PSEUDONYM,
+    PROVENANCE_FAILED,
+    security_event,
+    warn_security_events,
+)
 
 
 class RestoreGuardError(Exception):
@@ -20,28 +27,23 @@ class RestoreGuardError(Exception):
 def _strip_nonce(text: str, nonce: str) -> str:
     """Remove the echoed verification token from the model's reply.
 
-    ``prompt_anchor`` asks the model to end its reply with the token on its own
-    line, so drop any line that is exactly the token; a stray inline echo is
-    removed too. Without this the token — which is not a pseudonym and so is
-    invisible to the substitution pass — would be handed back to the caller as
-    part of the restored plaintext.
+    ``prompt_anchor`` instructs the model to end its reply with the token **on its
+    own line** (see ``compose/anchor.py`` ``_NONCE_ECHO_*`` — if that wording ever
+    changes, this stripper must change with it). Without this the token, which is
+    not a pseudonym and so is invisible to the substitution pass, would be handed
+    back to the caller as part of the restored plaintext.
+
+    The documented shape (token last) is handled in one pass; the fallbacks cover a
+    model that puts it on its own line mid-reply or echoes it inline.
     """
+    trimmed = text.rstrip()
+    if trimmed.endswith(nonce):  # the documented case — no full-text rebuild needed
+        return trimmed[: -len(nonce)].rstrip()
     kept = [line for line in text.split("\n") if line.strip() != nonce]
     out = "\n".join(kept)
     if nonce in out:  # defensive: echoed inline rather than on its own line
         out = out.replace(nonce, "")
     return out.rstrip()
-
-
-def _warn_events(events: list[dict]) -> None:
-    """Surface guard events so a fail-closed restore is never silent.
-
-    Shared with the integrations via ``pure.security_events.warn_security_events``
-    so every surface emits one PII-free format.
-    """
-    from argus_redact.pure.security_events import warn_security_events
-
-    warn_security_events(events, stacklevel=4)
 
 
 def check_restore_safety(
@@ -132,13 +134,6 @@ def restore(
         return result
 
     # guard is True — run P + S checks
-    from argus_redact.pure.security_events import (
-        GUARD_NO_ANCHOR,
-        OUT_OF_SCOPE_PSEUDONYM,
-        PROVENANCE_FAILED,
-        security_event,
-    )
-
     events: list[dict] = []
 
     # (P) Provenance check: anchor must exist and its nonce must appear in text
@@ -182,7 +177,8 @@ def restore(
         # Partial restore: in-scope codes were substituted, out-of-scope ones were
         # withheld. Without this the caller gets a plain str and no hint that some
         # pseudonyms were deliberately left unresolved.
-        _warn_events(events)
+        # stacklevel: warn_security_events -> restore -> glue.restore -> caller
+        warn_security_events(events, stacklevel=4)
 
     if detailed:
         return result, {"security_events": events}
@@ -202,7 +198,9 @@ def _fail_closed(
     # The returned str is shape-identical to a successful restore, so without this
     # the caller cannot tell a fail-closed apart from a clean round-trip. Documented
     # in docs/security-model.md ("emits a UserWarning") — this is that warning.
-    _warn_events(events)
+    # one frame deeper than the direct call in restore():
+    # warn_security_events -> _fail_closed -> restore -> glue.restore -> caller
+    warn_security_events(events, stacklevel=5)
     if detailed:
         return text, {"security_events": events}
     return text

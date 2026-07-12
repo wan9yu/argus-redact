@@ -21,6 +21,7 @@ from __future__ import annotations
 from argus_redact._types import NEREntity, PatternMatch
 from argus_redact.impure.ner import NERAdapter
 from argus_redact.pure.restore import restore
+from argus_redact.pure.security_events import raise_if_strict, warn_security_events
 
 # Map Presidio entity types to argus-redact types
 _PRESIDIO_TYPE_MAP = {
@@ -179,14 +180,12 @@ class PresidioBridge:
         # original is ever substituted. The H layer stays advisory by default —
         # it is a heuristic, and a heuristic must never be promoted to the
         # deterministic guarantee (that is P + S, inside restore()).
-        if strict and h_events:
-            from argus_redact.pure.restore import RestoreGuardError
+        raise_if_strict(h_events, strict)
 
-            raise RestoreGuardError(h_events)
-
-        result = restore(text, key, guard=guard, anchor=anchor, strict=strict, detailed=True)
-        _empty: dict = {"security_events": []}
-        result_text, details = result if isinstance(result, tuple) else (result, _empty)
+        # detailed=True always yields the 2-tuple, on every branch of restore().
+        result_text, details = restore(
+            text, key, guard=guard, anchor=anchor, strict=strict, detailed=True
+        )
         all_events = h_events + details.get("security_events", [])
 
         if detailed:
@@ -194,8 +193,6 @@ class PresidioBridge:
 
         # Never drop the events on the floor. restore() already warned about its own
         # (P/S) events, so only the H events we computed here still need a voice.
-        from argus_redact.pure.security_events import warn_security_events
-
         warn_security_events(h_events)
         return result_text
 
