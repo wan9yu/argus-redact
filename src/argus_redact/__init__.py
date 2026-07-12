@@ -10,6 +10,7 @@ from argus_redact._types import PseudonymLLMResult, RedactReport
 from argus_redact.compose.anchor import Anchor, make_anchor
 from argus_redact.compose.audit import AuditEntry, AuditLedger, collect_security_events
 from argus_redact.exceptions import LayerUnavailableError, SessionStateError
+from argus_redact.glue.guarded_restore import guarded_restore
 from argus_redact.glue.redact import redact
 from argus_redact.glue.redact_pseudonym_llm import (
     PseudonymPollutionError,
@@ -42,6 +43,7 @@ __all__ = [
     "make_anchor",
     "Anchor",
     "RestoreGuardError",
+    "guarded_restore",
     # ─── Compliance-as-artifact (v0.7.18) ───
     "AuditLedger",
     "AuditEntry",

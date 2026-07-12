@@ -27,6 +27,7 @@ from argus_redact._types import PatternMatch
 from argus_redact.compose.aliases import expand_aliases
 from argus_redact.compose.anchor import Anchor, make_anchor, prompt_anchor
 from argus_redact.compose.audit import AuditEntry, AuditLedger, collect_security_events
+from argus_redact.glue.guarded_restore import guarded_restore
 from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
 from argus_redact.specs.registry import PIITypeDef
 from argus_redact.specs.registry import register as register_pii_type
@@ -49,4 +50,6 @@ __all__ = [
     "AuditLedger",
     "AuditEntry",
     "collect_security_events",
+    # ─── v0.7.20: the one guard flow ───
+    "guarded_restore",
 ]

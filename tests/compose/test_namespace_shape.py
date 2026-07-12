@@ -57,12 +57,13 @@ def test_expand_aliases_real_returns_expanded_dict():
     assert "黄先生" in result and result["黄先生"] == "黄芳"
 
 
-def test_compose_dunder_all_is_exactly_thirteen():
+def test_compose_dunder_all_is_exactly_fourteen():
     """Lock the namespace surface — any addition is intentional, not accidental.
 
     v0.6.7 baseline: 5 names. v0.6.11 added the adapter-author trio. Theme A
     guard-by-default added Anchor + make_anchor. Theme B compliance-as-artifact
-    added AuditLedger + AuditEntry + collect_security_events.
+    added AuditLedger + AuditEntry + collect_security_events. v0.7.20 added
+    guarded_restore — the one correct guard flow.
     """
     import argus_redact.compose as mod
 
@@ -81,5 +82,7 @@ def test_compose_dunder_all_is_exactly_thirteen():
         "AuditLedger",
         "AuditEntry",
         "collect_security_events",
+        # v0.7.20: the one guard flow
+        "guarded_restore",
     }
     assert set(mod.__all__) == expected
