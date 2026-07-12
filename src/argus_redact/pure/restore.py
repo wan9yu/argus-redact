@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import warnings
 from typing import Mapping
 
@@ -45,6 +46,20 @@ def _strip_nonce(text: str, nonce: str) -> str:
     if nonce in out:  # defensive: echoed inline rather than on its own line
         out = out.replace(nonce, "")
     return out.rstrip()
+
+
+def _token_present(pseudonym: str, text: str) -> bool:
+    """True if ``pseudonym`` appears in ``text`` as a whole token, not merely
+    as a substring of a longer pseudonym-shaped run (e.g. ``P-1`` embedded in
+    ``P-10``). Generated pseudonyms are ``<PREFIX>-<digits>`` runs of letters,
+    digits, underscores and hyphens, so plain ``\\b`` word boundaries are not
+    enough — a hyphen is not a word character, but must still not count as a
+    boundary between two pseudonym-shaped tokens. Used only to size the
+    ``out_of_scope_pseudonym`` security event's ``count``; it never changes
+    which pseudonyms are withheld (that is structural, driven by the scoped
+    key filter above, not by this check)."""
+    pattern = re.compile(r"(?<![A-Za-z0-9_-])" + re.escape(pseudonym) + r"(?![A-Za-z0-9_-])")
+    return pattern.search(text) is not None
 
 
 def check_restore_safety(
@@ -162,8 +177,12 @@ def restore(
     key_dict = dict(key) if not isinstance(key, dict) else key
     scoped = {k: v for k, v in key_dict.items() if k in anchor.scope}
 
-    # Detect out-of-scope pseudonyms that appear in text
-    out_of_scope_hits = [k for k in key_dict if k not in anchor.scope and k in text]
+    # Detect out-of-scope pseudonyms that appear in text. Token-boundary match
+    # (not substring) — see `_token_present` — so a pseudonym that happens to
+    # be a substring of another one (e.g. "P-1" inside "P-10") is not
+    # over-counted. Cosmetic only: it sizes the event's `count`, never which
+    # pseudonyms get withheld (that is `scoped` above).
+    out_of_scope_hits = [k for k in key_dict if k not in anchor.scope and _token_present(k, text)]
     if out_of_scope_hits:
         events.append(
             security_event(

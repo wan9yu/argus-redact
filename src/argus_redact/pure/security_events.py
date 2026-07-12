@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import os
 import sys
+import warnings
+
+from argus_redact.exceptions import SecurityWarning
 
 PROVENANCE_FAILED = "provenance_failed"
 OUT_OF_SCOPE_PSEUDONYM = "out_of_scope_pseudonym"
@@ -111,9 +114,6 @@ def warn_security_events(events: list[dict], *, stacklevel: int | None = None) -
     """
     if not events:
         return
-    import warnings
-
-    from argus_redact.pure.replacer import SecurityWarning
 
     if stacklevel is None:
         stacklevel = _auto_stacklevel()

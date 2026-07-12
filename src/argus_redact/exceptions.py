@@ -7,10 +7,13 @@ This module collects shared exception classes:
   helper has not yet produced a key, or has been .reset().
 - LayerUnavailableError — raised when an explicitly-requested detection layer
   (e.g. ``mode="ner"``) cannot be satisfied.
+- SecurityWarning — emitted when a misconfiguration would silently weaken
+  redaction. Lives here (rather than ``pure.replacer``, its historical home)
+  so ``pure.security_events`` can import it at module level without an
+  import cycle; re-exported from ``pure.replacer`` for backward compatibility.
 
 Other exception types remain in their origin modules:
 - argus_redact.glue.redact_pseudonym_llm.PseudonymPollutionError
-- argus_redact.pure.replacer.SecurityWarning
 """
 
 from __future__ import annotations
@@ -31,3 +34,7 @@ class LayerUnavailableError(RuntimeError):
     e.g. ``redact(text, mode="ner")`` when no NER model is installed. Distinct
     from graceful ``mode="auto"`` degradation (which warns + signals status).
     """
+
+
+class SecurityWarning(UserWarning):
+    """Emitted when a misconfiguration would silently weaken redaction."""

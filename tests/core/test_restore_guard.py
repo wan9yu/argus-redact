@@ -41,6 +41,23 @@ def test_guard_out_of_scope_withheld_but_in_scope_restored():
     assert any(e["reason_code"] == "out_of_scope_pseudonym" for e in d["security_events"])
 
 
+def test_out_of_scope_count_is_token_boundary_not_substring():
+    # "P-1" is a substring of "P-10". The old substring check (`k in text`)
+    # double-counted a single out-of-scope pseudonym in the response ("P-10")
+    # as two hits, because "P-1" also matches as a substring of "P-10". This
+    # is purely a reported-count bug — it never affects which pseudonyms get
+    # withheld (that's the scope filter, unaffected here: P-1 is not in the
+    # response at all).
+    key = {"P-1": "Alice", "P-10": "Bob", "P-001": "张三"}
+    a = make_anchor({"P-001": "张三"})  # scope = {P-001} only
+    resp = f"P-001 和 P-10 都在\n{a.nonce}"
+    out, d = restore(resp, key, guard=True, anchor=a, detailed=True)
+    assert "Alice" not in out and "Bob" not in out and "张三" in out
+    events = [e for e in d["security_events"] if e["reason_code"] == "out_of_scope_pseudonym"]
+    assert len(events) == 1
+    assert events[0]["count"] == 1
+
+
 def test_guard_strict_raises():
     with pytest.raises(RestoreGuardError):
         restore("P-001", KEY, guard=True, strict=True)  # no anchor → raise
