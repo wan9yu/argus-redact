@@ -21,6 +21,14 @@
         validator: Some(r"credit_card_luhn"),
         check_context: true,
         description: r"Credit card number (Luhn checksum)",
+        // A PAN is the same digits in any script: without this flag a card in
+        // ja/ko/de/… text loads NO card pattern at all (zh `bank_card` is not
+        // neutral either) and the number passes through verbatim. zh is excluded
+        // because its `bank_card` already covers these digits (and additionally
+        // accepts non-Luhn UnionPay BINs); cross-loading there would double-match
+        // one PAN and raise a bogus near_miss hint on BIN-only cards.
+        language_neutral: true,
+        neutral_except: ["zh"],
     ),
     PatternData(
         type_: r"address",

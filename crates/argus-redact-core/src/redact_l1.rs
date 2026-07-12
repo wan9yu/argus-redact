@@ -150,7 +150,10 @@ fn load_patterns(lang: &[String]) -> Vec<PatternConfig> {
             continue;
         }
         for p in builtin_patterns(src) {
-            if p.language_neutral {
+            // `neutral_except` opts a neutral pattern out of the langs that already
+            // ship their own pattern for the same value (en `credit_card` → not into
+            // zh, which has `bank_card`) — otherwise both would match one PAN.
+            if p.language_neutral && !lang.iter().any(|l| p.neutral_except.contains(l)) {
                 push(p);
             }
         }
@@ -643,6 +646,45 @@ mod tests {
             .filter(|c| c.type_ == "phone" && c.pattern.contains("1[3-9]"))
             .count();
         assert_eq!(cn_mobile, 1, "CN mobile must appear exactly once for zh");
+    }
+
+    #[test]
+    fn non_en_zh_langs_load_the_card_pattern() {
+        // A PAN is the same digits in any script. ja/ko (and de/uk/in/br) ship no
+        // card pattern of their own, so the neutral en `credit_card` must reach
+        // them — otherwise a full card number passes through kana/hangul text.
+        for lang in ["ja", "ko", "de", "uk", "in", "br"] {
+            let configs = load_patterns(&[lang.to_string()]);
+            assert_eq!(
+                configs
+                    .iter()
+                    .filter(|c| c.type_ == "credit_card")
+                    .count(),
+                1,
+                "{lang} must load exactly one card pattern"
+            );
+        }
+    }
+
+    #[test]
+    fn zh_load_excludes_the_neutral_card_pattern() {
+        // `neutral_except: ["zh"]` — zh has its own `bank_card` for these digits;
+        // cross-loading the en pattern too would double-match one PAN.
+        let configs = load_patterns(&["zh".to_string()]);
+        assert!(configs.iter().any(|c| c.type_ == "bank_card"));
+        assert!(
+            !configs.iter().any(|c| c.type_ == "credit_card"),
+            "zh must not receive the neutral en card pattern"
+        );
+    }
+
+    #[test]
+    fn zh_plus_en_load_keeps_one_card_pattern_each() {
+        // Explicitly requesting en alongside zh loads en's own patterns (the
+        // exclusion only gates the cross-load), so exactly one of each type.
+        let configs = load_patterns(&["zh".to_string(), "en".to_string()]);
+        assert_eq!(configs.iter().filter(|c| c.type_ == "credit_card").count(), 1);
+        assert_eq!(configs.iter().filter(|c| c.type_ == "bank_card").count(), 1);
     }
 
     // ── Golden fixtures captured from LIVE Python ─────────────────────────────

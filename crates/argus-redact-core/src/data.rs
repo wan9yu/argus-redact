@@ -23,6 +23,15 @@ pub struct PatternData {
     /// text too — not only when zh is requested. Default false (language-gated).
     #[serde(default)]
     pub language_neutral: bool,
+    /// Languages that must NOT receive this pattern through the `language_neutral`
+    /// cross-load, because they already ship a native pattern for the same value
+    /// (e.g. the en `credit_card` PAN is neutral everywhere EXCEPT zh, whose
+    /// `bank_card` covers the same digits and additionally accepts non-Luhn
+    /// UnionPay BINs). Without this, both patterns would match one PAN: a second
+    /// raw detection on the same span and a bogus `near_miss` hint whenever the
+    /// other language's validator disagrees. Empty = neutral for every language.
+    #[serde(default)]
+    pub neutral_except: Vec<String>,
 }
 
 macro_rules! lang_ron {
