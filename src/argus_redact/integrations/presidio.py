@@ -20,8 +20,6 @@ from __future__ import annotations
 
 from argus_redact._types import NEREntity, PatternMatch
 from argus_redact.impure.ner import NERAdapter
-from argus_redact.pure.restore import restore
-from argus_redact.pure.security_events import raise_if_strict, warn_security_events
 
 # Map Presidio entity types to argus-redact types
 _PRESIDIO_TYPE_MAP = {
@@ -160,41 +158,17 @@ class PresidioBridge:
                 On the default path the events are surfaced as a SecurityWarning
                 rather than discarded.
         """
-        from argus_redact.pure.security_events import INJECTION_SUSPECTED, security_event
+        from argus_redact.glue.guarded_restore import guarded_restore
 
-        h_events: list[dict] = []
-        if redacted is not None and key:
-            from argus_redact.pure.restore import check_restore_safety
-
-            hints = check_restore_safety(redacted, text, key)
-            if hints:
-                h_events.append(
-                    security_event(
-                        INJECTION_SUSPECTED,
-                        count=len(hints),
-                        detail="; ".join(hints),
-                    )
-                )
-
-        # Opt-in fail-closed on suspected injection. Raise BEFORE restoring so no
-        # original is ever substituted. The H layer stays advisory by default —
-        # it is a heuristic, and a heuristic must never be promoted to the
-        # deterministic guarantee (that is P + S, inside restore()).
-        raise_if_strict(h_events, strict)
-
-        # detailed=True always yields the 2-tuple, on every branch of restore().
-        result_text, details = restore(
-            text, key, guard=guard, anchor=anchor, strict=strict, detailed=True
+        return guarded_restore(
+            text,
+            key,
+            redacted=redacted,
+            anchor=anchor,
+            guard=guard,
+            strict=strict,
+            detailed=detailed,
         )
-        all_events = h_events + details.get("security_events", [])
-
-        if detailed:
-            return result_text, {"security_events": all_events}
-
-        # Never drop the events on the floor. restore() already warned about its own
-        # (P/S) events, so only the H events we computed here still need a voice.
-        warn_security_events(h_events)
-        return result_text
 
 
 class PresidioNERAdapter(NERAdapter):
