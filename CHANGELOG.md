@@ -2,6 +2,53 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.7.20 — debt paydown
+
+Structural cleanup of the guarded-restore surface introduced in v0.7.18. Additive and
+non-breaking: no API removals, no behavioural change for callers who do not opt in. The
+`guard=True` default flip remains scheduled for v0.8.0.
+
+### Added
+
+- **`guarded_restore()`** — a single public entry point for the guarded-restore flow
+  (injection check, then provenance/scope guard, then restore). All five integrations
+  (LangChain, LlamaIndex, MCP, Presidio, FastAPI) are now thin wrappers over it, so the
+  flow exists once rather than five times. Exported from the top level and `compose`.
+- **`strict=`** is now reachable from LangChain (`RestoreRunnable`), LlamaIndex
+  (`RestoreTransform`) and the MCP `restore` tool, which previously had no way to opt into
+  fail-closed behaviour.
+- The MCP server performs the injection heuristic check it never ran before.
+- `tests/integration/test_guard_contract.py` asserts the same three guard properties across
+  all five integrations in one parametrised suite. The drift fixed above was invisible
+  because each integration had bespoke tests and nothing compared them.
+
+### Fixed
+
+- A restore that failed closed while the injection heuristic also fired emitted a second
+  warning describing the restore as having *proceeded* — the opposite of what happened.
+  Warning text is now derived from the outcome, and one warning covers all events.
+- `out_of_scope_pseudonym` counted pseudonyms by substring, so `P-1` was counted inside
+  `P-10`. It now matches on token boundaries. This only ever affected the reported `count`;
+  which pseudonyms are withheld is structural and was never in question.
+- A card number that is BIN-valid but fails its checksum no longer produces a spurious
+  `near_miss_format` hint when an accepted entity of another type already claims the span.
+  This replaces the hand-maintained `neutral_except` denylist (added in v0.7.19), which had
+  to be updated by hand whenever a new language pack shipped a card pattern; the denylist is
+  deleted. Detection output is unchanged — the suppression is at the hint layer only.
+
+### Not shipped
+
+- A layer-aware merge rule (prefer the higher detection layer when spans cross) was
+  implemented, benchmarked, and **rejected**. It fixed what it targeted — person false
+  positives fell to zero — but cost 6.9pp of overall recall on the Chinese benchmark,
+  because address and licence-plate spans are correctly claimed by L1 regexes that NER
+  overlaps with a coarser span. "Trust the higher layer" is true for names and false in
+  general. The underlying merge defect it aimed at is real and remains open.
+
+### Internal
+
+- `SecurityWarning` moved to `exceptions.py` (re-exported from its old location).
+
 ## v0.7.19 — security patch
 
 Fixes five defects found by an external audit of v0.7.18, four of them in the new guarded-restore
