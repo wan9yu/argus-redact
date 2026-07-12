@@ -155,6 +155,7 @@ async def redact_text(
 async def restore_text(
     text: str,
     key_token: str = "",
+    strict: bool = False,
 ) -> str:
     """Restore redacted text using a key_token returned by the redact tool.
 
@@ -170,6 +171,11 @@ async def restore_text(
         text: Redacted text (e.g. LLM output containing pseudonyms).
         key_token: Token returned by the redact tool. Tokens are scoped to
             the MCP server process; restart invalidates them.
+        strict: When True, raise instead of returning on ANY security event —
+            covers BOTH the deterministic guard (P/S) and a suspected
+            injection (H). An ordinary tool argument (JSON bool), not a
+            return-shape concern — H stays advisory by default; this is the
+            opt-in fail-closed path.
     """
     if not key_token:
         raise ValueError("Must provide key_token (returned by the redact tool)")
@@ -182,8 +188,14 @@ async def restore_text(
         )
 
     key_dict, anchor, redacted = resolved
+    # strict=True makes guarded_restore raise RestoreGuardError instead of
+    # returning — before any original is substituted. Not caught here: an
+    # uncaught exception is how the other tools in this module (see the
+    # ValueError raises above) already surface a hard failure to the MCP
+    # protocol caller, so a suspected injection or a failed guard is not
+    # swallowed into a normal-looking JSON payload.
     restored, details = guarded_restore(
-        text, key_dict, redacted=redacted, anchor=anchor, guard=True, detailed=True
+        text, key_dict, redacted=redacted, anchor=anchor, guard=True, strict=strict, detailed=True
     )
     events = details.get("security_events", [])
     # guarded_restore's detailed=True path hands the caller the merged events
