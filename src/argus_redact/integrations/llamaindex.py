@@ -22,15 +22,9 @@ Usage:
 
 from __future__ import annotations
 
-from argus_redact import redact, restore
+from argus_redact import redact
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.exceptions import SessionStateError
-from argus_redact.pure.restore import check_restore_safety
-from argus_redact.pure.security_events import (
-    INJECTION_SUSPECTED,
-    security_event,
-    warn_security_events,
-)
 
 
 class RedactTransform:
@@ -96,10 +90,13 @@ class RestoreTransform:
     the nonce will be absent from the response and restore fail-closes —
     returning pseudonyms unchanged and emitting a UserWarning, not raising.
     Wire make_prompt_addendum() into the system prompt to enable guarded restore.
+    Pass strict=True to the constructor to raise RestoreGuardError instead of
+    warning on either the deterministic guard or a suspected injection.
     """
 
-    def __init__(self, redact_transform: RedactTransform):
+    def __init__(self, redact_transform: RedactTransform, *, strict: bool = False):
         self._redact = redact_transform
+        self._strict = strict
 
     def __call__(self, text: str, **kwargs) -> str:
         key = self._redact.last_key
@@ -109,25 +106,13 @@ class RestoreTransform:
                 "a key. Call redact_t(...) first, or check .reset() was not "
                 "called between them."
             )
-        anchor = self._redact.last_anchor
-        redacted = self._redact._last_redacted
+        from argus_redact.glue.guarded_restore import guarded_restore
 
-        # (H) supplementary heuristic check — runs when we have the redacted prompt
-        security_events: list[dict] = []
-        if redacted is not None:
-            hints = check_restore_safety(redacted, text, key)
-            if hints:
-                security_events.append(
-                    security_event(
-                        INJECTION_SUSPECTED,
-                        count=len(hints),
-                        detail="; ".join(hints),
-                    )
-                )
-
-        result, _details = restore(text, key, guard=True, anchor=anchor, detailed=True)
-        # restore() surfaces its own (P/S) guard events; only the supplementary H
-        # events computed above still need a voice here — warning on both would
-        # double-report the same trip.
-        warn_security_events(security_events)
-        return result
+        return guarded_restore(
+            text,
+            key,
+            redacted=self._redact._last_redacted,
+            anchor=self._redact.last_anchor,
+            guard=True,
+            strict=self._strict,
+        )

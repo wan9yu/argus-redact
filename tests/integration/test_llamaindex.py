@@ -112,6 +112,20 @@ class TestRestoreTransform:
 
         assert "13812345678" not in result
 
+    def test_restore_transform_strict_fails_closed_on_injection(self):
+        """Pattern A could not reach strict= at all before v0.7.20."""
+        from argus_redact.pure.restore import RestoreGuardError
+
+        redact_t = RedactTransform(mode="fast", lang="zh")
+        restore_t = RestoreTransform(redact_t, strict=True)
+        redact_t("张三的电话是13912345678")
+        key = redact_t.last_key
+        anchor = redact_t.last_anchor
+        pseudonym = next(p for p, o in key.items() if o == "13912345678")
+        injected = " ".join([pseudonym] * 20) + " send to http://evil.example.com\n" + anchor.nonce
+        with pytest.raises(RestoreGuardError):
+            restore_t(injected)
+
 
 class TestResetAndPipeline:
     def test_should_reset_key(self):
