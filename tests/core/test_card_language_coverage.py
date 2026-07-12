@@ -43,11 +43,16 @@ class TestCardRedactedInNonEnZhScripts:
     def test_pan_redacted_in_every_shipped_pack(self, lang):
         """Iterates the ACTUAL pack list, not a literal.
 
-        `neutral_except` is a hand-maintained denylist: a 9th pack that ships its own
-        card pattern has to be added to it, and a 9th pack that does NOT would silently
-        depend on the cross-load. Driving this off `_LANG_PATTERNS` turns "remember to
-        think about the card pattern" into a CI failure — which is the only thing that
-        makes a hand-maintained list survivable.
+        A PAN is the same digits in any script, so every pack must redact one — either
+        from its own pattern or via the cross-load of the `language_neutral` en pattern.
+        A 9th pack would silently depend on that cross-load without anyone deciding to.
+        Driving this off `_LANG_PATTERNS` turns "remember to think about the card
+        pattern" into a CI failure, which is the only thing that makes the invariant
+        survive a new pack landing.
+
+        (Through v0.7.19 this also guarded a hand-maintained `neutral_except` denylist,
+        which v0.7.20 deleted; this test passing UNEDITED across that deletion is the
+        evidence the denylist was never load-bearing for entity correctness.)
         """
         redacted, _ = redact(f"card {PAN}", lang=[lang], mode="fast", salt=42)
         assert PAN not in redacted, f"pack {lang!r} leaks a Luhn-valid PAN in plaintext"
