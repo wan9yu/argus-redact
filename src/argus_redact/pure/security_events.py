@@ -145,12 +145,15 @@ def advisory_events(events: list[dict]) -> list[dict]:
 
     Everything that isn't a withholding code (P/S failures, out-of-scope
     pseudonyms) is advisory, currently just the H heuristic's
-    ``INJECTION_SUSPECTED``. Callers that already warn about their own P/S
-    events and only need to separately surface the advisory ones (e.g.
-    mcp_server, to avoid double-reporting a P/S trip) should derive the set
-    from this helper rather than naming a reason code directly — naming one
-    is exactly the drift that let a future advisory code go unsurfaced
-    silently.
+    ``INJECTION_SUSPECTED``. For a caller that already warns about its own P/S
+    events through some other path and only needs to separately surface the
+    advisory ones (avoiding a double-report of the same P/S trip), derive the
+    set from this helper rather than naming a reason code directly — naming
+    one is exactly the drift that let a future advisory code go unsurfaced
+    silently. ``guarded_restore`` and its integrations no longer need this
+    split themselves (they warn once over the full merged list — see
+    ``glue/guarded_restore.py``); it remains for any caller with its own,
+    separate P/S warning path.
     """
     return [e for e in events if e["reason_code"] not in _WITHHELD_CODES]
 

@@ -21,6 +21,9 @@ silently skipping it for a whole class of caller.
 
 from __future__ import annotations
 
+import warnings
+
+from argus_redact.exceptions import SecurityWarning
 from argus_redact.glue.restore import _load_key_file
 from argus_redact.glue.restore import restore as _restore
 from argus_redact.pure.restore import check_restore_safety
@@ -71,15 +74,31 @@ def guarded_restore(
     # substituted — not even into a local we then throw away.
     raise_if_strict(h_events, strict)
 
-    result_text, details = _restore(
-        text, key_dict, guard=guard, anchor=anchor, strict=strict, detailed=True
-    )
+    # restore() would otherwise warn about its own (P/S) events right here, from a
+    # DIFFERENT, disjoint event list than h_events above. Warning twice — once per
+    # list — makes warn_security_events' mixed (withheld + advisory) branch
+    # unreachable, and worse: on a fail-closed P/S trip plus an advisory H hit, the
+    # second warning FALSELY claimed the restore proceeded when nothing was in fact
+    # substituted (see the _WITHHELD_CODES comment in pure/security_events.py). Catch
+    # restore()'s own SecurityWarning here and fold its events into ONE combined
+    # warning below; re-emit anything else (notably the guard=None DeprecationWarning)
+    # exactly as raised, so only the SecurityWarning is swallowed.
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result_text, details = _restore(
+            text, key_dict, guard=guard, anchor=anchor, strict=strict, detailed=True
+        )
+    for w in caught:
+        if not issubclass(w.category, SecurityWarning):
+            warnings.warn_explicit(w.message, w.category, w.filename, w.lineno)
+
     all_events = h_events + details.get("security_events", [])
 
     if detailed:
         return result_text, {"security_events": all_events}
 
-    # restore() already warned about its own (P/S) events; only the H events computed
-    # here still need a voice. Never dropped.
-    warn_security_events(h_events)
+    # ONE warning over the merged events, so warn_security_events' three-way
+    # (withheld-only / advisory-only / mixed) branch describes what actually
+    # happened. Never dropped.
+    warn_security_events(all_events)
     return result_text

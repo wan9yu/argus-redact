@@ -530,6 +530,99 @@ restore("[某公司总部]开会", {"[某公司]": "阿里", "[某公司总部]"
 
 ---
 
+## guarded_restore() *(v0.7.20+)*
+
+```python
+from argus_redact import guarded_restore
+
+guarded_restore(
+    text: str,
+    key: dict[str, str] | str,
+    *,
+    redacted: str | None = None,
+    anchor: object | None = None,
+    guard: bool | None = True,
+    strict: bool = False,
+    detailed: bool = False,
+) -> str | tuple[str, dict]
+```
+
+The correct-by-construction entry point for restoring an LLM reply. It runs the whole guarded-restore flow in one call: the supplementary injection heuristic (H) → fail closed on H first if `strict=True` (before any pseudonym is touched) → the deterministic provenance + scope guard (P + S), which lives inside `restore()` → merge every event from both stages into one `security_events` list → surface it.
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `text` | `str` | *(required)* | The model's reply, containing pseudonyms. |
+| `key` | `dict[str, str] \| str` | *(required)* | The key from `redact()`, or a `str` path to a key file. A path is resolved once, here, so the same in-memory dict is used for both the H check and the restore call. |
+| `redacted` | `str \| None` | `None` | The redacted prompt that was sent to the model. Supplying it is what *enables* the injection heuristic (H) — without it, no H check runs at all. |
+| `anchor` | `object \| None` | `None` | The `Anchor` from `make_anchor(key)`. Required for the deterministic guard (P) to pass; without it, restore fails closed. |
+| `guard` | `bool \| None` | `True` | Passed through to `restore()`: `True` runs the deterministic provenance (P) + scope (S) checks — the intended default here. `None` runs legacy restore with a `DeprecationWarning`. `False` is the explicit, silent opt-out. |
+| `strict` | `bool` | `False` | Opt-in fail-closed, covering **both** stages. `True` raises `RestoreGuardError` on a suspected injection (H) *or* a failed deterministic guard (P/S) — for H specifically, this happens before any original is substituted, not after. `False` (the default) keeps H advisory: it warns, it does not block. |
+| `detailed` | `bool` | `False` | `True` returns `(text, {"security_events": [...]})` instead of a bare `str`, and does not warn — inspecting the events is then the caller's job. `False` surfaces the merged H + P/S events as a single `SecurityWarning`. |
+
+### Returns
+
+`str` by default. `tuple[str, dict]` when `detailed=True` — the dict is `{"security_events": [...]}`, the union of the H event (if any) and whatever the P/S guard produced.
+
+### Why it exists
+
+Hand-assembling H → fail-closed-if-strict → the P+S guard → merged events → surfaced warning is exactly the kind of multi-step flow that goes subtly wrong under copy-paste: three of argus-redact's own five shipped integrations got it wrong before this function existed — one dropped the events it had just computed, one could not reach `strict` at all, and one ran no injection check whatsoever. Every integration this project ships now routes through `guarded_restore`; if you're wiring your own framework, use this instead of composing `restore()` by hand.
+
+### Examples
+
+```python
+from argus_redact import redact, guarded_restore, make_anchor
+from argus_redact.compose import prompt_anchor
+
+redacted, key = redact("张三的电话是13912345678")
+anchor = make_anchor(key)
+system = prompt_anchor(key, anchor=anchor)
+llm_output = call_llm(redacted, system=system)
+
+# H runs because `redacted=` is supplied; P+S run because `anchor=` is supplied.
+restored = guarded_restore(llm_output, key, redacted=redacted, anchor=anchor)
+```
+
+```python
+# strict=True: raise before substituting anything, on EITHER a suspected
+# injection or a failed deterministic guard.
+from argus_redact import RestoreGuardError
+
+try:
+    restored = guarded_restore(llm_output, key, redacted=redacted, anchor=anchor, strict=True)
+except RestoreGuardError as e:
+    handle_guard_failure(e.events)  # e.events is a list of security event dicts
+```
+
+```python
+# detailed=True: inspect events yourself instead of relying on the warning.
+restored, details = guarded_restore(
+    llm_output, key, redacted=redacted, anchor=anchor, detailed=True
+)
+for event in details["security_events"]:
+    log(event["reason_code"], event["count"], event["detail"])
+```
+
+```python
+# key may also be a path to a saved key file.
+restored = guarded_restore(llm_output, "key.json", anchor=anchor)
+```
+
+### Behavior
+
+- **H is advisory by default.** A suspected injection warns (and shows up in `security_events`) but does not block the restore — the deterministic guarantee is P + S, and a heuristic is never promoted to it. Pass `strict=True` to also fail closed on H.
+- **One warning, accurately worded.** On the default (non-`detailed`) path, `guarded_restore` merges the H event and the P/S events into a single `SecurityWarning`, so a mixed outcome — some pseudonyms withheld, others advisory — is described as a mix, never as a plain "the restore proceeded" when it didn't (or the reverse).
+- **No H check without `redacted=`.** Omit it and `guarded_restore` silently skips the heuristic; it needs the redacted prompt to compare against the model's reply.
+
+### Errors
+
+| Error | When | Testable assertion |
+|-------|------|-------------------|
+| `RestoreGuardError` | `strict=True` and any security event fired (H or P/S) | `pytest.raises(RestoreGuardError)` |
+
+---
+
 ## check_restore_safety()
 
 ```python

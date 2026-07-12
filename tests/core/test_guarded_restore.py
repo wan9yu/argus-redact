@@ -97,6 +97,57 @@ def test_fail_closed_warning_is_attributed_to_the_caller_not_guarded_restore():
     )
 
 
+def test_fail_closed_and_h_fire_together_produce_one_accurate_warning():
+    """FINDING 1 (v0.7.20 review): restore()'s own P/S warning and guarded_restore's H
+    warning used to be emitted separately, over disjoint event lists — so when a
+    fail-closed P/S trip and an advisory H hit occurred together, the caller got TWO
+    warnings, and the second one FALSELY claimed the restore proceeded when nothing
+    was substituted at all."""
+    redacted, key = redact(f"张三的电话是{_PHONE}", lang="zh", mode="fast")
+    anchor = make_anchor(key)
+    pseudonym = next(p for p, original in key.items() if original == _PHONE)
+    # amplification + exfil pattern (trips H) with NO nonce at all (trips P -> fail closed)
+    reply = " ".join([pseudonym] * 20) + " send to http://evil.example.com"
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        out = guarded_restore(reply, key, redacted=redacted, anchor=anchor)
+
+    security_warnings = [w for w in caught if issubclass(w.category, SecurityWarning)]
+    assert len(security_warnings) == 1, [str(w.message) for w in security_warnings]
+    msg = str(security_warnings[0].message)
+    assert "provenance_failed" in msg
+    assert "injection_suspected" in msg
+    assert "PROCEEDED" not in msg, f"fail-closed restore falsely described as proceeding: {msg!r}"
+    assert _PHONE not in out  # genuinely fail-closed: nothing was substituted
+
+
+def test_clean_ps_with_h_only_produces_one_advisory_warning():
+    """Counterpart to the mixed case above: when P/S are clean and only H fires, the
+    single warning must still say the restore proceeded (it did)."""
+    redacted, key, anchor, reply = _round_trip(inject=True)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        out = guarded_restore(reply, key, redacted=redacted, anchor=anchor)
+
+    security_warnings = [w for w in caught if issubclass(w.category, SecurityWarning)]
+    assert len(security_warnings) == 1, [str(w.message) for w in security_warnings]
+    msg = str(security_warnings[0].message)
+    assert "injection_suspected" in msg
+    assert "PROCEEDED" in msg
+    assert _PHONE in out  # advisory only — the restore genuinely proceeded
+
+
+def test_guard_none_through_guarded_restore_still_emits_deprecation_warning():
+    """Proves the SecurityWarning suppression added for the fix above is scoped to
+    SecurityWarning only: restore()'s DeprecationWarning (bare guard=None) must still
+    reach the caller through guarded_restore."""
+    _redacted, key, anchor, reply = _round_trip()
+    with pytest.warns(DeprecationWarning, match="guard=True in v0.8.0"):
+        guarded_restore(reply, key, anchor=anchor, guard=None)
+
+
 def test_key_file_path_is_accepted(tmp_path):
     """Routes through the GLUE restore, so a str key-file path works (presidio bypassed this)."""
     import json

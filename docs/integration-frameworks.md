@@ -4,7 +4,9 @@
 
 ### Built-in Runnables
 
-argus-redact provides `RedactRunnable` and `RestoreRunnable` that implement the LangChain Runnable protocol. `RestoreRunnable` runs `restore()` with `guard=True` internally — **you must wire `make_prompt_addendum()` into your LLM system message** so the provenance nonce reaches the response; without it, restore fail-closes (returns pseudonyms unchanged + UserWarning, no exception).
+argus-redact provides `RedactRunnable` and `RestoreRunnable` that implement the LangChain Runnable protocol. `RestoreRunnable` routes through `guarded_restore()` internally — **you must wire `make_prompt_addendum()` into your LLM system message** so the provenance nonce reaches the response; without it, restore fail-closes (returns pseudonyms unchanged + UserWarning, no exception).
+
+`RestoreRunnable(redact_r, strict=True)` opts into fail-closed: a suspected injection or a failed deterministic guard then raises `RestoreGuardError` instead of warning. `strict` is a constructor kwarg, not a per-call one — construct a `RestoreRunnable` per desired strictness.
 
 ```python
 from argus_redact.integrations.langchain import RedactRunnable, RestoreRunnable
@@ -45,6 +47,18 @@ llm_output = call_llm(redacted, system=anchor_prompt)
 restored = restore_r.invoke(llm_output)
 ```
 
+```python
+# Fail-closed instead of warning, on either a suspected injection (H) or a
+# failed deterministic guard (P/S):
+from argus_redact import RestoreGuardError
+
+strict_restore_r = RestoreRunnable(redact_r, strict=True)
+try:
+    restored = strict_restore_r.invoke(llm_output)
+except RestoreGuardError as e:
+    handle_guard_failure(e.events)
+```
+
 ### With retrieval (RAG)
 
 In RAG pipelines, redact the user query AND the retrieved documents:
@@ -81,7 +95,9 @@ def safe_rag(query: str, retriever, llm) -> str:
 
 ### As a query transform
 
-argus-redact ships `RedactTransform` and `RestoreTransform` in `argus_redact.integrations.llamaindex`. `RestoreTransform` runs `restore()` with `guard=True` internally — **you must inject `make_prompt_addendum()` into the LLM system message**; without it, restore fail-closes (returns pseudonyms unchanged + UserWarning, no exception).
+argus-redact ships `RedactTransform` and `RestoreTransform` in `argus_redact.integrations.llamaindex`. `RestoreTransform` routes through `guarded_restore()` internally — **you must inject `make_prompt_addendum()` into the LLM system message**; without it, restore fail-closes (returns pseudonyms unchanged + UserWarning, no exception).
+
+`RestoreTransform(redact_t, strict=True)` opts into fail-closed: a suspected injection or a failed deterministic guard then raises `RestoreGuardError` instead of warning. Like `RestoreRunnable`, `strict` is a constructor kwarg — construct a separate `RestoreTransform` for the strictness you want.
 
 ```python
 from argus_redact.integrations.llamaindex import RedactTransform, RestoreTransform
@@ -96,6 +112,18 @@ anchor_prompt = redact_t.make_prompt_addendum()
 llm_output = call_llm(redacted, system=anchor_prompt)
 
 restored = restore_t(llm_output)
+```
+
+```python
+# Fail-closed instead of warning, on either a suspected injection (H) or a
+# failed deterministic guard (P/S):
+from argus_redact import RestoreGuardError
+
+strict_restore_t = RestoreTransform(redact_t, strict=True)
+try:
+    restored = strict_restore_t(llm_output)
+except RestoreGuardError as e:
+    handle_guard_failure(e.events)
 ```
 
 If you build a bare pipeline (without the built-in transforms), the guard flow with `make_anchor` and `prompt_anchor` looks like:
@@ -270,3 +298,5 @@ return_to_framework(result)
 ```
 
 The key insight: `redact()`, `make_anchor()`, `prompt_anchor()`, and `restore()` are plain functions that take and return strings. They slot into any framework at any point. The guard check adds deterministic provenance verification without requiring framework-specific adapters.
+
+**`guarded_restore()`:** every integration this project ships (LangChain, LlamaIndex, Presidio, FastAPI, the MCP server) routes its restore step through `guarded_restore()` rather than calling `restore()` directly — it is the one place the whole flow (H → fail-closed-if-strict → P+S guard → merged events → surfaced warning) is assembled, instead of copy-pasted per integration. If you're wiring a framework not listed above, prefer `guarded_restore()` over composing `restore()` yourself; see its entry in [`api-reference.md`](api-reference.md#guarded_restore-v0720).
