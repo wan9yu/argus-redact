@@ -128,3 +128,18 @@ def test_legacy_paths_unchanged():
         assert restore(redacted, key, guard=False) == original
     with pytest.warns(DeprecationWarning):
         assert restore(redacted, key) == original
+
+
+def test_deprecation_warning_is_attributed_to_the_caller():
+    """A deprecation warning exists to say WHERE the caller must change their code.
+    Hardcoded, it pointed at argus's own glue/restore.py — useless, and warnings' dedup
+    then collapses a whole loop of bare restores into a single warning."""
+    original, key, _anchor, _ = _round_trip()
+    redacted, _ = redact(original, lang="zh", mode="fast", key=dict(key))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        restore(redacted, key)  # bare -> DeprecationWarning
+    dep = [w for w in caught if issubclass(w.category, DeprecationWarning)][0]
+    assert dep.filename == __file__, (
+        f"deprecation warning attributed to {dep.filename}, not the caller ({__file__})"
+    )

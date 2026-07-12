@@ -10,6 +10,7 @@ from argus_redact.pure.security_events import (
     GUARD_NO_ANCHOR,
     OUT_OF_SCOPE_PSEUDONYM,
     PROVENANCE_FAILED,
+    _auto_stacklevel,
     security_event,
     warn_security_events,
 )
@@ -122,10 +123,15 @@ def restore(
         raise TypeError(f"key must be a Mapping, got {type(key).__name__}")
 
     if guard is None:
+        # Auto-detect the caller's frame, same as the security warnings. A
+        # deprecation warning exists to tell the user WHERE to change their code;
+        # a hardcoded stacklevel pointed it at argus's own glue/restore.py, which
+        # defeats the entire purpose (and collapses a whole loop of bare restores
+        # into one warning via warnings' (message, module, lineno) dedup).
         warnings.warn(
             "bare restore without guard= is deprecated; will default to guard=True in v0.8.0",
             DeprecationWarning,
-            stacklevel=2,
+            stacklevel=_auto_stacklevel(),
         )
     if not guard:  # None (deprecated default) or False (explicit opt-out) → legacy restore
         result = _do_restore(text, key, aliases=aliases, display_marker=display_marker)
