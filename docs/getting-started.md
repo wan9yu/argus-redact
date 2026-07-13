@@ -73,7 +73,8 @@ print(key)
 ## Redact → LLM → Restore
 
 ```python
-from argus_redact import redact, restore
+from argus_redact import redact, guarded_restore, make_anchor
+from argus_redact.compose import prompt_anchor
 from openai import OpenAI
 
 client = OpenAI()
@@ -84,25 +85,29 @@ redacted, key = redact(original)
 # "P-037和P-012在[咖啡店]讨论了去[某公司]面试的事，P-012很紧张"
 # Note: 张三 appears twice → same P-012 within this session
 
-# Step 2: send to LLM
+# Step 2: anchor this call — a fresh nonce the model will echo back
+anchor = make_anchor(key)
+system = "You are a career coach.\n\n" + prompt_anchor(key, anchor=anchor)
+
+# Step 3: send to LLM
 response = client.chat.completions.create(
     model="gpt-4o",
     messages=[
-        {"role": "system", "content": "You are a career coach."},
+        {"role": "system", "content": system},
         {"role": "user", "content": redacted},
     ],
 )
 llm_output = response.choices[0].message.content
 # "P-012's nervousness is normal. P-037 should help P-012
-#  prepare mock interviews for [某公司]."
+#  prepare mock interviews for [某公司].\n<nonce>"
 
-# Step 3: restore
-restored = restore(llm_output, key)
+# Step 4: restore, under the guard
+restored = guarded_restore(llm_output, key, redacted=redacted, anchor=anchor)
 # "张三's nervousness is normal. 王五 should help 张三
 #  prepare mock interviews for 阿里."
 ```
 
-The LLM never sees real names, locations, or organizations.
+The LLM never sees real names, locations, or organizations. The anchor in step 2 is what lets step 4 verify the reply actually came from this call before it substitutes anything back in — see [Restoring LLM output safely](#restoring-llm-output-safely).
 
 ## Per-Message Random Keys
 
@@ -187,15 +192,17 @@ with open("key.json", "w") as f:
 # Load and restore later
 with open("key.json") as f:
     key = json.load(f)
-restored = restore(llm_output, key)
+restored = restore(text, key, guard=False)
 ```
 
 Or pass a file path directly:
 
 ```python
-redacted, key = redact(text, key="key.json")    # writes key.json
-restored = restore(llm_output, key="key.json")   # reads key.json
+redacted, key = redact(text, key="key.json")     # writes key.json
+restored = restore(text, key="key.json", guard=False)   # reads key.json
 ```
+
+`guard=False` is the explicit opt-out: a plain, unchecked substitution, appropriate when the text did **not** come back from an LLM. When it did, use `guarded_restore()` — see [Restoring LLM output safely](#restoring-llm-output-safely) below.
 
 **Security rules:**
 - Key files contain plaintext identity mappings. Protect them like private keys.
@@ -223,21 +230,41 @@ cat input.txt | argus-redact redact -k key.json -l zh,en > redacted.txt
 cat input.txt | argus-redact redact -k key.json -m fast > redacted.txt
 ```
 
-## Safety Tips
+## Restoring LLM output safely
+
+A plain `restore()` will substitute a real name or phone number into *any* text that contains the right pseudonym — including text a prompt injection talked the model into producing. `guarded_restore()` closes that path, and it is the one call you should use for anything that came back from an LLM:
 
 ```python
-from argus_redact import check_restore_safety, wipe_key
+from argus_redact import redact, guarded_restore, make_anchor, wipe_key
+from argus_redact.compose import prompt_anchor
 
-# Before restoring LLM output, check for prompt injection
-warnings = check_restore_safety(redacted, llm_output, key)
-if warnings:
-    print("Suspicious LLM output:", warnings)
-else:
-    restored = restore(llm_output, key)
+redacted, key = redact("张三的电话是13812345678")
 
-# Clear key from memory when done
-wipe_key(key)
+# An anchor is a fresh random nonce + the pseudonyms this call owns.
+anchor = make_anchor(key)
+
+# The nonce has to reach the model, or the guard has nothing to verify.
+system = "You are a helpful assistant.\n\n" + prompt_anchor(key, anchor=anchor)
+llm_output = call_llm(redacted, system=system)
+
+restored = guarded_restore(llm_output, key, redacted=redacted, anchor=anchor)
+
+wipe_key(key)   # clear the key from memory when done
 ```
+
+`guarded_restore()` runs three checks:
+
+- **H** — an injection heuristic over the reply. **Advisory**: it warns, it does not block. It only runs if you pass `redacted=`.
+- **P** — provenance: the nonce must appear in the reply.
+- **S** — scope: only *this* call's pseudonyms are restored.
+
+**P and S are the deterministic guarantee; H is a heuristic and is not promoted to one.** If P or S fails, `guarded_restore()` returns the text **un-restored** (pseudonyms intact) with a `SecurityWarning` rather than raising — so check the result if your code assumes it always gets plaintext back. Pass `strict=True` to raise `RestoreGuardError` instead, on any event including H.
+
+The most common surprise: forget `prompt_anchor()`, and the model never echoes the nonce, so the guard fail-closes and your output still says `P-042`.
+
+A bare `restore(text, key)` still works but emits a `DeprecationWarning`, and **`guard=True` becomes the default in v0.8.0**. If you genuinely want a plain, unchecked substitution — text that never went through a model, tests, offline batch work — say so explicitly with `restore(text, key, guard=False)`.
+
+See [LLM Integration](integration-llm.md) for the full round-trip, streaming, and multi-turn patterns.
 
 For compliance (PIPL/GDPR/HIPAA), use profiles — they enforce stricter strategies:
 

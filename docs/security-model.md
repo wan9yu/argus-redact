@@ -442,18 +442,23 @@ If an attacker controls the LLM output (via prompt injection), they can include 
 - Validate LLM output structure before restoring
 - Use `report=True` to review what was redacted before sending
 - Consider the LLM's output trustworthiness in your threat model
-- Use guarded restore (v0.7.18, described below) to add a deterministic provenance layer
+- Use guarded restore (described below) to add a deterministic provenance layer
 
-### Guarded restore (v0.7.18)
+### Guarded restore
 
-v0.7.18 adds a deterministic guard layer to `restore()`, enabled by passing `guard=True` alongside an `Anchor`. It does not replace careful output validation, but it closes the mechanical window where a pseudonym injected into LLM output would silently restore.
+A guard layer sits between the LLM's reply and the substitution pass. It does not replace
+careful output validation, but it closes the mechanical window where a pseudonym injected
+into LLM output would silently restore.
+
+Use **`guarded_restore()`** — it is the whole flow in one call, and the same function the
+shipped integrations call internally.
 
 **How it works:**
 
 1. **Build an anchor** from the key before sending the prompt:
 
    ```python
-   from argus_redact import redact, restore, make_anchor
+   from argus_redact import redact, guarded_restore, make_anchor
    from argus_redact.compose import prompt_anchor
 
    redacted, key = redact(user_input)
@@ -465,56 +470,94 @@ v0.7.18 adds a deterministic guard layer to `restore()`, enabled by passing `gua
 
    ```python
    system = prompt_anchor(key, lang="zh", anchor=anchor)
-   llm_output = call_llm(redacted, system=system)
+   llm_reply = call_llm(redacted, system=system)
    ```
 
-3. **Restore with guard**:
+3. **Restore through the guard**, passing back *both* the redacted prompt and the anchor:
 
    ```python
-   restored = restore(llm_output, key, guard=True, anchor=anchor)
+   restored = guarded_restore(
+       llm_reply, key, redacted=redacted, anchor=anchor, strict=False
+   )
    ```
 
-**Two checks run on every guarded restore:**
+   `redacted=` is what enables the injection heuristic. Hand-composing the flow as
+   `restore(llm_reply, key, guard=True, anchor=anchor)` still runs the deterministic
+   P + S checks, but with no redacted prompt to compare against it runs **no H check at
+   all** — which is why `guarded_restore()` is the recommended path rather than a
+   convenience wrapper.
 
-- **P (provenance)**: the nonce must appear verbatim in the LLM response. If absent, the
-  response cannot be traced to this redaction session — restore returns pseudonyms
-  unchanged (fail-closed) and emits a `provenance_failed` security event. Once the check
-  passes, the token has done its job and is **stripped from the returned text** — it is
-  not part of the model's answer and never reaches the caller *(v0.7.19)*.
-- **S (scope-binding)**: only pseudonyms within `anchor.scope` (the set produced by this
-  redaction call) are substituted. Out-of-scope codes that appear in the response
-  trigger an `out_of_scope_pseudonym` event and are left unreplaced.
+**Three checks run, in this order:**
 
-**Fail-closed by default:** when a guard check fails, `restore()` returns the text with
-pseudonyms intact — no PII is leaked — and emits a `SecurityWarning` (a `UserWarning`
-subclass), so a fail-closed restore is never silent: the returned `str` is otherwise
-shape-identical to a successful one. The warning carries the reason code and count only —
-never the offending text — so it is safe for a log stream. Pass `strict=True`
-to raise `RestoreGuardError` instead. Pass `detailed=True` to receive
-`(text, {"security_events": [...]})` for programmatic inspection.
+- **H (injection heuristic)** — compares the reply against the redacted prompt for
+  suspicious pseudonym usage (frequency amplification, pseudonyms next to exfiltration
+  patterns). It is **advisory by default: it warns, it does not block.** A hit emits an
+  `injection_suspected` event and the restore still proceeds — originals *are*
+  substituted. H runs only when `redacted=` is supplied.
+- **P (provenance)** — the nonce must appear verbatim in the reply. If absent, the reply
+  cannot be traced to this redaction session: restore fail-closes, returning pseudonyms
+  unchanged, and emits a `provenance_failed` event. Once the check passes the token has
+  done its job and is **stripped from the returned text** — it is not part of the model's
+  answer and never reaches the caller.
+- **S (scope-binding)** — only pseudonyms in `anchor.scope` (the set produced by *this*
+  redaction call) are substituted. Out-of-scope codes appearing in the reply trigger an
+  `out_of_scope_pseudonym` event and are left unreplaced.
 
-The shipped integrations (`presidio`, `fastapi`) also accept `strict=` and surface their
-supplementary injection-heuristic (H) events rather than discarding them. H remains
-**advisory by default** — it is a heuristic, and a heuristic is never promoted to the
-deterministic guarantee, which is P + S. Pass `strict=True` to fail closed on it.
+**P + S are the deterministic guarantee. H is a heuristic and is never promoted to that
+guarantee** — it can miss an injection, and it can fire on a benign reply. Treat an H
+event as a signal to investigate, not as proof of either safety or attack.
+
+**Fail-closed behaviour:** when P or S withholds a substitution, the call returns the text
+with pseudonyms intact — no PII is substituted — **and emits a `SecurityWarning`** (a
+`UserWarning` subclass). A fail-closed restore is therefore never silent, which matters
+because the returned `str` is otherwise shape-identical to a successful one: without the
+warning, a caller could read silence as success. The warning carries the reason code and
+count only — never the offending text — so it is safe for a log stream. `SecurityWarning`
+lives in `argus_redact.exceptions` (also importable from the top-level package; the
+historical `argus_redact.pure.replacer` import still works).
+
+**`strict=True`** is the opt-in that makes the advisory layer fail closed too: any event —
+H, P, or S — raises `RestoreGuardError` instead of returning. Under `strict=True` the H
+check raises **before any restore is attempted**, so on a suspected injection no original
+value is ever substituted, not even transiently into a value that is then discarded.
 
 ```python
-from argus_redact import RestoreGuardError
+from argus_redact import RestoreGuardError, guarded_restore
 
 try:
-    restored = restore(llm_output, key, guard=True, anchor=anchor, strict=True)
+    restored = guarded_restore(
+        llm_reply, key, redacted=redacted, anchor=anchor, strict=True
+    )
 except RestoreGuardError as e:
     # e.events is a list of security event dicts
     handle_guard_failure(e.events)
 
 # Or inspect without raising:
-restored, details = restore(llm_output, key, guard=True, anchor=anchor, detailed=True)
+restored, details = guarded_restore(
+    llm_reply, key, redacted=redacted, anchor=anchor, detailed=True
+)
 for event in details["security_events"]:
     log(event["reason_code"], event["count"], event["detail"])
 ```
 
 Security event `reason_code` values: `provenance_failed`, `out_of_scope_pseudonym`,
 `injection_suspected`, `guard_no_anchor`.
+
+**The integrations are thin wrappers over the same call.** All five shipped integrations
+route through `guarded_restore()`, so all five run H → P → S and all five expose
+`strict=`:
+
+| Integration | How to pass `strict=` |
+|---|---|
+| `langchain` | constructor kwarg — `RestoreRunnable(redact_runnable, strict=True)` |
+| `llamaindex` | constructor kwarg — `RestoreTransform(redact_transform, strict=True)` |
+| `mcp` | tool argument — `restore(text, key_token, strict=True)` |
+| `presidio` | call kwarg — `bridge.restore(..., strict=True)` |
+| `fastapi` | call kwarg — `restore_body(..., strict=True)` |
+
+The LangChain and LlamaIndex adapters hold the redacted prompt and anchor from their
+paired redact step, so H runs there without you threading anything; the MCP server keeps
+them alongside the key token for the same reason (see [security.md](security.md#mcp-token-store)).
 
 **Honest boundary:** the guard operates at the restore layer only. It verifies that a
 response came from the expected session and contains only in-scope pseudonyms. It does

@@ -188,7 +188,7 @@ def test_roundtrip():
     """redact → restore recovers all PII."""
     original = "张三的手机号是13812345678"
     redacted, key = redact(original, salt=42, mode="fast")
-    restored = restore(redacted, key)
+    restored = restore(redacted, key, guard=False)  # local text, no LLM round-trip
     assert "13812345678" in restored
 
 def test_pii_removed_from_output():
@@ -230,17 +230,20 @@ def test_key_reuse():
     text2, key = redact("张三和王五", key=key, salt=42)
     assert len(key) >= original_key_size  # only grows
 
+# restore(..., guard=False) = the explicit legacy opt-out: no guard, no
+# DeprecationWarning. These properties are about the substitution pass itself.
+
 def test_restore_is_pure():
     """restore() is deterministic — same input = same output."""
     key = {"P-037": "王五"}
-    assert restore("P-037", key) == restore("P-037", key) == "王五"
+    assert restore("P-037", key, guard=False) == restore("P-037", key, guard=False) == "王五"
 
 def test_restore_no_match():
     """Unknown pseudonyms are left unchanged."""
-    assert restore("P-999 is unknown", {"P-037": "王五"}) == "P-999 is unknown"
+    assert restore("P-999 is unknown", {"P-037": "王五"}, guard=False) == "P-999 is unknown"
 
 def test_restore_empty_key():
-    assert restore("any text", {}) == "any text"
+    assert restore("any text", {}, guard=False) == "any text"
 
 def test_detailed_returns_3tuple():
     result = redact("13812345678", detailed=True, salt=42, mode="fast")
@@ -456,10 +459,36 @@ restore(
     *,
     aliases: dict[str, tuple[str, ...]] | None = None,
     display_marker: str | None = None,
-) -> str
+    guard: bool | None = None,      # v0.7.18+
+    anchor: object | None = None,   # v0.7.18+
+    strict: bool = False,           # v0.7.18+
+    detailed: bool = False,         # v0.7.18+
+) -> str | tuple[str, dict]
 ```
 
 Reverse redaction — replace pseudonyms with originals using the key.
+
+> **If the text you are restoring came back from an LLM, prefer [`guarded_restore()`](#guarded_restore-v0720).**
+> It is the same guard plus the injection heuristic, wired together correctly in one call.
+> `restore()` is the lower-level primitive; use it directly for text that never left your process.
+
+### Deprecation: bare `restore(text, key)`
+
+Calling `restore()` **without** `guard=` emits a `DeprecationWarning`:
+
+```
+bare restore without guard= is deprecated; will default to guard=True in v0.8.0
+```
+
+The call still performs a plain, unchecked restore today. To silence the warning, say what you mean:
+
+| You want | Pass | Result |
+|----------|------|--------|
+| The guard (recommended for LLM output) | `guard=True, anchor=anchor` | Provenance + scope checks run. |
+| A plain legacy restore, no checks | `guard=False` | Unchecked restore, **no warning** — the explicit opt-out. |
+| *(nothing)* | — | Unchecked restore **plus** `DeprecationWarning`. |
+
+In v0.8.0 the `guard=None` default becomes `guard=True`, so a bare call will start running the guard. Pin the behavior you want now.
 
 ### Parameters
 
@@ -469,10 +498,30 @@ Reverse redaction — replace pseudonyms with originals using the key.
 | `key` | `dict[str, str] \| str` | *(required)* | The key from `redact()` or `redact_pseudonym_llm()`. Accepts: (a) `dict[str, str]` (fake → original), or (b) `str` = path to a JSON file holding such a dict. |
 | `aliases` | `dict[str, tuple[str, ...]] \| None` | `None` | *(v0.6.0+)* Per-fake alternate transliterations to also match. Pass `result.aliases` from `redact_pseudonym_llm()` to recover originals from LLM output that transliterated names across languages. |
 | `display_marker` | `str \| None` | `None` | If set, strip the named display marker from `text` before key lookup. |
+| `guard` | `bool \| None` | `None` | *(v0.7.18+)* `True` runs the deterministic provenance (P) + scope (S) checks. `False` runs the legacy unchecked restore, silently. `None` (today's default) runs the legacy restore **and warns** — see above. |
+| `anchor` | `object \| None` | `None` | *(v0.7.18+)* The `Anchor` from `make_anchor(key)`, carrying the nonce and the scope. Required for the guard to pass: with `guard=True` and no anchor, restore fails closed. |
+| `strict` | `bool` | `False` | *(v0.7.18+)* With `guard=True`, raise `RestoreGuardError` on any security event instead of returning. Opt-in fail-closed. |
+| `detailed` | `bool` | `False` | *(v0.7.18+)* Return `(text, {"security_events": [...]})` instead of a bare `str`. |
 
 ### Returns
 
-`str` — text with pseudonyms replaced by originals.
+- `str` by default — text with pseudonyms replaced by originals.
+- `tuple[str, dict]` when `detailed=True` — `(text, {"security_events": [...]})`. The list is empty on a clean restore (including every `guard=False` / bare call, which runs no checks).
+
+When the guard fails closed, the returned `str` is the text **un-restored** — shape-identical to a success, which is why the events channel exists.
+
+### Guard semantics *(v0.7.18+)*
+
+The guard has two deterministic parts. Both run inside `restore()` when `guard=True`:
+
+- **P — provenance.** `prompt_anchor()` instructs the model to echo a per-call nonce; the anchor holds it. If no anchor was supplied (`guard_no_anchor`), or the nonce is absent from `text` (`provenance_failed`), restore **fails closed**: it returns the text un-restored, substituting nothing. On a pass, the echoed nonce is stripped from the output so it never reaches you as part of the plaintext.
+- **S — scope binding.** Only pseudonyms listed in `anchor.scope` are restored. A pseudonym that appears in the reply but is outside the scope is withheld and reported as `out_of_scope_pseudonym`; the in-scope ones are still restored (a partial restore, not a fail-closed one).
+
+The **H injection heuristic is not part of `restore()`.** It lives in [`check_restore_safety()`](#check_restore_safety) and is run for you by [`guarded_restore()`](#guarded_restore-v0720). H is **advisory by default** — it warns, it does not block — because it is a heuristic, and a heuristic is not promoted to the deterministic guarantee. `strict=True` is the opt-in that makes a security event fail closed.
+
+A fail-closed or partial restore is **not silent**: it emits a `SecurityWarning` carrying reason codes and counts (never `detail`, which may hold raw text). Prior to v0.7.19 a fail-closed restore returned un-restored text with no warning at all — a bug; it now always signals.
+
+Guard checks are not a guarantee against a determined adversary — they raise the cost of replaying, forging or widening an LLM reply, and they surface what they catch. See `docs/security-model.md` for the threat model and its limits.
 
 ### Examples
 
@@ -480,12 +529,40 @@ Reverse redaction — replace pseudonyms with originals using the key.
 redacted, key = redact("王五和张三在阿里面试")
 # redacted = "P-037和P-012在[某公司]面试"
 
-llm_output = "P-037 should help P-012 prepare for [某公司]"
-restored = restore(llm_output, key)
-# "王五 should help 张三 prepare for 阿里"
+# Text that never left your process — no guard is meaningful, so opt out explicitly.
+restored = restore(redacted, key, guard=False)
 
 # From saved key file
-restored = restore(llm_output, "key.json")
+restored = restore(llm_output, "key.json", guard=False)
+```
+
+```python
+# LLM output — run the guard. (guarded_restore() does this plus H in one call.)
+from argus_redact import redact, restore, make_anchor
+from argus_redact.compose import prompt_anchor
+
+redacted, key = redact("王五和张三在阿里面试")
+anchor = make_anchor(key)
+llm_output = call_llm(redacted, system=prompt_anchor(key, anchor=anchor))
+
+restored = restore(llm_output, key, guard=True, anchor=anchor)
+# Guard passed  → "王五 should help 张三 prepare for 阿里" (nonce stripped)
+# Guard tripped → llm_output, un-restored, plus a SecurityWarning
+```
+
+```python
+# detailed=True — read the events instead of catching a warning.
+restored, details = restore(llm_output, key, guard=True, anchor=anchor, detailed=True)
+for event in details["security_events"]:
+    log(event["reason_code"], event["count"])
+
+# strict=True — raise instead of returning un-restored text.
+from argus_redact import RestoreGuardError
+
+try:
+    restored = restore(llm_output, key, guard=True, anchor=anchor, strict=True)
+except RestoreGuardError as e:
+    handle(e.events)  # list of security event dicts
 ```
 
 ### Behavior
@@ -501,6 +578,8 @@ restored = restore(llm_output, "key.json")
 The compiled alternation regex is cached on `frozenset(key.keys())` (since v0.5.4). Repeated `restore()` calls with the same key dict pay only one compile; subsequent calls are pure scan. This is the streaming hot path: `StreamingRestorer.feed()` flushes a sentence per call against an evolving but mostly-stable key, hitting the cache on every flush after the first. Cache is bounded at 128 entries via `lru_cache`.
 
 ### Edge Cases
+
+These illustrate the substitution pass only, so they omit `guard=` for brevity — as written, each would also emit the `DeprecationWarning` above. In your own code pass `guard=False` (unchecked, silent) or `guard=True, anchor=...` (guarded); elsewhere in this document, any snippet calling `restore()` without `guard=` is subject to the same note.
 
 ```python
 # Pseudonym at start of text
@@ -526,7 +605,17 @@ restore("[某公司总部]开会", {"[某公司]": "阿里", "[某公司总部]"
 | Error | When | Testable assertion |
 |-------|------|-------------------|
 | `FileNotFoundError` | Key file path doesn't exist | `pytest.raises(FileNotFoundError)` |
-| `TypeError` | Key is not dict or str | `pytest.raises(TypeError)` |
+| `TypeError` | Key is not a mapping or str | `pytest.raises(TypeError)` |
+| `RestoreGuardError` | `guard=True`, `strict=True`, and any security event fired | `pytest.raises(RestoreGuardError)` |
+
+`RestoreGuardError.events` holds the security event dicts that caused the failure.
+
+### Warnings
+
+| Warning | When |
+|---------|------|
+| `DeprecationWarning` | `guard=` was not passed (bare `restore(text, key)`). Pass `guard=False` for the silent legacy path, or `guard=True` for the guard. |
+| `SecurityWarning` | `guard=True`, `strict=False`, and a security event fired — a fail-closed (nothing substituted) or partial (out-of-scope pseudonyms withheld) restore. `restore()` warns whenever events fire, `detailed=True` or not. (`guarded_restore()` differs: it warns only when *not* `detailed`, unless you force it with `warn=`.) |
 
 ---
 
@@ -544,6 +633,7 @@ guarded_restore(
     guard: bool | None = True,
     strict: bool = False,
     detailed: bool = False,
+    warn: bool | None = None,
 ) -> str | tuple[str, dict]
 ```
 
@@ -559,11 +649,14 @@ The correct-by-construction entry point for restoring an LLM reply. It runs the 
 | `anchor` | `object \| None` | `None` | The `Anchor` from `make_anchor(key)`. Required for the deterministic guard (P) to pass; without it, restore fails closed. |
 | `guard` | `bool \| None` | `True` | Passed through to `restore()`: `True` runs the deterministic provenance (P) + scope (S) checks — the intended default here. `None` runs legacy restore with a `DeprecationWarning`. `False` is the explicit, silent opt-out. |
 | `strict` | `bool` | `False` | Opt-in fail-closed, covering **both** stages. `True` raises `RestoreGuardError` on a suspected injection (H) *or* a failed deterministic guard (P/S) — for H specifically, this happens before any original is substituted, not after. `False` (the default) keeps H advisory: it warns, it does not block. |
-| `detailed` | `bool` | `False` | `True` returns `(text, {"security_events": [...]})` instead of a bare `str`, and does not warn — inspecting the events is then the caller's job. `False` surfaces the merged H + P/S events as a single `SecurityWarning`. |
+| `detailed` | `bool` | `False` | `True` returns `(text, {"security_events": [...]})` instead of a bare `str`, and (by default) does not warn — inspecting the events is then the caller's job. `False` surfaces the merged H + P/S events as a single `SecurityWarning`. |
+| `warn` | `bool \| None` | `None` | Whether to emit the `SecurityWarning`. `None` means *warn iff not `detailed`* — a `detailed` caller reads the structured events; a plain caller would otherwise get no signal at all. Force it either way with `True` / `False`: pass `warn=True` alongside `detailed=True` when you need **both** (argus-redact's own MCP `restore` tool does exactly this — it serialises the events into its JSON payload *and* wants the human-facing warning). |
 
 ### Returns
 
-`str` by default. `tuple[str, dict]` when `detailed=True` — the dict is `{"security_events": [...]}`, the union of the H event (if any) and whatever the P/S guard produced.
+`str` by default. `tuple[str, dict]` when `detailed=True` — the dict is `{"security_events": [...]}`, the union of the H event (if any) and whatever the P/S guard produced. An empty list means nothing fired.
+
+Each event is a dict: `{"type": "security", "reason_code": str, "count": int, "detail": str | None}`. Reason codes are `guard_no_anchor` / `provenance_failed` (P — nothing was substituted), `out_of_scope_pseudonym` (S — those pseudonyms were withheld, the rest were restored), and `injection_suspected` (H — advisory; the restore **proceeded** and originals *were* substituted). `detail` may contain pseudonyms or excerpts, so keep it out of logs you would not treat as sensitive; the `SecurityWarning` deliberately carries only reason codes and counts.
 
 ### Why it exists
 
@@ -635,20 +728,55 @@ check_restore_safety(
 ) -> list[str]
 ```
 
-Check if LLM output shows signs of prompt injection by detecting pseudonym amplification. Returns a list of warning strings (empty = safe).
+Check if LLM output shows signs of prompt injection by detecting pseudonym amplification. Returns a list of warning strings (empty = no suspicion).
+
+**This function *is* the H heuristic.** It is exactly what [`guarded_restore()`](#guarded_restore-v0720) runs for you when you pass `redacted=`; a non-empty result there becomes an `injection_suspected` security event. Call it directly only when you want the raw hints without a restore — otherwise let `guarded_restore()` run it, so the H result and the deterministic P/S guard are merged, surfaced and (optionally) failed-closed in one place.
 
 ```python
-redacted, key = redact("张三在医院看病", names=["张三"])
+redacted, key = redact("张三在医院看病")
 llm_output = call_llm(redacted)
 
-warnings = check_restore_safety(redacted, llm_output, key)
-if warnings:
-    print("Possible injection detected:", warnings)
+hints = check_restore_safety(redacted, llm_output, key)
+if hints:
+    print("Possible injection detected:", hints)
 else:
-    restored = restore(llm_output, key)
+    restored = restore(llm_output, key, guard=False)
 ```
 
-Warns when a pseudonym code appears more times in the LLM output than in the original redacted text.
+It flags a pseudonym code appearing more times in the LLM output than in the redacted prompt, pseudonyms sitting next to exfiltration-shaped context (emails, URLs), and amplified reserved-range values from realistic mode.
+
+Being a heuristic, it is advisory: expect both false positives (a model that legitimately repeats a code) and false negatives (an injection that never amplifies). The deterministic guarantee is the P + S guard, not this check — do not gate your pipeline on H alone.
+
+---
+
+## SecurityWarning
+
+```python
+from argus_redact import SecurityWarning
+```
+
+A `UserWarning` subclass, emitted when something would silently weaken redaction or when a restore did not go cleanly. It is the human-facing backstop for callers who are not reading `security_events`; the restore paths raise it for a fail-closed guard, a partial (out-of-scope) restore, and an advisory H hit.
+
+The message carries **reason codes and counts only** — never the event `detail`, which may hold raw text or pseudonyms — so it is safe to route into an ordinary log stream. The warning is attributed to your call site, not to argus-redact's internals.
+
+```python
+import warnings
+from argus_redact import guarded_restore, SecurityWarning
+
+# Promote to an exception in tests / CI
+warnings.simplefilter("error", SecurityWarning)
+
+# Or catch and inspect
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always", SecurityWarning)
+    restored = guarded_restore(llm_output, key, redacted=redacted, anchor=anchor)
+if any(issubclass(w.category, SecurityWarning) for w in caught):
+    ...
+```
+
+Import it from the top level (`argus_redact.SecurityWarning`); it lives in `argus_redact.exceptions` and is still re-exported from its historical home, `argus_redact.pure.replacer`, for backward compatibility.
+
+For programmatic handling, prefer the structured channel — `detailed=True` (events) or `strict=True` (`RestoreGuardError`) — over parsing warning text.
 
 ---
 
@@ -664,7 +792,9 @@ Clear a key dict to minimize PII exposure in memory. Removes all entries so refe
 
 ```python
 redacted, key = redact(text)
-restored = restore(llm_output, key)
+anchor = make_anchor(key)
+# ... send `redacted` to the LLM with prompt_anchor(key, anchor=anchor) ...
+restored = guarded_restore(llm_output, key, redacted=redacted, anchor=anchor)
 wipe_key(key)  # done with key, clear it
 ```
 

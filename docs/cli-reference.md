@@ -260,8 +260,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 | Tool | Description |
 |------|-------------|
-| `redact` | Redact PII from text. Returns JSON with redacted text and `key_token`. |
-| `restore` | Restore redacted text using `key_token`. |
+| `redact` | Redact PII from text. Returns JSON with the redacted text, a `key_token`, **and an `anchor_prompt` you must inject into the LLM's system prompt**. |
+| `restore` | Restore redacted text using `key_token`. Guard-by-default *(v0.7.20+)*: verifies the anchor nonce and the pseudonym scope, and runs the injection heuristic. |
 | `info` | Show version and installed capabilities. |
 | `assess` | Privacy risk score + entities found. |
 
@@ -269,18 +269,67 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 The `redact` tool mints a **`key_token`** — a process-scoped reference to the key dict — instead of returning the raw key. This keeps the key out of the LLM's context window so a malicious prompt cannot exfiltrate the mapping back to the user.
 
+Tokens live in the MCP server process, are bounded in number, and expire after an idle period. Restart invalidates them — re-run `redact` to obtain a fresh token if you see `Token not found or expired`.
+
+### `redact` → you MUST inject `anchor_prompt`
+
+The `redact` response has **three** fields:
+
 ```jsonc
 // redact response
 {
   "redacted": "P-12345 的电话是 138****5678",
-  "key_token": "Aq1f3-Xb9..."  // pass to restore
+  "key_token": "Aq1f3-Xb9...",   // pass to restore
+  "anchor_prompt": "..."          // pass to the LLM as a system message
 }
-
-// restore call
-{ "text": "...", "key_token": "Aq1f3-Xb9..." }
 ```
 
-Tokens live in the MCP server process. Restart invalidates them — re-run `redact` to obtain a fresh token if you see `Token not found or expired`.
+`anchor_prompt` is a system-prompt addendum carrying a **per-call nonce** that the model is instructed to echo back in its reply. It is empty (`""`) when no PII was detected.
+
+**If you do not put `anchor_prompt` into the LLM's system prompt, your pipeline is broken — quietly.** The model never echoes the nonce; `restore` cannot establish that the text it is given actually came from the model it anchored; the guard fails closed; and `restore` hands back the text **un-restored**, with the pseudonyms still in it. You get a plausible-looking string that simply never had the originals substituted. This is the single most common way to misuse this server.
+
+The intended sequence:
+
+1. Call `redact` → keep `key_token`, send `redacted` to the LLM, and pass `anchor_prompt` as (or appended to) the **system** message.
+2. Take the LLM's reply verbatim — including the echoed nonce; do not strip it.
+3. Call `restore` with that reply and the `key_token`. It strips the nonce for you.
+
+### `restore` — guard-by-default *(v0.7.20+)*
+
+```jsonc
+// restore call
+{
+  "text": "...",                 // the LLM's reply, verbatim
+  "key_token": "Aq1f3-Xb9...",
+  "strict": false                 // optional, default false
+}
+```
+
+Before v0.7.20 this tool did a plain key-token substitution with no checks at all. It now runs the full guarded flow:
+
+- **Provenance (P) + scope (S) — deterministic.** The nonce from `anchor_prompt` must appear in `text`, and only pseudonyms bound to that call's scope are restored. If the nonce is missing, restore is **fail-closed**: the text comes back un-restored, nothing substituted.
+- **Injection heuristic (H) — advisory.** The server retains the redacted prompt (pseudonyms only) alongside the token, which lets `restore` compare the reply against it and flag suspicious pseudonym use. H is a heuristic: by default it *reports*, it does not block.
+
+The response gains a `security_events` field whenever anything fired (absent on a clean restore):
+
+```jsonc
+// restore response — guard tripped
+{
+  "restored": "P-12345 的电话是 138****5678",   // NOTE: un-restored, guard failed closed
+  "security_events": [
+    {"type": "security", "reason_code": "provenance_failed", "count": 2,
+     "detail": "nonce absent from response"}
+  ]
+}
+```
+
+Reason codes: `guard_no_anchor` / `provenance_failed` (nothing was substituted), `out_of_scope_pseudonym` (those pseudonyms were withheld; the in-scope ones were restored), `injection_suspected` (advisory — the restore **did** proceed and originals *were* substituted).
+
+**Always check for `security_events`.** A fail-closed `restored` string is shape-identical to a successful one; the events field is how you tell them apart.
+
+Pass **`strict: true`** to turn every event into a hard error instead — the tool call fails rather than returning, and no original is substituted on a suspected injection. Use it when a silently-degraded restore is worse for you than a failed one.
+
+These checks raise the cost of forging, replaying or widening a model reply, and they surface what they catch; they are not a guarantee against a determined adversary. See `docs/security-model.md` for the threat model and its limits.
 
 ---
 

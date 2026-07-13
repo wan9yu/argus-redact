@@ -13,6 +13,7 @@ You can contribute any one of these independently. A pack with only regex patter
 | Language | Regex (Layer 1) | NER (Layer 2) | Install |
 |----------|:---------------:|:-------------:|---------|
 | **Shared** (all langs) | email, IP, age, gender, MAC, IMEI, URL token | — | core |
+| **Cross-loaded** (all langs) | payment-card number (Luhn-validated) | — | core |
 | Chinese (zh) | 20+ types (phone, ID, bank card, passport, address, medical, ...) | HanLP | `[zh]` |
 | English (en) | SSN, phone, credit card, DOB, passport, medical, ... | spaCy | `[en]` |
 | Japanese (ja) | phone, My Number | spaCy | `[ja]` |
@@ -21,6 +22,29 @@ You can contribute any one of these independently. A pack with only regex patter
 | UK (uk) | postcode, NINO, NHS number, phone | spaCy | `[uk]` |
 | Indian (in) | Aadhaar, PAN, phone | spaCy | `[in]` |
 | Brazilian (br) | CPF, CNPJ, phone | — | `[br]` |
+
+### Language-neutral patterns
+
+Some identifiers are the same digits no matter what script surrounds them. A pattern can
+be marked **language-neutral**, and it is then cross-loaded into *every* pack, not just the
+one it is defined in — so it fires even when the caller never asked for that language.
+
+The payment-card number is the practical case: the Luhn-validated card pattern is defined in
+the `en` pack, but a Luhn-valid card number is detected in **every** pack (`ja`, `ko`, `de`,
+`uk`, `in`, `br`, `zh`, `en`), including under `mode="fast"`. The same mechanism cross-loads
+several structured Chinese numeric identifiers.
+
+The **type labels deliberately did not change**: a card in English text is still typed
+`credit_card`, and a card in Chinese text is still typed `bank_card` (the `zh` pack's own
+pattern wins that overlap). Callers keying off the entity type see no change.
+See `tests/core/test_card_language_coverage.py`.
+
+> **Upgrade note (fixed in v0.7.19).** Up to and including v0.7.18, the card patterns were
+> *not* language-neutral: the only ones that existed lived in `en` (`credit_card`) and `zh`
+> (`bank_card`), and neither cross-loaded. Six of the eight packs — `ja`, `ko`, `de`, `uk`,
+> `in`, `br` — shipped no card pattern of their own, so a Luhn-valid card number sitting in
+> text of those languages passed through `mode="fast"` **verbatim**. If you are pinned below
+> v0.7.19 and redact non-en/zh text, upgrade.
 
 ### Benchmark status
 

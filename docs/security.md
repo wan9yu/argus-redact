@@ -175,8 +175,9 @@ originals.** Treat it as sensitive material:
 
 v0.6.2+ omits the salt by default. Caller holds the salt out-of-band and
 passes it to `from_state(state, salt=...)` on resume. Pass `include_salt=True`
-to `export_state()` for v0.6.0/v0.6.1-shaped output (deprecated; will be
-removed in v0.7.0). Even with the salt out of the dict, `accumulated_key`
+to `export_state()` for v0.6.0/v0.6.1-shaped output — deprecated (it emits a
+`DeprecationWarning`) and slated for removal in a future release; no removal
+version is scheduled. Even with the salt out of the dict, `accumulated_key`
 still carries plaintext originals — encrypt the serialized state at rest.
 
 ## Server deployment
@@ -189,13 +190,37 @@ network is unsafe.
 
 ## MCP token store
 
-`argus_redact.integrations.mcp_server` keeps key dicts in a process-scoped
-store keyed by 128-bit `secrets.token_urlsafe(16)` tokens. v0.6.2+ adds:
-- 5-minute idle TTL (sliding window — access bumps the timestamp).
-- 100-entry LRU bound (oldest evicted on overflow).
+`argus_redact.integrations.mcp_server` keeps a process-scoped store keyed by
+128-bit `secrets.token_urlsafe(16)` tokens. The raw key never enters the LLM's
+context — the `redact` tool returns only the token.
 
-Per-session binding (so two MCP consumers of the same server cannot replay
-each other's tokens) is a v0.7 candidate pending FastMCP session API survey.
+Each entry retains three things plus a timestamp:
+
+- **the key dict** — fake → original. The sensitive item; it is what `restore`
+  substitutes with.
+- **the anchor** — the per-call nonce and pseudonym scope, so the `restore` tool
+  can run the deterministic provenance + scope checks without the caller
+  round-tripping them through the LLM.
+- **the redacted prompt** — pseudonyms only, no originals. This is what lets the
+  server run the supplementary injection heuristic (H): the check compares the
+  reply against the prompt it was answering. Without the prompt retained
+  server-side there is nothing to compare against and H cannot run at all.
+
+The added items are strictly less sensitive than the key dict already in the
+store, and they live under the same bounds as it:
+
+- 5-minute idle TTL, sliding window — a successful lookup bumps the timestamp
+  (`time.monotonic`, so it is robust to system clock adjustments).
+- 100-entry LRU bound; the oldest entry is evicted on overflow.
+
+Tokens are process-scoped: restarting the server invalidates all of them.
+
+**Not implemented:** per-session binding, so that two MCP consumers of the same
+server process cannot replay each other's tokens. It was floated as a v0.7
+candidate and did not land in the v0.7 line; it is **not currently scheduled**.
+Until it exists, treat a token as a bearer credential valid for any consumer of
+that server process, and do not share one MCP server process across mutually
+untrusted consumers.
 
 ## Reporting issues
 

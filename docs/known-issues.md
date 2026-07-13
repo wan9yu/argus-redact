@@ -1,9 +1,50 @@
 # Known Issues
 
-> **v0.5.x zero-debt milestone**: as of v0.5.8 there are no open Unresolved entries.
-> All remaining items are explicit **Design Constraints** — permanent trade-offs
-> documented for transparency, not a backlog. New defects discovered post-v0.5.8
-> will reappear in an `## Unresolved` section above.
+> v0.5.8 closed every Unresolved entry open at the time. Defects found since are
+> listed under **Unresolved** below. Everything under **Design Constraints** is an
+> explicit permanent trade-off, documented for transparency — not a backlog.
+
+## Unresolved
+
+### Overlapping spans are resolved by length, not by detection layer
+
+- **What**: `merge_entities` / `pick_winner`
+  (`crates/argus-redact-core/src/merger.rs`) resolve an overlap between two detected
+  spans by **span length** — the longer span wins, with confidence only as a
+  same-length tiebreak. The detection layer is never consulted. An over-greedy
+  Layer-1 regex span that is one character longer than a Layer-2 NER span therefore
+  discards it, and when the L1 span is the *wrong* one, the PII the NER spans covered
+  is left in the clear.
+- **Reproduction** (`mode="ner"`, zh): on `客户李明明王小丽联系电话13800138000` the L1
+  person candidate generator emits `李明明王` (4 chars, wrong) while the NER model emits
+  `李明明` and `王小丽` (both correct). The 4-char L1 span wins both overlaps, both NER
+  spans are discarded, and the output is `客户P-NNNNN小丽联系电话138****8000` — the name
+  `小丽` in plaintext.
+- **Who is affected**: the defect needs an L1↔L2 overlap, so it needs a NER model —
+  `mode="ner"` or `mode="auto"`. `mode="fast"` is Layer-1 only and has no cross-layer
+  overlap to mis-resolve. Observed in Chinese, where adjacent person names can be fused
+  into a single L1 candidate; the merge rule itself is language-neutral.
+- **Status — open.** The obvious fix (on an overlap, prefer the higher detection layer,
+  L3 > L2 > L1) was implemented, benchmarked and **rejected** in v0.7.20. On
+  `pii_bench_zh` — our own benchmark;
+  `python -m tests.benchmark pii_bench_zh --mode ner --limit 300` — it fixed exactly what
+  it targeted (`person`: +18 true positives, false positives 18 → 0) but cost 6.9pp of
+  overall recall (.9057 → .8365, −66 true positives). `address` fell from 64 true
+  positives to **0**: the NER model emits one coarse `location` span over each L1
+  `address` span, so "higher layer wins" flips the entity type and every address then
+  fails the value match. `license_plate` fell from 23 to 3. Neither type carries a
+  checksum validator, so a "validated beats unvalidated" precedence could not rescue
+  them. "Trust the higher layer" is true for names and false in general — for
+  structured-but-unvalidated types, the L1 regex is the detector that knows the correct
+  span. Scoping the rule to `person` only is the surviving hypothesis; it is not
+  implemented.
+- **What you should do**: if your text can contain person names running together with no
+  delimiter, do not rely on NER to correct a Layer-1 person span — inserting a separator
+  (`、`, comma, space) between adjacent names prevents the fused candidate, and both
+  names are then redacted. In audit paths, inspect the spans from
+  `redact(..., detailed=True)`: an unusually long `person` span (more than 3 characters
+  for Chinese) is the signature of this defect. No configuration changes the merge rule
+  today.
 
 ## Deprecation Notices
 
@@ -78,7 +119,7 @@ Each entry follows three lines:
 
 - **What**: Upgrading the argus-redact pin across a major version boundary (e.g., `0.5.x` → `0.6.0`) requires a clean rebuild of any caller cache that holds pseudonym mappings.
 - **Why we won't fix**: cryptographic derivation chain changes (salt schema, KDF, pseudonym seeding) across major versions are by design — they fix security vulnerabilities or close known issues. Pseudonym tokens generated under one chain cannot be reproduced under another, so cached mapping tables become incoherent.
-- **What you should do**: when bumping a major version, force a clean rebuild of any docker image / build cache / persisted key store. Downstream R1003 lesson (cache-induced false-green on `0.5.x` → `0.6.0`): local dev had stale 0.5.x mappings, CI fresh build saw real 0.6.0 behavior → caught only because CI didn't share dev's cache. Pin to `>=0.6.4` if you saw R1003-style symptoms.
+- **What you should do**: when bumping a major version, force a clean rebuild of any docker image / build cache / persisted key store. A downstream project hit a cache-induced false-green on a `0.5.x` → `0.6.0` bump: local dev held stale 0.5.x mappings while the fresh CI build saw real 0.6.0 behavior, and the mismatch surfaced only because CI didn't share the dev cache. Pin to `>=0.6.4` if you saw those symptoms.
 
 ### `199-99` mobile sub-segment requires annual review
 
@@ -88,9 +129,12 @@ Each entry follows three lines:
 - **Why we won't fix**: External regulatory authority controls this allocation.
   argus-redact cannot anticipate when (or whether) it will be assigned.
 - **What you should do**: Re-verify against MIIT public allocations annually.
-  If the sub-segment gets assigned, switch to a different unassigned sub-segment
-  via configuration (the choice is a single constant in
-  `specs/fakers_zh_reserved.py`).
+  If the sub-segment gets assigned, switch to a different unassigned sub-segment.
+  The prefix is a literal in the Rust core, in two places that must stay in sync:
+  `fake_phone_reserved` in `crates/argus-redact-core/src/fakers.rs` (emits `19999` +
+  6 random digits) and the `phone_zh` pollution-scan pattern in
+  `crates/argus-redact-core/src/reserved_range.rs`. It is not caller-configurable —
+  changing it is a source change plus a rebuild.
 
 ### Realistic-mode output must not be re-redacted
 
@@ -270,12 +314,12 @@ Each entry follows three lines:
 
 ### v0.6.8 (2026-06-01) — API Surface SSOT
 
-- **`seed=` keyword removed from 9 public entry points** — use `salt=` (accepts `int | bytes | None`). Hard break, no DeprecationWarning alias. CLI `--seed N` flag unchanged at the argparse level. (audit MEDIUM "API parameter naming chaos")
-- **`PIITypeDef.strategy` is now runtime SSOT** — `DEFAULT_STRATEGIES` dict deleted; `replace()` reads `lookup(type)[0].strategy`. Per-language test (zh+en+shared) replaces zh-only drift guard. (audit MEDIUM)
-- **Presidio bridge routes through public `redact()`** via new `_pre_detected=` private kwarg, inheriting MAX_INPUT_SIZE / profile / telemetry / normalization. (audit MEDIUM)
-- **3 new PII types registered**: `phone_landline` (mask, prefix `LL`), `date` (remove, prefix `DATE`), `url` (remove, prefix `URL`). (audit LOW)
-- **README.zh.md sync to en parity** — added 5+ missing sections (North Star, Detection accuracy, Risk Assessment CLI, Security, Contributors). Pinned code blocks enforced in CI. (audit MEDIUM)
-- **README "All 52 types" → "All PII types"**; "PIPL ~85%" → "Meets PIPL Art.28 sensitive PII categories". (audit LOW + LOW)
+- **`seed=` keyword removed from 9 public entry points** — use `salt=` (accepts `int | bytes | None`). Hard break, no DeprecationWarning alias. CLI `--seed N` flag unchanged at the argparse level.
+- **`PIITypeDef.strategy` is now runtime SSOT** — `DEFAULT_STRATEGIES` dict deleted; `replace()` reads `lookup(type)[0].strategy`. Per-language test (zh+en+shared) replaces zh-only drift guard.
+- **Presidio bridge routes through public `redact()`** via new `_pre_detected=` private kwarg, inheriting MAX_INPUT_SIZE / profile / telemetry / normalization.
+- **3 new PII types registered**: `phone_landline` (mask, prefix `LL`), `date` (remove, prefix `DATE`), `url` (remove, prefix `URL`).
+- **README.zh.md sync to en parity** — added 5+ missing sections (North Star, Detection accuracy, Risk Assessment CLI, Security, Contributors). Pinned code blocks enforced in CI.
+- **README "All 52 types" → "All PII types"**; "PIPL ~85%" → "Meets PIPL Art.28 sensitive PII categories".
 
 ### v0.6.7 (2026-06-01) — Layer Codification
 
@@ -288,11 +332,11 @@ Each entry follows three lines:
 
 ### v0.6.6 (2026-05-31) — Reader Contract
 
-- **Integration session-isolation** — `RestoreRunnable` / `RestoreTransform` raise `SessionStateError` when paired Redact helper has no key. Previously returned text unchanged, masking a multi-tenant cross-session leak vector. (audit HIGH-1, HIGH-2)
+- **Integration session-isolation** — `RestoreRunnable` / `RestoreTransform` raise `SessionStateError` when paired Redact helper has no key. Previously returned text unchanged, masking a multi-tenant cross-session leak vector.
 - **Dead ContextVar stripped from langchain integration** — class docstring no longer claims thread-safe-via-contextvars.
-- **README hero example pinned to doctest** — every `<!-- pin -->` ```python``` block in README.md / README.zh.md exec'd in CI. (audit HIGH-3)
-- **`0% PII leak` headline rewritten** — lists actual PRvL LLMs (GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.5); discloses 96%/Bronze cell on `pseudonym-llm` + Opus-4.5. (audit HIGH-4)
-- **ai4privacy numbers regenerated on 0.6.6 baseline** — committed JSON under `tests/benchmark/results/`; `docs/benchmark-report.md` is the single source of truth, README carries compact table + link. (audit HIGH-5)
+- **README hero example pinned to doctest** — every `<!-- pin -->` ```python``` block in README.md / README.zh.md exec'd in CI.
+- **`0% PII leak` headline rewritten** — lists actual PRvL LLMs (GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.5); discloses 96%/Bronze cell on `pseudonym-llm` + Opus-4.5.
+- **ai4privacy numbers regenerated on 0.6.6 baseline** — committed JSON under `tests/benchmark/results/`; `docs/benchmark-report.md` is the single source of truth, README carries compact table + link.
 - **Single-source version sync** — `scripts/sync_docs_version.py` + `make sync-docs-version[-check]`; CI guards against drift on every PR.
 
 | Issue | Version | Fix |
@@ -300,7 +344,7 @@ Each entry follows three lines:
 | Compliance metadata SSOT not exposed for downstream | v0.6.5 | New top-level exports `PIPL_REFERENCES`, `GDPR_SPECIAL_CATEGORIES`, `HIPAA_PHI_CATEGORIES` projected from the PII type registry. Drift-guard test (`tests/architecture/test_compliance_metadata_export.py`) ensures every type cites ≥1 PIPL article. See [API reference → Compliance metadata exports](api-reference.md#compliance-metadata-exports-v065) for shapes and usage. |
 | Performance regressions could land silently | v0.6.4 | New `.github/workflows/perf.yml` runs 5-run median over 6 workloads on every PR; compares against committed `tests/benchmark/baseline.json` with 10% threshold. Touching the baseline file in a PR exempts the gate (caller-owned). |
 | Hypothesis property tests for security invariants | v0.6.3 | New `tests/security/property/`: 6 properties (round-trip, faker-in-reserved-range derived from registry, determinism, keep-whitelist, state round-trip, pseudonym format). Findings landed as fixes in same release. |
-| Mutation testing pass on `pure/{replacer,restore,pseudonym}.py` | v0.6.3 | One-shot mutmut audit (502 killed / 296 survived / 0 real bugs); 27 targeted unit tests added to kill survivors. Audit recorded in workspace audit doc. |
+| Mutation testing pass on `pure/{replacer,restore,pseudonym}.py` | v0.6.3 | One-shot mutmut run against the then-pure-Python implementations of those three modules (502 mutants killed / 296 survived / 0 real bugs found); 27 targeted unit tests added to kill survivors. Those numbers are a v0.6.3 snapshot and are not reproducible from the current tree — the logic has since moved to the Rust core, where mutation testing runs over the security-critical and Layer-1 modules via `make mutants-core` (cargo-mutants). |
 | `SECURITY.md` + GitHub private vulnerability reporting | v0.6.3 | Canonical disclosure channel; supported-versions table; threat-model link to `docs/security.md`; SLA tiers. |
 | Codecov soft gate on PRs | v0.6.3 | `.codecov.yml`: 90% patch target, 1% project threshold; comment-only, no merge block. |
 | `StreamingRedactor.export_state()` embedded the salt in the serialized dict | v0.6.2 | Default omits salt; pass `include_salt=True` (deprecated) for back-compat. `from_state(state, *, salt=...)` now requires explicit salt kwarg; legacy embedded-salt dumps still load with `DeprecationWarning`. Caller-supplied salt always wins when both are present. |

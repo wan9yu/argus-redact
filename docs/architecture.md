@@ -212,7 +212,7 @@ text = "他的同事在星巴克开会"
 2. **Chunking** — sentences are grouped into chunks of ≤ 512 tokens
 3. **NER inference** — each chunk is processed by the NER model
 4. **Span mapping** — entity offsets are mapped back to original text positions
-5. **Conflict resolution** — if NER detects an entity that overlaps with a Layer 1 match, Layer 1 wins (higher confidence for deterministic patterns)
+5. **Conflict resolution** — if NER detects an entity that overlaps a Layer 1 match, the two are resolved by the merger's span rule: the **longer span wins**, regardless of which layer produced it (see [Entity Merger](#entity-merger))
 
 **Backend selection:**
 
@@ -221,7 +221,7 @@ text = "他的同事在星巴克开会"
 | `zh` | HanLP 2.x | MSRA_NER_ELECTRA | `argus-redact[zh]` |
 | `en` | spaCy | en_core_web_sm | `argus-redact[en]` |
 
-**Mixed language:** When `lang=["zh", "en"]`, both NER backends run on the same text. Results are merged by span position. If both backends detect the same span, the higher-confidence result wins.
+**Mixed language:** When `lang=["zh", "en"]`, both NER backends run on the same text. Results are merged by span position. If the two backends produce overlapping spans of different lengths, the longer span wins; only for spans of **equal length** does the higher-confidence result win.
 
 **First-call overhead:** Model loads into memory on first use (2-5s). Cached for subsequent calls within the same process.
 
@@ -291,11 +291,18 @@ Merged:  [(0, 2, "person", "张三", 0.95, layer=2),
 
 **Rules:**
 
-1. **Priority types (self_reference):** Always win overlaps. When self_reference overlaps with a longer entity (e.g., "我" inside "我在协和医院"), the merger **splits** the longer entity instead of swallowing the priority type.
-2. **Exact overlap:** Higher-confidence entity wins. Ties: lower layer number wins (regex > NER > LLM).
-3. **Partial overlap:** Longer span wins.
-4. **Containment:** If entity A contains entity B, keep A only (e.g., "三里屯的星巴克" contains "星巴克").
-5. **Dedup:** Same text at same position from multiple layers → keep one.
+1. **Priority types (self_reference):** Always win overlaps. When self_reference overlaps with a longer entity (e.g., "我" inside "我在协和医院"), the merger **splits** the longer entity instead of swallowing the priority type. (One exception: a self_reference starting *inside* another entity — after its start — is treated as part of that entity's name, and the container is kept whole.)
+2. **Any other overlap — length first:** Of two overlapping entities, the **longer span wins** and the shorter one is discarded entirely. This covers partial overlap and containment alike (e.g., "三里屯的星巴克" beats the contained "星巴克").
+3. **Equal length — confidence as tiebreak:** Only when two overlapping spans have the *same* length does confidence decide. If confidence is also equal, the entity that sorted first is kept.
+4. **Dedup:** Same span from multiple layers → one entity survives, by the rules above.
+
+**The detection layer is not consulted.** There is no "regex beats NER" or "NER beats regex" rule anywhere in the merger — `layer` is carried on the entity for reporting, but it plays no part in resolving an overlap. An L2 NER span that is longer than an overlapping L1 regex span wins, and vice versa. The implementation is `pick_winner` / `merge_entities` in `crates/argus-redact-core/src/merger.rs`.
+
+**Known consequence (open).** Because length decides and type does not, a greedy L1 span that runs one character longer than a correct L2 NER span discards the NER span outright — the NER entity's extra characters are then never redacted. That is a real leak path, not a cosmetic ordering quirk.
+
+The obvious fix — "when spans cross, prefer the higher detection layer" — was implemented and benchmarked for v0.7.20, and **rejected**. It did fix what it targeted (person false positives went to zero), but it cost roughly 7 percentage points of overall recall on the Chinese benchmark suite: NER routinely lays a coarse `location` span across an L1 `address` match, so under a layer-first rule the coarse span wins, the entity type flips from `address` to `location`, and the address value no longer matches — address detection collapsed to nothing. "Trust the higher layer" is true for names and false in general. See the *Not shipped* note under v0.7.20 in [CHANGELOG.md](../CHANGELOG.md).
+
+The defect is therefore **still open**: no fix is shipped, and the length-first rule above is what runs today. A narrower, person-scoped variant is the surviving hypothesis, but it is not implemented.
 
 **Cross-layer agreement:** After merging, if the same span (or compatible types like address/location) was detected by both L1 and L2, confidence is boosted by 0.1. This rewards entities that multiple independent detectors agree on.
 
