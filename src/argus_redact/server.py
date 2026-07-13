@@ -22,7 +22,7 @@ import warnings
 from typing import TYPE_CHECKING, Any
 
 from argus_redact import __version__, redact, restore
-from argus_redact.pure.replacer import SecurityWarning
+from argus_redact.exceptions import SecurityWarning
 
 try:
     from starlette.requests import Request

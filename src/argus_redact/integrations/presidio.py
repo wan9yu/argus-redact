@@ -19,6 +19,7 @@ Usage (guarded Pattern B — recommended):
 from __future__ import annotations
 
 from argus_redact._types import NEREntity, PatternMatch
+from argus_redact.glue.guarded_restore import guarded_restore
 from argus_redact.impure.ner import NERAdapter
 
 # Map Presidio entity types to argus-redact types
@@ -158,8 +159,6 @@ class PresidioBridge:
                 On the default path the events are surfaced as a SecurityWarning
                 rather than discarded.
         """
-        from argus_redact.glue.guarded_restore import guarded_restore
-
         return guarded_restore(
             text,
             key,

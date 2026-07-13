@@ -53,8 +53,16 @@ _WITHHELD_CODES = frozenset({PROVENANCE_FAILED, GUARD_NO_ANCHOR, OUT_OF_SCOPE_PS
 # being mistaken for a frame inside this package.
 _PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + os.sep
 
+# Stacklevel used when the walk below cannot find a frame outside the package.
+_FALLBACK_STACKLEVEL = 3
 
-def _auto_stacklevel(default: int = 3) -> int:
+# ``os.path.realpath`` is syscall-heavy (an lstat per path component) and the walk
+# runs it once per frame, on every bare restore() — ~30% of the call. The set of
+# ``co_filename`` values is small, fixed and interned, so memoise it.
+_REALPATH_CACHE: dict[str, str] = {}
+
+
+def _auto_stacklevel() -> int:
     """Compute the ``warnings.warn`` ``stacklevel`` that attributes to the
     caller's OWN code, no matter how many argus_redact wrappers sit between it
     and ``warn_security_events`` (a direct ``restore()``, a fail-closed
@@ -82,9 +90,12 @@ def _auto_stacklevel(default: int = 3) -> int:
         # Stack too shallow to even reach warn_security_events's caller — can
         # happen in tests that call this helper in isolation. Don't crash the
         # warning path over an attribution nicety.
-        return default
+        return _FALLBACK_STACKLEVEL
     while frame is not None:
-        filename = os.path.realpath(frame.f_code.co_filename)
+        co_filename = frame.f_code.co_filename
+        filename = _REALPATH_CACHE.get(co_filename)
+        if filename is None:
+            filename = _REALPATH_CACHE.setdefault(co_filename, os.path.realpath(co_filename))
         if not filename.startswith(_PACKAGE_DIR):
             return level
         frame = frame.f_back
@@ -92,10 +103,10 @@ def _auto_stacklevel(default: int = 3) -> int:
     # Ran off the top of the stack without leaving the package (e.g. a test
     # harness that calls internal functions directly with no external caller
     # in the chain). Fall back rather than pointing at a nonexistent frame.
-    return default
+    return _FALLBACK_STACKLEVEL
 
 
-def warn_security_events(events: list[dict], *, stacklevel: int | None = None) -> None:
+def warn_security_events(events: list[dict]) -> None:
     """Emit a PII-free SecurityWarning summarising ``events``.
 
     Structured ``security_events`` stay the channel for programs; this is the
@@ -107,16 +118,13 @@ def warn_security_events(events: list[dict], *, stacklevel: int | None = None) -
     The sentence describing what HAPPENED is derived from the reason codes, so it
     is accurate for withholding events, advisory ones, and a mix of both.
 
-    ``stacklevel``: ``None`` (the default) auto-detects the first frame outside
-    the argus_redact package and attributes the warning there — see
-    ``_auto_stacklevel``. Pass an explicit int to override, e.g. for a caller
-    that knows its own depth is unusual; it is used verbatim, no auto-detection.
+    The warning is attributed to the first frame outside the argus_redact package
+    — see ``_auto_stacklevel``.
     """
     if not events:
         return
 
-    if stacklevel is None:
-        stacklevel = _auto_stacklevel()
+    stacklevel = _auto_stacklevel()
 
     codes = [e["reason_code"] for e in events]
     withheld = any(c in _WITHHELD_CODES for c in codes)
@@ -140,29 +148,12 @@ def warn_security_events(events: list[dict], *, stacklevel: int | None = None) -
     )
 
 
-def advisory_events(events: list[dict]) -> list[dict]:
-    """Return the ``events`` that are ADVISORY — i.e. NOT in ``_WITHHELD_CODES``.
-
-    Everything that isn't a withholding code (P/S failures, out-of-scope
-    pseudonyms) is advisory, currently just the H heuristic's
-    ``INJECTION_SUSPECTED``. For a caller that already warns about its own P/S
-    events through some other path and only needs to separately surface the
-    advisory ones (avoiding a double-report of the same P/S trip), derive the
-    set from this helper rather than naming a reason code directly — naming
-    one is exactly the drift that let a future advisory code go unsurfaced
-    silently. ``guarded_restore`` and its integrations no longer need this
-    split themselves (they warn once over the full merged list — see
-    ``glue/guarded_restore.py``); it remains for any caller with its own,
-    separate P/S warning path.
-    """
-    return [e for e in events if e["reason_code"] not in _WITHHELD_CODES]
-
-
 def raise_if_strict(events: list[dict], strict: bool) -> None:
     """Raise RestoreGuardError when ``strict`` and any event fired.
 
-    Shared by the integrations so the "advisory unless strict" policy is stated
-    once rather than copy-pasted per wrapper.
+    Called by ``guarded_restore`` (the single guard-flow entry point every
+    integration goes through) so the "advisory unless strict" policy is stated
+    once, at the one place that can fail closed BEFORE any original is restored.
     """
     if strict and events:
         from argus_redact.pure.restore import RestoreGuardError

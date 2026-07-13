@@ -12,9 +12,9 @@ from urllib.parse import urlparse
 import requests
 
 from argus_redact._types import NEREntity
+from argus_redact.exceptions import SecurityWarning
 from argus_redact.impure.model_profiles import get_model_profile
 from argus_redact.impure.semantic import SemanticAdapter
-from argus_redact.pure.replacer import SecurityWarning
 
 logger = logging.getLogger(__name__)
 

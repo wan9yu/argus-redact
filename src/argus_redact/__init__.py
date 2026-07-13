@@ -9,7 +9,7 @@ from argus_redact._metadata import (
 from argus_redact._types import PseudonymLLMResult, RedactReport
 from argus_redact.compose.anchor import Anchor, make_anchor
 from argus_redact.compose.audit import AuditEntry, AuditLedger, collect_security_events
-from argus_redact.exceptions import LayerUnavailableError, SessionStateError
+from argus_redact.exceptions import LayerUnavailableError, SecurityWarning, SessionStateError
 from argus_redact.glue.guarded_restore import guarded_restore
 from argus_redact.glue.redact import redact
 from argus_redact.glue.redact_pseudonym_llm import (
@@ -18,7 +18,7 @@ from argus_redact.glue.redact_pseudonym_llm import (
 )
 from argus_redact.glue.restore import restore
 from argus_redact.pure.pseudonym import max_pseudonym_length
-from argus_redact.pure.replacer import SecurityWarning, is_strategy_reversible
+from argus_redact.pure.replacer import is_strategy_reversible
 from argus_redact.pure.restore import RestoreGuardError, check_restore_safety, wipe_key
 from argus_redact.pure.risk import assess_risk
 

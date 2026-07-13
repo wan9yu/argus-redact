@@ -130,18 +130,17 @@ def produce_hints(
     # type is noise: the region is covered by a real detection, and the "near miss" is
     # only the other type's validator disagreeing. A same-type claimer is NOT suppressed
     # — that is one detector disagreeing with itself, which is worth reporting.
-    if near_misses:
-        for nm in near_misses:
-            claimed_by_other_type = any(
-                e.type != nm.type and e.start < nm.end and nm.start < e.end for e in entities
-            )
-            if claimed_by_other_type:
-                continue
-            _emit(
-                "near_miss_format",
-                region=(nm.start, nm.end),
-                data={"original_type": nm.type, "text": nm.text},
-            )
+    for nm in near_misses or ():
+        claimed_by_other_type = any(
+            e.type != nm.type and e.start < nm.end and nm.start < e.end for e in entities
+        )
+        if claimed_by_other_type:
+            continue
+        _emit(
+            "near_miss_format",
+            region=(nm.start, nm.end),
+            data={"original_type": nm.type, "text": nm.text},
+        )
 
     if not self_refs:
         intent = "narrative" if others else "neutral"

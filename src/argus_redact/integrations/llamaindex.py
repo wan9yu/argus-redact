@@ -25,6 +25,7 @@ from __future__ import annotations
 from argus_redact import redact
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.exceptions import SessionStateError
+from argus_redact.glue.guarded_restore import guarded_restore
 
 
 class RedactTransform:
@@ -106,7 +107,6 @@ class RestoreTransform:
                 "a key. Call redact_t(...) first, or check .reset() was not "
                 "called between them."
             )
-        from argus_redact.glue.guarded_restore import guarded_restore
 
         return guarded_restore(
             text,

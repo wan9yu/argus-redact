@@ -37,6 +37,7 @@ import threading
 from argus_redact import redact
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.exceptions import SessionStateError
+from argus_redact.glue.guarded_restore import guarded_restore
 
 
 class RedactRunnable:
@@ -131,7 +132,6 @@ class RestoreRunnable:
                 "produced a key. Call redact_r.invoke(...) first, or check that "
                 ".reset() was not called between them."
             )
-        from argus_redact.glue.guarded_restore import guarded_restore
 
         return guarded_restore(
             text,

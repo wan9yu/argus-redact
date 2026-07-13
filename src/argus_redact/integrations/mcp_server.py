@@ -26,7 +26,6 @@ from mcp.server.fastmcp import FastMCP
 from argus_redact import RedactReport, __version__, redact
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.glue.guarded_restore import guarded_restore
-from argus_redact.pure.security_events import warn_security_events
 
 mcp = FastMCP("argus-redact")
 
@@ -36,17 +35,14 @@ mcp = FastMCP("argus-redact")
 # no per-session binding, a leaked token could be replayed indefinitely.
 # Per-session binding is a v0.7+ candidate (requires FastMCP API survey).
 #
-# Each entry now holds (key, anchor, redacted, timestamp) — the anchor carries
-# the per-call nonce and scope for guard-by-default restore (Theme A); the
-# redacted prompt lets restore run the supplementary injection heuristic (H).
 _TOKEN_TTL_SECONDS = 5 * 60
 _TOKEN_STORE_MAX = 100
-# OrderedDict values: tuple[dict, Anchor | None, str, float]
-#   (key, anchor, redacted_prompt, created_at)
-# The redacted prompt is retained so restore() can run the supplementary injection
-# heuristic (H) — it holds PSEUDONYMS ONLY. The store already retains `key`, which
-# maps pseudonym -> ORIGINAL, so this is strictly less sensitive than what is
-# already here, under the same TTL / LRU bound.
+# Each entry holds (key, anchor, redacted_prompt, created_at). The anchor carries the
+# per-call nonce and scope for guard-by-default restore (Theme A); the redacted prompt
+# lets restore run the supplementary injection heuristic (H) — it holds PSEUDONYMS
+# ONLY. The store already retains `key`, which maps pseudonym -> ORIGINAL, so retaining
+# it is strictly less sensitive than what is already here, under the same TTL / LRU
+# bound.
 _TOKEN_STORE: "OrderedDict[str, tuple[dict, object, str, float]]" = OrderedDict()
 
 
@@ -194,16 +190,22 @@ async def restore_text(
     # ValueError raises above) already surface a hard failure to the MCP
     # protocol caller, so a suspected injection or a failed guard is not
     # swallowed into a normal-looking JSON payload.
+    # detailed=True for the structured `security_events` field in the JSON payload
+    # below; warn=True because this tool wants the human-facing warning TOO, and
+    # detailed=True would otherwise suppress it (guarded_restore's default is "warn
+    # iff not detailed"). Surfacing stays guarded_restore's decision — one warning
+    # over the merged (P/S + H) list, not a second one re-derived here.
     restored, details = guarded_restore(
-        text, key_dict, redacted=redacted, anchor=anchor, guard=True, strict=strict, detailed=True
+        text,
+        key_dict,
+        redacted=redacted,
+        anchor=anchor,
+        guard=True,
+        strict=strict,
+        detailed=True,
+        warn=True,
     )
     events = details.get("security_events", [])
-    # guarded_restore's detailed=True path hands back the merged (P/S + H) events
-    # without warning at all — the caller owns that decision (see guarded_restore's
-    # docstring). This tool always uses detailed=True (it needs the structured
-    # `security_events` field for the JSON payload below), so nothing else in the
-    # chain will warn: surface the whole merged list here, once.
-    warn_security_events(events)
 
     payload: dict = {"restored": restored}
     if events:

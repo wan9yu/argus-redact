@@ -15,7 +15,7 @@ import warnings
 import pytest
 
 from argus_redact import make_anchor, redact
-from argus_redact.pure.replacer import SecurityWarning
+from argus_redact.exceptions import SecurityWarning
 from argus_redact.pure.restore import RestoreGuardError
 
 _PHONE = "13912345678"
@@ -183,7 +183,7 @@ def test_h_is_advisory_by_default_everywhere(name):
         assert _PHONE in out
 
 
-@pytest.mark.parametrize("name", ["presidio", "fastapi", "langchain", "llamaindex", "mcp"])
+@pytest.mark.parametrize("name", sorted(ADAPTERS))
 def test_strict_fails_closed_everywhere(name):
     call, injected = ADAPTERS[name]()
     with pytest.raises(RestoreGuardError) as ei:

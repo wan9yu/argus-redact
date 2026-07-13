@@ -154,8 +154,8 @@ def test_restore_runs_the_h_check():
     pytest.importorskip("mcp", reason="mcp not installed")
     import asyncio
 
+    from argus_redact.exceptions import SecurityWarning
     from argus_redact.integrations import mcp_server
-    from argus_redact.pure.replacer import SecurityWarning
 
     mcp_server._TOKEN_STORE.clear()
 

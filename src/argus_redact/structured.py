@@ -8,7 +8,7 @@ import warnings
 from typing import Any
 
 from argus_redact import redact, restore
-from argus_redact.pure.replacer import SecurityWarning
+from argus_redact.exceptions import SecurityWarning
 
 
 def _parse_paths(paths: list[str]) -> list[list[str]]:

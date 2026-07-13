@@ -48,18 +48,31 @@ def _strip_nonce(text: str, nonce: str) -> str:
     return out.rstrip()
 
 
-def _token_present(pseudonym: str, text: str) -> bool:
-    """True if ``pseudonym`` appears in ``text`` as a whole token, not merely
-    as a substring of a longer pseudonym-shaped run (e.g. ``P-1`` embedded in
-    ``P-10``). Generated pseudonyms are ``<PREFIX>-<digits>`` runs of letters,
-    digits, underscores and hyphens, so plain ``\\b`` word boundaries are not
-    enough — a hyphen is not a word character, but must still not count as a
-    boundary between two pseudonym-shaped tokens. Used only to size the
-    ``out_of_scope_pseudonym`` security event's ``count``; it never changes
-    which pseudonyms are withheld (that is structural, driven by the scoped
-    key filter above, not by this check)."""
-    pattern = re.compile(r"(?<![A-Za-z0-9_-])" + re.escape(pseudonym) + r"(?![A-Za-z0-9_-])")
-    return pattern.search(text) is not None
+def _tokens_present(pseudonyms: list[str], text: str) -> list[str]:
+    """The ``pseudonyms`` that appear in ``text`` as whole tokens (sorted).
+
+    A match must not be merely a substring of a longer pseudonym-shaped run
+    (e.g. ``P-1`` embedded in ``P-10``). Generated pseudonyms are
+    ``<PREFIX>-<digits>`` runs of letters, digits, underscores and hyphens, so
+    plain ``\\b`` word boundaries are not enough — a hyphen is not a word
+    character, but must still not count as a boundary between two
+    pseudonym-shaped tokens.
+
+    ONE alternation scan over the whole set, longest-first (so ``P-10`` wins
+    over ``P-1`` at the same offset), rather than a full-text scan per
+    pseudonym: the per-key version was O(keys x len(text)) and dominated the
+    guarded path on realistic key sizes.
+
+    Used only to size the ``out_of_scope_pseudonym`` security event's ``count``
+    and ``detail``; it never changes which pseudonyms are withheld (that is
+    structural, driven by the scoped key filter in ``restore``, not by this
+    check).
+    """
+    if not pseudonyms:
+        return []
+    alternation = "|".join(re.escape(p) for p in sorted(pseudonyms, key=len, reverse=True))
+    pattern = re.compile(r"(?<![A-Za-z0-9_-])(?:" + alternation + r")(?![A-Za-z0-9_-])")
+    return sorted(set(pattern.findall(text)))
 
 
 def check_restore_safety(
@@ -102,6 +115,7 @@ def restore(
     anchor: object | None = None,
     strict: bool = False,
     detailed: bool = False,
+    _warn: bool = True,
 ) -> str | tuple[str, dict]:
     """Replace pseudonyms with originals using the key.
 
@@ -133,6 +147,12 @@ def restore(
         anchor: Anchor instance produced by make_anchor(); carries nonce + scope.
         strict: when True and guard=True, raises RestoreGuardError on any security event.
         detailed: when True, returns (result_text, {"security_events": [...]}) tuple.
+
+    ``_warn`` is internal: False suppresses the SecurityWarning for this call, for a
+    wrapper that will surface the same events itself (``glue.guarded_restore`` merges
+    them with its own H events and warns ONCE over the merged list). It never
+    suppresses the ``guard=None`` DeprecationWarning — that one is about the CALLER's
+    code and no wrapper re-emits it.
     """
     if not isinstance(key, Mapping):
         raise TypeError(f"key must be a Mapping, got {type(key).__name__}")
@@ -160,13 +180,13 @@ def restore(
     # (P) Provenance check: anchor must exist and its nonce must appear in text
     if anchor is None:
         events.append(security_event(GUARD_NO_ANCHOR, count=len(key), detail="no anchor provided"))
-        return _fail_closed(text, events, strict=strict, detailed=detailed)
+        return _fail_closed(text, events, strict=strict, detailed=detailed, warn=_warn)
 
     if anchor.nonce not in text:
         events.append(
             security_event(PROVENANCE_FAILED, count=len(key), detail="nonce absent from response")
         )
-        return _fail_closed(text, events, strict=strict, detailed=detailed)
+        return _fail_closed(text, events, strict=strict, detailed=detailed, warn=_warn)
 
     # Provenance holds. The token has done its job — strip it so it never reaches
     # the caller as part of the restored plaintext (it is not a pseudonym, so the
@@ -177,18 +197,16 @@ def restore(
     key_dict = dict(key) if not isinstance(key, dict) else key
     scoped = {k: v for k, v in key_dict.items() if k in anchor.scope}
 
-    # Detect out-of-scope pseudonyms that appear in text. Token-boundary match
-    # (not substring) — see `_token_present` — so a pseudonym that happens to
-    # be a substring of another one (e.g. "P-1" inside "P-10") is not
-    # over-counted. Cosmetic only: it sizes the event's `count`, never which
-    # pseudonyms get withheld (that is `scoped` above).
-    out_of_scope_hits = [k for k in key_dict if k not in anchor.scope and _token_present(k, text)]
+    # Detect out-of-scope pseudonyms that appear in text — see `_tokens_present`.
+    # Cosmetic only: it sizes the event's `count`/`detail`, never which pseudonyms
+    # get withheld (that is `scoped` above).
+    out_of_scope_hits = _tokens_present([k for k in key_dict if k not in anchor.scope], text)
     if out_of_scope_hits:
         events.append(
             security_event(
                 OUT_OF_SCOPE_PSEUDONYM,
                 count=len(out_of_scope_hits),
-                detail=f"withheld: {', '.join(sorted(out_of_scope_hits))}",
+                detail=f"withheld: {', '.join(out_of_scope_hits)}",  # already sorted
             )
         )
 
@@ -198,14 +216,11 @@ def restore(
     if strict and events:
         raise RestoreGuardError(events)
 
-    if events:
+    if events and _warn:
         # Partial restore: in-scope codes were substituted, out-of-scope ones were
         # withheld. Without this the caller gets a plain str and no hint that some
         # pseudonyms were deliberately left unresolved.
-        # stacklevel is auto-detected (see security_events._auto_stacklevel) so it
-        # is correct whether this is reached via glue.restore, guarded_restore, an
-        # integration, or any future wrapper — a hardcoded number here was tuned to
-        # one call depth and broke the moment a new wrapper was added (v0.7.19).
+        # stacklevel auto-detected — see security_events._auto_stacklevel.
         warn_security_events(events)
 
     if detailed:
@@ -219,6 +234,7 @@ def _fail_closed(
     *,
     strict: bool,
     detailed: bool,
+    warn: bool = True,
 ) -> str | tuple[str, dict]:
     """Return un-restored text with security events; warn; raise if strict."""
     if strict:
@@ -226,12 +242,9 @@ def _fail_closed(
     # The returned str is shape-identical to a successful restore, so without this
     # the caller cannot tell a fail-closed apart from a clean round-trip. Documented
     # in docs/security-model.md ("emits a UserWarning") — this is that warning.
-    # stacklevel is auto-detected (see security_events._auto_stacklevel): this path
-    # is one frame deeper than the direct warn_security_events call in restore()
-    # above, and auto-detection walks past however many wrapper frames (restore,
-    # glue.restore, guarded_restore, integrations, ...) sit between here and the
-    # caller's own code, rather than hardcoding a number tuned to one of them.
-    warn_security_events(events)
+    # stacklevel auto-detected — see security_events._auto_stacklevel.
+    if warn:
+        warn_security_events(events)
     if detailed:
         return text, {"security_events": events}
     return text

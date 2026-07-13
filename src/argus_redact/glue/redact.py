@@ -13,7 +13,7 @@ from pathlib import Path
 
 from argus_redact._safe_io import safe_read_text as _safe_read_text
 from argus_redact._types import PatternMatch
-from argus_redact.exceptions import LayerUnavailableError
+from argus_redact.exceptions import LayerUnavailableError, SecurityWarning
 from argus_redact.lang._loader import core_patterns
 from argus_redact.layers import LAYER_NER, LAYER_SEMANTIC
 from argus_redact.pure.grammar import normalize_grammar_en
@@ -27,7 +27,7 @@ from argus_redact.pure.hints import (
 from argus_redact.pure.lang_detect import detect_languages
 from argus_redact.pure.merger import merge_entities
 from argus_redact.pure.normalize import MAX_INPUT_SIZE
-from argus_redact.pure.replacer import SecurityWarning, replace
+from argus_redact.pure.replacer import replace
 from argus_redact.telemetry import PerfRecord, emit, get_perf_hook
 
 logger = logging.getLogger(__name__)

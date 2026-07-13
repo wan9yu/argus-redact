@@ -17,16 +17,18 @@ path itself, but the H check (`check_restore_safety`) needs a resolved dict too 
 the path is resolved ONCE here, at the top, and the same dict is handed to both the H
 check and the restore call. This keeps H working for key-file callers instead of
 silently skipping it for a whole class of caller.
+
+Having resolved the key, we then call `pure.restore.restore` DIRECTLY rather than the
+glue `restore()`: the only thing the glue layer adds is that key-file load, which is
+already done by the time we get here. Going direct also keeps the internal `_warn`
+opt-out (below) off the frozen Layer-1 public signature, where it does not belong.
 """
 
 from __future__ import annotations
 
-import warnings
-
-from argus_redact.exceptions import SecurityWarning
 from argus_redact.glue.restore import _load_key_file
-from argus_redact.glue.restore import restore as _restore
 from argus_redact.pure.restore import check_restore_safety
+from argus_redact.pure.restore import restore as _restore
 from argus_redact.pure.security_events import (
     INJECTION_SUSPECTED,
     raise_if_strict,
@@ -44,6 +46,7 @@ def guarded_restore(
     guard: bool | None = True,
     strict: bool = False,
     detailed: bool = False,
+    warn: bool | None = None,
 ) -> "str | tuple[str, dict]":
     """Restore pseudonyms with the full guard flow.
 
@@ -57,8 +60,13 @@ def guarded_restore(
         strict: raise RestoreGuardError instead of returning — covers BOTH the
             deterministic guard and a suspected injection. Opt-in fail-closed.
         detailed: return (text, {"security_events": [...]}) instead of just text.
-            On the default path the events are surfaced as a SecurityWarning rather
-            than discarded.
+        warn: whether to emit the SecurityWarning. None (default) means "warn iff
+            NOT detailed" — a detailed caller reads the structured events, a plain
+            caller would otherwise get no signal at all. Pass True alongside
+            detailed=True when a caller needs BOTH (the MCP tool serialises the
+            events into its JSON payload AND wants the human-facing warning).
+            Surfacing is decided HERE, never re-implemented by an integration —
+            that split ownership is what produced D1.
     """
     key_dict = _load_key_file(key) if isinstance(key, str) else key
 
@@ -74,31 +82,29 @@ def guarded_restore(
     # substituted — not even into a local we then throw away.
     raise_if_strict(h_events, strict)
 
-    # restore() would otherwise warn about its own (P/S) events right here, from a
+    # _warn=False: restore() would otherwise warn about its own (P/S) events from a
     # DIFFERENT, disjoint event list than h_events above. Warning twice — once per
     # list — makes warn_security_events' mixed (withheld + advisory) branch
     # unreachable, and worse: on a fail-closed P/S trip plus an advisory H hit, the
     # second warning FALSELY claimed the restore proceeded when nothing was in fact
-    # substituted (see the _WITHHELD_CODES comment in pure/security_events.py). Catch
-    # restore()'s own SecurityWarning here and fold its events into ONE combined
-    # warning below; re-emit anything else (notably the guard=None DeprecationWarning)
-    # exactly as raised, so only the SecurityWarning is swallowed.
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        result_text, details = _restore(
-            text, key_dict, guard=guard, anchor=anchor, strict=strict, detailed=True
-        )
-    for w in caught:
-        if not issubclass(w.category, SecurityWarning):
-            warnings.warn_explicit(w.message, w.category, w.filename, w.lineno)
+    # substituted (see the _WITHHELD_CODES comment in pure/security_events.py). Its
+    # events come back through detailed=True instead and are folded into ONE combined
+    # warning below. _warn=False does NOT suppress the guard=None DeprecationWarning,
+    # which is about the caller's own code and propagates untouched.
+    result_text, details = _restore(
+        text, key_dict, guard=guard, anchor=anchor, strict=strict, detailed=True, _warn=False
+    )
 
     all_events = h_events + details.get("security_events", [])
 
+    if warn is None:
+        warn = not detailed
+    if warn:
+        # ONE warning over the merged events, so warn_security_events' three-way
+        # (withheld-only / advisory-only / mixed) branch describes what actually
+        # happened. Never dropped.
+        warn_security_events(all_events)
+
     if detailed:
         return result_text, {"security_events": all_events}
-
-    # ONE warning over the merged events, so warn_security_events' three-way
-    # (withheld-only / advisory-only / mixed) branch describes what actually
-    # happened. Never dropped.
-    warn_security_events(all_events)
     return result_text

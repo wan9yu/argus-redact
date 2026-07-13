@@ -26,6 +26,7 @@ Usage (endpoint-level) with guard-by-default restore:
 from __future__ import annotations
 
 from argus_redact import redact
+from argus_redact.glue.guarded_restore import guarded_restore
 
 
 def _validate_message(i: int, msg: object) -> None:
@@ -141,31 +142,21 @@ def restore_body(
             return response, {"security_events": []}
         return response
 
-    from argus_redact.glue.guarded_restore import guarded_restore
+    # Bound once: the str and dict branches below differ ONLY in which string they
+    # restore and how the result is repackaged. Two near-identical call sites meant a
+    # new guarded_restore kwarg had to be threaded twice — the copy-paste drift this
+    # release exists to remove.
+    guard_kwargs = dict(
+        redacted=redacted, anchor=anchor, guard=guard, strict=strict, detailed=detailed
+    )
 
     if isinstance(response, str):
-        return guarded_restore(
-            response,
-            key,
-            redacted=redacted,
-            anchor=anchor,
-            guard=guard,
-            strict=strict,
-            detailed=detailed,
-        )
+        return guarded_restore(response, key, **guard_kwargs)
 
     if isinstance(response, dict) and field and field in response:
         if isinstance(response[field], str):
             result = dict(response)
-            out = guarded_restore(
-                response[field],
-                key,
-                redacted=redacted,
-                anchor=anchor,
-                guard=guard,
-                strict=strict,
-                detailed=detailed,
-            )
+            out = guarded_restore(response[field], key, **guard_kwargs)
             if detailed:
                 result[field], details = out
                 return result, details

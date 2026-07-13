@@ -12,8 +12,8 @@ import warnings
 import pytest
 
 from argus_redact import make_anchor, redact
+from argus_redact.exceptions import SecurityWarning
 from argus_redact.glue.guarded_restore import guarded_restore
-from argus_redact.pure.replacer import SecurityWarning
 from argus_redact.pure.restore import RestoreGuardError
 
 _PHONE = "13912345678"
