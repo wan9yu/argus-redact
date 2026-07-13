@@ -99,3 +99,12 @@ README/benchmark-report corpus sizes (en, same machine/Python): short 17 chars
 22.2 ms / benchmark-report long 4.84 ms; README short 13,036 docs/s /
 benchmark-report short 36,353 docs/s); both were stale and have been reconciled
 to these measured values.
+
+**Superseded (v0.7.20).** Those doc-corpus figures were real measurements, but the
+17-char / 770-char / 10K-char corpus they were taken on is not a committed harness —
+a reader running `bench_l1_rust_vs_python.py` or `perf_profile.py` gets different
+numbers, because those measure 141 B / 846 B / 8.5 KB documents. A published number
+that no in-repo harness reproduces is a number we cannot stand behind, so the README
+and benchmark-report now publish the `perf_profile` workloads directly, with the input
+sizes stated. The reconciliation above is kept as the record of why the older figures
+differed, not as the source for any current claim.

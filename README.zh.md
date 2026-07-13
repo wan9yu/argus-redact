@@ -113,7 +113,7 @@ Unicode 加固：NFKC 规范化、零宽字符剥离、西里尔/希腊伪装字
 
 核心引擎（regex 匹配、实体合并、还原、假名生成）用 **Rust + PyO3** 写，追求极致性能；Python 负责编排、NER 模型、LLM 集成。
 
-**63 类 PII，覆盖 3 层** — 从电话号码到医疗诊断、宗教信仰、政治立场。默认 `mode="fast"`（仅 L1，零依赖，亚毫秒）；可选 `mode="ner"`（+ NER 模型）→ `mode="auto"`（全部 3 层）。
+**63 类 PII，覆盖 3 层**（完整清单见[类型目录](docs/pii-types.md)，由注册表自动生成）— 从电话号码到医疗诊断、宗教信仰、政治立场。默认 `mode="fast"`（仅 L1，零依赖，亚毫秒）；可选 `mode="ner"`（+ NER 模型）→ `mode="auto"`（全部 3 层）。
 
 **部署位置很重要** — 三种 mode 的延迟差三个数量级，按你在请求路径中的位置选：
 
@@ -141,13 +141,17 @@ Unicode 加固：NFKC 规范化、零宽字符剥离、西里尔/希腊伪装字
 
 ## 性能
 
-Rust 核心 (PyO3) — M1 Max 上 `mode="fast"`：
+Rust 核心 (PyO3)，`mode="fast"` — `redact()` p50（500 次迭代），Apple M1 Max，
+Python 3.11。复现命令：`python tests/benchmark/perf_profile.py`
 
-| 文本 | redact() | restore() | 吞吐 |
-|------|:--------:|:---------:|:----:|
-| 短 (17 字) | 0.07ms | 0.04ms | 13,036 docs/sec |
-| 中 (770 字) | 1.00ms | 0.05ms | 1,031 docs/sec |
-| 长 (10K 字) | 22.2ms | 0.05ms | 45 docs/sec |
+| 文档 | en | zh |
+|------|:--:|:--:|
+| 短 (141 B en / 175 B zh) | 0.22 ms · ~4,500 docs/sec | 0.34 ms · ~2,900 docs/sec |
+| ~1 KB (846 B / 1.4 KB) | 0.97 ms · ~1,030 docs/sec | 2.03 ms · ~490 docs/sec |
+| 长 (8.5 KB / 14 KB) | 9.4 ms · ~106 docs/sec | 20.3 ms · ~49 docs/sec |
+
+吞吐高度依赖文档大小与语种，因此这里标注具体的输入尺寸，而不给单一的头条数字。
+提交的运行结果：[`perf_profile_0.7.16.json`](tests/benchmark/results/perf_profile_0.7.16.json)。
 
 预编译 wheel 覆盖：Linux x86_64 (glibc + musl) / Linux aarch64 (含树莓派) / macOS (Apple Silicon + Intel) / Windows x64，Python 3.10–3.13，无需 Rust 工具链即可安装。
 
@@ -155,11 +159,11 @@ Rust 核心 (PyO3) — M1 Max 上 `mode="fast"`：
 
 | Mode | 精确率 | 召回率 | F1 |
 |---|---|---|---|
-| fast (regex)          | 78.3% | 30.3% | 43.7% |
-| ner (+ spaCy)         | 72.8% | 41.4% | 52.8% |
+| fast (regex)          | 81.6% | 31.9% | 45.8% |
+| ner (+ spaCy)         | 74.8% | 42.9% | 54.5% |
 | auto (+ Ollama 32B)   | _本次跳过_ | | |
 
-_ai4privacy en，500 样本，v0.6.6。`auto` 模式在维护者硬件上跳过 — 完整矩阵与复现命令见 [benchmark-report.md](docs/benchmark-report.md)。_
+_ai4privacy en，500 样本，v0.7.16 run（结果 JSON：`tests/benchmark/results/ai4privacy_0.7.16.json`）。`auto` 模式在维护者硬件上跳过 — 完整矩阵与复现命令见 [benchmark-report.md](docs/benchmark-report.md)。_
 
 `fast` 模式设计上高精确率 / 低召回率 — 只对能校验格式的实体（Luhn、MOD11-2 等）报出。召回率由 `ner` 和 `auto` 以延迟为代价提升。按部署形态选 mode（见上方*部署位置*）。[完整基准 →](docs/benchmark-report.md) | [性能详情 →](docs/performance.md)
 
@@ -167,7 +171,7 @@ _ai4privacy en，500 样本，v0.6.6。`auto` 模式在维护者硬件上跳过 
 
 | 维度 | 当前 (v0.7.20) | 下一里程碑 |
 |-----------|:----------------:|:---:|
-| **保护** | 63 类 PII，L1-L3。**在 [PRvL](docs/prvl-standard.md) 参考套件中，`default` profile 在 GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.5 上 PII 泄漏率 0%**。`pseudonym-llm` profile：四个模型中三个 100%；**Claude-Opus-4.5 上 96% / Bronze**（单格重滚）。不保证对抗性输入 — 完整矩阵见 prvl-standard.md。8 语言跨层 hints（zh/en/ja/ko/de/uk/in/br）。SHAKE-256 派生 + 全盐熵 + faker 身份通过守卫。状态导出默认省略 salt；HTTP server 拒绝无认证启动；CLI 写入 O_NOFOLLOW + key 文件 mode 0600；MCP token 存储 TTL+LRU (v0.6.2)。Windows CI + 属性测试不变量 + 变异测试核心 (v0.6.3) + 性能预算 CI 门控 (v0.6.4) + 集成层会话隔离 (v0.6.6) + README pinned-to-doctest + 版本同步 CI 守卫 (v0.6.6) + compose 命名空间 + 纯层纯净守卫 (v0.6.7) + seed→salt API rename + PIITypeDef SSOT + Presidio bridge through public redact + 3 new types (v0.6.8) + compose 辅助函数 (v0.6.9) + Layer 1 冻结守卫/KDF replay 向量/死代码精简/manylinux 摘要锁定 (v0.6.10) + 适配器编写接口（compose.register_pii_type / PIITypeDef / PatternMatch）+ Layer 2 签名快照 (v0.6.11) + 港澳通行证/公积金 zh L1 覆盖 (v0.6.12)。**v0.7.x — 100% Rust 核心 SSOT**：argus-redact-core crate + crates.io 发布，patterns/校验器/归一化/替换+还原/fakers/人名打分 + 完整 L1 redact/restore 引擎迁入 Rust (v0.7.0–v0.7.8) + fail-closed 加固与检测正确性 (v0.7.9–v0.7.10) + 浏览器内 **wasm** 构建 (v0.7.11)。**v0.7.12 — 准标识符检测广度**：证据门控的中文裸地区、职业、医疗病症/过敏、以及新类型 **hobby** 检测（经由共享的 evidence_detector 框架），加上重识别评测（PRvL+ X 轴）；移除未发布的 generalize 策略 | 对抗性测试 |
+| **保护** | 63 类 PII，L1-L3。在 [PRvL](docs/prvl-standard.md) 参考套件中（24 个用例，每个模型 42 处 PII）：**`default` profile 在四个模型上均无泄漏** —— GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.6。可逆的 profile 并不干净：`pseudonym` 在 Claude-Opus-4.5 和 GLM-4.6 上各泄漏 1/42，`realistic` 在 Claude-Opus-4.5 上泄漏 1/42。参考套件不等于对抗性输入下的保证 —— 完整矩阵见 prvl-standard.md。8 语言跨层 hints（zh/en/ja/ko/de/uk/in/br）。SHAKE-256 派生 + 全盐熵 + faker 身份通过守卫。状态导出默认省略 salt；HTTP server 拒绝无认证启动；CLI 写入 O_NOFOLLOW + key 文件 mode 0600；MCP token 存储 TTL+LRU (v0.6.2)。Windows CI + 属性测试不变量 + 变异测试核心 (v0.6.3) + 性能预算 CI 门控 (v0.6.4) + 集成层会话隔离 (v0.6.6) + README pinned-to-doctest + 版本同步 CI 守卫 (v0.6.6) + compose 命名空间 + 纯层纯净守卫 (v0.6.7) + seed→salt API rename + PIITypeDef SSOT + Presidio bridge through public redact + 3 new types (v0.6.8) + compose 辅助函数 (v0.6.9) + Layer 1 冻结守卫/KDF replay 向量/死代码精简/manylinux 摘要锁定 (v0.6.10) + 适配器编写接口（compose.register_pii_type / PIITypeDef / PatternMatch）+ Layer 2 签名快照 (v0.6.11) + 港澳通行证/公积金 zh L1 覆盖 (v0.6.12)。**v0.7.x — 100% Rust 核心 SSOT**：argus-redact-core crate + crates.io 发布，patterns/校验器/归一化/替换+还原/fakers/人名打分 + 完整 L1 redact/restore 引擎迁入 Rust (v0.7.0–v0.7.8) + fail-closed 加固与检测正确性 (v0.7.9–v0.7.10) + 浏览器内 **wasm** 构建 (v0.7.11)。**v0.7.12 — 准标识符检测广度**：证据门控的中文裸地区、职业、医疗病症/过敏、以及新类型 **hobby** 检测（经由共享的 evidence_detector 框架），加上重识别评测（PRvL+ X 轴）；移除未发布的 generalize 策略。**v0.7.18–v0.7.20 — 守卫式还原**：`restore()` 增加确定性守卫（每次调用的溯源 nonce + 作用域绑定），关闭"LLM 输出里被注入的假名会被静默还原"这一窗口 (v0.7.18)；修复真实泄漏 —— 在 `mode="fast"` 下，一个 Luhn 合法的银行卡号在八个语言包中的六个（ja/ko/de/uk/in/br，即自身不带卡号 pattern 的语言包）会原样透传，现已改为不依赖周边文字语种即可检出 (v0.7.19)；整个流程收敛为一个公开的 `guarded_restore()`，五个集成层全部包装它 (v0.7.20)。`guard=True` 将在 v0.8.0 成为默认 | 对抗性测试 |
 | **可用** | PRvL U=100%。假名编码 + 真实模式（zh + en + RFC 共享）+ 按调用策略覆盖 + `keep` 策略（白名单）+ 可续流式会话 + 增量流式默认 + 跨语言别名还原（zh ↔ en） | 任务感知引导 |
 | **可逆** | PRvL R 按任务：引用 100%，提取 50%，创意 0%（设计如此）。跨语言 LLM 改写（`张三` → `Zhang San`）通过 `result.aliases` + `restore(text, key, aliases=...)` 自动还原 | 任务感知引导 |
 | **合规** | 满足 PIPL Art.28 敏感 PII 范畴，风险评估 + profiles | PIPL/GDPR/HIPAA（副产品） |
@@ -277,8 +281,9 @@ argus-redact 是 PII **数据最小化辅助工具**，不是匿名化或合规�
 - **L2 NER** 是统计推断；分布外文本（口语、错字、少数民族姓名）漏检率更高。
 - **不保证对抗性输入** — 攻击者可以构造规避检测的文本。
 - **不是 GDPR/PIPL 匿名化框架** — 匿名化是合规过程决策，不是单一库的输出。
+- **restore 是一次替换，不是一次鉴权。** 裸 `restore(text, key)` 会把原文替换进**任何**带有对应假名的文本 —— 包括攻击者诱导模型产出的回复。请用[守卫式还原](#安全)把一次 restore 绑定到产生该 key 的那次交互。
 
-**适合用 argus-redact**：LLM 流水线里需要 `redact() → LLM → restore()`，零 PII 跨过网络边界的可逆假名化。
+**适合用 argus-redact**：LLM 流水线里需要 `redact() → LLM → guarded_restore()`，零 PII 跨过网络边界的可逆假名化。
 
 **考虑替代品**：单向英文 PII 掩码 + 单次模型调用 → [OpenAI Privacy Filter](https://huggingface.co/openai/privacy-filter) 等基于模型的方案可能更适合。argus-redact 最强的地方是**可逆假名化 + 按消息独立 key**；中文支持最深（HanLP + 本土校验器），其他 7 种语言走 regex + spaCy NER。按工作负载选，不按排他性选。
 
@@ -297,6 +302,24 @@ argus-redact 是 PII **数据最小化辅助工具**，不是匿名化或合规�
 ## 安全
 
 PII 永不离开你的设备。按消息独立 key 防止跨请求画像。[完整安全模型 →](docs/security-model.md)
+
+**守卫式还原。** `guarded_restore()` 把一次 restore 绑定到产生该 key 的那次交互。两项确定性检查：回复必须回显本次调用的 nonce（**溯源**），且只替换本次调用产出的假名（**作用域**）。两者都 fail-closed —— 原样返回假名并发出 `SecurityWarning`，而不是把 PII 替换进一段被攻击者塑形的回复。此外还有一个注入启发式检查，默认仅告警。
+
+```python
+from argus_redact import redact, guarded_restore, make_anchor
+from argus_redact.compose import prompt_anchor
+
+redacted, key = redact("张三的电话是13812345678", names=["张三"], lang="zh")
+anchor = make_anchor(key)          # 本次调用的 nonce + 假名作用域
+
+system = prompt_anchor(key, lang="zh", anchor=anchor)   # 要求模型回显该 nonce
+reply = call_llm(redacted, system=system)
+
+restored = guarded_restore(reply, key, redacted=redacted, anchor=anchor)
+# strict=True 则抛 RestoreGuardError，而不是返回未还原的文本
+```
+
+裸 `restore(text, key)` 仍可用，但会发出 `DeprecationWarning`；`guard=True` 将在 v0.8.0 成为默认。[守卫式还原 →](docs/security-model.md#guarded-restore)
 
 满足 **PIPL** · **GDPR** · **HIPAA** 技术要求 — 这是其隐私优先设计的副产品。[详情 →](docs/security-model.md#regulatory-context)
 

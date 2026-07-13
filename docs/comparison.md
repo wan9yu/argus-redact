@@ -88,17 +88,25 @@ neighbor does something we don't.
 
 ## Benchmark: ai4privacy/pii-masking-400k
 
-Tested on the [ai4privacy PII benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-400k) (English, first 500 samples, deterministic order, `salt=42`), measured on the v0.7.9 development HEAD:
+Tested on the [ai4privacy PII benchmark](https://huggingface.co/datasets/ai4privacy/pii-masking-400k) (English, first 500 samples, deterministic order, `salt=42`), measured on the v0.7.16 run:
 
-| Mode | Precision | Recall | F1 |
+| Tool / mode | Precision | Recall | F1 |
 |------|-----------|--------|-----|
-| `fast` (regex only) | 81.6% | 31.9% | 45.8% |
-| `ner` (regex + spaCy) | 74.9% | 42.8% | 54.4% |
-| `auto` (regex + NER + Ollama) | _skipped this run — see benchmark report_ | | |
+| argus-redact `fast` (regex only) | 81.6% | 31.9% | 45.8% |
+| argus-redact `ner` (regex + spaCy) | 74.8% | 42.9% | 54.5% |
+| argus-redact `auto` (regex + NER + Ollama) | _skipped this run — see benchmark report_ | | |
+| Presidio (out-of-the-box recognizers) | 80.9% | 49.1% | 61.1% |
 
-**Email detection (`fast`): P=99.6% R=99.6%**
+**Email detection (argus `fast`): P=99.6% R=99.6%**
 
-_Numbers match `tests/benchmark/results/ai4privacy_0.7.9.json`. See the
+**Presidio leads on this set** (61.1 F1 vs. 54.5) — it has stronger out-of-the-box
+English NER for the `location`/free-text spans that dominate ai4privacy. We report
+that plainly: argus-redact's advantage is not English detection breadth, it is the
+reversible, per-message-keyed round-trip (and Chinese coverage) on top of detection.
+
+_argus numbers: `tests/benchmark/results/ai4privacy_0.7.16.json`. Presidio numbers:
+`tests/benchmark/results/presidio_ai4privacy_0.7.16.json` (same dataset, same gold
+labels, same scoring — only the detector changes). See the
 [full benchmark report](benchmark-report.md) for the per-type breakdown and the
 `auto`-mode skip note._
 

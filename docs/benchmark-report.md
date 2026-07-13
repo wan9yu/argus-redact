@@ -1,14 +1,8 @@
 # Benchmark Report
 
-> **Currency** (per-row, mixed across two releases for v0.7.10):
-> - **English sets** (`ai4privacy`, `kaggle_piilo`) were **re-run on v0.7.10** —
->   this release's detection-correctness work is **English-only** (the
->   evidence-gated person detector), so the English benchmarks are the ones that
->   can move.
-> - **Chinese suite** (`pii_bench_zh`) is **carried from v0.7.9 unchanged** — it
->   was **not re-measured** for v0.7.10. v0.7.10's person work is EN-only, and the
->   container/self-reference merger fix produced **no golden change** on the
->   Chinese suite, so the v0.7.9 numbers stand as-is.
+> **Currency:** every detection number in this report is from the **v0.7.16** run —
+> all three datasets, both argus modes, and Presidio, on the same code and the same
+> gold labels.
 >
 > Runs are on Apple M1 Max, Python 3.11. There is **no random sampling** — each
 > run streams the first N rows of the dataset in deterministic order; `salt=42`
@@ -16,19 +10,27 @@
 > maintainer's machine (qwen2.5:32b inference exceeded the 60s read timeout —
 > rerun on a host with adequate memory, or use a smaller LLM like qwen2.5:7b).
 >
-> | Benchmark | Samples | Re-run for v0.7.10? | Reproduce | Pinned JSON |
-> |---|---|---|---|---|
-> | pii_bench_zh (zh, self-authored) | 1000 | No — carried from v0.7.9 | `python -m tests.benchmark pii_bench_zh --lang zh --mode fast,ner --limit 1000 --save tests/benchmark/results/pii_bench_zh_0.7.9.json` | `tests/benchmark/results/pii_bench_zh_0.7.9.json` |
-> | ai4privacy (en) | 500 | Yes | `python -m tests.benchmark ai4privacy --lang en --mode fast,ner --limit 500 --save tests/benchmark/results/ai4privacy_0.7.10.json` | `tests/benchmark/results/ai4privacy_0.7.10.json` |
-> | kaggle_piilo (en, real essays) | 500 | Yes | `python -m tests.benchmark kaggle_piilo --lang en --mode fast,ner --limit 500 --save tests/benchmark/results/kaggle_piilo_0.7.10.json` | `tests/benchmark/results/kaggle_piilo_0.7.10.json` |
+> | Benchmark | Samples | Reproduce | Pinned JSON |
+> |---|---|---|---|
+> | pii_bench_zh (zh, self-authored) | 1000 | `python -m tests.benchmark pii_bench_zh --lang zh --mode fast,ner --limit 1000 --save tests/benchmark/results/pii_bench_zh_0.7.16.json` | `tests/benchmark/results/pii_bench_zh_0.7.16.json` |
+> | ai4privacy (en) | 500 | `python -m tests.benchmark ai4privacy --lang en --mode fast,ner --limit 500 --save tests/benchmark/results/ai4privacy_0.7.16.json` | `tests/benchmark/results/ai4privacy_0.7.16.json` |
+> | kaggle_piilo (en, real essays) | 500 | `python -m tests.benchmark kaggle_piilo --lang en --mode fast,ner --limit 500 --save tests/benchmark/results/kaggle_piilo_0.7.16.json` | `tests/benchmark/results/kaggle_piilo_0.7.16.json` |
+> | Presidio, same three datasets | 500 / 500 / 1000 | `python tests/benchmark/presidio_eval.py <dataset> --limit N --save tests/benchmark/results/presidio_<dataset>_0.7.16.json` | `tests/benchmark/results/presidio_*_0.7.16.json` |
+>
+> The Presidio rows are measured by `tests/benchmark/presidio_eval.py`, which reuses
+> the **same dataset adapters, the same gold labels and the same scoring** as the
+> argus runs — only the detector changes, and Presidio runs with its **default
+> out-of-the-box recognizers** (no crippling, no custom config).
 >
 > The earlier `tests/benchmark/results/ai4privacy_0.6.6.json` is retained as a
-> historical baseline (it backs a schema-guard test); the report now pins the
-> v0.7.10 English result files and the carried-forward v0.7.9 Chinese file above.
+> historical baseline (it backs a schema-guard test); the report pins the v0.7.16
+> files above.
 
 ## Executive Summary
 
-argus-redact combines PII detection with **reversible encryption and per-message keys**. On checksum-validated structured PII (phone, ID, email, bank card, license plate), it shows high precision and recall on the self-authored Chinese suite (100.0% on each of those types in the measured run below). On Chinese PII specifically, it is **the only bundled tool here with out-of-the-box Chinese PII support** — Presidio ships no out-of-the-box Chinese recognizer (one can be added via custom recognizers).
+argus-redact combines PII detection with **reversible encryption and per-message keys**. On checksum-validated structured PII (phone, ID, email, bank card, license plate), it shows high precision and recall on the self-authored Chinese suite (100.0% on each of those types in the measured run below). Chinese is where its out-of-the-box detection leads: Presidio ships no Chinese NLP engine or recognizer, so out of the box it reaches 27.9 F1 on that suite against argus's 93.3 (`fast`) — a gap a Presidio user can close with a spaCy zh model and custom recognizers (§1).
+
+**On English, the honest result is the reverse:** Presidio's out-of-the-box recognizers beat argus on both English datasets in this report (ai4privacy 61.1 F1 vs 54.5; Kaggle PIILO 43.2 F1 vs 40.7). argus's case for an LLM pipeline rests on the reversible, per-message-keyed round-trip and Chinese coverage — not on English detection breadth.
 
 |  | argus-redact | Presidio |
 |--|:-----------:|:--------:|
@@ -49,15 +51,11 @@ above is a coverage claim, not a benchmarked-recall claim.
 
 ## 1. Chinese PII Detection (pii_bench_zh, 1000 samples)
 
-**No other open-source tool benchmarks against Chinese PII.** This dataset is
-**self-authored** (`wan9yu/pii-bench-zh`) — created by us to fill this gap, so
-treat it as an internal coverage check, not a third-party-audited score.
-Numbers below are measured on the v0.7.9 development HEAD (commit `f17ad8a`).
-
-> **Carried from v0.7.9 — not re-measured for v0.7.10.** This release's detection
-> work is English-only (the evidence-gated person detector); the
-> container/self-reference merger fix produced no golden change on the Chinese
-> suite. The v0.7.9 numbers below therefore stand unchanged.
+This dataset is **self-authored** (`wan9yu/pii-bench-zh`) — created by us to fill a
+gap (no widely-used open Chinese PII benchmark existed), so the scores below —
+argus **93.3 F1 (`fast`) / 93.7 F1 (`ner`)** — are from a **self-authored**
+benchmark: treat them as an internal coverage check, not a third-party-audited
+score. Measured on the v0.7.16 run.
 
 ### argus-redact, `mode="fast"` (regex + name scoring)
 
@@ -87,10 +85,26 @@ Numbers below are measured on the v0.7.9 development HEAD (commit `f17ad8a`).
 | person | 92.1% | 88.0% | 90.0% |
 | **Overall** | **94.7%** | **92.6%** | **93.7%** |
 
-_Result JSON: `tests/benchmark/results/pii_bench_zh_0.7.9.json`. `auto` (LLM)
+_Result JSON: `tests/benchmark/results/pii_bench_zh_0.7.16.json`. `auto` (LLM)
 mode skipped — see currency note._
 
-**Presidio:** ships no out-of-the-box Chinese recognizer (one can be added via a spaCy zh model + custom recognizers), so it is not benchmarked here.
+### Presidio on the same 1000 samples
+
+| Tool | Precision | Recall | F1 |
+|------|-----------|--------|-----|
+| Presidio (out-of-the-box) | 71.8% | 17.3% | 27.9% |
+
+_Result JSON: `tests/benchmark/results/presidio_pii_bench_zh_0.7.16.json`._
+
+**Read this row carefully — it is not "Presidio is bad at Chinese".** Presidio
+ships **no out-of-the-box Chinese NLP engine or recognizer**, so this run analyzes
+Chinese text with Presidio's **English** engine (`en_core_web_lg`). Only its
+*language-agnostic* recognizers fire — phone (90.5% P / 51.3% R) and email —
+while its spaCy NER contributes nothing, hence person recall 0% and the low
+overall recall. What this row measures is exactly the **out-of-the-box** gap: a
+Presidio user who wires up a spaCy zh model plus custom zh recognizers would score
+substantially higher, and Presidio is a toolkit designed for precisely that. It is
+not a claim that Presidio *cannot* do Chinese.
 
 **Key takeaway:** Checksum-validated structured PII (phone, email, ID, bank
 card, license plate) stays at 100% precision **and** 100% recall on this suite.
@@ -100,8 +114,8 @@ no NER model required: `fast` gets 86.5% recall at 91.5% precision, and HanLP in
 `ner` mode adds only ~1.5 points of recall (88.0%) for a ~30x speed cost, so
 `fast` is the recommended default.
 
-**Honest deltas vs. the previous (v0.7.8-era, never-pinned) numbers:** these
-v0.7.9 numbers are measured against the published `wan9yu/pii-bench-zh` rows and
+**Honest deltas vs. the previous (v0.7.8-era, never-pinned) numbers:** the
+numbers above are measured against the published `wan9yu/pii-bench-zh` rows and
 are lower than the prior unpinned table (which claimed 98.5% person recall,
 100% passport, 88.8% address, 97.4% overall F1). Those earlier figures were
 never committed as a result JSON and do not reproduce against the published
@@ -116,22 +130,26 @@ Limitations below.
 
 ## 2. English PII Detection — ai4privacy (400K dataset, 500 samples)
 
-Re-run on v0.7.10, first 500 English rows. ai4privacy has **no person type**, and
-v0.7.10's only detection change is the English person evidence-gate, so the
-`fast`-mode numbers are **identical to v0.7.9** (81.6 / 31.9 / 45.8). The
-`ner`-mode row moved by tenths between runs — that is **spaCy NER run jitter on
-the location type**, not a v0.7.10 code effect (the `fast` path, which is what
-v0.7.10 touches, is bit-identical).
+Measured on the v0.7.16 run, first 500 English rows. ai4privacy has **no person
+type** — the labelled types here are `email`, `credit_card`, `location` and
+`address`.
 
-### argus-redact
+### argus-redact vs. Presidio (same 500 samples, same gold, same scoring)
 
-| Mode | Precision | Recall | F1 |
+| Tool / mode | Precision | Recall | F1 |
 |---|---|---|---|
-| fast (regex)          | 81.6% | 31.9% | 45.8% |
-| ner (+ spaCy)         | 74.8% | 42.9% | 54.5% |
-| auto (+ Ollama 32B)   | _skipped this run — see currency note_ | | |
+| argus fast (regex)          | 81.6% | 31.9% | 45.8% |
+| argus ner (+ spaCy)         | 74.8% | 42.9% | 54.5% |
+| argus auto (+ Ollama 32B)   | _skipped this run — see currency note_ | | |
+| **Presidio** (out-of-the-box) | **80.9%** | **49.1%** | **61.1%** |
 
-_Result JSON: `tests/benchmark/results/ai4privacy_0.7.10.json`._
+**Presidio wins this dataset.** Its 61.1 F1 beats argus's best mode (54.5) on both
+recall (49.1% vs 42.9%) and F1, and it matches argus on precision. We state that
+up front rather than bury it: on English free text, Presidio's out-of-the-box
+recognizer fleet is stronger than argus's detection layers.
+
+_argus result JSON: `tests/benchmark/results/ai4privacy_0.7.16.json`. Presidio
+result JSON: `tests/benchmark/results/presidio_ai4privacy_0.7.16.json`._
 
 ### Per-type breakdown (same 500-sample run)
 
@@ -149,36 +167,40 @@ _Result JSON: `tests/benchmark/results/ai4privacy_0.7.10.json`._
 (`location` fast precision is 100% only because `fast` detects zero locations —
 no false positives, no true positives either.)
 
-**Analysis:** Email is essentially solved (99.6% precision/recall). Recall is
-limited overall because ai4privacy uses European formats (Dutch, German, French)
-that don't match the US-centric structured patterns, and the dataset's
-`address`/`STREET` spans don't align with the detector's address model (0%, and
-the `fast` false positives there pull precision down). The NER layer adds
-location recall (0% → 33.3%) at the cost of location precision (59.4%). The
-v0.7.9 Phase 2 person-detection work had already lifted both modes over the
-v0.7.8-era table (fast 78.3/30.3/43.7, ner 72.8/41.4/52.8); v0.7.10 leaves the
-`fast` numbers byte-identical (no person type to gate here) and the `ner` row
-moves only by spaCy run jitter on the location type — no regression on this
-dataset.
+**Analysis:** Email is essentially solved (99.6% precision/recall; Presidio gets
+100/100). Recall is limited overall because ai4privacy uses European formats
+(Dutch, German, French) that don't match the US-centric structured patterns, and
+the dataset's `address`/`STREET` spans don't align with the detector's address
+model (0%, and the `fast` false positives there pull precision down). The NER
+layer adds location recall (0% → 33.3%) at the cost of location precision
+(59.4%).
+
+**Where Presidio's lead comes from:** almost entirely the `location` type — 50.0%
+recall at 60.0% precision (F1 54.5) against argus `ner`'s 33.3% / 59.4% (F1 42.7).
+On the other types the two are close or tied: email 100/100 (Presidio) vs
+99.6/99.6 (argus `fast`), credit card 12.5% recall (Presidio, at 75.0% precision)
+vs 10.4% (argus `fast`, at 100% precision), and **both tools score 0% recall on
+the `address`/`STREET` spans** — that gap is not argus-specific.
 
 ---
 
 ## 3. Real Student Essays — Kaggle PIILO (7K dataset, 500 samples)
 
-This is the only benchmark with **real (non-synthetic) text**. argus-redact
-numbers are re-run on v0.7.10, which is where the English person evidence-gate
-shows up.
+This is the only benchmark with **real (non-synthetic) text**. All rows below are
+from the v0.7.16 run.
 
-| Tool | Mode | Precision | Recall | F1 | Speed |
-|------|------|-----------|--------|-----|-------|
-| argus-redact | fast | 73.1% | 28.2% | 40.7% | 16 docs/s |
-| argus-redact | ner | 24.6% | 45.0% | 31.8% | 2 docs/s |
-| **Presidio** | — | 35.1% | 47.1% | 40.2% | 5 docs/s |
+| Tool | Mode | Precision | Recall | F1 |
+|------|------|-----------|--------|-----|
+| argus-redact | fast | 73.1% | 28.2% | 40.7% |
+| argus-redact | ner | 27.4% | 45.0% | 34.1% |
+| **Presidio** | out-of-the-box | **36.7%** | **52.6%** | **43.2%** |
 
-_argus-redact result JSON: `tests/benchmark/results/kaggle_piilo_0.7.10.json`.
-The Presidio row was measured on an earlier run and is **not re-measured** for
-v0.7.10 — keep it as a scoped historical reference, not a head-to-head on
-identical code._
+_argus-redact result JSON: `tests/benchmark/results/kaggle_piilo_0.7.16.json`.
+Presidio result JSON: `tests/benchmark/results/presidio_kaggle_piilo_0.7.16.json`
+— same 500 samples, same gold, same scoring, only the detector changes._
+
+**Presidio wins this dataset too** (43.2 F1 vs argus's best 40.7). This benchmark
+is ~85% person names, which is Presidio's strongest out-of-the-box axis.
 
 ### Per-type breakdown (argus-redact, same 500-sample run)
 
@@ -187,31 +209,32 @@ identical code._
 | email | fast | 100.0% | 100.0% | 100.0% |
 | email | ner | 100.0% | 100.0% | 100.0% |
 | person | fast | 71.6% | 29.8% | 42.1% |
-| person | ner | 23.5% | 49.7% | 31.9% |
+| person | ner | 26.2% | 49.7% | 34.3% |
 | phone | fast/ner | 33.3% | 33.3% | 33.3% |
 | id_number | fast/ner | 100.0% | 0.0% | 0.0% |
 | url | fast/ner | 100.0% | 0.0% | 0.0% |
 
-**Analysis:** On this dataset, person name detection dominates (85%+ of entities
-are names), so the v0.7.9 Phase 2 recall work moves the headline numbers the
-most — and the tradeoff is visible in both directions:
+**Analysis:** On this dataset person-name detection dominates (85%+ of entities
+are names), so the person row *is* the headline, and the precision/recall tradeoff
+between the two argus modes is stark:
 
-- **`fast` recall jumped 2.9% → 29.8%** (and F1 5.6% → 41.6%) thanks to the
-  unicode-aware tokenizer and grown surname pools picking up many more student
-  names without an NER model.
-- **`fast` precision dropped 90.0% → 68.9%.** This is a real regression to
-  report plainly: broader name detection on free-form essay text adds false
-  positives (person FP went up to 81 in `fast`). The net F1 still improves
-  because the recall gain dominates, but the precision cost is genuine on
-  noisy English prose.
-- **`ner` mode** trades precision hard for recall (person precision 24.0% at
-  51.6% recall) — spaCy NER over-fires on capitalized non-name tokens in essay
-  text. On this dataset `fast` is the better-balanced mode despite lower recall.
+- **`fast` is the precision mode**: person 71.6% precision at 29.8% recall (62 FP
+  against 156 TP). Overall `fast` precision is **73.1%** — the structured types
+  it does fire on are reliable (email 100/100).
+- **`ner` is the recall mode, and it pays for it**: person recall rises to 49.7%,
+  but precision collapses to 26.2% (734 FP against 260 TP) — spaCy NER over-fires
+  on capitalized non-name tokens in essay prose. Overall `ner` precision is
+  **27.4%**, and the recall gain does not pay for it: overall F1 is **34.1**,
+  *below* `fast`'s **40.7**. On this dataset **`fast` is the better mode** despite
+  detecting fewer names.
+- **Presidio lands between the two and ahead of both on F1** (36.7% precision /
+  52.6% recall / 43.2 F1; its person row is 33.8 / 52.4 / 41.1). It is tuned for
+  English name detection out of the box, and it also picks up the dataset's `url`
+  spans (86.1% recall) that argus does not detect at all (0%).
 
-Presidio's spaCy NER + regex combination still gives better overall F1 here
-because it is tuned for English name detection out of the box; argus-redact's
-structural strength (email 100%, phone, ID) is under-exercised because this
-dataset is almost entirely names.
+argus-redact's structural strength (email 100/100, checksum-validated IDs) is
+under-exercised here because this dataset is almost entirely names. Both tools
+score 0% recall on the dataset's `id_number` spans.
 
 **The critical difference:** Presidio's detected PII is **permanently deleted**. argus-redact's detected PII is **reversibly encrypted** — the downstream LLM output can be restored to contain real names afterward. These are fundamentally different use cases.
 
@@ -219,29 +242,44 @@ dataset is almost entirely names.
 
 ## 4. Performance
 
-### Latency
+### Latency and throughput (`mode="fast"`)
 
-`redact(mode="fast")` p50 — Apple M-series, Python 3.11. Reproduce with
-`python tests/benchmark/bench_l1_rust_vs_python.py`. The NER column is the
-Layer 1+2 path and is approximate (not re-measured by the same script).
+Apple M1 Max, Python 3.11, 500 iterations per workload. Reproduce:
 
-| Text size | Layer 1 (fast) | Layer 1+2 (NER) |
-|-----------|-----------------|-----------------|
-| Short (17 chars) | 0.03ms | ~15ms |
-| Medium (770 chars) | 0.75ms | ~30ms |
-| Long (10K chars) | 9.3ms | ~100ms |
-| `restore()` | <0.01–0.18ms | <0.01–0.18ms |
+```bash
+python tests/benchmark/perf_profile.py --output tests/benchmark/results/perf_profile_0.7.16.json
+```
 
-### Throughput
+Result JSON: `tests/benchmark/results/perf_profile_0.7.16.json` (full percentile
+distribution per workload). A Layer-1 Rust-vs-Python component breakdown is in
+`tests/benchmark/results/bench_l1_0.7.16.txt`
+(`python tests/benchmark/bench_l1_rust_vs_python.py`).
 
-`mode="fast"`, same machine/corpus as above:
+| Workload | Doc size | `redact(mode="fast")` p50 | p99 | Throughput |
+|---|---|---|---|---|
+| en, short | 141 B | 0.22 ms | 0.35 ms | ~4,500 docs/s |
+| en, ~1 KB | 846 B | 0.97 ms | 1.21 ms | ~1,030 docs/s |
+| en, long | 8.5 KB | 9.4 ms | 9.97 ms | ~106 docs/s |
+| zh, short | 175 B | 0.34 ms | 0.40 ms | ~2,940 docs/s |
+| zh, ~1 KB | 1.4 KB | 2.03 ms | 2.44 ms | ~490 docs/s |
+| zh, long | 14 KB | 20.3 ms | 24.5 ms | ~49 docs/s |
 
-| Scenario | argus-redact (fast) | Presidio |
-|----------|:------------------:|:--------:|
-| Short docs | ~29,000 docs/s | ~5 docs/s |
-| Medium docs | ~1,330 docs/s | ~5 docs/s |
+Throughput is single-threaded and scales inversely with document size — quote it
+with the workload attached, never as a bare headline number.
 
-argus-redact in `fast` mode is **~1000x faster** than Presidio for regex-detectable PII, because Presidio always runs NER models even for pattern-based entities.
+**These are Layer-1 (`fast`) numbers only.** We do **not** publish `ner`
+(Layer 1+2) or `auto` (Layer 3) latency figures: no committed harness measures
+them, so any number here would be an estimate, and the NER/LLM cost is dominated
+by the model and host you pick, not by argus.
+
+**On "argus is faster than Presidio":** we have **not committed a like-for-like
+Presidio timing run**, so this report publishes **no speed multiplier** against
+Presidio. The *architectural* reason to expect argus's `fast` mode to be cheaper
+for regex-detectable PII is real and stateable without a number: argus's Layer 1
+is regex + validators (no model loaded), whereas Presidio's default pipeline runs
+its spaCy NER model over every document even for purely pattern-based entities.
+How large that gap is on your hardware and your documents is a measurement nobody
+here has committed — treat any specific ratio as unsubstantiated until it is.
 
 ---
 
@@ -259,8 +297,10 @@ argus-redact in `fast` mode is **~1000x faster** than Presidio for regex-detecta
 | **Structured data** (JSON/CSV) | **Yes** | No | **Yes** | No |
 | **Streaming restore** | **Yes** | No | No | No |
 | **MCP Server** | **Yes** | No | Yes (commercial) | No |
-| Regex speed | ~29K docs/s | ~5 docs/s | N/A | N/A |
 | Open source | Apache 2.0 | Apache 2.0 | Proprietary | MIT |
+
+(No cross-tool speed row: we have not committed a like-for-like timing run for the
+other tools. argus's own `fast`-mode latency/throughput is in §4.)
 
 ---
 
@@ -309,8 +349,8 @@ Streaming hot path (`StreamingRestorer.feed` × N sentences) is the primary bene
 |----------|-----------|-----|
 | LLM pipeline (need to restore PII after) | **argus-redact** | Only tool with reversible per-message encryption |
 | Chinese text processing | **argus-redact** | Only open tool with Chinese PII coverage |
-| High-throughput batch (regex PII) | **argus-redact fast** | 1000x faster than alternatives |
-| English name detection only | Presidio | Better English NER out of the box |
+| High-throughput batch (regex PII) | **argus-redact fast** | Regex + validators, no NER model in the hot path (§4: 0.22 ms p50 on a 141 B doc) |
+| English name detection only | Presidio | Better English NER out of the box — and it measures that way here (§2, §3) |
 | Compliance audit / permanent deletion | Presidio | One-way deletion is the explicit goal |
 | SaaS with maximum entity coverage | Tonic Textual | 50+ languages, commercial support |
 
@@ -357,22 +397,23 @@ multi-turn case.
 
 ## 8. Limitations & Roadmap
 
-**Current limitations (v0.7.9 measurements):**
+**Current limitations (v0.7.16 measurements):**
 - Chinese address detection (~72% F1 on pii_bench_zh) — multi-part informal
   address spans under-match
 - Chinese passport recall (72.9%) — single-letter + 8-digit formats (e.g.
   `G10122691`) are not yet fully covered by the pattern (precision stays 100%)
 - English/European address detection essentially unsupported (0% on ai4privacy
-  `STREET` spans; `fast` even emits false positives there)
-- Person name precision on noisy real English prose — the v0.7.9 recall work
-  (unicode tokenizer + grown surname pools) raised Kaggle PIILO `fast` recall
-  (2.9% → 29.8%) but dropped `fast` precision (90% → 69%); broader detection
-  adds false positives on free-form essay text
+  `STREET` spans; `fast` even emits false positives there — though Presidio also
+  scores 0% recall on those spans)
+- English person-name detection is the weakest axis, in both directions: on Kaggle
+  PIILO `fast` reaches only 29.8% person recall (at 71.6% precision), while `ner`
+  buys recall (49.7%) at a precision collapse (26.2%). Presidio out-of-the-box
+  beats argus on F1 on both English datasets in this report
 
 **Planned improvements:**
 - Add the single-letter + 8-digit Chinese passport format to the pattern set
 - Recover person-name precision on noisy English (expand negative dictionary +
-  scoring signals) without giving back the v0.7.9 recall gains
+  scoring signals) without giving back recall
 - Improve Chinese address patterns for informal formats
 - Improve English/European address patterns
 - Fine-tune name detection for Kaggle-style educational text

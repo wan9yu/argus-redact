@@ -132,7 +132,9 @@ argus-redact is a PII **data minimization aid**, not an anonymization or complia
 - **Removing explicit PII ≠ anonymity.** LLM agents can re-identify individuals by combining residual, individually-non-identifying cues with public data — even on redacted text, even during benign tasks ([Ko et al. 2026](https://arxiv.org/abs/2603.18382)). Reversible substitution protects explicit identifiers and preserves LLM utility; it does **not** defend against inference-based re-identification, which a per-document redactor cannot fully prevent — the residual comes from *combinations* of quasi-identifiers, not single fields ([why coarsening one field doesn't fix it](docs/design-quasi-identifier-generalization.md); [and why detecting more English quasi-identifiers didn't reduce re-id either](docs/design-english-detection-breadth.md)).
 - **Not a GDPR / PIPL anonymization framework** — anonymization is a compliance process decision, not a single-library output.
 
-**When to use argus-redact**: reversible pseudonymization for LLM pipelines where you need `redact() → LLM → restore()` with zero PII crossing the network boundary.
+- **Restore is a substitution pass, not an authorization check.** A bare `restore(text, key)` will substitute originals into *any* text carrying the right pseudonyms — including a reply an attacker steered the model into producing. Use the [guarded round-trip](#security) to bind a restore to the exchange that produced the key.
+
+**When to use argus-redact**: reversible pseudonymization for LLM pipelines where you need `redact() → LLM → guarded_restore()` with zero PII crossing the network boundary.
 
 **When to consider alternatives**: if you need one-way English PII masking with a single model call, [OpenAI Privacy Filter](https://huggingface.co/openai/privacy-filter) and similar model-based maskers may fit better. argus-redact's strongest suit is **reversible** pseudonymization with **per-message keys**; Chinese has the deepest support (HanLP + native validators), the other 7 languages have regex + spaCy NER coverage. Pick by the workload, not by exclusivity.
 
@@ -154,14 +156,18 @@ Mix freely: `lang=["zh", "en", "de"]`. Pass known names: `names=["王一", "张�
 
 ## Performance
 
-Rust core (PyO3), `mode="fast"` — p50, Apple M-series, Python 3.11. Reproduce
-with `python tests/benchmark/bench_l1_rust_vs_python.py`:
+Rust core (PyO3), `mode="fast"` — `redact()` p50 over 500 iterations, Apple M1 Max,
+Python 3.11. Reproduce with `python tests/benchmark/perf_profile.py`:
 
-| Text | redact() | restore() | Throughput |
-|------|:--------:|:---------:|:----------:|
-| Short (17 chars) | 0.03ms | <0.01ms | ~29,000 docs/sec |
-| Medium (770 chars) | 0.75ms | 0.15ms | ~1,330 docs/sec |
-| Long (10K chars) | 9.3ms | 0.18ms | ~107 docs/sec |
+| Document | en | zh |
+|----------|:--:|:--:|
+| Short (141 B en / 175 B zh) | 0.22 ms · ~4,500 docs/sec | 0.34 ms · ~2,900 docs/sec |
+| ~1 KB (846 B / 1.4 KB) | 0.97 ms · ~1,030 docs/sec | 2.03 ms · ~490 docs/sec |
+| Long (8.5 KB / 14 KB) | 9.4 ms · ~106 docs/sec | 20.3 ms · ~49 docs/sec |
+
+Throughput depends heavily on document size and language, so the workload sizes are
+stated rather than a single headline number. Committed run:
+[`perf_profile_0.7.16.json`](tests/benchmark/results/perf_profile_0.7.16.json).
 
 Pre-built wheels for all major platforms — no Rust toolchain needed to install:
 
@@ -178,10 +184,10 @@ Pre-built wheels for all major platforms — no Rust toolchain needed to install
 | Mode | Precision | Recall | F1 |
 |---|---|---|---|
 | fast (regex)          | 81.6% | 31.9% | 45.8% |
-| ner (+ spaCy)         | 74.9% | 42.8% | 54.4% |
+| ner (+ spaCy)         | 74.8% | 42.9% | 54.5% |
 | auto (+ Ollama 32B)   | _skipped this run_ | | |
 
-_ai4privacy en, 500 samples, v0.7.9. `auto` mode skipped on the maintainer's hardware — see [benchmark-report.md](docs/benchmark-report.md) for full matrix + reproduction commands._
+_ai4privacy en, 500 samples, v0.7.16 run (`tests/benchmark/results/ai4privacy_0.7.16.json`). `auto` mode skipped on the maintainer's hardware — see [benchmark-report.md](docs/benchmark-report.md) for full matrix + reproduction commands._
 
 For context: `fast` mode is high-precision / low-recall by design — it only emits formats it can validate (Luhn, MOD11-2, etc.). Recall comes from `ner` and `auto` at the cost of latency. Pick the mode for your deployment shape (see *Deployment fit* above). [Full benchmarks →](docs/benchmark-report.md) | [Performance →](docs/performance.md)
 
@@ -189,7 +195,7 @@ For context: `fast` mode is high-precision / low-recall by design — it only em
 
 | Dimension | Current (v0.7.20) | Next milestone |
 |-----------|:----------------:|:---:|
-| **Protected** | 60+ PII types, L1-L3. **0% PII leak on `default` profile across GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.5** in the [PRvL](docs/prvl-standard.md) reference suite. `pseudonym-llm` profile: 100% on three of four models; **96% / Bronze on Claude-Opus-4.5** (single reroll cell). Not a guarantee against adversarial inputs — see prvl-standard.md for full matrix. Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). SHAKE-256 derivation + full-salt entropy + faker identity-pass guard. State export omits salt by default; HTTP server refuses no-auth start; CLI writes O_NOFOLLOW + key files mode 0600; MCP token store TTL+LRU (v0.6.2). Windows CI + property-tested invariants + mutation-tested core (v0.6.3) + perf budget CI gate (v0.6.4) + session-isolation in integrations (v0.6.6) + README pinned-to-doctest + version-sync CI guard (v0.6.6) + compose namespace + pure-layer purity guard (v0.6.7) + seed→salt API rename + PIITypeDef SSOT + Presidio bridge through public redact + 3 new types (v0.6.8) + compose helpers shipped (v0.6.9) + Layer 1 freeze guards + KDF replay vectors + dead code subtract + manylinux digest pin (v0.6.10) + Adapter authoring surface (compose.register_pii_type / PIITypeDef / PatternMatch) + KDF replay edge cases (full-FF salt fix) + Layer 2 signature snapshot (v0.6.11) + HK/Macao travel permits + housing-fund zh L1 coverage (v0.6.12). **v0.7.x — 100% Rust core SSOT**: `argus-redact-core` crate + crates.io publish, with patterns/validators/normalization/replace+restore/fakers/person-scoring + the full L1 redact/restore engine ported to Rust (v0.7.0–v0.7.8) + fail-closed hardening & detection-correctness (v0.7.9–v0.7.10) + in-browser **wasm** build (v0.7.11). **v0.7.12 — quasi-identifier detection breadth**: evidence-gated zh bare-region, occupation, medical condition/allergy, and **hobby** (new type) detection via a shared `evidence_detector` framework, plus a re-identification eval (PRvL+ X-axis); the unreleased `generalize` strategy removed | Adversarial testing |
+| **Protected** | 60+ PII types, L1-L3. In the [PRvL](docs/prvl-standard.md) reference suite (24 cases, 42 PII instances per model), the **`default` profile leaked nothing across all four models** — GPT-5, Claude-Opus-4.5, Gemini-2.5-Pro, GLM-4.6. The reversible profiles are not clean: `pseudonym` leaked 1 of 42 on both Claude-Opus-4.5 and GLM-4.6, and `realistic` leaked 1 of 42 on Claude-Opus-4.5. A reference suite is not a guarantee against adversarial input — see prvl-standard.md for the full matrix. Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). SHAKE-256 derivation + full-salt entropy + faker identity-pass guard. State export omits salt by default; HTTP server refuses no-auth start; CLI writes O_NOFOLLOW + key files mode 0600; MCP token store TTL+LRU (v0.6.2). Windows CI + property-tested invariants + mutation-tested core (v0.6.3) + perf budget CI gate (v0.6.4) + session-isolation in integrations (v0.6.6) + README pinned-to-doctest + version-sync CI guard (v0.6.6) + compose namespace + pure-layer purity guard (v0.6.7) + seed→salt API rename + PIITypeDef SSOT + Presidio bridge through public redact + 3 new types (v0.6.8) + compose helpers shipped (v0.6.9) + Layer 1 freeze guards + KDF replay vectors + dead code subtract + manylinux digest pin (v0.6.10) + Adapter authoring surface (compose.register_pii_type / PIITypeDef / PatternMatch) + KDF replay edge cases (full-FF salt fix) + Layer 2 signature snapshot (v0.6.11) + HK/Macao travel permits + housing-fund zh L1 coverage (v0.6.12). **v0.7.x — 100% Rust core SSOT**: `argus-redact-core` crate + crates.io publish, with patterns/validators/normalization/replace+restore/fakers/person-scoring + the full L1 redact/restore engine ported to Rust (v0.7.0–v0.7.8) + fail-closed hardening & detection-correctness (v0.7.9–v0.7.10) + in-browser **wasm** build (v0.7.11). **v0.7.12 — quasi-identifier detection breadth**: evidence-gated zh bare-region, occupation, medical condition/allergy, and **hobby** (new type) detection via a shared `evidence_detector` framework, plus a re-identification eval (PRvL+ X-axis); the unreleased `generalize` strategy removed. **v0.7.18–v0.7.20 — guarded restore**: `restore()` gained a deterministic guard (per-call provenance nonce + scope-binding), closing the window where an injected pseudonym in LLM output would silently restore (v0.7.18); a Luhn-valid card PAN that passed through `mode="fast"` verbatim in six of the eight language packs (ja/ko/de/uk/in/br — those with no native card pattern) is now detected regardless of surrounding script (v0.7.19); the whole flow is one public `guarded_restore()` that all five integrations wrap (v0.7.20). `guard=True` becomes the default in v0.8.0 | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (zh + en + RFC shared) + per-call strategy overrides + `keep` strategy (whitelisted) + resumable streaming sessions + incremental streaming default + cross-language alias restore (zh ↔ en) | Task-aware guidance |
 | **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design). Cross-language LLM rewrites (`张三` → `Zhang San`) auto-restored via `result.aliases` + `restore(text, key, aliases=...)` | Task-aware guidance |
 | **Compliance** | Meets PIPL Art.28 sensitive PII categories, risk assessment + profiles | PIPL/GDPR/HIPAA (byproduct) |
@@ -308,6 +314,24 @@ True byte-level streaming (entities crossing chunk boundaries) needs full increm
 ## Security
 
 PII never leaves your device. Per-message keys prevent cross-request profiling. [Full security model →](docs/security-model.md)
+
+**Guarded round-trip.** `guarded_restore()` binds a restore to the exchange that produced the key. Two deterministic checks: the reply must echo a per-call nonce (**provenance**), and only the pseudonyms *this* call emitted are substituted (**scope**). Both fail closed — pseudonyms are returned unchanged, with a `SecurityWarning`, rather than PII being substituted into an attacker-shaped reply. A supplementary injection heuristic is advisory by default.
+
+```python
+from argus_redact import redact, guarded_restore, make_anchor
+from argus_redact.compose import prompt_anchor
+
+redacted, key = redact("张三的电话是13812345678", names=["张三"], lang="zh")
+anchor = make_anchor(key)          # per-call nonce + the pseudonym scope of this call
+
+system = prompt_anchor(key, lang="zh", anchor=anchor)   # asks the model to echo the nonce
+reply = call_llm(redacted, system=system)
+
+restored = guarded_restore(reply, key, redacted=redacted, anchor=anchor)
+# strict=True raises RestoreGuardError instead of returning un-restored text
+```
+
+Bare `restore(text, key)` still works and emits a `DeprecationWarning`; `guard=True` becomes the default in v0.8.0. [Guarded restore →](docs/security-model.md#guarded-restore)
 
 Meets **PIPL** · **GDPR** · **HIPAA** technical requirements as a byproduct of its privacy-first design. [Details →](docs/security-model.md#regulatory-context)
 
