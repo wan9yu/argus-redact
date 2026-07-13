@@ -16,6 +16,14 @@ on:
     paths:
       - "demo/**"
       - "crates/argus-redact-wasm/**"
+      # The wasm bundle compiles the CORE, and the language packs are baked in via
+      # include_str! — so a core-only change (a pattern, a validator, the merge or
+      # hint engine) changes what the live demo does while touching neither path
+      # above. Without this line the demo only refreshed when a release happened to
+      # call this workflow: v0.7.19's card-leak fix and v0.7.20's hint fix were both
+      # core-only, and a core-only fix landing on main between releases would have
+      # left the deployed demo running the unfixed engine.
+      - "crates/argus-redact-core/**"
       - ".github/workflows/deploy-demo.yml"
 
 permissions:
