@@ -239,7 +239,9 @@ def redact_csv(
     out = io.StringIO()
     writer = csv.writer(out)
     writer.writerows(output_rows)
-    return out.getvalue().strip(), session.into_key()
+    # rstrip only the writer's trailing line terminator — .strip() would also
+    # delete non-PII leading whitespace from the first cell (silent corruption).
+    return out.getvalue().rstrip("\r\n"), session.into_key()
 
 
 def restore_csv(csv_text: str, key: dict) -> str:
