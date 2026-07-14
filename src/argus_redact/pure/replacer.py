@@ -121,10 +121,25 @@ def keep_downgraded_event(entities, config: dict | None) -> dict | None:
 
 
 def residual_personal_data(entities, config: dict | None) -> bool:
-    """True if any detected entity uses a reversible strategy (pseudonymised output
-    is still personal data under GDPR Art.4(5)). Derived from the
-    is_strategy_reversible SSOT. Empty entities → False."""
-    return any(is_strategy_reversible(_resolved_strategy(e.type, config)) for e in entities)
+    """True if what ``redact()`` returns still constitutes personal data under
+    GDPR Art.4(5) — i.e. the original value is recoverable from the returned
+    artifacts, NOT whether the surrogate looks reversible on its face.
+
+    Every strategy in the current palette retains the original one way or
+    another: the substituting strategies (pseudonym/realistic/mask/remove/
+    category/name_mask/landline_mask) write ``surrogate -> original`` into
+    the ``key`` dict ``redact()`` returns, so the surrogate can be mapped
+    back even when the strategy is classified "irreversible" for LLM-restore
+    purposes (see ``is_strategy_reversible``) — a retained recovery key means
+    pseudonymised/masked output is still personal data. ``keep`` needs no key
+    at all: it leaves the original value verbatim in the output text.
+
+    So this is True whenever at least one entity was detected, and False
+    only when nothing was detected (nothing to recover). Deliberately NOT
+    derived from ``is_strategy_reversible`` — that SSOT answers a different
+    question (LLM round-trip safety), not GDPR residual-data status.
+    """
+    return bool(entities)
 
 
 DEFAULT_PREFIXES = {

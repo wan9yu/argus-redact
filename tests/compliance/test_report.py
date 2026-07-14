@@ -59,7 +59,11 @@ class TestRedactReport:
         report = redact("姓名张伟", lang="zh", mode="fast", report=True)
         assert report.residual_personal_data is True
 
-    def test_report_has_residual_personal_data_false_when_all_masked(self):
+    def test_report_has_residual_personal_data_true_when_all_masked(self):
+        # mask writes surrogate->original into report.key (e.g.
+        # {'138****5678': '13812345678'}); restore() can recover the
+        # original from that key, so the output is still personal data
+        # under GDPR Art.4(5) even though mask *looks* irreversible.
         report = redact(
             "手机13812345678",
             lang="zh",
@@ -67,7 +71,40 @@ class TestRedactReport:
             report=True,
             config={"phone": {"strategy": "mask"}},
         )
+        assert report.residual_personal_data is True
+
+    def test_report_has_residual_personal_data_true_when_kept(self):
+        # keep leaves the original value verbatim in the output — no key
+        # needed for it to still be personal data.
+        report = redact(
+            "call me at 13800138000",
+            lang="en",
+            mode="fast",
+            report=True,
+            config={"self_reference": {"strategy": "keep"}, "phone": {"strategy": "keep"}},
+        )
+        assert report.residual_personal_data is True
+
+    def test_report_has_residual_personal_data_false_when_nothing_detected(self):
+        report = redact("今天天气不错", lang="zh", mode="fast", report=True)
+        assert len(report.entities) == 0
         assert report.residual_personal_data is False
+
+    def test_report_residual_personal_data_key_actually_reverses_mask(self):
+        # Decisive proof: the flag is True *because* the retained key really
+        # does reverse the mask output back to the original.
+        from argus_redact import restore
+
+        text = "call 13800138000, email bob@acme.com"
+        report = redact(
+            text,
+            lang="en",
+            mode="fast",
+            report=True,
+            config={"phone": {"strategy": "mask"}, "email": {"strategy": "mask"}},
+        )
+        assert report.residual_personal_data is True
+        assert restore(report.redacted_text, report.key, guard=False) == text
 
     def test_report_security_events_empty_when_no_keep_misconfig(self):
         report = redact("手机13812345678", lang="zh", mode="fast", report=True)

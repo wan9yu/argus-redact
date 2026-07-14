@@ -25,12 +25,27 @@ _REVERSIBLE_STRATEGIES = frozenset({"pseudonym", "realistic", "remove", "keep"})
 
 
 def is_strategy_reversible(strategy: str) -> bool:
-    """Return True if ``strategy`` produces output that ``restore()`` can map
-    back to the original value.
+    """Return True if ``strategy`` produces a stable surrogate that survives
+    an LLM round-trip and can be restored from the LLM's reply.
 
-    Reversible: ``pseudonym`` / ``realistic`` / ``remove`` / ``keep``.
-    Irreversible (lossy by design): ``mask`` / ``name_mask`` / ``landline_mask``
-    / ``category``.
+    This is NOT "can the key dict map the surrogate back to the original" —
+    every strategy in ``VALID_STRATEGIES`` is key-recoverable (``redact()``
+    always writes the substitution into the returned key, or leaves ``keep``
+    output verbatim), so that broader question is always True and isn't what
+    this function answers. This function answers a narrower, LLM-specific
+    question: mask-family surrogates (``mask`` / ``name_mask`` /
+    ``landline_mask`` / ``category``) are *content-derived* from the original
+    value (e.g. ``138****5678``, plus a trailing ``①``-style disambiguator on
+    collision), and that disambiguator is fragile under LLM normalization —
+    an LLM may drop, reformat, or otherwise mangle it in its reply, breaking
+    the restore(). ``pseudonym`` / ``realistic`` / ``remove`` / ``keep``
+    surrogates don't depend on the original value's shape and survive an LLM
+    round-trip reliably, so they're classified reversible here.
+
+    Reversible (LLM-restore safe): ``pseudonym`` / ``realistic`` / ``remove``
+    / ``keep``.
+    Irreversible for this purpose (content-derived, fragile disambiguator):
+    ``mask`` / ``name_mask`` / ``landline_mask`` / ``category``.
 
     Use in multi-turn dialog flows to fall through to a reversible strategy
     when the LLM response must be restored to original PII for follow-up.

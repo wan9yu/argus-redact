@@ -41,15 +41,29 @@ def test_keep_downgraded_count_is_unique_texts_detail_is_sorted_types():
     assert ev["detail"] == "types: bank_card, phone"  # sorted, deduped types
 
 
-def test_residual_personal_data_true_for_reversible():
+def test_residual_personal_data_true_for_pseudonym():
     ents = [_pm("张三", "person")]
     assert residual_personal_data(ents, {"person": {"strategy": "pseudonym"}}) is True
 
 
-def test_residual_personal_data_false_for_all_irreversible():
+def test_residual_personal_data_true_for_mask():
+    # mask writes surrogate->original into the returned key (e.g.
+    # {'138****8000': '13800138000'}), and restore() recovers the original
+    # from that key — a retained recovery key means the output is still
+    # personal data under GDPR Art.4(5), regardless of how "irreversible"
+    # the surrogate looks on its face.
     ents = [_pm("张三", "person")]
-    assert residual_personal_data(ents, {"person": {"strategy": "mask"}}) is False
+    assert residual_personal_data(ents, {"person": {"strategy": "mask"}}) is True
+
+
+def test_residual_personal_data_true_for_keep():
+    # keep leaves the original value verbatim in the redacted output (no
+    # key entry is even needed — the PII is right there), so this is also
+    # residual personal data.
+    ents = [_pm("I", "self_reference")]
+    assert residual_personal_data(ents, {"self_reference": {"strategy": "keep"}}) is True
 
 
 def test_residual_personal_data_false_for_empty():
+    # Nothing detected -> nothing retained, nothing to recover.
     assert residual_personal_data([], None) is False
