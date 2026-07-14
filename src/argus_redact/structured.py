@@ -65,7 +65,13 @@ def _parse_paths(paths: list[str]) -> list[list[str]]:
     for path in paths:
         segments = []
         for part in path.replace("[*]", ".*").split("."):
-            segments.append(part)
+            # A leading (or doubled) "[*]" turns into an empty segment once split
+            # on ".": "[*].phone" -> ".*.phone" -> ['', '*', 'phone']. A top-level
+            # list leaf's walk-path never carries that empty prefix, so the path
+            # would never match and the leaf silently goes unredacted. Drop empty
+            # segments so "[*].phone" behaves the same as "*.phone".
+            if part:
+                segments.append(part)
         parsed.append(segments)
     return parsed
 

@@ -419,11 +419,18 @@ def _detect(
     entities = filter_self_reference(entities, hints)
     timing["merge_ms"] = (time.perf_counter() - t0) * 1000
 
-    # Apply type filtering
+    # Apply type filtering. A bare str is a plausible caller mistake (they meant
+    # a one-element list): set("phone") silently becomes {'p','h','o','n','e'},
+    # which filters out every real entity type and returns success with zero
+    # redaction — a silent leak. Fail closed instead of fail-open.
     if types is not None:
+        if isinstance(types, str):
+            raise TypeError("types must be a list of type names, not a str")
         type_set = set(types)
         entities = [e for e in entities if e.type in type_set]
     elif types_exclude is not None:
+        if isinstance(types_exclude, str):
+            raise TypeError("types_exclude must be a list of type names, not a str")
         exclude_set = set(types_exclude)
         entities = [e for e in entities if e.type not in exclude_set]
 
