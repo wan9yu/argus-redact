@@ -286,7 +286,7 @@ pub fn replace<F: PseudoFactory>(
                         live,
                     );
                 }
-                org_gen.get(&entity.text)
+                org_gen.get_reserved(&entity.text, &mut used_labels)
             } else {
                 if info.map(|i| i.prefix_overridden).unwrap_or(false) {
                     // Same rebuild semantics for the person generator
@@ -300,7 +300,7 @@ pub fn replace<F: PseudoFactory>(
                         live,
                     );
                 }
-                pseudo_gen.get(&entity.text)
+                pseudo_gen.get_reserved(&entity.text, &mut used_labels)
             }
         } else if strategy == "realistic" {
             // Default to None when info is absent (no TypeInfo for this type).
@@ -354,7 +354,7 @@ pub fn replace<F: PseudoFactory>(
                     // else the per-type generator). The entity stays redacted; the
                     // whole redaction never crashes on a value a faker can't fake.
                     if entity.type_ == "organization" {
-                        org_gen.get(&entity.text)
+                        org_gen.get_reserved(&entity.text, &mut used_labels)
                     } else {
                         let type_gen = get_type_gen(
                             &mut type_gens,
@@ -365,21 +365,21 @@ pub fn replace<F: PseudoFactory>(
                             existing_for_gen.as_ref(),
                             factory,
                         );
-                        type_gen.get(&entity.text)
+                        type_gen.get_reserved(&entity.text, &mut used_labels)
                     }
                 }
             }
         } else if strategy == "mask" {
             let (vp, vs) = info.map(|i| (i.visible_prefix, i.visible_suffix)).unwrap_or((0, 0));
             let masked = mask_value(&entity.text, &entity.type_, vp, vs);
-            resolve_collision(&masked, &used_labels)
+            resolve_collision(&masked, &used_labels)?
         } else if strategy == "name_mask" {
-            resolve_collision(&mask_name(&entity.text), &used_labels)
+            resolve_collision(&mask_name(&entity.text), &used_labels)?
         } else if strategy == "landline_mask" {
-            resolve_collision(&mask_landline(&entity.text), &used_labels)
+            resolve_collision(&mask_landline(&entity.text), &used_labels)?
         } else if strategy == "remove" {
             if let Some(repl) = info.and_then(|i| i.replacement.as_deref()) {
-                resolve_collision(repl, &used_labels)
+                resolve_collision(repl, &used_labels)?
             } else {
                 let type_gen = get_type_gen(
                     &mut type_gens,
@@ -390,16 +390,16 @@ pub fn replace<F: PseudoFactory>(
                     existing_for_gen.as_ref(),
                     factory,
                 );
-                type_gen.get(&entity.text)
+                type_gen.get_reserved(&entity.text, &mut used_labels)
             }
         } else if strategy == "category" {
             let label = info
                 .and_then(|i| i.label.clone())
                 .or_else(|| info.map(|i| i.default_category_label.clone()))
                 .unwrap_or_else(|| format!("[{}]", entity.type_));
-            resolve_collision(&label, &used_labels)
+            resolve_collision(&label, &used_labels)?
         } else {
-            resolve_collision(DEFAULT_REDACT_LABEL, &used_labels)
+            resolve_collision(DEFAULT_REDACT_LABEL, &used_labels)?
         };
 
         entity_replacements.insert(entity.text.clone(), replacement.clone());
@@ -897,6 +897,60 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.redacted, "call 138****5678");
+    }
+
+    // Factory whose stream is INDEPENDENT of the seed: every generator it mints
+    // draws 7, 7, 8, ... So two sibling generators sharing one (unified) prefix
+    // would both want `U-00007` first — exactly the R1 collision condition.
+    struct ConstFactory;
+    impl PseudoFactory for ConstFactory {
+        type Source = SeqRng;
+        fn make(&self, _seed: Option<u64>) -> SeqRng {
+            SeqRng { values: vec![7, 7, 8], idx: 0 }
+        }
+    }
+
+    #[test]
+    fn unified_prefix_cross_generator_no_collision() {
+        // A person (pseudo_gen) and a remove-strategy type (a type_gen) both
+        // collapse to unified_prefix "U". With every generator drawing the same
+        // first number, the pre-fix code minted `U-00007` for BOTH, so the second
+        // `result_key.insert` silently overwrote the first mapping. The shared
+        // reserved set must now force the second generator to a distinct code, so
+        // the key keeps BOTH originals.
+        let mut info_map = HashMap::new();
+        info_map.insert("person".to_string(), info("pseudonym", "P"));
+        info_map.insert("phone".to_string(), info("remove", ""));
+        let wl = empty_whitelist();
+        let text = "王 138";
+        let ents = vec![
+            pm("王", "person", 0, 1),
+            pm("138", "phone", 2, 5),
+        ];
+        let r = replace(
+            ReplaceArgs {
+                text,
+                entities: &ents,
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: Some("U"),
+                keep_whitelist: &wl,
+            },
+            &ConstFactory,
+            None,
+        )
+        .unwrap();
+        // Both originals survive in the key under DISTINCT codes.
+        assert_eq!(r.key.len(), 2, "both entities must be keyed: {:?}", r.key);
+        let codes: HashSet<&String> = r.key.keys().collect();
+        assert_eq!(codes.len(), 2, "codes must be distinct (no overwrite): {:?}", r.key);
+        assert_eq!(r.key.get("U-00007"), Some(&"王".to_string()));
+        assert_eq!(r.key.get("U-00008"), Some(&"138".to_string()));
+        // Round-trip: both codes appear in the redacted text.
+        assert!(r.redacted.contains("U-00007") && r.redacted.contains("U-00008"));
     }
 
     #[test]

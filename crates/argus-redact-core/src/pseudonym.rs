@@ -53,19 +53,35 @@ impl<R: RandomSource> PseudonymGenerator<R> {
         }
     }
 
-    /// Get or create a pseudonym for an entity.
+    /// Get or create a pseudonym for an entity, deduping only against this
+    /// generator's own `used_codes`. Kept for the standalone Python generator,
+    /// which owns the whole namespace on its own.
     pub fn get(&mut self, entity: &str) -> String {
+        let mut reserved = HashSet::new();
+        self.get_reserved(entity, &mut reserved)
+    }
+
+    /// Get or create a pseudonym for an entity, deduping against BOTH this
+    /// generator's own `used_codes` AND a call-shared `reserved` set. The
+    /// orchestrator threads its `used_labels` set here so that sibling
+    /// generators sharing a prefix (unified-prefix mode, or two types with the
+    /// same default prefix) can never independently mint the same code for two
+    /// different originals — which would silently overwrite one mapping in the
+    /// restore key. The freshly minted code is registered in `reserved` so the
+    /// next generator sees it as taken.
+    pub fn get_reserved(&mut self, entity: &str, reserved: &mut HashSet<String>) -> String {
         if let Some(code) = self.entity_to_code.get(entity) {
             return code.clone();
         }
 
-        let code = self.generate_unique();
+        let code = self.generate_unique(reserved);
         self.entity_to_code.insert(entity.to_string(), code.clone());
         self.used_codes.insert(code.clone());
+        reserved.insert(code.clone());
         code
     }
 
-    fn generate_unique(&mut self) -> String {
+    fn generate_unique(&mut self, reserved: &mut HashSet<String>) -> String {
         let (lo, hi) = self.code_range;
 
         for _ in 0..1000 {
@@ -77,14 +93,19 @@ impl<R: RandomSource> PseudonymGenerator<R> {
             };
 
             let code = format!("{}-{:05}", self.prefix, num);
-            if !self.used_codes.contains(&code) {
+            // A code is free only if neither this generator nor any sibling
+            // (via the shared `reserved` set) has already claimed it. For the
+            // plain `get` path `reserved` starts empty, so behaviour — and the
+            // RNG draw sequence — is unchanged unless an actual cross-generator
+            // collision occurs.
+            if !self.used_codes.contains(&code) && !reserved.contains(&code) {
                 return code;
             }
         }
 
         // Expand range and retry
         self.code_range = (lo, hi * 10);
-        self.generate_unique()
+        self.generate_unique(reserved)
     }
 }
 

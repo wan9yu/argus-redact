@@ -1,3 +1,4 @@
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::collections::HashSet;
 
@@ -40,8 +41,10 @@ pub fn mask_landline(value: &str) -> String {
 /// Append a circled-digit (or numeric) suffix to avoid label collisions.
 ///
 /// Accepts a Python `set[str]` as `used`; PyO3 extracts it as `HashSet<String>`.
-/// Delegates to `argus_redact_core::masks::resolve_collision`.
+/// Delegates to `argus_redact_core::masks::resolve_collision`. On suffix
+/// saturation the core returns `Err`, surfaced here as a catchable `ValueError`
+/// (never an uncatchable `PanicException`).
 #[pyfunction]
-pub fn resolve_collision(label: &str, used: HashSet<String>) -> String {
-    core_resolve_collision(label, &used)
+pub fn resolve_collision(label: &str, used: HashSet<String>) -> PyResult<String> {
+    core_resolve_collision(label, &used).map_err(PyValueError::new_err)
 }

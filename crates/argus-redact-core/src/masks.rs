@@ -197,26 +197,32 @@ pub fn mask_phone_regional(value: &str, region: &str) -> String {
 /// 1. If `label` is not in `used` → return unchanged.
 /// 2. Try `label①` .. `label⑳` (circled digits).
 /// 3. Try `label(21)` .. `label(9999)`.
-/// 4. Panic if all are exhausted (matches Python `raise RuntimeError`).
-pub fn resolve_collision(label: &str, used: &HashSet<String>) -> String {
+/// 4. Return `Err` if all are exhausted (matches Python `raise RuntimeError`).
+///
+/// Returning `Err` — rather than panicking — keeps a pathological input (a
+/// document engineered to saturate every suffix for one label) from crossing the
+/// PyO3 boundary as an uncatchable `PanicException`. The binding maps the `Err`
+/// to a catchable Python `ValueError`, so saturation degrades to a normal error
+/// instead of a process-level DoS.
+pub fn resolve_collision(label: &str, used: &HashSet<String>) -> Result<String, String> {
     if !used.contains(label) {
-        return label.to_string();
+        return Ok(label.to_string());
     }
     // Try circled-digit suffixes ①..⑳
     for &c in CIRCLED_DIGITS {
         let candidate = format!("{}{}", label, c);
         if !used.contains(&candidate) {
-            return candidate;
+            return Ok(candidate);
         }
     }
     // Numeric suffix (21)..(9999)
     for i in 21..MAX_NUMERIC_COLLISION_SUFFIX {
         let candidate = format!("{}({})", label, i);
         if !used.contains(&candidate) {
-            return candidate;
+            return Ok(candidate);
         }
     }
-    panic!("Too many collisions for label: {}", label);
+    Err(format!("too many collisions for label {label:?}"))
 }
 
 #[cfg(test)]
@@ -400,14 +406,14 @@ mod tests {
     #[test]
     fn resolve_collision_no_collision() {
         let used: HashSet<String> = HashSet::new();
-        assert_eq!(resolve_collision("张*", &used), "张*");
+        assert_eq!(resolve_collision("张*", &used).unwrap(), "张*");
     }
 
     #[test]
     fn resolve_collision_first_circled() {
         let mut used = HashSet::new();
         used.insert("张*".to_string());
-        assert_eq!(resolve_collision("张*", &used), "张*①");
+        assert_eq!(resolve_collision("张*", &used).unwrap(), "张*①");
     }
 
     #[test]
@@ -415,7 +421,7 @@ mod tests {
         let mut used = HashSet::new();
         used.insert("张*".to_string());
         used.insert("张*①".to_string());
-        assert_eq!(resolve_collision("张*", &used), "张*②");
+        assert_eq!(resolve_collision("张*", &used).unwrap(), "张*②");
     }
 
     #[test]
@@ -426,6 +432,24 @@ mod tests {
             used.insert(format!("L*{}", c));
         }
         // Should fall through to numeric suffix (21)
-        assert_eq!(resolve_collision("L*", &used), "L*(21)");
+        assert_eq!(resolve_collision("L*", &used).unwrap(), "L*(21)");
+    }
+
+    #[test]
+    fn resolve_collision_saturated_returns_err_not_panic() {
+        // Saturate the label plus every circled-digit and numeric suffix.
+        // The resolver must return `Err` (a catchable error) rather than panic
+        // (which would cross PyO3 as an uncatchable PanicException → DoS).
+        let mut used = HashSet::new();
+        used.insert("X".to_string());
+        for &c in CIRCLED_DIGITS {
+            used.insert(format!("X{}", c));
+        }
+        for i in 21..MAX_NUMERIC_COLLISION_SUFFIX {
+            used.insert(format!("X({})", i));
+        }
+        let out = resolve_collision("X", &used);
+        assert!(out.is_err(), "saturated resolve_collision must return Err, got {out:?}");
+        assert!(out.unwrap_err().contains("too many collisions"));
     }
 }
