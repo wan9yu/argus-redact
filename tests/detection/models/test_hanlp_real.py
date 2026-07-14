@@ -126,6 +126,6 @@ class TestHanLPRealRedactIntegration:
         assert "13812345678" not in redacted
 
         # Restore
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "张三" in restored
         assert "13812345678" in restored

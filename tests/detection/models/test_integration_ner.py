@@ -32,7 +32,7 @@ class TestFullPipelineWithRealNER:
 
         assert "张三" not in redacted
         assert "13812345678" not in redacted
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "张三" in restored
         assert "13812345678" in restored
 
@@ -42,7 +42,7 @@ class TestFullPipelineWithRealNER:
         redacted, key = redact(text, salt=42, mode="ner", lang="zh")
 
         assert "王五" not in redacted
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "王五" in restored
 
     def test_should_redact_multiple_persons(self, _warm_up_model):
@@ -52,7 +52,7 @@ class TestFullPipelineWithRealNER:
 
         assert "张三" not in redacted
         assert "李四" not in redacted
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "张三" in restored
         assert "李四" in restored
 
@@ -64,7 +64,7 @@ class TestFullPipelineWithRealNER:
         assert "张三" not in redacted
         assert "zhang@test.com" not in redacted
         assert "110101199003074610" not in redacted
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "张三" in restored
         assert "zhang@test.com" in restored
         assert "110101199003074610" in restored
@@ -81,7 +81,7 @@ class TestFullPipelineWithRealNER:
         assert "13812345678" not in redacted
         assert "wang@corp.com" not in redacted
         assert "110101199003074610" not in redacted
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "王五" in restored
         assert "13812345678" in restored
         assert "wang@corp.com" in restored

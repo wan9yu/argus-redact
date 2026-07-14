@@ -75,7 +75,7 @@ class TestSpaCyFullPipeline:
             redacted_text, key = redact(text, salt=42, mode="ner", lang="en")
 
         assert "(555) 123-4567" not in redacted_text
-        restored = restore(redacted_text, key)
+        restored = restore(redacted_text, key, guard=False)
         assert "(555) 123-4567" in restored
 
     def test_should_roundtrip_english_names_and_ssn(self, adapter):
@@ -87,5 +87,5 @@ class TestSpaCyFullPipeline:
             redacted_text, key = redact(text, salt=42, mode="ner", lang="en")
 
         assert "123-45-6789" not in redacted_text
-        restored = restore(redacted_text, key)
+        restored = restore(redacted_text, key, guard=False)
         assert "123-45-6789" in restored

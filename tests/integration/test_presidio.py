@@ -38,7 +38,7 @@ class TestPresidioBridge:
         text = "John Smith called 555-123-4567"
 
         redacted, key = presidio_bridge.redact(text, language="en", salt=42)
-        restored = presidio_bridge.restore(redacted, key)
+        restored = presidio_bridge.restore(redacted, key, guard=False)
 
         assert "John Smith" in restored
 
@@ -98,7 +98,7 @@ class TestPresidioBridgeRoundtrip:
         # Simulate LLM processing
         llm_output = f"Summary: {redacted}"
 
-        restored = presidio_bridge.restore(llm_output, key)
+        restored = presidio_bridge.restore(llm_output, key, guard=False)
 
         assert "John Smith" in restored
 
@@ -150,5 +150,5 @@ class TestPresidioNERAdapter:
             )
 
         assert "John Smith" not in redacted
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "John Smith" in restored

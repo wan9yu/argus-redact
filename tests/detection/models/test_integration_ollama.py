@@ -85,5 +85,5 @@ class TestOllamaFullPipeline:
 
         assert "13812345678" not in redacted
 
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "13812345678" in restored

@@ -77,7 +77,7 @@ class TestChineseDigitEndToEnd:
 
         text = "手机号一三八零零一三八零零零"
         redacted, key = redact(text, salt=42, mode="fast")
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
 
         assert "一三八" in restored
 

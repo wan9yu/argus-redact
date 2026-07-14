@@ -98,7 +98,7 @@ class TestJaKoFullPipeline:
             redacted, key = redact(text, salt=42, mode="ner", lang="ja")
 
         assert "090-1234-5678" not in redacted
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "090-1234-5678" in restored
 
     def test_should_roundtrip_korean(self, ko_adapter):
@@ -115,5 +115,5 @@ class TestJaKoFullPipeline:
             redacted, key = redact(text, salt=42, mode="ner", lang="ko")
 
         assert "010-1234-5678" not in redacted
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "010-1234-5678" in restored
