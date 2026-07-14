@@ -89,12 +89,18 @@ class AuditEntry:
 
     @classmethod
     def from_dict(cls, d: dict) -> "AuditEntry":
+        # Re-sanitize on load: the PII-free invariant is enforced by _sanitize_event
+        # on the append() write path, but a stored/hand-crafted dict is untrusted
+        # input — a tampered or forged file could carry a free-form `detail` on a
+        # security_event. Running it through _sanitize_event again here is a no-op
+        # for an honest ledger (append() already sanitized) and strips PII for a
+        # dishonest one, so it never enters memory either way.
         return cls(
             seq=d["seq"],
             timestamp=d["timestamp"],
             kind=d["kind"],
             type_counts=dict(d["type_counts"]),
-            security_events=tuple(dict(e) for e in d.get("security_events", ())),
+            security_events=tuple(_sanitize_event(e) for e in d.get("security_events", ())),
             content_digest=d.get("content_digest"),
             prev_hash=d.get("prev_hash", ""),
             entry_hash=d.get("entry_hash", ""),
@@ -105,7 +111,12 @@ class AuditLedger:
     """Append-only, PII-free, hash-chained audit ledger. One structure = the audit
     trail (#18) AND the tamper-evident record (#26). Keyless SHA-256 chain by
     default (append-only integrity); pass ``hmac_key=`` for forge-resistance.
-    Caller-owned (like keys) — no global state, no I/O."""
+    Caller-owned (like keys) — no global state, no I/O.
+
+    Honesty caveat: under the keyless default, "tamper-evident" covers accidental
+    corruption and interior edits, not a determined adversary — anyone who controls
+    the store can recompute a self-consistent chain from scratch. Pass
+    ``hmac_key=`` (kept off the store) for forge-resistance against that threat."""
 
     def __init__(
         self,
@@ -165,7 +176,13 @@ class AuditLedger:
 
         Detects interior modification / reorder / deletion, but NOT tail-truncation
         (dropping the most-recent entries) on its own — detect that by persisting
-        ``head_digest`` externally and comparing after load."""
+        ``head_digest`` externally and comparing after load.
+
+        Under the keyless default, this does NOT detect full-chain forgery: an
+        adversary who controls the store can recompute a self-consistent chain
+        (correct seq/prev_hash/entry_hash throughout) and ``verify()`` will return
+        True on it. Pass ``hmac_key=`` (kept off the store, never persisted by
+        ``to_dict``) for forge-resistance against that threat."""
         prev = ""
         for i, e in enumerate(self._entries):
             if e.seq != i or e.prev_hash != prev:
@@ -222,6 +239,9 @@ class AuditLedger:
     def to_dict(self) -> dict:
         return {
             "schema_version": _LEDGER_SCHEMA_VERSION,
+            # Marker only — never the key itself. Lets from_dict fail loudly instead
+            # of silently returning verify() == False when the key is forgotten.
+            "hmac": self._hmac_key is not None,
             "entries": [e.to_dict() for e in self._entries],
         }
 
@@ -233,6 +253,8 @@ class AuditLedger:
                 f"unsupported audit ledger schema_version {version!r}; "
                 f"this build supports {_LEDGER_SCHEMA_VERSION}"
             )
+        if d.get("hmac") and hmac_key is None:
+            raise ValueError("this ledger was written with hmac_key=; pass hmac_key= to load it")
         ledger = cls(hmac_key=hmac_key)
         ledger._entries = [AuditEntry.from_dict(e) for e in d.get("entries", [])]
         return ledger
