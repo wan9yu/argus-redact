@@ -91,6 +91,11 @@ def test_guard_false_no_deprecation_warning():
 
 
 def test_guard_false_detailed_returns_empty_events():
+    from argus_redact.pure.security_events import COMPLETE
+
     out, d = restore("P-001 138****5678", KEY, guard=False, detailed=True)
     assert "张三" in out  # guard did NOT run → restored
-    assert d == {"security_events": []}
+    # A legacy restore substitutes everything → outcome COMPLETE, no security events.
+    # (The outcome key is now on every detailed return, so guarded_restore never has
+    # to guess it from reason codes — see warn_security_events.)
+    assert d == {"security_events": [], "outcome": COMPLETE}

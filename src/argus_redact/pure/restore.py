@@ -196,7 +196,11 @@ def restore(
                 stacklevel=_auto_stacklevel(),
             )
         if detailed:
-            return result, {"security_events": []}
+            # A legacy restore substitutes every pseudonym (no scope filter), so the
+            # outcome is COMPLETE. Emitting it here means guarded_restore never sees a
+            # None outcome from an internal caller, so warn_security_events never falls
+            # back to guessing from reason codes (see its docstring).
+            return result, {"security_events": [], "outcome": COMPLETE}
         return result
 
     # guard is True — run P + S checks

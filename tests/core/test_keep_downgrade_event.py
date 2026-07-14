@@ -43,7 +43,7 @@ def test_keep_downgraded_count_is_unique_texts_detail_is_sorted_types():
 
 def test_residual_personal_data_true_for_pseudonym():
     ents = [_pm("张三", "person")]
-    assert residual_personal_data(ents, {"person": {"strategy": "pseudonym"}}) is True
+    assert residual_personal_data(ents) is True
 
 
 def test_residual_personal_data_true_for_mask():
@@ -53,7 +53,7 @@ def test_residual_personal_data_true_for_mask():
     # personal data under GDPR Art.4(5), regardless of how "irreversible"
     # the surrogate looks on its face.
     ents = [_pm("张三", "person")]
-    assert residual_personal_data(ents, {"person": {"strategy": "mask"}}) is True
+    assert residual_personal_data(ents) is True
 
 
 def test_residual_personal_data_true_for_keep():
@@ -61,9 +61,9 @@ def test_residual_personal_data_true_for_keep():
     # key entry is even needed — the PII is right there), so this is also
     # residual personal data.
     ents = [_pm("I", "self_reference")]
-    assert residual_personal_data(ents, {"self_reference": {"strategy": "keep"}}) is True
+    assert residual_personal_data(ents) is True
 
 
 def test_residual_personal_data_false_for_empty():
     # Nothing detected -> nothing retained, nothing to recover.
-    assert residual_personal_data([], None) is False
+    assert residual_personal_data([]) is False

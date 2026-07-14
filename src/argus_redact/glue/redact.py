@@ -478,7 +478,7 @@ def _replace_and_emit(
     )
     effective_lang = lang if isinstance(lang, str) else (lang[0] if lang else "zh")
     if effective_lang == "en":
-        redacted = normalize_grammar_en(redacted, result_key)
+        redacted = normalize_grammar_en(redacted, list(result_key.values()))
     timing["replace_ms"] = (time.perf_counter() - t0) * 1000
 
     # Emit telemetry — zero overhead when no hook set
@@ -736,7 +736,7 @@ def redact(
                 entities=tuple(entity_details),
                 stats=stats,
                 risk=risk,
-                residual_personal_data=residual_personal_data(entities, config),
+                residual_personal_data=residual_personal_data(entities),
                 security_events=tuple(security_events),
             )
 

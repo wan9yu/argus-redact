@@ -120,7 +120,7 @@ def keep_downgraded_event(entities, config: dict | None) -> dict | None:
     return security_event(KEEP_DOWNGRADED, count=len(ents), detail="types: " + ", ".join(types))
 
 
-def residual_personal_data(entities, config: dict | None) -> bool:
+def residual_personal_data(entities) -> bool:
     """True if what ``redact()`` returns still constitutes personal data under
     GDPR Art.4(5) — i.e. the original value is recoverable from the returned
     artifacts, NOT whether the surrogate looks reversible on its face.
@@ -445,12 +445,9 @@ def replace(
     # in Rust and the historical pure-Python orchestrator has been removed.
     type_info, custom_fakers = _build_type_info(entities, config, langs)
 
-    # Person / organization pseudonym prefixes (config can override).
-    person_prefix = DEFAULT_PREFIXES["person"]
-    org_prefix = DEFAULT_PREFIXES["organization"]
-    if config:
-        person_prefix = config.get("person", {}).get("prefix", person_prefix)
-        org_prefix = config.get("organization", {}).get("prefix", org_prefix)
+    # Person / organization pseudonym prefixes (config can override) — via the
+    # SSOT so this one-shot path and the structured session builder never drift.
+    person_prefix, org_prefix = _resolve_person_org_prefixes(config)
 
     # Convert the dataclass entities into the Rust PatternMatch the binding
     # expects (same idiom as pure/merger.py). `_RustPM` is resolved at import.
@@ -580,11 +577,13 @@ def replace_into_session(
             stacklevel=2,
         )
 
-    # English article/grammar fix-up, exactly as `_replace_and_emit`: normalize
-    # against the CUMULATIVE originals (extra originals not present in this cell's
-    # text are no-ops). zh (the common structured path) skips this entirely, so no
-    # key is marshalled per cell there.
+    # English article/grammar fix-up, exactly as `_replace_and_emit`. Normalize
+    # against THIS cell's own originals only — the cumulative key's extras are not
+    # present in this cell's text and so are no-ops, and calling session.into_key()
+    # per cell would re-clone and marshal the whole growing key across PyO3, which
+    # is exactly the O(N^2) blow-up the Rust session exists to avoid. zh (the common
+    # structured path) skips this entirely.
     effective_lang = langs[0] if langs else "zh"
     if effective_lang == "en":
-        redacted = normalize_grammar_en(redacted, session.into_key())
+        redacted = normalize_grammar_en(redacted, [e.text for e in entities])
     return redacted

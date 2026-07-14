@@ -129,7 +129,7 @@ _ADVISORY_COOCCURRENCE_CLAUSE = (
 )
 
 
-def warn_security_events(events: list[dict], outcome: str | None = None) -> None:
+def warn_security_events(events: list[dict], outcome: str) -> None:
     """Emit a PII-free SecurityWarning summarising ``events``.
 
     Structured ``security_events`` stay the channel for programs; this is the
@@ -149,9 +149,10 @@ def warn_security_events(events: list[dict], outcome: str | None = None) -> None
     longer drives the outcome; it only decides whether to append a trailing
     clause noting an advisory event ALSO fired alongside a withheld one.
 
-    ``outcome=None`` is back-compat only, for external callers of this internal
-    function that predate H6: it falls back to the old reason-code-derived
-    guess. Every internal caller of this module passes an explicit outcome.
+    ``outcome`` is required: every call site knows what happened to the data (a
+    legacy/unguarded restore is COMPLETE — it substitutes everything). There is
+    no reason-code fallback, so a future reason code cannot silently mis-describe
+    the outcome.
 
     The warning is attributed to the first frame outside the argus_redact package
     — see ``_auto_stacklevel``.
@@ -162,7 +163,6 @@ def warn_security_events(events: list[dict], outcome: str | None = None) -> None
     stacklevel = _auto_stacklevel()
 
     codes = [e["reason_code"] for e in events]
-    withheld = any(c in _WITHHELD_CODES for c in codes)
     advisory = any(c not in _WITHHELD_CODES for c in codes)
 
     if outcome == BLOCKED:
@@ -179,17 +179,7 @@ def warn_security_events(events: list[dict], outcome: str | None = None) -> None
         )
         if advisory:
             outcome_text += _ADVISORY_COOCCURRENCE_CLAUSE
-    elif outcome == COMPLETE:
-        outcome_text = "ADVISORY ONLY — the restore PROCEEDED and originals were substituted"
-    elif withheld and advisory:
-        # outcome=None back-compat path (pre-H6 behavior).
-        outcome_text = (
-            "some pseudonyms were NOT substituted; the remaining events are "
-            "advisory and did not block the restore"
-        )
-    elif withheld:
-        outcome_text = "affected pseudonyms were NOT substituted"
-    else:
+    else:  # COMPLETE
         outcome_text = "ADVISORY ONLY — the restore PROCEEDED and originals were substituted"
 
     summary = ", ".join(f"{e['reason_code']}x{e['count']}" for e in events)
