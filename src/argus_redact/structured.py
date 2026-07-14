@@ -9,6 +9,51 @@ from typing import Any
 
 from argus_redact import redact, restore
 from argus_redact.exceptions import SecurityWarning
+from argus_redact.glue.redact import _build_type_map, _detect
+from argus_redact.pure.lang_detect import detect_languages
+from argus_redact.pure.replacer import make_structured_session, replace_into_session
+
+
+def _warn_low_entropy_salt(salt: int | bytes | None) -> None:
+    """Emit the same low-entropy salt SecurityWarning ``redact()`` does — once per
+    structured document (the stateless per-cell path emitted it per cell)."""
+    if salt is not None and (
+        isinstance(salt, int) or (isinstance(salt, (bytes, bytearray)) and len(salt) < 16)
+    ):
+        warnings.warn(
+            "low-entropy salt: an integer or short salt is grid-searchable on small "
+            "PII domains; prefer salt=os.urandom(32) for the forward-secure mapping claim.",
+            SecurityWarning,
+            stacklevel=3,
+        )
+
+
+def _redact_cell(
+    session,
+    text: str,
+    *,
+    mode: str,
+    lang: str | list[str],
+    config: dict | None,
+) -> tuple[str, list]:
+    """Detect PII in one cell/leaf and redact it through the shared session.
+
+    Returns ``(redacted_text, entities)``. Detection reuses the SAME pipeline
+    ``redact()`` runs (glue ``_detect``); only the replace step is routed through
+    the stateful session so the accumulation key + pseudonym generators stay in
+    Rust across cells (O(N) over the document instead of O(N²)).
+    """
+    cell_lang = detect_languages(text) if lang == "auto" else lang
+    entities, langs, _timing, _stats = _detect(
+        text,
+        lang=cell_lang,
+        mode=mode,
+        names=None,
+        types=None,
+        types_exclude=None,
+    )
+    redacted = replace_into_session(session, text, entities, config=config, langs=langs)
+    return redacted, entities
 
 
 def _parse_paths(paths: list[str]) -> list[list[str]]:
@@ -63,32 +108,25 @@ def redact_json(
     Returns:
         (redacted_data, key) or (redacted_data, key, type_map) if with_types=True.
     """
-    combined_key = dict(key) if key else {}
-    combined_types: dict[str, str] = {}
+    _warn_low_entropy_salt(salt)
+    session = make_structured_session(salt=salt, key=key, config=config)
     parsed_paths = _parse_paths(paths) if paths else None
+    # Entities accumulate across leaves ONLY to build the with_types map at the
+    # end (fake → PII type). The key itself lives in the Rust session.
+    all_entities: list = []
 
     def _walk(obj: Any, current_path: list[str] | None = None) -> Any:
-        nonlocal combined_key, combined_types
         if current_path is None:
             current_path = []
 
         if isinstance(obj, str):
             if parsed_paths is not None and not _path_matches(current_path, parsed_paths):
                 return obj
-            result = redact(
-                obj,
-                mode=mode,
-                lang=lang,
-                salt=salt,
-                config=config,
-                key=combined_key if combined_key else None,
-                with_types=with_types,
+            redacted_text, entities = _redact_cell(
+                session, obj, mode=mode, lang=lang, config=config
             )
             if with_types:
-                redacted_text, combined_key, type_map = result
-                combined_types.update(type_map)
-            else:
-                redacted_text, combined_key = result
+                all_entities.extend(entities)
             return redacted_text
         if isinstance(obj, dict):
             return {k: _walk(v, current_path + [k]) for k, v in obj.items()}
@@ -97,8 +135,12 @@ def redact_json(
         return obj
 
     result = _walk(data)
+    combined_key = session.into_key()
     if with_types:
-        return result, combined_key, combined_types
+        # Same fake → type map as redact(with_types=True), built once over all
+        # leaves' entities against the final key (a repeated original reuses its
+        # fake, so per-leaf vs whole-document assembly are identical).
+        return result, combined_key, _build_type_map(combined_key, all_entities)
     return result, combined_key
 
 
@@ -160,7 +202,8 @@ def redact_csv(
     if not rows:
         return csv_text, {}
 
-    combined_key: dict = {}
+    _warn_low_entropy_salt(salt)
+    session = make_structured_session(salt=salt, config=config)
     output_rows: list[list[str]] = []
     data_rows = rows
 
@@ -179,13 +222,8 @@ def redact_csv(
     for row in data_rows:
         redacted_row = []
         for cell in row:
-            redacted_cell, combined_key = redact(
-                cell,
-                mode=mode,
-                lang=lang,
-                salt=salt,
-                config=config,
-                key=combined_key if combined_key else None,
+            redacted_cell, _entities = _redact_cell(
+                session, cell, mode=mode, lang=lang, config=config
             )
             redacted_row.append(redacted_cell)
         output_rows.append(redacted_row)
@@ -193,7 +231,7 @@ def redact_csv(
     out = io.StringIO()
     writer = csv.writer(out)
     writer.writerows(output_rows)
-    return out.getvalue().strip(), combined_key
+    return out.getvalue().strip(), session.into_key()
 
 
 def restore_csv(csv_text: str, key: dict) -> str:

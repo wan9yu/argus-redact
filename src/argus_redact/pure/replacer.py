@@ -14,7 +14,7 @@ from argus_redact.pure._strategy_kind import (
     VALID_STRATEGIES,
     is_strategy_reversible,
 )
-from argus_redact.pure.grammar import SELF_REF_PRONOUNS
+from argus_redact.pure.grammar import SELF_REF_PRONOUNS, normalize_grammar_en
 from argus_redact.pure.security_events import KEEP_DOWNGRADED, security_event
 
 # Rust PatternMatch class, resolved once at import (same idiom as pure/merger.py).
@@ -474,3 +474,97 @@ def replace(
             )
 
     return redacted, result_key, aliases
+
+
+def _resolve_person_org_prefixes(config: dict | None) -> tuple[str, str]:
+    """Resolve the (person, organization) pseudonym prefixes — config override
+    else ``DEFAULT_PREFIXES``. Single source shared by ``replace`` and the
+    structured session builder so the two never drift."""
+    person_prefix = DEFAULT_PREFIXES["person"]
+    org_prefix = DEFAULT_PREFIXES["organization"]
+    if config:
+        person_prefix = config.get("person", {}).get("prefix", person_prefix)
+        org_prefix = config.get("organization", {}).get("prefix", org_prefix)
+    return person_prefix, org_prefix
+
+
+def make_structured_session(
+    *,
+    salt: int | bytes | None = None,
+    key: dict[str, str] | None = None,
+    config: dict | None = None,
+    unified_prefix: str | None = None,
+):
+    """Build a stateful ``_core.StructuredRedactor`` for a whole structured
+    document (CSV / JSON), so redacting its N cells keeps the accumulation key +
+    pseudonym generators in Rust and stays O(N) instead of O(N²).
+
+    The salt / prefixes / keep-whitelist are constant for the document (they come
+    from the one ``redact_csv`` / ``redact_json`` call), so they are fixed at
+    construction; per-cell entities + type_info are fed via ``replace_into_session``.
+    Validates ``config`` and rejects the removed ``_unified_prefix`` sentinel
+    identically to ``replace`` (so both paths raise the same way).
+    """
+    _validate_config(config)
+    if config and "_unified_prefix" in config:
+        raise ValueError(
+            "_unified_prefix is no longer accepted as a config key in v0.6.0. "
+            "Use the top-level `unified_prefix=` kwarg on redact() / "
+            "redact_pseudonym_llm() instead."
+        )
+    person_prefix, org_prefix = _resolve_person_org_prefixes(config)
+    return _core.StructuredRedactor(
+        salt=salt,
+        key=key,
+        person_prefix=person_prefix,
+        org_prefix=org_prefix,
+        unified_prefix=unified_prefix,
+        keep_whitelist=_KEEP_WHITELIST,
+    )
+
+
+def replace_into_session(
+    session,
+    text: str,
+    entities: list[PatternMatch],
+    *,
+    config: dict | None = None,
+    langs: list[str] | None = None,
+) -> str:
+    """Redact one cell/leaf through a ``make_structured_session`` session, returning
+    its redacted text. The accumulation key + generators live in the session (read
+    once at the end via ``session.into_key()``).
+
+    Byte-identical to a per-cell ``replace(...)`` call that threads the growing key
+    back in: it builds the SAME per-type info + custom fakers, drives the SAME core
+    replace engine, emits the SAME per-cell ``keep``-downgrade warnings, and applies
+    the SAME English grammar normalization — only the key stays in Rust across cells.
+    """
+    type_info, custom_fakers = _build_type_info(entities, config, langs)
+    rust_entities = [
+        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
+    ]
+    redacted = session.redact_cell(
+        text, rust_entities, type_info, custom_fakers if custom_fakers else None
+    )
+
+    # Same per-cell keep-downgrade warning selection as `replace` (single-sourced
+    # through `_keep_downgraded_entities`); the session's cumulative flag is a
+    # cross-check, not the per-cell signal.
+    for entity in _keep_downgraded_entities(entities, config):
+        warnings.warn(
+            f"strategy='keep' is only supported for self_reference "
+            f"pronouns and kinship phrases; downgrading to default for "
+            f"type={entity.type!r}.",
+            SecurityWarning,
+            stacklevel=2,
+        )
+
+    # English article/grammar fix-up, exactly as `_replace_and_emit`: normalize
+    # against the CUMULATIVE originals (extra originals not present in this cell's
+    # text are no-ops). zh (the common structured path) skips this entirely, so no
+    # key is marshalled per cell there.
+    effective_lang = langs[0] if langs else "zh"
+    if effective_lang == "en":
+        redacted = normalize_grammar_en(redacted, session.into_key())
+    return redacted

@@ -46,6 +46,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(reserved_range::scan_for_pollution, m)?)?;
     m.add_function(wrap_pyfunction!(replace::replace, m)?)?;
     m.add_function(wrap_pyfunction!(replace::build_type_info, m)?)?;
+    m.add_class::<replace::StructuredRedactor>()?;
     // ── L1 engine bindings (detect / redact / hints) ──
     m.add_function(wrap_pyfunction!(redact_l1::detect_l1, m)?)?;
     m.add_function(wrap_pyfunction!(redact_l1::redact_l1, m)?)?;

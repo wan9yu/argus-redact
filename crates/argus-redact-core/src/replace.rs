@@ -149,6 +149,11 @@ pub struct ReplaceArgs<'a> {
 /// Faithful port of `replace()` (`pure/replacer.py:483–644`). `factory` mints
 /// the Python-backed RNG for pseudonym generators (see [`PseudoFactory`]).
 ///
+/// Thin wrapper over [`ReplaceSession`]: build a session over the initial key,
+/// process the single cell, return its accumulated result. The per-entity
+/// strategy dispatch lives ONLY in [`ReplaceSession::process`] — this one-shot
+/// entry and the multi-cell structured path share it (no duplicated logic).
+///
 /// The `realistic` strategy dispatches on the type's [`FakerResolution`]:
 /// [`FakerResolution::Builtin`] resolves a built-in faker via [`resolve_faker`];
 /// [`FakerResolution::Custom`] (a custom Python `faker_reserved` callable) routes
@@ -172,289 +177,488 @@ pub fn replace<F: PseudoFactory>(
         keep_whitelist,
     } = args;
 
-    let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
-    let mut keep_downgraded = false;
+    let mut session = ReplaceSession::new(
+        factory,
+        salt,
+        person_prefix,
+        org_prefix,
+        unified_prefix,
+        key,
+    );
+    let redacted = session.process(text, entities, type_info, keep_whitelist, faker_factory)?;
+    Ok(ReplaceResult {
+        redacted,
+        key: session.result_key,
+        aliases: session.aliases,
+        keep_downgraded: session.keep_downgraded,
+    })
+}
 
-    // No-entities early return (Python: `return text, key or {}, aliases`).
-    if entities.is_empty() {
-        return Ok(ReplaceResult {
-            redacted: text.to_string(),
-            key: key.cloned().unwrap_or_default(),
-            aliases,
-            keep_downgraded,
-        });
+/// Stateful multi-cell replace engine.
+///
+/// Owns the accumulation key, the reverse index, the reserved-label set, and the
+/// pseudonym generators so a caller that redacts many small cells (structured
+/// CSV / JSON) pays O(cell) per cell — instead of the stateless per-cell
+/// `replace()` re-cloning + re-preloading the whole growing key on every cell
+/// (the O(N²) blow-up). One-shot [`replace`] is just a session that processes a
+/// single cell, so the two paths run the *same* per-entity logic in
+/// [`process`](Self::process).
+///
+/// ## Byte-identity with the stateless per-cell path
+///
+/// A pseudonym generator that PERSISTS its RNG across cells is provably
+/// identical to one re-seeded per cell and pre-loaded from the growing key:
+/// every stream value drawn before the current index is already a used code
+/// (it was either accepted, or it collided against an accepted code) — so a
+/// re-seeded generator collides through exactly those and lands on the same
+/// next value. This holds while each prefix namespace is owned by ONE generator
+/// (non-unified mode). The session is only driven multi-cell by structured
+/// redaction, which never sets `unified_prefix`; the one-shot [`replace`] (which
+/// the general `redact()` uses, including unified mode) processes a single cell,
+/// so its behaviour is unchanged.
+///
+/// The per-cell reserved set is reconstructed exactly: `used_labels` is kept as
+/// {key replacements} ∪ {key originals} incrementally, and each cell's entity
+/// texts are added for the pass then reverted (kept only if they became a key
+/// original) — matching the stateless
+/// `used_labels = key.keys() ∪ entities.texts ∪ key.values()`.
+///
+/// One theoretical exception: once a persisted generator exhausts its code
+/// range and permanently widens it (the `hi * 10` expansion in
+/// `pseudonym.rs`), its subsequent draws are governed by the wider range for
+/// the rest of the session, whereas a stateless per-cell reference would only
+/// see that widened range within the single cell that triggered it — the two
+/// paths can then diverge. This is reachable only around 99,000 entities
+/// sharing one prefix in a single document, a scale at which the stateless
+/// reference itself is already degenerate.
+pub struct ReplaceSession<'f, F: PseudoFactory> {
+    factory: &'f F,
+    salt: Option<Salt>,
+    pseudo_seed_int: Option<u64>,
+    /// Salt resolved for built-in realistic fakers. Cached lazily on first use;
+    /// the salt is constant for the session so the resolve is shared across cells.
+    resolved_salt: Option<Vec<u8>>,
+    person_prefix: String,
+    org_prefix: String,
+    unified_prefix: Option<String>,
+    result_key: HashMap<String, String>,
+    /// original → replacement, for existing-mapping reuse across cells.
+    reverse_index: HashMap<String, String>,
+    /// {key replacements} ∪ {key originals}, maintained incrementally.
+    used_labels: HashSet<String>,
+    aliases: HashMap<String, Vec<String>>,
+    keep_downgraded: bool,
+    /// Person / organization pseudonym generators — built lazily on first use and
+    /// persisted (RNG continues) across cells. Lazy build means an all-mask
+    /// workload never touches the key here, keeping per-cell cost flat.
+    pseudo_gen: Option<PseudonymGenerator<F::Source>>,
+    org_gen: Option<PseudonymGenerator<F::Source>>,
+    /// Per-type pseudonym generators for the remove / realistic-fallback paths.
+    type_gens: HashMap<String, PseudonymGenerator<F::Source>>,
+}
+
+impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
+    /// Build a session over an optional initial key. The reverse index and the
+    /// reserved-label set are derived from that key ONCE here, then maintained
+    /// incrementally per cell.
+    pub fn new(
+        factory: &'f F,
+        salt: Option<&Salt>,
+        person_prefix: &str,
+        org_prefix: &str,
+        unified_prefix: Option<&str>,
+        initial_key: Option<&HashMap<String, String>>,
+    ) -> Self {
+        let result_key: HashMap<String, String> = initial_key.cloned().unwrap_or_default();
+        let mut used_labels: HashSet<String> = HashSet::with_capacity(result_key.len() * 2);
+        let mut reverse_index: HashMap<String, String> =
+            HashMap::with_capacity(result_key.len());
+        for (replacement, original) in &result_key {
+            used_labels.insert(replacement.clone());
+            used_labels.insert(original.clone());
+            reverse_index.insert(original.clone(), replacement.clone());
+        }
+        let pseudo_seed_int = pseudonym_seed_int(salt);
+        Self {
+            factory,
+            salt: salt.cloned(),
+            pseudo_seed_int,
+            resolved_salt: None,
+            person_prefix: person_prefix.to_string(),
+            org_prefix: org_prefix.to_string(),
+            unified_prefix: unified_prefix.map(str::to_string),
+            result_key,
+            reverse_index,
+            used_labels,
+            aliases: HashMap::new(),
+            keep_downgraded: false,
+            pseudo_gen: None,
+            org_gen: None,
+            type_gens: HashMap::new(),
+        }
     }
 
-    let mut result_key: HashMap<String, String> = key.cloned().unwrap_or_default();
-    let mut used_labels: HashSet<String> = result_key.keys().cloned().collect();
-    // Reserve every ORIGINAL value too — this document's entity texts plus any
-    // originals already in the key — so a generated fake can never equal another
-    // entity's real value. Otherwise that real value would surface verbatim in
-    // the redacted output as some OTHER entity's fake (a cross-entity leak: e.g.
-    // person A's fake == person B's real name). The faker re-roll loop rejects
-    // anything in `used_labels`, so this makes it skip all real originals.
-    used_labels.extend(entities.iter().map(|e| e.text.clone()));
-    used_labels.extend(result_key.values().cloned());
-
-    // reverse_index: original → replacement (for existing-key reuse).
-    let mut reverse_index: HashMap<String, String> = HashMap::new();
-    for (replacement, original) in &result_key {
-        reverse_index.insert(original.clone(), replacement.clone());
+    /// Whether a `keep`-strategy entity has been downgraded so far this session.
+    pub fn keep_downgraded(&self) -> bool {
+        self.keep_downgraded
     }
 
-    let pseudo_seed_int = pseudonym_seed_int(salt);
-    let existing_for_gen = if result_key.is_empty() {
-        None
-    } else {
-        Some(result_key.clone())
-    };
+    /// Borrow the accumulated `{fake: aliases}` map.
+    pub fn aliases(&self) -> &HashMap<String, Vec<String>> {
+        &self.aliases
+    }
 
-    // Person + organization pseudonym generators.
-    let mut pseudo_gen = PseudonymGenerator::new(
-        unified_prefix.unwrap_or(person_prefix),
-        PSEUDONYM_CODE_RANGE,
-        factory.make(pseudo_seed_int),
-        existing_for_gen.as_ref(),
-    );
-    let mut org_gen = PseudonymGenerator::new(
-        unified_prefix.unwrap_or(org_prefix),
-        PSEUDONYM_CODE_RANGE,
-        factory.make(offset_seed(pseudo_seed_int, 1)),
-        existing_for_gen.as_ref(),
-    );
-    // Per-type pseudonym generators for the remove strategy (LLM survival).
-    let mut type_gens: HashMap<String, PseudonymGenerator<F::Source>> = HashMap::new();
+    /// Borrow the accumulated replacement → original key.
+    pub fn key(&self) -> &HashMap<String, String> {
+        &self.result_key
+    }
 
-    // Salt is immutable for the whole call; resolve it once, lazily — only when
-    // a built-in realistic faker actually needs it. Deferring the resolve keeps
-    // the original error surface (a `None` salt with no env var errors only when
-    // a realistic faker is reached, not for calls without any realistic entity).
-    let mut resolved_salt: Option<Vec<u8>> = None;
+    /// Consume the session, returning the accumulated replacement → original key.
+    pub fn into_key(self) -> HashMap<String, String> {
+        self.result_key
+    }
 
-    let mut entity_replacements: HashMap<String, String> = HashMap::new();
-
-    for entity in entities {
-        if entity_replacements.contains_key(&entity.text) {
-            continue;
-        }
-        if let Some(existing) = reverse_index.get(&entity.text) {
-            entity_replacements.insert(entity.text.clone(), existing.clone());
-            continue;
+    /// Redact one cell over the persistent session state, returning its redacted
+    /// text. The key, reverse index, reserved set, aliases, and `keep_downgraded`
+    /// flag all accumulate on `self`.
+    pub fn process(
+        &mut self,
+        text: &str,
+        entities: &[PatternMatch],
+        type_info: &HashMap<String, TypeInfo>,
+        keep_whitelist: &HashSet<String>,
+        faker_factory: Option<&dyn FakerFactory>,
+    ) -> Result<String, String> {
+        // No-entities early return (Python: `return text, key or {}, aliases`).
+        if entities.is_empty() {
+            return Ok(text.to_string());
         }
 
-        let info = type_info.get(&entity.type_);
-        // Strategy: config strategy, else the registry default (already folded
-        // into TypeInfo.strategy on the Python side). Fallback "remove" matches
-        // `_resolve_default_strategy`'s unknown-type fallback.
-        let mut strategy = info
-            .map(|i| i.strategy.clone())
-            .unwrap_or_else(|| "remove".to_string());
+        // Reserve this cell's entity texts so a generated fake can never equal
+        // another entity's real value (a cross-entity leak). This is transient:
+        // the stateless path folds ONLY the current cell's entity texts into
+        // used_labels, so we track the ones we newly added and revert them at the
+        // end — except those that became a key original (which stay reserved via
+        // the {key originals} invariant). Reverting keeps the per-cell reserved
+        // set byte-identical to the stateless single-call set.
+        let mut cell_added: Vec<String> = Vec::new();
+        for e in entities {
+            if self.used_labels.insert(e.text.clone()) {
+                cell_added.push(e.text.clone());
+            }
+        }
 
-        if strategy == "keep" {
-            // `keep` survives only for self_reference pronouns / kinship in the
-            // whitelist; anything else downgrades to the type default (guards
-            // against Layer-3 misclassifying sensitive PII as self_reference).
-            if entity.type_ == "self_reference" && keep_whitelist.contains(&entity.text) {
-                entity_replacements.insert(entity.text.clone(), entity.text.clone());
+        let mut entity_replacements: HashMap<String, String> = HashMap::new();
+
+        for entity in entities {
+            if entity_replacements.contains_key(&entity.text) {
                 continue;
             }
-            keep_downgraded = true;
-            // The Python original calls `_resolve_default_strategy(type)` again
-            // here — the registry default. We carry it explicitly in
-            // `default_strategy` so a user config of `{strategy: "keep"}`
-            // downgrades to the registry default (not back to "keep"). Fallback
-            // "remove" matches the unknown-type case.
-            strategy = info
-                .map(|i| i.default_strategy.clone())
+            if let Some(existing) = self.reverse_index.get(&entity.text) {
+                entity_replacements.insert(entity.text.clone(), existing.clone());
+                continue;
+            }
+
+            let info = type_info.get(&entity.type_);
+            // Strategy: config strategy, else the registry default (already folded
+            // into TypeInfo.strategy on the Python side). Fallback "remove" matches
+            // `_resolve_default_strategy`'s unknown-type fallback.
+            let mut strategy = info
+                .map(|i| i.strategy.clone())
                 .unwrap_or_else(|| "remove".to_string());
-            // fall through to strategy dispatch
-        }
 
-        let replacement: String = if strategy == "pseudonym" {
-            if entity.type_ == "organization" {
-                if info.map(|i| i.prefix_overridden).unwrap_or(false) {
-                    // Python rebuilds the org generator with the CONFIG prefix
-                    // (NOT unified_prefix) and the LIVE result_key — re-seeding
-                    // redraws the first number, but the up-to-date key forces a
-                    // fresh code on collision. (replacer.py:578–583)
-                    let prefix = info.map(|i| i.prefix.as_str()).unwrap_or("O");
-                    let live = if result_key.is_empty() { None } else { Some(&result_key) };
-                    org_gen = PseudonymGenerator::new(
-                        prefix,
-                        PSEUDONYM_CODE_RANGE,
-                        factory.make(offset_seed(pseudo_seed_int, 1)),
-                        live,
-                    );
+            if strategy == "keep" {
+                // `keep` survives only for self_reference pronouns / kinship in the
+                // whitelist; anything else downgrades to the type default (guards
+                // against Layer-3 misclassifying sensitive PII as self_reference).
+                if entity.type_ == "self_reference" && keep_whitelist.contains(&entity.text) {
+                    entity_replacements.insert(entity.text.clone(), entity.text.clone());
+                    continue;
                 }
-                org_gen.get_reserved(&entity.text, &mut used_labels)
-            } else {
-                if info.map(|i| i.prefix_overridden).unwrap_or(false) {
-                    // Same rebuild semantics for the person generator
-                    // (replacer.py:586–591): config prefix + live result_key.
-                    let prefix = info.map(|i| i.prefix.as_str()).unwrap_or("P");
-                    let live = if result_key.is_empty() { None } else { Some(&result_key) };
-                    pseudo_gen = PseudonymGenerator::new(
-                        prefix,
-                        PSEUDONYM_CODE_RANGE,
-                        factory.make(pseudo_seed_int),
-                        live,
-                    );
-                }
-                pseudo_gen.get_reserved(&entity.text, &mut used_labels)
+                self.keep_downgraded = true;
+                // The Python original calls `_resolve_default_strategy(type)` again
+                // here — the registry default. We carry it explicitly in
+                // `default_strategy` so a user config of `{strategy: "keep"}`
+                // downgrades to the registry default (not back to "keep"). Fallback
+                // "remove" matches the unknown-type case.
+                strategy = info
+                    .map(|i| i.default_strategy.clone())
+                    .unwrap_or_else(|| "remove".to_string());
+                // fall through to strategy dispatch
             }
-        } else if strategy == "realistic" {
-            // Default to None when info is absent (no TypeInfo for this type).
-            let resolution = info
-                .map(|i| &i.faker_resolution)
-                .unwrap_or(&FakerResolution::None);
-            // Resolve a fake via the configured faker. `None` means either "no
-            // faker configured" or "the faker exhausted its re-rolls" (it could
-            // only ever produce the input itself or an already-used value) —
-            // both fall back to the pseudonym path below. A genuine faker error
-            // (custom Python callable raised, unknown built-in) still `?`-aborts.
-            let produced: Option<(String, Vec<String>)> = match resolution {
-                FakerResolution::Builtin(name) => {
-                    // Built-in faker resolvable in Rust.
-                    let faker = resolve_faker(name).ok_or_else(|| {
-                        format!("realistic strategy: unknown faker '{name}' for type '{}'", entity.type_)
-                    })?;
-                    if resolved_salt.is_none() {
-                        resolved_salt = Some(resolve_salt(salt)?);
+
+            let replacement: String = if strategy == "pseudonym" {
+                if entity.type_ == "organization" {
+                    if info.map(|i| i.prefix_overridden).unwrap_or(false) {
+                        // Python rebuilds the org generator with the CONFIG prefix
+                        // (NOT unified_prefix) and the LIVE result_key — re-seeding
+                        // redraws the first number, but the up-to-date key forces a
+                        // fresh code on collision. (replacer.py:578–583)
+                        let prefix = info.map(|i| i.prefix.as_str()).unwrap_or("O");
+                        let live = if self.result_key.is_empty() {
+                            None
+                        } else {
+                            Some(&self.result_key)
+                        };
+                        self.org_gen = Some(PseudonymGenerator::new(
+                            prefix,
+                            PSEUDONYM_CODE_RANGE,
+                            self.factory.make(offset_seed(self.pseudo_seed_int, 1)),
+                            live,
+                        ));
                     }
-                    let salt_bytes = resolved_salt.as_deref().expect("resolved_salt set above");
-                    try_generate_unique_fake(faker, &entity.text, &entity.type_, salt_bytes, &used_labels)?
-                }
-                FakerResolution::Custom => {
-                    // Custom Python `faker_reserved`. Route through the
-                    // FakerFactory callback, reusing the shared re-roll loop so
-                    // seeding/collision is identical to the built-in path.
-                    let ff = faker_factory.ok_or_else(|| format!(
-                        "realistic strategy: custom faker for '{}' but no FakerFactory provided", entity.type_))?;
-                    if resolved_salt.is_none() {
-                        resolved_salt = Some(resolve_salt(salt)?);
+                    let org_prefix = self
+                        .unified_prefix
+                        .as_deref()
+                        .unwrap_or(self.org_prefix.as_str());
+                    let pg = lazy_gen(
+                        &mut self.org_gen,
+                        org_prefix,
+                        offset_seed(self.pseudo_seed_int, 1),
+                        &self.result_key,
+                        self.factory,
+                    );
+                    pg.get_reserved(&entity.text, &mut self.used_labels)
+                } else {
+                    if info.map(|i| i.prefix_overridden).unwrap_or(false) {
+                        // Same rebuild semantics for the person generator
+                        // (replacer.py:586–591): config prefix + live result_key.
+                        let prefix = info.map(|i| i.prefix.as_str()).unwrap_or("P");
+                        let live = if self.result_key.is_empty() {
+                            None
+                        } else {
+                            Some(&self.result_key)
+                        };
+                        self.pseudo_gen = Some(PseudonymGenerator::new(
+                            prefix,
+                            PSEUDONYM_CODE_RANGE,
+                            self.factory.make(self.pseudo_seed_int),
+                            live,
+                        ));
                     }
-                    let salt_bytes = resolved_salt.as_deref().expect("resolved_salt set above");
-                    crate::fakers::generate_unique_fake_with(
-                        |mk| ff.call_faker(&entity.type_, &entity.text, mk),
-                        &entity.text, &entity.type_, salt_bytes, &used_labels,
-                    )?
+                    let person_prefix = self
+                        .unified_prefix
+                        .as_deref()
+                        .unwrap_or(self.person_prefix.as_str());
+                    let pg = lazy_gen(
+                        &mut self.pseudo_gen,
+                        person_prefix,
+                        self.pseudo_seed_int,
+                        &self.result_key,
+                        self.factory,
+                    );
+                    pg.get_reserved(&entity.text, &mut self.used_labels)
                 }
-                FakerResolution::None => None,
-            };
-            match produced {
-                Some((fake, alias_list)) => {
-                    if !alias_list.is_empty() {
-                        aliases.insert(fake.clone(), alias_list);
-                    }
-                    fake
-                }
-                None => {
-                    // No faker, or the faker could not produce a unique non-identity
-                    // fake → fail closed to a pseudonym (organization → org_gen,
-                    // else the per-type generator). The entity stays redacted; the
-                    // whole redaction never crashes on a value a faker can't fake.
-                    if entity.type_ == "organization" {
-                        org_gen.get_reserved(&entity.text, &mut used_labels)
-                    } else {
-                        let type_gen = get_type_gen(
-                            &mut type_gens,
+            } else if strategy == "realistic" {
+                // Default to None when info is absent (no TypeInfo for this type).
+                let resolution = info
+                    .map(|i| &i.faker_resolution)
+                    .unwrap_or(&FakerResolution::None);
+                // Resolve a fake via the configured faker. `None` means either "no
+                // faker configured" or "the faker exhausted its re-rolls" (it could
+                // only ever produce the input itself or an already-used value) —
+                // both fall back to the pseudonym path below. A genuine faker error
+                // (custom Python callable raised, unknown built-in) still `?`-aborts.
+                let produced: Option<(String, Vec<String>)> = match resolution {
+                    FakerResolution::Builtin(name) => {
+                        // Built-in faker resolvable in Rust.
+                        let faker = resolve_faker(name).ok_or_else(|| {
+                            format!(
+                                "realistic strategy: unknown faker '{name}' for type '{}'",
+                                entity.type_
+                            )
+                        })?;
+                        if self.resolved_salt.is_none() {
+                            self.resolved_salt = Some(resolve_salt(self.salt.as_ref())?);
+                        }
+                        let salt_bytes =
+                            self.resolved_salt.as_deref().expect("resolved_salt set above");
+                        try_generate_unique_fake(
+                            faker,
+                            &entity.text,
                             &entity.type_,
-                            info,
-                            unified_prefix,
-                            pseudo_seed_int,
-                            existing_for_gen.as_ref(),
-                            factory,
-                        );
-                        type_gen.get_reserved(&entity.text, &mut used_labels)
+                            salt_bytes,
+                            &self.used_labels,
+                        )?
+                    }
+                    FakerResolution::Custom => {
+                        // Custom Python `faker_reserved`. Route through the
+                        // FakerFactory callback, reusing the shared re-roll loop so
+                        // seeding/collision is identical to the built-in path.
+                        let ff = faker_factory.ok_or_else(|| {
+                            format!(
+                                "realistic strategy: custom faker for '{}' but no FakerFactory provided",
+                                entity.type_
+                            )
+                        })?;
+                        if self.resolved_salt.is_none() {
+                            self.resolved_salt = Some(resolve_salt(self.salt.as_ref())?);
+                        }
+                        let salt_bytes =
+                            self.resolved_salt.as_deref().expect("resolved_salt set above");
+                        crate::fakers::generate_unique_fake_with(
+                            |mk| ff.call_faker(&entity.type_, &entity.text, mk),
+                            &entity.text,
+                            &entity.type_,
+                            salt_bytes,
+                            &self.used_labels,
+                        )?
+                    }
+                    FakerResolution::None => None,
+                };
+                match produced {
+                    Some((fake, alias_list)) => {
+                        if !alias_list.is_empty() {
+                            self.aliases.insert(fake.clone(), alias_list);
+                        }
+                        fake
+                    }
+                    None => {
+                        // No faker, or the faker could not produce a unique
+                        // non-identity fake → fail closed to a pseudonym
+                        // (organization → org_gen, else the per-type generator).
+                        if entity.type_ == "organization" {
+                            let org_prefix = self
+                                .unified_prefix
+                                .as_deref()
+                                .unwrap_or(self.org_prefix.as_str());
+                            let pg = lazy_gen(
+                                &mut self.org_gen,
+                                org_prefix,
+                                offset_seed(self.pseudo_seed_int, 1),
+                                &self.result_key,
+                                self.factory,
+                            );
+                            pg.get_reserved(&entity.text, &mut self.used_labels)
+                        } else {
+                            let pg = get_type_gen(
+                                &mut self.type_gens,
+                                &entity.type_,
+                                info,
+                                self.unified_prefix.as_deref(),
+                                self.pseudo_seed_int,
+                                &self.result_key,
+                                self.factory,
+                            );
+                            pg.get_reserved(&entity.text, &mut self.used_labels)
+                        }
                     }
                 }
-            }
-        } else if strategy == "mask" {
-            let (vp, vs) = info.map(|i| (i.visible_prefix, i.visible_suffix)).unwrap_or((0, 0));
-            let masked = mask_value(&entity.text, &entity.type_, vp, vs);
-            resolve_collision(&masked, &used_labels)?
-        } else if strategy == "name_mask" {
-            resolve_collision(&mask_name(&entity.text), &used_labels)?
-        } else if strategy == "landline_mask" {
-            resolve_collision(&mask_landline(&entity.text), &used_labels)?
-        } else if strategy == "remove" {
-            if let Some(repl) = info.and_then(|i| i.replacement.as_deref()) {
-                resolve_collision(repl, &used_labels)?
+            } else if strategy == "mask" {
+                let (vp, vs) = info.map(|i| (i.visible_prefix, i.visible_suffix)).unwrap_or((0, 0));
+                let masked = mask_value(&entity.text, &entity.type_, vp, vs);
+                resolve_collision(&masked, &self.used_labels)?
+            } else if strategy == "name_mask" {
+                resolve_collision(&mask_name(&entity.text), &self.used_labels)?
+            } else if strategy == "landline_mask" {
+                resolve_collision(&mask_landline(&entity.text), &self.used_labels)?
+            } else if strategy == "remove" {
+                if let Some(repl) = info.and_then(|i| i.replacement.as_deref()) {
+                    resolve_collision(repl, &self.used_labels)?
+                } else {
+                    let pg = get_type_gen(
+                        &mut self.type_gens,
+                        &entity.type_,
+                        info,
+                        self.unified_prefix.as_deref(),
+                        self.pseudo_seed_int,
+                        &self.result_key,
+                        self.factory,
+                    );
+                    pg.get_reserved(&entity.text, &mut self.used_labels)
+                }
+            } else if strategy == "category" {
+                let label = info
+                    .and_then(|i| i.label.clone())
+                    .or_else(|| info.map(|i| i.default_category_label.clone()))
+                    .unwrap_or_else(|| format!("[{}]", entity.type_));
+                resolve_collision(&label, &self.used_labels)?
             } else {
-                let type_gen = get_type_gen(
-                    &mut type_gens,
-                    &entity.type_,
-                    info,
-                    unified_prefix,
-                    pseudo_seed_int,
-                    existing_for_gen.as_ref(),
-                    factory,
-                );
-                type_gen.get_reserved(&entity.text, &mut used_labels)
+                resolve_collision(DEFAULT_REDACT_LABEL, &self.used_labels)?
+            };
+
+            entity_replacements.insert(entity.text.clone(), replacement.clone());
+            self.used_labels.insert(replacement.clone());
+            self.reverse_index
+                .insert(entity.text.clone(), replacement.clone());
+            self.result_key.insert(replacement, entity.text.clone());
+        }
+
+        // Revert the transient per-cell entity-text reservations that did NOT
+        // become a key original (e.g. a whitelisted keep entity). Replaced
+        // originals are now in reverse_index and stay reserved (the {key
+        // originals} invariant), so we keep them.
+        for t in cell_added {
+            if !self.reverse_index.contains_key(&t) {
+                self.used_labels.remove(&t);
             }
-        } else if strategy == "category" {
-            let label = info
-                .and_then(|i| i.label.clone())
-                .or_else(|| info.map(|i| i.default_category_label.clone()))
-                .unwrap_or_else(|| format!("[{}]", entity.type_));
-            resolve_collision(&label, &used_labels)?
-        } else {
-            resolve_collision(DEFAULT_REDACT_LABEL, &used_labels)?
-        };
-
-        entity_replacements.insert(entity.text.clone(), replacement.clone());
-        used_labels.insert(replacement.clone());
-        result_key.insert(replacement, entity.text.clone());
-    }
-
-    // Replace right-to-left, dedup by (start, end). Char-based slicing to match
-    // Python string indexing (code points, not bytes).
-    let chars: Vec<char> = text.chars().collect();
-    let mut sorted: Vec<&PatternMatch> = entities.iter().collect();
-    sorted.sort_by(|a, b| b.start.cmp(&a.start));
-
-    let mut result_chars = chars;
-    let mut seen_positions: HashSet<(usize, usize)> = HashSet::new();
-    for entity in sorted {
-        let pos = (entity.start, entity.end);
-        if seen_positions.contains(&pos) {
-            continue;
         }
-        seen_positions.insert(pos);
-        let replacement = entity_replacements
-            .get(&entity.text)
-            .expect("entity.text must have a replacement");
-        let repl_chars: Vec<char> = replacement.chars().collect();
-        // result = result[:start] + replacement + result[end:]
-        //
-        // Python slicing silently clamps out-of-range indices: `s[:start]` with
-        // `start > len(s)` yields the whole string, `s[end:]` with `end > len(s)`
-        // yields "". The Presidio bridge feeds stale offsets into a string that
-        // the prior (right-to-left) replacements already shortened, relying on
-        // exactly this leniency — so we clamp to the current length to stay
-        // byte-identical to `_replace_python` (a hard slice would panic).
-        let cur_len = result_chars.len();
-        let lo = entity.start.min(cur_len);
-        let hi = entity.end.min(cur_len);
-        let mut new_chars = Vec::with_capacity(lo + repl_chars.len() + cur_len.saturating_sub(hi));
-        new_chars.extend_from_slice(&result_chars[..lo]);
-        new_chars.extend_from_slice(&repl_chars);
-        if hi < cur_len {
-            new_chars.extend_from_slice(&result_chars[hi..]);
-        }
-        result_chars = new_chars;
-    }
 
-    Ok(ReplaceResult {
-        redacted: result_chars.into_iter().collect(),
-        key: result_key,
-        aliases,
-        keep_downgraded,
+        // Replace right-to-left, dedup by (start, end). Char-based slicing to match
+        // Python string indexing (code points, not bytes).
+        let chars: Vec<char> = text.chars().collect();
+        let mut sorted: Vec<&PatternMatch> = entities.iter().collect();
+        sorted.sort_by(|a, b| b.start.cmp(&a.start));
+
+        let mut result_chars = chars;
+        let mut seen_positions: HashSet<(usize, usize)> = HashSet::new();
+        for entity in sorted {
+            let pos = (entity.start, entity.end);
+            if seen_positions.contains(&pos) {
+                continue;
+            }
+            seen_positions.insert(pos);
+            let replacement = entity_replacements
+                .get(&entity.text)
+                .expect("entity.text must have a replacement");
+            let repl_chars: Vec<char> = replacement.chars().collect();
+            // result = result[:start] + replacement + result[end:]
+            //
+            // Python slicing silently clamps out-of-range indices: `s[:start]` with
+            // `start > len(s)` yields the whole string, `s[end:]` with `end > len(s)`
+            // yields "". The Presidio bridge feeds stale offsets into a string that
+            // the prior (right-to-left) replacements already shortened, relying on
+            // exactly this leniency — so we clamp to the current length to stay
+            // byte-identical to `_replace_python` (a hard slice would panic).
+            let cur_len = result_chars.len();
+            let lo = entity.start.min(cur_len);
+            let hi = entity.end.min(cur_len);
+            let mut new_chars =
+                Vec::with_capacity(lo + repl_chars.len() + cur_len.saturating_sub(hi));
+            new_chars.extend_from_slice(&result_chars[..lo]);
+            new_chars.extend_from_slice(&repl_chars);
+            if hi < cur_len {
+                new_chars.extend_from_slice(&result_chars[hi..]);
+            }
+            result_chars = new_chars;
+        }
+
+        Ok(result_chars.into_iter().collect())
+    }
+}
+
+/// Lazily build (or fetch) a person/organization pseudonym generator, preloading
+/// codes of its prefix from the live key on first construction and persisting its
+/// RNG thereafter. The caller passes `&mut self.used_labels` separately to
+/// `get_reserved` (disjoint field borrow).
+fn lazy_gen<'a, F: PseudoFactory>(
+    slot: &'a mut Option<PseudonymGenerator<F::Source>>,
+    prefix: &str,
+    seed: Option<u64>,
+    result_key: &HashMap<String, String>,
+    factory: &F,
+) -> &'a mut PseudonymGenerator<F::Source> {
+    slot.get_or_insert_with(|| {
+        let existing = if result_key.is_empty() { None } else { Some(result_key) };
+        PseudonymGenerator::new(prefix, PSEUDONYM_CODE_RANGE, factory.make(seed), existing)
     })
 }
 
 /// Lazily build (or fetch) the per-type pseudonym generator for the remove /
 /// realistic-fallback strategies. Mirrors `_get_type_gen` (replacer.py:525–533).
+/// Preloads from the live `result_key` on first construction and persists across
+/// cells (the matching-prefix subset it preloads is exactly the codes it minted,
+/// so a persisted generator stays byte-identical to a per-cell rebuild).
 #[allow(clippy::too_many_arguments)]
 fn get_type_gen<'a, F: PseudoFactory>(
     type_gens: &'a mut HashMap<String, PseudonymGenerator<F::Source>>,
@@ -462,7 +666,7 @@ fn get_type_gen<'a, F: PseudoFactory>(
     info: Option<&TypeInfo>,
     unified_prefix: Option<&str>,
     pseudo_seed_int: Option<u64>,
-    existing: Option<&HashMap<String, String>>,
+    result_key: &HashMap<String, String>,
     factory: &F,
 ) -> &'a mut PseudonymGenerator<F::Source> {
     type_gens.entry(entity_type.to_string()).or_insert_with(|| {
@@ -470,6 +674,7 @@ fn get_type_gen<'a, F: PseudoFactory>(
         // Python side into TypeInfo.prefix, with the type.upper()[:4] fallback).
         let prefix = unified_prefix.unwrap_or_else(|| info.map(|i| i.prefix.as_str()).unwrap_or(""));
         let seed = offset_seed(pseudo_seed_int, type_seed_offset(entity_type) as u64);
+        let existing = if result_key.is_empty() { None } else { Some(result_key) };
         PseudonymGenerator::new(prefix, PSEUDONYM_CODE_RANGE, factory.make(seed), existing)
     })
 }

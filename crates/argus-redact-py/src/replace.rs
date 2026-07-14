@@ -4,7 +4,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
 
 use argus_redact_core::replace::{
-    replace as core_replace, FakerFactory, FakerResolution, PseudoFactory, ReplaceArgs, TypeInfo,
+    replace as core_replace, FakerFactory, FakerResolution, PseudoFactory, ReplaceArgs,
+    ReplaceSession, TypeInfo,
 };
 use argus_redact_core::seed::Salt;
 use argus_redact_core::typeinfo::{
@@ -29,6 +30,12 @@ impl PseudoFactory for PyPseudoFactory {
         PyRandomSource::for_seed(seed)
     }
 }
+
+/// A single shared factory instance so a [`StructuredRedactor`]'s owned
+/// [`ReplaceSession`] can borrow it for `'static`. `PyPseudoFactory` is a
+/// zero-sized unit struct (no per-instance state — every `make` mints a fresh
+/// [`PyRandomSource`] from the seed), so a process-wide `static` is exact.
+static PY_FACTORY: PyPseudoFactory = PyPseudoFactory;
 
 /// Looks up the registered custom Python `faker_reserved` callable by type and
 /// invokes it with a `_core.ShakeRng` built from the attempt's master_key. The
@@ -433,4 +440,105 @@ pub fn build_type_info<'py>(
         out.set_item(type_name, d)?;
     }
     Ok(out)
+}
+
+/// Stateful structured-redaction session.
+///
+/// Owns the accumulation key + reverse index + pseudonym generators in Rust
+/// across cells, so redacting an N-cell CSV / JSON is O(N) total instead of
+/// O(N²): the stateless per-cell [`replace`] re-clones and re-preloads the whole
+/// growing key on every cell (marshalled in AND out across the boundary), which
+/// is O(|key|) per cell. This session marshals only the per-cell entities +
+/// type_info in and the redacted text out; the key lives in Rust and is read
+/// once at the end via [`into_key`](Self::into_key).
+///
+/// Byte-identical to the per-cell path: it drives the SAME core
+/// [`ReplaceSession`] the one-shot [`replace`] uses, so no replace logic is
+/// duplicated. `structured.py` builds one of these, calls
+/// [`redact_cell`](Self::redact_cell) per cell/leaf, then reads
+/// [`into_key`](Self::into_key).
+#[pyclass]
+pub struct StructuredRedactor {
+    session: ReplaceSession<'static, PyPseudoFactory>,
+    /// Keep-strategy whitelist, constant for the session (single SSOT from
+    /// Python, same value the stateless `replace` receives per call).
+    keep_whitelist: HashSet<String>,
+}
+
+#[pymethods]
+impl StructuredRedactor {
+    /// Build a session. `salt` / prefixes / `keep_whitelist` are constant for the
+    /// whole structured document (they come from the one redact() call's params);
+    /// `key` seeds an optional existing mapping.
+    #[new]
+    #[pyo3(signature = (
+        *, salt=None, key=None, person_prefix="P", org_prefix="O",
+        unified_prefix=None, keep_whitelist
+    ))]
+    fn new(
+        salt: Option<&Bound<'_, PyAny>>,
+        key: Option<HashMap<String, String>>,
+        person_prefix: &str,
+        org_prefix: &str,
+        unified_prefix: Option<&str>,
+        keep_whitelist: HashSet<String>,
+    ) -> PyResult<Self> {
+        let salt = parse_salt(salt)?;
+        let session = ReplaceSession::new(
+            &PY_FACTORY,
+            salt.as_ref(),
+            person_prefix,
+            org_prefix,
+            unified_prefix,
+            key.as_ref(),
+        );
+        Ok(Self {
+            session,
+            keep_whitelist,
+        })
+    }
+
+    /// Redact one cell / leaf against the persistent session state, returning its
+    /// redacted text. The key, reverse index, reserved set, and `keep_downgraded`
+    /// flag accumulate in the session across calls. `entities` + `type_info` are
+    /// the SAME per-cell shapes `_core.replace` takes.
+    #[pyo3(signature = (text, entities, type_info, custom_fakers=None))]
+    fn redact_cell(
+        &mut self,
+        text: &str,
+        entities: Vec<PyPatternMatch>,
+        type_info: &Bound<'_, PyDict>,
+        custom_fakers: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<String> {
+        let core_entities: Vec<CorePM> = entities.iter().map(CorePM::from).collect();
+        let info_map = build_info_map(type_info)?;
+        let py_faker_factory = build_faker_factory(custom_fakers)?;
+        let faker_arg: Option<&dyn FakerFactory> = if py_faker_factory.fakers.is_empty() {
+            None
+        } else {
+            Some(&py_faker_factory)
+        };
+        self.session
+            .process(
+                text,
+                &core_entities,
+                &info_map,
+                &self.keep_whitelist,
+                faker_arg,
+            )
+            .map_err(pyo3::exceptions::PyValueError::new_err)
+    }
+
+    /// The accumulated replacement → original key (a snapshot copy). Read once at
+    /// the end of the document — the only key marshal across the boundary.
+    fn into_key(&self) -> HashMap<String, String> {
+        self.session.key().clone()
+    }
+
+    /// Whether any `keep`-strategy entity was downgraded so far this session (the
+    /// Python wrapper turns this into the structured `keep_downgraded` event).
+    #[getter]
+    fn keep_downgraded(&self) -> bool {
+        self.session.keep_downgraded()
+    }
 }
