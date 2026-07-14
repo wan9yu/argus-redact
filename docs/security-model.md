@@ -222,7 +222,7 @@ This does not replace a Data Protection Impact Assessment (DPIA) or legal review
 
 The EU AI Act (effective August 2026) imposes data minimization requirements on AI systems. GDPR Article 25 requires data protection by design. argus-redact supports both by ensuring that only the minimum necessary data — semantically preserved but identity-removed — is processed by external AI services.
 
-v0.7.18 adds machine-readable compliance artifacts that make the pseudonymization/anonymization boundary explicit: `RedactReport.residual_personal_data` (accessible via `redact(report=True)`) is `True` when any reversible strategy was used, signalling that output remains personal data under GDPR Art.4(5). See [Compliance artifacts (v0.7.18)](#compliance-artifacts-v0718) below for the full artifact set.
+v0.7.18 adds machine-readable compliance artifacts that make the pseudonymization/anonymization boundary explicit: `RedactReport.residual_personal_data` (accessible via `redact(report=True)`) is `True` whenever any PII was detected — a retained recovery key makes masked/category output just as re-linkable as a pseudonym, and `keep` leaves the original verbatim — signalling that output remains personal data under GDPR Art.4(5). See [Compliance artifacts (v0.7.18)](#compliance-artifacts-v0718) below for the full artifact set.
 
 ### HIPAA
 
@@ -285,10 +285,17 @@ redacted output is still personal data under GDPR Art.4(5): pseudonymization
 produces reversible output, so the pseudonymized text can be re-linked to the
 original identity via the key.
 
-`residual_personal_data` is `True` when **any** detected entity uses a reversible
-strategy (`pseudonym`, `realistic`, `remove`, or `keep`). It is `False` only when
-every entity was handled by a lossy, irreversible strategy (`mask`, `name_mask`,
-`landline_mask`, or `category`).
+`residual_personal_data` is `True` whenever **any** entity was detected. Every
+substituting strategy — including the lossy-looking ones (`mask`, `name_mask`,
+`landline_mask`, `category`) — writes `surrogate -> original` into the `key` dict
+`redact()` returns, so the surrogate can be mapped back regardless of which
+strategy produced it; `keep` needs no key at all because it leaves the original
+verbatim in the output text. So a retained recovery key (or verbatim output) means
+the result is still personal data under GDPR Art.4(5) no matter the strategy. It is
+`False` only when nothing was detected (nothing to recover). This is deliberately
+**not** derived from `is_strategy_reversible` — that helper answers a narrower,
+LLM-specific question (does the surrogate survive an LLM round-trip), not the
+broader "is the original recoverable at all" question this flag answers.
 
 ```python
 from argus_redact import redact
@@ -297,7 +304,7 @@ from argus_redact import redact
 report = redact("姓名张伟，手机13812345678", lang="zh", mode="fast", report=True)
 assert report.residual_personal_data is True
 
-# Forcing mask on every type → lossy output → not re-linkable via key
+# Forcing mask on every type → still recoverable via the retained key
 report_masked = redact(
     "手机13812345678",
     lang="zh",
@@ -305,7 +312,7 @@ report_masked = redact(
     report=True,
     config={"phone": {"strategy": "mask"}},
 )
-assert report_masked.residual_personal_data is False
+assert report_masked.residual_personal_data is True  # the key still maps 138****5678 -> 13812345678
 ```
 
 `RedactReport` also carries `report.security_events` — a tuple of the same
@@ -438,11 +445,12 @@ Python strings are immutable and cannot be securely erased. After `del key`, the
 
 ### restore() and LLM prompt injection
 
-If an attacker controls the LLM output (via prompt injection), they can include pseudonym codes (e.g., `P-00037`) in the response. `restore()` will replace these with real PII. This is by design — restore is a mechanical string replacement. Mitigations:
-- Validate LLM output structure before restoring
-- Use `report=True` to review what was redacted before sending
-- Consider the LLM's output trustworthiness in your threat model
-- Use guarded restore (described below) to add a deterministic provenance layer
+If an attacker controls the LLM output (via prompt injection), they can include pseudonym codes (e.g., `P-00037`) in the response. `restore()` defaults to `guard=True`, so a bare `restore(text, key)` with no anchor **fails closed** — it returns the text un-restored rather than substituting. But an explicit unguarded call (`guard=False`, the informed opt-out — or `guard=None`, the deprecated legacy path) will replace pseudonym codes with real PII: that call is a mechanical string replacement by design and does not check where the text came from. Mitigations:
+- Prefer the guard: pass `guard=True` with an `anchor`, or use `guarded_restore()`, for any text that came back from an LLM.
+- If you must call `restore(..., guard=False)`, validate LLM output structure before restoring.
+- Use `report=True` to review what was redacted before sending.
+- Consider the LLM's output trustworthiness in your threat model.
+- Use guarded restore (described below) to add a deterministic provenance layer.
 
 ### Guarded restore
 

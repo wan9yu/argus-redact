@@ -232,7 +232,7 @@ cat input.txt | argus-redact redact -k key.json -m fast > redacted.txt
 
 ## Restoring LLM output safely
 
-A plain `restore()` will substitute a real name or phone number into *any* text that contains the right pseudonym — including text a prompt injection talked the model into producing. `guarded_restore()` closes that path, and it is the one call you should use for anything that came back from an LLM:
+An unguarded `restore(text, key, guard=False)` will substitute a real name or phone number into *any* text that contains the right pseudonym — including text a prompt injection talked the model into producing. (The default `guard=True` path is safer for a bare call — it fails closed with no anchor — but supplies no injection check on its own even with a valid anchor.) `guarded_restore()` closes that path, and it is the one call you should use for anything that came back from an LLM:
 
 ```python
 from argus_redact import redact, guarded_restore, make_anchor, wipe_key
@@ -262,7 +262,7 @@ wipe_key(key)   # clear the key from memory when done
 
 The most common surprise: forget `prompt_anchor()`, and the model never echoes the nonce, so the guard fail-closes and your output still says `P-042`.
 
-A bare `restore(text, key)` still works but emits a `DeprecationWarning`, and **`guard=True` becomes the default in v0.8.0**. If you genuinely want a plain, unchecked substitution — text that never went through a model, tests, offline batch work — say so explicitly with `restore(text, key, guard=False)`.
+**`guard=True` is the default (v0.8.0+).** A bare `restore(text, key)` with no `anchor` now fails closed — it returns the text un-restored rather than substituting. If you genuinely want a plain, unchecked substitution — text that never went through a model, tests, offline batch work — say so explicitly with `restore(text, key, guard=False)`.
 
 See [LLM Integration](integration-llm.md) for the full round-trip, streaming, and multi-turn patterns.
 

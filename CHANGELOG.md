@@ -2,6 +2,127 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.0 — guard-by-default, compliance-semantics fix, structured-redaction perf
+
+A breaking release. The `guard=True` default flip scheduled since v0.7.18 lands here,
+alongside a compliance-semantics correction, two silent-leak closures, several
+crash-to-clean-error fixes, and a structured-redaction performance fix. No detection
+output change — `mode="fast"` redaction of plain text is byte-for-byte unchanged.
+
+### Breaking changes
+
+- **`guard=True` is now the default** for `restore()`, `PresidioBridge.restore`,
+  the FastAPI `restore_body`, and the HTTP `/restore` endpoint. A bare
+  `restore(text, key)` with no anchor now **fails closed** — it returns the text
+  un-restored — instead of silently substituting. `guard=False` remains the
+  explicit, silent, legacy opt-out; `guard=None` still runs the legacy path but now
+  also emits a `SecurityWarning` naming the consequence if it actually substituted
+  something (see Fixed, R4).
+- **`RedactReport.residual_personal_data` semantics changed.** It is now `True`
+  whenever *any* PII was detected — a retained recovery key means masked/category/
+  name_mask/landline_mask output is just as recoverable as pseudonym/realistic/
+  remove output, and `keep` leaves the original verbatim. It is `False` only when
+  nothing was detected. It is **no longer** derived from `is_strategy_reversible`,
+  which answers a different question (LLM round-trip safety, not GDPR residual-data
+  status) — see Fixed, H1/H2.
+- **`types` / `types_exclude` passed as a bare `str` now raise `TypeError`.** Previously
+  `redact(text, types="phone")` silently treated the string as the character set
+  `{'p','h','o','n','e'}`, filtered out every real type, and returned success with
+  nothing redacted. Pass a list: `types=["phone"]`.
+- **HTTP `/restore` now defaults to the guard and accepts an optional `anchor`.**
+  Request body gains `anchor: {nonce: str, scope: [str, ...]} | null`; a request with
+  no anchor and no explicit `"guard": false` fails closed. The response now always
+  includes a `security_events` array (empty on a clean restore).
+
+**Migration:**
+
+- If `restore()` output unexpectedly comes back un-restored after upgrading, you were
+  relying on the old silent-substitution default. For text that never left your
+  process, pass `guard=False` explicitly. For LLM output, build an anchor with
+  `make_anchor()` / `prompt_anchor()` and pass `guard=True, anchor=anchor` — or use
+  `guarded_restore()`, which does this for you.
+- If you branch on `RedactReport.residual_personal_data`, it may now read `True`
+  where it previously read `False` for mask-family configs. It now answers "is a
+  recovery key retained" (GDPR Art.4(5)); use `is_strategy_reversible(strategy)` for
+  "is this surrogate safe to restore from an LLM round-trip" instead.
+- A bare-string `types=` / `types_exclude=` now raises instead of silently detecting
+  nothing — pass a list.
+- HTTP `/restore` callers who don't send an `anchor` must now send `"guard": false`
+  explicitly, or the call fails closed.
+
+Correction to the v0.7.18 entry below: "All five integrations ... default to
+`guard=True`" was inaccurate at the time — `PresidioBridge.restore` and the FastAPI
+`restore_body` actually defaulted to `guard=None` (legacy path + `DeprecationWarning`)
+at v0.7.18; only the LangChain, LlamaIndex and MCP integrations hardcoded `True`. All
+four now default to `guard=True` as of this release, so the claim is accurate going
+forward.
+
+### Fixed
+
+- Rust pseudonym generators sharing a prefix (`unified_prefix`, or two types that
+  share a default prefix such as `passport`/`us_passport` → `PASS`) could mint the
+  same code for two different originals; the second write silently overwrote the
+  first in the returned key. Generators now consult a shared used-code set so a
+  cross-generator collision forces another draw (R1).
+- `resolve_collision` panicked once a single label collided more than ~9999 times,
+  crossing PyO3 as an uncatchable `PanicException` — a hard crash for an embedding
+  server. It now returns a `Result` that surfaces as a catchable `ValueError` (R6).
+- `redact_json(..., paths=["[*].x"])` over a top-level JSON list matched nothing — a
+  leading `[*]` parsed to an empty path segment that no actual walk path ever
+  carries, so it never matched. Path parsing now drops empty segments (R2).
+- `redact(text, types="phone")` (a bare `str`, not a list) treated the string as a
+  set of characters and filtered out every real PII type while returning success;
+  see Breaking changes (R3).
+- `redact(profile=..., config="<path>")` always crashed — the profile merge ran
+  before the config path was resolved to a dict. Config-file resolution now happens
+  first (C1).
+- A non-dict `config` raised `AttributeError: 'list' object has no attribute
+  'items'`, pointing at dict internals instead of the caller's mistake; it now
+  raises a clear `TypeError` naming `config` (R5).
+- `POST /redact` and `POST /restore` returned an unhandled 500 on an empty or
+  malformed request body; body parsing now happens inside the existing try/except,
+  returning a clean 400 (C4).
+- `redact_csv()` trimmed the whole serialized output with `.strip()`, silently
+  corrupting leading whitespace in the first cell and trailing whitespace in the
+  last; only the CSV writer's trailing line terminator is stripped now (C2).
+- CLI: `--seed abc`, `--profile pseudonym-llm` with no `--seed`, and a trailing
+  comma in `--lang` (`--lang zh,`) now print a clean `Error: ...` to stderr and exit
+  non-zero instead of raising a raw traceback.
+- `AuditLedger.from_dict` now sanitizes loaded events (drops the free-form `detail`
+  field), closing a path where a hand-crafted or tampered on-disk ledger could load
+  PII straight into memory — previously the PII-free invariant was enforced only on
+  the `append()` write path. `verify()` and the class docstring now state the
+  keyless-chain forge boundary explicitly (an adversary who controls the store can
+  recompute a self-consistent chain — pass `hmac_key=` for forge-resistance), and
+  `to_dict()` carries an `"hmac"` marker so an HMAC ledger reloaded without the key
+  raises a clear error instead of silently failing `verify()` (H5).
+- The `restore()` `SecurityWarning` text is now derived from the outcome the call
+  site actually witnessed (BLOCKED / PARTIAL / COMPLETE) instead of guessed from
+  reason codes — a total fail-closed restore that also tripped the advisory
+  injection heuristic no longer reads as a partial success (H6).
+- `is_strategy_reversible()`'s docstring no longer claims reversible means "`restore()`
+  can map back" — every strategy is key-recoverable, so that was true of all 8 and
+  answered the wrong question. It now states the real meaning: safe to restore from
+  an LLM round-trip. The set of reversible strategies is unchanged (H2).
+- `RedactReport.residual_personal_data` no longer under-reports: masked / category /
+  name_mask / landline_mask output retains a recovery key in `key` and is now
+  honestly flagged as residual personal data — see Breaking changes (H1).
+
+### Also in this release
+
+- An unguarded restore on the legacy `guard=None` path that actually substitutes a
+  pseudonym now emits a default-visible `SecurityWarning` naming the consequence —
+  previously the only signal was a `DeprecationWarning`, which Python mutes outside
+  `__main__`. `guard=False`, the informed opt-out, stays silent either way. A
+  PII-free `logger.warning(...)` also fires at the fail-closed chokepoint for an ops
+  log stream, which has no per-callsite dedup (R4).
+- **Performance:** `redact_csv()` / `redact_json()` no longer re-clone and rebuild
+  the whole accumulated key on every cell — a new Rust-side `StructuredRedactor`
+  session keeps the key, reverse index and generators in place across cells, so
+  per-cell cost is flat in the cell count instead of growing with the distinct PII
+  already seen (was effectively O(N²) over a document; verified flat via
+  `tests/benchmark/test_structured_linear.py`) (P2).
+
 ## v0.7.20 — debt paydown
 
 Structural cleanup of the guarded-restore surface introduced in v0.7.18. Additive and
@@ -105,6 +226,10 @@ frozen Layer-1 API (`redact`/`restore` signatures, return shapes) is preserved.
     structured events via `restore(..., detailed=True)`; `strict=True` raises `RestoreGuardError`.
   - New exports: `make_anchor`, `Anchor`, `RestoreGuardError`. All five integrations
     (langchain / llamaindex / mcp / presidio / fastapi) default to `guard=True`.
+    **Correction (v0.8.0):** this was inaccurate — `presidio` and `fastapi` actually
+    defaulted to `guard=None` (legacy path + `DeprecationWarning`) until v0.8.0; only
+    langchain/llamaindex/mcp hardcoded `True` at this release. See the v0.8.0 section
+    above.
 - **Compliance-as-artifact.**
   - **`keep_downgraded`** structured event in `redact(detailed=True)["security_events"]` — the
     reliable channel for keep-strategy misconfiguration (the `SecurityWarning` remains for humans);
@@ -112,6 +237,9 @@ frozen Layer-1 API (`redact`/`restore` signatures, return shapes) is preserved.
   - **`RedactReport.residual_personal_data`** (bool) + **`RedactReport.security_events`** —
     a machine-readable assertion that pseudonymised output remains personal data under GDPR Art.4(5)
     (True whenever any reversible strategy was used, derived from `is_strategy_reversible`).
+    **Corrected in v0.8.0:** this derivation under-reported — mask-family strategies also retain
+    a recovery key and are just as re-linkable, so `is_strategy_reversible` (an LLM round-trip
+    question) was the wrong signal for a GDPR residual-data question. See the v0.8.0 section above.
   - **`AuditLedger`** (`from argus_redact import AuditLedger, AuditEntry, collect_security_events`) —
     an append-only, **PII-free**, hash-chained ledger that is simultaneously the audit trail and the
     tamper-evident record: `record_redact` / `record_restore`, `verify()`, `head_digest`,

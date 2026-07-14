@@ -2,7 +2,7 @@
 
 [English](README.md) · 中文说明
 
-[![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![crates.io](https://img.shields.io/badge/crates.io-v0.7.20-orange)](https://crates.io/crates/argus-redact-core) [![Tests](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml/badge.svg)](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
+[![PyPI](https://img.shields.io/pypi/v/argus-redact)](https://pypi.org/project/argus-redact/) [![crates.io](https://img.shields.io/badge/crates.io-v0.8.0-orange)](https://crates.io/crates/argus-redact-core) [![Tests](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml/badge.svg)](https://github.com/wan9yu/argus-redact/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/wan9yu/argus-redact/graph/badge.svg)](https://codecov.io/gh/wan9yu/argus-redact) [![Demo](https://img.shields.io/badge/🤗-Demo-yellow)](https://huggingface.co/spaces/wan9yu/argus-redact)
 
 **只加密 PII，不加密含义。在你本地。**
 
@@ -169,9 +169,9 @@ _ai4privacy en，500 样本，v0.7.16 run（结果 JSON：`tests/benchmark/resul
 
 ## 北极星
 
-| 维度 | 当前 (v0.7.20) | 下一里程碑 |
+| 维度 | 当前 (v0.8.0) | 下一里程碑 |
 |-----------|:----------------:|:---:|
-| **保护** | 63 类 PII，L1-L3。在 [PRvL](docs/prvl-standard.md) 参考套件中（24 个用例，每个模型 42 处 PII）：**`default` profile 在四个模型上均无泄漏** —— GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.6。可逆的 profile 并不干净：`pseudonym` 在 Claude-Opus-4.5 和 GLM-4.6 上各泄漏 1/42，`realistic` 在 Claude-Opus-4.5 上泄漏 1/42。参考套件不等于对抗性输入下的保证 —— 完整矩阵见 prvl-standard.md。8 语言跨层 hints（zh/en/ja/ko/de/uk/in/br）。SHAKE-256 派生 + 全盐熵 + faker 身份通过守卫。状态导出默认省略 salt；HTTP server 拒绝无认证启动；CLI 写入 O_NOFOLLOW + key 文件 mode 0600；MCP token 存储 TTL+LRU (v0.6.2)。Windows CI + 属性测试不变量 + 变异测试核心 (v0.6.3) + 性能预算 CI 门控 (v0.6.4) + 集成层会话隔离 (v0.6.6) + README pinned-to-doctest + 版本同步 CI 守卫 (v0.6.6) + compose 命名空间 + 纯层纯净守卫 (v0.6.7) + seed→salt API rename + PIITypeDef SSOT + Presidio bridge through public redact + 3 new types (v0.6.8) + compose 辅助函数 (v0.6.9) + Layer 1 冻结守卫/KDF replay 向量/死代码精简/manylinux 摘要锁定 (v0.6.10) + 适配器编写接口（compose.register_pii_type / PIITypeDef / PatternMatch）+ Layer 2 签名快照 (v0.6.11) + 港澳通行证/公积金 zh L1 覆盖 (v0.6.12)。**v0.7.x — 100% Rust 核心 SSOT**：argus-redact-core crate + crates.io 发布，patterns/校验器/归一化/替换+还原/fakers/人名打分 + 完整 L1 redact/restore 引擎迁入 Rust (v0.7.0–v0.7.8) + fail-closed 加固与检测正确性 (v0.7.9–v0.7.10) + 浏览器内 **wasm** 构建 (v0.7.11)。**v0.7.12 — 准标识符检测广度**：证据门控的中文裸地区、职业、医疗病症/过敏、以及新类型 **hobby** 检测（经由共享的 evidence_detector 框架），加上重识别评测（PRvL+ X 轴）；移除未发布的 generalize 策略。**v0.7.18–v0.7.20 — 守卫式还原**：`restore()` 增加确定性守卫（每次调用的溯源 nonce + 作用域绑定），关闭"LLM 输出里被注入的假名会被静默还原"这一窗口 (v0.7.18)；修复真实泄漏 —— 在 `mode="fast"` 下，一个 Luhn 合法的银行卡号在八个语言包中的六个（ja/ko/de/uk/in/br，即自身不带卡号 pattern 的语言包）会原样透传，现已改为不依赖周边文字语种即可检出 (v0.7.19)；整个流程收敛为一个公开的 `guarded_restore()`，五个集成层全部包装它 (v0.7.20)。`guard=True` 将在 v0.8.0 成为默认 | 对抗性测试 |
+| **保护** | 63 类 PII，L1-L3。在 [PRvL](docs/prvl-standard.md) 参考套件中（24 个用例，每个模型 42 处 PII）：**`default` profile 在四个模型上均无泄漏** —— GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.6。可逆的 profile 并不干净：`pseudonym` 在 Claude-Opus-4.5 和 GLM-4.6 上各泄漏 1/42，`realistic` 在 Claude-Opus-4.5 上泄漏 1/42。参考套件不等于对抗性输入下的保证 —— 完整矩阵见 prvl-standard.md。8 语言跨层 hints（zh/en/ja/ko/de/uk/in/br）。SHAKE-256 派生 + 全盐熵 + faker 身份通过守卫。状态导出默认省略 salt；HTTP server 拒绝无认证启动；CLI 写入 O_NOFOLLOW + key 文件 mode 0600；MCP token 存储 TTL+LRU (v0.6.2)。Windows CI + 属性测试不变量 + 变异测试核心 (v0.6.3) + 性能预算 CI 门控 (v0.6.4) + 集成层会话隔离 (v0.6.6) + README pinned-to-doctest + 版本同步 CI 守卫 (v0.6.6) + compose 命名空间 + 纯层纯净守卫 (v0.6.7) + seed→salt API rename + PIITypeDef SSOT + Presidio bridge through public redact + 3 new types (v0.6.8) + compose 辅助函数 (v0.6.9) + Layer 1 冻结守卫/KDF replay 向量/死代码精简/manylinux 摘要锁定 (v0.6.10) + 适配器编写接口（compose.register_pii_type / PIITypeDef / PatternMatch）+ Layer 2 签名快照 (v0.6.11) + 港澳通行证/公积金 zh L1 覆盖 (v0.6.12)。**v0.7.x — 100% Rust 核心 SSOT**：argus-redact-core crate + crates.io 发布，patterns/校验器/归一化/替换+还原/fakers/人名打分 + 完整 L1 redact/restore 引擎迁入 Rust (v0.7.0–v0.7.8) + fail-closed 加固与检测正确性 (v0.7.9–v0.7.10) + 浏览器内 **wasm** 构建 (v0.7.11)。**v0.7.12 — 准标识符检测广度**：证据门控的中文裸地区、职业、医疗病症/过敏、以及新类型 **hobby** 检测（经由共享的 evidence_detector 框架），加上重识别评测（PRvL+ X 轴）；移除未发布的 generalize 策略。**v0.7.18–v0.7.20 — 守卫式还原**：`restore()` 增加确定性守卫（每次调用的溯源 nonce + 作用域绑定），关闭"LLM 输出里被注入的假名会被静默还原"这一窗口 (v0.7.18)；修复真实泄漏 —— 在 `mode="fast"` 下，一个 Luhn 合法的银行卡号在八个语言包中的六个（ja/ko/de/uk/in/br，即自身不带卡号 pattern 的语言包）会原样透传，现已改为不依赖周边文字语种即可检出 (v0.7.19)；整个流程收敛为一个公开的 `guarded_restore()`，五个集成层全部包装它 (v0.7.20)。**v0.8.0（破坏性）** —— `guard=True` 现为默认（裸 restore 无 anchor 时 fail-closed）；`residual_personal_data` 对 mask 配置如实上报；修复了 `unified_prefix` 下会导致还原张冠李戴的假名撞码 | 对抗性测试 |
 | **可用** | PRvL U=100%。假名编码 + 真实模式（zh + en + RFC 共享）+ 按调用策略覆盖 + `keep` 策略（白名单）+ 可续流式会话 + 增量流式默认 + 跨语言别名还原（zh ↔ en） | 任务感知引导 |
 | **可逆** | PRvL R 按任务：引用 100%，提取 50%，创意 0%（设计如此）。跨语言 LLM 改写（`张三` → `Zhang San`）通过 `result.aliases` + `restore(text, key, aliases=...)` 自动还原 | 任务感知引导 |
 | **合规** | 满足 PIPL Art.28 敏感 PII 范畴，风险评估 + profiles | PIPL/GDPR/HIPAA（副产品） |
@@ -281,7 +281,7 @@ argus-redact 是 PII **数据最小化辅助工具**，不是匿名化或合规�
 - **L2 NER** 是统计推断；分布外文本（口语、错字、少数民族姓名）漏检率更高。
 - **不保证对抗性输入** — 攻击者可以构造规避检测的文本。
 - **不是 GDPR/PIPL 匿名化框架** — 匿名化是合规过程决策，不是单一库的输出。
-- **restore 是一次替换，不是一次鉴权。** 裸 `restore(text, key)` 会把原文替换进**任何**带有对应假名的文本 —— 包括攻击者诱导模型产出的回复。请用[守卫式还原](#安全)把一次 restore 绑定到产生该 key 的那次交互。
+- **restore 是一次替换，不是一次鉴权。** 未守卫的还原（`guard=False`）会把原文替换进**任何**带有对应假名的文本 —— 包括攻击者诱导模型产出的回复。自 v0.8.0 起默认 `guard=True`，无有效 anchor 时 fail-closed；请用[守卫式还原](#安全)把一次 restore 绑定到产生该 key 的那次交互。
 
 **适合用 argus-redact**：LLM 流水线里需要 `redact() → LLM → guarded_restore()`，零 PII 跨过网络边界的可逆假名化。
 
@@ -319,7 +319,7 @@ restored = guarded_restore(reply, key, redacted=redacted, anchor=anchor)
 # strict=True 则抛 RestoreGuardError，而不是返回未还原的文本
 ```
 
-裸 `restore(text, key)` 仍可用，但会发出 `DeprecationWarning`；`guard=True` 将在 v0.8.0 成为默认。[守卫式还原 →](docs/security-model.md#guarded-restore)
+自 v0.8.0 起，`restore(text, key)` 默认 `guard=True`，无有效 anchor 时 fail-closed；传 `guard=False` 使用旧的无守卫替换，或用带 anchor 的守卫式还原。[守卫式还原 →](docs/security-model.md#guarded-restore)
 
 满足 **PIPL** · **GDPR** · **HIPAA** 技术要求 — 这是其隐私优先设计的副产品。[详情 →](docs/security-model.md#regulatory-context)
 

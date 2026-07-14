@@ -173,7 +173,7 @@ argus-redact info
 ### Output
 
 ```
-argus-redact v0.7.20
+argus-redact v0.8.0
 
 Languages:
   zh  Chinese    regex (14+ patterns) + NER
@@ -227,8 +227,34 @@ argus-redact serve --port 9000        # custom port
 | `mode` | `string` | `"fast"` | Detection mode: `fast`, `ner`, `auto` |
 | `report` | `bool` | `false` | Return a full `RedactReport` with risk assessment |
 | `profile` | `string` | `null` | Compliance profile: `"default"`, `"pipl"`, `"gdpr"`, `"hipaa"` |
-| `types` | `list[string]` | `null` | Only detect these PII types (e.g. `["phone", "email"]`) |
-| `types_exclude` | `list[string]` | `null` | Exclude these PII types from detection |
+| `types` | `list[string]` | `null` | Only detect these PII types (e.g. `["phone", "email"]`). A bare `string` is rejected with 400, not silently treated as a character set *(v0.8.0+)*. |
+| `types_exclude` | `list[string]` | `null` | Exclude these PII types from detection. Same bare-`string` rejection as `types` *(v0.8.0+)*. |
+
+A malformed or empty request body returns 400 (`{"error": "request body must be valid JSON"}`), not a 500.
+
+#### POST `/restore` parameters *(guard-by-default, v0.8.0+)*
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `text` | `string` | *(required)* | Text containing pseudonyms (typically an LLM reply). |
+| `key` | `object` | `{}` | The key from `/redact`'s response. A non-object `key` (string, list, number) is rejected with 400. |
+| `anchor` | `{"nonce": string, "scope": [string, ...]} \| null` | `null` | Optional provenance/scope anchor. Reconstructed into the same shape `make_anchor(key)` produces. Required for the guard to pass — with `guard` true and no `anchor`, restore fails closed. |
+| `guard` | `bool` | `true` | `true` (default) runs the deterministic provenance (P) + scope (S) checks; a request with no `anchor` fails closed. `false` runs a plain, unchecked restore — the explicit opt-out for text that never left your process. |
+| `strict` | `bool` | `false` | When `true` and `guard` is `true`, a security event returns 400 with `{"error": ..., "security_events": [...]}` instead of an un-restored 200. |
+
+The response always includes a `security_events` array (empty on a clean restore):
+
+```jsonc
+// clean restore
+{"restored": "王五 should help 张三", "security_events": []}
+
+// fail-closed — no anchor supplied
+{"restored": "P-037 should help P-012", "security_events": [
+  {"type": "security", "reason_code": "guard_no_anchor", "count": 2, "detail": "no anchor provided"}
+]}
+```
+
+**Before v0.8.0**, `/restore` defaulted to `guard: null` (the legacy unchecked path) and had no `anchor` field at all. A caller that does not send `anchor` and does not explicitly send `"guard": false` will now get a fail-closed (un-restored) response instead of a plain substitution — update callers accordingly.
 
 ---
 
@@ -341,9 +367,14 @@ All commands use the same exit codes:
 |------|---------|----------|
 | 0 | Success | `echo $?` → 0 |
 | 1 | Input file not found | Provide nonexistent input path |
-| 3 | Language pack not installed | Use `-l ja` without Japanese pack |
+| 2 | Invalid CLI argument *(v0.8.0+)* | `--seed abc` (not an integer); `--profile pseudonym-llm` with no `--seed`; malformed or misapplied `--strategy-override` |
+| 3 | Language pack not installed, or `redact()` rejected the request (bad `lang`/`mode`/`profile`/`config` combination) | Use `-l ja` without Japanese pack |
 | 4 | Key file not found (`restore` only) | Provide nonexistent `-k` path |
 | 5 | Key file invalid / corrupted | Provide non-JSON file as `-k` |
+
+*(v0.8.0+)* Argument and detection errors that used to surface as a raw Python traceback
+(`--seed abc`, `--profile pseudonym-llm` without `--seed`, a trailing comma in
+`--lang`) now print a clean `Error: ...` to stderr and exit non-zero instead.
 
 ---
 

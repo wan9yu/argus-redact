@@ -46,17 +46,49 @@
   for Chinese) is the signature of this defect. No configuration changes the merge rule
   today.
 
+### `restore()` can substitute a pseudonym key inside a longer adjacent token
+
+- **What**: `restore()` matches a pseudonym as a plain substring scan, not on a token
+  boundary. If a pseudonym is immediately followed (or preceded) by other non-delimiter
+  characters that happen to form a longer run — e.g. an LLM or downstream system appends
+  a suffix directly onto the code — the key still matches and substitutes inside that
+  longer token: `restore("P-12345_final", {"P-12345": "Michael Zhang"}, guard=False)` →
+  `"Michael Zhang_final"`, not `"P-12345_final"` left alone.
+- **Who is affected**: this is **in-scope only** — the value substituted is always the
+  caller's own key's original for a pseudonym the caller minted, never a cross-scope or
+  cross-session leak. It surfaces whenever a pseudonym abuts other content with no
+  delimiter between them.
+- **Why we won't fix**: a token-boundary check was implemented and **rejected**. Chinese
+  masked output is often delimiter-free by construction (`P-61961138****8000有事找他` —
+  a pseudonym directly followed by CJK text with no separator), so a boundary check would
+  make that a *non-match* and leave the pseudonym unrestored. Even a maximal-munch
+  boundary heuristic broke a real fixture where a pseudonym abuts literal digits from
+  unrelated structured text (e.g. an address's unit number immediately after a
+  pseudonym). The failure mode of "under-restores real content" is worse than the failure
+  mode of "restores into an adjacent token" for the primary (Chinese, delimiter-sparse)
+  use case.
+- **What you should do**: if your pipeline concatenates a pseudonym directly against
+  other machine-generated content (filenames, IDs, suffixes) with no separator, insert a
+  delimiter before doing so. In audit paths, inspect long spans via
+  `redact(..., detailed=True)` / `restore(..., detailed=True)`: a restored value that is
+  longer than any known original is the signature of this defect.
+
 ## Deprecation Notices
 
-### bare `restore()` without `guard=` (v0.7.18)
+### bare `restore()` without `guard=` — flip shipped in v0.8.0
 
-- **What**: Calling `restore(text, key)` without passing `guard=` emits a `DeprecationWarning`
-  ("bare restore without guard= is deprecated; will default to guard=True in v0.8.0"). The
-  v0.7.18 default (`guard=None`) preserves existing behavior; no immediate breakage.
-- **Action required**: Migrate to `restore(text, key, guard=True, anchor=anchor)` before v0.8.0.
-  See `docs/security-model.md` — Guarded restore (v0.7.18) for the migration pattern. If you
-  intentionally want legacy behavior beyond v0.8.0, pass `guard=False` explicitly.
-- **Timeline**: `guard=None` → `guard=True` default flip is targeted for v0.8.0.
+- **What**: Calling `restore(text, key)` without passing `guard=` emitted a
+  `DeprecationWarning` from v0.7.18 ("bare restore without guard= is deprecated; will
+  default to guard=True in v0.8.0"). **As of v0.8.0, the flip has shipped**: `guard=True`
+  is now the default, so a bare `restore(text, key)` with no `anchor` **fails closed** —
+  it returns the text un-restored — instead of substituting.
+- **Action required**: If your code relied on the old silent-substitution default, pass
+  `guard=False` explicitly to keep it. For text that came back from an LLM, migrate to
+  `restore(text, key, guard=True, anchor=anchor)` or `guarded_restore()` — see
+  `docs/security-model.md` § Guarded restore.
+- **Status**: Shipped in v0.8.0. `guard=None` is still accepted (runs the legacy path,
+  emits `DeprecationWarning`, and — new in v0.8.0 — also emits a `SecurityWarning` if it
+  actually substituted a pseudonym).
 
 ## Design Constraints
 

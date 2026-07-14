@@ -74,9 +74,12 @@ for event in details["security_events"]:
 
 `lang` accepts `"zh"` (default) or `"en"`; unknown values fall back to English. It returns an empty string when the key is empty (nothing was detected — nothing to anchor).
 
-### `restore()` without a guard is deprecated
+### `guard=True` is the default — a bare restore fails closed
 
-A bare `restore(text, key)` still works today but emits a `DeprecationWarning`, and **`guard=True` becomes the default in v0.8.0** — at which point a bare restore with no anchor fails closed and returns un-restored pseudonyms. Two ways forward:
+**Since v0.8.0, `guard=True` is the default.** A bare `restore(text, key)` with no
+`anchor` now fails closed: it returns the text **un-restored** and reports a
+`guard_no_anchor` security event, instead of the pre-v0.8.0 behavior of a plain,
+unchecked substitution plus a `DeprecationWarning`. Two ways forward:
 
 ```python
 from argus_redact import guarded_restore, restore
@@ -85,12 +88,14 @@ from argus_redact import guarded_restore, restore
 result = guarded_restore(llm_reply, key, redacted=redacted, anchor=anchor)
 
 # Explicit legacy opt-out — plain, unchecked string substitution, no warning, no
-# behaviour change in v0.8.0. Appropriate when the text did not come back from an
-# untrusted model at all (offline batch de-pseudonymisation, tests, fixtures).
+# guard. Appropriate when the text did not come back from an untrusted model at
+# all (offline batch de-pseudonymisation, tests, fixtures).
 result = restore(some_text, key, guard=False)
 ```
 
-Do not leave bare `restore(text, key)` calls in an LLM pipeline: they warn now and change behaviour at v0.8.0.
+Do not leave bare `restore(text, key)` calls in an LLM pipeline: without an anchor
+they now silently do nothing (fail closed) rather than silently restoring
+unchecked.
 
 ---
 

@@ -272,6 +272,7 @@ def test_restore_bad_key_type():
 | `FileNotFoundError` | `key` file path doesn't exist when used in `restore()` | `pytest.raises(FileNotFoundError)` |
 | `TypeError` | `text` is not a string (e.g., `redact(123)`) | `pytest.raises(TypeError)` |
 | `ValueError` | `types` and `types_exclude` both specified | `pytest.raises(ValueError)` |
+| `TypeError` | *(v0.8.0+)* `types` or `types_exclude` passed as a bare `str` (e.g. `types="phone"`) instead of a list — previously this silently treated the string as a character set and detected nothing | `pytest.raises(TypeError)` |
 | `ValueError` | Unknown `profile` name | `pytest.raises(ValueError)` |
 
 ---
@@ -459,7 +460,7 @@ restore(
     *,
     aliases: dict[str, tuple[str, ...]] | None = None,
     display_marker: str | None = None,
-    guard: bool | None = None,      # v0.7.18+
+    guard: bool | None = True,      # v0.7.18+; default flipped to True in v0.8.0
     anchor: object | None = None,   # v0.7.18+
     strict: bool = False,           # v0.7.18+
     detailed: bool = False,         # v0.7.18+
@@ -472,23 +473,23 @@ Reverse redaction — replace pseudonyms with originals using the key.
 > It is the same guard plus the injection heuristic, wired together correctly in one call.
 > `restore()` is the lower-level primitive; use it directly for text that never left your process.
 
-### Deprecation: bare `restore(text, key)`
+### `guard=True` is the default (v0.8.0+)
 
-Calling `restore()` **without** `guard=` emits a `DeprecationWarning`:
-
-```
-bare restore without guard= is deprecated; will default to guard=True in v0.8.0
-```
-
-The call still performs a plain, unchecked restore today. To silence the warning, say what you mean:
+A bare `restore(text, key)` with no `anchor` now **fails closed**: it returns the text
+**un-restored**, substitutes nothing, and (on `detailed=True`) reports a
+`guard_no_anchor` security event. This is a change from pre-v0.8.0, where a bare call
+ran a plain, unchecked substitution and only emitted a `DeprecationWarning`.
 
 | You want | Pass | Result |
 |----------|------|--------|
 | The guard (recommended for LLM output) | `guard=True, anchor=anchor` | Provenance + scope checks run. |
 | A plain legacy restore, no checks | `guard=False` | Unchecked restore, **no warning** — the explicit opt-out. |
-| *(nothing)* | — | Unchecked restore **plus** `DeprecationWarning`. |
+| *(nothing)* | — | `guard=True` with no anchor → **fails closed**, `SecurityWarning`. |
+| Legacy behavior with a migration nudge | `guard=None` | Unchecked restore (like `guard=False`) **plus** `DeprecationWarning`, and a `SecurityWarning` too if it actually substituted something (R4). |
 
-In v0.8.0 the `guard=None` default becomes `guard=True`, so a bare call will start running the guard. Pin the behavior you want now.
+`guard=None` is still accepted for callers migrating off the pre-v0.8.0 bare-call
+default; it is not itself deprecated as a value, but relying on it silently is — pass
+`guard=False` if you mean it.
 
 ### Parameters
 
@@ -498,7 +499,7 @@ In v0.8.0 the `guard=None` default becomes `guard=True`, so a bare call will sta
 | `key` | `dict[str, str] \| str` | *(required)* | The key from `redact()` or `redact_pseudonym_llm()`. Accepts: (a) `dict[str, str]` (fake → original), or (b) `str` = path to a JSON file holding such a dict. |
 | `aliases` | `dict[str, tuple[str, ...]] \| None` | `None` | *(v0.6.0+)* Per-fake alternate transliterations to also match. Pass `result.aliases` from `redact_pseudonym_llm()` to recover originals from LLM output that transliterated names across languages. |
 | `display_marker` | `str \| None` | `None` | If set, strip the named display marker from `text` before key lookup. |
-| `guard` | `bool \| None` | `None` | *(v0.7.18+)* `True` runs the deterministic provenance (P) + scope (S) checks. `False` runs the legacy unchecked restore, silently. `None` (today's default) runs the legacy restore **and warns** — see above. |
+| `guard` | `bool \| None` | `True` *(v0.8.0+; was `None` in v0.7.18–v0.7.20)* | `True` (default) runs the deterministic provenance (P) + scope (S) checks — a bare call with no anchor fails closed. `False` runs the legacy unchecked restore, silently — the explicit opt-out. `None` runs the legacy restore and warns (`DeprecationWarning` always; `SecurityWarning` too if it substituted anything). |
 | `anchor` | `object \| None` | `None` | *(v0.7.18+)* The `Anchor` from `make_anchor(key)`, carrying the nonce and the scope. Required for the guard to pass: with `guard=True` and no anchor, restore fails closed. |
 | `strict` | `bool` | `False` | *(v0.7.18+)* With `guard=True`, raise `RestoreGuardError` on any security event instead of returning. Opt-in fail-closed. |
 | `detailed` | `bool` | `False` | *(v0.7.18+)* Return `(text, {"security_events": [...]})` instead of a bare `str`. |
@@ -579,24 +580,28 @@ The compiled alternation regex is cached on `frozenset(key.keys())` (since v0.5.
 
 ### Edge Cases
 
-These illustrate the substitution pass only, so they omit `guard=` for brevity — as written, each would also emit the `DeprecationWarning` above. In your own code pass `guard=False` (unchecked, silent) or `guard=True, anchor=...` (guarded); elsewhere in this document, any snippet calling `restore()` without `guard=` is subject to the same note.
+These illustrate the substitution pass only, so each passes `guard=False` — the
+explicit, silent, unguarded path — to isolate the string-matching behavior from the
+guard. Since v0.8.0 a bare call with no `guard=` and no anchor fails closed and
+returns the text un-restored, which would not demonstrate the substitution rule
+being shown.
 
 ```python
 # Pseudonym at start of text
-restore("P-037是好人", {"P-037": "王五"})  # "王五是好人"
+restore("P-037是好人", {"P-037": "王五"}, guard=False)  # "王五是好人"
 
 # Pseudonym at end of text
-restore("他是P-037", {"P-037": "王五"})  # "他是王五"
+restore("他是P-037", {"P-037": "王五"}, guard=False)  # "他是王五"
 
 # Multiple occurrences of same pseudonym
-restore("P-037和P-037", {"P-037": "王五"})  # "王五和王五"
+restore("P-037和P-037", {"P-037": "王五"}, guard=False)  # "王五和王五"
 
 # Replacement contains characters that look like another pseudonym
 # key = {"P-037": "P先生"}  ← original contains "P"
-restore("P-037说了话", {"P-037": "P先生"})  # "P先生说了话" (no re-matching)
+restore("P-037说了话", {"P-037": "P先生"}, guard=False)  # "P先生说了话" (no re-matching)
 
 # Nested-looking keys — longest match first
-restore("[某公司总部]开会", {"[某公司]": "阿里", "[某公司总部]": "阿里西溪园区"})
+restore("[某公司总部]开会", {"[某公司]": "阿里", "[某公司总部]": "阿里西溪园区"}, guard=False)
 # "阿里西溪园区开会"  ← [某公司总部] matched first (longer), [某公司] not triggered
 ```
 
@@ -614,8 +619,8 @@ restore("[某公司总部]开会", {"[某公司]": "阿里", "[某公司总部]"
 
 | Warning | When |
 |---------|------|
-| `DeprecationWarning` | `guard=` was not passed (bare `restore(text, key)`). Pass `guard=False` for the silent legacy path, or `guard=True` for the guard. |
-| `SecurityWarning` | `guard=True`, `strict=False`, and a security event fired — a fail-closed (nothing substituted) or partial (out-of-scope pseudonyms withheld) restore. `restore()` warns whenever events fire, `detailed=True` or not. (`guarded_restore()` differs: it warns only when *not* `detailed`, unless you force it with `warn=`.) |
+| `DeprecationWarning` | `guard=None` was passed explicitly (the pre-v0.8.0 default). Pass `guard=False` for the silent legacy path, or `guard=True` (now the default — omitting `guard=` entirely also triggers the guard) with an `anchor` for the guard. |
+| `SecurityWarning` | (a) `guard=True` (the default, explicit or implicit), `strict=False`, and a security event fired — a fail-closed (nothing substituted, e.g. a bare call with no anchor) or partial (out-of-scope pseudonyms withheld) restore. `restore()` warns whenever events fire, `detailed=True` or not. (`guarded_restore()` differs: it warns only when *not* `detailed`, unless you force it with `warn=`.) (b) *(R4, v0.8.0+)* `guard=None` (the deprecated legacy path) and the call actually substituted at least one pseudonym — names the consequence: originals were reinserted with no injection check. (`guard=False`, the informed opt-out, stays silent even when it substitutes.) |
 
 ---
 
@@ -755,7 +760,7 @@ Being a heuristic, it is advisory: expect both false positives (a model that leg
 from argus_redact import SecurityWarning
 ```
 
-A `UserWarning` subclass, emitted when something would silently weaken redaction or when a restore did not go cleanly. It is the human-facing backstop for callers who are not reading `security_events`; the restore paths raise it for a fail-closed guard, a partial (out-of-scope) restore, and an advisory H hit.
+A `UserWarning` subclass, emitted when something would silently weaken redaction or when a restore did not go cleanly. It is the human-facing backstop for callers who are not reading `security_events`; the restore paths raise it for a fail-closed guard, a partial (out-of-scope) restore, an advisory H hit, and — since v0.8.0 (R4) — an unguarded (`guard=None`) restore that actually reinserted an original with no injection check.
 
 The message carries **reason codes and counts only** — never the event `detail`, which may hold raw text or pseudonyms — so it is safe to route into an ordinary log stream. The warning is attributed to your call site, not to argus-redact's internals.
 
@@ -804,15 +809,26 @@ wipe_key(key)  # done with key, clear it
 
 ## is_strategy_reversible() *(v0.5.9+)*
 
-Public helper for callers that need to know whether a redaction strategy
-emits output that ``restore()`` can recover.
+Public helper for callers that need to know whether a redaction strategy's
+surrogate is **safe to restore from an LLM round-trip** — a narrower question than
+"can the key dict map it back". Every strategy is key-recoverable: `redact()` always
+writes `surrogate -> original` into the returned `key` (or, for `keep`, leaves the
+original verbatim with no key entry needed), so that broader question is always
+`True` and is not what this function answers *(clarified v0.8.0, H2 — the docstring
+previously implied the broader question; see `RedactReport.residual_personal_data`
+in [security-model.md](security-model.md#redactreportresidual_personal_data) for
+that one)*. `is_strategy_reversible` instead flags whether the surrogate is
+*content-derived* from the original (`mask`-family surrogates like `138****5678`
+carry a disambiguator that can be mangled by LLM normalization) versus
+shape-independent (`pseudonym` / `realistic` / `remove` / `keep`, which survive an
+LLM reply reliably).
 
 ```python
 from argus_redact import is_strategy_reversible
 from argus_redact.specs import get
 
 is_strategy_reversible("pseudonym")   # True
-is_strategy_reversible("mask")        # False — middle digits are lost
+is_strategy_reversible("mask")        # False — fragile under LLM round-trip
 is_strategy_reversible("nonexistent") # raises ValueError
 
 # PIITypeDef exposes the same answer for the type's *default* strategy:
@@ -820,16 +836,20 @@ get("zh", "phone").is_reversible      # False (default = mask)
 get("zh", "person").is_reversible     # True  (default = pseudonym)
 ```
 
-| Strategy | Reversible? | Why |
+| Strategy | LLM round-trip safe? | Why |
 |---|:---:|---|
-| `pseudonym` | ✓ | random code stored 1:1 in key dict |
-| `realistic` | ✓ | reserved-range fake stored 1:1 in key dict |
-| `remove` | ✓ | per-type `[ID-NNNNN]` code stored 1:1 |
+| `pseudonym` | ✓ | random code, shape-independent of the original |
+| `realistic` | ✓ | reserved-range fake, shape-independent of the original |
+| `remove` | ✓ | per-type `[ID-NNNNN]` code, shape-independent of the original |
 | `keep` | ✓ | original text untouched |
-| `mask` | ✗ | middle characters replaced with `*` — lossy |
-| `name_mask` | ✗ | `张*` style — lossy |
-| `landline_mask` | ✗ | masked middle digits — lossy |
-| `category` | ✗ | many-to-one mapping (`[LOCATION]`) |
+| `mask` | ✗ | content-derived (`138****5678`); collision disambiguator is fragile under LLM normalization |
+| `name_mask` | ✗ | content-derived (`张*` style); same fragility |
+| `landline_mask` | ✗ | content-derived, masked middle digits; same fragility |
+| `category` | ✗ | many-to-one mapping (`[LOCATION]`); ambiguous on restore |
+
+All eight strategies are key-recoverable regardless of this table — the ✗ rows are
+about surviving an *LLM* round-trip specifically, not about whether `restore()` can
+look the value up in the key.
 
 ### When to use
 
@@ -1121,6 +1141,105 @@ Keys are the **canonical PII type names** (e.g., `"phone"`, `"id_number"`, `"med
 When the same canonical name appears across multiple language variants (the registry has both a `zh` and `en` `phone`, etc.), variants are merged: `PIPL_REFERENCES` unions articles preserving order, `GDPR_SPECIAL_CATEGORIES` ORs flags, `HIPAA_PHI_CATEGORIES` takes the first non-`None` value (registry order is `zh` → `en` → `shared`, deterministic for a given argus-redact version).
 
 The dicts are computed once at module import. Custom types registered via `argus_redact.specs.register()` after import are not reflected — by design.
+
+---
+
+## AuditLedger *(v0.7.18+)*
+
+```python
+from argus_redact import AuditLedger, AuditEntry, collect_security_events
+
+AuditLedger(
+    *,
+    hmac_key: bytes | None = None,
+    clock: Callable[[], str] | None = None,
+)
+```
+
+A caller-owned, append-only, **PII-free**, hash-chained ledger that is simultaneously
+the audit trail and the tamper-evident record. It carries no built-in I/O — like the
+redaction key, persistence is the caller's responsibility.
+
+```python
+from argus_redact import redact, restore, AuditLedger
+
+led = AuditLedger()
+
+# Record a redact operation
+redact_result = redact("姓名张伟，手机13812345678", lang="zh", mode="fast", detailed=True)
+text, key = redact_result[0], redact_result[1]
+led.record_redact(redact_result)
+
+# ... send text to LLM, receive response ...
+
+# Record a restore operation. guard=False here opts out of the guarded round-trip
+# for this local illustration; production callers restoring LLM output should use
+# the guarded flow (make_anchor / prompt_anchor / restore(guard=True, anchor=...)
+# or guarded_restore()).
+restore_result = restore(text, key, guard=False, detailed=True)
+led.record_restore(restore_result)
+
+assert led.verify() is True
+print(led.head_digest)  # 64-char hex SHA-256 string
+
+# Persist across sessions
+import json
+saved = json.dumps(led.to_dict())
+led2 = AuditLedger.from_dict(json.loads(saved))
+assert led2.verify() is True
+```
+
+### PII-free invariant
+
+The ledger stores only: PII type names and counts (`type_counts`, e.g.
+`{"person": 2, "phone": 1}`), sanitized security events (`reason_code` + `count`
+only — the free-form `detail` field is stripped at append time), and one-way SHA-256
+digests. It never stores original text, the pseudonym → original key, or an event's
+raw `detail`. *(v0.8.0, H5)* `AuditEntry.from_dict` re-sanitizes events on load too,
+so loading a hand-crafted or tampered on-disk ledger cannot smuggle PII into memory
+even if the stored `detail` was never sanitized to begin with.
+
+### Methods
+
+| Method | Signature | Notes |
+|---|---|---|
+| `append` | `append(kind, *, type_counts, security_events=(), content_digest=None) -> AuditEntry` | Low-level primitive both sugar methods below call. |
+| `record_redact` | `record_redact(detailed_result, *, content_digest=None) -> AuditEntry` | Accepts the 3-tuple from `redact(detailed=True)`. Counts detected entity types; `content_digest` defaults to a SHA-256 of the **redacted** text (never the original). |
+| `record_restore` | `record_restore(detailed_result, *, content_digest=None) -> AuditEntry` | Accepts the 2-tuple from `restore(detailed=True)`. Records any security events; does **not** auto-digest the restored text (recovered plaintext should not be fingerprinted into the ledger by default) — pass `content_digest=` explicitly if your threat model needs it. |
+| `verify` | `verify() -> bool` | Recomputes every entry hash and the `prev_hash` chain. `True` if intact, `False` on any interior modification, reorder, or deletion. |
+| `head_digest` | *(property)* `str` | The current chain-head hash, or `""` if empty. Persist this externally to detect tail-truncation (see below). |
+| `entries` | *(property)* `tuple[AuditEntry, ...]` | Read-only view of the recorded entries. |
+| `to_dict` | `to_dict() -> dict` | `{"schema_version": 1, "hmac": bool, "entries": [...]}`. Never includes `hmac_key` itself. |
+| `from_dict` | `AuditLedger.from_dict(d, *, hmac_key=None) -> AuditLedger` | Reloads a persisted ledger. Raises `ValueError` if `d["hmac"]` is `True` and no `hmac_key` is supplied — a clear error instead of a silent `verify() == False`. |
+
+`collect_security_events(result)` is a standalone helper: given a `RedactReport`, a
+`redact(detailed=True)` 3-tuple, or a `restore(detailed=True)` 2-tuple, it extracts
+the `security_events` list uniformly (`[]` for anything else). `record_redact` /
+`record_restore` use it internally; call it directly if you're building a custom
+ledger entry.
+
+### Keyless vs. HMAC — the forge boundary
+
+The default constructor (`AuditLedger()`) chains entries with plain SHA-256:
+**append-only integrity** — `verify()` reliably detects interior modification,
+reordering, and deletion of entries. It does **not** detect:
+
+- **Tail-truncation** — dropping the most recent entries leaves a valid shorter
+  chain. Persist `head_digest` externally (a separate log, a notary service, a
+  signed receipt) and compare after reload.
+- **Full-chain forgery** — an adversary who controls the ledger store can recompute
+  a self-consistent chain from scratch; `verify()` returns `True` on it. This is the
+  keyless default's honest boundary, stated explicitly in `verify()`'s and the
+  class's docstrings *(v0.8.0, H5)*.
+
+Pass `hmac_key=secrets.token_bytes(32)` (kept separate from the ledger store, never
+persisted by `to_dict()`) for forge-resistance: entry hashes become HMAC-SHA-256, and
+an adversary who cannot reproduce the key cannot forge a chain that passes
+`verify()`.
+
+See [security-model.md § AuditLedger](security-model.md#auditledger) for the full
+threat-model writeup, and `docs/known-issues.md` for the caller-persisted /
+keyless-by-default design constraint.
 
 ---
 
