@@ -557,5 +557,5 @@ def test_custom_faker_roundtrip():
     )
     assert len(key) == 1, f"Expected 1 key entry, got {key!r}"
 
-    restored = restore(redacted, key)
+    restored = restore(redacted, key, guard=False)
     assert restored == text, f"restore() failed: expected {text!r}, got {restored!r}"

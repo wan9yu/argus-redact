@@ -123,7 +123,7 @@ def _compute_prvl(texts: list[dict], mode: str = "fast"):
         privacy_scores.append(privacy)
 
         # R: Reversibility — restore should recover PII
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         if item["pii"]:
             pii_recovered = sum(1 for p in item["pii"] if p in restored)
             reversibility = pii_recovered / len(item["pii"])

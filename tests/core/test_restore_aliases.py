@@ -13,7 +13,7 @@ class TestLegacyDictStillWorks:
     def test_str_to_str_dict_unchanged(self):
         text = "P-001 phoned"
         key = {"P-001": "王建国"}
-        assert restore(text, key) == "王建国 phoned"
+        assert restore(text, key, guard=False) == "王建国 phoned"
 
 
 class TestAliasesKwargRoundTrip:
@@ -21,14 +21,14 @@ class TestAliasesKwargRoundTrip:
         text = "Wang Wu phoned 138****8000"
         key = {"王五": "王建国", "138****8000": "13800138000"}
         aliases = {"王五": ("Wang Wu", "WangWu")}
-        out = restore(text, key, aliases=aliases)
+        out = restore(text, key, aliases=aliases, guard=False)
         assert out == "王建国 phoned 13800138000"
 
     def test_restore_matches_canonical_fake_when_present(self):
         text = "王五 and Wang Wu both"
         key = {"王五": "王建国"}
         aliases = {"王五": ("Wang Wu",)}
-        out = restore(text, key, aliases=aliases)
+        out = restore(text, key, aliases=aliases, guard=False)
         # Both forms map back to the original
         assert out == "王建国 and 王建国 both"
 
@@ -37,7 +37,7 @@ class TestAliasesKwargRoundTrip:
         text = "Zhang Sanity is fine"
         key = {"张三": "王建国"}
         aliases = {"张三": ("Zhang San", "Zhang")}
-        out = restore(text, key, aliases=aliases)
+        out = restore(text, key, aliases=aliases, guard=False)
         # "Zhang San" matched (longer wins over "Zhang"); "ity" suffix preserved
         assert out == "王建国ity is fine"
 
@@ -46,7 +46,7 @@ class TestAliasesKwargRoundTrip:
         text = "Wang Wu phoned"
         key = {"王五": "王建国"}
         # Without aliases=, "Wang Wu" stays unchanged (no mapping)
-        out = restore(text, key)
+        out = restore(text, key, guard=False)
         assert out == "Wang Wu phoned"
 
 
@@ -59,7 +59,7 @@ class TestEndToEndCrossLanguage:
         fake = next(iter(person_fakes))
         alias = r.aliases[fake][0]
         llm_output = r.downstream_text.replace(fake, alias)
-        restored = restore(llm_output, r.key, aliases=r.aliases)
+        restored = restore(llm_output, r.key, aliases=r.aliases, guard=False)
         assert restored == text, f"expected {text!r}, got {restored!r}"
 
     def test_zh_address_redact_then_en_alias_in_llm_output(self):
@@ -73,17 +73,17 @@ class TestEndToEndCrossLanguage:
         fake = next(iter(addr_fakes))
         alias = r.aliases[fake][0]
         llm_output = r.downstream_text.replace(fake, alias)
-        restored = restore(llm_output, r.key, aliases=r.aliases)
+        restored = restore(llm_output, r.key, aliases=r.aliases, guard=False)
         assert restored == text
 
 
 class TestEmptyKeyEdgeCase:
     def test_empty_key(self):
-        assert restore("hello", {}) == "hello"
+        assert restore("hello", {}, guard=False) == "hello"
 
     def test_empty_key_with_aliases(self):
         # No-op even if aliases are provided but key is empty
-        assert restore("hello", {}, aliases={}) == "hello"
+        assert restore("hello", {}, aliases={}, guard=False) == "hello"
 
 
 class TestResultAliasesField:

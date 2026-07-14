@@ -156,7 +156,9 @@ class TestServerRestore:
 
         r2 = client.post(
             "/restore",
-            json={"text": data["redacted"], "key": data["key"]},
+            # v0.8.0: /restore guards by default; this is a plain round-trip
+            # (not an anchor test), so opt into the legacy path explicitly.
+            json={"text": data["redacted"], "key": data["key"], "guard": False},
         )
 
         assert r2.status_code == 200

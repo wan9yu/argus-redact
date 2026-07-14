@@ -66,7 +66,7 @@ def test_straddling_entity_round_trips_via_aggregate_key():
     pad = "啊" * (DEFAULT_MAX_BUFFER - 5)
     chunks = [pad + "电话138", "00138000，结束。"]
     out, r = _stream(chunks)
-    assert restore(out, r.aggregate_key()) == "".join(chunks)
+    assert restore(out, r.aggregate_key(), guard=False) == "".join(chunks)
 
 
 def test_entity_before_carry_window_emitted_exactly_once():
@@ -242,7 +242,7 @@ def test_cjk_full_width_boundary_still_splits():
     out, r = _stream(chunks, lang="zh")
     assert "13912345678" not in out
     assert "13987654321" not in out
-    assert restore(out, r.aggregate_key()) == "".join(chunks)
+    assert restore(out, r.aggregate_key(), guard=False) == "".join(chunks)
 
 
 def test_normal_sentence_boundary_stream_unchanged():
@@ -258,7 +258,7 @@ def test_normal_sentence_boundary_stream_unchanged():
     assert "13912345678" not in out
     assert "13987654321" not in out
     assert "user@company.com" not in out
-    assert restore(out, r.aggregate_key()) == "".join(chunks)
+    assert restore(out, r.aggregate_key(), guard=False) == "".join(chunks)
 
 
 def test_open_ended_entity_does_not_grow_buffer_unbounded():
@@ -319,7 +319,7 @@ def test_forceflush_megabuffer_typed_entity_head_not_leaked():
     assert head not in out, "github_token head leaked RAW across the forced bounded drain (C1)"
     # Restore round-trips: the redacted head expands back and the documented-edge
     # raw tail is untouched, so the original token is reconstructed exactly.
-    assert restore(out, r.aggregate_key()) == token
+    assert restore(out, r.aggregate_key(), guard=False) == token
 
 
 def test_forceflush_megabuffer_typed_entity_no_leak_en():
@@ -334,7 +334,7 @@ def test_forceflush_megabuffer_typed_entity_no_leak_en():
         assert token not in out, (
             f"full token re-formed (leaked) in stream output at chunk size {size}"
         )
-        assert restore(out, r.aggregate_key()) == token, (
+        assert restore(out, r.aggregate_key(), guard=False) == token, (
             f"restore round-trip failed at chunk size {size}"
         )
 
@@ -380,7 +380,7 @@ def test_carry_window_range_token_straddle_not_leaked():
     assert token in r.aggregate_key().values(), (
         "token not in aggregate_key — carry failed to assemble the entity"
     )
-    assert restore(out, r.aggregate_key()) == chunk1 + chunk2
+    assert restore(out, r.aggregate_key(), guard=False) == chunk1 + chunk2
 
 
 # ---------------------------------------------------------------------------

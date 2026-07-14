@@ -38,7 +38,7 @@ class TestAdversarial:
         lang = case.get("lang", "zh")
 
         redacted, key = redact(case["input"], salt=42, mode="fast", lang=lang)
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
 
         for original in key.values():
             assert original in restored, (

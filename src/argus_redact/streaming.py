@@ -112,8 +112,12 @@ class StreamingRestorer:
         Returns ``(complete, residual)`` (``("", buffer)`` when no real boundary
         is present).
         """
+        # guard=False throughout: a streaming restore has no per-call anchor to
+        # verify against — the provenance nonce only arrives at the end of a
+        # stream, so per-chunk guarding is structurally impossible. This is the
+        # explicit unguarded opt-out, not the fail-closed default.
         if self._strategy == "none":
-            return restore(chunk, self._key)
+            return restore(chunk, self._key, guard=False)
 
         self._buffer += chunk
 
@@ -121,13 +125,13 @@ class StreamingRestorer:
         if not complete:
             return ""
         self._buffer = residual
-        return restore(complete, self._key)
+        return restore(complete, self._key, guard=False)
 
     def flush(self) -> str:
         """Flush remaining buffer."""
         if not self._buffer:
             return ""
-        result = restore(self._buffer, self._key)
+        result = restore(self._buffer, self._key, guard=False)  # see feed(): no per-call anchor
         self._buffer = ""
         return result
 

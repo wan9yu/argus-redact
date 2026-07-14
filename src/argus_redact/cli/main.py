@@ -144,7 +144,9 @@ def cmd_restore(args):
         sys.exit(5)
 
     text = _read_input(args.input)
-    restored = restore(text, key)
+    # guard=False: the CLI restores an operator-held key file locally, with no
+    # per-call anchor — the explicit unguarded opt-out, not the fail-closed default.
+    restored = restore(text, key, guard=False)
 
     _write_output(restored, args.output)
 

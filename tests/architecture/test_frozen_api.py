@@ -28,8 +28,9 @@ import argus_redact
 # only removals/renames/required-additions need v2.0.
 FROZEN_SIGNATURES = {
     "redact": "(text: 'str', *, key: 'dict | str | None' = None, lang: 'str | list[str]' = 'zh', mode: 'str' = 'fast', salt: 'int | bytes | None' = None, config: 'dict | str | None' = None, names: 'list[str] | None' = None, detailed: 'bool' = False, report: 'bool' = False, with_types: 'bool' = False, profile: 'str | None' = None, types: 'list[str] | None' = None, types_exclude: 'list[str] | None' = None, unified_prefix: 'str | None' = None, strict: 'bool' = False, _pre_detected: \"'list[PatternMatch] | None'\" = None)",  # noqa: E501
-    # additive v0.7.18 guard kwargs — backward-compatible; default behavior unchanged when unused
-    "restore": "(text: 'str', key: 'dict[str, str] | str', *, aliases: 'dict[str, tuple[str, ...]] | None' = None, display_marker: 'str | None' = None, guard: 'bool | None' = None, anchor: 'object | None' = None, strict: 'bool' = False, detailed: 'bool' = False) -> \"'str | tuple[str, dict]'\"",  # noqa: E501
+    # guard kwargs added additive in v0.7.18; v0.8.0 flipped the guard DEFAULT
+    # None -> True (breaking): a bare restore with no anchor now fails closed.
+    "restore": "(text: 'str', key: 'dict[str, str] | str', *, aliases: 'dict[str, tuple[str, ...]] | None' = None, display_marker: 'str | None' = None, guard: 'bool | None' = True, anchor: 'object | None' = None, strict: 'bool' = False, detailed: 'bool' = False) -> \"'str | tuple[str, dict]'\"",  # noqa: E501
     "assess_risk": "(entities: 'list[dict]', lang: 'str' = 'zh') -> 'RiskResult'",
     "check_restore_safety": "(redacted: 'str', llm_output: 'str', key: 'dict[str, str]') -> 'list[str]'",  # noqa: E501
     "wipe_key": "(key: 'dict') -> 'None'",

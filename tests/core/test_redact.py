@@ -121,7 +121,7 @@ class TestRedactRoundtrip:
                 assert pii not in redacted, (
                     f"PII '{pii}' still in redacted: {example['description']}"
                 )
-            restored = restore(redacted, key)
+            restored = restore(redacted, key, guard=False)
             for pii in example["pii_values"]:
                 assert pii in restored, f"PII '{pii}' not recovered: {example['description']}"
         else:
@@ -156,7 +156,7 @@ class TestRedactSelfReference:
     def test_should_roundtrip_when_self_reference_zh(self):
         original = "我在协和医院做了体检，医生说我血糖偏高"
         redacted, key = redact(original, salt=42, mode="fast")
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         # 我 preserved in redacted, round-trip still recovers exactly the input
         assert "我" in redacted
         assert restored == original
@@ -164,7 +164,7 @@ class TestRedactSelfReference:
     def test_should_roundtrip_when_kinship_zh(self):
         original = "我妈在301医院住院"
         redacted, key = redact(original, salt=42, mode="fast")
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "我妈" in redacted
         assert restored == original
 
@@ -217,7 +217,7 @@ class TestRedactSelfReference:
         # With keep, round-trip is by definition exact: pronoun stays, other PII restored.
         original = "I'm feeling sick. I have diabetes."
         redacted, key = redact(original, salt=42, mode="fast", lang="en")
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "I have" in restored or "I'm" in restored
 
 
@@ -264,7 +264,7 @@ class TestRedactConfigValidation:
         config = {"phone": {"strategy": "remove", "replacement": "[PHONE]"}}
         text = "电话13812345678"
         redacted, key = redact(text, salt=42, mode="fast", config=config)
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "13812345678" in restored
 
 
@@ -346,7 +346,7 @@ class TestMultiLanguageRedact:
                 assert pii not in redacted, (
                     f"PII '{pii}' still in redacted: {example['description']}"
                 )
-            restored = restore(redacted, key)
+            restored = restore(redacted, key, guard=False)
             for pii in example["pii_values"]:
                 assert pii in restored, f"PII '{pii}' not recovered: {example['description']}"
         else:
@@ -376,7 +376,7 @@ class TestMixedLanguageSensitive:
             return
         text = example["input"]
         redacted, key = redact(text, lang=["zh", "en"], mode="fast", salt=42)
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert isinstance(restored, str)
 
 
@@ -418,7 +418,7 @@ class TestRedactWithNER:
         adapter = _mock_ner_adapter({"张三": [NEREntity("张三", "person", 0, 2, 0.95)]})
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact("张三说了话", salt=42, mode="ner", lang="zh")
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "张三" in restored
 
 
@@ -428,7 +428,7 @@ class TestMultiLanguageNER:
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact("张三在北京工作", salt=42, mode="ner", lang="zh")
         assert "张三" not in redacted
-        assert restore(redacted, key) == "张三在北京工作"
+        assert restore(redacted, key, guard=False) == "张三在北京工作"
 
     def test_should_redact_mixed_zh_en_names(self):
         adapter = _mock_ner_adapter(
@@ -443,7 +443,7 @@ class TestMultiLanguageNER:
             redacted, key = redact("张三和John在星巴克聊天", salt=42, mode="ner", lang=["zh", "en"])
         assert "张三" not in redacted
         assert "John" not in redacted
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "张三" in restored and "John" in restored
 
     def test_should_redact_three_language_names(self):
@@ -462,7 +462,7 @@ class TestMultiLanguageNER:
             )
         for name in ("张三", "田中", "김철수"):
             assert name not in redacted
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         for name in ("张三", "田中", "김철수"):
             assert name in restored
 
@@ -526,7 +526,7 @@ class TestRedactWithSemantic:
             redacted, key = redact(text, salt=42, mode="auto", lang="zh")
         for pii in ("老王", "那个地方", "13812345678"):
             assert pii not in redacted
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         for pii in ("老王", "那个地方", "13812345678"):
             assert pii in restored
 

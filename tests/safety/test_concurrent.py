@@ -35,7 +35,7 @@ class TestConcurrentRedact:
 
         def roundtrip(text, seed):
             redacted, key = redact(text, salt=seed, mode="fast")
-            restored = restore(redacted, key)
+            restored = restore(redacted, key, guard=False)
             return text, restored
 
         with ThreadPoolExecutor(max_workers=4) as pool:

@@ -309,7 +309,7 @@ def test_roundtrip_restore(label):
     if names is not None:
         kw["names"] = names
     redacted, key = redact(text, **kw)
-    assert restore(redacted, key) == text, f"round-trip failed for {label!r}"
+    assert restore(redacted, key, guard=False) == text, f"round-trip failed for {label!r}"
 
 
 def _regenerate():

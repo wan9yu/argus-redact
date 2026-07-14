@@ -130,7 +130,7 @@ class PresidioBridge:
         text: str,
         key: dict,
         *,
-        guard: bool | None = None,
+        guard: bool | None = True,
         anchor: object | None = None,
         redacted: str | None = None,
         strict: bool = False,

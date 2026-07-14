@@ -46,7 +46,7 @@ class TestRealisticScenarios:
         lang = case.get("lang", "zh")
 
         redacted, key = redact(case["input"], salt=42, mode="fast", lang=lang)
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
 
         for pii in case["pii_values"]:
             assert pii in restored, f"PII '{pii}' not recovered: {case['description']}"

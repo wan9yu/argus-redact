@@ -176,7 +176,8 @@ class TestStreamingRedactor:
         result = r.flush()
         assert "19999" in result.downstream_text
         assert (
-            restore(result.downstream_text, r.aggregate_key()) == "请拨打 13912345678 联系王建国。"
+            restore(result.downstream_text, r.aggregate_key(), guard=False)
+            == "请拨打 13912345678 联系王建国。"
         )
 
     def test_should_keep_same_fake_for_repeated_value_across_chunks(self):
@@ -204,7 +205,7 @@ class TestStreamingRedactor:
         final = r.flush()
         joined_in = "".join(chunks)
         joined_out = "".join(o.downstream_text for o in outs) + final.downstream_text
-        assert restore(joined_out, r.aggregate_key()) == joined_in
+        assert restore(joined_out, r.aggregate_key(), guard=False) == joined_in
 
     def test_should_avoid_collision_across_chunks(self):
         """Two distinct originals must map to distinct fakes in aggregate_key."""
@@ -242,7 +243,10 @@ class TestStreamingRedactor:
         out += r.flush().downstream_text
         assert "(555) 555-01" in out
         assert "999-" in out
-        assert restore(out, r.aggregate_key()) == "Call (415) 555-1234, SSN 123-45-6789 today."
+        assert (
+            restore(out, r.aggregate_key(), guard=False)
+            == "Call (415) 555-1234, SSN 123-45-6789 today."
+        )
 
     def test_should_require_salt(self):
         with pytest.raises(TypeError):

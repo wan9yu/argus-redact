@@ -147,8 +147,8 @@ class TestMessagesFailClosed:
         # Restore round-trips
         from argus_redact import restore
 
-        r1 = restore(c1, key)
-        r2 = restore(c2, key)
+        r1 = restore(c1, key, guard=False)
+        r2 = restore(c2, key, guard=False)
         assert "13812345678" in r1
         assert "13812345678" in r2
 
@@ -159,7 +159,7 @@ class TestRestoreBody:
         redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)
         response = {"result": redacted["text"]}
 
-        restored = restore_body(response, key, field="result")
+        restored = restore_body(response, key, field="result", guard=False)
 
         assert "13812345678" in restored["result"]
 
@@ -167,7 +167,7 @@ class TestRestoreBody:
         body = {"text": "电话13812345678"}
         redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)
 
-        restored_text = restore_body(redacted["text"], key)
+        restored_text = restore_body(redacted["text"], key, guard=False)
 
         assert "13812345678" in restored_text
 
@@ -182,7 +182,7 @@ class TestRoundtrip:
         assert "zhang@test.com" not in redacted["text"]
 
         response = {"result": redacted["text"]}
-        restored = restore_body(response, key, field="result")
+        restored = restore_body(response, key, field="result", guard=False)
 
         assert "13812345678" in restored["result"]
         assert "zhang@test.com" in restored["result"]

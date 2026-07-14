@@ -69,7 +69,7 @@ def test_en_ner_keeps_name_like_person_l1_misses():
         redacted, key = redact(text, salt=42, mode="ner", lang="en")
     assert "Obama" not in redacted
     assert "Obama" in key.values()
-    assert restore(redacted, key) == text
+    assert restore(redacted, key, guard=False) == text
 
 
 def test_en_ner_gate_is_selective_drop_and_keep_together():

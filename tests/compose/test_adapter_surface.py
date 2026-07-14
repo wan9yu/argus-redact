@@ -64,6 +64,6 @@ def test_register_custom_type_round_trips():
             ],
         )
         assert "EMP-123456" not in redacted, "custom-type entity should be redacted"
-        assert restore(redacted, key) == text
+        assert restore(redacted, key, guard=False) == text
     finally:
         unregister("en", "employee_id_test")

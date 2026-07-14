@@ -29,7 +29,7 @@ class TestPresidioBridgeGuard:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            result = bridge.restore(redacted, key)
+            result = bridge.restore(redacted, key, guard=None)
         assert any(issubclass(x.category, DeprecationWarning) for x in w)
         assert "13812345678" in result
 

@@ -141,12 +141,12 @@ def test_round_trip_restore_with_surname_title_in_llm_output():
     llm_output = "你好黄先生，请确认 138****5678 这个号码"
 
     # Without expand_aliases: restore() can't reach "黄先生"
-    restored_naive = restore(llm_output, key)
+    restored_naive = restore(llm_output, key, guard=False)
     assert "黄先生" in restored_naive  # NOT restored — naive restore fails
 
     # With expand_aliases: restore() resolves "黄先生" → "黄芳"
     expanded = expand_aliases(key, lang="zh")
-    restored = restore(llm_output, expanded)
+    restored = restore(llm_output, expanded, guard=False)
     assert "黄芳" in restored
     assert "黄先生" not in restored
     assert "13912345678" in restored

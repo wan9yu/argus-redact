@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 
 from argus_redact import __version__, redact, restore
 from argus_redact.exceptions import SecurityWarning
+from argus_redact.pure.restore import RestoreGuardError
 
 try:
     from starlette.requests import Request
@@ -107,7 +108,13 @@ async def handle_redact(request: Request) -> JSONResponse:
 
 
 async def handle_restore(request: Request) -> JSONResponse:
-    body = await request.json()
+    # C4: a malformed body raises JSONDecodeError (a ValueError). Parsing inside
+    # the try turns that into a 400, not an unhandled 500.
+    try:
+        body = await request.json()
+    except ValueError:
+        return JSONResponse({"error": "request body must be valid JSON"}, status_code=400)
+
     text = body.get("text", "")
     key = body.get("key", {})
     # Security: reject any non-dict, non-None key (str path, list, int, etc.)
@@ -117,12 +124,40 @@ async def handle_restore(request: Request) -> JSONResponse:
             status_code=400,
         )
 
+    # v0.8.0: guard defaults to True — a restore with no anchor fails closed. A
+    # caller wanting the legacy plain substitution passes "guard": false.
+    guard = body.get("guard", True)
+    strict = body.get("strict", False)
+
+    # Optional provenance/scope anchor: {"nonce": str, "scope": [pseudonym, ...]}.
+    # Reconstructed into the same Anchor make_anchor() produces so the (P + S)
+    # checks in restore() can verify the model echoed the nonce and stayed in scope.
+    anchor = None
+    anchor_spec = body.get("anchor")
+    if anchor_spec is not None:
+        if not isinstance(anchor_spec, dict):
+            return JSONResponse(
+                {"error": "anchor must be a JSON object with nonce and scope"},
+                status_code=400,
+            )
+        from argus_redact.compose.anchor import Anchor
+
+        nonce = anchor_spec.get("nonce", "")
+        scope = anchor_spec.get("scope", [])
+        anchor = Anchor(nonce=nonce, scope=frozenset(scope))
+
     try:
-        restored = restore(text, key)
+        restored, details = restore(
+            text, key, guard=guard, anchor=anchor, strict=strict, detailed=True
+        )
+    except RestoreGuardError as e:
+        return JSONResponse({"error": str(e), "security_events": e.events}, status_code=400)
     except (ValueError, TypeError) as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
-    return JSONResponse({"restored": restored})
+    return JSONResponse(
+        {"restored": restored, "security_events": details.get("security_events", [])}
+    )
 
 
 async def handle_info(request: Request) -> JSONResponse:

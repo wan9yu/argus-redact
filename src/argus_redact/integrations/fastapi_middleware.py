@@ -117,7 +117,7 @@ def restore_body(
     *,
     field: str | None = None,
     anchor: object | None = None,
-    guard: bool | None = None,
+    guard: bool | None = True,
     redacted: str | None = None,
     strict: bool = False,
     detailed: bool = False,

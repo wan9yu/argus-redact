@@ -144,7 +144,7 @@ class TestRoundtripWithNormalization:
     def test_should_roundtrip_fullwidth_phone(self):
         text = "电话１３８００１３８０００"
         redacted, key = redact(text, salt=42, mode="fast")
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
 
         # Original fullwidth chars recovered (key stores original text)
         assert "１３８" in restored
@@ -152,7 +152,7 @@ class TestRoundtripWithNormalization:
     def test_should_roundtrip_zwsp_phone(self):
         text = "电话1\u200b3\u200b8\u200b0\u200b0\u200b1\u200b3\u200b8\u200b0\u200b0\u200b0"
         redacted, key = redact(text, salt=42, mode="fast")
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
 
         # Original chars (with ZWSP) recovered
         assert "13800138000" in restored.replace("\u200b", "")
@@ -181,7 +181,7 @@ class TestHomoglyphBypass:
     def test_should_roundtrip_homoglyph_email(self):
         text = "邮箱zh\u0430ng@gmail.com"
         redacted, key = redact(text, salt=42, mode="fast")
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
 
         assert "\u0430" in restored or "a" in restored
 

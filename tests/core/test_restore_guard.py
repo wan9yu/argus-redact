@@ -66,7 +66,7 @@ def test_guard_strict_raises():
 def test_bare_restore_deprecation_warning():
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
-        restore("P-001", KEY)  # guard=None
+        restore("P-001", KEY, guard=None)  # v0.8.0: None must be explicit now
         assert any(issubclass(x.category, DeprecationWarning) for x in w)
 
 

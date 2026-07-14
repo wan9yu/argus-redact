@@ -12,21 +12,21 @@ class TestRestoreBasic:
         key = {"P-037": "王五"}
         text = "P-037是好人"
 
-        result = restore(text, key)
+        result = restore(text, key, guard=False)
 
         assert result == "王五是好人"
 
     def test_should_replace_all_pseudonyms_when_key_has_multiple_entries(self, sample_key):
         text = "P-037和P-012在[咖啡店]讨论了去[某公司]面试的事"
 
-        result = restore(text, sample_key)
+        result = restore(text, sample_key, guard=False)
 
         assert result == "王五和张三在星巴克讨论了去阿里面试的事"
 
     def test_should_replace_pseudonym_when_at_start_of_text(self):
         key = {"P-037": "王五"}
 
-        result = restore("P-037说了话", key)
+        result = restore("P-037说了话", key, guard=False)
 
         assert result == "王五说了话"
 
@@ -37,7 +37,7 @@ class TestRestoreBasic:
         # restore to "李明(经理)", never "王芳(经理)".
         key = {"张三": "李明", "李明": "王芳"}
 
-        result = restore("张三(经理)", key)
+        result = restore("张三(经理)", key, guard=False)
 
         assert result == "李明(经理)"
 
@@ -48,7 +48,7 @@ class TestRestoreBasic:
         # "李明(假)", never "王芳(假)" (李明 re-scanned = cross-entity leak).
         key = {"张三": "李明", "李明": "王芳"}
 
-        result = restore("张三(假)", key)
+        result = restore("张三(假)", key, guard=False)
 
         assert result == "李明(假)"
 
@@ -59,20 +59,20 @@ class TestRestoreBasic:
         # token, so it must be left literal.
         key = {"19999123456": "13912345678"}
 
-        assert restore("199991234560", key) == "199991234560"
-        assert restore("call 19999123456 now", key) == "call 13912345678 now"
+        assert restore("199991234560", key, guard=False) == "199991234560"
+        assert restore("call 19999123456 now", key, guard=False) == "call 13912345678 now"
 
     def test_should_replace_pseudonym_when_at_end_of_text(self):
         key = {"P-037": "王五"}
 
-        result = restore("他是P-037", key)
+        result = restore("他是P-037", key, guard=False)
 
         assert result == "他是王五"
 
     def test_should_replace_all_occurrences_when_same_pseudonym_appears_twice(self):
         key = {"P-037": "王五"}
 
-        result = restore("P-037和P-037", key)
+        result = restore("P-037和P-037", key, guard=False)
 
         assert result == "王五和王五"
 
@@ -83,14 +83,14 @@ class TestRestoreLongestFirst:
     def test_should_match_longer_key_when_short_key_is_prefix_of_long(self):
         key = {"[某公司]": "阿里", "[某公司总部]": "阿里西溪园区"}
 
-        result = restore("[某公司总部]开会", key)
+        result = restore("[某公司总部]开会", key, guard=False)
 
         assert result == "阿里西溪园区开会"
 
     def test_should_replace_both_when_long_and_short_keys_appear_separately(self):
         key = {"[某公司]": "阿里", "[某公司总部]": "阿里西溪园区"}
 
-        result = restore("[某公司总部]和[某公司]", key)
+        result = restore("[某公司总部]和[某公司]", key, guard=False)
 
         assert result == "阿里西溪园区和阿里"
 
@@ -101,7 +101,7 @@ class TestRestoreInjectionSafety:
     def test_should_not_chain_replace_when_original_looks_like_marker(self):
         key = {"P-037": "P-012先生", "P-012": "张三"}
 
-        result = restore("P-037和P-012", key)
+        result = restore("P-037和P-012", key, guard=False)
 
         assert result == "P-012先生和张三"
         assert "张三先生" not in result
@@ -110,7 +110,7 @@ class TestRestoreInjectionSafety:
         key = {"P-037": "王五"}
         text = "P-037 said: the code P-037 is a pseudonym"
 
-        result = restore(text, key)
+        result = restore(text, key, guard=False)
 
         assert result == "王五 said: the code 王五 is a pseudonym"
 
@@ -118,7 +118,7 @@ class TestRestoreInjectionSafety:
         key = {"[地点]": "星巴克", "[咖啡]": "拿铁"}
         text = "在[地点]喝[咖啡]"
 
-        result = restore(text, key)
+        result = restore(text, key, guard=False)
 
         assert result == "在星巴克喝拿铁"
 
@@ -127,38 +127,38 @@ class TestRestoreEdgeCases:
     """Edge cases and boundary conditions."""
 
     def test_should_return_empty_when_text_is_empty(self, sample_key):
-        result = restore("", sample_key)
+        result = restore("", sample_key, guard=False)
 
         assert result == ""
 
     def test_should_return_original_when_key_is_empty(self):
-        result = restore("any text", {})
+        result = restore("any text", {}, guard=False)
 
         assert result == "any text"
 
     def test_should_return_empty_when_both_empty(self):
-        result = restore("", {})
+        result = restore("", {}, guard=False)
 
         assert result == ""
 
     def test_should_leave_unknown_pseudonyms_when_not_in_key(self):
         key = {"P-037": "王五"}
 
-        result = restore("P-999 is unknown", key)
+        result = restore("P-999 is unknown", key, guard=False)
 
         assert result == "P-999 is unknown"
 
     def test_should_return_original_when_no_pseudonym_patterns_in_text(self):
         key = {"P-037": "王五"}
 
-        result = restore("普通文本没有假名", key)
+        result = restore("普通文本没有假名", key, guard=False)
 
         assert result == "普通文本没有假名"
 
     def test_should_not_re_match_when_original_contains_pseudonym_like_chars(self):
         key = {"P-037": "P先生"}
 
-        result = restore("P-037说了话", key)
+        result = restore("P-037说了话", key, guard=False)
 
         assert result == "P先生说了话"
 
@@ -169,15 +169,15 @@ class TestRestorePurity:
     def test_should_return_same_result_when_called_twice(self, sample_key):
         text = "P-037和P-012在[咖啡店]"
 
-        result1 = restore(text, sample_key)
-        result2 = restore(text, sample_key)
+        result1 = restore(text, sample_key, guard=False)
+        result2 = restore(text, sample_key, guard=False)
 
         assert result1 == result2
 
     def test_should_not_mutate_key_when_restoring(self, sample_key):
         original_key = dict(sample_key)
 
-        restore("P-037在[咖啡店]", sample_key)
+        restore("P-037在[咖啡店]", sample_key, guard=False)
 
         assert sample_key == original_key
 
@@ -288,7 +288,7 @@ class TestRestoreSubstringSafety:
         key = {"P-00037": "张三", "MED-00037": "糖尿病", "O-00037": "协和医院"}
         text = "P-00037确诊MED-00037，在O-00037"
 
-        result = restore(text, key)
+        result = restore(text, key, guard=False)
 
         assert result == "张三确诊糖尿病，在协和医院"
 
@@ -297,7 +297,7 @@ class TestRestoreSubstringSafety:
         key = {"P-00003": "张三", "IP-00003": "192.168.1.1"}
         text = "用户P-00003的IP是IP-00003"
 
-        result = restore(text, key)
+        result = restore(text, key, guard=False)
 
         assert result == "用户张三的IP是192.168.1.1"
 
@@ -305,7 +305,7 @@ class TestRestoreSubstringSafety:
         key = {"P-00001": "张", "P-00002": "三"}
         text = "P-00001P-00002是好人"
 
-        result = restore(text, key)
+        result = restore(text, key, guard=False)
 
         assert result == "张三是好人"
 
@@ -315,11 +315,11 @@ class TestRestoreErrors:
 
     def test_should_raise_type_error_when_key_is_int(self):
         with pytest.raises(TypeError):
-            restore("text", 123)
+            restore("text", 123, guard=False)
 
     def test_should_raise_type_error_when_key_is_none(self):
         with pytest.raises(TypeError):
-            restore("text", None)
+            restore("text", None, guard=False)
 
 
 class TestRestoreAutoDetectsMarkers:
@@ -331,7 +331,7 @@ class TestRestoreAutoDetectsMarkers:
         # Pretend display_text has 19999... fake with ⓕ marker appended
         text = "Call 19999123456ⓕ"
         key = {"19999123456": "13800138000"}
-        out = restore(text, key)
+        out = restore(text, key, guard=False)
         assert out == "Call 13800138000ⓕ"
 
     def test_auto_strips_chinese_marker(self):
@@ -339,7 +339,7 @@ class TestRestoreAutoDetectsMarkers:
 
         text = "联系张明(假)"
         key = {"张明": "王建国"}
-        out = restore(text, key)
+        out = restore(text, key, guard=False)
         assert out == "联系王建国(假)"
 
     def test_explicit_marker_still_works(self):
@@ -347,7 +347,7 @@ class TestRestoreAutoDetectsMarkers:
 
         text = "联系张明🌟"
         key = {"张明": "王建国"}
-        out = restore(text, key, display_marker="🌟")
+        out = restore(text, key, display_marker="🌟", guard=False)
         assert out == "联系王建国"
 
     def test_unknown_custom_marker_still_silent(self):
@@ -356,7 +356,7 @@ class TestRestoreAutoDetectsMarkers:
 
         text = "联系张明🌟"
         key = {"张明": "王建国"}
-        out = restore(text, key)  # no display_marker
+        out = restore(text, key, guard=False)  # no display_marker
         # Token "张明🌟" is NOT in key → not matched → output unchanged
         assert "🌟" in out
 
@@ -422,7 +422,7 @@ class TestRestoreKeyFileLoadIsGlueOnly:
     def test_pure_restore_accepts_in_memory_mapping(self):
         from argus_redact.pure.restore import restore as _pure_restore
 
-        result = _pure_restore("P-037 is here", {"P-037": "王五"})
+        result = _pure_restore("P-037 is here", {"P-037": "王五"}, guard=False)
 
         assert result == "王五 is here"
 
@@ -441,7 +441,7 @@ class TestRestoreKeyFileLoadIsGlueOnly:
         key_path = tmp_path / "key.json"
         key_path.write_text(json.dumps({"P-037": "王五"}), encoding="utf-8")
 
-        result = public_restore("P-037 是好人", str(key_path))
+        result = public_restore("P-037 是好人", str(key_path), guard=False)
 
         assert result == "王五 是好人"
 
@@ -479,7 +479,7 @@ class TestRestoreAliasesMapBackToOriginal:
         aliases = {"P-00001": ("Wang Jianguo",)}
         text = "Wang Jianguo went home"
 
-        result = restore(text, key, aliases=aliases)
+        result = restore(text, key, aliases=aliases, guard=False)
 
         assert result == "王建国 went home"
 
@@ -489,7 +489,7 @@ class TestRestoreAliasesMapBackToOriginal:
         aliases = {"P-99999": ("Stranger",)}
         text = "Stranger came by"
 
-        result = restore(text, key, aliases=aliases)
+        result = restore(text, key, aliases=aliases, guard=False)
 
         # Stranger isn't bound to anything → unchanged
         assert result == "Stranger came by"

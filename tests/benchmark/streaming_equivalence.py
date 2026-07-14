@@ -103,7 +103,7 @@ def _score_case(text: str, lang: str, chunks: list[str]) -> dict:
     out, r = _stream(chunks, lang)
     return {
         "leak_equiv": all(term not in out for term in removed),
-        "restore_recovers": restore(out, r.aggregate_key()) == text,
+        "restore_recovers": restore(out, r.aggregate_key(), guard=False) == text,
         "output_identical": out == batch_res.downstream_text,
         "n_removed": len(removed),
     }

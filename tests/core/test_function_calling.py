@@ -34,7 +34,7 @@ class TestFunctionCallingCompatibility:
         lang = example.get("lang", "zh")
 
         redacted, key = redact(example["input"], salt=42, mode="fast", lang=lang)
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
 
         for pii in example["pii_values"]:
             assert pii in restored, f"PII '{pii}' not recovered: {example['description']}"

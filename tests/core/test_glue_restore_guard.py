@@ -64,10 +64,8 @@ class TestGlueKeyFilePathBackcompat:
         """A str path to a JSON key file is resolved at the glue boundary."""
         key_file = tmp_path / "key.json"
         key_file.write_text(json.dumps(KEY))
-        # Use legacy bare restore (no guard kwarg) to keep this pure path test
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            out = restore("P-001 来了", str(key_file))
+        # guard=False: explicit legacy opt-out, keeps this a pure key-file-path test
+        out = restore("P-001 来了", str(key_file), guard=False)
         assert "张三" in out
 
     def test_str_path_key_with_guard_kwargs(self, tmp_path):
@@ -80,19 +78,19 @@ class TestGlueKeyFilePathBackcompat:
 
 
 class TestGlueBackwardCompat:
-    """No new kwargs → still returns a bare str (backward compatibility)."""
+    """guard=None (the legacy path) still returns a bare str (backward compatibility)."""
 
-    def test_no_guard_kwargs_returns_str(self):
-        """Calling restore without any new kwargs still returns a bare str."""
+    def test_guard_none_returns_str(self):
+        """guard=None still runs the legacy restore and returns a bare str."""
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            result = restore("P-001 来了", KEY)
+            warnings.simplefilter("ignore")  # DeprecationWarning + R4 SecurityWarning
+            result = restore("P-001 来了", KEY, guard=None)
         assert isinstance(result, str)
         assert "张三" in result
 
-    def test_no_guard_kwargs_emits_deprecation_warning(self):
-        """Calling restore without guard= still emits DeprecationWarning."""
+    def test_guard_none_emits_deprecation_warning(self):
+        """guard=None still emits the migration DeprecationWarning."""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            restore("P-001", KEY)
+            restore("P-001", KEY, guard=None)
         assert any(issubclass(x.category, DeprecationWarning) for x in w)

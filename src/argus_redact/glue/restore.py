@@ -26,7 +26,7 @@ def restore(
     *,
     aliases: dict[str, tuple[str, ...]] | None = None,
     display_marker: str | None = None,
-    guard: bool | None = None,
+    guard: bool | None = True,
     anchor: object | None = None,
     strict: bool = False,
     detailed: bool = False,
@@ -41,10 +41,11 @@ def restore(
     The ``dict[str, str] | str`` annotation matches the frozen Layer-1 public
     contract; any Mapping is accepted at runtime (delegated to the pure layer).
 
-    Guard parameters (added v0.7.18, additive; the guard=None default flips to
-    guard=True in v0.8.0):
-        guard: when True, enables deterministic provenance (P) + scope (S) checks.
-               when None (default), emits DeprecationWarning and runs legacy restore.
+    Guard parameters (added v0.7.18; the default flipped to guard=True in v0.8.0):
+        guard: when True (default, v0.8.0+), enables deterministic provenance (P) +
+               scope (S) checks; a bare restore with no anchor FAILS CLOSED.
+               when None, emits DeprecationWarning and runs legacy restore (plus a
+               SecurityWarning if it substituted — see pure.restore.restore).
                when False, runs legacy restore (guard off) with NO warning — the
                explicit opt-out for callers that want a plain, unchecked restore.
         anchor: Anchor instance produced by make_anchor(); carries nonce + scope.

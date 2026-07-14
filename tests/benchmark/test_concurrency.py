@@ -11,7 +11,7 @@ class TestConcurrency:
 
         def redact_one(text):
             redacted, key = redact(text, mode="fast", lang="zh")
-            restored = restore(redacted, key)
+            restored = restore(redacted, key, guard=False)
             return text, redacted, restored, key
 
         with ThreadPoolExecutor(max_workers=10) as pool:

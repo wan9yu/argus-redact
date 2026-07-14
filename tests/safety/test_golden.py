@@ -64,7 +64,7 @@ class TestGoldenSeedDeterminism:
         ]
         for text, kwargs, expected_pii in cases:
             redacted, key = redact(text, **kwargs)
-            restored = restore(redacted, key)
+            restored = restore(redacted, key, guard=False)
             for pii in expected_pii:
                 assert pii in restored, f"PII '{pii}' not recovered from: {text}"
 
@@ -115,7 +115,7 @@ class TestUnicodeBoundary:
         text = "客户𠀀𠀁电话13812345678"
         redacted, key = redact(text, salt=42, mode="fast", names=["𠀀𠀁"])
 
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
         assert "13812345678" in restored
         assert "𠀀𠀁" in restored
 

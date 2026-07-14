@@ -65,12 +65,12 @@ class TestRoundTripBehavior:
     def test_pseudonym_round_trips(self):
         entities = [_match("张三", "person", 0)]
         redacted, key, _ = replace("张三说了话", entities, salt=42)
-        assert restore(redacted, key) == "张三说了话"
+        assert restore(redacted, key, guard=False) == "张三说了话"
 
     def test_remove_round_trips(self):
         entities = [_match("110101199003074610", "id_number", 0)]
         redacted, key, _ = replace("110101199003074610", entities, salt=42)
-        assert restore(redacted, key) == "110101199003074610"
+        assert restore(redacted, key, guard=False) == "110101199003074610"
 
     def test_mask_emits_partial_visible_form(self):
         # mask emits 138****5678 — the middle 4 digits are lost. Two distinct

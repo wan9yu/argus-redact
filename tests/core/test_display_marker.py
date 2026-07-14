@@ -101,32 +101,32 @@ class TestRestoreWithMarkers:
     def test_restore_should_strip_markers_before_lookup(self):
         marked = "请拨打 19999123456ⓕ 联系 张明ⓕ"
         key = {"19999123456": "13912345678", "张明": "王建国"}
-        result = restore(marked, key, display_marker="ⓕ")
+        result = restore(marked, key, display_marker="ⓕ", guard=False)
         assert result == "请拨打 13912345678 联系 王建国"
 
     def test_restore_should_handle_word_boundary_extension(self):
         """LLM may rewrite '张明' -> '张明先生'; restore matches '张明' inside the longer phrase."""
         text = "张明先生今天到了"
         key = {"张明": "王建国"}
-        result = restore(text, key)
+        result = restore(text, key, guard=False)
         assert result == "王建国先生今天到了"
 
     def test_restore_should_be_noop_when_marker_absent_in_text(self):
         text = "请拨打 19999123456 联系 张明"
         key = {"19999123456": "13912345678", "张明": "王建国"}
-        result = restore(text, key, display_marker="ⓕ")
+        result = restore(text, key, display_marker="ⓕ", guard=False)
         assert result == "请拨打 13912345678 联系 王建国"
 
     def test_restore_should_handle_empty_key_with_marker(self):
         marked = "纯文本ⓕ"
-        result = restore(marked, {}, display_marker="ⓕ")
+        result = restore(marked, {}, display_marker="ⓕ", guard=False)
         assert result == "纯文本"
 
     def test_restore_should_default_marker_when_none_passed(self):
         # display_marker=None means no stripping at all (default behavior)
         text = "张明ⓕ"
         key = {"张明": "王建国"}
-        result = restore(text, key)
+        result = restore(text, key, guard=False)
         # Without display_marker, the ⓕ stays attached to the lookup target,
         # so 张明 is still replaced but the trailing ⓕ remains.
         assert result == "王建国ⓕ"

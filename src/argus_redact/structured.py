@@ -149,7 +149,9 @@ def restore_json(data: dict | list, key: dict) -> dict | list:
 
     def _walk(obj: Any) -> Any:
         if isinstance(obj, str):
-            return restore(obj, key)
+            # guard=False: structured restore reverses a stored key file, with no
+            # per-call anchor to verify — the explicit unguarded opt-out.
+            return restore(obj, key, guard=False)
         if isinstance(obj, dict):
             return {k: _walk(v) for k, v in obj.items()}
         if isinstance(obj, list):
@@ -236,4 +238,4 @@ def redact_csv(
 
 def restore_csv(csv_text: str, key: dict) -> str:
     """Restore PII in a CSV string."""
-    return restore(csv_text, key)
+    return restore(csv_text, key, guard=False)  # anchor-less key-file restore

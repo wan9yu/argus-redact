@@ -33,10 +33,10 @@ def test_pseudonym_cross_salt_isolation_holds():
     # Pseudonym codes are salt-derived -> the two redactions differ.
     assert red_a != red_b
     # A salt-A key must NOT reconstruct the name redacted under salt B.
-    assert "张三" not in restore(red_b, key_a)
+    assert "张三" not in restore(red_b, key_a, guard=False)
     # Sanity: each key restores its own redaction exactly.
-    assert restore(red_a, key_a) == text
-    assert restore(red_b, key_b) == text
+    assert restore(red_a, key_a, guard=False) == text
+    assert restore(red_b, key_b, guard=False) == text
 
 
 @pytest.mark.xfail(
@@ -51,4 +51,4 @@ def test_masked_cross_salt_isolation_known_limitation():
     text = "电话13800138000"
     _red_a, key_a = redact(text, lang="zh", mode="fast", salt=11111)
     red_b, _key_b = redact(text, lang="zh", mode="fast", salt=22222)
-    assert "13800138000" not in restore(red_b, key_a)
+    assert "13800138000" not in restore(red_b, key_a, guard=False)

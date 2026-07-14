@@ -23,19 +23,19 @@ class TestThreeOutputBasics:
     def test_should_round_trip_audit_text(self):
         text = "请拨打 13912345678 联系王建国"
         result = redact_pseudonym_llm(text, salt=b"fixed-salt-for-test")
-        restored = restore(result.audit_text, result.key)
+        restored = restore(result.audit_text, result.key, guard=False)
         assert restored == text
 
     def test_should_round_trip_downstream_text(self):
         text = "请拨打 13912345678 联系王建国"
         result = redact_pseudonym_llm(text, salt=b"fixed-salt-for-test")
-        restored = restore(result.downstream_text, result.key)
+        restored = restore(result.downstream_text, result.key, guard=False)
         assert restored == text
 
     def test_should_round_trip_display_text(self):
         text = "请拨打 13912345678 联系王建国"
         result = redact_pseudonym_llm(text, salt=b"fixed-salt-for-test")
-        restored = restore(result.display_text, result.key, display_marker="ⓕ")
+        restored = restore(result.display_text, result.key, display_marker="ⓕ", guard=False)
         assert restored == text
 
 
@@ -70,15 +70,15 @@ class TestEnglishProfile:
         assert "999-" in result.downstream_text  # SSN 999 area
         assert "@example." in result.downstream_text  # RFC 2606 email
         # Round-trip restores exact original
-        assert restore(result.downstream_text, result.key) == text
-        assert restore(result.audit_text, result.key) == text
-        assert restore(result.display_text, result.key, display_marker="ⓕ") == text
+        assert restore(result.downstream_text, result.key, guard=False) == text
+        assert restore(result.audit_text, result.key, guard=False) == text
+        assert restore(result.display_text, result.key, display_marker="ⓕ", guard=False) == text
 
     def test_should_round_trip_credit_card(self):
         text = "Card: 4111-1111-1111-1111"
         result = redact_pseudonym_llm(text, lang="en", salt=b"fixed-salt-for-test")
         assert "999999" in result.downstream_text
-        assert restore(result.downstream_text, result.key) == text
+        assert restore(result.downstream_text, result.key, guard=False) == text
 
     def test_should_round_trip_ip_and_mac(self):
         # IPv4 detection requires keyword context (e.g. "IP:") per lang/shared/patterns.py.
@@ -93,14 +93,14 @@ class TestEnglishProfile:
         result = redact_pseudonym_llm(text, lang="en", salt=b"fixed-salt-for-test")
         assert re.search(_RESERVED_RANGE_PATTERNS["ipv4_shared"], result.downstream_text)
         assert re.search(_RESERVED_RANGE_PATTERNS["mac_shared"], result.downstream_text)
-        assert restore(result.downstream_text, result.key) == text
+        assert restore(result.downstream_text, result.key, guard=False) == text
 
 
 class TestMixedZhEn:
     def test_should_round_trip_mixed_text(self):
         text = "客户Wang at (415) 555-1234, 邮箱 wang@company.com"
         result = redact_pseudonym_llm(text, lang="auto", salt=b"fixed-salt-for-test")
-        assert restore(result.downstream_text, result.key) == text
+        assert restore(result.downstream_text, result.key, guard=False) == text
 
 
 class TestCustomReservedNames:

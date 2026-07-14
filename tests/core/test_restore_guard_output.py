@@ -129,7 +129,7 @@ def test_legacy_paths_unchanged():
         warnings.simplefilter("error", SecurityWarning)
         assert restore(redacted, key, guard=False) == original
     with pytest.warns(DeprecationWarning):
-        assert restore(redacted, key) == original
+        assert restore(redacted, key, guard=None) == original
 
 
 def test_deprecation_warning_is_attributed_to_the_caller():
@@ -140,7 +140,7 @@ def test_deprecation_warning_is_attributed_to_the_caller():
     redacted, _ = redact(original, lang="zh", mode="fast", key=dict(key))
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        restore(redacted, key)  # bare -> DeprecationWarning
+        restore(redacted, key, guard=None)  # guard=None -> DeprecationWarning
     dep = [w for w in caught if issubclass(w.category, DeprecationWarning)][0]
     assert dep.filename == __file__, (
         f"deprecation warning attributed to {dep.filename}, not the caller ({__file__})"

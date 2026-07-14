@@ -46,7 +46,7 @@ class TestNamesWhitelist:
             salt=42,
             mode="fast",
         )
-        restored = restore(redacted, key)
+        restored = restore(redacted, key, guard=False)
 
         assert "王一" in restored
         assert "18630303030" in restored
