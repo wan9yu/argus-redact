@@ -8,8 +8,11 @@ from typing import Mapping
 
 from argus_redact.pure.display_marker import strip_display_markers
 from argus_redact.pure.security_events import (
+    BLOCKED,
+    COMPLETE,
     GUARD_NO_ANCHOR,
     OUT_OF_SCOPE_PSEUDONYM,
+    PARTIAL,
     PROVENANCE_FAILED,
     _auto_stacklevel,
     security_event,
@@ -216,15 +219,22 @@ def restore(
     if strict and events:
         raise RestoreGuardError(events)
 
+    # This branch WITNESSES the outcome directly: out_of_scope_hits means some
+    # pseudonyms were withheld while the in-scope ones above WERE substituted
+    # (PARTIAL); no hits means every pseudonym in scope made it through clean
+    # (COMPLETE — any events left are advisory, e.g. from guarded_restore's H
+    # layer merged in later).
+    outcome = PARTIAL if out_of_scope_hits else COMPLETE
+
     if events and _warn:
         # Partial restore: in-scope codes were substituted, out-of-scope ones were
         # withheld. Without this the caller gets a plain str and no hint that some
         # pseudonyms were deliberately left unresolved.
         # stacklevel auto-detected — see security_events._auto_stacklevel.
-        warn_security_events(events)
+        warn_security_events(events, outcome)
 
     if detailed:
-        return result, {"security_events": events}
+        return result, {"security_events": events, "outcome": outcome}
     return result
 
 
@@ -243,10 +253,13 @@ def _fail_closed(
     # the caller cannot tell a fail-closed apart from a clean round-trip. Documented
     # in docs/security-model.md ("emits a UserWarning") — this is that warning.
     # stacklevel auto-detected — see security_events._auto_stacklevel.
+    # This function only ever runs on a TOTAL fail-closed (no anchor, or nonce
+    # mismatch) — nothing is EVER substituted here, so the outcome is always
+    # BLOCKED, never PARTIAL/COMPLETE.
     if warn:
-        warn_security_events(events)
+        warn_security_events(events, BLOCKED)
     if detailed:
-        return text, {"security_events": events}
+        return text, {"security_events": events, "outcome": BLOCKED}
     return text
 
 

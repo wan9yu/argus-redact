@@ -96,14 +96,20 @@ def guarded_restore(
     )
 
     all_events = h_events + details.get("security_events", [])
+    # `restore()` is the site that witnessed whether P + S actually let anything
+    # through — BLOCKED (fail-closed), PARTIAL (scope withheld some), or COMPLETE
+    # (everything in scope substituted). Forward that as-is rather than
+    # re-deriving it from the merged reason codes, which is exactly the bug this
+    # replaces: a BLOCKED restore plus an advisory H hit must still say BLOCKED,
+    # not a mixed sentence implying some of it went through.
+    outcome = details.get("outcome")
 
     if warn is None:
         warn = not detailed
     if warn:
-        # ONE warning over the merged events, so warn_security_events' three-way
-        # (withheld-only / advisory-only / mixed) branch describes what actually
-        # happened. Never dropped.
-        warn_security_events(all_events)
+        # ONE warning over the merged events, using the outcome witnessed above —
+        # never dropped, never re-guessed from reason codes.
+        warn_security_events(all_events, outcome)
 
     if detailed:
         return result_text, {"security_events": all_events}

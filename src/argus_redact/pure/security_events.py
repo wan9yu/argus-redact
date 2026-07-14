@@ -19,6 +19,12 @@ INJECTION_SUSPECTED = "injection_suspected"
 GUARD_NO_ANCHOR = "guard_no_anchor"
 KEEP_DOWNGRADED = "keep_downgraded"
 
+# Outcomes a caller of warn_security_events can witness first-hand — see that
+# function's docstring for why these replace the old reason-code-derived guess.
+BLOCKED = "blocked"
+PARTIAL = "partial"
+COMPLETE = "complete"
+
 
 def security_event(reason_code: str, count: int, detail: str | None = None) -> dict:
     """
@@ -39,10 +45,17 @@ def security_event(reason_code: str, count: int, detail: str | None = None) -> d
 
 # Reason codes that mean the guard WITHHELD a substitution (fail-closed, or an
 # out-of-scope code left as a placeholder). Everything else — notably the H
-# heuristic's INJECTION_SUSPECTED — is ADVISORY: the restore proceeded and the
-# originals WERE substituted. The two must never be described with one sentence:
-# telling an operator investigating an injection that "pseudonyms were not
-# substituted" when the plaintext was in fact handed back is worse than silence.
+# heuristic's INJECTION_SUSPECTED — is ADVISORY: it never blocks a restore on
+# its own. The two must never be described with one sentence: telling an
+# operator investigating an injection that "pseudonyms were not substituted"
+# when the plaintext was in fact handed back is worse than silence.
+#
+# This no longer DRIVES the outcome sentence — the call site that witnessed
+# what actually happened (restore()'s scope branch, _fail_closed,
+# guarded_restore) passes that as `outcome` (BLOCKED/PARTIAL/COMPLETE) below.
+# _WITHHELD_CODES now only decides whether to append a trailing clause noting
+# that an advisory (e.g. INJECTION_SUSPECTED) event ALSO fired alongside a
+# withholding one.
 _WITHHELD_CODES = frozenset({PROVENANCE_FAILED, GUARD_NO_ANCHOR, OUT_OF_SCOPE_PSEUDONYM})
 
 # The argus_redact package directory, derived from this file's location
@@ -106,7 +119,17 @@ def _auto_stacklevel() -> int:
     return _FALLBACK_STACKLEVEL
 
 
-def warn_security_events(events: list[dict]) -> None:
+# Trailing clause appended to a BLOCKED/PARTIAL sentence when an advisory event
+# (e.g. INJECTION_SUSPECTED) co-occurred: the outcome sentence above already
+# states what happened to the pseudonyms; this only notes that additional
+# advisory signal was ALSO present, without re-opening the "were they
+# substituted or not" question the outcome sentence already answered.
+_ADVISORY_COOCCURRENCE_CLAUSE = (
+    "; additional advisory events were also observed but did not change this outcome"
+)
+
+
+def warn_security_events(events: list[dict], outcome: str | None = None) -> None:
     """Emit a PII-free SecurityWarning summarising ``events``.
 
     Structured ``security_events`` stay the channel for programs; this is the
@@ -115,8 +138,20 @@ def warn_security_events(events: list[dict]) -> None:
     ``detail``, which may hold raw text or pseudonyms — so it is safe for a log
     stream.
 
-    The sentence describing what HAPPENED is derived from the reason codes, so it
-    is accurate for withholding events, advisory ones, and a mix of both.
+    ``outcome`` — one of ``BLOCKED``/``PARTIAL``/``COMPLETE`` — is supplied by the
+    call site that WITNESSED what actually happened to the caller's data
+    (``restore()``'s scope branch, ``_fail_closed``, ``guarded_restore``). The
+    sentence is picked from ``outcome``, not re-derived from reason codes: a
+    TOTAL fail-closed (nothing substituted) that also carries an advisory
+    ``INJECTION_SUSPECTED`` event must still say BLOCKED, never a mixed
+    "some ... NOT substituted, advisory, did not block" sentence that implies a
+    mostly-successful restore when nothing happened. ``_WITHHELD_CODES`` no
+    longer drives the outcome; it only decides whether to append a trailing
+    clause noting an advisory event ALSO fired alongside a withheld one.
+
+    ``outcome=None`` is back-compat only, for external callers of this internal
+    function that predate H6: it falls back to the old reason-code-derived
+    guess. Every internal caller of this module passes an explicit outcome.
 
     The warning is attributed to the first frame outside the argus_redact package
     — see ``_auto_stacklevel``.
@@ -129,19 +164,37 @@ def warn_security_events(events: list[dict]) -> None:
     codes = [e["reason_code"] for e in events]
     withheld = any(c in _WITHHELD_CODES for c in codes)
     advisory = any(c not in _WITHHELD_CODES for c in codes)
-    if withheld and advisory:
-        outcome = (
+
+    if outcome == BLOCKED:
+        outcome_text = (
+            "the restore was BLOCKED — NO originals were substituted; "
+            "the text is returned un-restored"
+        )
+        if advisory:
+            outcome_text += _ADVISORY_COOCCURRENCE_CLAUSE
+    elif outcome == PARTIAL:
+        outcome_text = (
+            "PARTIAL restore — out-of-scope pseudonyms were withheld; "
+            "in-scope pseudonyms WERE substituted"
+        )
+        if advisory:
+            outcome_text += _ADVISORY_COOCCURRENCE_CLAUSE
+    elif outcome == COMPLETE:
+        outcome_text = "ADVISORY ONLY — the restore PROCEEDED and originals were substituted"
+    elif withheld and advisory:
+        # outcome=None back-compat path (pre-H6 behavior).
+        outcome_text = (
             "some pseudonyms were NOT substituted; the remaining events are "
             "advisory and did not block the restore"
         )
     elif withheld:
-        outcome = "affected pseudonyms were NOT substituted"
+        outcome_text = "affected pseudonyms were NOT substituted"
     else:
-        outcome = "ADVISORY ONLY — the restore PROCEEDED and originals were substituted"
+        outcome_text = "ADVISORY ONLY — the restore PROCEEDED and originals were substituted"
 
     summary = ", ".join(f"{e['reason_code']}x{e['count']}" for e in events)
     warnings.warn(
-        f"restore security events ({summary}); {outcome} — "
+        f"restore security events ({summary}); {outcome_text} — "
         f"inspect detailed=True or use strict=True",
         SecurityWarning,
         stacklevel=stacklevel,

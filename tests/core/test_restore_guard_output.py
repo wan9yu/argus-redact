@@ -93,15 +93,17 @@ def test_fail_closed_warning_is_attributed_to_the_caller():
 
 
 def test_fail_closed_warning_says_pii_was_withheld():
-    """Counterpart to the advisory case: here the pseudonyms really were withheld, and
-    the message must say so."""
+    """Counterpart to the advisory case: here nothing was substituted at all — a
+    TOTAL fail-closed — and the message must say so as BLOCKED, not the weaker
+    'NOT substituted' phrasing that could also describe a partial restore."""
     _original, key, _anchor, llm_reply = _round_trip()
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         restore(llm_reply, key, guard=True)
     msg = str(caught[0].message)
     assert "guard_no_anchor" in msg
-    assert "NOT substituted" in msg
+    assert "BLOCKED" in msg
+    assert "NO originals were substituted" in msg
 
 
 def test_clean_guarded_restore_does_not_warn():
