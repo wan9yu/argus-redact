@@ -1,0 +1,79 @@
+"""C1 + R5 — profile + file-path config no longer crashes; non-dict config
+
+gets a clean TypeError instead of an AttributeError.
+
+C1: ``redact(profile=..., config="<path>")`` used to always crash — the
+profile block did ``profile_config.update(config)`` while ``config`` was
+still a str (a file path); the str->dict file resolution ran *after* that
+merge. Fixed by resolving the file path before the profile merge.
+
+R5: ``_validate_config`` called ``config.items()`` with no type guard, so a
+non-dict config (e.g. a list of pairs) raised ``AttributeError`` instead of a
+message naming the actual problem.
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from argus_redact import redact
+
+
+class TestProfileWithFileConfig:
+    def test_profile_plus_file_path_config_succeeds(self, tmp_path):
+        """(a) profile= + a real config file path together must not crash."""
+        config_path = tmp_path / "config.json"
+        config_path.write_text(json.dumps({"phone": {"strategy": "mask"}}), encoding="utf-8")
+
+        redacted, key = redact(
+            "call 13800138000",
+            lang="zh",
+            profile="gdpr",
+            config=str(config_path),
+        )
+
+        assert "13800138000" not in redacted
+        assert key
+
+    def test_profile_plus_file_path_config_user_override_wins(self, tmp_path):
+        """User config (from the file) overrides the profile's base config."""
+        config_path = tmp_path / "config.json"
+        # gdpr forces phone -> remove; the user file asks for mask instead.
+        config_path.write_text(json.dumps({"phone": {"strategy": "mask"}}), encoding="utf-8")
+
+        redacted, _ = redact(
+            "call 13800138000",
+            lang="zh",
+            profile="gdpr",
+            config=str(config_path),
+        )
+
+        # mask keeps a partial digit run visible; remove would not.
+        assert any(ch.isdigit() for ch in redacted)
+
+    def test_profile_with_missing_config_file_still_raises_filenotfound(self, tmp_path):
+        """A genuinely missing file still raises FileNotFoundError, not the
+        old dict-update crash — ordering changed but the error for a bad
+        path is unchanged."""
+        missing = tmp_path / "does-not-exist.json"
+
+        with pytest.raises(FileNotFoundError):
+            redact("call 13800138000", lang="zh", profile="gdpr", config=str(missing))
+
+
+class TestValidateConfigNonDict:
+    def test_list_config_raises_clean_type_error(self):
+        """(c) a non-dict config raises a TypeError naming `config`, not an
+        AttributeError from inside `.items()`."""
+        with pytest.raises(TypeError, match="config"):
+            redact("call 13800138000", lang="zh", config=[("phone", {})])
+
+    def test_list_config_error_is_not_attribute_error(self):
+        try:
+            redact("call 13800138000", lang="zh", config=[("phone", {})])
+        except AttributeError:
+            pytest.fail("non-dict config raised AttributeError instead of TypeError")
+        except TypeError:
+            pass

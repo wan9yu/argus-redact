@@ -35,7 +35,13 @@ except ImportError:
 
 
 async def handle_redact(request: Request) -> JSONResponse:
-    body = await request.json()
+    # C4: a malformed/empty body raises JSONDecodeError (a ValueError). Parsing
+    # inside the try turns that into a 400, not an unhandled 500.
+    try:
+        body = await request.json()
+    except ValueError:
+        return JSONResponse({"error": "request body must be valid JSON"}, status_code=400)
+
     text = body.get("text", "")
     lang = body.get("lang", "zh")
     mode = body.get("mode", "fast")

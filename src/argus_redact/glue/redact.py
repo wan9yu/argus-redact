@@ -583,6 +583,21 @@ def redact(
             stacklevel=2,
         )
 
+    # Resolve config from file path — BEFORE the profile merge below, so
+    # `config` is always a dict (or None) by the time profile_config.update()
+    # runs. (Was below the profile block; a str config there crashed with
+    # "ValueError: dictionary update sequence element #0 has length 1".)
+    if isinstance(config, str):
+        config_path = Path(config)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config file not found: {config}")
+        if config_path.suffix in (".yaml", ".yml"):
+            import yaml
+
+            config = yaml.safe_load(_safe_read_text(config_path))
+        else:
+            config = json.loads(_safe_read_text(config_path))
+
     # Resolve profile → types filter + strategy overrides
     if profile is not None:
         from argus_redact.specs.profiles import get_profile
@@ -596,18 +611,6 @@ def redact(
             if config:
                 profile_config.update(config)
             config = profile_config
-
-    # Resolve config from file path
-    if isinstance(config, str):
-        config_path = Path(config)
-        if not config_path.exists():
-            raise FileNotFoundError(f"Config file not found: {config}")
-        if config_path.suffix in (".yaml", ".yml"):
-            import yaml
-
-            config = yaml.safe_load(_safe_read_text(config_path))
-        else:
-            config = json.loads(_safe_read_text(config_path))
 
     # Resolve key
     existing_key: dict | None = None

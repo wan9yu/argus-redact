@@ -68,8 +68,22 @@ def cmd_redact(args):
     key_path = Path(args.key)
 
     profile = getattr(args, "profile", None)
-    seed = int(args.seed) if args.seed else None
-    lang = args.lang.split(",") if "," in args.lang else args.lang
+    if args.seed:
+        try:
+            seed = int(args.seed)
+        except ValueError:
+            print("Error: --seed must be an integer", file=sys.stderr)
+            sys.exit(2)
+    else:
+        seed = None
+    if profile == "pseudonym-llm" and seed is None:
+        print(
+            "Error: --profile pseudonym-llm requires --seed <int> (realistic "
+            "substitution needs a salt)",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    lang = [code for code in args.lang.split(",") if code] if "," in args.lang else args.lang
 
     raw_override = getattr(args, "strategy_override", None)
     try:
@@ -87,14 +101,18 @@ def cmd_redact(args):
     unified_prefix = getattr(args, "unified_prefix", None)
 
     if profile == "pseudonym-llm":
-        result = redact_pseudonym_llm(
-            text,
-            lang=lang,
-            mode=args.mode,
-            salt=seed,
-            strategy_overrides=strategy_overrides,
-            unified_prefix=unified_prefix,
-        )
+        try:
+            result = redact_pseudonym_llm(
+                text,
+                lang=lang,
+                mode=args.mode,
+                salt=seed,
+                strategy_overrides=strategy_overrides,
+                unified_prefix=unified_prefix,
+            )
+        except (ValueError, TypeError, FileNotFoundError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(3)
         _safe_write_key(str(key_path), result.key)
         payload = {
             "audit_text": result.audit_text,
@@ -114,16 +132,20 @@ def cmd_redact(args):
             print(f"Error: invalid key file: {args.key}", file=sys.stderr)
             sys.exit(5)
 
-    redacted, key = redact(
-        text,
-        salt=seed,
-        mode=args.mode,
-        lang=lang,
-        key=existing_key,
-        config=args.config,
-        profile=profile,
-        unified_prefix=unified_prefix,
-    )
+    try:
+        redacted, key = redact(
+            text,
+            salt=seed,
+            mode=args.mode,
+            lang=lang,
+            key=existing_key,
+            config=args.config,
+            profile=profile,
+            unified_prefix=unified_prefix,
+        )
+    except (ValueError, TypeError, FileNotFoundError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(3)
 
     _safe_write_key(str(key_path), key)
     _write_output(redacted, args.output)
@@ -189,7 +211,7 @@ def cmd_assess(args):
     from argus_redact import redact
 
     text = _read_input(args.input)
-    lang = args.lang.split(",") if "," in args.lang else args.lang
+    lang = [code for code in args.lang.split(",") if code] if "," in args.lang else args.lang
 
     report = redact(
         text,
@@ -220,7 +242,7 @@ def cmd_assess(args):
 
 def cmd_setup(args):
     """Pre-download NER models for offline use."""
-    langs = args.lang.split(",") if "," in args.lang else [args.lang]
+    langs = [code for code in args.lang.split(",") if code] if "," in args.lang else [args.lang]
 
     for code in langs:
         print(f"Setting up {code}...")

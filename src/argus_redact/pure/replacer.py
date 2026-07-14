@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import warnings
+from collections.abc import Mapping
 from typing import Callable
 
 from argus_redact._core_loader import _core
@@ -192,6 +193,10 @@ def _validate_config(config: dict | None) -> None:
     """Validate user config, raise ValueError on invalid strategy."""
     if not config:
         return
+    if not isinstance(config, Mapping):
+        raise TypeError(
+            f"config must be a dict mapping entity type to settings, got {type(config).__name__}"
+        )
     for entity_type, type_config in config.items():
         if not isinstance(type_config, dict):
             continue
