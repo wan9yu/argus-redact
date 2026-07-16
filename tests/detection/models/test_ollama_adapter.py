@@ -131,6 +131,44 @@ class TestOllamaAdapter:
         assert spans == {(0, 2), (7, 9), (17, 19)}
 
     @patch("argus_redact.impure.ollama_adapter.requests.post")
+    def test_should_keep_both_types_at_same_span(self, mock_post):
+        # The LLM may legitimately tag one span with two distinct types
+        # (e.g. a pregnancy mention is both "medical" and "gender"). Dedup
+        # must key on (start, end, type), not (start, end) alone, or the
+        # second type silently disappears.
+        mock_post.return_value = self._mock_response(
+            [
+                {"text": "怀孕", "type": "medical", "start": 2, "end": 4},
+                {"text": "怀孕", "type": "gender", "start": 2, "end": 4},
+            ]
+        )
+        adapter = self._make_adapter()
+
+        results = adapter.detect("她说怀孕了")
+
+        types = {r.type for r in results}
+        assert types == {"medical", "gender"}
+        assert len(results) == 2
+
+    @patch("argus_redact.impure.ollama_adapter.requests.post")
+    def test_should_still_dedup_same_span_same_type(self, mock_post):
+        # Control: a true duplicate (same span AND same type) must still
+        # collapse to one entity — widening the dedup key must not disable
+        # dedup entirely.
+        mock_post.return_value = self._mock_response(
+            [
+                {"text": "老王", "type": "person", "start": 0, "end": 2},
+                {"text": "老王", "type": "person", "start": 0, "end": 2},
+            ]
+        )
+        adapter = self._make_adapter()
+
+        results = adapter.detect("老王说了话")
+
+        assert len(results) == 1
+        assert results[0].type == "person"
+
+    @patch("argus_redact.impure.ollama_adapter.requests.post")
     def test_should_use_custom_model(self, mock_post):
         mock_post.return_value = self._mock_response([])
         adapter = self._make_adapter(model="qwen2.5:7b")

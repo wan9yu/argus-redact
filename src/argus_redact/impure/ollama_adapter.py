@@ -166,7 +166,7 @@ class OllamaAdapter(SemanticAdapter):
             return []
 
         entities = []
-        seen: set[tuple[int, int]] = set()
+        seen: set[tuple[int, int, str]] = set()
         for item in raw_entities:
             if not isinstance(item, dict):
                 continue
@@ -196,9 +196,9 @@ class OllamaAdapter(SemanticAdapter):
                     continue
 
             for s, e in spans:
-                if (s, e) in seen:
+                if (s, e, entity_type) in seen:
                     continue
-                seen.add((s, e))
+                seen.add((s, e, entity_type))
                 entities.append(
                     NEREntity(
                         text=entity_text,
