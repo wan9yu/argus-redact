@@ -342,6 +342,21 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
         self.result_key
     }
 
+    /// `resolve_collision` for a mask-family label, recording the collision (by
+    /// entity type) when a real disambiguation happened. The mask / name_mask /
+    /// landline_mask / category arms all need this exact pair.
+    fn resolve_collision_tracked(
+        &mut self,
+        label: &str,
+        entity_type: &str,
+    ) -> Result<String, String> {
+        let resolved = resolve_collision(label, &self.used_labels)?;
+        if resolved != label {
+            self.mask_collisions.push(entity_type.to_string());
+        }
+        Ok(resolved)
+    }
+
     /// Redact one cell over the persistent session state, returning its redacted
     /// text. The key, reverse index, reserved set, aliases, and `keep_downgraded`
     /// flag all accumulate on `self`.
@@ -571,25 +586,13 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
             } else if strategy == "mask" {
                 let (vp, vs) = info.map(|i| (i.visible_prefix, i.visible_suffix)).unwrap_or((0, 0));
                 let masked = mask_value(&entity.text, &entity.type_, vp, vs);
-                let resolved = resolve_collision(&masked, &self.used_labels)?;
-                if resolved != masked {
-                    self.mask_collisions.push(entity.type_.clone());
-                }
-                resolved
+                self.resolve_collision_tracked(&masked, &entity.type_)?
             } else if strategy == "name_mask" {
                 let masked = mask_name(&entity.text);
-                let resolved = resolve_collision(&masked, &self.used_labels)?;
-                if resolved != masked {
-                    self.mask_collisions.push(entity.type_.clone());
-                }
-                resolved
+                self.resolve_collision_tracked(&masked, &entity.type_)?
             } else if strategy == "landline_mask" {
                 let masked = mask_landline(&entity.text);
-                let resolved = resolve_collision(&masked, &self.used_labels)?;
-                if resolved != masked {
-                    self.mask_collisions.push(entity.type_.clone());
-                }
-                resolved
+                self.resolve_collision_tracked(&masked, &entity.type_)?
             } else if strategy == "remove" {
                 if let Some(repl) = info.and_then(|i| i.replacement.as_deref()) {
                     resolve_collision(repl, &self.used_labels)?
@@ -610,11 +613,7 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
                     .and_then(|i| i.label.clone())
                     .or_else(|| info.map(|i| i.default_category_label.clone()))
                     .unwrap_or_else(|| format!("[{}]", entity.type_));
-                let resolved = resolve_collision(&label, &self.used_labels)?;
-                if resolved != label {
-                    self.mask_collisions.push(entity.type_.clone());
-                }
-                resolved
+                self.resolve_collision_tracked(&label, &entity.type_)?
             } else {
                 resolve_collision(DEFAULT_REDACT_LABEL, &self.used_labels)?
             };

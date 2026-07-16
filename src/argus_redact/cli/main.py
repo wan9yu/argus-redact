@@ -181,13 +181,12 @@ def cmd_info(args):
     import importlib.util
 
     from argus_redact import __version__
-    from argus_redact.glue.redact import _LANG_DISPLAY_NAMES, _LANG_PATTERNS
+    from argus_redact.glue.redact import (
+        _LANG_DISPLAY_NAMES,
+        _LANG_PATTERNS,
+        ner_engine_available,
+    )
     from argus_redact.lang.shared.patterns import PATTERNS as SHARED
-
-    # Layer-2 NER engine availability — checked once and reused per-language
-    # below, so "+ NER" can never claim more than the Layer 2 status line does.
-    has_hanlp = importlib.util.find_spec("hanlp") is not None
-    has_spacy = importlib.util.find_spec("spacy") is not None
 
     print(f"argus-redact v{__version__}")
     print()
@@ -199,22 +198,16 @@ def cmd_info(args):
             count = len(mod.PATTERNS) + len(SHARED)
         except ModuleNotFoundError:
             count = 0
-        # "+ NER" requires BOTH the adapter module to exist AND the engine it
-        # wraps (hanlp for zh, spaCy for the rest) to actually be installed.
-        # The adapter module alone can't run without its engine — reporting
-        # it as available would contradict the Layer 2 status line below.
-        engine_available = has_hanlp if code == "zh" else has_spacy
-        has_ner = engine_available and (
-            importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
-        )
-        ner_label = " + NER" if has_ner else ""
+        ner_label = " + NER" if ner_engine_available(code) else ""
         name = _LANG_DISPLAY_NAMES.get(code, code)
         print(f"  {code}  {name:20s} regex ({count} patterns){ner_label}")
 
     print()
     print("Layers:")
     print("  1 Pattern (regex)       ✓")
-    ner_ok = has_hanlp or has_spacy
+    # Same signal as the per-language "+ NER" labels above, so the Layer-2
+    # line can never claim more than they do.
+    ner_ok = any(ner_engine_available(code) for code in _LANG_PATTERNS)
     print(f"  2 Entity (NER)          {'✓' if ner_ok else '✗'}")
     ollama_ok = importlib.util.find_spec("requests") is not None
     if ollama_ok:

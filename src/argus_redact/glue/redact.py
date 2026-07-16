@@ -136,6 +136,22 @@ _LANG_DISPLAY_NAMES = {
 }
 
 
+def ner_engine_available(code: str) -> bool:
+    """True if Layer-2 NER can actually run for ``code`` — i.e. BOTH the adapter
+    module AND the engine it wraps (hanlp for zh, spaCy for the rest) are
+    installed. The adapter module alone can't run without its engine, so
+    reporting it as available (the `info`/`redact_info` bug) contradicted the
+    Layer-2 status. Single source shared by the CLI `info` command and the MCP
+    `redact_info` tool so the two can't drift."""
+    import importlib.util
+
+    engine = "hanlp" if code == "zh" else "spacy"
+    if importlib.util.find_spec(engine) is None:
+        return False
+    mod_code = "in_" if code == "in" else code
+    return importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
+
+
 # Plausible ISO-639-1 codes a caller might reach for instead of an argus
 # locale-pack code that collides with a *different* ISO-639-1 language:
 # `uk` is Ukrainian in ISO-639-1 (argus uses it for British English), and

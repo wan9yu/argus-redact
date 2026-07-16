@@ -353,12 +353,17 @@ pub fn detect_person_names(
             // `O'Brien`) that must stay part of the match, and the lookarounds
             // only ever inspect the characters just outside the whole
             // alternation, never between tokens within it.
+            // Wrap an (already-escaped) alternation in the ASCII word-boundary
+            // lookarounds + case-insensitive flag — one source so the normal and
+            // per-name-fallback paths can't drift.
+            let word_bounded_ci =
+                |inner: &str| format!(r"(?i)(?<![A-Za-z0-9_])(?:{inner})(?![A-Za-z0-9_])");
             let alt = sorted_names
                 .iter()
                 .map(|n| fancy_regex::escape(n).into_owned())
                 .collect::<Vec<_>>()
                 .join("|");
-            let bounded = format!(r"(?i)(?<![A-Za-z0-9_])(?:{alt})(?![A-Za-z0-9_])");
+            let bounded = word_bounded_ci(&alt);
             match Regex::new(&bounded) {
                 Ok(known_pat) => {
                     // Normal case: one alternation, leftmost/longest over the
@@ -380,7 +385,7 @@ pub fn detect_person_names(
                     // case-insensitivity wrapping as the normal path.
                     for name in &sorted_names {
                         let escaped = fancy_regex::escape(name);
-                        let pat = format!(r"(?i)(?<![A-Za-z0-9_])(?:{escaped})(?![A-Za-z0-9_])");
+                        let pat = word_bounded_ci(&escaped);
                         if let Ok(re) = Regex::new(&pat) {
                             emit(&re, &mut results, &mut seen_spans);
                         }

@@ -194,6 +194,22 @@ def _row_has_pii(
     return False
 
 
+def _parse_csv_rows(csv_text: str) -> list[list[str]]:
+    """Parse CSV text into rows. Shared by redact_csv/restore_csv so the two
+    stay symmetric (same dialect) and a comma inside a restored value can't
+    reshape the columns."""
+    return list(csv.reader(io.StringIO(csv_text)))
+
+
+def _serialize_csv_rows(rows: list[list[str]]) -> str:
+    """Serialize rows back to CSV text. rstrip only the writer's trailing line
+    terminator — .strip() would also delete non-PII leading whitespace from the
+    first cell (silent corruption)."""
+    out = io.StringIO()
+    csv.writer(out).writerows(rows)
+    return out.getvalue().rstrip("\r\n")
+
+
 def redact_csv(
     csv_text: str,
     *,
@@ -215,8 +231,7 @@ def redact_csv(
     Returns:
         (redacted_csv, key).
     """
-    reader = csv.reader(io.StringIO(csv_text))
-    rows = list(reader)
+    rows = _parse_csv_rows(csv_text)
 
     if not rows:
         return csv_text, {}
@@ -247,17 +262,12 @@ def redact_csv(
             redacted_row.append(redacted_cell)
         output_rows.append(redacted_row)
 
-    out = io.StringIO()
-    writer = csv.writer(out)
-    writer.writerows(output_rows)
     # Mirrors the one-shot `replace()` path (C1 / Task 7): warn once, over the
     # WHOLE document's cumulative collisions, before the key is read out — a
     # column of similarly-masked values (e.g. phone numbers) is exactly the
     # highest collision-risk shape this path exists to redact.
     warn_mask_collisions(list(session.mask_collisions))
-    # rstrip only the writer's trailing line terminator — .strip() would also
-    # delete non-PII leading whitespace from the first cell (silent corruption).
-    return out.getvalue().rstrip("\r\n"), session.into_key()
+    return _serialize_csv_rows(output_rows), session.into_key()
 
 
 def restore_csv(csv_text: str, key: dict) -> str:
@@ -269,20 +279,11 @@ def restore_csv(csv_text: str, key: dict) -> str:
     unescaped comma into the flat CSV text, splitting one cell into two
     columns and corrupting the row structure on re-parse.
     """
-    reader = csv.reader(io.StringIO(csv_text))
-    rows = list(reader)
-
     output_rows: list[list[str]] = []
-    for row in rows:
+    for row in _parse_csv_rows(csv_text):
         # guard=False: structured restore reverses a stored key file, with no
         # per-call anchor to verify — the explicit unguarded opt-out (same as
         # restore_json / redact_csv's forward path).
         output_rows.append([restore(cell, key, guard=False) for cell in row])
 
-    out = io.StringIO()
-    writer = csv.writer(out)
-    writer.writerows(output_rows)
-    # Same trailing-line-terminator handling as redact_csv: rstrip only the
-    # writer's \r\n, not .strip(), so non-PII leading whitespace in a cell
-    # survives.
-    return out.getvalue().rstrip("\r\n")
+    return _serialize_csv_rows(output_rows)
