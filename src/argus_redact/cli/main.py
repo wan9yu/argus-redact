@@ -170,7 +170,10 @@ def cmd_restore(args):
     # per-call anchor — the explicit unguarded opt-out, not the fail-closed default.
     restored = restore(text, key, guard=False)
 
-    _write_output(restored, args.output)
+    # Restored output is deanonymized PII — at least as sensitive as the key
+    # file, so it gets the same 0o600 mode rather than the world-readable
+    # 0o644 default.
+    _write_output(restored, args.output, mode=0o600)
 
 
 def cmd_info(args):
@@ -234,7 +237,11 @@ def cmd_assess(args):
     }
     output = json.dumps(data, ensure_ascii=False, indent=2)
     if args.output:
-        _safe_write_text(args.output, output)
+        # The report's entities[].original field carries plaintext PII spans
+        # (see glue/redact.py entity_details) — at least as sensitive as the
+        # restore output, so it gets the same 0o600 mode rather than the
+        # world-readable 0o644 default.
+        _safe_write_text(args.output, output, mode=0o600)
         print(f"Report saved to {args.output}", file=sys.stderr)
     else:
         print(output)

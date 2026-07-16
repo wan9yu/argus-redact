@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import stat
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -21,13 +22,27 @@ _IS_WIN = sys.platform == "win32"
 @contextlib.contextmanager
 def _open_nofollow(path: str, mode: int) -> Iterator[int]:
     """Open ``path`` for writing with ``O_NOFOLLOW`` (POSIX). Yields fd."""
+    # Determine pre-existence BEFORE opening: `O_CREAT | O_TRUNC` means the
+    # file exists by the time we hold the fd regardless, so `os.path.lexists`
+    # here is the only reliable signal of "did this path already have a mode
+    # a caller may have deliberately hardened".
+    pre_existed = os.path.lexists(path)
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
     fd = os.open(path, flags, mode)
     try:
         # os.open applies `mode` only when CREATING the file (and umask-masked).
-        # Enforce the exact mode unconditionally so a key written into a
-        # pre-existing world-readable file is still locked to e.g. 0o600.
-        os.fchmod(fd, mode)
+        # Enforce the exact mode so a key written into a pre-existing
+        # world-readable file is still locked to e.g. 0o600 — but never
+        # WIDEN a file the caller had already hardened to something
+        # stricter (e.g. a 0o600 file overwritten by a 0o644-default write).
+        # Bitwise-AND only clears bits, never sets them, so narrowing still
+        # works while widening is impossible.
+        if pre_existed:
+            existing_mode = stat.S_IMODE(os.fstat(fd).st_mode)
+            effective_mode = mode & existing_mode
+        else:
+            effective_mode = mode
+        os.fchmod(fd, effective_mode)
         yield fd
     finally:
         os.close(fd)
