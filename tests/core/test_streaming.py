@@ -4,11 +4,13 @@ import os
 import re
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
 
 from argus_redact import PseudonymPollutionError, redact, redact_pseudonym_llm
+from argus_redact.exceptions import SecurityWarning
 from argus_redact.pure.restore import restore
 from argus_redact.streaming import StreamingRedactor, StreamingRestorer
 
@@ -92,6 +94,86 @@ class TestStreamingRestorer:
 
         with pytest.raises(ValueError, match="Unknown strategy"):
             StreamingRestorer({}, strategy="invalid")
+
+
+class TestStreamingRestorerSecurityWarning:
+    """H6: streaming restore runs unguarded (guard=False, no per-call anchor is
+    possible mid-stream) — it must emit a one-time SecurityWarning the first
+    time it actually reinserts a pseudonym, not stay silent forever."""
+
+    def test_should_warn_once_on_first_substitution_then_stay_quiet(self):
+        _, key1 = redact("电话13812345678", salt=b"test-salt-a", mode="fast")
+        redacted1, _ = redact("电话13812345678", salt=b"test-salt-a", mode="fast")
+        _, key2 = redact("电话13912345678", salt=b"test-salt-b", mode="fast")
+        redacted2, _ = redact("电话13912345678", salt=b"test-salt-b", mode="fast")
+        merged_key = {**key1, **key2}
+
+        restorer = StreamingRestorer(merged_key)
+
+        with pytest.warns(SecurityWarning, match="streaming restore is unguarded"):
+            first = restorer.feed(f"结果是{redacted1}。")
+        assert "13812345678" in first
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            second = restorer.feed(f"另一个{redacted2}。")
+        assert "13912345678" in second
+        assert not any(issubclass(w.category, SecurityWarning) for w in caught)
+
+    def test_should_not_warn_when_nothing_is_substituted(self):
+        restorer = StreamingRestorer({})
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = restorer.feed("hello world。")
+        assert result == "hello world。"
+        assert not any(issubclass(w.category, SecurityWarning) for w in caught)
+
+    def test_should_warn_once_across_flush(self):
+        _, key = redact("电话13812345678", salt=b"test-salt-c", mode="fast")
+        redacted, _ = redact("电话13812345678", salt=b"test-salt-c", mode="fast")
+
+        restorer = StreamingRestorer(key)
+        with pytest.warns(SecurityWarning, match="streaming restore is unguarded"):
+            result = restorer.feed(f"结果是{redacted}") + restorer.flush()
+        assert "13812345678" in result
+
+
+class TestStreamingRestorerMaxBuffer:
+    """H7: an LLM reply that never emits a sentence terminator must not buffer
+    the whole stream unboundedly — the internal buffer is force-flushed once
+    it grows past ``max_buffer``."""
+
+    def test_should_bound_buffer_when_no_boundary_ever_appears(self):
+        restorer = StreamingRestorer({}, max_buffer=64)
+
+        for _ in range(50):
+            restorer.feed("x" * 10)  # no boundary chars at all
+            assert len(restorer._buffer) <= restorer._max_buffer
+
+    def test_default_max_buffer_mirrors_streaming_redactor(self):
+        from argus_redact.glue._detect_partial import DEFAULT_MAX_BUFFER
+
+        restorer = StreamingRestorer({})
+        assert restorer._max_buffer == DEFAULT_MAX_BUFFER == 4096
+
+    def test_force_flush_does_not_split_a_pseudonym_token(self):
+        """Force-flushing past the cap must not corrupt the eventual restore —
+        no fake token may be split across the force-flush boundary."""
+        text = "填充" * 300 + "电话13912345678。"
+        result = redact_pseudonym_llm(text, salt=b"test-salt", lang="zh")
+        ds = result.downstream_text
+        # Precondition: no sentence boundary until the trailing "。" — this
+        # actually exercises force-flush (not the normal boundary path).
+        assert not any(b in ds[:-1] for b in StreamingRestorer.BOUNDARIES)
+
+        restorer = StreamingRestorer(result.key, max_buffer=64)
+        out = ""
+        for i in range(0, len(ds), 7):
+            out += restorer.feed(ds[i : i + 7])
+            assert len(restorer._buffer) <= restorer._max_buffer + 32
+        out += restorer.flush()
+        assert out == text
 
 
 class TestStreamingRestorerRealisticMode:

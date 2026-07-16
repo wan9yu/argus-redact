@@ -19,6 +19,7 @@ import warnings
 
 from argus_redact._core_loader import _core
 from argus_redact._types import PatternMatch, PseudonymLLMResult
+from argus_redact.exceptions import SecurityWarning
 from argus_redact.glue._detect_partial import (
     _EVIDENCE_CONTEXT_WINDOW,
     DEFAULT_MAX_BUFFER,
@@ -77,6 +78,15 @@ class StreamingRestorer:
         "sentence" (default) — flush at sentence boundaries (。.！!？?；;\\n)
         "none" — restore every chunk immediately (no buffering)
 
+    ``max_buffer`` (default ``DEFAULT_MAX_BUFFER``, mirrors ``StreamingRedactor``)
+    bounds the "sentence" strategy's buffer: a reply that never emits a
+    terminator is force-flushed instead of accumulating without limit.
+
+    Every restore here runs unguarded (``guard=False`` — no per-call anchor is
+    possible mid-stream); the first time a ``feed()``/``flush()`` call actually
+    reinserts a pseudonym, the instance emits a one-time ``SecurityWarning``
+    naming that risk.
+
     Usage:
         restorer = StreamingRestorer(key)
         for chunk in llm_stream:
@@ -90,12 +100,70 @@ class StreamingRestorer:
 
     BOUNDARIES = ("\n", "。", ".", "！", "!", "？", "?", "；", ";")
 
-    def __init__(self, key: dict, strategy: str = "sentence"):
+    def __init__(self, key: dict, strategy: str = "sentence", max_buffer: int = DEFAULT_MAX_BUFFER):
         self._key = key
         self._buffer = ""
         if strategy not in ("sentence", "none"):
             raise ValueError(f"Unknown strategy '{strategy}'. Use 'sentence' or 'none'.")
         self._strategy = strategy
+        # H7: mirrors StreamingRedactor's max_buffer — an LLM reply that never
+        # emits a sentence terminator would otherwise buffer forever and get
+        # re-scanned (by ``_core.streaming_restorer_split``) in full on every
+        # ``feed()`` call, an O(N^2) CPU/memory pressure path on untrusted
+        # model output. See ``_force_flush_split`` for the bounded-drain path.
+        self._max_buffer = max_buffer
+        # H6: one-time signal that this instance actually reinserted a
+        # pseudonym via the unguarded restore path below (see the guard=False
+        # rationale in feed()/flush()) — fires at most once per instance, the
+        # first time a substitution really happens (not on every feed()).
+        self._warned = False
+
+    def _warn_if_substituted(self, before: str, after: str) -> None:
+        """Emit the one-time H6 SecurityWarning on the first real substitution.
+
+        ``after != before`` is the only reliable witness that ``restore``
+        actually replaced a pseudonym with its original — comparing the
+        emitted segment (not the whole buffer) so the warning fires exactly
+        when a real reinsertion happens, not on every feed()/flush() call.
+        """
+        if self._warned or after == before:
+            return
+        warnings.warn(
+            "streaming restore is unguarded — a pseudonym from untrusted "
+            "output was reinserted without provenance/scope checks",
+            SecurityWarning,
+            stacklevel=3,
+        )
+        self._warned = True
+
+    def _force_flush_split(self) -> tuple[str, str]:
+        """H7 bounded-drain: called when no sentence boundary exists AND the
+        buffer has grown past ``max_buffer``.
+
+        Flushes the whole buffer except a held-back tail that is a strict,
+        non-empty prefix of some key ``fake`` — a subsequent chunk could still
+        complete it into a real substitution target, and ``restore``'s
+        exact-substring match would otherwise fail on BOTH halves of a token
+        split mid-flush (silently corrupting the round-trip rather than
+        raising). Mirrors ``StreamingRedactor``'s straddle-snap safety (see
+        ``bounded_drain_cut`` in ``crates/argus-redact-core/src/streaming.rs``),
+        adapted to restore's exact-string keys instead of detected entity
+        spans. The held-back length is bounded by the longest fake in the key,
+        so buffer growth stays bounded to that fixed headroom instead of
+        growing without limit.
+        """
+        buffer = self._buffer
+        hold = 0
+        for fake in self._key:
+            if not fake:
+                continue
+            limit = min(len(fake) - 1, len(buffer))
+            for n in range(limit, hold, -1):
+                if buffer.endswith(fake[:n]):
+                    hold = n
+                    break
+        cut = len(buffer) - hold
+        return buffer[:cut], buffer[cut:]
 
     def feed(self, chunk: str) -> str:
         """Feed a chunk. Returns restored text based on strategy.
@@ -117,22 +185,35 @@ class StreamingRestorer:
         # stream, so per-chunk guarding is structurally impossible. This is the
         # explicit unguarded opt-out, not the fail-closed default.
         if self._strategy == "none":
-            return restore(chunk, self._key, guard=False)
+            result = restore(chunk, self._key, guard=False)
+            self._warn_if_substituted(chunk, result)
+            return result
 
         self._buffer += chunk
 
         complete, residual = _core.streaming_restorer_split(self._buffer)
         if not complete:
-            return ""
+            # H7: no sentence boundary anywhere in the buffer yet. Left
+            # unchecked this buffers the entire stream and re-scans it in
+            # full on every feed() — bound it via force-flush once it grows
+            # past max_buffer, instead of accumulating without limit.
+            if len(self._buffer) > self._max_buffer:
+                complete, residual = self._force_flush_split()
+            if not complete:
+                return ""
         self._buffer = residual
-        return restore(complete, self._key, guard=False)
+        result = restore(complete, self._key, guard=False)
+        self._warn_if_substituted(complete, result)
+        return result
 
     def flush(self) -> str:
         """Flush remaining buffer."""
         if not self._buffer:
             return ""
-        result = restore(self._buffer, self._key, guard=False)  # see feed(): no per-call anchor
+        buffer = self._buffer
+        result = restore(buffer, self._key, guard=False)  # see feed(): no per-call anchor
         self._buffer = ""
+        self._warn_if_substituted(buffer, result)
         return result
 
 
