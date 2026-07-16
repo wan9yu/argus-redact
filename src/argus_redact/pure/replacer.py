@@ -213,6 +213,12 @@ def _validate_config(config: dict | None) -> None:
             f"config must be a dict mapping entity type to settings, got {type(config).__name__}"
         )
     for entity_type, type_config in config.items():
+        # Underscore-prefixed keys are reserved sentinels (e.g. the removed
+        # `_unified_prefix`), not entity types; they carry scalar values and are
+        # validated/rejected by their own dedicated checks in replace(). Skip
+        # them here so this per-type dict check doesn't shadow that rejection.
+        if isinstance(entity_type, str) and entity_type.startswith("_"):
+            continue
         if not isinstance(type_config, dict):
             raise TypeError(
                 f"config[{entity_type!r}] must be a dict, got {type(type_config).__name__}"
