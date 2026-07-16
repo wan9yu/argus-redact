@@ -570,6 +570,13 @@ mod tests {
     }
 
     #[test]
+    fn jp_phone_parens_separator_digit_count() {
+        // Parens are not digits and must not be counted — pins the digit-count
+        // fix for the parens-separator form (e.g. "03(1234)5678").
+        assert!(validate_jp_phone("03(1234)5678"));
+    }
+
+    #[test]
     fn resolve_known_and_unknown() {
         assert!(resolve_validator("ssn").is_some());
         assert!(resolve_validator("jwt").is_some());          // ported to Rust (v0.7.7)

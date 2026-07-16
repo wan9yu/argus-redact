@@ -50,5 +50,12 @@
     "should_match": false,
     "type": "phone",
     "description": "전화번호 없음"
+  },
+  {
+    "id": "newline_separated_no_cross_line_match",
+    "input": "010\n1234\n5678",
+    "should_match": false,
+    "type": "phone",
+    "description": "줄바꿈으로 구분된 숫자는 하나의 전화번호로 결합되지 않음"
   }
 ]

@@ -74,5 +74,12 @@
     "should_match": false,
     "type": "phone",
     "description": "電話番号なし"
+  },
+  {
+    "id": "newline_separated_no_cross_line_match",
+    "input": "090\n1234\n5678",
+    "should_match": false,
+    "type": "phone",
+    "description": "改行区切りは電話番号として結合されない"
   }
 ]
