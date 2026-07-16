@@ -157,9 +157,11 @@ class TestProfileConfigDeepMerge:
         assert "13812345678" not in redacted
         # A shallow merge drops "strategy": "remove" and falls back to the
         # phone default ("mask" with visible_prefix=3), which would leak
-        # both ends of the number in plaintext.
-        assert "78" not in redacted
-        assert "138" not in redacted
+        # both ends of the number in plaintext. Discriminate remove-vs-mask
+        # by shape, not by banning specific digits (the remove placeholder's
+        # random suffix can coincidentally contain "78"/"138").
+        assert "PHON-" in redacted
+        assert "*" not in redacted
         assert key
 
     def test_type_only_in_user_config_applies_fully(self):
@@ -206,6 +208,7 @@ class TestProfileConfigDeepMerge:
         redacted, key = redact("Call 13812345678", lang="zh", profile="gdpr")
 
         assert "13812345678" not in redacted
-        assert "78" not in redacted
-        assert "138" not in redacted
+        # Same shape-based discriminator as above, not a digit-substring ban.
+        assert "PHON-" in redacted
+        assert "*" not in redacted
         assert key
