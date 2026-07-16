@@ -2,6 +2,39 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.1 — guard hardening + fail-open fixes (security patch)
+
+A security patch. Four defects were surfaced by an external audit (Run 16) and verified
+against the shipped v0.8.0 wheel. No API changes; upgrading is recommended.
+
+### Security
+
+- **A degenerate anchor nonce could destroy or corrupt the caller's text while the call
+  reported a clean COMPLETE restore.** Provenance was a bare `nonce in text` substring test,
+  so an empty nonce (a substring of everything), a nonce that is an incidental substring of
+  the text (a common character), a short nonce that coincides with a text suffix, and `None`
+  all passed the gate — and `_strip_nonce` then sliced the text to empty or removed the
+  matched run. It was reachable over the HTTP `/restore` endpoint, which reconstructs an
+  anchor from a client-supplied nonce (defaulting a missing nonce to `""`). Provenance now
+  requires the model to have echoed a genuine token — on its own line or as the trailing
+  token, and at least 16 characters — so every degenerate nonce fails closed (text returned
+  un-restored, `provenance_failed`) instead of corrupting it. A real `make_anchor` nonce
+  (32 hex chars) is unaffected.
+
+### Fixed
+
+- An unknown or mis-cased type name in `types=` / `types_exclude=` (e.g. `"Phone"` vs the
+  registry name `"phone"`, or a typo) silently filtered out every entity and returned success
+  with nothing redacted — a fail-open leak, one level down from the v0.8.0 bare-string fix.
+  Unknown names now raise `ValueError`, validated live against the registry so custom types
+  registered via `register_pii_type` are still accepted.
+- The PARTIAL restore `SecurityWarning` asserted "in-scope pseudonyms WERE substituted" even
+  when none were present in the reply; it now states only what the PARTIAL outcome witnesses
+  (the out-of-scope withholding and the scope limit).
+- The `guard=None` `DeprecationWarning` still read "will default to guard=True in v0.8.0" on
+  v0.8.0 itself — future tense for a flip that already shipped. It now names the real choices
+  (`guard=True` with an anchor, or `guard=False`).
+
 ## v0.8.0 — guard-by-default, compliance-semantics fix, structured-redaction perf
 
 A breaking release. The `guard=True` default flip scheduled since v0.7.18 lands here,
