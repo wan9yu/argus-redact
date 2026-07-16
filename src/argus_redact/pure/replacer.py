@@ -214,7 +214,9 @@ def _validate_config(config: dict | None) -> None:
         )
     for entity_type, type_config in config.items():
         if not isinstance(type_config, dict):
-            continue
+            raise TypeError(
+                f"config[{entity_type!r}] must be a dict, got {type(type_config).__name__}"
+            )
         strategy = type_config.get("strategy")
         if strategy and strategy not in VALID_STRATEGIES:
             raise ValueError(

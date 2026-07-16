@@ -49,3 +49,66 @@ def test_restore_empty_body_still_returns_400(client):
     resp = client.post("/restore", content="")
     assert resp.status_code == 400
     assert "error" in resp.json()
+
+
+def test_restore_anchor_str_scope_returns_400_not_200(client):
+    """F3 — a str scope (e.g. "P-1" instead of ["P-1"]) used to pass straight
+    through frozenset() unrejected, becoming frozenset({'P', '-', '1'}) — a
+    garbage anchor that still returned 200 instead of a 400."""
+    resp = client.post(
+        "/restore",
+        json={
+            "text": "hello P-1",
+            "key": {"P-1": "Alice"},
+            "anchor": {"nonce": "abc123deadbeef00", "scope": "P-1"},
+        },
+    )
+    assert resp.status_code == 400
+    assert "error" in resp.json()
+
+
+def test_restore_anchor_non_iterable_scope_returns_400_not_500(client):
+    """F3 — scope=123 is not iterable; frozenset(123) used to raise an
+    unhandled TypeError (500) instead of a clean 400."""
+    resp = client.post(
+        "/restore",
+        json={
+            "text": "hello P-1",
+            "key": {"P-1": "Alice"},
+            "anchor": {"nonce": "abc123deadbeef00", "scope": 123},
+        },
+    )
+    assert resp.status_code == 400
+    assert "error" in resp.json()
+
+
+def test_restore_anchor_non_str_nonce_returns_400(client):
+    """F3 — a non-str nonce must also be rejected with 400, not passed through."""
+    resp = client.post(
+        "/restore",
+        json={
+            "text": "hello P-1",
+            "key": {"P-1": "Alice"},
+            "anchor": {"nonce": 12345, "scope": ["P-1"]},
+        },
+    )
+    assert resp.status_code == 400
+    assert "error" in resp.json()
+
+
+def test_restore_anchor_valid_list_scope_still_200(client):
+    """Positive control: a well-formed anchor (list scope, str nonce) that
+    round-trips must still return 200 — the new validation must not reject
+    valid input."""
+    nonce = "abc123deadbeef00"
+    resp = client.post(
+        "/restore",
+        json={
+            "text": f"hello P-1\n{nonce}",
+            "key": {"P-1": "Alice"},
+            "anchor": {"nonce": nonce, "scope": ["P-1"]},
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "Alice" in data["restored"]

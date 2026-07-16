@@ -142,3 +142,43 @@ class TestMCPToolExecution:
 
         content = result if isinstance(result, str) else result[0].text
         assert "argus-redact" in content or "version" in content
+
+    @pytest.mark.asyncio
+    async def test_redact_trailing_comma_lang_does_not_crash(self, mcp_app):
+        """F6 — a trailing comma in lang (e.g. "zh,") used to leave an empty
+        string segment in the split list, which _load_patterns/_validate_langs
+        rejected as an unknown language code. The empty segment must be
+        filtered out."""
+        result = await mcp_app._tool_manager.call_tool(
+            "redact",
+            {"text": "电话13812345678", "mode": "fast", "lang": "zh,", "salt": 42},
+        )
+
+        content = result if isinstance(result, str) else result[0].text
+        data = json.loads(content)
+        assert "13812345678" not in data["redacted"]
+
+    @pytest.mark.asyncio
+    async def test_redact_multi_lang_csv_still_works(self, mcp_app):
+        """Positive control: a genuine multi-lang CSV (no empty segment)
+        still works after the fix."""
+        result = await mcp_app._tool_manager.call_tool(
+            "redact",
+            {"text": "电话13812345678", "mode": "fast", "lang": "zh,en", "salt": 42},
+        )
+
+        content = result if isinstance(result, str) else result[0].text
+        data = json.loads(content)
+        assert "13812345678" not in data["redacted"]
+
+    @pytest.mark.asyncio
+    async def test_assess_trailing_comma_lang_does_not_crash(self, mcp_app):
+        """F6 — same empty-segment fix applies to the assess tool's lang split."""
+        result = await mcp_app._tool_manager.call_tool(
+            "assess",
+            {"text": "联系电话：13812345678", "mode": "fast", "lang": "zh,"},
+        )
+
+        content = result if isinstance(result, str) else result[0].text
+        data = json.loads(content)
+        assert data["entities_found"] > 0

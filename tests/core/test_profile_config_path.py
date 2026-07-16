@@ -77,3 +77,34 @@ class TestValidateConfigNonDict:
             pytest.fail("non-dict config raised AttributeError instead of TypeError")
         except TypeError:
             pass
+
+
+class TestValidateConfigNonDictEntryValue:
+    """F4 — a well-formed dict config with a non-dict per-type VALUE (e.g.
+    ``{"phone": "mask"}``, a plausible caller mistake for
+    ``{"phone": {"strategy": "mask"}}``) used to be silently skipped
+    (``continue``), so the strategy was quietly ignored instead of raising.
+    """
+
+    def test_non_dict_entry_value_raises_typeerror_naming_the_key(self):
+        with pytest.raises(TypeError, match=r"config\['phone'\]"):
+            redact("电话13800138000", lang="zh", config={"phone": "mask"})
+
+    def test_non_dict_entry_value_is_not_silently_ignored(self):
+        """Before the fix this silently degraded to the default strategy
+        instead of raising — confirm it's a hard failure, not a no-op."""
+        try:
+            redact("电话13800138000", lang="zh", config={"phone": "mask"})
+        except TypeError:
+            pass
+        else:
+            pytest.fail("non-dict config[phone] value should raise, not silently redact")
+
+    def test_valid_dict_config_still_redacts(self):
+        """Positive control: a correctly-shaped dict config is unaffected."""
+        redacted, key = redact(
+            "电话13800138000", lang="zh", config={"phone": {"strategy": "mask"}}
+        )
+
+        assert "13800138000" not in redacted
+        assert key

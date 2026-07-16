@@ -146,13 +146,28 @@ async def handle_restore(request: Request) -> JSONResponse:
                 {"error": "anchor must be a JSON object with nonce and scope"},
                 status_code=400,
             )
-        from argus_redact.compose.anchor import Anchor
-
         nonce = anchor_spec.get("nonce", "")
         scope = anchor_spec.get("scope", [])
-        anchor = Anchor(nonce=nonce, scope=frozenset(scope))
+        # Security: reject a non-str nonce and a non-list scope up front. A str
+        # scope (e.g. "P-1") would otherwise pass frozenset() silently and become
+        # frozenset({'P', '-', '1'}) — garbage that still "succeeds" with a 200.
+        if not isinstance(nonce, str):
+            return JSONResponse({"error": "anchor.nonce must be a string"}, status_code=400)
+        if not isinstance(scope, list):
+            return JSONResponse(
+                {"error": "anchor.scope must be a list of pseudonym strings"},
+                status_code=400,
+            )
 
     try:
+        # Anchor construction lives inside the try too: even a list scope can
+        # contain an unhashable element (e.g. a nested list), which raises inside
+        # frozenset() — that must map to 400 via the except below, not an
+        # unhandled 500.
+        if anchor_spec is not None:
+            from argus_redact.compose.anchor import Anchor
+
+            anchor = Anchor(nonce=nonce, scope=frozenset(scope))
         restored, details = restore(
             text, key, guard=guard, anchor=anchor, strict=strict, detailed=True
         )

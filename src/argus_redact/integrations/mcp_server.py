@@ -117,7 +117,7 @@ async def redact_text(
     """
     lang_param: str | list[str] = lang
     if "," in lang:
-        lang_param = [code.strip() for code in lang.split(",")]
+        lang_param = [code.strip() for code in lang.split(",") if code.strip()]
 
     # No explicit salt → strong per-call random salt (CSPRNG). Making the
     # CSPRNG explicit here keeps this tool's security boundary auditable:
@@ -228,7 +228,7 @@ async def assess_text(
     """
     lang_param: str | list[str] = lang
     if "," in lang:
-        lang_param = [code.strip() for code in lang.split(",")]
+        lang_param = [code.strip() for code in lang.split(",") if code.strip()]
 
     report: RedactReport = redact(
         text,

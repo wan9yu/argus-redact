@@ -161,6 +161,44 @@ def _reject_unknown_type_names(names: set[str], param: str) -> None:
         )
 
 
+def _apply_type_filter(
+    entities: list[PatternMatch],
+    types: list[str] | None,
+    types_exclude: list[str] | None,
+) -> list[PatternMatch]:
+    """Apply the types/types_exclude allow/deny filter, shared by every entry path.
+
+    A bare str is a plausible caller mistake (they meant a one-element list):
+    set("phone") silently becomes {'p','h','o','n','e'}, which filters out every
+    real entity type and returns success with zero redaction — a silent leak.
+    An empty list is the same fail-open family: set([]) also filters out every
+    entity. Both fail closed instead of fail-open. Shared by ``_detect`` and the
+    ``_pre_detected`` branch of ``redact()`` so both inherit the guard identically.
+    """
+    if types is not None:
+        if isinstance(types, str):
+            raise TypeError("types must be a list of type names, not a str")
+        type_set = set(types)
+        if not type_set:
+            raise ValueError(
+                "types is empty; pass at least one type name, or types=None to detect all"
+            )
+        _reject_unknown_type_names(type_set, "types")
+        return [e for e in entities if e.type in type_set]
+    elif types_exclude is not None:
+        if isinstance(types_exclude, str):
+            raise TypeError("types_exclude must be a list of type names, not a str")
+        exclude_set = set(types_exclude)
+        if not exclude_set:
+            raise ValueError(
+                "types_exclude is empty; pass at least one type name, or "
+                "types_exclude=None to exclude none"
+            )
+        _reject_unknown_type_names(exclude_set, "types_exclude")
+        return [e for e in entities if e.type not in exclude_set]
+    return entities
+
+
 _LANG_NER_ADAPTERS = {
     "zh": "argus_redact.lang.zh.ner_adapter",
     "en": "argus_redact.lang.en.ner_adapter",
@@ -439,31 +477,8 @@ def _detect(
     entities = filter_self_reference(entities, hints)
     timing["merge_ms"] = (time.perf_counter() - t0) * 1000
 
-    # Apply type filtering. A bare str is a plausible caller mistake (they meant
-    # a one-element list): set("phone") silently becomes {'p','h','o','n','e'},
-    # which filters out every real entity type and returns success with zero
-    # redaction — a silent leak. Fail closed instead of fail-open.
-    if types is not None:
-        if isinstance(types, str):
-            raise TypeError("types must be a list of type names, not a str")
-        type_set = set(types)
-        if not type_set:
-            raise ValueError(
-                "types is empty; pass at least one type name, or types=None to detect all"
-            )
-        _reject_unknown_type_names(type_set, "types")
-        entities = [e for e in entities if e.type in type_set]
-    elif types_exclude is not None:
-        if isinstance(types_exclude, str):
-            raise TypeError("types_exclude must be a list of type names, not a str")
-        exclude_set = set(types_exclude)
-        if not exclude_set:
-            raise ValueError(
-                "types_exclude is empty; pass at least one type name, or "
-                "types_exclude=None to exclude none"
-            )
-        _reject_unknown_type_names(exclude_set, "types_exclude")
-        entities = [e for e in entities if e.type not in exclude_set]
+    # Apply type filtering (shared with the _pre_detected branch of redact()).
+    entities = _apply_type_filter(entities, types, types_exclude)
 
     layer_stats = {
         "layer1_count": layer1_count,
@@ -668,7 +683,11 @@ def redact(
     # single bundled call) is built, bound, and tested, but is NOT used by this
     # shim — it is the entry point reserved for the upcoming iOS C ABI.
     if _pre_detected is not None:
-        entities = _pre_detected
+        # Merge (dedupe overlapping spans, same as the internal _detect path)
+        # then apply the same types/types_exclude filter — a pre-detected list
+        # is caller-supplied and must not skip either guard.
+        entities = merge_entities(_pre_detected, text=text)
+        entities = _apply_type_filter(entities, types, types_exclude)
         langs = [lang] if isinstance(lang, str) else list(lang)
         timing: dict[str, float] = {}
         layer_stats = {

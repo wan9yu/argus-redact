@@ -637,3 +637,85 @@ class TestRedactTypeErrors:
     def test_should_raise_type_error_when_text_is_not_string(self):
         with pytest.raises(TypeError):
             redact(123)
+
+
+class TestPreDetectedMergeAndFilter:
+    """F7: the ``_pre_detected`` branch must run merge_entities() AND the
+    types/types_exclude filter, the same as the internal _detect() path.
+
+    Before the fix, a caller-supplied ``_pre_detected`` list with overlapping
+    spans was passed straight to replacement (no dedupe), corrupting the
+    output, and ``types``/``types_exclude`` were silently ignored on this
+    branch.
+    """
+
+    def test_overlapping_entities_merge_and_roundtrip_clean(self):
+        """Two overlapping phone spans must be deduped (merged) into ONE
+        entity before replacement. Without the merge, the key ends up with a
+        second, dead entry (a fake string that never appears in the redacted
+        output — a corrupt/unusable key), even though the underlying Rust
+        replace() tolerates the raw overlap enough not to crash. ``len(key)
+        == 1`` is the discriminating assertion; round-tripping alone is not
+        (it passes even on the unmerged pre-fix output)."""
+        from argus_redact._types import PatternMatch
+
+        text = "call 13800138000 today"
+        overlapping = [
+            PatternMatch(
+                text="13800138000", type="phone", start=5, end=16, confidence=0.9, layer=1
+            ),
+            PatternMatch(
+                text="1380013800", type="phone", start=5, end=15, confidence=0.5, layer=1
+            ),
+        ]
+
+        redacted, key = redact(text, salt=42, _pre_detected=overlapping)
+
+        assert "13800138000" not in redacted
+        assert len(key) == 1, f"expected merged overlap to yield a single key entry, got {key!r}"
+        assert restore(redacted, key, guard=False) == text
+
+    def test_non_overlapping_entities_still_correct(self):
+        """Positive control: disjoint spans are unaffected by the merge (a
+        no-op on already-non-overlapping input) and still round-trip."""
+        from argus_redact._types import PatternMatch
+
+        text = "call 13800138000 and 13900139000"
+        entities = [
+            PatternMatch(text="13800138000", type="phone", start=5, end=16),
+            PatternMatch(text="13900139000", type="phone", start=21, end=32),
+        ]
+
+        redacted, key = redact(text, salt=42, _pre_detected=entities)
+
+        assert "13800138000" not in redacted
+        assert "13900139000" not in redacted
+        assert restore(redacted, key, guard=False) == text
+
+    def test_types_allowlist_filters_pre_detected_entities(self):
+        """types=["phone"] must drop the person entity from a _pre_detected
+        list, not just from internally-detected entities."""
+        from argus_redact._types import PatternMatch
+
+        text = "call 13800138000, I am Zhang Wei"
+        entities = [
+            PatternMatch(text="13800138000", type="phone", start=5, end=16),
+            PatternMatch(text="Zhang Wei", type="person", start=23, end=32),
+        ]
+
+        redacted, key = redact(text, salt=42, _pre_detected=entities, types=["phone"])
+
+        assert "13800138000" not in redacted
+        assert "Zhang Wei" in redacted
+
+    def test_unknown_type_name_rejected_on_pre_detected_branch(self):
+        """T2's ``_reject_unknown_type_names`` guard must fire on this branch
+        too — inherited via the shared ``_apply_type_filter`` helper, not
+        skipped because detection was bypassed."""
+        from argus_redact._types import PatternMatch
+
+        text = "call 13800138000"
+        entities = [PatternMatch(text="13800138000", type="phone", start=5, end=16)]
+
+        with pytest.raises(ValueError):
+            redact(text, salt=42, _pre_detected=entities, types=["not_a_real_type"])
