@@ -213,11 +213,13 @@ def _validate_config(config: dict | None) -> None:
             f"config must be a dict mapping entity type to settings, got {type(config).__name__}"
         )
     for entity_type, type_config in config.items():
-        # Underscore-prefixed keys are reserved sentinels (e.g. the removed
-        # `_unified_prefix`), not entity types; they carry scalar values and are
-        # validated/rejected by their own dedicated checks in replace(). Skip
-        # them here so this per-type dict check doesn't shadow that rejection.
-        if isinstance(entity_type, str) and entity_type.startswith("_"):
+        # `_unified_prefix` is the one reserved sentinel key (removed in
+        # v0.6.0); it carries a scalar value and is validated/rejected by its
+        # own dedicated check in replace(). Skip it here so this per-type dict
+        # check doesn't shadow that rejection. Other underscore-named keys are
+        # ordinary custom entity types (register_pii_type permits them) and
+        # must go through the same strategy validation as any other type.
+        if entity_type == "_unified_prefix":
             continue
         if not isinstance(type_config, dict):
             raise TypeError(

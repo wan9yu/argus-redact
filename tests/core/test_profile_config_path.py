@@ -108,3 +108,25 @@ class TestValidateConfigNonDictEntryValue:
 
         assert "13800138000" not in redacted
         assert key
+
+
+class TestValidateConfigUnderscoreKeyNarrowing:
+    """`_validate_config` used to skip every underscore-prefixed key, not just
+    the one reserved sentinel (`_unified_prefix`). `register_pii_type` does
+    not forbid underscore-named custom entity types, so a config entry like
+    ``{"_internal_id": {"strategy": "bogus_typo"}}`` was silently skipped
+    instead of raising on the unknown strategy.
+    """
+
+    def test_underscore_named_custom_type_bad_strategy_still_raises(self):
+        with pytest.raises(ValueError, match="bogus_typo"):
+            redact("x", config={"_internal_id": {"strategy": "bogus_typo"}})
+
+    def test_unified_prefix_sentinel_still_raises(self):
+        """Unchanged behavior: `_unified_prefix` remains a reserved sentinel
+        rejected by its own dedicated check, not by the per-type loop."""
+        with pytest.raises(ValueError, match="_unified_prefix"):
+            redact(
+                "x",
+                config={"_unified_prefix": "R", "phone": {"strategy": "remove"}},
+            )
