@@ -620,10 +620,20 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
             };
 
             entity_replacements.insert(entity.text.clone(), replacement.clone());
-            self.used_labels.insert(replacement.clone());
             self.reverse_index
                 .insert(entity.text.clone(), replacement.clone());
-            self.result_key.insert(replacement, entity.text.clone());
+            if !replacement.is_empty() {
+                // An empty replacement (remove strategy, `replacement: ""`) means
+                // "delete" — the value is already gone from `entity_replacements` /
+                // the redacted output below. Registering `"" -> original` in
+                // `result_key` would create a surrogate that matches between every
+                // character of the text on restore, exploding/duplicating the
+                // original throughout it. So an empty resolved label gets NO
+                // restorable key entry (and isn't reserved in `used_labels` either
+                // — collision resolution is meaningless for "nothing").
+                self.used_labels.insert(replacement.clone());
+                self.result_key.insert(replacement, entity.text.clone());
+            }
         }
 
         // Revert the transient per-cell entity-text reservations that did NOT
