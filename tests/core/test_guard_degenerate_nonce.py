@@ -83,3 +83,23 @@ def test_short_suffix_nonce_fails_closed():
     )
     assert out == red, f"short suffix nonce corrupted the text: {out!r}"
     assert det["outcome"] == "blocked"
+
+
+def test_make_anchor_nonce_clears_floor():
+    # Enforces the producer/consumer coupling: make_anchor's token must be at least
+    # as long as the floor the guard rejects below, or every genuine nonce would
+    # fail closed. A shrink of make_anchor's token_hex arg trips this, not prod.
+    from argus_redact.pure.restore import _MIN_NONCE_LEN
+
+    _red, key = redact("张三的电话是13800138000", lang="zh", mode="fast")
+    assert len(make_anchor(key).nonce) >= _MIN_NONCE_LEN
+
+
+def test_strip_nonce_refuses_degenerate_input_directly():
+    # Defense in depth: _strip_nonce is a text-destroyer; called directly with a
+    # degenerate nonce it must return the text untouched, not slice it away.
+    from argus_redact.pure.restore import _strip_nonce
+
+    assert _strip_nonce("keep this text", "") == "keep this text"
+    assert _strip_nonce("keep this text", "的") == "keep this text"
+    assert _strip_nonce("keep this text", None) == "keep this text"

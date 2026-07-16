@@ -35,7 +35,9 @@ class RestoreGuardError(Exception):
 
 # A make_anchor nonce is secrets.token_hex(16) = 32 chars. A floor well below
 # that (real nonces pass) but far above any incidental text-suffix collision
-# rejects short degenerate nonces as provenance proofs.
+# rejects short degenerate nonces as provenance proofs. The coupling to
+# make_anchor's token length is enforced by test_make_anchor_nonce_clears_floor
+# so the producer can't shrink its token below what this consumer accepts.
 _MIN_NONCE_LEN = 16
 
 
@@ -54,12 +56,10 @@ def _nonce_echoed(text: str, nonce: object) -> bool:
     the caller's text. A genuine ``make_anchor`` nonce (32 hex chars on its own
     line) satisfies this; nothing incidental does.
     """
-    # A genuine provenance token is high-entropy: make_anchor emits
-    # secrets.token_hex(16) = 32 chars. Anything shorter than a token floor cannot
-    # be one, and a short string can incidentally be a text suffix ("8000" ending
-    # a masked phone, "com" ending an email) — which would pass `endswith` and let
-    # `_strip_nonce` truncate the caller's text. Reject it before the shape check.
-    if not isinstance(nonce, str) or len(nonce.strip()) < _MIN_NONCE_LEN:
+    # Reject sub-token-length nonces before the shape check (rationale on
+    # _MIN_NONCE_LEN): a short string can incidentally be a text suffix and pass
+    # `endswith`, and an empty/None one is never a proof.
+    if not isinstance(nonce, str) or len(nonce) < _MIN_NONCE_LEN:
         return False
     if text.rstrip().endswith(nonce):  # documented trailing echo
         return True
@@ -78,6 +78,13 @@ def _strip_nonce(text: str, nonce: str) -> str:
     The documented shape (token last) is handled in one pass; the fallbacks cover a
     model that puts it on its own line mid-reply or echoes it inline.
     """
+    if not isinstance(nonce, str) or len(nonce) < _MIN_NONCE_LEN:
+        # Defense in depth: a degenerate nonce has no valid echo to strip, and
+        # stripping it WOULD destroy or corrupt the text (an empty nonce slices the
+        # whole string away). The only caller gates on _nonce_echoed first, so this
+        # never fires today — but a function whose failure mode is "silently destroy
+        # the caller's plaintext" must refuse degenerate input regardless of caller.
+        return text
     trimmed = text.rstrip()
     if trimmed.endswith(nonce):  # the documented case — no full-text rebuild needed
         return trimmed[: -len(nonce)].rstrip()
@@ -280,11 +287,12 @@ def restore(
     if strict and events:
         raise RestoreGuardError(events)
 
-    # This branch WITNESSES the outcome directly: out_of_scope_hits means some
-    # pseudonyms were withheld while the in-scope ones above WERE substituted
-    # (PARTIAL); no hits means every pseudonym in scope made it through clean
-    # (COMPLETE — any events left are advisory, e.g. from guarded_restore's H
-    # layer merged in later).
+    # out_of_scope_hits means some pseudonyms present in the text were outside
+    # this call's scope and withheld (PARTIAL — the restore was limited to scope);
+    # no hits means nothing in the text was withheld (COMPLETE — any events left
+    # are advisory, e.g. from guarded_restore's H layer merged in later). PARTIAL
+    # does not itself witness whether any in-scope pseudonym was actually present
+    # or substituted, so the warning must not claim it was.
     outcome = PARTIAL if out_of_scope_hits else COMPLETE
 
     if events and _warn:
