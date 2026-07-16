@@ -667,10 +667,33 @@ def redact(
         if types is None and "types" in prof:
             types = prof["types"]
         if "config" in prof:
-            # Profile config is base; user config overrides
+            # Profile config is base; user config overrides, per-type. A
+            # shallow `profile_config.update(config)` would REPLACE a
+            # per-type dict wholesale, dropping any profile field (e.g.
+            # "strategy") the user's override didn't mention — silently
+            # downgrading e.g. gdpr's phone "remove" to the default "mask"
+            # when the caller only meant to tweak "visible_suffix". Merge
+            # one level deep instead: for a type present in both, user
+            # fields override profile fields but profile fields the user
+            # omitted survive. `profile_config` is a fresh top-level dict
+            # (from `dict(...)`), but its per-type VALUES are the same
+            # objects as the shared profile source (profiles may reuse one
+            # config dict across profiles) — build a NEW dict per merged
+            # type rather than mutating in place, so the cached profile
+            # is never poisoned for later calls.
             profile_config = dict(prof["config"])
             if config:
-                profile_config.update(config)
+                for type_key, user_type_config in config.items():
+                    base_type_config = profile_config.get(type_key)
+                    if isinstance(base_type_config, dict) and isinstance(
+                        user_type_config, dict
+                    ):
+                        profile_config[type_key] = {
+                            **base_type_config,
+                            **user_type_config,
+                        }
+                    else:
+                        profile_config[type_key] = user_type_config
             config = profile_config
 
     # Resolve key

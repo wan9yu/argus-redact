@@ -130,3 +130,82 @@ class TestValidateConfigUnderscoreKeyNarrowing:
                 "x",
                 config={"_unified_prefix": "R", "phone": {"strategy": "remove"}},
             )
+
+
+class TestProfileConfigDeepMerge:
+    """C8 — the profile+config merge used to be a shallow
+    ``profile_config.update(config)``: a user override for a type already in
+    the profile REPLACED the whole per-type dict instead of merging into it.
+
+    gdpr forces ``phone -> {"strategy": "remove"}``. A caller who only wants
+    to tweak ``visible_suffix`` (a mask-only knob) without touching strategy
+    — ``config={"phone": {"visible_suffix": 2}}`` — should still get gdpr's
+    ``remove`` behavior. Under the shallow bug, the whole "phone" entry was
+    replaced by ``{"visible_suffix": 2}``, "strategy" was lost, and the type
+    fell back to its registry default (``mask``), leaking the trailing
+    digits ("78") and prefix ("138") of the original number in plaintext.
+    """
+
+    def test_partial_override_keeps_profile_strategy(self):
+        redacted, key = redact(
+            "Call 13812345678",
+            lang="zh",
+            profile="gdpr",
+            config={"phone": {"visible_suffix": 2}},
+        )
+
+        assert "13812345678" not in redacted
+        # A shallow merge drops "strategy": "remove" and falls back to the
+        # phone default ("mask" with visible_prefix=3), which would leak
+        # both ends of the number in plaintext.
+        assert "78" not in redacted
+        assert "138" not in redacted
+        assert key
+
+    def test_type_only_in_user_config_applies_fully(self):
+        """Control: a user config for a type NOT present in the profile's
+        config still applies in full (nothing to merge against)."""
+        redacted, key = redact(
+            "身份证 110101199003077758",
+            lang="zh",
+            profile="gdpr",
+            config={"id_number": {"strategy": "mask", "visible_suffix": 3}},
+        )
+
+        # mask with visible_suffix=3 keeps the last 3 original digits visible.
+        assert "758" in redacted
+        assert "110101199003077758" not in redacted
+        assert key
+
+    def test_user_supplied_strategy_still_overrides_profile(self):
+        """Control: when the user DOES specify "strategy", their value wins
+        over the profile's, same as before the deep-merge fix."""
+        redacted, key = redact(
+            "Call 13812345678",
+            lang="zh",
+            profile="gdpr",
+            config={"phone": {"strategy": "mask"}},
+        )
+
+        # mask (not gdpr's remove) leaves a partial digit run visible.
+        assert any(ch.isdigit() for ch in redacted)
+        assert key
+
+    def test_cached_profile_not_poisoned_by_prior_merge(self):
+        """Control: the profile dict is module-level/shared. A merge for one
+        call must not mutate it in place — a later call (even with a
+        different or absent user config) must still see gdpr's original
+        "remove" strategy for phone."""
+        redact(
+            "Call 13812345678",
+            lang="zh",
+            profile="gdpr",
+            config={"phone": {"visible_suffix": 2}},
+        )
+
+        redacted, key = redact("Call 13812345678", lang="zh", profile="gdpr")
+
+        assert "13812345678" not in redacted
+        assert "78" not in redacted
+        assert "138" not in redacted
+        assert key
