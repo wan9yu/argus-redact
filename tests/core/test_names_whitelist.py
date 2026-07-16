@@ -114,6 +114,62 @@ class TestNamesWhitelist:
         assert "person" in types_found
         assert "id_number" in types_found
 
+    def test_should_not_corrupt_substring_when_name_is_prefix(self):
+        # "Alex" must not match the "Alex" inside "Alexander" — the alternation
+        # is word-bounded, not a bare substring search.
+        redacted, key = redact(
+            "Alexander met Alex",
+            names=["Alex"],
+            salt=42,
+            mode="fast",
+            lang="en",
+        )
+
+        assert "Alexander" in redacted
+        assert "Alexander" not in key.values()
+        assert "Alex" in key.values()
+        # "Alexander" contributes exactly one substring occurrence of "Alex";
+        # the standalone "Alex" must have been replaced, not left in place.
+        assert redacted.count("Alex") == 1
+
+    def test_should_match_known_name_case_insensitively(self):
+        redacted, key = redact(
+            "met alice",
+            names=["Alice"],
+            salt=42,
+            mode="fast",
+            lang="en",
+        )
+
+        assert "alice" not in redacted
+        assert "alice" in key.values()
+
+    def test_should_trim_supplied_name_before_matching(self):
+        redacted, key = redact(
+            "Hello Alice bye",
+            names=[" Alice "],
+            salt=42,
+            mode="fast",
+            lang="en",
+        )
+
+        assert "Alice" not in redacted
+        assert "Alice" in key.values()
+
+    def test_should_still_match_at_a_genuine_boundary(self):
+        # Positive control: a name that legitimately stands alone still matches.
+        redacted, key = redact(
+            "Ann is here, not Anna.",
+            names=["Ann"],
+            salt=42,
+            mode="fast",
+            lang="en",
+        )
+
+        assert "Ann is here" not in redacted
+        assert "Anna" in redacted
+        assert "Ann" in key.values()
+
     def test_should_combine_names_with_ner(self):
         """names + NER = 1+1>2: known names always hit, NER catches unknown."""
         from unittest.mock import MagicMock, patch

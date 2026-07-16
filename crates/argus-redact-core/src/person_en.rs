@@ -305,8 +305,11 @@ pub fn detect_person_names(
     // Python `key=len` is the char length of the str; STABLE sort keeps the
     // original order among equal-length names.
     if !known_names.is_empty() {
-        let mut sorted_names: Vec<&String> =
-            known_names.iter().filter(|n| !n.is_empty()).collect();
+        let mut sorted_names: Vec<&str> = known_names
+            .iter()
+            .map(|n| n.trim())
+            .filter(|n| !n.is_empty())
+            .collect();
         if !sorted_names.is_empty() {
             sorted_names
                 .sort_by_key(|n| std::cmp::Reverse(n.chars().count()));
@@ -340,16 +343,27 @@ pub fn detect_person_names(
                 }
             };
 
-            // known_pat = "|".join(re.escape(n) for n in sorted_names)
+            // known_pat = "|".join(re.escape(n) for n in sorted_names), wrapped
+            // in ASCII word-boundary lookarounds and made case-insensitive: a
+            // supplied name is a WHOLE-WORD, case-insensitive match — `names=
+            // ["Alex"]` must not corrupt "Alexander", and `names=["Alice"]`
+            // must still catch "alice". The boundary class mirrors
+            // `_tokens_present`'s pseudonym-token boundary in restore.py, minus
+            // the hyphen: names may contain internal punctuation (`Jean-Luc`,
+            // `O'Brien`) that must stay part of the match, and the lookarounds
+            // only ever inspect the characters just outside the whole
+            // alternation, never between tokens within it.
             let alt = sorted_names
                 .iter()
                 .map(|n| fancy_regex::escape(n).into_owned())
                 .collect::<Vec<_>>()
                 .join("|");
-            match Regex::new(&alt) {
+            let bounded = format!(r"(?i)(?<![A-Za-z0-9_])(?:{alt})(?![A-Za-z0-9_])");
+            match Regex::new(&bounded) {
                 Ok(known_pat) => {
                     // Normal case: one alternation, leftmost/longest over the
-                    // whole pattern. Bit-identical to the pre-port Python.
+                    // whole pattern. Bit-identical to the pre-port Python, plus
+                    // the word-boundary / case-insensitivity fix above.
                     emit(&known_pat, &mut results, &mut seen_spans);
                 }
                 Err(_) => {
@@ -362,9 +376,12 @@ pub fn detect_person_names(
                     // from the alternation, but this branch only fires on input that
                     // cannot appear in a bounded text — so exact parity is both
                     // unachievable and unobservable, and the normal path above is
-                    // untouched.
+                    // untouched. Each per-name pattern gets the same boundary /
+                    // case-insensitivity wrapping as the normal path.
                     for name in &sorted_names {
-                        if let Ok(re) = Regex::new(&fancy_regex::escape(name)) {
+                        let escaped = fancy_regex::escape(name);
+                        let pat = format!(r"(?i)(?<![A-Za-z0-9_])(?:{escaped})(?![A-Za-z0-9_])");
+                        if let Ok(re) = Regex::new(&pat) {
                             emit(&re, &mut results, &mut seen_spans);
                         }
                     }
