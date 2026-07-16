@@ -93,3 +93,51 @@ def test_strategy_overrides_valid_type_key_still_works():
         "电话13800138000", salt=42, strategy_overrides={"phone": "remove"}
     )
     assert "13800138000" not in result.downstream_text
+
+
+# --- Task 4 follow-up: redact_pseudonym_llm's OWN _pre_detected branch ------
+class TestPseudonymLLMPreDetectedMergeAndFilter:
+    """``redact_pseudonym_llm`` has its own ``_pre_detected`` branch, separate
+    from ``redact()``'s. Task 4 fixed the fail-open on the ``redact()`` side
+    (caller-supplied entities skipped ``merge_entities`` and the
+    types/types_exclude filter); this branch had the identical defect.
+    """
+
+    def test_overlapping_entities_merge_before_replace(self):
+        """Two overlapping phone spans must be deduped (merged) before either
+        replace pass. Detection ran once and both the realistic and audit
+        passes consume the SAME merged entity list, so one merged entity
+        yields exactly 2 key entries (1 realistic + 1 audit fake). Without
+        the merge, the dead overlap duplicates this to 4 — a corrupt/unusable
+        key, same failure mode as the redact() side."""
+        from argus_redact._types import PatternMatch
+
+        text = "call 13800138000 today"
+        overlapping = [
+            PatternMatch(
+                text="13800138000", type="phone", start=5, end=16, confidence=0.9, layer=1
+            ),
+            PatternMatch(
+                text="1380013800", type="phone", start=5, end=15, confidence=0.5, layer=1
+            ),
+        ]
+
+        result = redact_pseudonym_llm(text, salt=42, _pre_detected=overlapping)
+
+        assert "13800138000" not in result.downstream_text
+        assert "13800138000" not in result.audit_text
+        assert len(result.key) == 2, f"expected merged overlap, got {result.key!r}"
+
+    def test_types_exclude_unknown_type_rejected_on_pre_detected_branch(self):
+        """The unknown-type-name guard must fire on this branch too —
+        inherited via the shared ``_apply_type_filter`` helper, not skipped
+        because detection was bypassed by ``_pre_detected``."""
+        from argus_redact._types import PatternMatch
+
+        text = "call 13800138000"
+        entities = [PatternMatch(text="13800138000", type="phone", start=5, end=16)]
+
+        with pytest.raises(ValueError, match="Phone"):
+            redact_pseudonym_llm(
+                text, salt=42, _pre_detected=entities, types_exclude=["Phone"]
+            )
