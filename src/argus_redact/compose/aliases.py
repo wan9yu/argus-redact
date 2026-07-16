@@ -86,16 +86,22 @@ def _extract_surname_en(name: str) -> str | None:
     return last
 
 
-def _detect_effective_lang(key: dict) -> str:
-    """Auto-detect zh vs en from the Person original names when the caller
-    doesn't pass an explicit lang, so the documented en use case
-    (``expand_aliases({"P-1": "John Smith"})``) doesn't silently fall back to
-    zh-style aliases (e.g. "J先生")."""
-    names = [original for pseudonym, original in key.items() if pseudonym.startswith("P-")]
-    if not names:
-        return "zh"
-    detected = detect_languages(" ".join(names))
+def _detect_name_lang(name: str) -> str:
+    """Auto-detect zh vs en script for a SINGLE Person original name, so the
+    documented en use case (``expand_aliases({"P-1": "John Smith"})``)
+    doesn't silently fall back to zh-style aliases (e.g. "J先生"), and a
+    MIXED-language key (one zh name + one Latin name) routes each name
+    through its own script instead of one whole-key decision."""
+    detected = detect_languages(name)
     return "zh" if "zh" in detected else "en"
+
+
+def _titles_and_extract(lang_code: str) -> tuple[tuple[str, ...], object]:
+    """Resolve the (titles, surname-extractor) pair for a lang code. Unknown
+    codes fall back to en, matching the documented explicit-lang contract."""
+    if lang_code == "zh":
+        return _ZH_TITLES, _extract_surname_zh
+    return _EN_TITLES, _extract_surname_en
 
 
 def expand_aliases(key: dict, lang: str | None = None) -> dict:
@@ -103,9 +109,12 @@ def expand_aliases(key: dict, lang: str | None = None) -> dict:
 
     Args:
         key: redaction key dict (pseudonym → original) from redact().
-        lang: "zh" or "en". Unknown explicit values fall back to "en". If
-            None (the default), auto-detected from the Person original names
-            in ``key`` — Latin-script names resolve to "en", otherwise "zh".
+        lang: "zh" or "en". Unknown explicit values fall back to "en", applied
+            uniformly to every Person in ``key``. If None (the default), each
+            Person's own original name is auto-detected independently —
+            Latin-script names resolve to "en", otherwise "zh" — so a MIXED
+            key (some zh names, some Latin names) expands each Person through
+            its own script instead of one whole-key decision.
 
     Returns:
         A new dict containing all original (pseudonym → original) entries
@@ -128,33 +137,49 @@ def expand_aliases(key: dict, lang: str | None = None) -> dict:
     """
     if not key:
         return {}
-    effective_lang = lang if lang is not None else _detect_effective_lang(key)
     expanded = dict(key)
-    titles = _ZH_TITLES if effective_lang == "zh" else _EN_TITLES
-    extract = _extract_surname_zh if effective_lang == "zh" else _extract_surname_en
+
+    # Per-Person (titles, extract) resolution. Explicit lang: one shared decision
+    # for the whole key (unchanged behavior — do not detect per-name here). Auto
+    # (lang=None): each Person's OWN original name picks its own script, so a
+    # MIXED-language key (e.g. one zh name + one Latin name) doesn't force every
+    # name through the same extractor/titles.
+    person_config: dict[str, tuple[str, tuple[str, ...], object]] = {}
+    for pseudonym, original in key.items():
+        if not pseudonym.startswith("P-"):
+            continue
+        lang_code = lang if lang is not None else _detect_name_lang(original)
+        titles, extract = _titles_and_extract(lang_code)
+        person_config[pseudonym] = (lang_code, titles, extract)
 
     # First pass: which surnames are shared by ≥2 DISTINCT Person originals? A bare
     # {surname}{title} alias for a shared surname is ambiguous — it cannot restore to
     # one identity — so it must not be emitted at all. Emitting it would silently bind
     # the alias to the first-iterated Person = a confident wrong-identity restore.
+    # Surnames are extracted with each Person's OWN extractor, so a zh surname and
+    # an en surname never spuriously collide.
     surname_originals: dict[str, set[str]] = {}
     for pseudonym, original in key.items():
-        if not pseudonym.startswith("P-"):
+        config = person_config.get(pseudonym)
+        if config is None:
             continue
+        _, _, extract = config
         surname = extract(original)
         if surname:
             surname_originals.setdefault(surname, set()).add(original)
 
     for pseudonym, original in key.items():
-        if not pseudonym.startswith("P-"):
+        config = person_config.get(pseudonym)
+        if config is None:
             continue
+        lang_code, titles, extract = config
         surname = extract(original)
         if not surname:
             continue
         if len(surname_originals.get(surname, ())) > 1:
             continue  # ambiguous: ≥2 Persons share this surname — skip its aliases
         for title in titles:
-            alias = f"{surname}{title}" if effective_lang == "zh" else f"{title} {surname}"
+            alias = f"{surname}{title}" if lang_code == "zh" else f"{title} {surname}"
             if alias not in expanded:
                 # alias → original (single-pass restore semantics)
                 expanded[alias] = original

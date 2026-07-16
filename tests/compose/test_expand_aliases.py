@@ -213,3 +213,36 @@ def test_lang_default_still_auto_detects_chinese():
     expanded = expand_aliases(key)
     assert expanded["张先生"] == "张伟"
     assert expanded["张总"] == "张伟"
+
+
+def test_mixed_language_key_auto_detects_per_person():
+    """MIXED key, no explicit lang: each Person's own script decides its
+    aliases — a zh name must not run through the en path (and vice versa).
+    Before the per-name fix, the whole key shared ONE global decision, so a
+    Latin name in a mostly-zh (or tie) key got a nonsensical zh alias like
+    "J先生"."""
+    key = {"P-1": "张伟", "P-2": "John Smith"}
+    expanded = expand_aliases(key)
+    # zh alias for 张伟
+    assert expanded["张先生"] == "张伟"
+    # en alias for John Smith
+    assert expanded.get("Mr. Smith") == "John Smith" or expanded.get("Mr Smith") == "John Smith"
+    # No Latin-initial + zh-honorific nonsense alias
+    assert "J先生" not in expanded
+    assert not any(alias.startswith(("J", "S")) and "先生" in alias for alias in expanded)
+    # No zh-script surname wrongly paired with en titles either
+    for title in ("Mr.", "Mrs.", "Ms.", "Dr.", "Prof."):
+        assert f"{title} 张" not in expanded
+        assert f"{title} 伟" not in expanded
+
+
+def test_mixed_language_key_auto_detect_shared_surname_guard_still_fires():
+    """Regression: within an auto-detected MIXED key, two Latin Persons that
+    share a surname must still trigger the ambiguity guard (surnames are
+    compared using the per-name extractor, so this must keep working), while
+    the unrelated zh Person still expands normally."""
+    key = {"P-1": "John Brown", "P-2": "Alice Brown", "P-3": "张伟"}
+    expanded = expand_aliases(key)
+    for title in ("Mr.", "Mrs.", "Ms.", "Dr.", "Prof."):
+        assert f"{title} Brown" not in expanded  # ambiguous — two Browns
+    assert expanded["张先生"] == "张伟"  # unrelated zh Person unaffected
