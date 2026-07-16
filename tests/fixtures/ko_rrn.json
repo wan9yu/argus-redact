@@ -30,6 +30,22 @@
     "description": "일 32는 무효"
   },
   {
+    "id": "foreigner_gender_5",
+    "input": "880101-5123456",
+    "should_match": true,
+    "type": "rrn",
+    "expected_text": "880101-5123456",
+    "description": "외국인 등록번호 성별코드 5"
+  },
+  {
+    "id": "1800s_gender_9",
+    "input": "991231-9123456",
+    "should_match": true,
+    "type": "rrn",
+    "expected_text": "991231-9123456",
+    "description": "1800년대생 성별코드 9"
+  },
+  {
     "id": "plain_text",
     "input": "주민등록번호 없음",
     "should_match": false,

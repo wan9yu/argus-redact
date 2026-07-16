@@ -3,13 +3,13 @@
     PatternData(
         type_: r"phone",
         label: r"[電話番号]",
-        pattern: r"0[789]0-?\d{4}-?\d{4}(?!\d)",
+        pattern: r"0[789]0[-\s(]?\d{4}[-\s)]?\d{4}(?!\d)",
         description: r"Japanese mobile phone (070/080/090)",
     ),
     PatternData(
         type_: r"phone",
         label: r"[電話番号]",
-        pattern: r"0[1-9]\d{0,3}-?\d{1,4}-?\d{4}(?!\d)",
+        pattern: r"0[1-9]\d{0,3}[-\s(]?\d{1,4}[-\s)]?\d{4}(?!\d)",
         validator: Some(r"jp_phone"),
         description: r"Japanese landline phone",
     ),

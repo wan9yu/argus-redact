@@ -311,7 +311,10 @@ pub fn validate_de_tax_id(value: &str) -> bool {
 }
 
 pub fn validate_jp_phone(value: &str) -> bool {
-    let n = value.replace('-', "").chars().count();
+    // Count digits only — the pattern's separator class now accepts
+    // `-`/whitespace/parens (e.g. "03(1234)5678"), and stripping just '-'
+    // would leave the parens in the count and wrongly reject a valid number.
+    let n = value.chars().filter(|c| c.is_ascii_digit()).count();
     (10..=11).contains(&n)
 }
 

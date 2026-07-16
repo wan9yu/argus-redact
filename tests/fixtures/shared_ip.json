@@ -56,6 +56,22 @@
         "description": "IPv6中间省略"
     },
     {
+        "id": "ipv4_cidr_private",
+        "input": "内网段192.168.1.0/24",
+        "should_match": true,
+        "type": "ip_address",
+        "expected_text": "192.168.1.0/24",
+        "description": "带CIDR掩码的私有IPv4段"
+    },
+    {
+        "id": "ipv4_cidr_public",
+        "input": "允许来源: 8.8.8.8/24",
+        "should_match": true,
+        "type": "ip_address",
+        "expected_text": "8.8.8.8/24",
+        "description": "带CIDR掩码的公网IPv4地址"
+    },
+    {
         "id": "ipv4_octet_too_large",
         "input": "无效地址256.1.2.3",
         "should_match": false,

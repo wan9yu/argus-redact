@@ -30,6 +30,14 @@
     "description": "부산 유선전화"
   },
   {
+    "id": "mobile_space",
+    "input": "010 1234 5678",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "010 1234 5678",
+    "description": "공백 구분 휴대전화"
+  },
+  {
     "id": "too_short",
     "input": "010-1234",
     "should_match": false,

@@ -46,6 +46,22 @@
     "description": "大阪固定電話"
   },
   {
+    "id": "mobile_parens",
+    "input": "090(1234)5678",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "090(1234)5678",
+    "description": "携帯電話（括弧区切り）"
+  },
+  {
+    "id": "landline_parens",
+    "input": "03(1234)5678",
+    "should_match": true,
+    "type": "phone",
+    "expected_text": "03(1234)5678",
+    "description": "固定電話（括弧区切り）"
+  },
+  {
     "id": "too_short",
     "input": "090-1234",
     "should_match": false,

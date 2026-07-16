@@ -24,7 +24,7 @@
     PatternData(
         type_: "ip_address",
         label: "[IP已脱敏]",
-        pattern: r"(?<!\d)(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(?!\d)",
+        pattern: r"(?<!\d)(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(?:/\d{1,2})?(?!\d)",
         check_context: true,
         description: "IPv4 address",
     ),
