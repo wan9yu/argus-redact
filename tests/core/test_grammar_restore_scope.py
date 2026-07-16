@@ -45,3 +45,18 @@ class TestGrammarRestoreScope:
         result = restore(text, key, guard=False)
 
         assert result == "Alice is here. The letter I is silent."
+
+    def test_two_close_together_self_ref_restorations_both_get_fixed(self):
+        # Two separate "I" restorations close together: the first window
+        # (12 chars past the first restored "I") reaches byte 13 of the
+        # output — far enough to cover the *second* restored "I" itself, but
+        # NOT its own trailing "is". The old overlap-SKIP logic then dropped
+        # the second span entirely (its start fell inside the first window),
+        # so the second "I is" was never fixed. Merging windows instead of
+        # skipping must fix both.
+        key = {"P-1": "I", "P-2": "I"}
+        text = "P-1 is" + " " * 8 + "P-2 is right"
+
+        result = restore(text, key, guard=False)
+
+        assert result == "I am" + " " * 8 + "I am right"

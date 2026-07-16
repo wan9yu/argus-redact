@@ -81,9 +81,9 @@ fn restore_tracking_self_ref(
 }
 
 /// Chars to scan past a restored self-ref pronoun for a verb to fix. Covers
-/// the longest reverse rule ("I doesn't", 8 chars incl. the leading space)
-/// plus slack for the `\b` boundary — generous enough to catch the verb, tight
-/// enough to stay well short of an unrelated sentence further along.
+/// the longest reverse rule ("I doesn't", 9 chars for the full "I doesn't"
+/// phrase) plus slack for the `\b` boundary — generous enough to catch the
+/// verb, tight enough to stay well short of an unrelated sentence further along.
 const GRAMMAR_FIX_WINDOW_CHARS: usize = 12;
 
 /// Apply `restore_grammar_en` ONLY inside the neighbourhood of each recorded
@@ -93,24 +93,52 @@ const GRAMMAR_FIX_WINDOW_CHARS: usize = 12;
 /// text this restoration never touched — corrupting it into "I am". Scoping
 /// to a window that starts at the restored pronoun and runs a few chars past
 /// it avoids that: the fix only ever fires where a pronoun was JUST restored.
+///
+/// Each span's own window is `[span.start, span.end + GRAMMAR_FIX_WINDOW_CHARS
+/// chars]`. When the next span's window OVERLAPS the current accumulated
+/// window (its start falls at or before the current window's end), the two
+/// windows are MERGED — extended to the max of both windows' ends — rather
+/// than the next span being skipped. Skipping would silently drop the
+/// grammar fix for a second restoration that lies close to (but isn't fully
+/// covered by) an earlier restoration's window: the first window can reach
+/// past the second span's start without reaching far enough to cover the
+/// second span's own trailing verb. Merging guarantees every restored
+/// pronoun's trailing verb is inside some window, each region processed
+/// exactly once — no double-application, no corruption, no missed fix.
 fn apply_grammar_scoped(text: &str, spans: &[(usize, usize)]) -> String {
     if spans.is_empty() {
         return text.to_string();
     }
     let mut out = String::with_capacity(text.len());
     let mut cursor = 0usize;
+    // The current maximal merged window, accumulated across spans whose
+    // windows overlap or touch.
+    let mut window: Option<(usize, usize)> = None;
+
     for &(start, end) in spans {
-        if start < cursor {
-            // An earlier window already extended past this span's start
-            // (adjacent restorations) — that text was already emitted, and
-            // already ran through the grammar fix as part of the prior
-            // window, so there is nothing left to do for this span.
-            continue;
+        let this_window_end = advance_chars(text, end, GRAMMAR_FIX_WINDOW_CHARS).min(text.len());
+        match window {
+            None => window = Some((start, this_window_end)),
+            Some((win_start, win_end)) => {
+                if start <= win_end {
+                    // Overlapping/adjacent: extend the accumulated window
+                    // to cover both spans' trailing verbs.
+                    window = Some((win_start, win_end.max(this_window_end)));
+                } else {
+                    // No overlap: flush the finished window, then start a
+                    // new one for this span.
+                    out.push_str(&text[cursor..win_start]);
+                    out.push_str(&restore_grammar_en(&text[win_start..win_end]));
+                    cursor = win_end;
+                    window = Some((start, this_window_end));
+                }
+            }
         }
-        let window_end = advance_chars(text, end, GRAMMAR_FIX_WINDOW_CHARS).min(text.len());
-        out.push_str(&text[cursor..start]);
-        out.push_str(&restore_grammar_en(&text[start..window_end]));
-        cursor = window_end;
+    }
+    if let Some((win_start, win_end)) = window {
+        out.push_str(&text[cursor..win_start]);
+        out.push_str(&restore_grammar_en(&text[win_start..win_end]));
+        cursor = win_end;
     }
     out.push_str(&text[cursor..]);
     out
@@ -400,6 +428,25 @@ mod tests {
         let result =
             restore_full("P-1 is here. The letter I is silent.", &k, None, None).unwrap();
         assert_eq!(result, "I am here. The letter I is silent.");
+    }
+
+    #[test]
+    fn full_two_close_together_self_ref_restorations_both_get_fixed() {
+        // Two separate "I" restorations close together: the first grammar
+        // window (12 chars past the first restored "I") reaches byte 13 of
+        // the output — far enough to cover the *second* restored "I" itself,
+        // but NOT its own trailing "is". The old overlap-SKIP logic dropped
+        // the second span entirely because its start (12) fell inside the
+        // first window's range (< 13), even though that window never
+        // actually fixed its verb. Merging windows instead of skipping must
+        // fix both restorations' verbs.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "I".to_string());
+        k.insert("P-2".to_string(), "I".to_string());
+        let text = format!("P-1 is{}P-2 is right", " ".repeat(8));
+        let result = restore_full(&text, &k, None, None).unwrap();
+        let expected = format!("I am{}I am right", " ".repeat(8));
+        assert_eq!(result, expected);
     }
 
     #[test]
