@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use fancy_regex::Regex;
 
-use crate::display_marker::strip_display_markers;
+use crate::display_marker::strip_display_markers_scoped;
 use crate::grammar::{is_self_ref, restore_grammar_en};
 use crate::reserved_range::{
     byte_to_char_offset, escaped_alternation_digit_bounded, scan_for_pollution,
@@ -75,10 +75,16 @@ pub fn restore_full(
     aliases: Option<&HashMap<String, Vec<String>>>,
     display_marker: Option<&str>,
 ) -> Result<String, RestoreError> {
-    // Step 1: strip explicit display marker.
+    // Step 1: strip explicit display marker — scoped to this key's fakes
+    // only. A global strip would remove the marker character everywhere in
+    // `text`, destroying unrelated content that happens to contain it (e.g.
+    // markdown `**bold**`, or a masked value's internal `*`). Scoping to the
+    // same longest-first fake alternation `mark_for_display` uses makes the
+    // strip land exactly where the mark was added, nowhere else.
     let text_owned: String;
     let text = if let Some(dm) = display_marker {
-        text_owned = strip_display_markers(text, Some(dm));
+        let key_fakes: Vec<String> = key.keys().cloned().collect();
+        text_owned = strip_display_markers_scoped(text, &key_fakes, Some(dm));
         text_owned.as_str()
     } else {
         text

@@ -8,7 +8,6 @@ import warnings
 from typing import Mapping
 
 from argus_redact.exceptions import SecurityWarning
-from argus_redact.pure.display_marker import strip_display_markers
 from argus_redact.pure.security_events import (
     BLOCKED,
     COMPLETE,
@@ -349,8 +348,9 @@ def _do_restore(
 ) -> str:
     """Perform the actual substitution via Rust core."""
     if not key:
-        if display_marker is not None:
-            return strip_display_markers(text, marker=display_marker)
+        # An empty key means no fakes were ever marked, so there is nothing
+        # to strip. Do NOT globally strip display_marker here — that would
+        # destroy unrelated occurrences (e.g. markdown `**bold**`).
         return text
 
     if not isinstance(key, dict):

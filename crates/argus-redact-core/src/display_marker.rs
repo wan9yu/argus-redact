@@ -86,12 +86,62 @@ pub fn mark_for_display(text: &str, key_fakes: &[String], marker: Option<&str>) 
 }
 
 /// Remove `marker` from `text`.
+///
+/// Global — every occurrence of `marker` anywhere in `text` is removed. Safe
+/// only when there is no key to scope against (e.g. an empty-key restore).
+/// When a key IS available, use `strip_display_markers_scoped` instead: a
+/// marker character can legitimately appear in unrelated text (markdown
+/// `**bold**`, a masked value's internal `*`), and a global replace would
+/// destroy it.
 pub fn strip_display_markers(text: &str, marker: Option<&str>) -> String {
     let m = resolve_marker(marker);
     if m.is_empty() {
         return text.to_string();
     }
     text.replace(&m, "")
+}
+
+/// Remove `marker` from `text`, but ONLY where it immediately trails one of
+/// `key_fakes` — the exact positions `mark_for_display` would have added it.
+///
+/// This is the precise inverse of `mark_for_display`: it mirrors the same
+/// longest-first fake alternation, so a marker is stripped only right after a
+/// matched fake token, never anywhere else in `text`. Unrelated occurrences of
+/// the marker character (unconnected markdown, a masked value's internal
+/// characters, etc.) are left untouched.
+pub fn strip_display_markers_scoped(text: &str, key_fakes: &[String], marker: Option<&str>) -> String {
+    let m = resolve_marker(marker);
+    if m.is_empty() || key_fakes.is_empty() {
+        return text.to_string();
+    }
+
+    // Sort longest-first — identical ordering to mark_for_display, so the two
+    // functions agree on which token matches at any given position.
+    let mut sorted_fakes: Vec<&str> = key_fakes.iter().map(|s| s.as_str()).collect();
+    sorted_fakes.sort_by(|a, b| b.len().cmp(&a.len()));
+
+    let pattern_str = escaped_alternation(&sorted_fakes);
+    let re = Regex::new(&pattern_str).expect("display_marker: invalid regex");
+
+    let mut result = String::with_capacity(text.len());
+    let mut last_end = 0;
+
+    for mat in re.find_iter(text) {
+        let mat = mat.expect("display_marker: regex error");
+        // Copy everything up to and including the matched fake verbatim — this
+        // preserves any marker characters that are part of the fake itself
+        // (e.g. a masked value like "138****5678").
+        result.push_str(&text[last_end..mat.end()]);
+        last_end = mat.end();
+        // Strip the marker only if it immediately follows this fake match —
+        // the one spot mark_for_display would have inserted it.
+        let after = &text[last_end..];
+        if after.starts_with(&m) {
+            last_end += m.len();
+        }
+    }
+    result.push_str(&text[last_end..]);
+    result
 }
 
 #[cfg(test)]
@@ -216,5 +266,47 @@ mod tests {
     fn test_strip_custom_marker() {
         let result = strip_display_markers("Hello Alice*!", Some("asterisk"));
         assert_eq!(result, "Hello Alice!");
+    }
+
+    // ── strip_display_markers_scoped ────────────────────────────────────
+
+    #[test]
+    fn test_scoped_strip_preserves_unrelated_asterisks() {
+        // Global strip would destroy "**bold**" and mangle the masked value
+        // "138****5678". Scoped strip must only remove the marker trailing
+        // the key fake, leaving everything else verbatim.
+        let fakes = vec!["138****5678".to_string()];
+        let text = "See **bold** and note*. Reach 138****5678*";
+        let result = strip_display_markers_scoped(text, &fakes, Some("asterisk"));
+        assert_eq!(result, "See **bold** and note*. Reach 138****5678");
+    }
+
+    #[test]
+    fn test_scoped_strip_round_trip_is_inverse_of_mark() {
+        let fakes = vec!["P-1".to_string()];
+        let marked = mark_for_display("call P-1 now", &fakes, None);
+        let stripped = strip_display_markers_scoped(&marked, &fakes, None);
+        assert_eq!(stripped, "call P-1 now");
+    }
+
+    #[test]
+    fn test_scoped_strip_leaves_unrelated_marker_elsewhere() {
+        let fakes = vec!["Alice".to_string()];
+        let text = "Alice* said *hi* to Bob";
+        let result = strip_display_markers_scoped(text, &fakes, Some("asterisk"));
+        assert_eq!(result, "Alice said *hi* to Bob");
+    }
+
+    #[test]
+    fn test_scoped_strip_empty_fakes_is_noop() {
+        let result = strip_display_markers_scoped("call P-1* now", &[], Some("asterisk"));
+        assert_eq!(result, "call P-1* now");
+    }
+
+    #[test]
+    fn test_scoped_strip_no_marker_present_is_noop() {
+        let fakes = vec!["P-1".to_string()];
+        let result = strip_display_markers_scoped("call P-1 now", &fakes, None);
+        assert_eq!(result, "call P-1 now");
     }
 }
