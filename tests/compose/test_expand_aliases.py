@@ -173,3 +173,43 @@ def test_shared_surname_persons_skip_ambiguous_alias_en():
     for title in ("Mr.", "Mrs.", "Ms.", "Dr.", "Prof."):
         assert f"{title} Brown" not in expanded  # ambiguous — two Browns
     assert expanded["Dr. Lee"] == "Sara Lee"  # unique surname still expands
+
+
+def test_generational_suffix_shares_surname_ambiguity_guard_fires():
+    """bug: "Robert Smith Jr." must extract surname "Smith", not "Jr" — else the
+    shared-surname ambiguity guard misses and emits a confident wrong-identity
+    "Mr. Smith" -> "John Smith" alias while a distinct "Robert Smith Jr." is
+    also present."""
+    key = {"P-1": "John Smith", "P-2": "Robert Smith Jr."}
+    expanded = expand_aliases(key, lang="en")
+    assert "Mr. Smith" not in expanded
+    assert "Mr Smith" not in expanded
+    for title in ("Mr.", "Mrs.", "Ms.", "Dr.", "Prof."):
+        assert f"{title} Smith" not in expanded
+
+
+def test_generational_suffix_does_not_over_suppress_distinct_surnames():
+    """Positive control: the suffix fix must not suppress aliases when the
+    surnames are genuinely distinct."""
+    key = {"P-1": "John Smith", "P-2": "Robert Jones"}
+    expanded = expand_aliases(key, lang="en")
+    assert expanded["Mr. Smith"] == "John Smith"
+    assert expanded["Mr. Jones"] == "Robert Jones"
+
+
+def test_lang_default_auto_detects_english_from_latin_names():
+    """expand_aliases with no explicit lang must not default to zh-style
+    aliases ("J先生") for Latin-script names — auto-detect from key values."""
+    key = {"P-1": "John Smith"}
+    expanded = expand_aliases(key)
+    assert expanded["Mr. Smith"] == "John Smith"
+    assert "J先生" not in expanded
+    assert not any("先生" in alias for alias in expanded)
+
+
+def test_lang_default_still_auto_detects_chinese():
+    """zh control: no explicit lang on Chinese names still produces zh aliases."""
+    key = {"P-1": "张伟"}
+    expanded = expand_aliases(key)
+    assert expanded["张先生"] == "张伟"
+    assert expanded["张总"] == "张伟"

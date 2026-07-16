@@ -15,8 +15,16 @@ Known limitations (out of scope per docs/architecture-layers.md §Layer 2):
 
 from __future__ import annotations
 
+from argus_redact.pure.lang_detect import detect_languages
+
 _ZH_TITLES = ("先生", "女士", "总", "老师", "医生")
 _EN_TITLES = ("Mr.", "Mrs.", "Ms.", "Dr.", "Prof.")
+
+# Trailing generational suffixes stripped before surname extraction. Jr/Sr are
+# matched case-insensitively; the Roman numerals are matched uppercase only
+# (per the documented convention — "ii"/"iii" are not recognized).
+_EN_GENERATIONAL_JR_SR = frozenset({"JR", "SR"})
+_EN_GENERATIONAL_ROMAN = frozenset({"II", "III", "IV"})
 
 # Compound Chinese surnames (2-char). When original starts with one of these,
 # use 2 chars as surname; otherwise use 1 char. Coverage: top compound surnames
@@ -47,10 +55,25 @@ def _extract_surname_zh(name: str) -> str | None:
 
 
 def _extract_surname_en(name: str) -> str | None:
-    """Extract English surname (last whitespace-delimited token > 1 char)."""
+    """Extract English surname (last whitespace-delimited token > 1 char).
+
+    Trailing generational suffixes (Jr, Sr, II, III, IV — with or without a
+    trailing period) are stripped first, so "Robert Smith Jr." extracts
+    "Smith", not "Jr". This matters for the shared-surname ambiguity guard in
+    expand_aliases: an under-extracted surname (e.g. "Jr") can't collide with
+    anyone else's, so the guard silently misses a real collision.
+    """
     if not name or not name.strip():
         return None
     tokens = name.strip().split()
+    if not tokens:
+        return None
+    while tokens:
+        candidate = tokens[-1].rstrip(".,")
+        if candidate.upper() in _EN_GENERATIONAL_JR_SR or candidate in _EN_GENERATIONAL_ROMAN:
+            tokens.pop()
+            continue
+        break
     if not tokens:
         return None
     # Skip single-letter trailing initials (e.g., "F." in "John F.")
@@ -63,12 +86,26 @@ def _extract_surname_en(name: str) -> str | None:
     return last
 
 
-def expand_aliases(key: dict, lang: str = "zh") -> dict:
+def _detect_effective_lang(key: dict) -> str:
+    """Auto-detect zh vs en from the Person original names when the caller
+    doesn't pass an explicit lang, so the documented en use case
+    (``expand_aliases({"P-1": "John Smith"})``) doesn't silently fall back to
+    zh-style aliases (e.g. "J先生")."""
+    names = [original for pseudonym, original in key.items() if pseudonym.startswith("P-")]
+    if not names:
+        return "zh"
+    detected = detect_languages(" ".join(names))
+    return "zh" if "zh" in detected else "en"
+
+
+def expand_aliases(key: dict, lang: str | None = None) -> dict:
     """Expand the key dict with surname+title composite aliases.
 
     Args:
         key: redaction key dict (pseudonym → original) from redact().
-        lang: "zh" or "en". Unknown values fall back to "en".
+        lang: "zh" or "en". Unknown explicit values fall back to "en". If
+            None (the default), auto-detected from the Person original names
+            in ``key`` — Latin-script names resolve to "en", otherwise "zh".
 
     Returns:
         A new dict containing all original (pseudonym → original) entries
@@ -91,9 +128,10 @@ def expand_aliases(key: dict, lang: str = "zh") -> dict:
     """
     if not key:
         return {}
+    effective_lang = lang if lang is not None else _detect_effective_lang(key)
     expanded = dict(key)
-    titles = _ZH_TITLES if lang == "zh" else _EN_TITLES
-    extract = _extract_surname_zh if lang == "zh" else _extract_surname_en
+    titles = _ZH_TITLES if effective_lang == "zh" else _EN_TITLES
+    extract = _extract_surname_zh if effective_lang == "zh" else _extract_surname_en
 
     # First pass: which surnames are shared by ≥2 DISTINCT Person originals? A bare
     # {surname}{title} alias for a shared surname is ambiguous — it cannot restore to
@@ -116,7 +154,7 @@ def expand_aliases(key: dict, lang: str = "zh") -> dict:
         if len(surname_originals.get(surname, ())) > 1:
             continue  # ambiguous: ≥2 Persons share this surname — skip its aliases
         for title in titles:
-            alias = f"{surname}{title}" if lang == "zh" else f"{title} {surname}"
+            alias = f"{surname}{title}" if effective_lang == "zh" else f"{title} {surname}"
             if alias not in expanded:
                 # alias → original (single-pass restore semantics)
                 expanded[alias] = original
