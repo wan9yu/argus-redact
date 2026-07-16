@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from argus_redact._types import PatternMatch, PseudonymLLMResult
 from argus_redact.glue import redact as _redact_module
+from argus_redact.glue.redact import _reject_unknown_type_names
 from argus_redact.pure.display_marker import mark_for_display, resolve_marker
 from argus_redact.pure.normalize import MAX_INPUT_SIZE
 from argus_redact.pure.replacer import VALID_STRATEGIES
@@ -112,6 +113,7 @@ def redact_pseudonym_llm(
         raise ValueError("types and types_exclude are mutually exclusive")
 
     if strategy_overrides:
+        _reject_unknown_type_names(set(strategy_overrides), "strategy_overrides")
         for ent_type, strategy in strategy_overrides.items():
             if strategy not in VALID_STRATEGIES:
                 raise ValueError(

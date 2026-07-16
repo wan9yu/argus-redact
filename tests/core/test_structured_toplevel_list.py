@@ -7,7 +7,26 @@ never matches and nothing gets redacted: silent zero-redaction with a
 success return (the caller sees 200/no error, PII stays in the output).
 """
 
+import pytest
+
 from argus_redact.structured import redact_json
+
+
+class TestPathsBareStrRejected:
+    # F8 (v0.8.2): a bare str for `paths` (e.g. "messages" instead of
+    # ["messages"]) iterates char-by-char in _parse_paths, matches nothing,
+    # and returns success with zero redaction — a silent leak. Must raise.
+    def test_should_raise_typeerror_for_bare_str_paths(self):
+        data = {"messages": "call me at 13812345678"}
+        with pytest.raises(TypeError):
+            redact_json(data, paths="messages", mode="fast", salt=42)
+
+    def test_should_still_redact_with_list_paths(self):
+        data = {"messages": "call me at 13812345678"}
+        redacted, key = redact_json(data, paths=["messages"], mode="fast", salt=42)
+
+        assert "13812345678" not in str(redacted)
+        assert "13812345678" in key.values()
 
 
 class TestTopLevelListBracketStarPath:

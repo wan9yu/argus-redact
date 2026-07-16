@@ -153,8 +153,8 @@ def restore_body(
     if isinstance(response, str):
         return guarded_restore(response, key, **guard_kwargs)
 
-    if isinstance(response, dict) and field and field in response:
-        if isinstance(response[field], str):
+    if isinstance(response, dict) and field:
+        if field in response and isinstance(response[field], str):
             result = dict(response)
             out = guarded_restore(response[field], key, **guard_kwargs)
             if detailed:
@@ -162,6 +162,13 @@ def restore_body(
                 return result, details
             result[field] = out
             return result
+
+        # Fail CLOSED: a present-but-non-str or missing field would otherwise be
+        # returned unchanged with an empty security_events list — a false
+        # all-clear that hides the fact that nothing was restored.
+        raise TypeError(
+            f"restore_body: field {field!r} missing or not a str; nothing was restored"
+        )
 
     if detailed:
         return response, {"security_events": []}

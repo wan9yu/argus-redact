@@ -9,6 +9,9 @@
   PARTIAL outcome (out-of-scope withheld) actually witnessed.
 - QQZJG: on v0.8.0 the guard=None DeprecationWarning still read "will default to
   guard=True in v0.8.0" — future tense for a flip that already shipped.
+- F5 (v0.8.2): ``strategy_overrides`` validated the strategy VALUE but not the
+  type KEY, so a miscased/unknown type name was silently dropped from the
+  override — the profile's default strategy applied instead with no warning.
 """
 
 import warnings
@@ -18,6 +21,7 @@ import pytest
 from argus_redact import redact
 from argus_redact.compose.anchor import Anchor
 from argus_redact.exceptions import SecurityWarning
+from argus_redact.glue.redact_pseudonym_llm import redact_pseudonym_llm
 from argus_redact.pure.restore import restore
 
 
@@ -74,3 +78,18 @@ def test_deprecation_warning_not_future_tense_for_shipped_flip():
     dep = " | ".join(str(x.message) for x in w if issubclass(x.category, DeprecationWarning))
     assert "will default to guard=True in v0.8.0" not in dep  # the stale future-tense line
     assert "guard=None" in dep or "guard=False" in dep  # names the real choice
+
+
+# --- F5 (v0.8.2) -----------------------------------------------------------
+def test_strategy_overrides_unknown_type_key_raises():
+    with pytest.raises(ValueError, match="Phone"):
+        redact_pseudonym_llm(
+            "电话13800138000", salt=42, strategy_overrides={"Phone": "realistic"}
+        )
+
+
+def test_strategy_overrides_valid_type_key_still_works():
+    result = redact_pseudonym_llm(
+        "电话13800138000", salt=42, strategy_overrides={"phone": "remove"}
+    )
+    assert "13800138000" not in result.downstream_text

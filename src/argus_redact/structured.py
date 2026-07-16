@@ -114,6 +114,8 @@ def redact_json(
     Returns:
         (redacted_data, key) or (redacted_data, key, type_map) if with_types=True.
     """
+    if isinstance(paths, str):
+        raise TypeError("paths must be a list of path strings, not a str")
     _warn_low_entropy_salt(salt)
     session = make_structured_session(salt=salt, key=key, config=config)
     parsed_paths = _parse_paths(paths) if paths else None

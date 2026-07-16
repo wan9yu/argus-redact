@@ -171,6 +171,35 @@ class TestRestoreBody:
 
         assert "13812345678" in restored_text
 
+    def test_should_fail_closed_when_field_missing(self):
+        # A dict response missing the requested field must fail CLOSED
+        # (raise), not silently return the response unchanged with an empty
+        # security_events list — that false all-clear hides the fact that
+        # nothing was restored.
+        body = {"text": "电话13812345678"}
+        redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)
+        response = {"answer": redacted["text"]}
+
+        with pytest.raises(TypeError):
+            restore_body(response, key, field="result", guard=False)
+
+    def test_should_fail_closed_when_field_present_but_not_str(self):
+        body = {"text": "电话13812345678"}
+        _, key = redact_body(body, mode="fast", lang="zh", salt=42)
+        response = {"result": 123}
+
+        with pytest.raises(TypeError):
+            restore_body(response, key, field="result", guard=False)
+
+    def test_should_return_unchanged_when_key_empty(self):
+        # Positive control: an empty key means nothing to restore — this
+        # short-circuit must keep working unchanged after the fix above.
+        response = {"result": "no PII here"}
+
+        restored = restore_body(response, {}, field="result", guard=False)
+
+        assert restored == response
+
 
 class TestRoundtrip:
     def test_should_roundtrip_full_flow(self):
