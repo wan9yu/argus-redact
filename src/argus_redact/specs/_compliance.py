@@ -76,6 +76,8 @@ PIPL_SENSITIVE_PI = frozenset(
     {
         "medical",
         "financial",
+        "bank_card",
+        "credit_card",
         "religion",
         "political",
         "sexual_orientation",
@@ -121,6 +123,8 @@ _HIPAA_MAP: dict[str, str] = {
     "financial": "account_numbers",
     "bank_card": "account_numbers",
     "credit_card": "account_numbers",
+    "url": "url",
+    "date": "dates",
 }
 
 

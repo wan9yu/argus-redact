@@ -41,7 +41,7 @@ Age (Chinese 岁/年龄/周岁 + English years old/aged)
 | Default strategy | `mask` |
 | Sensitivity | 4 |
 | Reversible | ✗ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | HIPAA Safe Harbor | `account_numbers` |
 | Checksum | Luhn (or BIN prefix) |
 | Examples | `6217001234567890`, `6222021234567890`, `4111111111111111` |
@@ -537,7 +537,7 @@ Biometric identifier
 | Default strategy | `mask` |
 | Sensitivity | 3 |
 | Reversible | ✗ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | HIPAA Safe Harbor | `account_numbers` |
 | Checksum | Luhn |
 | Examples | `4111111111111111` |
@@ -762,6 +762,7 @@ AWS IAM access key ID (does not cover the secret access key — that needs keywo
 | Sensitivity | 1 |
 | Reversible | ✓ |
 | PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| HIPAA Safe Harbor | `dates` |
 
 Date / temporal identifier — detected via NER or Presidio; HIPAA shift-by-N is a v0.7+ candidate
 
@@ -880,6 +881,7 @@ SSH private key PEM block (RSA, OPENSSH, DSA, EC variants)
 | Sensitivity | 1 |
 | Reversible | ✓ |
 | PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| HIPAA Safe Harbor | `url` |
 
 URL / web address — detected via NER or Presidio; removed because query parameters may carry PII
 

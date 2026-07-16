@@ -73,6 +73,18 @@ class TestAssessRisk:
         result = assess_risk(entities)
         assert "PIPL Art.55" in result.pipl_articles
 
+    def test_should_include_impact_assessment_for_bank_card(self):
+        # Task 16: bank_card is PIPL Art.28 sensitive PI (financial data) —
+        # was missing from PIPL_SENSITIVE_PI.
+        entities = [{"type": "bank_card", "sensitivity": 4}]
+        result = assess_risk(entities)
+        assert "PIPL Art.55" in result.pipl_articles
+
+    def test_should_include_impact_assessment_for_credit_card(self):
+        entities = [{"type": "credit_card", "sensitivity": 4}]
+        result = assess_risk(entities)
+        assert "PIPL Art.55" in result.pipl_articles
+
     def test_should_include_record_keeping(self):
         entities = [{"type": "phone", "sensitivity": 3}]
         result = assess_risk(entities)
@@ -141,6 +153,17 @@ class TestComplianceMetadataFields:
         )
         assert "phone_numbers" in result.hipaa_categories
         assert "medical_record" in result.hipaa_categories
+
+    def test_should_expose_hipaa_categories_for_url_and_date(self):
+        # Task 16: url -> "url" and date -> "dates" were missing from _HIPAA_MAP.
+        result = assess_risk(
+            [
+                {"type": "url", "sensitivity": 1},
+                {"type": "date", "sensitivity": 1},
+            ]
+        )
+        assert "url" in result.hipaa_categories
+        assert "dates" in result.hipaa_categories
 
     def test_should_have_empty_hipaa_categories_for_non_phi_types(self):
         # qq is a Chinese-specific type with no HIPAA mapping
