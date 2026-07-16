@@ -17,8 +17,25 @@ impl std::fmt::Display for RestoreError {
 /// Keys sorted by length descending to prevent partial matches.
 /// Single-pass replacement prevents re-scanning of replaced content.
 pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, RestoreError> {
+    restore_tracking_self_ref(text, key).map(|(result, _spans)| result)
+}
+
+/// Same single-pass substitution as `restore()`, but additionally records the
+/// BYTE-offset span (in the OUTPUT string) of every self-referential pronoun
+/// value (`is_self_ref`, e.g. "I") it splices in. These spans let
+/// `restore_full` scope the reverse grammar fix to just the neighbourhood of
+/// an actual pronoun restoration instead of a whole-text pass — see
+/// `apply_grammar_scoped`.
+///
+/// The recorded offsets are exactly the start/end of the pushed replacement
+/// text, so they always land on a valid UTF-8 char boundary: no separate
+/// byte→char conversion is needed to slice `result` at them later.
+fn restore_tracking_self_ref(
+    text: &str,
+    key: &HashMap<String, String>,
+) -> Result<(String, Vec<(usize, usize)>), RestoreError> {
     if key.is_empty() || text.is_empty() {
-        return Ok(text.to_string());
+        return Ok((text.to_string(), Vec::new()));
     }
 
     // Sort keys by length descending (longest first)
@@ -35,6 +52,7 @@ pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, Rest
     // Single-pass replacement
     let mut result = String::with_capacity(text.len());
     let mut last_end = 0;
+    let mut self_ref_spans: Vec<(usize, usize)> = Vec::new();
 
     let mut search_start = 0;
     while search_start <= text.len() {
@@ -46,7 +64,11 @@ pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, Rest
 
         result.push_str(&text[last_end..m.start()]);
         if let Some(replacement) = key.get(m.as_str()) {
+            let span_start = result.len();
             result.push_str(replacement);
+            if is_self_ref(replacement) {
+                self_ref_spans.push((span_start, result.len()));
+            }
         } else {
             result.push_str(m.as_str());
         }
@@ -55,7 +77,55 @@ pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, Rest
     }
     result.push_str(&text[last_end..]);
 
-    Ok(result)
+    Ok((result, self_ref_spans))
+}
+
+/// Chars to scan past a restored self-ref pronoun for a verb to fix. Covers
+/// the longest reverse rule ("I doesn't", 8 chars incl. the leading space)
+/// plus slack for the `\b` boundary — generous enough to catch the verb, tight
+/// enough to stay well short of an unrelated sentence further along.
+const GRAMMAR_FIX_WINDOW_CHARS: usize = 12;
+
+/// Apply `restore_grammar_en` ONLY inside the neighbourhood of each recorded
+/// self-ref-pronoun restoration span, leaving the rest of `text` byte-for-byte
+/// untouched elsewhere. A whole-text `restore_grammar_en` call would also "fix"
+/// an unrelated "I is" that happens to already be in the surrounding text —
+/// text this restoration never touched — corrupting it into "I am". Scoping
+/// to a window that starts at the restored pronoun and runs a few chars past
+/// it avoids that: the fix only ever fires where a pronoun was JUST restored.
+fn apply_grammar_scoped(text: &str, spans: &[(usize, usize)]) -> String {
+    if spans.is_empty() {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0usize;
+    for &(start, end) in spans {
+        if start < cursor {
+            // An earlier window already extended past this span's start
+            // (adjacent restorations) — that text was already emitted, and
+            // already ran through the grammar fix as part of the prior
+            // window, so there is nothing left to do for this span.
+            continue;
+        }
+        let window_end = advance_chars(text, end, GRAMMAR_FIX_WINDOW_CHARS).min(text.len());
+        out.push_str(&text[cursor..start]);
+        out.push_str(&restore_grammar_en(&text[start..window_end]));
+        cursor = window_end;
+    }
+    out.push_str(&text[cursor..]);
+    out
+}
+
+/// Advance up to `n_chars` UTF-8 chars past byte offset `from` in `s`,
+/// returning the resulting byte offset. Always lands on a char boundary
+/// (unlike `from + n_chars`, which would panic or slice mid-character on
+/// multi-byte text) — char-safe equivalent of `from + n_chars` bytes.
+fn advance_chars(s: &str, from: usize, n_chars: usize) -> usize {
+    let mut end = from;
+    for (offset, ch) in s[from..].char_indices().take(n_chars) {
+        end = from + offset + ch.len_utf8();
+    }
+    end
 }
 
 /// Full restore path: alias merge + core substitution + grammar.
@@ -63,8 +133,10 @@ pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, Rest
 /// 1. If `display_marker` is Some → strip that marker from text.
 /// 2. If key empty → return text.
 /// 3. Alias merge: build flat lookup = key ∪ {alias → key[fake]'s original}.
-/// 4. Core substitution (`restore`, single-pass longest-first).
-/// 5. If any key VALUE is self-ref → `restore_grammar_en(result)`.
+/// 4. Core substitution (`restore`, single-pass longest-first), tracking the
+///    span of every self-ref pronoun value it substitutes in.
+/// 5. `restore_grammar_en` runs ONLY in the neighbourhood of those spans (see
+///    `apply_grammar_scoped`) — never as a whole-text pass.
 ///
 /// Decoration markers (`ⓕ`, `(假)`, `ˢ`, `*`) need no dedicated pass: a marker
 /// trailing a key is ordinary non-key text, so the single `restore` pass leaves
@@ -122,14 +194,13 @@ pub fn restore_full(
     // itself another key) the value got replaced a SECOND time — a cross-entity
     // disclosure. Folding the marker handling into the single no-rescan pass
     // closes that double-replace by construction.
-    let result = restore(text, &flat)?;
+    let (result, self_ref_spans) = restore_tracking_self_ref(text, &flat)?;
 
-    // Step 5: grammar restore if any value is self-ref.
-    let result = if key.values().any(|v| is_self_ref(v)) {
-        restore_grammar_en(&result)
-    } else {
-        result
-    };
+    // Step 5: grammar restore, scoped to the neighbourhood of each restored
+    // self-ref pronoun. `apply_grammar_scoped` is a no-op (returns `result`
+    // unchanged) when `self_ref_spans` is empty, i.e. when no key value was a
+    // self-ref pronoun OR none of them actually got substituted into `text`.
+    let result = apply_grammar_scoped(&result, &self_ref_spans);
 
     Ok(result)
 }
@@ -309,13 +380,37 @@ mod tests {
 
     #[test]
     fn full_self_ref_grammar_applied() {
-        // key has value "I" (self-ref) → grammar restore runs.
-        // Forward normalization would have turned "I am" → "P-1 is",
-        // so restore should turn "I is ok" → "I am ok".
+        // key has value "I" (self-ref) → grammar restore runs on the restored
+        // pronoun. Forward normalization would have turned "I am" → "P-1 is",
+        // so restoring "P-1 is ok" → "I is ok" → grammar-fixed to "I am ok".
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "I".to_string());
+        let result = restore_full("P-1 is ok", &k, None, None).unwrap();
+        assert_eq!(result, "I am ok");
+    }
+
+    #[test]
+    fn full_self_ref_grammar_scoped_not_whole_text() {
+        // The C7 regression: a global grammar fix would ALSO mangle an
+        // unrelated "I is" that this restoration never touched. Only the
+        // restored "P-1" → "I" plus its own following verb gets fixed; "The
+        // letter I is silent." is untouched text and must survive verbatim.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "I".to_string());
+        let result =
+            restore_full("P-1 is here. The letter I is silent.", &k, None, None).unwrap();
+        assert_eq!(result, "I am here. The letter I is silent.");
+    }
+
+    #[test]
+    fn full_self_ref_no_actual_substitution_leaves_text_unchanged() {
+        // The key has a self-ref value, but the redacted-form token ("P-1")
+        // never appears in this text — no substitution happens, so the
+        // grammar fix must not fire either (nothing was actually restored).
         let mut k = HashMap::new();
         k.insert("P-1".to_string(), "I".to_string());
         let result = restore_full("I is ok", &k, None, None).unwrap();
-        assert_eq!(result, "I am ok");
+        assert_eq!(result, "I is ok");
     }
 
     #[test]
