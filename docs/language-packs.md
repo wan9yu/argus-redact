@@ -23,6 +23,14 @@ You can contribute any one of these independently. A pack with only regex patter
 | Indian (in) | Aadhaar, PAN, phone | spaCy | `[in]` |
 | Brazilian (br) | CPF, CNPJ, phone | — | `[br]` |
 
+> **Note on `uk`/`in`.** These are argus locale-pack codes, not ISO-639-1
+> language codes. In ISO-639-1, `uk` is Ukrainian and `in` is Indonesian
+> (the legacy code for `id`). Here `uk` selects the **British English**
+> pack and `in` selects the **Indian (English)** pack — not Ukrainian or
+> Indonesian. The values are kept as-is for backward compatibility; passing
+> a plausible ISO code instead (`ua` for Ukrainian, `id` for Indonesian)
+> raises an error naming the collision.
+
 ### Language-neutral patterns
 
 Some identifiers are the same digits no matter what script surrounds them. A pattern can

@@ -119,6 +119,11 @@ _LANG_PATTERNS = {
 # as _LANG_PATTERNS. Single source for the `info` surfaces (CLI `cmd_info` and
 # HTTP `/info`) so the two can't drift. A code present in _LANG_PATTERNS but
 # absent here falls back to the code itself at the display site.
+#
+# Note: `uk` and `in` are argus locale-pack codes, not ISO-639-1 language
+# codes — in ISO-639-1, `uk` is Ukrainian and `in` is Indonesian (legacy for
+# `id`). Here `uk` = British English and `in` = Indian (English). The values
+# are unchanged for backward compatibility; see docs/language-packs.md.
 _LANG_DISPLAY_NAMES = {
     "zh": "Chinese",
     "en": "English",
@@ -131,6 +136,19 @@ _LANG_DISPLAY_NAMES = {
 }
 
 
+# Plausible ISO-639-1 codes a caller might reach for instead of an argus
+# locale-pack code that collides with a *different* ISO-639-1 language:
+# `uk` is Ukrainian in ISO-639-1 (argus uses it for British English), and
+# `in` is Indonesian in ISO-639-1 (legacy for `id`; argus uses it for
+# Indian English). Mapping each plausible guess to the argus code it was
+# probably reaching for, so the error can name the collision instead of
+# leaving the caller to guess why the "correct" ISO code doesn't work.
+_LANG_COLLISION_HINTS = {
+    "ua": "uk",
+    "id": "in",
+}
+
+
 def _validate_langs(langs: tuple[str, ...] | list[str]) -> None:
     """Raise ValueError for any requested language code not in the known set.
 
@@ -138,7 +156,20 @@ def _validate_langs(langs: tuple[str, ...] | list[str]) -> None:
     """
     for code in langs:
         if code not in _LANG_PATTERNS:
-            raise ValueError(f"Unknown language '{code}'. Available: {list(_LANG_PATTERNS.keys())}")
+            available = list(_LANG_PATTERNS.keys())
+            hint_code = _LANG_COLLISION_HINTS.get(code)
+            if hint_code is not None:
+                display = _LANG_DISPLAY_NAMES.get(hint_code, hint_code)
+                not_this = "not Ukrainian" if hint_code == "uk" else "not Indonesian"
+                raise ValueError(
+                    f"Unknown language '{code}'. Available: {available}. "
+                    f"Did you mean '{hint_code}' ({display} locale pack, {not_this})? "
+                    "argus language codes are locale packs, not ISO-639-1 codes."
+                )
+            raise ValueError(
+                f"Unknown language '{code}'. Available: {available} "
+                "(argus language codes are locale packs, not ISO-639-1 codes)."
+            )
 
 
 def _reject_unknown_type_names(names: set[str], param: str) -> None:

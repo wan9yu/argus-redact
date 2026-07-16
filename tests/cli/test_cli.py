@@ -416,3 +416,70 @@ class TestCliErrors:
 
         # argparse shows help on stderr or stdout depending on version
         assert code != 0 or "usage" in (stderr + _).lower()
+
+
+class TestLangCodeCollisionHint:
+    """H5 — `uk`/`in` are argus locale-pack codes, not ISO-639-1 language codes
+    (ISO-639-1 `uk` = Ukrainian, `in` = Indonesian). The collision itself is
+    NOT fixed by changing the code values (that would break existing
+    `uk`=British-English callers) — only by a clearer error message that
+    catches a plausible mis-guess like `ua` (Ukrainian) or `id` (Indonesian).
+    """
+
+    def test_ua_unknown_lang_hints_at_uk_collision(self, tmp_path):
+        key_file = tmp_path / "key.json"
+
+        code, stdout, stderr = run_cli(
+            "redact",
+            "-k",
+            str(key_file),
+            "-m",
+            "fast",
+            "-l",
+            "ua",
+            stdin="hello",
+        )
+
+        assert code != 0
+        assert "Error:" in stderr
+        assert "uk" in stderr
+        assert "British" in stderr
+        assert "not Ukrainian" in stderr
+
+    def test_id_unknown_lang_hints_at_in_collision(self, tmp_path):
+        key_file = tmp_path / "key.json"
+
+        code, stdout, stderr = run_cli(
+            "redact",
+            "-k",
+            str(key_file),
+            "-m",
+            "fast",
+            "-l",
+            "id",
+            stdin="hello",
+        )
+
+        assert code != 0
+        assert "Error:" in stderr
+        assert "'in'" in stderr
+        assert "Indian" in stderr
+        assert "not Indonesian" in stderr
+
+    def test_uk_lang_still_works(self, tmp_path):
+        """No behavior change: `uk` remains the British-English locale pack."""
+        key_file = tmp_path / "key.json"
+
+        code, stdout, stderr = run_cli(
+            "redact",
+            "-k",
+            str(key_file),
+            "-m",
+            "fast",
+            "-l",
+            "uk",
+            stdin="hello",
+        )
+
+        assert code == 0, stderr
+        assert "Traceback" not in stderr

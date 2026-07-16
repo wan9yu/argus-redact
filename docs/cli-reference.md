@@ -46,6 +46,12 @@ argus-redact redact [input] [options]
 | `--profile` | | none | Compliance profile: `default`, `pipl`, `gdpr`, `hipaa`, or `pseudonym-llm`. |
 | `--strategy-override` | | none | Per-type strategy override for `--profile pseudonym-llm`, e.g. `"phone:remove,address:realistic"`. Strategy names: `pseudonym`, `realistic`, `mask`, `remove`, `category`, `name_mask`, `landline_mask`. |
 
+> **Note on `-l uk` / `-l in`.** These are argus locale-pack codes, not
+> ISO-639-1 language codes. `uk` selects the **British English** pack
+> (ISO-639-1 `uk` is Ukrainian) and `in` selects the **Indian (English)**
+> pack (ISO-639-1 `in` is Indonesian, legacy for `id`). Passing `ua` or
+> `id` instead raises an error that names the intended pack.
+
 ### Examples
 
 ```bash
