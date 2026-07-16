@@ -30,7 +30,7 @@ import argus_redact.compose as c
 
 COMPOSE_SIGNATURES = {
     "prompt_anchor": "(key: 'dict', lang: 'str' = 'zh', *, anchor: 'Anchor | None' = None) -> 'str'",  # noqa: E501
-    "expand_aliases": "(key: 'dict', lang: 'str' = 'zh') -> 'dict'",
+    "expand_aliases": "(key: 'dict', lang: 'str | None' = None) -> 'dict'",
     "register_pii_type": "(typedef: 'PIITypeDef') -> 'PIITypeDef'",
 }
 
