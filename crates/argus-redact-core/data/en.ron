@@ -15,6 +15,14 @@
         description: r"US Social Security Number (with optional spaces/dashes)",
     ),
     PatternData(
+        type_: r"itin",
+        label: r"[ITIN REDACTED]",
+        pattern: r"(?<!\d)\d{3}[-\s]?\d{2}[-\s]?\d{4}(?!\d)",
+        validator: Some(r"itin"),
+        check_context: true,
+        description: r"US Individual Taxpayer Identification Number (area 900-999, IRS-assigned group ranges)",
+    ),
+    PatternData(
         type_: r"credit_card",
         label: r"[CARD REDACTED]",
         pattern: r"(?<!\d)(?:3[47]\d{2}[-\s]?\d{6}[-\s]?\d{5}|3(?:0[0-5]|[68]\d)\d[-\s]?\d{6}[-\s]?\d{4}|[3-6]\d{3}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4})(?!\d)",

@@ -483,10 +483,24 @@
         "kind": "near",
         "start": 0,
         "text": "000-12-3456",
+        "type": "itin"
+      },
+      {
+        "end": 11,
+        "kind": "near",
+        "start": 0,
+        "text": "000-12-3456",
         "type": "ssn"
       }
     ],
     "123-45-6789": [
+      {
+        "end": 11,
+        "kind": "near",
+        "start": 0,
+        "text": "123-45-6789",
+        "type": "itin"
+      },
       {
         "end": 11,
         "kind": "hit",
@@ -538,10 +552,56 @@
         "kind": "near",
         "start": 0,
         "text": "666-12-3456",
+        "type": "itin"
+      },
+      {
+        "end": 11,
+        "kind": "near",
+        "start": 0,
+        "text": "666-12-3456",
+        "type": "ssn"
+      }
+    ],
+    "912-45-6789": [
+      {
+        "end": 11,
+        "kind": "near",
+        "start": 0,
+        "text": "912-45-6789",
+        "type": "itin"
+      },
+      {
+        "end": 11,
+        "kind": "near",
+        "start": 0,
+        "text": "912-45-6789",
+        "type": "ssn"
+      }
+    ],
+    "912-70-1234": [
+      {
+        "end": 11,
+        "kind": "hit",
+        "start": 0,
+        "text": "912-70-1234",
+        "type": "itin"
+      },
+      {
+        "end": 11,
+        "kind": "near",
+        "start": 0,
+        "text": "912-70-1234",
         "type": "ssn"
       }
     ],
     "999-12-3456": [
+      {
+        "end": 11,
+        "kind": "near",
+        "start": 0,
+        "text": "999-12-3456",
+        "type": "itin"
+      },
       {
         "end": 11,
         "kind": "near",

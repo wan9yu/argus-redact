@@ -1,0 +1,93 @@
+[
+  {
+    "id": "standard_itin",
+    "input": "ITIN 912-70-1234",
+    "should_match": true,
+    "type": "itin",
+    "expected_text": "912-70-1234",
+    "description": "Standard ITIN format (area 912, group 70)"
+  },
+  {
+    "id": "itin_is_entire_text",
+    "input": "912-70-1234",
+    "should_match": true,
+    "type": "itin",
+    "expected_text": "912-70-1234",
+    "description": "ITIN is the entire text"
+  },
+  {
+    "id": "itin_embedded",
+    "input": "His ITIN 912-70-1234 is on file",
+    "should_match": true,
+    "type": "itin",
+    "expected_text": "912-70-1234",
+    "description": "ITIN embedded in sentence"
+  },
+  {
+    "id": "itin_with_spaces",
+    "input": "ITIN is 912 70 1234",
+    "should_match": true,
+    "type": "itin",
+    "expected_text": "912 70 1234",
+    "description": "ITIN with spaces instead of dashes"
+  },
+  {
+    "id": "itin_no_separator",
+    "input": "ITIN 912701234",
+    "should_match": true,
+    "type": "itin",
+    "expected_text": "912701234",
+    "description": "ITIN without any separators (continuous digits)"
+  },
+  {
+    "id": "itin_group_boundary_low",
+    "input": "ITIN 912-50-1234",
+    "should_match": true,
+    "type": "itin",
+    "expected_text": "912-50-1234",
+    "description": "Group 50 is the low end of the 50-65 IRS-assigned range"
+  },
+  {
+    "id": "itin_group_boundary_high",
+    "input": "ITIN 912-99-1234",
+    "should_match": true,
+    "type": "itin",
+    "expected_text": "912-99-1234",
+    "description": "Group 99 is the high end of the 94-99 IRS-assigned range"
+  },
+  {
+    "id": "itin_invalid_group_45",
+    "input": "ITIN 912-45-6789",
+    "should_match": false,
+    "type": "itin",
+    "description": "Group 45 is not an IRS-assigned ITIN group range"
+  },
+  {
+    "id": "itin_invalid_group_66",
+    "input": "ITIN 912-66-1234",
+    "should_match": false,
+    "type": "itin",
+    "description": "Group 66 falls in the gap between 50-65 and 70-88"
+  },
+  {
+    "id": "itin_invalid_group_93",
+    "input": "ITIN 912-93-1234",
+    "should_match": false,
+    "type": "itin",
+    "description": "Group 93 falls in the gap between 90-92 and 94-99"
+  },
+  {
+    "id": "itin_invalid_area_below_900",
+    "input": "ITIN 123-45-6789",
+    "should_match": false,
+    "type": "itin",
+    "description": "Area below 900 is an SSN area, not an ITIN area"
+  },
+  {
+    "id": "plain_text",
+    "input": "no itin here",
+    "should_match": false,
+    "type": "itin",
+    "description": "No ITIN"
+  }
+]

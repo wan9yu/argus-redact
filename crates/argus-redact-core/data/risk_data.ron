@@ -40,6 +40,7 @@
         (lang: "zh", name: "age", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.56"], gdpr_special_category: false, hipaa_phi_category: None),
         (lang: "en", name: "phone", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.56"], gdpr_special_category: false, hipaa_phi_category: Some("phone_numbers")),
         (lang: "en", name: "ssn", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.51", "PIPL Art.29", "PIPL Art.56"], gdpr_special_category: false, hipaa_phi_category: Some("ssn")),
+        (lang: "en", name: "itin", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.51", "PIPL Art.29", "PIPL Art.56"], gdpr_special_category: false, hipaa_phi_category: None),
         (lang: "en", name: "credit_card", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.51", "PIPL Art.29", "PIPL Art.56"], gdpr_special_category: false, hipaa_phi_category: Some("account_numbers")),
         (lang: "en", name: "address", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.56"], gdpr_special_category: false, hipaa_phi_category: Some("geographic")),
         (lang: "en", name: "person", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.56"], gdpr_special_category: false, hipaa_phi_category: Some("names")),

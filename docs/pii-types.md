@@ -3,7 +3,7 @@
 Auto-generated from `argus_redact.specs.list_types()`. Do not hand-edit.
 Regenerate via: `make catalog`
 
-Total: 73 types (36 zh / 15 en / 12 shared / 10 international)
+Total: 74 types (36 zh / 16 en / 12 shared / 10 international)
 
 ## Chinese (zh) — 36 types
 
@@ -499,7 +499,7 @@ WeChat ID
 
 Chinese workplace (keyword-triggered)
 
-## English (en) — 15 types
+## English (en) — 16 types
 
 ### `address`
 
@@ -586,6 +586,19 @@ English date of birth — keyword-triggered, multiple formats
 | Source | GLBA/financial privacy categories |
 
 Financial information (income/debt/credit/bankruptcy)
+
+### `itin`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| Examples | `912-70-1234` |
+| Source | IRS ITIN format (area 900-999, group ranges 50-65/70-88/90-92/94-99) |
+
+US Individual Taxpayer ID — SSN digit shape, IRS-assigned 9xx area
 
 ### `medical`
 

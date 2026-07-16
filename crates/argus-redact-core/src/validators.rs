@@ -291,6 +291,20 @@ pub fn validate_ssn(value: &str) -> bool {
     !(area == "666" || area.parse::<u32>().unwrap() >= 900)
 }
 
+pub fn validate_itin(value: &str) -> bool {
+    let digits: String = value.replace(['-', ' '], "");
+    if digits.chars().count() != 9 || !digits.chars().all(|c| c.is_ascii_digit()) { return false; }
+    let (area, group) = (&digits[..3], &digits[3..5]);
+    let area: u32 = area.parse().unwrap();
+    let group: u32 = group.parse().unwrap();
+    if !(900..=999).contains(&area) { return false; }
+    // IRS-assigned ITIN group ranges (the middle two digits).
+    (50..=65).contains(&group)
+        || (70..=88).contains(&group)
+        || (90..=92).contains(&group)
+        || (94..=99).contains(&group)
+}
+
 pub fn validate_aadhaar(value: &str) -> bool {
     let digits: String = value.replace([' ', '-'], "");
     let c: Vec<char> = digits.chars().collect();
@@ -446,6 +460,7 @@ pub fn resolve_validator(name: &str) -> Option<fn(&str) -> bool> {
         "email" => validate_email,
         "pan" => validate_pan,
         "ssn" => validate_ssn,
+        "itin" => validate_itin,
         "age" => validate_age,
         "de_phone" => validate_de_phone,
         "de_tax_id" => validate_de_tax_id,
@@ -497,6 +512,16 @@ mod tests {
         assert!(!validate_ssn("123-45-0000")); // serial 0000
         assert!(!validate_ssn("900-45-6789")); // area >= 900
         assert!(validate_ssn("123-45-6789")); // all fields valid
+    }
+
+    #[test]
+    fn itin_area_and_group_ranges() {
+        assert!(validate_itin("912-70-1234")); // area 900-999, group in 70-88
+        assert!(!validate_itin("912-45-6789")); // group 45 outside all IRS ranges
+        assert!(!validate_itin("123-45-6789")); // area 123 — not an ITIN area
+        assert!(validate_itin("912-50-1234")); // group boundary: low end of 50-65
+        assert!(validate_itin("912-99-1234")); // group boundary: high end of 94-99
+        assert!(!validate_itin("912-66-1234")); // group gap between 50-65 and 70-88
     }
 
     #[test]
@@ -593,7 +618,7 @@ mod tests {
         for key in [
             "credit_card_luhn", "cn_bank_card", "gb11643_mod11", "hkid", "twid",
             "credit_code_mod31", "iban_mod97", "aadhaar", "cpf", "cnpj",
-            "my_number", "email", "pan", "ssn", "age", "de_phone", "de_tax_id",
+            "my_number", "email", "pan", "ssn", "itin", "age", "de_phone", "de_tax_id",
             "jp_phone", "jwt", "organization", "school",
         ] {
             assert!(resolve_validator(key).is_some(), "key {key} must resolve");

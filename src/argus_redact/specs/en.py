@@ -51,6 +51,23 @@ register(
 
 register(
     PIITypeDef(
+        name="itin",
+        lang="en",
+        format="NNN-NN-NNNN",
+        length=11,
+        charset="digits + dashes",
+        strategy="remove",
+        label="[ITIN REDACTED]",
+        examples=("912-70-1234",),
+        counterexamples=("912-45-6789", "123-45-6789"),
+        sensitivity=4,
+        source="IRS ITIN format (area 900-999, group ranges 50-65/70-88/90-92/94-99)",
+        description="US Individual Taxpayer ID — SSN digit shape, IRS-assigned 9xx area",
+    )
+)
+
+register(
+    PIITypeDef(
         name="credit_card",
         lang="en",
         format="NNNN-NNNN-NNNN-NNNN (16 digits, Luhn-valid)",

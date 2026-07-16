@@ -26,3 +26,20 @@ def test_valid_id_after_serial_keyword_redacted():
     # trigger, but a validator-confirmed value must not be suppressed by it.
     out, _ = redact("编号110101199003074610", lang="zh", mode="fast", salt=42)
     assert "110101199003074610" not in out
+
+
+def test_itin_redacted_and_does_not_cannibalize_ssn():
+    # ITINs share SSN digit shape but use area 900-999, which validate_ssn
+    # rejects. Without a dedicated itin type these values leaked entirely.
+    out, _ = redact("ITIN 912-70-1234", lang="en", salt=42)
+    assert "912-70-1234" not in out
+
+    # A group outside the IRS-assigned ranges (50-65, 70-88, 90-92, 94-99) is
+    # not a valid ITIN, and its area (900+) is not a valid SSN either — so it
+    # is correctly left unredacted rather than misclassified as either type.
+    out, _ = redact("group 912-45-6789", lang="en", salt=42)
+    assert "912-45-6789" in out
+
+    # Regression guard: a genuine SSN must still redact as ssn.
+    out, _ = redact("SSN 123-45-6789", lang="en", salt=42)
+    assert "123-45-6789" not in out

@@ -29,6 +29,24 @@ class TestSSN:
         assert_pattern_match(results, example, "ssn")
 
 
+class TestITIN:
+    @parametrize_examples("en_itin.json")
+    def test_should_match_or_reject_when_itin_input(self, en_patterns, example):
+        results, _ = match_patterns(example["input"], en_patterns)
+        assert_pattern_match(results, example, "itin")
+
+    def test_ssn_and_itin_do_not_cannibalize_each_other(self, en_patterns):
+        # ITIN area 900-999 must be redacted as itin, never as ssn (validate_ssn
+        # rejects area>=900), and a valid SSN area must still redact as ssn.
+        itin_results, _ = match_patterns("ITIN 912-70-1234", en_patterns)
+        assert any(r.type == "itin" for r in itin_results)
+        assert not any(r.type == "ssn" for r in itin_results)
+
+        ssn_results, _ = match_patterns("SSN 123-45-6789", en_patterns)
+        assert any(r.type == "ssn" for r in ssn_results)
+        assert not any(r.type == "itin" for r in ssn_results)
+
+
 class TestEnglishCreditCard:
     @parametrize_examples("en_credit_card.json")
     def test_should_match_or_reject_when_credit_card_input(self, en_patterns, example):
