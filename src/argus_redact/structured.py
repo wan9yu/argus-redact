@@ -11,7 +11,11 @@ from argus_redact import redact, restore
 from argus_redact.exceptions import SecurityWarning
 from argus_redact.glue.redact import _build_type_map, _detect
 from argus_redact.pure.lang_detect import detect_languages
-from argus_redact.pure.replacer import make_structured_session, replace_into_session
+from argus_redact.pure.replacer import (
+    make_structured_session,
+    replace_into_session,
+    warn_mask_collisions,
+)
 
 
 def _warn_low_entropy_salt(salt: int | bytes | None) -> None:
@@ -143,6 +147,11 @@ def redact_json(
         return obj
 
     result = _walk(data)
+    # Mirrors the one-shot `replace()` path (C1 / Task 7): warn once, over the
+    # WHOLE document's cumulative collisions, before the key is read out — a
+    # column of similarly-masked values (e.g. phone numbers) is exactly the
+    # highest collision-risk shape this path exists to redact.
+    warn_mask_collisions(list(session.mask_collisions))
     combined_key = session.into_key()
     if with_types:
         # Same fake → type map as redact(with_types=True), built once over all
@@ -241,6 +250,11 @@ def redact_csv(
     out = io.StringIO()
     writer = csv.writer(out)
     writer.writerows(output_rows)
+    # Mirrors the one-shot `replace()` path (C1 / Task 7): warn once, over the
+    # WHOLE document's cumulative collisions, before the key is read out — a
+    # column of similarly-masked values (e.g. phone numbers) is exactly the
+    # highest collision-risk shape this path exists to redact.
+    warn_mask_collisions(list(session.mask_collisions))
     # rstrip only the writer's trailing line terminator — .strip() would also
     # delete non-PII leading whitespace from the first cell (silent corruption).
     return out.getvalue().rstrip("\r\n"), session.into_key()

@@ -17,6 +17,7 @@ import pytest
 
 from argus_redact import redact
 from argus_redact.exceptions import SecurityWarning
+from argus_redact.structured import redact_csv, redact_json
 
 # Two distinct CN mobile numbers that both mask to "138****5678" (mask only
 # shows the first 3 + last 4 chars; the middle 4 digits are hidden either way).
@@ -68,3 +69,37 @@ def test_no_collision_no_warning_no_event():
             text, lang="zh", mode="fast", config=_CONFIG, detailed=True
         )
     assert not any(e["reason_code"] == "mask_collision" for e in details["security_events"])
+
+
+def test_redact_json_mask_collision_emits_security_warning():
+    """The structured JSON path is the highest collision-risk shape (a column of
+    similar phone/ID numbers masking to the same string) — it must warn too,
+    not just the one-shot `redact()` path."""
+    data = {"a": "13812345678", "b": "13800005678"}
+    with pytest.warns(SecurityWarning, match="collided"):
+        redact_json(data, paths=["a", "b"], config=_CONFIG)
+
+
+def test_redact_csv_mask_collision_emits_security_warning():
+    """Same collision risk, CSV shape: two rows/cells of similar phone numbers
+    masking to the same visible string."""
+    csv_text = "phone\n13812345678\n13800005678"
+    with pytest.warns(SecurityWarning, match="collided"):
+        redact_csv(csv_text, config=_CONFIG)
+
+
+def test_redact_json_no_collision_no_warning():
+    """A structured redact with no collision (a single phone) fires no
+    SecurityWarning."""
+    data = {"a": "13812345678"}
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", SecurityWarning)
+        redact_json(data, paths=["a"], config=_CONFIG)
+
+
+def test_redact_csv_no_collision_no_warning():
+    """Same negative control, CSV shape: distinct (non-colliding) phone values."""
+    csv_text = "phone\n13812345678\n19999999999"
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", SecurityWarning)
+        redact_csv(csv_text, config=_CONFIG)

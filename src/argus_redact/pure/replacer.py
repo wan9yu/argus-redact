@@ -31,6 +31,7 @@ __all__ = [
     "is_strategy_reversible",
     "SecurityWarning",
     "replace",
+    "warn_mask_collisions",
 ]
 
 
@@ -132,6 +133,23 @@ def mask_collision_event(mask_collisions: list[str]) -> dict | None:
     types = sorted(set(mask_collisions))
     return security_event(
         MASK_COLLISION, count=len(mask_collisions), detail="types: " + ", ".join(types)
+    )
+
+
+def warn_mask_collisions(mask_collisions: list[str]) -> None:
+    """Emit the ``mask_collision`` SecurityWarning — a no-op when the list is
+    empty. THE single source for that warning's text/category, shared by the
+    one-shot ``replace()`` path and the structured (``redact_json``/
+    ``redact_csv``) path, so the two can never drift apart. See
+    ``mask_collision_event`` for the sibling structured-channel event."""
+    if not mask_collisions:
+        return
+    warnings.warn(
+        f"{len(mask_collisions)} masked value(s) collided; their "
+        f"disambiguator (①) is not LLM-durable — restore of an LLM reply "
+        f"may misattribute them.",
+        SecurityWarning,
+        stacklevel=2,
     )
 
 
@@ -534,14 +552,7 @@ def replace(
     # from `entities`/`config` alone — it depends on collision-resolution order).
     if _mask_collisions is not None:
         _mask_collisions.extend(mask_collisions)
-    if mask_collisions:
-        warnings.warn(
-            f"{len(mask_collisions)} masked value(s) collided; their "
-            f"disambiguator (①) is not LLM-durable — restore of an LLM reply "
-            f"may misattribute them.",
-            SecurityWarning,
-            stacklevel=2,
-        )
+    warn_mask_collisions(mask_collisions)
 
     return redacted, result_key, aliases
 
