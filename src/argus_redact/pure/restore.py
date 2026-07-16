@@ -33,6 +33,28 @@ class RestoreGuardError(Exception):
         super().__init__(f"restore guard failed: {codes}")
 
 
+def _nonce_echoed(text: str, nonce: object) -> bool:
+    """True only if the model echoed ``nonce`` as instructed — as a whole token,
+    on its own line or as the trailing token (the shape ``prompt_anchor`` asks for
+    and ``_strip_nonce`` removes).
+
+    Provenance means the model reproduced OUR verification token, not that the
+    token happens to appear somewhere in the reply. A bare ``nonce in text`` test
+    accepted three degenerate nonces that are not proofs at all: an empty nonce
+    (a substring of everything), a nonce that is an incidental substring of the
+    text (a common character), and — via ``in`` on a non-str — ``None`` (a
+    TypeError). All three must read as "not echoed" so the guard fails closed
+    instead of trusting the anchor and letting ``_strip_nonce`` destroy or corrupt
+    the caller's text. A genuine ``make_anchor`` nonce (32 hex chars on its own
+    line) satisfies this; nothing incidental does.
+    """
+    if not isinstance(nonce, str) or not nonce.strip():
+        return False
+    if text.rstrip().endswith(nonce):  # documented trailing echo
+        return True
+    return any(line.strip() == nonce for line in text.split("\n"))  # own-line echo
+
+
 def _strip_nonce(text: str, nonce: str) -> str:
     """Remove the echoed verification token from the model's reply.
 
@@ -211,7 +233,7 @@ def restore(
         events.append(security_event(GUARD_NO_ANCHOR, count=len(key), detail="no anchor provided"))
         return _fail_closed(text, events, strict=strict, detailed=detailed, warn=_warn)
 
-    if anchor.nonce not in text:
+    if not _nonce_echoed(text, anchor.nonce):
         events.append(
             security_event(PROVENANCE_FAILED, count=len(key), detail="nonce absent from response")
         )
