@@ -33,6 +33,12 @@ class RestoreGuardError(Exception):
         super().__init__(f"restore guard failed: {codes}")
 
 
+# A make_anchor nonce is secrets.token_hex(16) = 32 chars. A floor well below
+# that (real nonces pass) but far above any incidental text-suffix collision
+# rejects short degenerate nonces as provenance proofs.
+_MIN_NONCE_LEN = 16
+
+
 def _nonce_echoed(text: str, nonce: object) -> bool:
     """True only if the model echoed ``nonce`` as instructed — as a whole token,
     on its own line or as the trailing token (the shape ``prompt_anchor`` asks for
@@ -48,7 +54,12 @@ def _nonce_echoed(text: str, nonce: object) -> bool:
     the caller's text. A genuine ``make_anchor`` nonce (32 hex chars on its own
     line) satisfies this; nothing incidental does.
     """
-    if not isinstance(nonce, str) or not nonce.strip():
+    # A genuine provenance token is high-entropy: make_anchor emits
+    # secrets.token_hex(16) = 32 chars. Anything shorter than a token floor cannot
+    # be one, and a short string can incidentally be a text suffix ("8000" ending
+    # a masked phone, "com" ending an email) — which would pass `endswith` and let
+    # `_strip_nonce` truncate the caller's text. Reject it before the shape check.
+    if not isinstance(nonce, str) or len(nonce.strip()) < _MIN_NONCE_LEN:
         return False
     if text.rstrip().endswith(nonce):  # documented trailing echo
         return True

@@ -33,7 +33,7 @@ def client():
 def test_restore_with_anchor_round_trips(client):
     """(c) valid anchor + nonce-carrying text → round-trips, security_events == []."""
     key = {"P-1": "Alice"}
-    nonce = "abc123deadbeef"
+    nonce = "abc123deadbeef00"  # >= 16, a plausible token
     resp = client.post(
         "/restore",
         json={

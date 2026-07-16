@@ -52,8 +52,9 @@ def test_partial_warning_does_not_claim_in_scope_substitution_when_none():
     items = list(key.items())
     in_scope = items[0][0]  # in scope, NOT present in the text below
     out_ps = items[1][0]  # out of scope, present
-    anchor = Anchor(nonce="NONCE123", scope=frozenset({in_scope}))
-    text = f"only {out_ps} appears here\nNONCE123"
+    nonce = "a1b2c3d4e5f6a7b8"  # 16 chars, a plausible provenance token
+    anchor = Anchor(nonce=nonce, scope=frozenset({in_scope}))
+    text = f"only {out_ps} appears here\n{nonce}"
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         restore(text, key, guard=True, anchor=anchor)

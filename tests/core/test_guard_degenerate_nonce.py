@@ -72,3 +72,14 @@ def test_legit_ownline_echo_midreply_still_restores():
     out = restore(reply, key, guard=True, anchor=anchor)
     assert "13800138000" in out
     assert anchor.nonce not in out
+
+
+def test_short_suffix_nonce_fails_closed():
+    # A short nonce that coincides with a text suffix (a masked phone ends "8000")
+    # must not pass provenance and let _strip_nonce truncate the tail.
+    red, key = _fixture()  # red ends with the masked phone "...138****8000"
+    out, det = restore(
+        red, key, guard=True, anchor=Anchor(nonce="8000", scope=frozenset(key)), detailed=True
+    )
+    assert out == red, f"short suffix nonce corrupted the text: {out!r}"
+    assert det["outcome"] == "blocked"
