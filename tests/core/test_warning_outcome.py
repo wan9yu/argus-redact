@@ -67,7 +67,10 @@ def test_partial_out_of_scope_says_partial():
     txt = _warn_text(lambda: restore(resp, key, guard=True, anchor=a))
     assert "PARTIAL" in txt
     assert "out-of-scope pseudonyms were withheld" in txt
-    assert "in-scope pseudonyms WERE substituted" in txt
+    # The message states only what PARTIAL witnesses (the withholding + the scope
+    # limit) — it does not assert in-scope substitution, which may not have happened
+    # (see test_run16_confirmed for the none-present case).
+    assert "the restore was limited to this call's scope" in txt
     assert "BLOCKED" not in txt
 
 

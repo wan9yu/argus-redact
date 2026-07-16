@@ -144,7 +144,7 @@ def test_guard_none_through_guarded_restore_still_emits_deprecation_warning():
     SecurityWarning only: restore()'s DeprecationWarning (bare guard=None) must still
     reach the caller through guarded_restore."""
     _redacted, key, anchor, reply = _round_trip()
-    with pytest.warns(DeprecationWarning, match="guard=True in v0.8.0"):
+    with pytest.warns(DeprecationWarning, match="deprecated"):
         guarded_restore(reply, key, anchor=anchor, guard=None)
 
 

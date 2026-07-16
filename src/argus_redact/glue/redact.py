@@ -141,6 +141,26 @@ def _validate_langs(langs: tuple[str, ...] | list[str]) -> None:
             raise ValueError(f"Unknown language '{code}'. Available: {list(_LANG_PATTERNS.keys())}")
 
 
+def _reject_unknown_type_names(names: set[str], param: str) -> None:
+    """Raise ValueError for any type name not in the registry SSOT.
+
+    ``set(types)`` over the wrong names (a typo, or a mis-cased ``"Phone"`` vs the
+    SSOT ``"phone"``) filters out every real entity and returns success with zero
+    redaction — a fail-open leak. The registry is queried live so custom types
+    registered via ``register_pii_type`` are accepted. Only runs when a caller
+    passes ``types=``/``types_exclude=``, so it is off the common redact path.
+    """
+    from argus_redact.specs.registry import list_types
+
+    known = {t.name for t in list_types()}
+    unknown = sorted(names - known)
+    if unknown:
+        raise ValueError(
+            f"Unknown PII type name(s) in {param}: {', '.join(unknown)}. "
+            f"Pass names from the registry (e.g. phone, email, person, bank_card)."
+        )
+
+
 _LANG_NER_ADAPTERS = {
     "zh": "argus_redact.lang.zh.ner_adapter",
     "en": "argus_redact.lang.en.ner_adapter",
@@ -427,11 +447,13 @@ def _detect(
         if isinstance(types, str):
             raise TypeError("types must be a list of type names, not a str")
         type_set = set(types)
+        _reject_unknown_type_names(type_set, "types")
         entities = [e for e in entities if e.type in type_set]
     elif types_exclude is not None:
         if isinstance(types_exclude, str):
             raise TypeError("types_exclude must be a list of type names, not a str")
         exclude_set = set(types_exclude)
+        _reject_unknown_type_names(exclude_set, "types_exclude")
         entities = [e for e in entities if e.type not in exclude_set]
 
     layer_stats = {

@@ -198,7 +198,9 @@ def restore(
         # defeats the entire purpose (and collapses a whole loop of bare restores
         # into one warning via warnings' (message, module, lineno) dedup).
         warnings.warn(
-            "bare restore without guard= is deprecated; will default to guard=True in v0.8.0",
+            "guard=None runs the legacy unguarded restore and is deprecated; the guard is "
+            "the default as of v0.8.0 — pass guard=True with an anchor for a guarded restore, "
+            "or guard=False for an explicit unguarded one",
             DeprecationWarning,
             stacklevel=_auto_stacklevel(),
         )

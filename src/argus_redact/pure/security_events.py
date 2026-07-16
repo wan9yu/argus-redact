@@ -175,7 +175,7 @@ def warn_security_events(events: list[dict], outcome: str) -> None:
     elif outcome == PARTIAL:
         outcome_text = (
             "PARTIAL restore — out-of-scope pseudonyms were withheld; "
-            "in-scope pseudonyms WERE substituted"
+            "the restore was limited to this call's scope"
         )
         if advisory:
             outcome_text += _ADVISORY_COOCCURRENCE_CLAUSE
