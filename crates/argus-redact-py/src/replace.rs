@@ -181,16 +181,27 @@ pub(crate) fn build_faker_factory(
     Ok(PyFakerFactory { fakers })
 }
 
-/// `(redacted, key, aliases, keep_downgraded)` — the [`replace`] return shape.
-type ReplaceOut = (String, HashMap<String, String>, HashMap<String, Vec<String>>, bool);
+/// `(redacted, key, aliases, keep_downgraded, mask_collisions)` — the
+/// [`replace`] return shape.
+type ReplaceOut = (
+    String,
+    HashMap<String, String>,
+    HashMap<String, Vec<String>>,
+    bool,
+    Vec<String>,
+);
 
 /// Single-pass replace orchestrator (Rust).
 ///
 /// Mirrors `pure/replacer.replace`. Returns
-/// `(redacted, key, aliases, keep_downgraded)` — the Python wrapper turns the
-/// `keep_downgraded` flag into the `SecurityWarning` (it already pre-checks the
-/// downgrade condition to build the warning message, so the flag is a safety
-/// cross-check rather than the sole signal).
+/// `(redacted, key, aliases, keep_downgraded, mask_collisions)` — the Python
+/// wrapper turns the `keep_downgraded` flag into the `SecurityWarning` (it
+/// already pre-checks the downgrade condition to build the warning message, so
+/// the flag is a safety cross-check rather than the sole signal). Likewise,
+/// `mask_collisions` (one entry per mask-family collision `resolve_collision`
+/// actually disambiguated) drives a second `SecurityWarning` + a
+/// `mask_collision` `security_event` — see `ReplaceResult::mask_collisions`
+/// (core `replace.rs`).
 #[pyfunction]
 #[pyo3(signature = (
     text, entities, *, salt=None, key=None, type_info,
@@ -244,7 +255,13 @@ pub fn replace(
     )
     .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
-    Ok((result.redacted, result.key, result.aliases, result.keep_downgraded))
+    Ok((
+        result.redacted,
+        result.key,
+        result.aliases,
+        result.keep_downgraded,
+        result.mask_collisions,
+    ))
 }
 
 /// Parse the Python `config` dict (`{type: {strategy, prefix, ...}}`) into the
@@ -540,5 +557,13 @@ impl StructuredRedactor {
     #[getter]
     fn keep_downgraded(&self) -> bool {
         self.session.keep_downgraded()
+    }
+
+    /// Entity types for mask-family collisions disambiguated so far this session
+    /// (mirrors `keep_downgraded` — the Python wrapper can turn a non-empty list
+    /// into the structured `mask_collision` event / `SecurityWarning`).
+    #[getter]
+    fn mask_collisions(&self) -> Vec<String> {
+        self.session.mask_collisions().to_vec()
     }
 }

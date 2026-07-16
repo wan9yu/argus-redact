@@ -119,6 +119,19 @@ pub struct ReplaceResult {
     /// `true` if a `keep`-strategy entity was downgraded (the Python original
     /// emits a `SecurityWarning` here; the binding/wrapper surfaces it).
     pub keep_downgraded: bool,
+    /// Entity types for which a mask-family strategy (`mask` / `name_mask` /
+    /// `landline_mask` / `category`) produced a REAL collision — two different
+    /// originals wanting the same visible label — that `resolve_collision`
+    /// disambiguated with a trailing circled-digit (or numeric) suffix. One
+    /// entry per collided entity (not deduped), so `.len()` is the count the
+    /// Python wrapper warns/reports with.
+    ///
+    /// The collided entry STAYS in `key` (a direct in-process restore still
+    /// works) — this field only SIGNALS that the disambiguator is fragile: an
+    /// LLM that normalizes away `①` collapses the two key entries and a later
+    /// restore silently returns the wrong original for one of them. See
+    /// `resolve_collision` in `masks.rs`.
+    pub mask_collisions: Vec<String>,
 }
 
 /// Inputs to [`replace`], grouped to keep the signature readable.
@@ -191,6 +204,7 @@ pub fn replace<F: PseudoFactory>(
         key: session.result_key,
         aliases: session.aliases,
         keep_downgraded: session.keep_downgraded,
+        mask_collisions: session.mask_collisions,
     })
 }
 
@@ -248,6 +262,9 @@ pub struct ReplaceSession<'f, F: PseudoFactory> {
     used_labels: HashSet<String>,
     aliases: HashMap<String, Vec<String>>,
     keep_downgraded: bool,
+    /// One entry (the entity type) per mask-family collision `resolve_collision`
+    /// actually disambiguated this session. See [`ReplaceResult::mask_collisions`].
+    mask_collisions: Vec<String>,
     /// Person / organization pseudonym generators — built lazily on first use and
     /// persisted (RNG continues) across cells. Lazy build means an all-mask
     /// workload never touches the key here, keeping per-cell cost flat.
@@ -292,6 +309,7 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
             used_labels,
             aliases: HashMap::new(),
             keep_downgraded: false,
+            mask_collisions: Vec::new(),
             pseudo_gen: None,
             org_gen: None,
             type_gens: HashMap::new(),
@@ -301,6 +319,12 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
     /// Whether a `keep`-strategy entity has been downgraded so far this session.
     pub fn keep_downgraded(&self) -> bool {
         self.keep_downgraded
+    }
+
+    /// Entity types for mask-family collisions disambiguated so far this session.
+    /// See [`ReplaceResult::mask_collisions`].
+    pub fn mask_collisions(&self) -> &[String] {
+        &self.mask_collisions
     }
 
     /// Borrow the accumulated `{fake: aliases}` map.
@@ -547,11 +571,25 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
             } else if strategy == "mask" {
                 let (vp, vs) = info.map(|i| (i.visible_prefix, i.visible_suffix)).unwrap_or((0, 0));
                 let masked = mask_value(&entity.text, &entity.type_, vp, vs);
-                resolve_collision(&masked, &self.used_labels)?
+                let resolved = resolve_collision(&masked, &self.used_labels)?;
+                if resolved != masked {
+                    self.mask_collisions.push(entity.type_.clone());
+                }
+                resolved
             } else if strategy == "name_mask" {
-                resolve_collision(&mask_name(&entity.text), &self.used_labels)?
+                let masked = mask_name(&entity.text);
+                let resolved = resolve_collision(&masked, &self.used_labels)?;
+                if resolved != masked {
+                    self.mask_collisions.push(entity.type_.clone());
+                }
+                resolved
             } else if strategy == "landline_mask" {
-                resolve_collision(&mask_landline(&entity.text), &self.used_labels)?
+                let masked = mask_landline(&entity.text);
+                let resolved = resolve_collision(&masked, &self.used_labels)?;
+                if resolved != masked {
+                    self.mask_collisions.push(entity.type_.clone());
+                }
+                resolved
             } else if strategy == "remove" {
                 if let Some(repl) = info.and_then(|i| i.replacement.as_deref()) {
                     resolve_collision(repl, &self.used_labels)?
@@ -572,7 +610,11 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
                     .and_then(|i| i.label.clone())
                     .or_else(|| info.map(|i| i.default_category_label.clone()))
                     .unwrap_or_else(|| format!("[{}]", entity.type_));
-                resolve_collision(&label, &self.used_labels)?
+                let resolved = resolve_collision(&label, &self.used_labels)?;
+                if resolved != label {
+                    self.mask_collisions.push(entity.type_.clone());
+                }
+                resolved
             } else {
                 resolve_collision(DEFAULT_REDACT_LABEL, &self.used_labels)?
             };
@@ -1186,5 +1228,74 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r.redacted, "a 138****5678 b 139****0000");
+    }
+
+    #[test]
+    fn mask_collision_recorded_when_two_originals_share_a_masked_label() {
+        // "13812345678" and "13800005678" both mask to "138****5678" (mask only
+        // shows the first 3 + last 4 chars) — a REAL collision that
+        // resolve_collision disambiguates with a trailing circled digit. The
+        // session must record it in `mask_collisions` (C1 / Task 7).
+        let mut info_map = HashMap::new();
+        info_map.insert("phone".to_string(), info("mask", "P"));
+        let wl = empty_whitelist();
+        let text = "电话13812345678 和 13800005678";
+        let ents = vec![
+            pm("13812345678", "phone", 2, 13),
+            pm("13800005678", "phone", 16, 27),
+        ];
+        let r = replace(
+            ReplaceArgs {
+                text,
+                entities: &ents,
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+            },
+            &SeqFactory,
+            None,
+        )
+        .unwrap();
+        assert_eq!(r.mask_collisions, vec!["phone".to_string()]);
+        // The collided entry is NOT dropped — both originals stay in the key
+        // (direct in-process restore still works); only the signal is added.
+        assert_eq!(r.key.len(), 2, "both originals must stay keyed: {:?}", r.key);
+        assert_eq!(r.key.get("138****5678"), Some(&"13812345678".to_string()));
+        assert_eq!(r.key.get("138****5678①"), Some(&"13800005678".to_string()));
+    }
+
+    #[test]
+    fn no_mask_collision_when_labels_differ() {
+        // The existing two-phone fixture masks to two DISTINCT labels — no
+        // collision, so `mask_collisions` must stay empty.
+        let mut info_map = HashMap::new();
+        info_map.insert("phone".to_string(), info("mask", "P"));
+        let wl = empty_whitelist();
+        let text = "a 13812345678 b 13900000000";
+        let ents = vec![
+            pm("13812345678", "phone", 2, 13),
+            pm("13900000000", "phone", 16, 27),
+        ];
+        let r = replace(
+            ReplaceArgs {
+                text,
+                entities: &ents,
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+            },
+            &SeqFactory,
+            None,
+        )
+        .unwrap();
+        assert!(r.mask_collisions.is_empty(), "no collision expected: {:?}", r.mask_collisions);
     }
 }

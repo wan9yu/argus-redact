@@ -109,7 +109,7 @@ def _core_redact_fast(
     Identical wiring to the T7 export test: build `type_info` / `custom_fakers`
     via the SAME `_build_type_info` `replace()` uses, resolve prefixes / keep
     whitelist identically, forward the detect_l1 lang / names + the type filter.
-    Returns the redact_l1 4-tuple (redacted, key, aliases, keep_downgraded).
+    Returns the redact_l1 5-tuple (redacted, key, aliases, keep_downgraded, mask_collisions).
     """
     entities, resolved_langs, _, _ = _detect(
         text, lang=lang, mode="fast", names=names, types=types, types_exclude=types_exclude
@@ -474,7 +474,7 @@ def test_redact_l1_equals_redact_fast(case):
     Python fast path. Compares two independent code paths (NOT self).
     """
     _label, text, lang, config, names, types, types_exclude, unified_prefix = case
-    core_redacted, core_key, _aliases, _kd = _core_redact_fast(
+    core_redacted, core_key, _aliases, _kd, _mc = _core_redact_fast(
         text,
         lang,
         config=config,
@@ -506,7 +506,7 @@ def test_redact_l1_keep_downgrade_equals_redact_fast():
     config = {"phone": {"strategy": "keep"}}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        core_redacted, core_key, _aliases, keep_downgraded = _core_redact_fast(
+        core_redacted, core_key, _aliases, keep_downgraded, _mc = _core_redact_fast(
             text, "zh", config=config
         )
         py_redacted, py_key = _py_redact_fast(text, "zh", config=config)
@@ -518,7 +518,7 @@ def test_redact_l1_keep_downgrade_equals_redact_fast():
 def test_redact_l1_keep_whitelist_self_reference_not_downgraded():
     """The self_reference kinship whitelist ('我妈') is genuinely kept (no downgrade)."""
     out = _core_redact_fast("我妈说她13812345678", "zh")
-    redacted, _key, _aliases, keep_downgraded = out
+    redacted, _key, _aliases, keep_downgraded, _mc = out
     assert keep_downgraded is False
     assert "我妈" in redacted  # kinship kept verbatim
 
@@ -636,7 +636,7 @@ def test_redact_differential_is_real_not_self_compare():
     a deliberately-wrong expected string would NOT match.
     """
     text = "张三的电话13812345678"
-    core_redacted, core_key, _a, _kd = _core_redact_fast(text, "zh")
+    core_redacted, core_key, _a, _kd, _mc = _core_redact_fast(text, "zh")
     py_redacted, py_key = _py_redact_fast(text, "zh")
     assert core_redacted == py_redacted  # the gate's positive assertion
     assert core_redacted != text, "redaction must change the text (non-no-op)"

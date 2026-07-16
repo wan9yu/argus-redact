@@ -503,16 +503,23 @@ def _replace_and_emit(
     timing: dict,
     mode: str,
     unified_prefix: str | None = None,
+    security_events: list[dict] | None = None,
 ) -> tuple[str, dict, dict[str, list[str]]]:
     """Apply replacement, run grammar normalization, emit telemetry, persist key file.
 
     Mutates `timing` in place by adding `replace_ms`. The caller is responsible
     for any further use of `timing` (e.g., detailed-output stats).
 
+    ``security_events``, if given, is MUTATED in place: a ``mask_collision``
+    event (C1 / Task 7) is appended when this call's masked-strategy entities
+    collided. Same out-param idiom as `timing` — kept separate from the public
+    3-tuple return so this internal signature stays additive.
+
     Returns ``(redacted_text, key, aliases)``. ``aliases`` carries the cross-language
     transliterations emitted by realistic-strategy fakers (empty dict when none ran).
     """
     t0 = time.perf_counter()
+    mask_collisions: list[str] = []
     redacted, result_key, aliases = replace(
         text,
         entities,
@@ -521,11 +528,19 @@ def _replace_and_emit(
         config=config,
         langs=langs,
         unified_prefix=unified_prefix,
+        _mask_collisions=mask_collisions,
     )
     effective_lang = lang if isinstance(lang, str) else (lang[0] if lang else "zh")
     if effective_lang == "en":
         redacted = normalize_grammar_en(redacted, list(result_key.values()))
     timing["replace_ms"] = (time.perf_counter() - t0) * 1000
+
+    if security_events is not None and mask_collisions:
+        from argus_redact.pure.replacer import mask_collision_event
+
+        _mc_event = mask_collision_event(mask_collisions)
+        if _mc_event:
+            security_events.append(_mc_event)
 
     # Emit telemetry — zero overhead when no hook set
     if _telemetry_hook_active():
@@ -708,6 +723,7 @@ def redact(
             strict=strict,
         )
 
+    _security_events: list[dict] = []
     redacted, result_key, _aliases = _replace_and_emit(
         text,
         entities,
@@ -720,6 +736,7 @@ def redact(
         timing=timing,
         mode=mode,
         unified_prefix=unified_prefix,
+        security_events=_security_events,
     )
 
     # Return-shape dispatch — precedence (locked by tests/core/test_redact_return_shapes.py):
@@ -756,12 +773,17 @@ def redact(
             **{k: round(v, 2) for k, v in timing.items()},
         }
 
-        # Theme B: PII-free security events (currently keep-downgrade) shared by
-        # both the report and detailed return shapes; residual flag is report-only.
+        # Theme B: PII-free security events (keep-downgrade + mask-collision, C1 /
+        # Task 7) shared by both the report and detailed return shapes; residual
+        # flag is report-only. `_security_events` (mask_collision) was collected
+        # by `_replace_and_emit` above — Rust is the sole authority on whether a
+        # real mask-family collision happened, unlike keep_downgraded (which is
+        # re-derived here from `entities`/`config`, see `keep_downgraded_event`).
         from argus_redact.pure.replacer import keep_downgraded_event, residual_personal_data
 
         _kd_event = keep_downgraded_event(entities, config)
         security_events = [_kd_event] if _kd_event else []
+        security_events.extend(_security_events)
 
         if report:
             # Precedence 1: report wins over everything

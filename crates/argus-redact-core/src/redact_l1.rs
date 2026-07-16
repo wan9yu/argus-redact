@@ -615,6 +615,7 @@ pub fn redact_l1<F: PseudoFactory>(
             key: result.key,
             aliases: result.aliases,
             keep_downgraded: result.keep_downgraded,
+            mask_collisions: result.mask_collisions,
         });
     }
 

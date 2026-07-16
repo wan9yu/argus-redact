@@ -129,13 +129,14 @@ fn hints_from_py(hints: &Bound<'_, PyAny>) -> PyResult<Vec<Hint>> {
 
 // ── detect_l1 ─────────────────────────────────────────────────────────────────
 
-/// `(redacted, key, aliases, keep_downgraded)` — the [`redact_l1`] return shape
-/// (identical to `_core.replace`'s).
+/// `(redacted, key, aliases, keep_downgraded, mask_collisions)` — the
+/// [`redact_l1`] return shape (identical to `_core.replace`'s).
 type RedactL1Out = (
     String,
     HashMap<String, String>,
     HashMap<String, Vec<String>>,
     bool,
+    Vec<String>,
 );
 
 /// `(layer1, person, regions, job_titles, framework, hints, near_misses)` — the
@@ -194,9 +195,9 @@ pub fn detect_l1<'py>(
 /// Reuses the EXACT `type_info` / faker adaptation of `_core.replace`
 /// (`build_info_map` / `build_faker_factory` / `parse_salt` / `PyPseudoFactory`),
 /// then forwards detect_l1's `lang` / `known_names` and the type allow/deny
-/// filter. Returns `(redacted, key, aliases, keep_downgraded)` — identical to
-/// `_core.replace`. Mirrors `_core.replace`'s signature for the shared params,
-/// adding `known_names=None`, `types=None`, `types_exclude=None`.
+/// filter. Returns `(redacted, key, aliases, keep_downgraded, mask_collisions)`
+/// — identical to `_core.replace`. Mirrors `_core.replace`'s signature for the
+/// shared params, adding `known_names=None`, `types=None`, `types_exclude=None`.
 #[pyfunction]
 #[pyo3(signature = (
     text, lang, known_names=None, *, type_info,
@@ -253,7 +254,13 @@ pub fn redact_l1(
     )
     .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
-    Ok((result.redacted, result.key, result.aliases, result.keep_downgraded))
+    Ok((
+        result.redacted,
+        result.key,
+        result.aliases,
+        result.keep_downgraded,
+        result.mask_collisions,
+    ))
 }
 
 // ── hint helpers ──────────────────────────────────────────────────────────────

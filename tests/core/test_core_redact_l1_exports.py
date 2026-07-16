@@ -292,7 +292,7 @@ def test_detect_l1_default_names_is_empty():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# redact_l1 — (redacted, key, aliases, keep_downgraded); == T1 fixture + Python
+# redact_l1 — (redacted, key, aliases, keep_downgraded, mask_collisions); == T1 fixture + Python
 # ══════════════════════════════════════════════════════════════════════════════
 
 
@@ -389,7 +389,7 @@ def test_redact_l1_matches_t1_fixture(case):
     """`_core.redact_l1` == the frozen T1 (redacted, key) at SALT=42."""
     label, text, lang, config, names, unified_prefix = case
     golden = json.loads(FIXTURE_REDACT.read_text(encoding="utf-8"))[label]
-    redacted, key, _aliases, _kd = _core_redact_fast(
+    redacted, key, _aliases, _kd, _mc = _core_redact_fast(
         text, lang, config=config, names=names, unified_prefix=unified_prefix
     )
     assert redacted == golden["redacted"], f"redacted drift for {label!r}"
@@ -400,7 +400,7 @@ def test_redact_l1_matches_t1_fixture(case):
 def test_redact_l1_matches_python_redact_fast(case):
     """`_core.redact_l1` (redacted, key) == live Python `redact(mode='fast')`."""
     _label, text, lang, config, names, unified_prefix = case
-    redacted, key, _aliases, _kd = _core_redact_fast(
+    redacted, key, _aliases, _kd, _mc = _core_redact_fast(
         text, lang, config=config, names=names, unified_prefix=unified_prefix
     )
     kw = dict(mode="fast", lang=lang, salt=SALT, config=config)
@@ -414,18 +414,19 @@ def test_redact_l1_matches_python_redact_fast(case):
 
 
 def test_redact_l1_keep_downgraded_surfaces():
-    """The 4-tuple's `keep_downgraded` flag is surfaced (False on a clean run)."""
+    """The 5-tuple's `keep_downgraded` flag is surfaced (False on a clean run)."""
     out = _core_redact_fast("张三的电话13812345678，身份证110101199003074610", "zh")
-    assert len(out) == 4
-    redacted, key, aliases, keep_downgraded = out
+    assert len(out) == 5
+    redacted, key, aliases, keep_downgraded, mask_collisions = out
     assert isinstance(keep_downgraded, bool)
     assert keep_downgraded is False
     assert isinstance(aliases, dict)
+    assert mask_collisions == []
 
 
 def test_redact_l1_type_filter_keeps_only_listed():
     """`types` keeps only listed types (phone dropped, bank_card masked)."""
-    redacted, key, _aliases, _kd = _core_redact_fast(
+    redacted, key, _aliases, _kd, _mc = _core_redact_fast(
         "电话13812345678 银行卡6217000000000000",
         "zh",
         config={"phone": {"strategy": "mask"}, "bank_card": {"strategy": "mask"}},
@@ -438,7 +439,7 @@ def test_redact_l1_type_filter_keeps_only_listed():
 
 def test_redact_l1_type_filter_exclude_listed():
     """`types_exclude` drops the listed type (phone left intact)."""
-    redacted, _key, _aliases, _kd = _core_redact_fast(
+    redacted, _key, _aliases, _kd, _mc = _core_redact_fast(
         "电话13812345678 银行卡6217000000000000",
         "zh",
         config={"phone": {"strategy": "mask"}, "bank_card": {"strategy": "mask"}},
