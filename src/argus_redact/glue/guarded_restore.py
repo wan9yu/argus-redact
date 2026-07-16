@@ -112,5 +112,5 @@ def guarded_restore(
         warn_security_events(all_events, outcome)
 
     if detailed:
-        return result_text, {"security_events": all_events}
+        return result_text, {"security_events": all_events, "outcome": outcome}
     return result_text

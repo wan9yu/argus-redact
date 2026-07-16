@@ -12,9 +12,12 @@ import warnings
 import pytest
 
 from argus_redact import make_anchor, redact
+from argus_redact.compose.anchor import Anchor
 from argus_redact.exceptions import SecurityWarning
 from argus_redact.glue.guarded_restore import guarded_restore
 from argus_redact.pure.restore import RestoreGuardError
+from argus_redact.pure.restore import restore as _restore
+from argus_redact.pure.security_events import BLOCKED, COMPLETE, PARTIAL
 
 _PHONE = "13912345678"
 
@@ -146,6 +149,51 @@ def test_guard_none_through_guarded_restore_still_emits_deprecation_warning():
     _redacted, key, anchor, reply = _round_trip()
     with pytest.warns(DeprecationWarning, match="deprecated"):
         guarded_restore(reply, key, anchor=anchor, guard=None)
+
+
+# --- H4: detailed=True must include "outcome", matching restore(detailed=True) -----
+
+
+def test_detailed_includes_complete_outcome_on_clean_round_trip():
+    """A clean guarded restore is COMPLETE — nothing was withheld or blocked."""
+    _redacted, key, anchor, reply = _round_trip()
+    out, details = guarded_restore(reply, key, anchor=anchor, detailed=True)
+    assert details["outcome"] == COMPLETE
+    assert _PHONE in out
+    # Consistency with the sibling API for the equivalent call.
+    _expected_out, expected_details = _restore(reply, key, guard=True, anchor=anchor, detailed=True)
+    assert details["outcome"] == expected_details["outcome"]
+
+
+def test_detailed_includes_blocked_outcome_when_guard_fails_closed():
+    """No anchor -> guard fails closed; detailed must say BLOCKED, not silently
+    drop the outcome the way the plain security_events-only dict used to."""
+    _redacted, key, _anchor, reply = _round_trip()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SecurityWarning)
+        out, details = guarded_restore(reply, key, detailed=True)  # guard=True default, no anchor
+    assert details["outcome"] == BLOCKED
+    assert _PHONE not in out  # genuinely nothing substituted
+
+
+def test_detailed_includes_partial_outcome_when_scope_withholds():
+    """A restricted anchor.scope withholds an out-of-scope pseudonym present in
+    the text -> PARTIAL. Must match what restore(detailed=True) reports for the
+    same inputs."""
+    redacted, key = redact(f"张三的电话是{_PHONE}，李四的邮箱abc@x.com", lang="zh", mode="fast")
+    items = list(key.items())
+    in_scope_pseudonym = items[0][0]
+    out_of_scope_pseudonym = items[1][0]
+    nonce = "a1b2c3d4e5f6a7b8"
+    anchor = Anchor(nonce=nonce, scope=frozenset({in_scope_pseudonym}))
+    text = f"only {out_of_scope_pseudonym} appears here\n{nonce}"
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SecurityWarning)
+        _out, details = guarded_restore(text, key, redacted=redacted, anchor=anchor, detailed=True)
+    assert details["outcome"] == PARTIAL
+    _expected_out, expected_details = _restore(text, key, guard=True, anchor=anchor, detailed=True)
+    assert details["outcome"] == expected_details["outcome"]
 
 
 def test_key_file_path_is_accepted(tmp_path):
