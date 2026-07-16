@@ -261,5 +261,28 @@ def redact_csv(
 
 
 def restore_csv(csv_text: str, key: dict) -> str:
-    """Restore PII in a CSV string."""
-    return restore(csv_text, key, guard=False)  # anchor-less key-file restore
+    """Restore PII in a CSV string.
+
+    Mirrors ``redact_csv``'s parse/reserialize shape instead of doing a blind
+    whole-string substring restore: a restored original value that itself
+    contains a comma (e.g. ``"Smith, John"``) would otherwise splice an
+    unescaped comma into the flat CSV text, splitting one cell into two
+    columns and corrupting the row structure on re-parse.
+    """
+    reader = csv.reader(io.StringIO(csv_text))
+    rows = list(reader)
+
+    output_rows: list[list[str]] = []
+    for row in rows:
+        # guard=False: structured restore reverses a stored key file, with no
+        # per-call anchor to verify — the explicit unguarded opt-out (same as
+        # restore_json / redact_csv's forward path).
+        output_rows.append([restore(cell, key, guard=False) for cell in row])
+
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerows(output_rows)
+    # Same trailing-line-terminator handling as redact_csv: rstrip only the
+    # writer's \r\n, not .strip(), so non-PII leading whitespace in a cell
+    # survives.
+    return out.getvalue().rstrip("\r\n")

@@ -1,5 +1,8 @@
 """Tests for structured data redaction — JSON (flat, nested, paths) and CSV."""
 
+import csv
+import io
+
 import pytest
 
 from argus_redact import SecurityWarning
@@ -332,3 +335,53 @@ class TestRedactCSV:
         # unrelated low-entropy-salt SecurityWarning masking a vacuous pass.
         with pytest.warns(SecurityWarning, match="header"):
             redact_csv(csv_text, mode="fast", salt=bytes(range(32)))
+
+    def test_restore_csv_preserves_row_structure_when_restored_value_has_comma(self):
+        """A restored original value containing a comma must not split its cell.
+
+        Neither the fast-mode regex layer nor NER (unavailable in this
+        environment) reliably tags a comma-formatted name like "Smith, John"
+        as PII, so the key is hand-constructed here to isolate the exact
+        defect: restore_csv's OWN handling of a comma'd value, independent of
+        detection. The old blind whole-string substring restore spliced the
+        unescaped comma straight into the flat CSV text, turning one 2-column
+        data row into 3 columns on re-parse — silent structural corruption.
+        """
+        redacted_csv = "name,city\n__NAME_TOKEN__,Boston"
+        key = {"__NAME_TOKEN__": "Smith, John"}
+
+        restored = restore_csv(redacted_csv, key)
+
+        rows = list(csv.reader(io.StringIO(restored)))
+        header, data_row = rows[0], rows[1]
+        assert len(data_row) == len(header) == 2, (
+            f"expected 2 columns per row (structure preserved), got "
+            f"header={header} data_row={data_row}"
+        )
+        assert data_row == ["Smith, John", "Boston"]
+
+    def test_should_roundtrip_plain_csv_with_no_comma_values(self):
+        """Control: a plain CSV with no comma-containing values round-trips cleanly.
+
+        Compares parsed rows, not raw text — csv.writer normalizes the line
+        terminator to "\\r\\n" regardless of the input's own convention, which
+        is orthogonal to the comma-splitting defect this task fixes.
+        """
+        csv_text = "name,phone\n张三,13812345678\n李四,15900001234"
+        redacted, key = redact_csv(csv_text, mode="fast", salt=42)
+        restored = restore_csv(redacted, key)
+
+        assert list(csv.reader(io.StringIO(restored))) == list(
+            csv.reader(io.StringIO(csv_text))
+        )
+
+    def test_should_roundtrip_csv_with_preexisting_quoted_comma_field(self):
+        """Control: a quoted field with an embedded comma but no PII round-trips
+        unchanged — redact_csv/restore_csv must not disturb existing CSV quoting."""
+        csv_text = 'name,note\n张三,"hello, world"\n李四,13812345678'
+        redacted, key = redact_csv(csv_text, mode="fast", salt=42)
+        restored = restore_csv(redacted, key)
+
+        rows = list(csv.reader(io.StringIO(restored)))
+        assert rows[1] == ["张三", "hello, world"]
+        assert rows[2] == ["李四", "13812345678"]
