@@ -447,12 +447,21 @@ def _detect(
         if isinstance(types, str):
             raise TypeError("types must be a list of type names, not a str")
         type_set = set(types)
+        if not type_set:
+            raise ValueError(
+                "types is empty; pass at least one type name, or types=None to detect all"
+            )
         _reject_unknown_type_names(type_set, "types")
         entities = [e for e in entities if e.type in type_set]
     elif types_exclude is not None:
         if isinstance(types_exclude, str):
             raise TypeError("types_exclude must be a list of type names, not a str")
         exclude_set = set(types_exclude)
+        if not exclude_set:
+            raise ValueError(
+                "types_exclude is empty; pass at least one type name, or "
+                "types_exclude=None to exclude none"
+            )
         _reject_unknown_type_names(exclude_set, "types_exclude")
         entities = [e for e in entities if e.type not in exclude_set]
 

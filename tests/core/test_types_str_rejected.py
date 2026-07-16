@@ -45,6 +45,34 @@ class TestTypesBareStrRejected:
         assert "13812345678" in redacted
 
 
+class TestEmptyTypesListRejected:
+    """An empty list is a distinct caller mistake from a bare str, but the
+    same fail-open family: set([]) filters out every entity, so redact()
+    returns the input unchanged with a *success* return (empty key, no
+    error). Must raise ValueError instead of silently leaking.
+    """
+
+    def test_should_raise_valueerror_for_empty_types_list(self):
+        with pytest.raises(ValueError):
+            redact("电话13800138000", types=[], mode="fast", salt=42)
+
+    def test_should_raise_valueerror_for_empty_types_exclude_list(self):
+        with pytest.raises(ValueError):
+            redact("电话13800138000", types_exclude=[], mode="fast", salt=42)
+
+    def test_should_still_redact_with_nonempty_types_list(self):
+        redacted, key = redact("电话13800138000", types=["phone"], mode="fast", salt=42)
+
+        assert "13800138000" not in redacted
+        assert key
+
+    def test_should_still_detect_all_with_types_none(self):
+        redacted, key = redact("电话13800138000", types=None, mode="fast", salt=42)
+
+        assert "13800138000" not in redacted
+        assert key
+
+
 class TestRedactPseudonymLlmInheritsFix:
     """redact_pseudonym_llm has no own set(types) — it must inherit the guard
     via the shared _detect() call, not need a second check."""
@@ -85,6 +113,23 @@ class TestServerRedactRejectsBareStrTypes:
         resp = client.post(
             "/redact",
             json={"text": "张伟 13812345678", "types_exclude": "phone", "salt": 42},
+        )
+
+        assert resp.status_code == 400
+
+    def test_should_return_400_not_200_leak_for_empty_types_list(self, client):
+        resp = client.post(
+            "/redact",
+            json={"text": "电话13800138000", "types": [], "salt": 42},
+        )
+
+        assert resp.status_code == 400
+        assert "13800138000" not in resp.text
+
+    def test_should_return_400_for_empty_types_exclude_list(self, client):
+        resp = client.post(
+            "/redact",
+            json={"text": "电话13800138000", "types_exclude": [], "salt": 42},
         )
 
         assert resp.status_code == 400
