@@ -1,9 +1,31 @@
 """Tests for CLI — argus-redact redact / restore / info."""
 
+import argparse
+import importlib.util
 import json
 
+import pytest
+
 from argus_redact import __version__
+from argus_redact.cli.main import cmd_info
 from tests.cli.conftest import run_cli
+
+_REAL_FIND_SPEC = importlib.util.find_spec
+
+
+def _patch_ner_engines(monkeypatch, *, hanlp: bool, spacy: bool):
+    """Force ``importlib.util.find_spec`` to report hanlp/spacy availability,
+    delegating every other module name to the real lookup (so the adapter
+    module checks — which do reflect real installed files — are untouched)."""
+
+    def fake(name, *args, **kwargs):
+        if name == "hanlp":
+            return object() if hanlp else None
+        if name == "spacy":
+            return object() if spacy else None
+        return _REAL_FIND_SPEC(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.util, "find_spec", fake)
 
 
 class TestRedactCommand:
@@ -230,10 +252,100 @@ class TestInfoCommand:
         assert "uk" in stdout
         assert "in" in stdout
         assert "br" in stdout
-        # Per-lang info must survive: regex pattern-count marker + NER marker.
+        # Per-lang detail line must survive: regex pattern-count marker.
         # Guards against a regression that drops the per-language detail line.
+        # (The "+ NER" marker is exercised separately in
+        # TestInfoCommandHonesty — it depends on whether hanlp/spacy are
+        # actually installed, which this process-wide subprocess call can't
+        # control deterministically.)
         assert "regex (" in stdout
+
+
+class TestInfoCommandHonesty:
+    """H2 — `info` must not claim NER/Ollama capability it can't back up.
+
+    "+ NER" used to fire on the adapter module existing alone, even with
+    hanlp/spacy absent (contradicting the Layer-2 "✗" the same output shows).
+    The Ollama/L3 line used to read success off of `requests` being
+    importable, which says nothing about whether an Ollama endpoint is
+    actually reachable.
+    """
+
+    def test_no_ner_label_when_engines_absent(self, monkeypatch, capsys):
+        _patch_ner_engines(monkeypatch, hanlp=False, spacy=False)
+
+        cmd_info(argparse.Namespace())
+
+        stdout = capsys.readouterr().out
+        assert "+ NER" not in stdout, (
+            "info must not print '+ NER' when neither hanlp nor spacy is installed"
+        )
+        assert "2 Entity (NER)          ✗" in stdout
+
+    def test_ner_label_present_when_engines_installed(self, monkeypatch, capsys):
+        """Control: don't over-suppress — with the engines available, "+ NER"
+        must still appear for languages that ship an adapter."""
+        _patch_ner_engines(monkeypatch, hanlp=True, spacy=True)
+
+        cmd_info(argparse.Namespace())
+
+        stdout = capsys.readouterr().out
         assert "+ NER" in stdout
+        assert "2 Entity (NER)          ✓" in stdout
+
+    def test_zh_ner_label_depends_only_on_hanlp(self, monkeypatch, capsys):
+        """zh's NER engine is hanlp, not spaCy — spaCy alone must not light
+        up zh's "+ NER"."""
+        _patch_ner_engines(monkeypatch, hanlp=False, spacy=True)
+
+        cmd_info(argparse.Namespace())
+
+        lines = capsys.readouterr().out.splitlines()
+        zh_line = next(line for line in lines if line.strip().startswith("zh "))
+        assert "+ NER" not in zh_line
+
+    def test_ollama_line_does_not_claim_readiness_from_requests_alone(self, capsys):
+        cmd_info(argparse.Namespace())
+
+        stdout = capsys.readouterr().out
+        assert "not probed" in stdout, (
+            "the Ollama/L3 line must say the endpoint was not probed, "
+            "not imply readiness merely because `requests` imports"
+        )
+        assert "3 Semantic (Ollama)     ✓" not in stdout
+
+
+class TestMCPInfoHonesty:
+    """Parallel check for the MCP `redact_info` tool — same NER-gating fix."""
+
+    def test_ner_flag_false_when_engines_absent(self, monkeypatch):
+        pytest.importorskip("mcp")
+        import asyncio
+
+        from argus_redact.integrations import mcp_server
+
+        _patch_ner_engines(monkeypatch, hanlp=False, spacy=False)
+
+        result = asyncio.run(mcp_server.redact_info())
+
+        data = json.loads(result)
+        assert all(not info["ner"] for info in data["languages"].values()), (
+            "MCP info must not report ner: true when neither hanlp nor spacy is installed"
+        )
+
+    def test_ner_flag_true_when_engines_installed(self, monkeypatch):
+        pytest.importorskip("mcp")
+        import asyncio
+
+        from argus_redact.integrations import mcp_server
+
+        _patch_ner_engines(monkeypatch, hanlp=True, spacy=True)
+
+        result = asyncio.run(mcp_server.redact_info())
+
+        data = json.loads(result)
+        assert data["languages"]["zh"]["ner"] is True
+        assert data["languages"]["en"]["ner"] is True
 
 
 class TestSetupCommand:

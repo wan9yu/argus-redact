@@ -264,6 +264,11 @@ async def redact_info() -> str:
     from argus_redact.lang.shared.patterns import PATTERNS as SHARED
 
     lang_info = {}
+    # Layer-2 NER engine availability — mirrors the CLI `info` command: the
+    # adapter module alone can't run without its engine (hanlp for zh, spaCy
+    # for the rest), so "ner": true must require both.
+    has_hanlp = importlib.util.find_spec("hanlp") is not None
+    has_spacy = importlib.util.find_spec("spacy") is not None
 
     for code in _LANG_PATTERNS:
         mod_code = "in_" if code == "in" else code
@@ -272,7 +277,10 @@ async def redact_info() -> str:
             count = len(mod.PATTERNS) + len(SHARED)
         except ModuleNotFoundError:
             count = 0
-        has_ner = importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
+        engine_available = has_hanlp if code == "zh" else has_spacy
+        has_ner = engine_available and (
+            importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
+        )
         lang_info[code] = {
             "name": _LANG_DISPLAY_NAMES.get(code, code),
             "patterns": count,

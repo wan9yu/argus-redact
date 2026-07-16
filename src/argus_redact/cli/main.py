@@ -184,6 +184,11 @@ def cmd_info(args):
     from argus_redact.glue.redact import _LANG_DISPLAY_NAMES, _LANG_PATTERNS
     from argus_redact.lang.shared.patterns import PATTERNS as SHARED
 
+    # Layer-2 NER engine availability — checked once and reused per-language
+    # below, so "+ NER" can never claim more than the Layer 2 status line does.
+    has_hanlp = importlib.util.find_spec("hanlp") is not None
+    has_spacy = importlib.util.find_spec("spacy") is not None
+
     print(f"argus-redact v{__version__}")
     print()
     print("Languages:")
@@ -194,7 +199,14 @@ def cmd_info(args):
             count = len(mod.PATTERNS) + len(SHARED)
         except ModuleNotFoundError:
             count = 0
-        has_ner = importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
+        # "+ NER" requires BOTH the adapter module to exist AND the engine it
+        # wraps (hanlp for zh, spaCy for the rest) to actually be installed.
+        # The adapter module alone can't run without its engine — reporting
+        # it as available would contradict the Layer 2 status line below.
+        engine_available = has_hanlp if code == "zh" else has_spacy
+        has_ner = engine_available and (
+            importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
+        )
         ner_label = " + NER" if has_ner else ""
         name = _LANG_DISPLAY_NAMES.get(code, code)
         print(f"  {code}  {name:20s} regex ({count} patterns){ner_label}")
@@ -202,12 +214,15 @@ def cmd_info(args):
     print()
     print("Layers:")
     print("  1 Pattern (regex)       ✓")
-    has_hanlp = importlib.util.find_spec("hanlp") is not None
-    has_spacy = importlib.util.find_spec("spacy") is not None
     ner_ok = has_hanlp or has_spacy
     print(f"  2 Entity (NER)          {'✓' if ner_ok else '✗'}")
     ollama_ok = importlib.util.find_spec("requests") is not None
-    print(f"  3 Semantic (Ollama)     {'✓' if ollama_ok else '✗'}")
+    if ollama_ok:
+        # `requests` importing does not mean Ollama is reachable — info never
+        # probes the network, so say exactly what was checked.
+        print("  3 Semantic (Ollama)     requests installed (endpoint not probed)")
+    else:
+        print("  3 Semantic (Ollama)     ✗ (requests not installed)")
 
 
 def cmd_assess(args):
