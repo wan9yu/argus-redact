@@ -225,6 +225,10 @@ def redact_pseudonym_llm(
         key=unified_key,
         aliases=unified_aliases,
         types=unified_types,
+        # Realistic-only key (pre-union with audit_key, see `unified_key`
+        # above) — the exact source for a streaming/multi-call caller's
+        # existing_key= threading (see StreamingRedactor._redact_and_merge).
+        downstream_key=key,
     )
 
 

@@ -201,6 +201,11 @@ class StreamingRedactor:
         # 0 initially; ``min(prev_cut, _EVIDENCE_CONTEXT_WINDOW)`` after each emit.
         self._ctx_len: int = 0
         self._accumulated_key: dict[str, str] = {}
+        # Realistic-fake-only subset of `_accumulated_key` (excludes audit-space
+        # placeholders). Fed back as `existing_key=` to the realistic pass ONLY
+        # (see `_redact_and_merge`) so its reverse_index can never resolve a
+        # recurring original to an audit placeholder.
+        self._accumulated_realistic_key: dict[str, str] = {}
         self._accumulated_types: dict[str, str] = {}
 
     def feed(self, chunk: str) -> PseudonymLLMResult:
@@ -328,7 +333,15 @@ class StreamingRedactor:
             types_exclude=self._types_exclude,
             strict_input=self._strict_input,
             reserved_names=self._reserved_names,
-            existing_key=self._accumulated_key,
+            # Realistic-only (never the unified key): `redact_pseudonym_llm`
+            # threads `existing_key` into the REALISTIC pass alone (the audit
+            # pass always starts fresh). Feeding the unified key here would let
+            # the realistic pass's reverse_index — built by inverting
+            # existing_key, a Rust HashMap with randomized iteration order —
+            # resolve a recurring original to an audit placeholder (P-NNNNN /
+            # [TYPE-NNNNN]) instead of its realistic fake, nondeterministically
+            # leaking an audit-space token into downstream_text.
+            existing_key=self._accumulated_realistic_key,
             # ``None`` on the forced bounded-drain split → redact_pseudonym_llm
             # re-detects the bare emit slice internally (pre-rework drain safety);
             # otherwise the range-shifted full-buffer detection.
@@ -342,6 +355,15 @@ class StreamingRedactor:
         # are disjoint by construction, so collisions are impossible.
         for fake, original in result.key.items():
             self._accumulated_key.setdefault(fake, original)
+        # `result.downstream_key` (v0.8.2+) is the EXACT realistic-only key
+        # `redact_pseudonym_llm` computed internally, before it was unioned
+        # into `result.key` (the unified realistic+audit key). Using this
+        # exact source — rather than a `fake in result.downstream_text`
+        # substring heuristic — avoids both false positives (an audit
+        # placeholder that happens to be a substring of some unrelated
+        # downstream text) and false negatives.
+        for fake, original in result.downstream_key.items():
+            self._accumulated_realistic_key.setdefault(fake, original)
         for fake, t in result.types.items():
             self._accumulated_types.setdefault(fake, t)
         return result
@@ -368,6 +390,16 @@ class StreamingRedactor:
         state = {
             "version": _STATE_SCHEMA_VERSION,
             "accumulated_key": dict(self._accumulated_key),
+            # Realistic-fake-only subset of accumulated_key (see the
+            # existing_key derivation in _redact_and_merge). Additive field
+            # with a {} default in from_state
+            # — older (pre-fix) dumps load cleanly but resume with an empty
+            # realistic-only key, so an original already carried in
+            # accumulated_key from before the resume may mint a second,
+            # distinct realistic fake post-resume; no version bump needed
+            # since this only affects cross-version resume, not correctness
+            # within a single schema version.
+            "accumulated_realistic_key": dict(self._accumulated_realistic_key),
             # fake → SSOT PII type accumulated across chunks (backs aggregate_types).
             # Additive field with a {} default in from_state — older dumps load
             # cleanly, so no schema bump (same contract as inc_buffer/ctx_len).
@@ -440,6 +472,7 @@ class StreamingRedactor:
             ),
         )
         instance._accumulated_key = dict(state.get("accumulated_key", {}))
+        instance._accumulated_realistic_key = dict(state.get("accumulated_realistic_key", {}))
         instance._accumulated_types = dict(state.get("accumulated_types", {}))
         instance._inc_buffer = state.get("inc_buffer", "")
         instance._ctx_len = state.get("ctx_len", 0)

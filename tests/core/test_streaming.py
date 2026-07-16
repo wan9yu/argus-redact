@@ -1,10 +1,24 @@
 """Tests for streaming restore + streaming redact."""
 
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from argus_redact import PseudonymPollutionError, redact, redact_pseudonym_llm
 from argus_redact.pure.restore import restore
 from argus_redact.streaming import StreamingRedactor, StreamingRestorer
+
+# Matches the reserved-range audit-space placeholder shape emitted by the
+# "remove" strategy (e.g. "P-21929" for person, "PHON-76495" for phone,
+# "[TYPE-NNNNN]" style prefixes) — never a shape a realistic-strategy faker
+# would legitimately produce.
+_AUDIT_PLACEHOLDER_RE = re.compile(r"(?<![A-Za-z0-9_])[A-Z][A-Z_]*-\d{4,6}(?![0-9])")
+
+_SRC_DIR = Path(__file__).resolve().parents[2] / "src"
 
 
 class TestStreamingRestorer:
@@ -380,3 +394,85 @@ class TestStreamingRedactorIncremental:
         assert len(downstream_fakes) == 1, (
             f"same original must mint exactly one fake; got {downstream_fakes}"
         )
+
+
+class TestStreamingRedactorRealisticKeyIsolation:
+    """C9 (v0.8.2): the realistic pass must never resolve a recurring name to
+    an audit-space placeholder in downstream_text.
+
+    ``_accumulated_key`` (the UNIFIED key) holds BOTH the realistic fake and
+    the audit placeholder for the same original. Its reverse index (Rust
+    HashMap, built by inverting the whole dict — see ``ReplaceSession::new``
+    in ``crates/argus-redact-core/src/replace.rs``) can resolve a recurring
+    original to EITHER fake, non-deterministically. The fix threads the
+    exact realistic-only ``result.downstream_key`` (populated by
+    ``redact_pseudonym_llm`` from the realistic pass's own ``key``, before it
+    is unioned with the audit pass's key) into a separate
+    ``_accumulated_realistic_key``, so the realistic pass's ``existing_key``
+    never contains an audit placeholder at all — no reverse-index ambiguity
+    is structurally possible, regardless of hash seed.
+    """
+
+    def test_should_not_leak_audit_placeholder_when_name_recurs_across_flushes(self):
+        r = StreamingRedactor(salt=b"test-salt", lang="zh", mode="fast")
+        r.feed("请拨打 13912345678 联系王建国。")
+        out1 = r.flush()
+        r.feed("王建国的电话是13911112222,请再次确认。")
+        out2 = r.flush()
+        combined = out1.downstream_text + out2.downstream_text
+        assert not _AUDIT_PLACEHOLDER_RE.search(combined), (
+            f"audit placeholder leaked into downstream_text: {combined!r}"
+        )
+
+    def test_aggregate_key_still_has_both_realistic_and_audit_spaces(self):
+        """The fix must not strip audit space from the returned unified key —
+        restore() needs both the realistic fake AND the audit placeholder
+        mapped back to the same original."""
+        r = StreamingRedactor(salt=b"test-salt", lang="zh", mode="fast")
+        r.feed("请拨打 13912345678 联系王建国。")
+        r.flush()
+        agg = r.aggregate_key()
+        fakes_for_name = [k for k, v in agg.items() if v == "王建国"]
+        assert len(fakes_for_name) == 2, (
+            f"expected exactly one realistic fake and one audit placeholder "
+            f"for 王建国, got {fakes_for_name}"
+        )
+        audit_fakes = [k for k in fakes_for_name if _AUDIT_PLACEHOLDER_RE.fullmatch(k)]
+        realistic_fakes = [k for k in fakes_for_name if not _AUDIT_PLACEHOLDER_RE.fullmatch(k)]
+        assert len(audit_fakes) == 1, fakes_for_name
+        assert len(realistic_fakes) == 1, fakes_for_name
+
+    def test_seed_sweep_never_leaks_audit_placeholder_into_downstream(self):
+        """Determinism: the original bug's leak was hash-seed dependent
+        (measured ~60% leak rate pre-fix over 41 seeds via a scratch harness
+        feeding the unified key as existing_key=). Sweep PYTHONHASHSEED over a
+        fresh subprocess per value; the fix must be leak-free for every seed
+        because the audit-space placeholder is structurally never fed into
+        the realistic pass's existing_key at all (not merely less likely to
+        be picked by a random HashMap iteration order).
+        """
+        script = (
+            f"import sys; sys.path.insert(0, {str(_SRC_DIR)!r})\n"
+            "from argus_redact.streaming import StreamingRedactor\n"
+            'r = StreamingRedactor(salt=b"test-salt", lang="zh", mode="fast")\n'
+            'r.feed("请拨打 13912345678 联系王建国。")\n'
+            "out1 = r.flush()\n"
+            'r.feed("王建国的电话是13911112222,请再次确认。")\n'
+            "out2 = r.flush()\n"
+            'print(out1.downstream_text + "|" + out2.downstream_text, end="")\n'
+        )
+        leaking_seeds = []
+        for seed in range(26):
+            proc = subprocess.run(
+                [sys.executable, "-c", script],
+                env={**os.environ, "PYTHONHASHSEED": str(seed)},
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            assert proc.returncode == 0, (
+                f"subprocess failed for seed={seed}: {proc.stderr}"
+            )
+            if _AUDIT_PLACEHOLDER_RE.search(proc.stdout):
+                leaking_seeds.append((seed, proc.stdout))
+        assert leaking_seeds == [], f"audit placeholder leaked at seeds: {leaking_seeds}"

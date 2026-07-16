@@ -85,6 +85,11 @@ class PseudonymLLMResult:
       realistic downstream fakes AND the ``[TYPE-NNNNN]`` audit placeholders.
       Empty when nothing was detected. (Distinct from the ``types`` *parameter*
       of ``redact_pseudonym_llm``, which is a detection type filter.)
+    - ``result.downstream_key`` *(v0.8.2+)* — realistic-fake-only subset of
+      ``key`` (excludes audit-space placeholders); this is what a
+      streaming/multi-call caller should thread back as ``existing_key=`` so
+      the realistic pass never resolves a recurring original to an audit
+      placeholder.
     """
 
     audit_text: str
@@ -93,3 +98,4 @@ class PseudonymLLMResult:
     key: dict[str, str] = field(default_factory=dict)
     aliases: dict[str, tuple[str, ...]] = field(default_factory=dict)
     types: dict[str, str] = field(default_factory=dict)
+    downstream_key: dict[str, str] = field(default_factory=dict)
