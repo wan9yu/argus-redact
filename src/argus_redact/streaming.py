@@ -162,6 +162,15 @@ class StreamingRestorer:
                 if buffer.endswith(fake[:n]):
                     hold = n
                     break
+        # Guarantee forward progress: never hold back more than max_buffer. A
+        # fake at least as long as max_buffer could otherwise make the whole
+        # buffer a held-back prefix (cut == 0) and the buffer would grow without
+        # bound — defeating H7. Since this runs only when len(buffer) > max_buffer,
+        # capping hold at max_buffer keeps cut >= 1 and bounds the buffer to
+        # max_buffer after the flush. This splits an over-long token (a fake
+        # longer than the entire buffer budget can't be preserved intact anyway),
+        # trading token integrity for the memory bound in that degenerate config.
+        hold = min(hold, self._max_buffer)
         cut = len(buffer) - hold
         return buffer[:cut], buffer[cut:]
 

@@ -151,6 +151,20 @@ class TestStreamingRestorerMaxBuffer:
             restorer.feed("x" * 10)  # no boundary chars at all
             assert len(restorer._buffer) <= restorer._max_buffer
 
+    def test_buffer_stays_bounded_even_when_a_fake_exceeds_max_buffer(self):
+        """H7 bound must hold even in the degenerate config where a key fake is
+        longer than max_buffer — otherwise the whole buffer becomes a held-back
+        prefix (cut == 0) and grows without limit. Forward progress is
+        guaranteed by capping the held-back tail at max_buffer (the over-long
+        token is split; the memory bound is kept)."""
+        # A fake far longer than the tiny buffer; feed a boundary-less stream
+        # that is a running prefix of it.
+        long_fake = "F" * 40
+        restorer = StreamingRestorer({long_fake: "REAL"}, max_buffer=8)
+        for _ in range(30):
+            restorer.feed("F")  # no boundary; each char extends the prefix
+            assert len(restorer._buffer) <= restorer._max_buffer
+
     def test_default_max_buffer_mirrors_streaming_redactor(self):
         from argus_redact.glue._detect_partial import DEFAULT_MAX_BUFFER
 
