@@ -112,3 +112,43 @@ def test_restore_anchor_valid_list_scope_still_200(client):
     assert resp.status_code == 200
     data = resp.json()
     assert "Alice" in data["restored"]
+
+
+# --- request body size cap (memory-amplification DoS on /redact and /restore) ---
+
+
+@pytest.fixture
+def small_cap(monkeypatch):
+    """Shrink the module's body cap so oversized-body tests run fast without
+    actually allocating a multi-megabyte payload."""
+    from argus_redact import server
+
+    monkeypatch.setattr(server, "MAX_HTTP_BODY_BYTES", 100)
+    return 100
+
+
+def test_redact_oversized_body_returns_413(client, small_cap):
+    text = "x" * (small_cap + 1)
+    resp = client.post("/redact", json={"text": text})
+    assert resp.status_code == 413
+    assert "error" in resp.json()
+
+
+def test_restore_oversized_body_returns_413(client, small_cap):
+    text = "x" * (small_cap + 1)
+    resp = client.post("/restore", json={"text": text, "key": {}})
+    assert resp.status_code == 413
+    assert "error" in resp.json()
+
+
+def test_redact_body_under_cap_still_200(client, small_cap):
+    resp = client.post("/redact", json={"text": "hello"})
+    assert resp.status_code == 200
+
+
+def test_redact_malformed_json_under_cap_still_400(client, small_cap):
+    """A small malformed-JSON body must still map to 400, not get swallowed
+    by the new size check."""
+    resp = client.post("/redact", content="{not valid json")
+    assert resp.status_code == 400
+    assert "error" in resp.json()

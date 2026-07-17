@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import json
 import os
 import secrets
 import warnings
@@ -33,12 +34,23 @@ except ImportError:
         from starlette.requests import Request
         from starlette.responses import JSONResponse
 
+# Configurable server-side body cap — a DoS guard against memory amplification
+# from unbounded request bodies buffered before any size check.
+MAX_HTTP_BODY_BYTES = 10 * 1024 * 1024
+
 
 async def handle_redact(request: Request) -> JSONResponse:
+    clen = request.headers.get("content-length")
+    if clen is not None and clen.isdigit() and int(clen) > MAX_HTTP_BODY_BYTES:
+        return JSONResponse({"error": "request body too large"}, status_code=413)
+    raw = await request.body()
+    if len(raw) > MAX_HTTP_BODY_BYTES:
+        return JSONResponse({"error": "request body too large"}, status_code=413)
+
     # C4: a malformed/empty body raises JSONDecodeError (a ValueError). Parsing
     # inside the try turns that into a 400, not an unhandled 500.
     try:
-        body = await request.json()
+        body = json.loads(raw)
     except ValueError:
         return JSONResponse({"error": "request body must be valid JSON"}, status_code=400)
 
@@ -114,10 +126,17 @@ async def handle_redact(request: Request) -> JSONResponse:
 
 
 async def handle_restore(request: Request) -> JSONResponse:
+    clen = request.headers.get("content-length")
+    if clen is not None and clen.isdigit() and int(clen) > MAX_HTTP_BODY_BYTES:
+        return JSONResponse({"error": "request body too large"}, status_code=413)
+    raw = await request.body()
+    if len(raw) > MAX_HTTP_BODY_BYTES:
+        return JSONResponse({"error": "request body too large"}, status_code=413)
+
     # C4: a malformed body raises JSONDecodeError (a ValueError). Parsing inside
     # the try turns that into a 400, not an unhandled 500.
     try:
-        body = await request.json()
+        body = json.loads(raw)
     except ValueError:
         return JSONResponse({"error": "request body must be valid JSON"}, status_code=400)
 
