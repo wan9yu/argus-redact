@@ -39,12 +39,33 @@ except ImportError:
 MAX_HTTP_BODY_BYTES = 10 * 1024 * 1024
 
 
-async def handle_redact(request: Request) -> JSONResponse:
+class _BodyTooLarge(Exception):
+    """Request body exceeded MAX_HTTP_BODY_BYTES (mapped to 413)."""
+
+
+async def _read_capped_body(request: Request) -> bytes:
+    """Read the request body, aborting as soon as it exceeds MAX_HTTP_BODY_BYTES.
+
+    Streams via request.stream() so memory stays bounded to ~cap even for a
+    chunked body with no Content-Length header. Raises _BodyTooLarge.
+    """
     clen = request.headers.get("content-length")
     if clen is not None and clen.isdigit() and int(clen) > MAX_HTTP_BODY_BYTES:
-        return JSONResponse({"error": "request body too large"}, status_code=413)
-    raw = await request.body()
-    if len(raw) > MAX_HTTP_BODY_BYTES:
+        raise _BodyTooLarge
+    size = 0
+    chunks: list[bytes] = []
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_HTTP_BODY_BYTES:
+            raise _BodyTooLarge
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+async def handle_redact(request: Request) -> JSONResponse:
+    try:
+        raw = await _read_capped_body(request)
+    except _BodyTooLarge:
         return JSONResponse({"error": "request body too large"}, status_code=413)
 
     # C4: a malformed/empty body raises JSONDecodeError (a ValueError). Parsing
@@ -126,11 +147,9 @@ async def handle_redact(request: Request) -> JSONResponse:
 
 
 async def handle_restore(request: Request) -> JSONResponse:
-    clen = request.headers.get("content-length")
-    if clen is not None and clen.isdigit() and int(clen) > MAX_HTTP_BODY_BYTES:
-        return JSONResponse({"error": "request body too large"}, status_code=413)
-    raw = await request.body()
-    if len(raw) > MAX_HTTP_BODY_BYTES:
+    try:
+        raw = await _read_capped_body(request)
+    except _BodyTooLarge:
         return JSONResponse({"error": "request body too large"}, status_code=413)
 
     # C4: a malformed body raises JSONDecodeError (a ValueError). Parsing inside

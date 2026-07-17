@@ -152,3 +152,67 @@ def test_redact_malformed_json_under_cap_still_400(client, small_cap):
     resp = client.post("/redact", content="{not valid json")
     assert resp.status_code == 400
     assert "error" in resp.json()
+
+
+def test_redact_chunked_no_content_length_bounds_memory(small_cap):
+    """The size cap must bound memory, not just detect an overage after the
+    fact. A chunked request has no Content-Length header, so the only way to
+    enforce the cap without buffering the whole body first is to stream it
+    and abort as soon as the running count exceeds the cap.
+
+    This drives the raw ASGI app with a ``receive`` callable that counts how
+    many bytes it has handed over. Against the old ``await request.body()``
+    implementation, ``request.body()`` drains every chunk before the length
+    check ever runs, so ``pulled_bytes`` reaches the full payload — this
+    assertion fails on that code even though the response is still a
+    (post-hoc) 413. Against the streaming fix, the app stops asking for more
+    chunks once the running count exceeds the cap, so ``pulled_bytes`` stays
+    near the cap.
+    """
+    import asyncio
+    import warnings
+
+    from argus_redact import SecurityWarning, server
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SecurityWarning)
+        app = server.create_app(allow_no_auth=True)
+
+    chunk = b"x" * 50
+    total_chunks = 1000  # 50_000 bytes total -- far more than the 100-byte cap
+    state = {"pulled_bytes": 0, "chunks_sent": 0}
+
+    async def receive():
+        if state["chunks_sent"] < total_chunks:
+            state["chunks_sent"] += 1
+            state["pulled_bytes"] += len(chunk)
+            return {"type": "http.request", "body": chunk, "more_body": True}
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    messages = []
+
+    async def send(message):
+        messages.append(message)
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/redact",
+        "raw_path": b"/redact",
+        "headers": [(b"content-type", b"application/json")],
+        "query_string": b"",
+        "http_version": "1.1",
+        "scheme": "http",
+        "server": ("testserver", 80),
+        "client": ("testclient", 12345),
+        "root_path": "",
+    }
+
+    asyncio.run(app(scope, receive, send))
+
+    status = next(m["status"] for m in messages if m["type"] == "http.response.start")
+    assert status == 413
+
+    # The whole point: memory must stay bounded to ~cap + one in-flight
+    # chunk, not balloon to the full (never-Content-Length'd) payload.
+    assert state["pulled_bytes"] <= small_cap + len(chunk)
