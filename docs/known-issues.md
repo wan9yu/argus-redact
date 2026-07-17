@@ -317,6 +317,16 @@ Each entry follows three lines:
 
 ## Recently Fixed
 
+### v0.8.3 — Streaming checkpoint mid-PII-value resume verified
+
+- **Checkpoint-mid-PII-value resume — closed.** `StreamingRedactor.export_state()`
+  / `from_state()` persist `_inc_buffer` and `_ctx_len`, so checkpointing while a
+  PII value straddles the in-flight buffer — its head fed, tail not yet arrived —
+  and resuming on a NEW instance redacts the completed value exactly as an
+  uninterrupted stream would, with no raw leak across the checkpoint seam.
+  Verified by `tests/safety/test_streaming_straddle.py::TestCheckpointMidPII`
+  (phone, email, and a ~150-char token straddling the force-flush cut).
+
 ### v0.7.0 (2026-06-15) — Core Split
 
 - Rust core split into a Cargo workspace: pure-Rust `argus-redact-core` (now on

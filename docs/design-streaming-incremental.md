@@ -86,10 +86,11 @@ buffering is the only mode in v0.6.0+.
   tail.
 
 `existing_key` and `aggregate_key()` build up the unified key dict as
-entities are emitted. `export_state()` / `from_state()` continue to round-trip
-correctly; the incremental buffer is included in `_inc_buffer` for
-completeness, though the current schema does not serialize it (mid-stream
-resume remains out of scope).
+entities are emitted. `export_state()` / `from_state()` round-trip the
+incremental buffer (`_inc_buffer`) and context length, so a session that
+pauses mid-sentence and resumes via `from_state()` keeps the incomplete tail:
+a PII value straddling the checkpoint is redacted after resume, not leaked
+(covered by the checkpoint-mid-PII straddle tests).
 
 ## Private internals
 
@@ -106,9 +107,9 @@ One private module in `glue/`:
   streams with frequent sentence breaks this is N detections instead of 1.
   Mitigations on the table for v0.5.8+: (a) lazy NER (only if L1 found
   high-density PII), (b) explicit `min_emit_chunk` threshold to amortize.
-- **Mid-stream state schema**: `export_state()` does not currently round-trip
-  `_inc_buffer`. A long-running session that pauses mid-sentence and resumes
-  via `from_state()` will lose the incomplete tail. v0.5.8+ schema bump can
-  add it.
+- **Mid-stream state schema**: `export_state()` round-trips `_inc_buffer` and
+  the context length, so a long-running session that pauses mid-sentence and
+  resumes via `from_state()` keeps the incomplete tail (a PII value straddling
+  the checkpoint stays whole and is redacted after resume — tested).
 - **Byte-level partial detection** (a true state machine across regex
   patterns) is a future candidate when token-stream latency demands it.

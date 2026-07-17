@@ -562,3 +562,85 @@ def test_fuzz_stream_oracle_is_a_real_guard(monkeypatch):
         "expected a cross-sentence gated term to leak with the window broken "
         "(W=0); if nothing leaked, the fuzz oracle no longer guards the window"
     )
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint (export_state / from_state) mid-PII-value
+# ---------------------------------------------------------------------------
+
+
+class TestCheckpointMidPII:
+    """Checkpoint (``export_state`` / ``from_state``) at the exact moment a PII
+    value straddles the in-flight buffer: its head has been fed but its tail has
+    not arrived, and neither half has been committed to ``downstream_text`` yet.
+    Resuming on a NEW redactor must carry the uncommitted head (``_inc_buffer`` /
+    ``_ctx_len``) intact so the completed value is detected and redacted exactly
+    as an uninterrupted stream would -- no raw leak across the checkpoint seam,
+    and the resume is transparent (byte-identical to one continuous stream).
+    """
+
+    @staticmethod
+    def _checkpoint_stream(chunk1: str, chunk2: str, *, lang: str = "zh") -> str:
+        """Feed ``chunk1``, checkpoint (export_state -> from_state on a NEW
+        instance), then feed ``chunk2`` + ``flush()`` on the RESUMED redactor.
+        Returns the full concatenated downstream text.
+        """
+        r = StreamingRedactor(salt=42, mode="fast", lang=lang)
+        out = r.feed(chunk1).downstream_text
+        state = r.export_state()  # salt held out-of-band, not embedded
+        r2 = StreamingRedactor.from_state(state, salt=42)
+        out += r2.feed(chunk2).downstream_text
+        out += r2.flush().downstream_text
+        return out
+
+    def test_checkpoint_mid_phone_straddle_resumes_without_leak(self):
+        # Same construction as test_phone_straddling_max_buffer_redacts: chunk1
+        # hits exactly DEFAULT_MAX_BUFFER with no sentence boundary, forcing a
+        # bounded-drain emit inside feed() itself that holds the phone's
+        # straddling head "138" back in `_inc_buffer`. The checkpoint lands
+        # right there -- before the tail "00138000" ever arrives.
+        pad = "啊" * (DEFAULT_MAX_BUFFER - 5)
+        chunk1, chunk2 = pad + "电话138", "00138000，结束。"
+        assert len(chunk1) == DEFAULT_MAX_BUFFER  # precondition: chunk1 forces a flush
+        baseline, _ = _stream([chunk1, chunk2])
+        resumed = self._checkpoint_stream(chunk1, chunk2)
+        assert "13800138000" not in resumed, (
+            f"raw phone leaked across the checkpoint seam: {resumed[-40:]!r}"
+        )
+        assert resumed == baseline, "resume is not transparent vs. an uninterrupted stream"
+
+    def test_checkpoint_mid_email_straddle_resumes_without_leak(self):
+        # Same construction as test_email_straddling_max_buffer_redacts: chunk1
+        # hits exactly DEFAULT_MAX_BUFFER, holding the email head "a@bc" back in
+        # `_inc_buffer` when the checkpoint happens.
+        head = "a@bc"
+        pad = "x" * (DEFAULT_MAX_BUFFER - len(head))
+        chunk1, chunk2 = pad + head, "d.com stop."
+        assert len(chunk1) == DEFAULT_MAX_BUFFER  # precondition: chunk1 forces a flush
+        baseline, _ = _stream([chunk1, chunk2], lang="en")
+        resumed = self._checkpoint_stream(chunk1, chunk2, lang="en")
+        assert "a@bcd.com" not in resumed, (
+            f"raw email leaked across the checkpoint seam: {resumed[-40:]!r}"
+        )
+        assert resumed == baseline, "resume is not transparent vs. an uninterrupted stream"
+
+    def test_checkpoint_mid_long_token_straddle_resumes_without_leak(self):
+        # Longer value: same ~150-char github_token as
+        # test_carry_window_range_token_straddle_not_leaked, whose 'ghp_' prefix
+        # sits inside the CARRY_WINDOW (256) at the force-flush cut. The
+        # checkpoint lands right after chunk1's forced drain, before the 150
+        # 'A's tail ever arrives.
+        token = "ghp_" + "A" * 150  # 154 chars, in the (128, _CARRY_WINDOW=256] range
+        head, tail = token[:4], token[4:]
+        pad = "x" * (DEFAULT_MAX_BUFFER - len(head))
+        chunk1, chunk2 = pad + head, tail + " done."
+        assert len(chunk1) == DEFAULT_MAX_BUFFER  # precondition: chunk1 forces a flush
+        baseline, r_baseline = _stream([chunk1, chunk2], lang="en")
+        assert token in r_baseline.aggregate_key().values(), (
+            "precondition invalid: baseline never detected the token"
+        )
+        resumed = self._checkpoint_stream(chunk1, chunk2, lang="en")
+        assert token not in resumed, (
+            f"raw long token leaked across the checkpoint seam: {resumed[-60:]!r}"
+        )
+        assert resumed == baseline, "resume is not transparent vs. an uninterrupted stream"
