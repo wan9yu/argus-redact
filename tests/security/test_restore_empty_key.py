@@ -42,3 +42,11 @@ def test_empty_string_key_entry_raises_via_streaming_restorer():
     restorer = StreamingRestorer({"": "SECRET"}, strategy="none")
     with pytest.raises(ValueError, match="empty"):
         restorer.feed("abc")
+
+
+def test_empty_string_alias_also_raises():
+    # An empty-string ALIAS (not just an empty key) is equally corrupt: it merges
+    # into the flat lookup and would reach the alternation the same way. The
+    # rejection must catch it too — the core guard runs against the post-merge map.
+    with pytest.raises(ValueError, match="empty"):
+        restore("P-1 came home.", {"P-1": "Zhang San"}, aliases={"P-1": [""]}, guard=False)
