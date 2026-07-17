@@ -16,7 +16,12 @@ from argus_redact.pure._strategy_kind import (
     is_strategy_reversible,
 )
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS, normalize_grammar_en
-from argus_redact.pure.security_events import KEEP_DOWNGRADED, MASK_COLLISION, security_event
+from argus_redact.pure.security_events import (
+    ALIAS_COLLISION,
+    KEEP_DOWNGRADED,
+    MASK_COLLISION,
+    security_event,
+)
 
 # Rust PatternMatch class, resolved once at import (same idiom as pure/merger.py).
 _RustPM = _core.PatternMatch
@@ -32,6 +37,7 @@ __all__ = [
     "SecurityWarning",
     "replace",
     "warn_mask_collisions",
+    "warn_alias_collisions",
 ]
 
 
@@ -148,6 +154,37 @@ def warn_mask_collisions(mask_collisions: list[str]) -> None:
         f"{len(mask_collisions)} masked value(s) collided; their "
         f"disambiguator (①) is not LLM-durable — restore of an LLM reply "
         f"may misattribute them.",
+        SecurityWarning,
+        stacklevel=2,
+    )
+
+
+def alias_collision_event(alias_collisions: list[str]) -> dict | None:
+    """A PII-free ALIAS_COLLISION security_event, or None if no alias collided
+    this call. ``alias_collisions`` is the Rust core's authoritative list (one
+    entry per alias string that two distinct fakes both claimed — see
+    ``restore_full``'s alias-merge step, core ``restore.rs``). count = collided
+    aliases; detail names how many, never the raw alias/original — mirrors
+    ``mask_collision_event``."""
+    if not alias_collisions:
+        return None
+    return security_event(
+        ALIAS_COLLISION,
+        count=len(alias_collisions),
+        detail=f"{len(alias_collisions)} alias(es) collided",
+    )
+
+
+def warn_alias_collisions(alias_collisions: list[str]) -> None:
+    """Emit the ``alias_collision`` SecurityWarning — a no-op when the list is
+    empty. THE single source for that warning's text/category, called from
+    ``pure/restore._do_restore`` wherever the core restore result comes back —
+    mirrors ``warn_mask_collisions``."""
+    if not alias_collisions:
+        return
+    warnings.warn(
+        f"{len(alias_collisions)} alias(es) map to more than one original; the "
+        "restored value for a collided alias may be the wrong identity.",
         SecurityWarning,
         stacklevel=2,
     )

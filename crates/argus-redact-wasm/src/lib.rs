@@ -379,7 +379,11 @@ pub fn restore(text: &str, key: JsValue) -> Result<String, JsValue> {
             .map_err(|e| JsValue::from_str(&format!("invalid key: {e}")))?
     };
 
-    restore_full(text, &key, None, None).map_err(|e| JsValue::from_str(&e.0))
+    // No `aliases` are taken here (see the doc comment above), so
+    // `alias_collisions` is always empty — discard it.
+    restore_full(text, &key, None, None)
+        .map(|(result, _)| result)
+        .map_err(|e| JsValue::from_str(&e.0))
 }
 
 // ── streaming: feed / flush over the core carry-window engine ─────────────────

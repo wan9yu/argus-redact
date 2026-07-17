@@ -19,6 +19,7 @@ INJECTION_SUSPECTED = "injection_suspected"
 GUARD_NO_ANCHOR = "guard_no_anchor"
 KEEP_DOWNGRADED = "keep_downgraded"
 MASK_COLLISION = "mask_collision"
+ALIAS_COLLISION = "alias_collision"
 
 # Outcomes a caller of warn_security_events can witness first-hand — see that
 # function's docstring for why these replace the old reason-code-derived guess.
@@ -34,7 +35,7 @@ def security_event(reason_code: str, count: int, detail: str | None = None) -> d
     Args:
         reason_code: One of the PROVENANCE_FAILED, OUT_OF_SCOPE_PSEUDONYM,
                      INJECTION_SUSPECTED, GUARD_NO_ANCHOR, KEEP_DOWNGRADED,
-                     MASK_COLLISION constants.
+                     MASK_COLLISION, ALIAS_COLLISION constants.
         count: Number of PII items affected by this event.
         detail: Optional context about the event (e.g., "nonce absent").
 

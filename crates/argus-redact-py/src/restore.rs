@@ -7,6 +7,12 @@ use argus_redact_core::restore_full as core_restore_full;
 
 /// Restore redacted text by replacing pseudonyms with originals (simple 2-arg form).
 /// Kept for back-compat; new callers should prefer `restore` with keyword args.
+///
+/// Returns `(restored_text, alias_collisions)` — `alias_collisions` has one
+/// entry per alias string that two distinct fakes both claimed (mapping to two
+/// different originals); empty when no `aliases` were passed or none collided.
+/// The Python wrapper (`pure/restore._do_restore`) turns a non-empty list into
+/// a `SecurityWarning` — mirrors how `replace`'s `mask_collisions` is threaded.
 #[pyfunction]
 #[pyo3(signature = (text, key, aliases=None, display_marker=None))]
 pub fn restore(
@@ -14,7 +20,7 @@ pub fn restore(
     key: HashMap<String, String>,
     aliases: Option<HashMap<String, Vec<String>>>,
     display_marker: Option<String>,
-) -> PyResult<String> {
+) -> PyResult<(String, Vec<String>)> {
     // Route through restore_full when extras are provided (or always, for consistency).
     core_restore_full(
         text,

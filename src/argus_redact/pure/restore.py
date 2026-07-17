@@ -8,6 +8,7 @@ import warnings
 from typing import Mapping
 
 from argus_redact.exceptions import SecurityWarning
+from argus_redact.pure.replacer import warn_alias_collisions
 from argus_redact.pure.security_events import (
     BLOCKED,
     COMPLETE,
@@ -362,4 +363,8 @@ def _do_restore(
     if aliases:
         rust_aliases = {k: list(v) for k, v in aliases.items()}
 
-    return _rust_restore(text, key, aliases=rust_aliases, display_marker=display_marker)
+    result, alias_collisions = _rust_restore(
+        text, key, aliases=rust_aliases, display_marker=display_marker
+    )
+    warn_alias_collisions(alias_collisions)
+    return result

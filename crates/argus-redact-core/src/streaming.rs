@@ -767,7 +767,9 @@ impl StreamingRestorer {
     /// `StreamingRestorer.feed`.
     pub fn feed(&mut self, chunk: &str) -> Result<String, RestoreError> {
         if self.strategy == RestoreStrategy::None {
-            return restore_full(chunk, &self.key, None, None);
+            // No `aliases` are threaded through this streaming path, so
+            // `alias_collisions` is always empty — discard it.
+            return restore_full(chunk, &self.key, None, None).map(|(result, _)| result);
         }
 
         self.buffer.push_str(chunk);
@@ -778,7 +780,7 @@ impl StreamingRestorer {
             return Ok("".to_string());
         }
         self.buffer = residual;
-        restore_full(&complete, &self.key, None, None)
+        restore_full(&complete, &self.key, None, None).map(|(result, _)| result)
     }
 
     /// Flush the remaining buffer. Mirrors `StreamingRestorer.flush`.
@@ -786,7 +788,7 @@ impl StreamingRestorer {
         if self.buffer.is_empty() {
             return Ok("".to_string());
         }
-        let result = restore_full(&self.buffer, &self.key, None, None);
+        let result = restore_full(&self.buffer, &self.key, None, None).map(|(result, _)| result);
         self.buffer.clear();
         result
     }

@@ -498,7 +498,7 @@ fn cjk_full_width_boundary_still_splits() {
     assert!(!out.contains("13912345678"));
     assert!(!out.contains("13987654321"));
     let joined: String = chunks.concat();
-    let restored = restore_full(&out, &agg, None, None).unwrap();
+    let (restored, _) = restore_full(&out, &agg, None, None).unwrap();
     assert_eq!(restored, joined);
 }
 
@@ -510,7 +510,7 @@ fn straddling_entity_round_trips_via_aggregate_key() {
     let chunks = [c1.as_str(), "00138000，结束。"];
     let (out, agg) = stream(&chunks, &["zh"]);
     let joined: String = chunks.concat();
-    let restored = restore_full(&out, &agg, None, None).unwrap();
+    let (restored, _) = restore_full(&out, &agg, None, None).unwrap();
     assert_eq!(restored, joined);
 }
 
@@ -794,7 +794,7 @@ fn forceflush_megabuffer_typed_entity_head_not_leaked() {
     );
     // Restore round-trips: the redacted head expands back and the documented-edge
     // raw tail is untouched, so the original is reconstructed exactly.
-    let restored = restore_full(&out, &agg, None, None).unwrap();
+    let (restored, _) = restore_full(&out, &agg, None, None).unwrap();
     assert_eq!(restored, token, "restore must reconstruct the original token");
 }
 
@@ -840,7 +840,7 @@ fn fuzz_megabuffer_typed_entity_no_leak_en() {
             "full token re-formed (leaked) in stream output at chunk size {size}"
         );
         assert_eq!(
-            restore_full(&out, &agg, None, None).unwrap(),
+            restore_full(&out, &agg, None, None).unwrap().0,
             token,
             "restore round-trip failed at chunk size {size}"
         );
@@ -864,7 +864,7 @@ fn normal_sentence_boundary_stream_unchanged() {
     assert!(!out.contains("13987654321"));
     assert!(!out.contains("user@company.com"));
     let joined: String = chunks.concat();
-    let restored = restore_full(&out, &agg, None, None).unwrap();
+    let (restored, _) = restore_full(&out, &agg, None, None).unwrap();
     assert_eq!(restored, joined);
 }
 
@@ -934,7 +934,7 @@ fn multi_chunk_redact_restore_roundtrip() {
     ];
     let (out, agg) = stream(&chunks, &["zh"]);
     let joined: String = chunks.concat();
-    assert_eq!(restore_full(&out, &agg, None, None).unwrap(), joined);
+    assert_eq!(restore_full(&out, &agg, None, None).unwrap().0, joined);
 }
 
 // ── StreamingRestorer parity (test_streaming.py::TestStreamingRestorer) ─────────
