@@ -83,9 +83,7 @@ def test_deprecation_warning_not_future_tense_for_shipped_flip():
 # --- F5 (v0.8.2) -----------------------------------------------------------
 def test_strategy_overrides_unknown_type_key_raises():
     with pytest.raises(ValueError, match="Phone"):
-        redact_pseudonym_llm(
-            "电话13800138000", salt=42, strategy_overrides={"Phone": "realistic"}
-        )
+        redact_pseudonym_llm("电话13800138000", salt=42, strategy_overrides={"Phone": "realistic"})
 
 
 def test_strategy_overrides_valid_type_key_still_works():
@@ -117,9 +115,7 @@ class TestPseudonymLLMPreDetectedMergeAndFilter:
             PatternMatch(
                 text="13800138000", type="phone", start=5, end=16, confidence=0.9, layer=1
             ),
-            PatternMatch(
-                text="1380013800", type="phone", start=5, end=15, confidence=0.5, layer=1
-            ),
+            PatternMatch(text="1380013800", type="phone", start=5, end=15, confidence=0.5, layer=1),
         ]
 
         result = redact_pseudonym_llm(text, salt=42, _pre_detected=overlapping)
@@ -138,6 +134,4 @@ class TestPseudonymLLMPreDetectedMergeAndFilter:
         entities = [PatternMatch(text="13800138000", type="phone", start=5, end=16)]
 
         with pytest.raises(ValueError, match="Phone"):
-            redact_pseudonym_llm(
-                text, salt=42, _pre_detected=entities, types_exclude=["Phone"]
-            )
+            redact_pseudonym_llm(text, salt=42, _pre_detected=entities, types_exclude=["Phone"])

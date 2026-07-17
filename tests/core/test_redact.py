@@ -664,9 +664,7 @@ class TestPreDetectedMergeAndFilter:
             PatternMatch(
                 text="13800138000", type="phone", start=5, end=16, confidence=0.9, layer=1
             ),
-            PatternMatch(
-                text="1380013800", type="phone", start=5, end=15, confidence=0.5, layer=1
-            ),
+            PatternMatch(text="1380013800", type="phone", start=5, end=15, confidence=0.5, layer=1),
         ]
 
         redacted, key = redact(text, salt=42, _pre_detected=overlapping)

@@ -166,9 +166,7 @@ def restore_body(
         # Fail CLOSED: a present-but-non-str or missing field would otherwise be
         # returned unchanged with an empty security_events list — a false
         # all-clear that hides the fact that nothing was restored.
-        raise TypeError(
-            f"restore_body: field {field!r} missing or not a str; nothing was restored"
-        )
+        raise TypeError(f"restore_body: field {field!r} missing or not a str; nothing was restored")
 
     if detailed:
         return response, {"security_events": []}

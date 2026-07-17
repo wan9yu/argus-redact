@@ -371,9 +371,7 @@ class TestRedactCSV:
         redacted, key = redact_csv(csv_text, mode="fast", salt=42)
         restored = restore_csv(redacted, key)
 
-        assert list(csv.reader(io.StringIO(restored))) == list(
-            csv.reader(io.StringIO(csv_text))
-        )
+        assert list(csv.reader(io.StringIO(restored))) == list(csv.reader(io.StringIO(csv_text)))
 
     def test_should_roundtrip_csv_with_preexisting_quoted_comma_field(self):
         """Control: a quoted field with an embedded comma but no PII round-trips

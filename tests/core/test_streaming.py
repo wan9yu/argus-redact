@@ -561,14 +561,16 @@ class TestStreamingRedactorRealisticKeyIsolation:
         for seed in range(26):
             proc = subprocess.run(
                 [sys.executable, "-c", script],
-                env={**os.environ, "PYTHONHASHSEED": str(seed)},
+                # PYTHONUTF8=1 forces the child's stdout to UTF-8 so printing the
+                # Chinese downstream_text doesn't hit a UnicodeEncodeError on a
+                # Windows cp1252 console.
+                env={**os.environ, "PYTHONHASHSEED": str(seed), "PYTHONUTF8": "1"},
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 timeout=60,
             )
-            assert proc.returncode == 0, (
-                f"subprocess failed for seed={seed}: {proc.stderr}"
-            )
+            assert proc.returncode == 0, f"subprocess failed for seed={seed}: {proc.stderr}"
             if _AUDIT_PLACEHOLDER_RE.search(proc.stdout):
                 leaking_seeds.append((seed, proc.stdout))
         assert leaking_seeds == [], f"audit placeholder leaked at seeds: {leaking_seeds}"

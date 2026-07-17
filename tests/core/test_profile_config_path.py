@@ -102,9 +102,7 @@ class TestValidateConfigNonDictEntryValue:
 
     def test_valid_dict_config_still_redacts(self):
         """Positive control: a correctly-shaped dict config is unaffected."""
-        redacted, key = redact(
-            "电话13800138000", lang="zh", config={"phone": {"strategy": "mask"}}
-        )
+        redacted, key = redact("电话13800138000", lang="zh", config={"phone": {"strategy": "mask"}})
 
         assert "13800138000" not in redacted
         assert key

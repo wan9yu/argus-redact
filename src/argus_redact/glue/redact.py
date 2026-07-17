@@ -732,9 +732,7 @@ def redact(
             if config:
                 for type_key, user_type_config in config.items():
                     base_type_config = profile_config.get(type_key)
-                    if isinstance(base_type_config, dict) and isinstance(
-                        user_type_config, dict
-                    ):
+                    if isinstance(base_type_config, dict) and isinstance(user_type_config, dict):
                         profile_config[type_key] = {
                             **base_type_config,
                             **user_type_config,
