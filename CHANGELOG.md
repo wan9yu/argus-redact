@@ -2,6 +2,59 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.3 — symmetry invariants: restore-side defense, determinism, CI coverage
+
+A hardening release. Where the previous release fixed each defect at the site where it was
+produced, this one defends the same invariants across the boundary where they must also hold,
+and adds machine checks so those classes can't silently reopen. No breaking API changes — the
+one behaviour change (a corrupted key now fails closed) only affects input that previously
+corrupted its own output.
+
+### Security / robustness
+
+- **A corrupted key with an empty-string entry now fails closed instead of exploding the
+  original throughout the text.** argus never produces a key whose surrogate is `""` (the redact
+  side refuses to), so such a key can only arrive via corruption or hand-building; on restore the
+  empty surrogate used to match between every character (`abc` → `SECRETaSECRETb…`). Restore now
+  raises `ValueError` on it — in the Rust core, so the Python API, the HTTP `/restore` endpoint
+  (400), the structured and streaming restore paths, and the in-browser wasm build all inherit
+  the same rejection. An empty dict key (`{}`) is still a clean no-op.
+- **The HTTP server caps request bodies (413) on `/restore` and `/redact`.** It streams the body
+  and aborts as soon as the running byte count exceeds the cap (default 10 MB), so an oversized
+  or chunked body is rejected without being fully buffered into memory. The in-process library
+  calls remain uncapped — the caller owns their own input.
+
+### Fixed / added
+
+- **Restore is now deterministic across process hash seeds.** Two internal map iterations reached
+  the restored output in randomized order; both are now sorted, so a restore is byte-identical
+  run to run. A seed-sweep test guards the property.
+- **Colliding aliases are now signalled.** When two different originals have realistic-mode
+  aliases that collide on one string, the deterministic (sorted-first) winner is used and a
+  `SecurityWarning` is emitted; `restore(detailed=True)` carries a PII-free `alias_collision`
+  event — the same treatment masked-value collisions already get. Under `strict=True` a guarded
+  restore now raises on an alias collision.
+- **Grammar restore covers the plural self-reference `we`, not just `I`.** A pseudonymized
+  `we have` used to round-trip to `we has`; it now restores correctly (and `I` is unchanged).
+- **Guarded restore emits an `empty_key_with_scope` advisory** when the anchor's scope excludes
+  every key entry, so `detailed=True` callers can tell a scoped no-op from a completed restore.
+- **The streaming checkpoint / resume path is verified** to keep a PII value that straddles the
+  checkpoint whole (no leak across `export_state`/`from_state`).
+
+### CI / tests
+
+- The server, MCP, and Presidio integration suites now run on CI (they previously never did),
+  with a guard that fails the job if the optional extras didn't install — closing a false-green
+  that had let a broken integration surface ship.
+
+### Docs
+
+- Scoped the honesty claims the project's own rules call for: the PRvL-Gold rating is now marked
+  as the `default` profile on the project's own reference suite; the compliance line reads
+  "a technical control, not a certification" rather than "meets … requirements"; the
+  profiles-are-presets-not-guarantees caveat moved from a code docstring into the docs; and the
+  PRvL results table was refreshed to the current run.
+
 ## v0.8.2 — Run-16 hardening: fail-open closure, restore correctness, localization, honesty
 
 A hardening release. An external audit (Run 16) surfaced a broad set of defects across five
