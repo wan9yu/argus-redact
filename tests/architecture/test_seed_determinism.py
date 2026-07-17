@@ -9,10 +9,19 @@ whose visit order is randomized per process — nondeterministic across runs,
 and silent (no signal which identity or which warning ordering you'd get).
 
 This test retires that whole defect CLASS by machine: it runs the
-determinism-sensitive paths in a fresh subprocess per ``PYTHONHASHSEED``
-value and fails on ANY divergence across the sweep, so a future regression
-that reintroduces an unsorted ``HashMap`` walk on one of these paths fails
-CI immediately instead of shipping a coin-flip.
+determinism-sensitive paths in a fresh subprocess for each sweep value and
+fails on ANY divergence across the sweep, so a future regression that
+reintroduces an unsorted iteration on one of these paths fails CI immediately
+instead of shipping a coin-flip.
+
+What actually varies across the sweep is the FRESH PROCESS, not the
+``PYTHONHASHSEED`` value on its own: Rust's default ``HashMap`` hasher seeds
+from OS randomness at each map's construction, independent of any env var, so
+each subprocess gets a different Rust iteration order regardless. (Passing a
+distinct ``PYTHONHASHSEED`` per value additionally varies any Python-side dict
+order, and gives each subprocess a stable, labelled identity.) The guard holds
+because a correct fix is order-INDEPENDENT: every one of the N fresh processes
+must produce byte-identical output.
 """
 
 from __future__ import annotations

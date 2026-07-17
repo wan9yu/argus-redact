@@ -13,6 +13,21 @@ impl std::fmt::Display for RestoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.0) }
 }
 
+/// Fail closed on a key containing an empty-string surrogate. argus never
+/// produces one (the redact side refuses to), so such a key is corrupted or
+/// hand-built; an empty surrogate would otherwise become a zero-width regex
+/// alternative matching between every character and splicing the original in
+/// everywhere. Single source for the check + message, called on both the raw
+/// key and the merged flat map so both are guarded.
+fn reject_empty_key_entry(key: &HashMap<String, String>) -> Result<(), RestoreError> {
+    if key.keys().any(|k| k.is_empty()) {
+        return Err(RestoreError(
+            "restore key contains an empty-string entry — corrupted or hand-built key".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Restore redacted text by replacing pseudonyms with originals.
 /// Keys sorted by length descending to prevent partial matches.
 /// Single-pass replacement prevents re-scanning of replaced content.
@@ -43,11 +58,7 @@ fn restore_tracking_self_ref(
     // every character below and explode the original throughout the text.
     // A key that has one is corrupted or hand-built: fail closed rather than
     // execute the explosion.
-    if key.keys().any(|k| k.is_empty()) {
-        return Err(RestoreError(
-            "restore key contains an empty-string entry — corrupted or hand-built key".to_string(),
-        ));
-    }
+    reject_empty_key_entry(key)?;
 
     // Sort keys by length descending (longest first)
     let mut keys: Vec<&String> = key.keys().collect();
@@ -216,11 +227,7 @@ pub fn restore_full(
     // empty-string key entry too; this is defense in depth so `restore_full`
     // fails closed on its own before doing any alias-merge work, independent
     // of whether the lower-level fn is reached unchanged.
-    if key.keys().any(|k| k.is_empty()) {
-        return Err(RestoreError(
-            "restore key contains an empty-string entry — corrupted or hand-built key".to_string(),
-        ));
-    }
+    reject_empty_key_entry(key)?;
 
     // Step 3: alias merge — build flat lookup. Iterates `alias_map` in SORTED
     // key order so the merge winner is deterministic across process runs (a
