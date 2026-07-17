@@ -541,7 +541,7 @@ def replace(
                 stacklevel=2,
             )
 
-    # `mask_collisions` (C1 / Task 7): the Rust core disambiguated a mask-family
+    # `mask_collisions`: the Rust core disambiguated a mask-family
     # collision (two different originals wanting the same visible label) with a
     # trailing circled-digit suffix. The collided entry STAYS in `result_key` (a
     # direct in-process restore still works) — but that disambiguator is fragile

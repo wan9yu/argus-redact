@@ -147,7 +147,7 @@ def redact_json(
         return obj
 
     result = _walk(data)
-    # Mirrors the one-shot `replace()` path (C1 / Task 7): warn once, over the
+    # Mirrors the one-shot `replace()` path: warn once, over the
     # WHOLE document's cumulative collisions, before the key is read out — a
     # column of similarly-masked values (e.g. phone numbers) is exactly the
     # highest collision-risk shape this path exists to redact.
@@ -262,7 +262,7 @@ def redact_csv(
             redacted_row.append(redacted_cell)
         output_rows.append(redacted_row)
 
-    # Mirrors the one-shot `replace()` path (C1 / Task 7): warn once, over the
+    # Mirrors the one-shot `replace()` path: warn once, over the
     # WHOLE document's cumulative collisions, before the key is read out — a
     # column of similarly-masked values (e.g. phone numbers) is exactly the
     # highest collision-risk shape this path exists to redact.

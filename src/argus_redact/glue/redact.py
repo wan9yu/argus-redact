@@ -558,7 +558,7 @@ def _replace_and_emit(
     for any further use of `timing` (e.g., detailed-output stats).
 
     ``security_events``, if given, is MUTATED in place: a ``mask_collision``
-    event (C1 / Task 7) is appended when this call's masked-strategy entities
+    event is appended when this call's masked-strategy entities
     collided. Same out-param idiom as `timing` — kept separate from the public
     3-tuple return so this internal signature stays additive.
 
@@ -843,8 +843,8 @@ def redact(
             **{k: round(v, 2) for k, v in timing.items()},
         }
 
-        # Theme B: PII-free security events (keep-downgrade + mask-collision, C1 /
-        # Task 7) shared by both the report and detailed return shapes; residual
+        # PII-free security events (keep-downgrade + mask-collision) shared by
+        # both the report and detailed return shapes; residual
         # flag is report-only. `_security_events` (mask_collision) was collected
         # by `_replace_and_emit` above — Rust is the sole authority on whether a
         # real mask-family collision happened, unlike keep_downgraded (which is

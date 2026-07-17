@@ -1244,7 +1244,7 @@ mod tests {
         // "13812345678" and "13800005678" both mask to "138****5678" (mask only
         // shows the first 3 + last 4 chars) — a REAL collision that
         // resolve_collision disambiguates with a trailing circled digit. The
-        // session must record it in `mask_collisions` (C1 / Task 7).
+        // session must record it in `mask_collisions`.
         let mut info_map = HashMap::new();
         info_map.insert("phone".to_string(), info("mask", "P"));
         let wl = empty_whitelist();

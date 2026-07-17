@@ -419,7 +419,7 @@ mod tests {
 
     #[test]
     fn full_self_ref_grammar_scoped_not_whole_text() {
-        // The C7 regression: a global grammar fix would ALSO mangle an
+        // A global grammar fix would ALSO mangle an
         // unrelated "I is" that this restoration never touched. Only the
         // restored "P-1" → "I" plus its own following verb gets fixed; "The
         // letter I is silent." is untouched text and must survive verbatim.
