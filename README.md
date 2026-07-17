@@ -8,7 +8,7 @@ English · [中文说明](README.zh.md)
 
 The privacy layer between you and AI. Your identity stays on your device — AI gets the meaning, not you.
 
-Rated **[PRvL-Gold](docs/prvl-standard.md)** on the PRvL reference suite — see the spec for what it measures.
+Rated **[PRvL-Gold](docs/prvl-standard.md)** (default profile) on the project's own PRvL reference suite — see the spec for what it measures and the full per-profile matrix.
 
 <!-- pin -->
 ```python
@@ -198,7 +198,7 @@ For context: `fast` mode is high-precision / low-recall by design — it only em
 | **Protected** | 60+ PII types, L1-L3. In the [PRvL](docs/prvl-standard.md) reference suite (24 cases, 42 PII instances per model), the **`default` profile leaked nothing across all four models** — GPT-5, Claude-Opus-4.5, Gemini-2.5-Pro, GLM-4.6. The reversible profiles are not clean: `pseudonym` leaked 1 of 42 on both Claude-Opus-4.5 and GLM-4.6, and `realistic` leaked 1 of 42 on Claude-Opus-4.5. A reference suite is not a guarantee against adversarial input — see prvl-standard.md for the full matrix. Cross-layer hints in 8 langs (zh/en/ja/ko/de/uk/in/br). SHAKE-256 derivation + full-salt entropy + faker identity-pass guard. State export omits salt by default; HTTP server refuses no-auth start; CLI writes O_NOFOLLOW + key files mode 0600; MCP token store TTL+LRU (v0.6.2). Windows CI + property-tested invariants + mutation-tested core (v0.6.3) + perf budget CI gate (v0.6.4) + session-isolation in integrations (v0.6.6) + README pinned-to-doctest + version-sync CI guard (v0.6.6) + compose namespace + pure-layer purity guard (v0.6.7) + seed→salt API rename + PIITypeDef SSOT + Presidio bridge through public redact + 3 new types (v0.6.8) + compose helpers shipped (v0.6.9) + Layer 1 freeze guards + KDF replay vectors + dead code subtract + manylinux digest pin (v0.6.10) + Adapter authoring surface (compose.register_pii_type / PIITypeDef / PatternMatch) + KDF replay edge cases (full-FF salt fix) + Layer 2 signature snapshot (v0.6.11) + HK/Macao travel permits + housing-fund zh L1 coverage (v0.6.12). **v0.7.x — 100% Rust core SSOT**: `argus-redact-core` crate + crates.io publish, with patterns/validators/normalization/replace+restore/fakers/person-scoring + the full L1 redact/restore engine ported to Rust (v0.7.0–v0.7.8) + fail-closed hardening & detection-correctness (v0.7.9–v0.7.10) + in-browser **wasm** build (v0.7.11). **v0.7.12 — quasi-identifier detection breadth**: evidence-gated zh bare-region, occupation, medical condition/allergy, and **hobby** (new type) detection via a shared `evidence_detector` framework, plus a re-identification eval (PRvL+ X-axis); the unreleased `generalize` strategy removed. **v0.7.18–v0.7.20 — guarded restore**: `restore()` gained a deterministic guard (per-call provenance nonce + scope-binding), closing the window where an injected pseudonym in LLM output would silently restore (v0.7.18); a Luhn-valid card PAN that passed through `mode="fast"` verbatim in six of the eight language packs (ja/ko/de/uk/in/br — those with no native card pattern) is now detected regardless of surrounding script (v0.7.19); the whole flow is one public `guarded_restore()` that all five integrations wrap (v0.7.20). **v0.8.0 (breaking)** — `guard=True` is now the default (a bare restore fails closed without an anchor); `residual_personal_data` reports honestly for mask configs; a `unified_prefix` pseudonym-collision that could misattribute a restore is fixed | Adversarial testing |
 | **Usable** | PRvL U=100%. Pseudonym codes + realistic mode (zh + en + RFC shared) + per-call strategy overrides + `keep` strategy (whitelisted) + resumable streaming sessions + incremental streaming default + cross-language alias restore (zh ↔ en) | Task-aware guidance |
 | **Reversible** | PRvL R by task: reference 100%, extract 50%, creative 0% (by design). Cross-language LLM rewrites (`张三` → `Zhang San`) auto-restored via `result.aliases` + `restore(text, key, aliases=...)` | Task-aware guidance |
-| **Compliance** | Meets PIPL Art.28 sensitive PII categories, risk assessment + profiles | PIPL/GDPR/HIPAA (byproduct) |
+| **Compliance** | Covers PIPL Art.28 sensitive PII categories; ships risk assessment + compliance profiles | PIPL/GDPR/HIPAA (byproduct) |
 | **Coverage** | 8 langs, 4 LLMs benchmarked, 6 frameworks | Browser extension |
 
 ## Risk Assessment
@@ -217,7 +217,7 @@ report.stats              # per-layer timing
 argus-redact assess <<< "身份证110101199003074610"
 ```
 
-Compliance profiles: `redact(text, profile="pipl")` / `"gdpr"` / `"hipaa"`.
+Compliance profiles: `redact(text, profile="pipl")` / `"gdpr"` / `"hipaa"`. These are strategy-override presets, not coverage guarantees — they change how detected types are redacted, not which types are detected, and don't by themselves make a pipeline compliant. [Details →](docs/configuration.md#profile-strategy-overrides)
 Type filtering: `redact(text, types=["phone", "id_number"])` / `types_exclude=["address"]`.
 
 ## Realistic Redaction (`pseudonym-llm` profile)
@@ -333,7 +333,7 @@ restored = guarded_restore(reply, key, redacted=redacted, anchor=anchor)
 
 As of v0.8.0, `restore(text, key)` defaults to `guard=True` and fails closed without a valid anchor; pass `guard=False` for the legacy unguarded substitution, or use the guarded round-trip with an anchor. [Guarded restore →](docs/security-model.md#guarded-restore)
 
-Meets **PIPL** · **GDPR** · **HIPAA** technical requirements as a byproduct of its privacy-first design. [Details →](docs/security-model.md#regulatory-context)
+Provides the local de-identification layer that **PIPL** cross-border transfer, **GDPR** Art.25 data minimization, and **HIPAA** de-identification workflows call for — a technical control, not a certification. [Details →](docs/security-model.md#regulatory-context)
 
 ## Documentation
 

@@ -238,13 +238,16 @@ Source code: `tests/benchmark/test_prvl.py`, `tests/benchmark/test_prvl_multi_ll
 
 ---
 
-## argus-redact v0.6.4 Results
+## argus-redact v0.7.16 Results
 
-Evaluated against the reference test suite. Applies to v0.6.5 — the
-v0.6.4 → v0.6.5 diff was compliance metadata SSOT exports only, with no
-change to redact / restore / pseudonym behavior.
+This is the project's own reference suite, self-authored and self-run — not
+a third-party audit (see "Why PRvL?" above). Source data:
+`tests/benchmark/results/prvl_multi_0.7.16.json`.
 
 ### Fast Mode (no LLM)
+
+Deterministic, non-LLM redact → restore path (no model in the loop). Exercised
+on every change by `tests/benchmark/test_prvl.py` in CI:
 
 | Axis | Score | Grade |
 |------|:-----:|:-----:|
@@ -252,73 +255,103 @@ change to redact / restore / pseudonym behavior.
 | U-structural | 100% | Gold |
 | R (Direct restore) | 100% | Gold |
 
-### Through-LLM (4 frontier LLMs × 2 profiles)
+### Through-LLM (4 frontier LLMs × 3 profiles)
 
-Setup: 4 task cases × 2 profiles (`default` / `pseudonym-llm`) × 4 frontier
-LLMs via Poe API. Privacy = leak count of original PII tokens / total PII
-tokens. U-pragmatic = task quality 0.0–1.0 judged by Claude-Opus-4.5.
+Setup: 24 task cases (42 PII instances per model/profile cell) × 3 profiles
+(`default` / `pseudonym` / `realistic`) × 4 frontier LLMs (GPT-5,
+Claude-Opus-4.5, Gemini-2.5-Pro, GLM-4.6) via the Poe API. Privacy = leaked
+PII instances / total PII instances. Reversibility = fraction of instances
+`restore()` recovers, by task type. U-pragmatic = task quality 0.0–1.0
+judged by Claude-Opus-4.5, informational only.
 
 #### Privacy (P)
 
-| Profile | Model | P | Grade |
-|---|---|:---:|:---:|
-| `default` | Claude-Opus-4.5 | 100% | Gold |
-| `default` | GPT-5 | 100% | Gold |
-| `default` | Gemini-2.5-Pro | 100% | Gold |
-| `default` | GLM-4.5 | 100% | Gold |
-| `pseudonym-llm` | GPT-5 | 100% | Gold |
-| `pseudonym-llm` | Gemini-2.5-Pro | 100% | Gold |
-| `pseudonym-llm` | GLM-4.5 | 100% | Gold |
-| `pseudonym-llm` | Claude-Opus-4.5 | 96% | Bronze |
+| Profile | Model | Leaked / Total | P | Grade |
+|---|---|:---:|:---:|:---:|
+| `default` | GPT-5 | 0/42 | 100% | Gold |
+| `default` | Claude-Opus-4.5 | 0/42 | 100% | Gold |
+| `default` | Gemini-2.5-Pro | 0/42 | 100% | Gold |
+| `default` | GLM-4.6 | 0/42 | 100% | Gold |
+| `pseudonym` | GPT-5 | 0/42 | 100% | Gold |
+| `pseudonym` | Gemini-2.5-Pro | 0/42 | 100% | Gold |
+| `pseudonym` | Claude-Opus-4.5 | 1/42 | 97.6% | Bronze |
+| `pseudonym` | GLM-4.6 | 1/42 | 97.6% | Bronze |
+| `realistic` | GPT-5 | 0/42 | 100% | Gold |
+| `realistic` | Gemini-2.5-Pro | 0/42 | 100% | Gold |
+| `realistic` | GLM-4.6 | 0/42 | 100% | Gold |
+| `realistic` | Claude-Opus-4.5 | 1/42 | 97.6% | Bronze |
 
-**Finding — pseudonym-llm + Claude-Opus-4.5 leak:** Claude-Opus-4.5
-occasionally treats realistic-looking reserved-range fakes as if they were
-real values it should preserve verbatim, and partially reconstructs
-original-looking patterns. Out of 4 task cases, this surfaced once. Other
-LLMs in the test did not exhibit this behavior. For maximum P, prefer
-`default` profile when the downstream model is Claude-Opus-4.5.
+**Finding — reversible profiles leak a medical-condition mention on some
+models:** both leaks are the same failure mode — a Chinese medical-condition
+phrase (糖尿病 / 2型糖尿病, "diabetes" / "type 2 diabetes") that the redacted
+text pseudonymizes or fakes reappears verbatim in the model's advice
+response. Claude-Opus-4.5 shows this under both `pseudonym` and `realistic`;
+GLM-4.6 shows it under `pseudonym` only. GPT-5 and Gemini-2.5-Pro show no
+leak in any profile in this run. `default` — which removes rather than
+pseudonymizes/fakes this category — leaked nothing across all four models.
+For maximum P with Claude-Opus-4.5 or GLM-4.6 downstream, prefer `default`.
+
+#### Reversibility (R) by task type (informational)
+
+Averaged across all 4 models; the profile changes the redaction strategy so R
+varies by profile too:
+
+| Task type | `default` | `pseudonym` | `realistic` |
+|---|:---:|:---:|:---:|
+| reference | 80% | 89% | 79% |
+| extract | 59% | 78% | 61% |
+| creative | 39% | 69% | 53% |
+
+**Read:** R stays task-dependent as in prior runs — reference tasks restore
+best, creative tasks worst — but the reversible profiles (`pseudonym`,
+`realistic`) lift R over `default` on every task type, since they preserve a
+type-consistent surface form the model can echo back, at the small P cost
+above.
 
 #### U-pragmatic (LLM-judged task quality, informational)
 
 | Profile | Model | U-pragmatic |
 |---|---|:---:|
-| `default` | GPT-5 | 0.57 |
-| `default` | GLM-4.5 | 0.50 |
-| `default` | Claude-Opus-4.5 | 0.42 |
-| `default` | Gemini-2.5-Pro | 0.35 |
-| `pseudonym-llm` | GPT-5 | 0.55 |
-| `pseudonym-llm` | GLM-4.5 | 0.53 |
-| `pseudonym-llm` | Claude-Opus-4.5 | 0.50 |
-| `pseudonym-llm` | Gemini-2.5-Pro | 0.30 |
+| `default` | GPT-5 | 0.55 |
+| `default` | Claude-Opus-4.5 | 0.53 |
+| `default` | Gemini-2.5-Pro | 0.36 |
+| `default` | GLM-4.6 | 0.57 |
+| `pseudonym` | GPT-5 | 0.53 |
+| `pseudonym` | Claude-Opus-4.5 | 0.50 |
+| `pseudonym` | Gemini-2.5-Pro | 0.29 |
+| `pseudonym` | GLM-4.6 | 0.54 |
+| `realistic` | GPT-5 | 0.66 |
+| `realistic` | Claude-Opus-4.5 | 0.55 |
+| `realistic` | Gemini-2.5-Pro | 0.33 |
+| `realistic` | GLM-4.6 | 0.73 |
 
-**Read:** `pseudonym-llm` lifts U-pragmatic on 3 of 4 models (Claude
-+0.08, GLM +0.03, GPT roughly flat) at the cost of the Claude leak above.
-Gemini-2.5-Pro is the outlier on both axes — investigate before deploying
-behind it.
-
-#### Reversibility (R) by task type
-
-R-reference / R-extract / R-creative were not re-measured in this run. The
-v0.5.x baseline (still valid because `restore()` semantics are unchanged)
-holds: R-reference ≥ 90% across LLMs, R-extract ~50% on summarize/QA
-tasks, R-creative ≈ 0% on advice/writing tasks (by design — see "R is
-task-dependent" above).
+**Read:** Gemini-2.5-Pro is the outlier on U-pragmatic across all three
+profiles in this run — investigate before deploying behind it. `realistic`
+scores the highest U-pragmatic on 3 of 4 models.
 
 ### Overall Grade
 
-- **`default` profile: Gold** across all 4 frontier LLMs
-- **`pseudonym-llm` profile: Gold on 3/4 LLMs, Bronze on Claude-Opus-4.5**
+- **`default` profile: Gold** across all 4 frontier LLMs — 0 leaked
+  instances. This is the profile behind the README's PRvL-Gold rating.
+- **`pseudonym` profile: Gold on GPT-5 + Gemini-2.5-Pro, Bronze on
+  Claude-Opus-4.5 + GLM-4.6** (1 leaked instance of 42 each).
+- **`realistic` profile: Gold on GPT-5, Gemini-2.5-Pro, GLM-4.6; Bronze on
+  Claude-Opus-4.5** (1 leaked instance of 42).
 
 ### Caveats specific to this run
 
-- n = 4 task cases per cell. Differences ≤ 0.05 in U-pragmatic should be
-  treated as noise.
-- `pseudonym-llm` rejects inputs containing reserved-range names
-  (张三 / 王五 / etc.) to prevent re-encoding loops. Test cases use
-  黄芳 / 王建国 / 赵敏 instead.
-- LLM-as-judge bias: Claude-Opus-4.5 judging tasks where Claude-Opus-4.5
-  is also under test introduces possible self-preference. Cross-judge
-  validation is on the roadmap.
+- Self-authored suite, self-run — not an independent or third-party audit.
+  Reproduce with
+  `POE_API_KEY=... pytest tests/benchmark/test_prvl_multi_llm.py -v -s -m semantic`;
+  raw data in `tests/benchmark/results/prvl_multi_0.7.16.json`.
+- n = 24 task cases (42 PII instances) per model/profile cell. A single
+  leaked instance moves a cell from Gold to Bronze — a small-n sensitivity,
+  not necessarily a stable trend.
+- LLM-as-judge bias: Claude-Opus-4.5 judges U-pragmatic, including its own
+  outputs, which can introduce self-preference. Cross-judge validation
+  remains on the roadmap.
+- A reference suite is not a guarantee against adversarial input — see the
+  P axis definition above and the README's "North Star" table.
 
 ---
 

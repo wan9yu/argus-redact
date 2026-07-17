@@ -69,6 +69,12 @@ Compliance profiles (`pipl`, `gdpr`, `hipaa`) automatically override `mask` stra
 
 User config overrides profile config: `redact(text, profile="pipl", config={"phone": {"strategy": "mask"}})` uses mask despite PIPL profile.
 
+**Caveat:** these are strategy-override presets, not coverage guarantees. A
+profile changes *how* already-detected types are redacted — it does not widen
+or narrow *which* types get detected. Selecting a profile does not by itself
+make a pipeline compliant: compliance depends on what the detectors actually
+find, your review process, and legal review, not on the profile name.
+
 ---
 
 ## Full Configuration Schema
