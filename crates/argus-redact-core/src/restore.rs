@@ -225,8 +225,8 @@ pub fn restore_full(
     // Step 3: alias merge — build flat lookup. Iterates `alias_map` in SORTED
     // key order so the merge winner is deterministic across process runs (a
     // plain `for (fake, alias_list) in alias_map` walk order is randomized
-    // per-process by HashMap's hasher — the same nondeterminism class as the
-    // v0.8.2 C9 leak). When two distinct fakes alias to the SAME string with
+    // per-process by HashMap's hasher, so an unsorted walk would let the
+    // process hash seed decide the output). When two distinct fakes alias to the SAME string with
     // two DIFFERENT originals, the sorted-first fake wins and the collision is
     // recorded so the caller can be warned the loser's identity may come back
     // wrong on restore.

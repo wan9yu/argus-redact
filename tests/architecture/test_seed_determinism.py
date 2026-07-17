@@ -1,7 +1,7 @@
 """Seed-sweep determinism canary.
 
-Task 3 sorted the two ``HashMap`` iteration sites in the Rust core that
-``restore()`` and ``check_restore_safety()`` depend on for a deterministic
+The two ``HashMap`` iteration sites in the Rust core that ``restore()`` and
+``check_restore_safety()`` depend on are sorted for a deterministic
 outcome: the alias-merge winner in ``restore_full``
 (``crates/argus-redact-core/src/restore.rs``) and the pseudonym iteration
 order inside ``check_restore_safety``. Both were previously unsorted walks

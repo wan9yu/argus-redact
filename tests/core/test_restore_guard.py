@@ -126,7 +126,7 @@ def test_guard_normal_restore_no_empty_key_with_scope_event():
 
 def test_empty_string_key_entry_still_raises_not_advisory():
     # Control: a corrupted/hand-built key with an empty-string entry is a
-    # distinct failure mode (restore-side rejection, Task 1) — it still
-    # raises ValueError and must never be folded into this advisory event.
+    # distinct failure mode (restore-side rejection) — it still raises
+    # ValueError and must never be folded into this advisory event.
     with pytest.raises(ValueError, match="empty"):
         restore("abc", {"": "SECRET"}, guard=False)
