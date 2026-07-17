@@ -38,6 +38,17 @@ fn restore_tracking_self_ref(
         return Ok((text.to_string(), Vec::new()));
     }
 
+    // An empty-string surrogate can never come from argus — the producer
+    // (`replace.rs`) refuses to register one, because it would match between
+    // every character below and explode the original throughout the text.
+    // A key that has one is corrupted or hand-built: fail closed rather than
+    // execute the explosion.
+    if key.keys().any(|k| k.is_empty()) {
+        return Err(RestoreError(
+            "restore key contains an empty-string entry — corrupted or hand-built key".to_string(),
+        ));
+    }
+
     // Sort keys by length descending (longest first)
     let mut keys: Vec<&String> = key.keys().collect();
     keys.sort_by(|a, b| b.len().cmp(&a.len()));
@@ -193,6 +204,16 @@ pub fn restore_full(
     // Step 2: empty key fast-path.
     if key.is_empty() {
         return Ok(text.to_string());
+    }
+
+    // `restore_tracking_self_ref` (called below at Step 4) rejects an
+    // empty-string key entry too; this is defense in depth so `restore_full`
+    // fails closed on its own before doing any alias-merge work, independent
+    // of whether the lower-level fn is reached unchanged.
+    if key.keys().any(|k| k.is_empty()) {
+        return Err(RestoreError(
+            "restore key contains an empty-string entry — corrupted or hand-built key".to_string(),
+        ));
     }
 
     // Step 3: alias merge — build flat lookup.
@@ -366,6 +387,26 @@ mod tests {
     fn empty_key_noop() {
         let k = HashMap::new();
         assert_eq!(restore("hello", &k).unwrap(), "hello");
+    }
+
+    #[test]
+    fn empty_string_key_entry_rejected_not_explosive() {
+        // argus never produces a `"" -> original` entry (the producer in
+        // replace.rs refuses to register one). A key that has one is
+        // corrupted or hand-built; it must fail closed rather than match
+        // between every char and explode the original throughout the text.
+        let mut k = HashMap::new();
+        k.insert(String::new(), "SECRET".to_string());
+        let err = restore("abc", &k).unwrap_err();
+        assert!(err.0.contains("empty"), "unexpected error message: {}", err.0);
+    }
+
+    #[test]
+    fn full_empty_string_key_entry_rejected() {
+        let mut k = HashMap::new();
+        k.insert(String::new(), "SECRET".to_string());
+        let err = restore_full("abc", &k, None, None).unwrap_err();
+        assert!(err.0.contains("empty"), "unexpected error message: {}", err.0);
     }
 
     // ── restore_full tests ──────────────────────────────────────────────
