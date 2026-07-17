@@ -92,6 +92,89 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  # The server (Starlette) and MCP integration suites are `skipif(not HAS_STARLETTE)`
+  # / `pytest.mark.slow` so the base `test` job's `.[dev]` install never has to carry
+  # starlette/mcp — which also means those suites never actually run in `test`; they
+  # silently skip and the job still reports green. This job installs the `serve` and
+  # `mcp` extras and runs them for real (the `not slow` deselect is intentionally
+  # dropped here — that's the whole point).
+  #
+  # This is a THIRD workflow leg alongside `lint`/`test`: its green must be checked
+  # independently at release time, since a green `test` job does not imply this one
+  # ran, let alone passed.
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable @ 2026-05-03
+
+      - name: Cache Rust
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Install dependencies (dev + serve + mcp)
+        run: |
+          pip install maturin
+          pip install -e ".[dev,serve,mcp]"
+
+      - name: Run server + MCP integration suites
+        # ARGUS_REQUIRE_INTEGRATION_EXTRAS is the meta-guard in
+        # tests/integration/conftest.py: it fails the job loudly if starlette/mcp
+        # didn't actually install, instead of letting every gated test skip to a
+        # false green.
+        env:
+          ARGUS_REQUIRE_INTEGRATION_EXTRAS: starlette,mcp
+        run: pytest tests/integration -m "not ner and not semantic" -p no:recording
+
+  # Presidio bridge suite, isolated from the `integration` job above so spaCy's
+  # model pull (and any presidio-analyzer flakiness) can't block the server/MCP
+  # signal. Same false-green risk and same meta-guard mechanism, scoped to presidio.
+  integration-presidio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable @ 2026-05-03
+
+      - name: Cache Rust
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Install dependencies (dev + presidio)
+        run: |
+          pip install maturin
+          pip install -e ".[dev,presidio]"
+
+      - name: Run Presidio integration suite
+        env:
+          ARGUS_REQUIRE_INTEGRATION_EXTRAS: presidio_analyzer
+        run: |
+          pytest tests/integration/test_presidio.py tests/integration/test_presidio_pipeline_guarantees.py \
+            -m "not ner and not semantic" -p no:recording
+
   # Build the sdist and install it in a fresh venv. The binding crate depends on
   # the core crate via a path dep (../argus-redact-core); wheel-only CI would not
   # catch a path-dependency that fails to vendor into the sdist. This job compiles
