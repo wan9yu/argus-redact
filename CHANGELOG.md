@@ -2,6 +2,105 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.2 — Run-16 hardening: fail-open closure, restore correctness, localization, honesty
+
+A hardening release. An external audit (Run 16) surfaced a broad set of defects across five
+areas; each was reproduced against the shipped v0.8.1 wheel and fixed with a regression test.
+No breaking API changes — a few inputs that previously failed silently now raise (see
+Behaviour changes). Upgrading is recommended.
+
+### Security
+
+- **The CLI wrote de-anonymized output world-readable.** `argus-redact restore -o FILE` writes
+  the caller's recovered plaintext PII, and `assess -o FILE` writes detected originals, both at
+  mode 0644. They are now written 0600 (owner-only), matching the key files, and
+  `safe_write_text` will never widen an existing file's permissions.
+
+### Fixed — inputs that failed open (returned success while redacting nothing / leaking)
+
+- An empty allow-list — `types=[]` or `types_exclude=[]` — filtered out every entity and
+  returned an empty key with success. It now raises `ValueError` (pass `types=None` to detect
+  everything). The same guard was missing on `redact_pseudonym_llm` and the streaming path;
+  both are covered.
+- `redact_json(paths="messages")` — a bare string where a list of paths is expected — iterated
+  the string character by character, matched nothing, and returned the document unredacted. A
+  string `paths` now raises `TypeError`.
+- `restore_body` returned the response unchanged with an empty all-clear when the named field
+  was missing or not a string; it now fails closed.
+- `strategy_overrides` validated the strategy value but not the type key, so a mis-cased name
+  (`"Phone"`) was silently dropped; unknown type keys now raise.
+- A non-dict per-type `config` value (`config={"phone": "mask"}`) was silently skipped; it now
+  raises `TypeError`.
+- The HTTP `/restore` endpoint built a garbage scope from a malformed anchor and returned a
+  spurious 200 (or an unhandled 500); a bad anchor now returns 400.
+- The MCP `lang` argument kept empty segments from a trailing comma; they are now filtered.
+- Externally-supplied `_pre_detected` entities skipped overlap-merging and type-filtering on
+  both `redact()` and `redact_pseudonym_llm()`; both paths now merge and filter them.
+
+### Fixed — detection leaks in specific locales
+
+- An IPv4 address with a CIDR mask (`8.8.8.8/24`) went undetected because the trailing `/24`
+  read as division; the mask is now part of the match.
+- Japanese phone numbers with a parenthesized or space-separated area code (`03(1234)5678`,
+  `090 1234 5678`) and Korean phones with space separators (`010 1234 5678`) are now detected.
+  Phone separators no longer span a line break.
+- Korean resident-registration numbers with foreigner or pre-1900 gender digits were rejected
+  as invalid and leaked; the full gender range is now accepted.
+- **New type: `itin`.** US Individual Taxpayer Identification Numbers share the SSN shape but
+  use a 900–999 area, which the SSN validator correctly rejects — so ITINs matched no type and
+  leaked. They are now detected as their own type.
+
+### Fixed — round-trip and restore correctness (silent corruption)
+
+- When two different values masked to the same visible string, they were disambiguated only by
+  a trailing circled digit; a model that normalized that glyph away collapsed the two key
+  entries and restore silently returned the wrong original for one of them. The collision is
+  now signalled (a `SecurityWarning` and a PII-free event) — LLM-round-trip reversibility is
+  not guaranteed for masked collisions.
+- `remove` strategy with `replacement=""` registered an empty key that, on restore, matched
+  between every character and exploded the original throughout the text.
+- The known-name allow-list (`names=`) matched substrings and was case-sensitive, so
+  `names=["Alex"]` corrupted `"Alexander"` and missed `"alice"`; matches are now whole-word,
+  case-insensitive, and trimmed.
+- Restoring display-marker text stripped every marker globally, destroying unrelated markup
+  (`**bold**`); stripping is now scoped to the actual key fakes.
+- Grammar restore over-corrected an unrelated `"I is"` elsewhere in the text; it is now scoped
+  to the spans where a pronoun was actually restored.
+- `expand_aliases` took the last name token as the surname (so `"Robert Smith Jr."` yielded
+  `"Jr"`, defeating the shared-surname ambiguity guard); generational suffixes are now
+  stripped, and each name's script is auto-detected.
+- `restore_csv` did a blind substring restore, so a restored value containing a comma
+  (`"Smith, John"`) split one cell into two columns; it now re-parses and re-serializes per cell.
+- A profile plus user `config` merged shallowly, so a user override of one field dropped the
+  profile's strategy for that type (silently downgrading, e.g., a removed value to a masked
+  one); the merge is now per-type and deep.
+- The streaming pseudonym path could nondeterministically leak an internal audit placeholder
+  into the model-facing text; it now threads a realistic-only key.
+
+### Fixed — reporting honesty
+
+- `assess_risk` now flags bank and credit cards under PIPL sensitive-PI, and url/date under
+  HIPAA.
+- `argus-redact info` reported "+ NER" for a language whose engine was not installed (from the
+  adapter module alone) and implied Ollama was reachable from `requests` being importable; both
+  now report what is actually available.
+- The Ollama layer dropped a second entity type at the same span; it now keeps both.
+- `guarded_restore(detailed=True)` now reports the outcome (blocked / partial / complete),
+  matching `restore(detailed=True)`.
+- `StreamingRestorer` reinserted pseudonyms from untrusted model output with no signal and
+  buffered unboundedly on input with no sentence break; it now warns once on first substitution
+  and bounds its buffer.
+- Documented that the `uk` and `in` language codes are English locale packs (British and
+  Indian), not the ISO-639-1 languages (Ukrainian and Indonesian).
+
+### Behaviour changes
+
+- `types=[]` / `types_exclude=[]`, a string `paths`, a non-dict per-type config, and an
+  unknown or mis-cased type key now raise instead of silently doing nothing.
+- Masked-value collisions are signalled and are not guaranteed LLM-round-trip reversible.
+- `expand_aliases`'s `lang` default changed from `"zh"` to auto-detect (`None`).
+- ITIN-shaped strings are now redacted (new `itin` type).
+
 ## v0.8.1 — guard hardening + fail-open fixes (security patch)
 
 A security patch. Four defects were surfaced by an external audit (Run 16) and verified
