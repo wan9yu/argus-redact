@@ -576,6 +576,12 @@ leaking context through paraphrase. Egress and transport security remain separat
 
 The `mask` strategy (e.g., `138****5678`) reveals prefix and suffix digits. For phone numbers, 3 prefix + 4 suffix digits may narrow the search space to ~10,000 numbers. For strict privacy, use `pseudonym` or `remove` strategy instead. PIPL/GDPR compliance profiles should prefer non-mask strategies.
 
+### Masked-value collisions are not guaranteed LLM-round-trip reversible
+
+When two different originals produce the same masked/category/remove surrogate (e.g., two phone numbers that mask to the same `138****5678`), argus-redact disambiguates them by appending a trailing circled digit (`①②③...`) to the second and later occurrences. That disambiguator is itself content — an LLM rewriting or normalizing the text can drop or alter it, which collapses the two surrogates back to the same string. `restore()` can then no longer tell the two originals apart.
+
+argus-redact emits a `SecurityWarning` naming the collision whenever `resolve_collision` actually disambiguates two same-strategy surrogates; the message carries the count and affected types only, never the raw values. Treat any masked/category/remove entry involved in a reported collision as **not restorable with confidence** across an LLM round-trip — prefer `pseudonym` or `realistic` (shape-independent surrogates, see `is_strategy_reversible()` in [api-reference.md](api-reference.md#is_strategy_reversible-v059)) for values you need to restore reliably after the text has passed through an LLM.
+
 ### Seeded pseudonym codes are predictable, not random
 
 When you supply a seed/salt, the `P-NNNNN` codes are drawn from a Mersenne-Twister (MT19937) stream (CPython's `random.Random`), which is deterministic and not cryptographic — so the codes are reproducible and, given enough outputs, predictable and linkable across redactions that share the same seed/salt. This is low severity: the code is an opaque sequence label, not derived from the original value, so it leaks no original-value information. It is a deterministic-but-predictable label, not a cryptographic commitment. Unseeded redactions use `secrets` instead and are not subject to this property.

@@ -851,6 +851,12 @@ All eight strategies are key-recoverable regardless of this table — the ✗ ro
 about surviving an *LLM* round-trip specifically, not about whether `restore()` can
 look the value up in the key.
 
+When two originals actually collide on the same mask/category/remove surrogate,
+argus-redact emits a `SecurityWarning` naming the collision (count and types only,
+never the raw values) — see [Masked-value collisions](security-model.md#masked-value-collisions-are-not-guaranteed-llm-round-trip-reversible)
+in the security model. Treat the collided entries as non-restorable across an LLM
+round-trip rather than relying on the `①`-style disambiguator surviving a rewrite.
+
 ### When to use
 
 Multi-turn dialog flows where the LLM may echo redacted values back: prefer
@@ -1347,6 +1353,10 @@ if final:
 
 > ℹ️ For `display_text` containing visible markers (`ⓕ`), the markers stay in the streamed output (the underlying `key` doesn't include them). To strip markers, call `strip_display_markers(text, marker="ⓕ")` from `argus_redact.pure.display_marker` on the streamed output, or feed `downstream_text` instead.
 
+**Unguarded by design.** Every `feed()` / `flush()` substitution runs `restore(..., guard=False)` — there is no per-call anchor to check mid-stream, so `StreamingRestorer` cannot fail closed the way `guarded_restore()` does. The first time an instance actually reinserts a pseudonym, it emits a one-time `SecurityWarning`; it does not warn again for the rest of that instance's lifetime. If you need the provenance/scope guard, buffer the full reply and call `guarded_restore()` once instead of streaming the restore.
+
+`StreamingRestorer(key, max_buffer=4096)` bounds the "sentence" strategy's buffer the same way `StreamingRedactor` does: a reply that never emits a sentence terminator is force-flushed once the buffer exceeds `max_buffer`, instead of accumulating without limit.
+
 ---
 
 ## Structured Data
@@ -1375,5 +1385,6 @@ restored_csv = restore_csv(redacted_csv, key)
 |-----------|--------|
 | YAML config requires `pyyaml` | Pass dict or JSON file path if pyyaml not installed |
 | Streaming restore is sentence-based | Pseudonyms split across chunks are buffered until a sentence boundary |
+| `StreamingRestorer` is unguarded | No per-call anchor mid-stream; a one-time `SecurityWarning` fires on the first real substitution, and the buffer is capped (`max_buffer`, default 4096) |
 | `restore()` is global replacement | If LLM output naturally contains a pseudonym pattern, it gets replaced. Use a unique `prefix` in `config` to minimize risk |
 | Pseudonym codes auto-expand | 5-digit codes (99,999 per prefix); automatically expands range on exhaustion |

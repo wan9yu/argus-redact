@@ -264,6 +264,57 @@ Each entry follows three lines:
   English *free-text* PII. (Chinese `mode="fast"` covers both structured and
   free-text at F1 ~93 — the asymmetry is the zh-first product reality.)
 
+### Korean RRN has no check-digit validator by design
+
+- **What**: `rrn` (Korean Resident Registration Number) is matched on format
+  and date-plausibility (the digit pattern must decode to a real month/day)
+  only — there is no mod-11 checksum gate on the trailing digits, unlike
+  several other national-ID validators.
+- **Why we won't fix**: post-2020 Korean RRNs randomize the trailing digits by
+  policy, so a checksum computed against the pre-2020 scheme would reject a
+  genuine current-issue RRN — a false *negative* that leaves real PII
+  unredacted. Format plus date-plausibility is the recall-safe choice for a
+  numbering scheme that no longer carries a stable public check digit.
+- **What you should do**: treat `rrn` matches as format-validated, not
+  checksum-validated. If your input is known pre-2020 and you need stricter
+  precision, add a downstream checksum check on top of argus's match.
+
+### Some national-ID validators are length/format-only, not checksum-validated
+
+- **What**: A few validators (`aadhaar`, `de_tax_id`) check digit count and
+  a couple of structural constraints (e.g., leading-digit rules) but do not
+  implement the full public check-digit algorithm (Aadhaar's Verhoeff digit,
+  the German Steuer-ID's pairwise-sum check).
+- **Why we won't fix**: over-redaction is the fail-safe direction here — a
+  malformed number of the right shape and length is still redacted rather
+  than leaked. Implementing and maintaining the full checksum for every
+  national scheme is a long tail; where the format-only validator already
+  redacts every genuine ID (plus some non-IDs of the same shape), the
+  precision cost is preferred over the risk of a checksum bug leaking a real
+  ID that fails it.
+- **What you should do**: if you need to distinguish a genuine ID from a
+  same-shape non-ID number in this pair of types, validate the check digit
+  yourself downstream; argus's match tells you "right shape," not
+  "cryptographically confirmed valid."
+
+### Chinese evidence-gated detectors suppress low-evidence bare candidates
+
+- **What**: The Chinese bare-surname person heuristic (`person_zh.rs`) and the
+  evidence-gated quasi-identifier detectors (bare-region, occupation,
+  condition, hobby — `evidence_detector.rs`) require at least one corroborating
+  signal (a cue word, an honorific, nearby person-identifying PII, …) before a
+  candidate is redacted at Layer 1. A bare surname or region name with zero
+  corroborating evidence is deliberately left unredacted at this layer.
+- **Why we won't fix**: this is a precision/recall tradeoff, not an oversight.
+  Bare surnames and region names appear constantly in ordinary prose that
+  isn't about a specific person (`王先生做的很好` vs `我姓王`); redacting every
+  occurrence would over-redact common prose. Candidates with no evidence are
+  left to Layer 2 (NER), which has broader context to judge them.
+- **What you should do**: for `mode="fast"`-only pipelines where recall on
+  bare names/regions with no surrounding context matters more than prose
+  precision, run `mode="ner"` or `mode="auto"` so Layer 2 gets a chance at the
+  low-evidence candidates Layer 1 intentionally passes over.
+
 ## Recently Fixed
 
 ### v0.7.0 (2026-06-15) — Core Split
