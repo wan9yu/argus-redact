@@ -10,6 +10,7 @@ restore step never touched.
 """
 
 from argus_redact import restore
+from argus_redact.pure.grammar import normalize_grammar_en
 
 
 class TestGrammarRestoreScope:
@@ -60,3 +61,78 @@ class TestGrammarRestoreScope:
         result = restore(text, key, guard=False)
 
         assert result == "I am" + " " * 8 + "I am right"
+
+
+class TestGrammarRestoreWePronoun:
+    """The reverse grammar fix must cover `we`, not just `I`.
+
+    `we` is a `SELF_REF_PRONOUNS` value just like `I`, so pseudonymizing it
+    arms the same forward rule (any self-ref key value rewrites a following
+    first-person verb to third-person on the pseudonym code). Before this
+    fix, `GRAMMAR_RESTORE_EN` only reversed `I ...` back to first person, so a
+    restored `we` was left with the third-person verb: `we have` round-tripped
+    through pseudonymize -> normalize -> restore as `we has` (silently wrong).
+    """
+
+    def test_we_have_roundtrips_through_forward_normalize_and_restore(self):
+        key = {"P-1": "we"}
+        # Simulate the forward pseudonymize + normalize step redact() performs:
+        # "we have a meeting" -> (pseudonymize "we") "P-1 have a meeting"
+        # -> (normalize_grammar_en, armed by the self-ref key value "we").
+        forward = normalize_grammar_en("P-1 have a meeting", ["we"])
+        assert forward == "P-1 has a meeting"  # sanity: forward rule fired
+
+        result = restore(forward, key, guard=False)
+
+        assert result == "we have a meeting"
+
+    def test_we_do_roundtrips_through_forward_normalize_and_restore(self):
+        key = {"P-1": "we"}
+        forward = normalize_grammar_en("P-1 do the work", ["we"])
+        assert forward == "P-1 does the work"
+
+        result = restore(forward, key, guard=False)
+
+        assert result == "we do the work"
+
+    def test_we_dont_roundtrips_through_forward_normalize_and_restore(self):
+        key = {"P-1": "we"}
+        forward = normalize_grammar_en("P-1 don't know", ["we"])
+        assert forward == "P-1 doesn't know"
+
+        result = restore(forward, key, guard=False)
+
+        assert result == "we don't know"
+
+    def test_we_is_restores_to_we_are(self):
+        # There's no forward "are"->"is" rule (VERB_PAIRS has no "are" entry),
+        # so this exercises the reverse rule directly the same way the "I"
+        # copula case is exercised elsewhere in this file — "we is" must not
+        # survive a restore, since "we" takes "are", not "is".
+        key = {"P-1": "we"}
+        text = "P-1 is here"
+
+        result = restore(text, key, guard=False)
+
+        assert result == "we are here"
+
+    def test_i_am_and_i_have_still_roundtrip(self):
+        # Control: adding "we" reversals must not regress the pre-existing
+        # "I" reversals.
+        key = {"P-1": "I"}
+
+        forward_am = normalize_grammar_en("P-1 am here", ["I"])
+        assert forward_am == "P-1 is here"
+        assert restore(forward_am, key, guard=False) == "I am here"
+
+        forward_have = normalize_grammar_en("P-1 have a cat", ["I"])
+        assert forward_have == "P-1 has a cat"
+        assert restore(forward_have, key, guard=False) == "I have a cat"
+
+    def test_correctly_conjugated_we_verb_not_over_corrected(self):
+        # "we have"/"we are" are already correct — restoring them must not
+        # trigger any reverse rule (no "we is"/"we has"/... pattern present).
+        key = {"P-1": "we"}
+
+        assert restore("P-1 have fun", key, guard=False) == "we have fun"
+        assert restore("P-1 are fine", key, guard=False) == "we are fine"

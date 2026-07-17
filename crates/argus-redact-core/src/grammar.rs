@@ -51,13 +51,32 @@ static GRAMMAR_RULES_EN: LazyLock<Vec<GrammarRule>> = LazyLock::new(|| {
     rules
 });
 
-/// Reverse grammar rules: `\bI {third}\b` → `I {first}`.
+/// Reverse grammar rules: `\b{subject} {third}\b` → `{subject} {first-for-subject}`.
+///
+/// Covers both self-ref subjects that precede a verb: `I` (1st singular) and
+/// `we` (1st plural). The copula differs per subject (`I am` vs `we are`);
+/// `have`/`do`/`don't` are shared. Other `SELF_REF_PRONOUNS` values (`me`,
+/// `my`, `mine`, `myself`, `us`, `our`, `ours`, `ourselves`) are object or
+/// possessive forms, never clause subjects preceding these verbs, so no
+/// rules are needed for them.
 static GRAMMAR_RESTORE_EN: LazyLock<Vec<GrammarRule>> = LazyLock::new(|| {
-    VERB_PAIRS
+    // (subject pronoun, third-person verb the forward rule produced, correct
+    // first-person verb for that subject)
+    const REVERSALS: &[(&str, &str, &str)] = &[
+        ("I", "is", "am"),
+        ("I", "has", "have"),
+        ("I", "does", "do"),
+        ("I", "doesn't", "don't"),
+        ("we", "is", "are"),
+        ("we", "has", "have"),
+        ("we", "does", "do"),
+        ("we", "doesn't", "don't"),
+    ];
+    REVERSALS
         .iter()
-        .map(|&(first, third)| GrammarRule {
-            pattern: Regex::new(&format!(r"\bI {}\b", third)).unwrap(),
-            replacement: format!("I {}", first),
+        .map(|&(subj, third, first)| GrammarRule {
+            pattern: Regex::new(&format!(r"\b{} {}\b", subj, third)).unwrap(),
+            replacement: format!("{} {}", subj, first),
         })
         .collect()
 });
@@ -117,6 +136,41 @@ mod tests {
     fn test_restore_grammar() {
         let result = restore_grammar_en("I is happy");
         assert_eq!(result, "I am happy");
+    }
+
+    #[test]
+    fn test_restore_grammar_we_is_to_are() {
+        // "we" is 1st-person plural: its copula reversal is "are", not "am".
+        let result = restore_grammar_en("we is happy");
+        assert_eq!(result, "we are happy");
+    }
+
+    #[test]
+    fn test_restore_we_have() {
+        // "have" is shared between "I" and "we" — forward normalization turns
+        // both into "has"; the reverse must land back on "have" either way.
+        let result = restore_grammar_en("we has a cat");
+        assert_eq!(result, "we have a cat");
+    }
+
+    #[test]
+    fn test_restore_we_do() {
+        let result = restore_grammar_en("we does it");
+        assert_eq!(result, "we do it");
+    }
+
+    #[test]
+    fn test_restore_we_dont() {
+        let result = restore_grammar_en("we doesn't know");
+        assert_eq!(result, "we don't know");
+    }
+
+    #[test]
+    fn test_restore_we_already_correct_not_overcorrected() {
+        // "we are"/"we have" are already correctly conjugated — no reverse
+        // rule pattern matches them, so they must pass through unchanged.
+        assert_eq!(restore_grammar_en("we are fine"), "we are fine");
+        assert_eq!(restore_grammar_en("we have fun"), "we have fun");
     }
 
     #[test]
