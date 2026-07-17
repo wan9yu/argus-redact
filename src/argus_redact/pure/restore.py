@@ -12,6 +12,7 @@ from argus_redact.pure.replacer import alias_collision_event, warn_alias_collisi
 from argus_redact.pure.security_events import (
     BLOCKED,
     COMPLETE,
+    EMPTY_KEY_WITH_SCOPE,
     GUARD_NO_ANCHOR,
     OUT_OF_SCOPE_PSEUDONYM,
     PARTIAL,
@@ -279,6 +280,20 @@ def restore(
     # (S) Scope filter: only restore pseudonyms within anchor.scope
     key_dict = dict(key) if not isinstance(key, dict) else key
     scoped = {k: v for k, v in key_dict.items() if k in anchor.scope}
+
+    # Advisory: the key was non-empty and anchor.scope is non-empty, but scope
+    # excluded EVERY entry — the restore below is a silent no-op that would
+    # otherwise be reported COMPLETE with no hint that nothing was substituted.
+    # Distinct from the corruption empty-string-key case (that raises); this is
+    # a legitimate, non-overlapping scope and key, so it only advises, never blocks.
+    if key_dict and not scoped and anchor.scope:
+        events.append(
+            security_event(
+                EMPTY_KEY_WITH_SCOPE,
+                count=len(key_dict),
+                detail="anchor.scope excluded every key entry; nothing was restored",
+            )
+        )
 
     # Detect out-of-scope pseudonyms that appear in text — see `_tokens_present`.
     # Cosmetic only: it sizes the event's `count`/`detail`, never which pseudonyms

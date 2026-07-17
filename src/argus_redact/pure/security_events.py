@@ -20,6 +20,7 @@ GUARD_NO_ANCHOR = "guard_no_anchor"
 KEEP_DOWNGRADED = "keep_downgraded"
 MASK_COLLISION = "mask_collision"
 ALIAS_COLLISION = "alias_collision"
+EMPTY_KEY_WITH_SCOPE = "empty_key_with_scope"
 
 # Outcomes a caller of warn_security_events can witness first-hand — see that
 # function's docstring for why these replace the old reason-code-derived guess.

@@ -99,3 +99,34 @@ def test_guard_false_detailed_returns_empty_events():
     # (The outcome key is now on every detailed return, so guarded_restore never has
     # to guess it from reason codes — see warn_security_events.)
     assert d == {"security_events": [], "outcome": COMPLETE}
+
+
+def test_guard_empty_key_with_scope_advisory():
+    # scope = {P-001} only, but the key handed to restore() has NOTHING in
+    # that scope — the scoped filter empties out entirely and the restore is
+    # a silent no-op reported COMPLETE unless this advisory event fires.
+    a = make_anchor({"P-001": "张三"})
+    key = {"P-999": "王五"}
+    resp = f"P-999 在这里\n{a.nonce}"
+    out, d = restore(resp, key, guard=True, anchor=a, detailed=True)
+    assert "王五" not in out  # nothing was restored
+    events = [e for e in d["security_events"] if e["reason_code"] == "empty_key_with_scope"]
+    assert len(events) == 1
+    assert events[0]["count"] == len(key)
+
+
+def test_guard_normal_restore_no_empty_key_with_scope_event():
+    # Control: scope covers the key and restoration actually happens — the
+    # advisory above must NOT fire on the ordinary, successful path.
+    a, resp = _anchor_ok("P-001 here")
+    out, d = restore(resp, KEY, guard=True, anchor=a, detailed=True)
+    assert "张三" in out
+    assert not any(e["reason_code"] == "empty_key_with_scope" for e in d["security_events"])
+
+
+def test_empty_string_key_entry_still_raises_not_advisory():
+    # Control: a corrupted/hand-built key with an empty-string entry is a
+    # distinct failure mode (restore-side rejection, Task 1) — it still
+    # raises ValueError and must never be folded into this advisory event.
+    with pytest.raises(ValueError, match="empty"):
+        restore("abc", {"": "SECRET"}, guard=False)
