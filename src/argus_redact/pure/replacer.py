@@ -161,17 +161,19 @@ def warn_mask_collisions(mask_collisions: list[str]) -> None:
 
 def alias_collision_event(alias_collisions: list[str]) -> dict | None:
     """A PII-free ALIAS_COLLISION security_event, or None if no alias collided
-    this call. ``alias_collisions`` is the Rust core's authoritative list (one
-    entry per alias string that two distinct fakes both claimed — see
-    ``restore_full``'s alias-merge step, core ``restore.rs``). count = collided
-    aliases; detail names how many, never the raw alias/original — mirrors
-    ``mask_collision_event``."""
+    this call. ``alias_collisions`` is the Rust core's authoritative list — one
+    entry per LOSING claim (see ``restore_full``'s alias-merge step, core
+    ``restore.rs``), so a 3+-way collision on the same alias string pushes it
+    more than once. Deduped via ``set()`` before counting so the count reflects
+    DISTINCT collided aliases, not raw pushes — detail names how many, never
+    the raw alias/original — mirrors ``mask_collision_event``."""
     if not alias_collisions:
         return None
+    distinct = set(alias_collisions)
     return security_event(
         ALIAS_COLLISION,
-        count=len(alias_collisions),
-        detail=f"{len(alias_collisions)} alias(es) collided",
+        count=len(distinct),
+        detail=f"{len(distinct)} alias(es) collided",
     )
 
 
@@ -179,11 +181,13 @@ def warn_alias_collisions(alias_collisions: list[str]) -> None:
     """Emit the ``alias_collision`` SecurityWarning — a no-op when the list is
     empty. THE single source for that warning's text/category, called from
     ``pure/restore._do_restore`` wherever the core restore result comes back —
-    mirrors ``warn_mask_collisions``."""
+    mirrors ``warn_mask_collisions``. Deduped via ``set()`` before counting —
+    see ``alias_collision_event``."""
     if not alias_collisions:
         return
+    count = len(set(alias_collisions))
     warnings.warn(
-        f"{len(alias_collisions)} alias(es) map to more than one original; the "
+        f"{count} alias(es) map to more than one original; the "
         "restored value for a collided alias may be the wrong identity.",
         SecurityWarning,
         stacklevel=2,

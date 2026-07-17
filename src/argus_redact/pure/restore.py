@@ -8,7 +8,7 @@ import warnings
 from typing import Mapping
 
 from argus_redact.exceptions import SecurityWarning
-from argus_redact.pure.replacer import warn_alias_collisions
+from argus_redact.pure.replacer import alias_collision_event, warn_alias_collisions
 from argus_redact.pure.security_events import (
     BLOCKED,
     COMPLETE,
@@ -223,7 +223,15 @@ def restore(
             stacklevel=_auto_stacklevel(),
         )
     if not guard:  # None (deprecated) or False (explicit opt-out) → legacy restore
-        result = _do_restore(text, key, aliases=aliases, display_marker=display_marker)
+        alias_collisions: list[str] = []
+        result = _do_restore(
+            text,
+            key,
+            aliases=aliases,
+            display_marker=display_marker,
+            _warn=_warn,
+            _alias_collisions=alias_collisions,
+        )
         # R4: make the unguarded-restore consequence visible in production. Only the
         # None path warns — the caller has NOT chosen, and originals were reinserted
         # with no injection check. guard=False is the informed opt-out (the warning
@@ -242,7 +250,11 @@ def restore(
             # outcome is COMPLETE. Emitting it here means guarded_restore never sees a
             # None outcome from an internal caller, so warn_security_events never falls
             # back to guessing from reason codes (see its docstring).
-            return result, {"security_events": [], "outcome": COMPLETE}
+            legacy_events: list[dict] = []
+            _ac_event = alias_collision_event(alias_collisions)
+            if _ac_event:
+                legacy_events.append(_ac_event)
+            return result, {"security_events": legacy_events, "outcome": COMPLETE}
         return result
 
     # guard is True — run P + S checks
@@ -282,7 +294,24 @@ def restore(
         )
 
     # Restore only in-scope pseudonyms
-    result = _do_restore(text, scoped, aliases=aliases, display_marker=display_marker)
+    alias_collisions: list[str] = []
+    result = _do_restore(
+        text,
+        scoped,
+        aliases=aliases,
+        display_marker=display_marker,
+        # _warn=False here (never the direct warning) is deliberate: the
+        # collision is folded into `events` below instead, so it rides the ONE
+        # combined `warn_security_events` call further down — the same
+        # SecurityWarning P + S events already share. Warning here too would
+        # double-fire (once specific-text, once generic) for the same event.
+        _warn=False,
+        _alias_collisions=alias_collisions,
+    )
+    if alias_collisions:
+        _ac_event = alias_collision_event(alias_collisions)
+        if _ac_event:
+            events.append(_ac_event)
 
     if strict and events:
         raise RestoreGuardError(events)
@@ -346,8 +375,24 @@ def _do_restore(
     *,
     aliases: dict[str, tuple[str, ...]] | None = None,
     display_marker: str | None = None,
+    _warn: bool = True,
+    _alias_collisions: list[str] | None = None,
 ) -> str:
-    """Perform the actual substitution via Rust core."""
+    """Perform the actual substitution via Rust core.
+
+    ``_warn``: False suppresses the ``alias_collision`` SecurityWarning for
+    this call — the same suppression contract ``restore()``'s own ``_warn``
+    documents, threaded through so a caller that asked for silence (or that
+    folds the collision into its own combined warning, see the guarded branch
+    of ``restore()``) actually gets it.
+
+    ``_alias_collisions``, if given, is MUTATED in place: the Rust core's
+    authoritative alias-collision list is extended onto it, so a caller
+    building a ``detailed=True`` ``security_events`` list can turn it into an
+    ``alias_collision`` event via ``alias_collision_event`` — mirrors the
+    ``_mask_collisions`` out-param idiom in
+    ``glue.redact._do_replace_and_persist``.
+    """
     if not key:
         # An empty key means no fakes were ever marked, so there is nothing
         # to strip. Do NOT globally strip display_marker here — that would
@@ -366,5 +411,8 @@ def _do_restore(
     result, alias_collisions = _rust_restore(
         text, key, aliases=rust_aliases, display_marker=display_marker
     )
-    warn_alias_collisions(alias_collisions)
+    if _alias_collisions is not None:
+        _alias_collisions.extend(alias_collisions)
+    if _warn:
+        warn_alias_collisions(alias_collisions)
     return result
