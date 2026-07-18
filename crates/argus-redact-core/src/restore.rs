@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use fancy_regex::Regex;
 
 use crate::display_marker::strip_display_markers_scoped;
 use crate::grammar::{is_self_ref, restore_grammar_en};
 use crate::hints::{py_rstrip, py_strip};
 use crate::reserved_range::{
-    byte_to_char_offset, escaped_alternation_digit_bounded, scan_for_pollution,
+    byte_to_char_offset, escaped_alternation, escaped_alternation_digit_bounded, scan_for_pollution,
 };
 
 #[derive(Debug)]
@@ -365,6 +365,66 @@ pub fn restore_full_guarded(
     let result = apply_grammar_scoped(&result, &self_ref_spans);
 
     Ok(RestoreResult { restored: result, alias_collisions })
+}
+
+/// The `pseudonyms` that appear in `text` as whole tokens (sorted, deduped).
+/// Port of `pure/restore.py::_tokens_present`.
+///
+/// A match must not be merely a substring of a longer pseudonym-shaped run
+/// (e.g. `P-1` embedded in `P-10`). Generated pseudonyms are
+/// `<PREFIX>-<digits>` runs of letters, digits, underscores and hyphens, so
+/// plain word-boundary matching is not enough — a hyphen is not a word
+/// character, but must still not count as a boundary between two
+/// pseudonym-shaped tokens. The negative lookbehind/lookahead over
+/// `[A-Za-z0-9_-]` covers that.
+///
+/// ONE alternation scan over the whole set, longest-first (so `P-10` wins
+/// over `P-1` at the same offset), rather than a full-text scan per
+/// pseudonym.
+///
+/// Used only to size the `out_of_scope_pseudonym` security event's `count`
+/// and `detail`; it never changes which pseudonyms are withheld (that is
+/// structural, driven by the caller's own scoped key filter).
+fn tokens_present(pseudonyms: &[String], text: &str) -> Vec<String> {
+    if pseudonyms.is_empty() {
+        return Vec::new();
+    }
+
+    // Sort a COPY by length descending — mirrors Python's
+    // `sorted(pseudonyms, key=len, reverse=True)`, which never mutates its
+    // input either.
+    let mut sorted: Vec<String> = pseudonyms.to_vec();
+    sorted.sort_by(|a, b| b.len().cmp(&a.len()));
+    let alternation = escaped_alternation(&sorted);
+    let pattern_str = format!(r"(?<![A-Za-z0-9_-])(?:{alternation})(?![A-Za-z0-9_-])");
+
+    let re = match Regex::new(&pattern_str) {
+        Ok(re) => re,
+        // An escaped alternation of literal strings should always compile;
+        // if it somehow doesn't, Python's `re.compile` on the equivalent
+        // pattern would not raise here either, so fail open to "no hits"
+        // rather than panic.
+        Err(_) => return Vec::new(),
+    };
+
+    let mut hits: BTreeSet<String> = BTreeSet::new();
+    let mut search_start = 0;
+    while search_start <= text.len() {
+        match re.find_from_pos(text, search_start) {
+            Ok(Some(m)) => {
+                hits.insert(m.as_str().to_string());
+                search_start = if m.end() > m.start() { m.end() } else { m.start() + 1 };
+            }
+            Ok(None) => break,
+            // A match-time error (e.g. a backtrack/overflow limit) stops the
+            // scan rather than panicking — mirrors `check_restore_safety`'s
+            // `_ => break` on this same `find_from_pos` idiom in this file.
+            Err(_) => break,
+        }
+    }
+    // `BTreeSet` iterates in sorted order, so this is exactly Python's
+    // `sorted(set(pattern.findall(text)))`.
+    hits.into_iter().collect()
 }
 
 /// Compat projection of [`restore_full_guarded`] onto the pre-existing tuple
@@ -966,5 +1026,44 @@ possible hallucination or fabrication"
         let text = format!("Reply.\n{short_nonce}");
         assert!(!nonce_echoed(&text, short_nonce));
         assert_eq!(strip_nonce(&text, short_nonce), text);
+    }
+
+    // ── out-of-scope pseudonym detector (S guard): tokens_present ───────────
+    // Port of `pure/restore.py::_tokens_present`.
+
+    #[test]
+    fn tokens_present_empty_pseudonyms_returns_empty() {
+        let empty: Vec<String> = Vec::new();
+        assert_eq!(tokens_present(&empty, "see P-10 and P-1"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn tokens_present_longest_first_no_substring_match() {
+        // "P-10" must not be reported as containing "P-1" — longest-first
+        // alternation plus the boundary lookaround wins the whole "P-10" token,
+        // and the shorter "P-1" elsewhere in the text still matches on its own.
+        let pseudonyms = vec!["P-1".to_string(), "P-10".to_string()];
+        assert_eq!(
+            tokens_present(&pseudonyms, "see P-10 and P-1"),
+            vec!["P-1".to_string(), "P-10".to_string()],
+        );
+    }
+
+    #[test]
+    fn tokens_present_trailing_word_char_not_matched() {
+        // "P-1x" has a trailing word character right after "P-1" — the
+        // negative lookahead over [A-Za-z0-9_-] must reject it as a match.
+        let pseudonyms = vec!["P-1".to_string()];
+        let empty: Vec<String> = Vec::new();
+        assert_eq!(tokens_present(&pseudonyms, "P-1x"), empty);
+    }
+
+    #[test]
+    fn tokens_present_duplicate_match_appears_once() {
+        let pseudonyms = vec!["P-1".to_string()];
+        assert_eq!(
+            tokens_present(&pseudonyms, "P-1 and P-1 again"),
+            vec!["P-1".to_string()],
+        );
     }
 }
