@@ -296,3 +296,53 @@ fn golden_fast_mode_byte_parity() {
         );
     }
 }
+
+/// The `{ text, key, aliases, keep_downgraded, mask_collisions }` shape `redact`
+/// returns once the two compliance signals are carried; a struct SEPARATE from
+/// [`RedactOut`] (used by the byte-parity test above) so that test keeps reading
+/// only the fields it needs.
+#[derive(Deserialize)]
+struct RedactOutWithSignals {
+    #[allow(dead_code)]
+    text: String,
+    #[allow(dead_code)]
+    key: HashMap<String, String>,
+    keep_downgraded: bool,
+    mask_collisions: Vec<String>,
+}
+
+/// `keep_downgraded` / `mask_collisions` (already produced by the core `replace()`
+/// session) must reach the wasm `redact` result additively — mirrors the Python
+/// binding's `signals` slot (`keep_downgraded`, `mask_collisions`) landing on the
+/// PyO3 `replace()` return.
+///
+/// The fixture forces a REAL mask-family collision: "13812345678" and
+/// "13800005678" both mask to the same visible label "138****5678" (mask only
+/// shows the first 3 + last 4 digits) under `phone -> mask` with a fixed salt —
+/// the exact input `mask_collision_recorded_when_two_originals_share_a_masked_label`
+/// uses in `argus-redact-core`'s `replace.rs` tests, mirrored here so wasm and core
+/// stay in lockstep on what counts as a collision.
+#[wasm_bindgen_test]
+fn redact_result_carries_signals() {
+    let opts = Opts {
+        config: cfg(&[("phone", "mask")]),
+        ..opts("zh")
+    };
+    let opts_js = serde_wasm_bindgen::to_value(&opts).expect("opts serialize failed");
+
+    let out_js = redact("电话13812345678 和 13800005678", opts_js).expect("redact errored");
+    let out: RedactOutWithSignals = serde_wasm_bindgen::from_value(out_js).expect(
+        "result deserialize failed — keep_downgraded/mask_collisions missing from \
+         the wasm redact result?",
+    );
+
+    assert_eq!(
+        out.mask_collisions,
+        vec!["phone".to_string()],
+        "two originals masking to the same visible label must surface as a \
+         mask_collisions signal"
+    );
+    // No keep-strategy entity appears in this input, so keep_downgraded pins to
+    // false — this also proves the field round-trips through JsValue at all.
+    assert!(!out.keep_downgraded, "no keep-strategy entity in this input");
+}

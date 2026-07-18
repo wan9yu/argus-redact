@@ -158,13 +158,21 @@ fn to_object_serializer() -> serde_wasm_bindgen::Serializer {
     serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true)
 }
 
-/// The `redact` return shape `{ text, key, aliases }`. `key` is `{fake: original}`
-/// (for `restore`); `aliases` is `{fake: [alias, ...]}` from realistic fakers.
+/// The `redact` return shape `{ text, key, aliases, keep_downgraded,
+/// mask_collisions }`. `key` is `{fake: original}` (for `restore`); `aliases` is
+/// `{fake: [alias, ...]}` from realistic fakers. `keep_downgraded` /
+/// `mask_collisions` are the two compliance signals the core `replace()` session
+/// tracks, surfaced here ADDITIVELY — mirrors the `signals` slot the PyO3 binding
+/// carries (`crates/argus-redact-py/src/replace.rs`), NOT a widening of the public
+/// core [`RedactSegment`] (which stays `{ downstream_text, key, aliases }` for
+/// crates.io compatibility; see [`redact_segment`]).
 #[derive(Serialize)]
 struct RedactResult {
     text: String,
     key: HashMap<String, String>,
     aliases: HashMap<String, Vec<String>>,
+    keep_downgraded: bool,
+    mask_collisions: Vec<String>,
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -227,18 +235,31 @@ struct RedactParams {
     whitelist: HashSet<String>,
 }
 
+/// [`redact_segment`]'s full result: the public core [`RedactSegment`]
+/// (`downstream_text` + `key` + `aliases`, untouched — NOT widened) plus the two
+/// compliance signals the core `replace()` session tracks on `ReplaceResult`
+/// (`keep_downgraded` / `mask_collisions`), read off the session result HERE
+/// before they would otherwise be dropped when `RedactSegment` is built. Local to
+/// this crate — never crosses the crates.io-published core boundary.
+struct RedactSegmentWithSignals {
+    segment: RedactSegment,
+    keep_downgraded: bool,
+    mask_collisions: Vec<String>,
+}
+
 /// Run the one-shot fast-mode redact path over `text`, optionally threading an
 /// `existing_key` for cross-chunk collision continuity (same original reuses the
 /// same fake — mirrors the Python `existing_key=` / `setdefault` merge). This is
 /// the SSOT for the one-shot [`redact`] entry point: `detect_l1` →
 /// `build_type_info` (`registry_defaults = None`) → `redact_l1` with the wasm
-/// MT19937 pseudo-factory. Returns the `(downstream, key, aliases)` segment.
+/// MT19937 pseudo-factory. Returns the segment PLUS the `keep_downgraded` /
+/// `mask_collisions` signals (see [`RedactSegmentWithSignals`]).
 /// The streaming path uses a separate replace-based redact closure (no re-detect).
 fn redact_segment(
     params: &RedactParams,
     text: &str,
     existing_key: Option<&HashMap<String, String>>,
-) -> Result<RedactSegment, String> {
+) -> Result<RedactSegmentWithSignals, String> {
     // Detect first so build_type_info only resolves the types that actually
     // appear — redact_l1 re-detects internally; this re-detect feeds type_info,
     // matching the Python shim's build-type-info-over-detected-entities order.
@@ -273,10 +294,14 @@ fn redact_segment(
         None, // no custom Python fakers in wasm
     )?;
 
-    Ok(RedactSegment {
-        downstream_text: result.redacted,
-        key: result.key,
-        aliases: result.aliases,
+    Ok(RedactSegmentWithSignals {
+        segment: RedactSegment {
+            downstream_text: result.redacted,
+            key: result.key,
+            aliases: result.aliases,
+        },
+        keep_downgraded: result.keep_downgraded,
+        mask_collisions: result.mask_collisions,
     })
 }
 
@@ -298,7 +323,14 @@ pub fn init() {
 }
 
 /// Fast-mode redact. `text` is the source; `opts` is a JS object deserialized
-/// into [`RedactOpts`]. Returns `{ text, key, aliases }`.
+/// into [`RedactOpts`]. Returns `{ text, key, aliases, keep_downgraded,
+/// mask_collisions }` — the last two are additive compliance signals (a JS
+/// caller reading only `text`/`key`/`aliases` is unaffected): `keep_downgraded`
+/// is `true` if a `keep`-strategy entity failed the whitelist and was downgraded;
+/// `mask_collisions` lists (one entry per collision, not deduped) the entity
+/// types for which a mask-family strategy produced two originals sharing one
+/// visible label, disambiguated with a trailing marker (see the core
+/// `ReplaceResult::mask_collisions` doc for the LLM-normalization caveat).
 ///
 /// Errors (as a JS `Error`):
 /// - `mode` other than `"fast"` (NER / semantic layers are unavailable in wasm).
@@ -331,12 +363,14 @@ pub fn redact(text: &str, opts: JsValue) -> Result<JsValue, JsValue> {
     }
 
     let params = resolve_params(opts);
-    let segment = redact_segment(&params, text, None).map_err(|e| JsValue::from_str(&e))?;
+    let with_signals = redact_segment(&params, text, None).map_err(|e| JsValue::from_str(&e))?;
 
     let out = RedactResult {
-        text: segment.downstream_text,
-        key: segment.key,
-        aliases: segment.aliases,
+        text: with_signals.segment.downstream_text,
+        key: with_signals.segment.key,
+        aliases: with_signals.segment.aliases,
+        keep_downgraded: with_signals.keep_downgraded,
+        mask_collisions: with_signals.mask_collisions,
     };
     out.serialize(&to_object_serializer())
         .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
