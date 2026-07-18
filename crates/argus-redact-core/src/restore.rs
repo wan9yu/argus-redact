@@ -13,6 +13,16 @@ impl std::fmt::Display for RestoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.0) }
 }
 
+/// Result of a full restore pass. `restored` is the text with pseudonyms
+/// replaced back to originals; `alias_collisions` lists every alias string
+/// that two distinct fakes both claimed (mapping to two different originals)
+/// — see `merge_aliases`.
+#[derive(Debug)]
+pub struct RestoreResult {
+    pub restored: String,
+    pub alias_collisions: Vec<String>,
+}
+
 /// Fail closed on a key containing an empty-string surrogate. argus never
 /// produces one (the redact side refuses to), so such a key is corrupted or
 /// hand-built; an empty surrogate would otherwise become a zero-width regex
@@ -178,65 +188,21 @@ fn advance_chars(s: &str, from: usize, n_chars: usize) -> usize {
     end
 }
 
-/// Full restore path: alias merge + core substitution + grammar.
+/// Build the flat restore lookup = `key` ∪ {alias → key[fake]'s original},
+/// merging in SORTED fake-key order so the winner is deterministic across
+/// process runs (a plain `for (fake, alias_list) in alias_map` walk order is
+/// randomized per-process by HashMap's hasher, so an unsorted walk would let
+/// the process hash seed decide the output). When two distinct fakes alias to
+/// the SAME string with two DIFFERENT originals, the sorted-first fake wins
+/// and the collision is recorded in the returned `Vec` so the caller can be
+/// warned the loser's identity may come back wrong on restore.
 ///
-/// 1. If `display_marker` is Some → strip that marker from text.
-/// 2. If key empty → return text.
-/// 3. Alias merge: build flat lookup = key ∪ {alias → key[fake]'s original}.
-/// 4. Core substitution (`restore`, single-pass longest-first), tracking the
-///    span of every self-ref pronoun value it substitutes in.
-/// 5. `restore_grammar_en` runs ONLY in the neighbourhood of those spans (see
-///    `apply_grammar_scoped`) — never as a whole-text pass.
-///
-/// Decoration markers (`ⓕ`, `(假)`, `ˢ`, `*`) need no dedicated pass: a marker
-/// trailing a key is ordinary non-key text, so the single `restore` pass leaves
-/// it verbatim right after the restored value (e.g. `"P-1ⓕ"` → `"<value>ⓕ"`).
-///
-/// Returns `(restored_text, alias_collisions)`. `alias_collisions` has one
-/// entry per alias string that two distinct fakes both claimed (mapping to two
-/// different originals) — empty when `aliases` is `None` or no collision
-/// occurred. See the alias-merge step above: the sorted-first fake wins
-/// deterministically and every collision is recorded, never silently dropped.
-pub fn restore_full(
-    text: &str,
+/// Returns `(flat_map, alias_collisions)`. With `aliases = None`, `flat_map`
+/// is a plain clone of `key` and `alias_collisions` is empty.
+fn merge_aliases(
     key: &HashMap<String, String>,
     aliases: Option<&HashMap<String, Vec<String>>>,
-    display_marker: Option<&str>,
-) -> Result<(String, Vec<String>), RestoreError> {
-    // Step 1: strip explicit display marker — scoped to this key's fakes
-    // only. A global strip would remove the marker character everywhere in
-    // `text`, destroying unrelated content that happens to contain it (e.g.
-    // markdown `**bold**`, or a masked value's internal `*`). Scoping to the
-    // same longest-first fake alternation `mark_for_display` uses makes the
-    // strip land exactly where the mark was added, nowhere else.
-    let text_owned: String;
-    let text = if let Some(dm) = display_marker {
-        let key_fakes: Vec<String> = key.keys().cloned().collect();
-        text_owned = strip_display_markers_scoped(text, &key_fakes, Some(dm));
-        text_owned.as_str()
-    } else {
-        text
-    };
-
-    // Step 2: empty key fast-path.
-    if key.is_empty() {
-        return Ok((text.to_string(), Vec::new()));
-    }
-
-    // `restore_tracking_self_ref` (called below at Step 4) rejects an
-    // empty-string key entry too; this is defense in depth so `restore_full`
-    // fails closed on its own before doing any alias-merge work, independent
-    // of whether the lower-level fn is reached unchanged.
-    reject_empty_key_entry(key)?;
-
-    // Step 3: alias merge — build flat lookup. Iterates `alias_map` in SORTED
-    // key order so the merge winner is deterministic across process runs (a
-    // plain `for (fake, alias_list) in alias_map` walk order is randomized
-    // per-process by HashMap's hasher, so an unsorted walk would let the
-    // process hash seed decide the output). When two distinct fakes alias to the SAME string with
-    // two DIFFERENT originals, the sorted-first fake wins and the collision is
-    // recorded so the caller can be warned the loser's identity may come back
-    // wrong on restore.
+) -> (HashMap<String, String>, Vec<String>) {
     let mut alias_collisions: Vec<String> = Vec::new();
     let flat: HashMap<String, String> = if let Some(alias_map) = aliases {
         let mut m: HashMap<String, String> = key.clone();
@@ -265,6 +231,62 @@ pub fn restore_full(
     } else {
         key.clone()
     };
+    (flat, alias_collisions)
+}
+
+/// Full restore path: alias merge + core substitution + grammar.
+///
+/// 1. If `display_marker` is Some → strip that marker from text.
+/// 2. If key empty → return text.
+/// 3. Alias merge: build flat lookup = key ∪ {alias → key[fake]'s original}
+///    (see `merge_aliases`).
+/// 4. Core substitution (`restore`, single-pass longest-first), tracking the
+///    span of every self-ref pronoun value it substitutes in.
+/// 5. `restore_grammar_en` runs ONLY in the neighbourhood of those spans (see
+///    `apply_grammar_scoped`) — never as a whole-text pass.
+///
+/// Decoration markers (`ⓕ`, `(假)`, `ˢ`, `*`) need no dedicated pass: a marker
+/// trailing a key is ordinary non-key text, so the single `restore` pass leaves
+/// it verbatim right after the restored value (e.g. `"P-1ⓕ"` → `"<value>ⓕ"`).
+///
+/// Returns a `RestoreResult` whose `alias_collisions` has one entry per alias
+/// string that two distinct fakes both claimed (mapping to two different
+/// originals) — empty when `aliases` is `None` or no collision occurred.
+pub fn restore_full_guarded(
+    text: &str,
+    key: &HashMap<String, String>,
+    aliases: Option<&HashMap<String, Vec<String>>>,
+    display_marker: Option<&str>,
+) -> Result<RestoreResult, RestoreError> {
+    // Step 1: strip explicit display marker — scoped to this key's fakes
+    // only. A global strip would remove the marker character everywhere in
+    // `text`, destroying unrelated content that happens to contain it (e.g.
+    // markdown `**bold**`, or a masked value's internal `*`). Scoping to the
+    // same longest-first fake alternation `mark_for_display` uses makes the
+    // strip land exactly where the mark was added, nowhere else.
+    let text_owned: String;
+    let text = if let Some(dm) = display_marker {
+        let key_fakes: Vec<String> = key.keys().cloned().collect();
+        text_owned = strip_display_markers_scoped(text, &key_fakes, Some(dm));
+        text_owned.as_str()
+    } else {
+        text
+    };
+
+    // Step 2: empty key fast-path.
+    if key.is_empty() {
+        return Ok(RestoreResult { restored: text.to_string(), alias_collisions: Vec::new() });
+    }
+
+    // `restore_tracking_self_ref` (called below at Step 4) rejects an
+    // empty-string key entry too; this is defense in depth so
+    // `restore_full_guarded` fails closed on its own before doing any
+    // alias-merge work, independent of whether the lower-level fn is reached
+    // unchanged.
+    reject_empty_key_entry(key)?;
+
+    // Step 3: alias merge — build flat lookup.
+    let (flat, alias_collisions) = merge_aliases(key, aliases);
 
     // Step 4: core substitution over the flat lookup.
     //
@@ -286,7 +308,19 @@ pub fn restore_full(
     // self-ref pronoun OR none of them actually got substituted into `text`.
     let result = apply_grammar_scoped(&result, &self_ref_spans);
 
-    Ok((result, alias_collisions))
+    Ok(RestoreResult { restored: result, alias_collisions })
+}
+
+/// Compat projection of [`restore_full_guarded`] onto the pre-existing tuple
+/// shape. `argus-redact-core` is a stable crates.io crate — this signature is
+/// frozen; new callers should use `restore_full_guarded` directly.
+pub fn restore_full(
+    text: &str,
+    key: &HashMap<String, String>,
+    aliases: Option<&HashMap<String, Vec<String>>>,
+    display_marker: Option<&str>,
+) -> Result<(String, Vec<String>), RestoreError> {
+    restore_full_guarded(text, key, aliases, display_marker).map(|r| (r.restored, r.alias_collisions))
 }
 
 // ── Danger patterns for check_restore_safety ────────────────────────────────
@@ -650,6 +684,25 @@ mod tests {
         k.insert("P-1".to_string(), "张三".to_string());
         let (result, _collisions) = restore_full("call P-1(假) now", &k, None, None).unwrap();
         assert_eq!(result, "call 张三(假) now");
+    }
+
+    #[test]
+    fn full_guarded_matches_tuple_projection() {
+        // `restore_full_guarded` must be a strict superset of the tuple
+        // `restore_full` returns — same restored text, same alias_collisions
+        // — including on a case that actually records a collision.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        k.insert("P-2".to_string(), "Bob".to_string());
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        aliases.insert("P-1".to_string(), vec!["Shared".to_string()]);
+        aliases.insert("P-2".to_string(), vec!["Shared".to_string()]);
+
+        let guarded = restore_full_guarded("hello Shared", &k, Some(&aliases), None).unwrap();
+        let tuple = restore_full("hello Shared", &k, Some(&aliases), None).unwrap();
+
+        assert_eq!(guarded.restored, tuple.0);
+        assert_eq!(guarded.alias_collisions, tuple.1);
     }
 
     // ── check_restore_safety tests ──────────────────────────────────────────
