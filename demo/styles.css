@@ -30,3 +30,8 @@ button.primary { font-size: 1.05rem; padding: .55rem 1.1rem; }
 #how-steps { line-height: 1.9; }
 .limit { color: #8a6d00; background: #fff8e1; border-radius: 6px; padding: .4rem .6rem; margin-top: .7rem; font-size: .82rem; }
 .dev-row { display: flex; gap: .5rem; align-items: center; margin: .3rem 0; flex-wrap: wrap; }
+#guarded-outcome { font-weight: 600; }
+#guarded-outcome[data-outcome="complete"] { color: #2e7d32; }
+#guarded-outcome[data-outcome="partial"] { color: #b08900; }
+#guarded-outcome[data-outcome="blocked"] { color: #c62828; }
+#guarded-withheld { font-size: .9em; color: #555; }

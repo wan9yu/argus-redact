@@ -4,7 +4,7 @@ import { initHero } from './hero.js';
 import { initDeveloper } from './developer.js';
 import { initStreaming } from './streaming.js';
 import { renderLlmProof } from './llm_proof.js';
-import { makeNonce, promptAnchor, buildAnchor } from './guarded.js';
+import { makeNonce, promptAnchor, buildAnchor, initGuarded } from './guarded.js';
 
 function applyStatic() {
   document.getElementById('headline').textContent = T.headline;
@@ -40,6 +40,7 @@ window.argusReady = (async () => {
   initHero(api);
   initDeveloper(api);
   initStreaming(api);
+  initGuarded(api);
   await renderLlmProof();
 })();
 

@@ -1,7 +1,20 @@
 import { test, expect } from '@playwright/test';
+import { T } from '../../demo/js/strings.js';
 
 const NONCE_ECHO_EN = 'End your reply with this exact verification token on its own line: ';
 const NONCE_ECHO_ZH = '请在回复末尾以独立的一行输出这个验证令牌：';
+
+// The guard's stable event-kind vocabulary (crates/argus-redact-wasm/src/lib.rs
+// guard_event_kind_str) and outcome vocabulary (restore_outcome_str) — the demo
+// panel owes every one of these a non-blank zh/en copy entry.
+const GUARD_KINDS = [
+  'guard_no_anchor',
+  'provenance_failed',
+  'empty_key_with_scope',
+  'out_of_scope_pseudonym',
+  'alias_collision',
+];
+const GUARD_OUTCOMES = ['blocked', 'partial', 'complete'];
 
 async function ready(page) {
   await page.goto('/index.html');
@@ -73,4 +86,66 @@ test('full guarded roundtrip: buildAnchor + restore_guarded recovers the origina
   });
   expect(result.outcome).toBe('complete');
   expect(result.restored).toBe('Contact Alice Johnson at the office.');
+});
+
+// ── panel: every guard kind + outcome has non-blank zh/en copy ──────────────
+
+test('every guard event-kind key has non-blank zh and en copy', () => {
+  for (const kind of GUARD_KINDS) {
+    const s = T.guardKind?.[kind];
+    expect(s, `T.guardKind.${kind} must exist`).toBeTruthy();
+    const [zh, en] = s.split(' · ');
+    expect(zh?.trim().length, `zh half of guardKind.${kind}`).toBeGreaterThan(0);
+    expect(en?.trim().length, `en half of guardKind.${kind}`).toBeGreaterThan(0);
+  }
+});
+
+test('every guard outcome key has non-blank zh and en copy', () => {
+  for (const outcome of GUARD_OUTCOMES) {
+    const s = T.guardOutcome?.[outcome];
+    expect(s, `T.guardOutcome.${outcome} must exist`).toBeTruthy();
+    const [zh, en] = s.split(' · ');
+    expect(zh?.trim().length, `zh half of guardOutcome.${outcome}`).toBeGreaterThan(0);
+    expect(en?.trim().length, `en half of guardOutcome.${outcome}`).toBeGreaterThan(0);
+  }
+});
+
+// ── panel: happy path (simulated echoed reply) ───────────────────────────────
+
+test('guarded panel: happy path with the prefilled simulated reply restores exactly and reports complete', async ({ page }) => {
+  await ready(page);
+  const original = await page.inputValue('#guarded-input');
+  await page.click('#guarded-build');
+  // The reply textarea is prefilled with a SIMULATED echo (redacted text + the
+  // prompt's own nonce line) — no live LLM involved. Run the guarded restore
+  // over that prefill unmodified.
+  await page.click('#guarded-run');
+  await expect(page.locator('#guarded-outcome')).toHaveAttribute('data-outcome', 'complete');
+  await expect(page.locator('#guarded-result')).toHaveText(original);
+});
+
+// ── panel: fail-closed when the reply never echoes the nonce back ───────────
+
+test('guarded panel: a reply missing the verification token is blocked and the text stays redacted', async ({ page }) => {
+  await ready(page);
+  await page.click('#guarded-build');
+  const redactedText = await page.locator('#guarded-redacted').innerText();
+  // Tamper the simulated reply: drop the nonce line the happy path relies on,
+  // keep the redacted text — simulates a reply that never echoed the token.
+  await page.fill('#guarded-reply', redactedText);
+  await page.click('#guarded-run');
+  await expect(page.locator('#guarded-outcome')).toHaveAttribute('data-outcome', 'blocked');
+  await expect(page.locator('#guarded-result')).toHaveText(redactedText);
+  await expect(page.locator('#guarded-withheld')).not.toBeEmpty();
+});
+
+// ── panel: an empty reply is also blocked (fail-closed, not a crash) ────────
+
+test('guarded panel: clearing the reply entirely is blocked, not a crash', async ({ page }) => {
+  await ready(page);
+  await page.click('#guarded-build');
+  await page.fill('#guarded-reply', '');
+  await page.click('#guarded-run');
+  await expect(page.locator('#guarded-outcome')).toHaveAttribute('data-outcome', 'blocked');
+  await expect(page.locator('#guarded-error')).toBeEmpty();
 });
