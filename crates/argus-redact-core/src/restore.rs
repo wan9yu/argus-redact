@@ -533,10 +533,22 @@ pub fn restore_full_guarded(
     // Restore only in-scope pseudonyms.
     let (result, alias_collisions) = restore_body(&text, &scoped, aliases, display_marker)?;
     if !alias_collisions.is_empty() {
+        // Dedupe + sort for the EVENT only — `merge_aliases` pushes one entry
+        // per LOSING claim, so a 3-way collision on one alias string appears
+        // multiple times in `alias_collisions`. The event must report DISTINCT
+        // collided aliases (matching Python's `alias_collision_event`, which
+        // counts `set(...)`), and its `detail` must be the SORTED token list
+        // the `GuardEvent.detail` contract promises (as its sibling
+        // `OutOfScopePseudonym` already does via `tokens_present`). `BTreeSet`
+        // gives both in one step. `RestoreResult.alias_collisions` below stays
+        // the RAW list — the unguarded/warn path counts it via its own
+        // `set()`-dedup and must see every push.
+        let distinct: Vec<String> =
+            alias_collisions.iter().cloned().collect::<BTreeSet<_>>().into_iter().collect();
         events.push(GuardEvent {
             kind: GuardEventKind::AliasCollision,
-            count: alias_collisions.len(),
-            detail: Some(alias_collisions.clone()),
+            count: distinct.len(),
+            detail: Some(distinct),
         });
     }
 
@@ -1154,6 +1166,59 @@ mod tests {
         assert_eq!(result.events[1].kind, GuardEventKind::AliasCollision);
         assert_eq!(result.events[1].count, result.alias_collisions.len());
         assert_eq!(result.events[1].detail, Some(result.alias_collisions.clone()));
+    }
+
+    #[test]
+    fn guarded_alias_collision_event_dedupes_and_sorts_but_field_stays_raw() {
+        // A MULTI-way collision: "Beta" is claimed by three distinct fakes
+        // (P-1 wins, P-2 and P-3 each lose → "Beta" pushed TWICE), and "Alpha"
+        // by two (P-4 wins, P-5 loses → pushed once). The raw
+        // `merge_aliases` push list is therefore ["Beta", "Beta", "Alpha"]
+        // (len 3, unsorted). The AliasCollision EVENT must report DISTINCT
+        // collided aliases — count 2, detail sorted+deduped ["Alpha", "Beta"]
+        // — matching Python's `set()`-based `alias_collision_event` and the
+        // `GuardEvent.detail` SORTED-token contract. The
+        // `RestoreResult.alias_collisions` FIELD must stay the RAW list so the
+        // unguarded/warn path's own dedup still sees every push.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        k.insert("P-2".to_string(), "Bob".to_string());
+        k.insert("P-3".to_string(), "Carol".to_string());
+        k.insert("P-4".to_string(), "Dave".to_string());
+        k.insert("P-5".to_string(), "Eve".to_string());
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        aliases.insert("P-1".to_string(), vec!["Beta".to_string()]);
+        aliases.insert("P-2".to_string(), vec!["Beta".to_string()]);
+        aliases.insert("P-3".to_string(), vec!["Beta".to_string()]);
+        aliases.insert("P-4".to_string(), vec!["Alpha".to_string()]);
+        aliases.insert("P-5".to_string(), vec!["Alpha".to_string()]);
+        let mut scope = std::collections::HashSet::new();
+        for c in ["P-1", "P-2", "P-3", "P-4", "P-5"] {
+            scope.insert(c.to_string());
+        }
+        let anchor = Anchor { nonce: NONCE.to_string(), scope };
+
+        let text = format!("Beta and Alpha here.\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, Some(&aliases), None, Some(&anchor)).unwrap();
+
+        // Winners restore: sorted-first fake wins each alias (P-1 for Beta,
+        // P-4 for Alpha). All in scope → no OutOfScope event, so the only
+        // event is the AliasCollision one.
+        assert_eq!(result.restored, "Alice and Dave here.");
+        assert_eq!(result.outcome, RestoreOutcome::Complete);
+
+        // The FIELD is the raw undeduped list, in merge-push order.
+        assert_eq!(
+            result.alias_collisions,
+            vec!["Beta".to_string(), "Beta".to_string(), "Alpha".to_string()],
+        );
+
+        // The EVENT dedupes + sorts.
+        assert_eq!(result.events.len(), 1);
+        let ev = &result.events[0];
+        assert_eq!(ev.kind, GuardEventKind::AliasCollision);
+        assert_eq!(ev.count, 2, "distinct collided aliases, not the raw push count (3)");
+        assert_eq!(ev.detail, Some(vec!["Alpha".to_string(), "Beta".to_string()]));
     }
 
     // ── check_restore_safety tests ──────────────────────────────────────────
