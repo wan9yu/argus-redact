@@ -567,6 +567,16 @@ The LangChain and LlamaIndex adapters hold the redacted prompt and anchor from t
 paired redact step, so H runs there without you threading anything; the MCP server keeps
 them alongside the key token for the same reason (see [security.md](security.md#mcp-token-store)).
 
+**The guard is not Python-only.** The P + S checks are core logic (`restore_full_guarded`),
+and the in-browser wasm build exposes them directly as `restore_guarded(text, key, anchor)`,
+taking the same `{nonce, scope}` anchor shape and returning a structured `{restored,
+outcome, events}` result — the browser-facing counterpart to the Python binding, with no
+Python or server round-trip involved. The [in-repo demo](../demo/) — the same demo also
+published as a [Hugging Face Space](https://huggingface.co/spaces/wan9yu/argus-redact) —
+drives this path with a guarded-restore panel: it builds a real anchor and nonce, but the
+"reply" is a **simulated echo typed into the page**, not a live LLM — so the panel
+demonstrates the guard's provenance and scope checks, not an end-to-end LLM integration.
+
 **Honest boundary:** the guard operates at the restore layer only. It verifies that a
 response came from the expected session and contains only in-scope pseudonyms. It does
 not inspect network transport, protect against key exfiltration, or prevent the LLM from
