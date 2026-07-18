@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 
 use argus_redact_core::check_restore_safety as core_check_safety;
 use argus_redact_core::restore_full as core_restore_full;
@@ -8,27 +9,38 @@ use argus_redact_core::restore_full as core_restore_full;
 /// Restore redacted text by replacing pseudonyms with originals (simple 2-arg form).
 /// Kept for back-compat; new callers should prefer `restore` with keyword args.
 ///
-/// Returns `(restored_text, alias_collisions)` — `alias_collisions` has one
-/// entry per alias string that two distinct fakes both claimed (mapping to two
+/// Returns `(restored_text, signals)` where `signals =
+/// {"alias_collisions": list[str]}` — `alias_collisions` has one entry per
+/// alias string that two distinct fakes both claimed (mapping to two
 /// different originals); empty when no `aliases` were passed or none collided.
 /// The Python wrapper (`pure/restore._do_restore`) turns a non-empty list into
 /// a `SecurityWarning` — mirrors how `replace`'s `mask_collisions` is threaded.
+///
+/// This calls the STABLE `restore_full` compat wrapper (not
+/// `restore_full_guarded` directly) so this binding's shape stays decoupled
+/// from any guard-parameter evolution on the guarded entry point.
 #[pyfunction]
 #[pyo3(signature = (text, key, aliases=None, display_marker=None))]
-pub fn restore(
+pub fn restore<'py>(
+    py: Python<'py>,
     text: &str,
     key: HashMap<String, String>,
     aliases: Option<HashMap<String, Vec<String>>>,
     display_marker: Option<String>,
-) -> PyResult<(String, Vec<String>)> {
+) -> PyResult<(String, Py<PyDict>)> {
     // Route through restore_full when extras are provided (or always, for consistency).
-    core_restore_full(
+    let (restored, alias_collisions) = core_restore_full(
         text,
         &key,
         aliases.as_ref(),
         display_marker.as_deref(),
     )
-    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+    let signals = PyDict::new(py);
+    signals.set_item("alias_collisions", alias_collisions)?;
+
+    Ok((restored, signals.unbind()))
 }
 
 /// Check whether LLM output has suspicious pseudonym usage (possible injection).

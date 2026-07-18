@@ -547,7 +547,7 @@ def replace(
         _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
     ]
 
-    redacted, result_key, aliases, keep_downgraded, mask_collisions = _core.replace(
+    redacted, result_key, aliases, signals = _core.replace(
         text,
         rust_entities,
         salt=salt,
@@ -559,6 +559,8 @@ def replace(
         keep_whitelist=_KEEP_WHITELIST,
         custom_fakers=custom_fakers if custom_fakers else None,
     )
+    keep_downgraded = signals["keep_downgraded"]
+    mask_collisions = signals["mask_collisions"]
 
     # `keep_downgraded` is the Rust core's authoritative "a downgrade happened"
     # signal. The Python-side entity SELECTION (which entities to warn about, and

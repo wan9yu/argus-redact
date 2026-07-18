@@ -181,27 +181,28 @@ pub(crate) fn build_faker_factory(
     Ok(PyFakerFactory { fakers })
 }
 
-/// `(redacted, key, aliases, keep_downgraded, mask_collisions)` — the
-/// [`replace`] return shape.
+/// `(redacted, key, aliases, signals)` — the [`replace`] return shape.
+/// `signals` is a Python dict carrying `keep_downgraded` (bool) and
+/// `mask_collisions` (list[str]) in one slot rather than two trailing
+/// positional elements.
 type ReplaceOut = (
     String,
     HashMap<String, String>,
     HashMap<String, Vec<String>>,
-    bool,
-    Vec<String>,
+    Py<PyDict>,
 );
 
 /// Single-pass replace orchestrator (Rust).
 ///
-/// Mirrors `pure/replacer.replace`. Returns
-/// `(redacted, key, aliases, keep_downgraded, mask_collisions)` — the Python
-/// wrapper turns the `keep_downgraded` flag into the `SecurityWarning` (it
-/// already pre-checks the downgrade condition to build the warning message, so
-/// the flag is a safety cross-check rather than the sole signal). Likewise,
-/// `mask_collisions` (one entry per mask-family collision `resolve_collision`
-/// actually disambiguated) drives a second `SecurityWarning` + a
-/// `mask_collision` `security_event` — see `ReplaceResult::mask_collisions`
-/// (core `replace.rs`).
+/// Mirrors `pure/replacer.replace`. Returns `(redacted, key, aliases,
+/// signals)` where `signals = {"keep_downgraded": bool, "mask_collisions":
+/// list[str]}`. The Python wrapper turns the `keep_downgraded` flag into the
+/// `SecurityWarning` (it already pre-checks the downgrade condition to build
+/// the warning message, so the flag is a safety cross-check rather than the
+/// sole signal). Likewise, `mask_collisions` (one entry per mask-family
+/// collision `resolve_collision` actually disambiguated) drives a second
+/// `SecurityWarning` + a `mask_collision` `security_event` — see
+/// `ReplaceResult::mask_collisions` (core `replace.rs`).
 #[pyfunction]
 #[pyo3(signature = (
     text, entities, *, salt=None, key=None, type_info,
@@ -255,13 +256,15 @@ pub fn replace(
     )
     .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
-    Ok((
-        result.redacted,
-        result.key,
-        result.aliases,
-        result.keep_downgraded,
-        result.mask_collisions,
-    ))
+    // `type_info` is a `Bound<'_, PyDict>` we already hold, so it carries the
+    // GIL token this call is running under — reuse it to build `signals`
+    // rather than re-attaching.
+    let py = type_info.py();
+    let signals = PyDict::new(py);
+    signals.set_item("keep_downgraded", result.keep_downgraded)?;
+    signals.set_item("mask_collisions", result.mask_collisions)?;
+
+    Ok((result.redacted, result.key, result.aliases, signals.unbind()))
 }
 
 /// Parse the Python `config` dict (`{type: {strategy, prefix, ...}}`) into the

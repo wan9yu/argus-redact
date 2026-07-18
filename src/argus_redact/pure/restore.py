@@ -423,9 +423,8 @@ def _do_restore(
     if aliases:
         rust_aliases = {k: list(v) for k, v in aliases.items()}
 
-    result, alias_collisions = _rust_restore(
-        text, key, aliases=rust_aliases, display_marker=display_marker
-    )
+    result, signals = _rust_restore(text, key, aliases=rust_aliases, display_marker=display_marker)
+    alias_collisions = signals["alias_collisions"]
     if _alias_collisions is not None:
         _alias_collisions.extend(alias_collisions)
     if _warn:
