@@ -534,10 +534,7 @@ pub fn restore_guarded(text: &str, key: JsValue, anchor: JsValue) -> Result<JsVa
 
     let spec: AnchorSpec = serde_wasm_bindgen::from_value(anchor)
         .map_err(|e| JsValue::from_str(&format!("invalid anchor: {e}")))?;
-    let core_anchor = Anchor {
-        nonce: spec.nonce,
-        scope: spec.scope.into_iter().collect(),
-    };
+    let core_anchor = Anchor::new(spec.nonce, spec.scope.into_iter().collect());
 
     let result = restore_full_guarded(text, &key, None, None, Some(&core_anchor))
         .map_err(|e| JsValue::from_str(&e.0))?;

@@ -101,10 +101,7 @@ pub fn restore_guarded<'py>(
     nonce: Option<String>,
     scope: Option<Vec<String>>,
 ) -> PyResult<(String, Vec<String>, Vec<Py<PyDict>>, &'static str)> {
-    let anchor = nonce.map(|nonce| Anchor {
-        nonce,
-        scope: scope.unwrap_or_default().into_iter().collect(),
-    });
+    let anchor = nonce.map(|nonce| Anchor::new(nonce, scope.unwrap_or_default().into_iter().collect()));
 
     let result = core_restore_full_guarded(
         text,

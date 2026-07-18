@@ -20,6 +20,7 @@ impl std::fmt::Display for RestoreError {
 /// — see `merge_aliases`. `events` records every guard check that fired
 /// (empty when the pass ran unguarded); `outcome` summarizes whether the
 /// restore proceeded in full, was partially withheld, or was blocked outright.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct RestoreResult {
     pub restored: String,
@@ -32,10 +33,20 @@ pub struct RestoreResult {
 /// actually came from the model that saw the redacted prompt, plus the set
 /// of pseudonym codes that reply is scoped to (anything outside `scope` is
 /// out-of-scope for that anchor).
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct Anchor {
     pub nonce: String,
     pub scope: std::collections::HashSet<String>,
+}
+
+impl Anchor {
+    /// Build an `Anchor` from its two fields. `#[non_exhaustive]` blocks
+    /// other crates from writing the struct literal directly, so this is the
+    /// stable construction path for callers outside `argus-redact-core`.
+    pub fn new(nonce: String, scope: std::collections::HashSet<String>) -> Self {
+        Self { nonce, scope }
+    }
 }
 
 /// Summary verdict of a guarded restore pass.
@@ -71,6 +82,7 @@ pub enum GuardEventKind {
 /// human-readable message. Callers own rendering (Python builds its
 /// `"withheld: {join}"` string, wasm exposes `tokens[]`) so no reason-code
 /// prose lives in this crate.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct GuardEvent {
     pub kind: GuardEventKind,
