@@ -7,7 +7,7 @@ import io
 import warnings
 from typing import Any
 
-from argus_redact import redact, restore
+from argus_redact import redact
 from argus_redact.exceptions import SecurityWarning
 from argus_redact.glue.redact import _build_type_map, _detect
 from argus_redact.pure.lang_detect import detect_languages
@@ -16,6 +16,7 @@ from argus_redact.pure.replacer import (
     replace_into_session,
     warn_mask_collisions,
 )
+from argus_redact.pure.restore import make_structured_restorer
 
 
 def _warn_low_entropy_salt(salt: int | bytes | None) -> None:
@@ -163,12 +164,15 @@ def redact_json(
 
 def restore_json(data: dict | list, key: dict) -> dict | list:
     """Restore PII in all string values of a JSON-like structure."""
+    # The session restores unguarded — a stored key file, no per-call anchor to
+    # verify — the same explicit unguarded opt-out `restore(..., guard=False)`
+    # documents, but merges the key + compiles the pattern ONCE for the whole
+    # document instead of on every leaf.
+    session = make_structured_restorer(key)
 
     def _walk(obj: Any) -> Any:
         if isinstance(obj, str):
-            # guard=False: structured restore reverses a stored key file, with no
-            # per-call anchor to verify — the explicit unguarded opt-out.
-            return restore(obj, key, guard=False)
+            return session.restore_cell(obj)
         if isinstance(obj, dict):
             return {k: _walk(v) for k, v in obj.items()}
         if isinstance(obj, list):
@@ -279,11 +283,14 @@ def restore_csv(csv_text: str, key: dict) -> str:
     unescaped comma into the flat CSV text, splitting one cell into two
     columns and corrupting the row structure on re-parse.
     """
+    # The session restores unguarded — a stored key file, no per-call anchor to
+    # verify — the same explicit unguarded opt-out `restore(..., guard=False)`
+    # documents (same as restore_json / redact_csv's forward path), but merges
+    # the key + compiles the pattern ONCE for the whole document instead of on
+    # every cell.
+    session = make_structured_restorer(key)
     output_rows: list[list[str]] = []
     for row in _parse_csv_rows(csv_text):
-        # guard=False: structured restore reverses a stored key file, with no
-        # per-call anchor to verify — the explicit unguarded opt-out (same as
-        # restore_json / redact_csv's forward path).
-        output_rows.append([restore(cell, key, guard=False) for cell in row])
+        output_rows.append([session.restore_cell(cell) for cell in row])
 
     return _serialize_csv_rows(output_rows)

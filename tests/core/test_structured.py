@@ -5,7 +5,7 @@ import io
 
 import pytest
 
-from argus_redact import SecurityWarning
+from argus_redact import SecurityWarning, restore
 from argus_redact.structured import redact_csv, redact_json, restore_csv, restore_json
 
 # ══════════════════════════════════════════════════════════════
@@ -289,6 +289,52 @@ class TestCrossLeafAliasKey:
         restored = restore_json(redacted, key)
         assert "13812345678" in str(restored), "phone not restored from JSON leaf"
         assert "110101199003074610" in str(restored), "id number not restored from JSON leaf"
+
+
+# ══════════════════════════════════════════════════════════════
+# restore_json — session vs. per-cell equivalence
+# ══════════════════════════════════════════════════════════════
+
+
+class TestRestoreJsonSessionEquivalence:
+    def test_restore_json_session_equivalence(self):
+        """restore_json's session-based walk must match a per-cell restore() walk.
+
+        Guards the session refactor: routing every leaf through ONE shared
+        `make_structured_restorer` session must be byte-identical to calling
+        the public `restore(cell, key, guard=False)` independently on each
+        leaf. The fixture nests a dict inside a list inside a dict, and
+        repeats one entity across two leaves, so both the recursion shape and
+        the shared-key accumulation are exercised.
+        """
+        data = {
+            "batch": [
+                {
+                    "user": {"note": "电话13812345678，邮箱zhang@test.com"},
+                    "tag": "vip",
+                },
+                {
+                    "user": {"note": "再次确认，电话13812345678"},
+                    "tag": "returning",
+                },
+            ],
+            "summary": "无PII",
+        }
+        redacted, key = redact_json(data, mode="fast", salt=42)
+
+        def _walk_per_cell(obj):
+            if isinstance(obj, str):
+                return restore(obj, key, guard=False)
+            if isinstance(obj, dict):
+                return {k: _walk_per_cell(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_walk_per_cell(item) for item in obj]
+            return obj
+
+        expected = _walk_per_cell(redacted)
+        actual = restore_json(redacted, key)
+
+        assert actual == expected
 
 
 # ══════════════════════════════════════════════════════════════
