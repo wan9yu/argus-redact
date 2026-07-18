@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import logging
-import re
 import warnings
 from typing import Mapping
 
 from argus_redact.exceptions import SecurityWarning
 from argus_redact.pure.replacer import alias_collision_event, warn_alias_collisions
 from argus_redact.pure.security_events import (
+    ALIAS_COLLISION,
     BLOCKED,
     COMPLETE,
     EMPTY_KEY_WITH_SCOPE,
@@ -39,6 +39,13 @@ class RestoreGuardError(Exception):
 # rejects short degenerate nonces as provenance proofs. The coupling to
 # make_anchor's token length is enforced by test_make_anchor_nonce_clears_floor
 # so the producer can't shrink its token below what this consumer accepts.
+#
+# The Rust core (`_core.restore_guarded`) now owns the LIVE enforcement of this
+# floor for restore()'s guarded path — see restore()'s `guard is True` branch
+# below. This constant and the two functions after it stay here, unchanged, so
+# the direct-import pins in test_guard_degenerate_nonce.py and
+# test_make_anchor_nonce_clears_floor keep testing the exact values the port
+# was checked against.
 _MIN_NONCE_LEN = 16
 
 
@@ -96,33 +103,6 @@ def _strip_nonce(text: str, nonce: str) -> str:
     return out.rstrip()
 
 
-def _tokens_present(pseudonyms: list[str], text: str) -> list[str]:
-    """The ``pseudonyms`` that appear in ``text`` as whole tokens (sorted).
-
-    A match must not be merely a substring of a longer pseudonym-shaped run
-    (e.g. ``P-1`` embedded in ``P-10``). Generated pseudonyms are
-    ``<PREFIX>-<digits>`` runs of letters, digits, underscores and hyphens, so
-    plain ``\\b`` word boundaries are not enough — a hyphen is not a word
-    character, but must still not count as a boundary between two
-    pseudonym-shaped tokens.
-
-    ONE alternation scan over the whole set, longest-first (so ``P-10`` wins
-    over ``P-1`` at the same offset), rather than a full-text scan per
-    pseudonym: the per-key version was O(keys x len(text)) and dominated the
-    guarded path on realistic key sizes.
-
-    Used only to size the ``out_of_scope_pseudonym`` security event's ``count``
-    and ``detail``; it never changes which pseudonyms are withheld (that is
-    structural, driven by the scoped key filter in ``restore``, not by this
-    check).
-    """
-    if not pseudonyms:
-        return []
-    alternation = "|".join(re.escape(p) for p in sorted(pseudonyms, key=len, reverse=True))
-    pattern = re.compile(r"(?<![A-Za-z0-9_-])(?:" + alternation + r")(?![A-Za-z0-9_-])")
-    return sorted(set(pattern.findall(text)))
-
-
 def check_restore_safety(
     redacted: str,
     llm_output: str,
@@ -141,6 +121,55 @@ def check_restore_safety(
     from argus_redact._core import check_restore_safety as _rust_check
 
     return _rust_check(redacted, llm_output, key)
+
+
+# Maps `_core.restore_guarded`'s `outcome` string onto the same BLOCKED/
+# PARTIAL/COMPLETE constants every other outcome-producing call site
+# (`_fail_closed`, the legacy branch above) uses — so `warn_security_events`
+# and `detailed=True` see one consistent vocabulary no matter which path
+# produced it. An explicit KeyError on an unrecognised value (rather than a
+# silent fallback) is deliberate: a future core outcome this shim does not yet
+# render must fail loudly, not mislabel the restore.
+_CORE_OUTCOME = {"blocked": BLOCKED, "partial": PARTIAL, "complete": COMPLETE}
+
+
+def _event_from_core(event: dict) -> dict:
+    """Rebuild one Python ``security_event`` dict from a core guard event.
+
+    ``event`` is one of `_core.restore_guarded`'s structured
+    ``{"kind": str, "count": int, "tokens": list[str] | None}`` records — the
+    core decides WHICH check fired and how big/which tokens it carries, but
+    carries zero prose (see ``GuardEvent`` in the Rust ``restore.rs``). This is
+    the one place that turns ``kind`` back into the Python reason_code
+    constant and renders the exact detail string every caller (the
+    SecurityWarning, ``detailed=True``, the docs) has always seen, so the two
+    can never drift apart.
+
+    ``guard_no_anchor`` never reaches here: core only ever runs from
+    ``restore()`` once a real anchor exists, so that event is built directly
+    in Python, in the ``anchor is None`` branch above.
+    """
+    kind, count, tokens = event["kind"], event["count"], event["tokens"]
+    if kind == PROVENANCE_FAILED:
+        return security_event(PROVENANCE_FAILED, count=count, detail="nonce absent from response")
+    if kind == EMPTY_KEY_WITH_SCOPE:
+        return security_event(
+            EMPTY_KEY_WITH_SCOPE,
+            count=count,
+            detail="anchor.scope excluded every key entry; nothing was restored",
+        )
+    if kind == OUT_OF_SCOPE_PSEUDONYM:
+        return security_event(
+            OUT_OF_SCOPE_PSEUDONYM,
+            count=count,
+            detail=f"withheld: {', '.join(tokens)}",  # already sorted+deduped by core
+        )
+    if kind == ALIAS_COLLISION:
+        # Mirrors `alias_collision_event`: names how many collided, never the raw
+        # alias/original strings (`count` is already the distinct-alias count core
+        # dedups to, matching Python's `set()` semantics).
+        return security_event(ALIAS_COLLISION, count=count, detail=f"{count} alias(es) collided")
+    raise ValueError(f"unrecognised guard event kind from core: {kind!r}")
 
 
 def wipe_key(key: dict) -> None:
@@ -258,86 +287,55 @@ def restore(
             return result, {"security_events": legacy_events, "outcome": COMPLETE}
         return result
 
-    # guard is True — run P + S checks
+    # guard is True — the P (provenance) + S (scope) DECISION lives in the Rust
+    # core (`_core.restore_guarded`); this branch's job is only to (a) keep the
+    # anchor-less case in Python (core never sees it), (b) hand the anchor'd
+    # case to core, and (c) reconstruct the human-readable event strings from
+    # core's structured, prose-free `{kind, count, tokens}` output — Python
+    # owns every string a caller can see, core owns zero of them.
     events: list[dict] = []
 
-    # (P) Provenance check: anchor must exist and its nonce must appear in text
+    # (P) Provenance check: anchor must exist at all. `_core.restore_guarded` is
+    # only ever called below, with a real nonce, so this fail-closed case never
+    # reaches core.
     if anchor is None:
         events.append(security_event(GUARD_NO_ANCHOR, count=len(key), detail="no anchor provided"))
         return _fail_closed(text, events, strict=strict, detailed=detailed, warn=_warn)
 
-    if not _nonce_echoed(text, anchor.nonce):
-        events.append(
-            security_event(PROVENANCE_FAILED, count=len(key), detail="nonce absent from response")
-        )
-        return _fail_closed(text, events, strict=strict, detailed=detailed, warn=_warn)
+    from argus_redact._core import restore_guarded as _rust_restore_guarded
 
-    # Provenance holds. The token has done its job — strip it so it never reaches
-    # the caller as part of the restored plaintext (it is not a pseudonym, so the
-    # substitution pass below would otherwise carry it straight through).
-    text = _strip_nonce(text, anchor.nonce)
+    rust_aliases: dict[str, list[str]] | None = None
+    if aliases:
+        rust_aliases = {k: list(v) for k, v in aliases.items()}
 
-    # (S) Scope filter: only restore pseudonyms within anchor.scope
-    key_dict = dict(key) if not isinstance(key, dict) else key
-    scoped = {k: v for k, v in key_dict.items() if k in anchor.scope}
+    # `_core.restore_guarded`'s own docstring flags this as a policy call for
+    # the Python shim, not the binding: a bare Python `None` for `nonce` means
+    # "no anchor at all" to the binding (it skips building an Anchor and takes
+    # the always-complete unguarded path) — but here `anchor` IS present, just
+    # with a degenerate (non-str) nonce, e.g. `Anchor(nonce=None, ...)`. That
+    # must still fail closed as a provenance failure, not slip through as
+    # unguarded-complete. Coerce any non-str nonce to "" — a string core's own
+    # length-floor check (mirroring `_MIN_NONCE_LEN`) rejects exactly like a
+    # missing one, so the Anchor is still built and provenance still fails.
+    nonce = anchor.nonce if isinstance(anchor.nonce, str) else ""
 
-    # Advisory: the key was non-empty and anchor.scope is non-empty, but scope
-    # excluded EVERY entry — the restore below is a silent no-op that would
-    # otherwise be reported COMPLETE with no hint that nothing was substituted.
-    # Distinct from the corruption empty-string-key case (that raises); this is
-    # a legitimate, non-overlapping scope and key, so it only advises, never blocks.
-    if key_dict and not scoped and anchor.scope:
-        events.append(
-            security_event(
-                EMPTY_KEY_WITH_SCOPE,
-                count=len(key_dict),
-                detail="anchor.scope excluded every key entry; nothing was restored",
-            )
-        )
-
-    # Detect out-of-scope pseudonyms that appear in text — see `_tokens_present`.
-    # Cosmetic only: it sizes the event's `count`/`detail`, never which pseudonyms
-    # get withheld (that is `scoped` above).
-    out_of_scope_hits = _tokens_present([k for k in key_dict if k not in anchor.scope], text)
-    if out_of_scope_hits:
-        events.append(
-            security_event(
-                OUT_OF_SCOPE_PSEUDONYM,
-                count=len(out_of_scope_hits),
-                detail=f"withheld: {', '.join(out_of_scope_hits)}",  # already sorted
-            )
-        )
-
-    # Restore only in-scope pseudonyms
-    alias_collisions: list[str] = []
-    result = _do_restore(
+    # `_alias_collisions` (the raw, undeduped list) is discarded here: core's own
+    # `alias_collision` guard event already carries the deduped count/tokens this
+    # branch needs, so there is nothing left for the raw list to drive.
+    result, _alias_collisions, core_events, core_outcome = _rust_restore_guarded(
         text,
-        scoped,
-        aliases=aliases,
+        dict(key),
+        aliases=rust_aliases,
         display_marker=display_marker,
-        # _warn=False here (never the direct warning) is deliberate: the
-        # collision is folded into `events` below instead, so it rides the ONE
-        # combined `warn_security_events` call further down — the same
-        # SecurityWarning P + S events already share. Warning here too would
-        # double-fire (once specific-text, once generic) for the same event.
-        _warn=False,
-        _alias_collisions=alias_collisions,
+        nonce=nonce,
+        scope=list(anchor.scope),
     )
-    if alias_collisions:
-        _ac_event = alias_collision_event(alias_collisions)
-        if _ac_event:
-            events.append(_ac_event)
+    events.extend(_event_from_core(event) for event in core_events)
 
     if strict and events:
         raise RestoreGuardError(events)
 
-    # out_of_scope_hits means some pseudonyms present in the text were outside
-    # this call's scope and withheld (PARTIAL — the restore was limited to scope);
-    # no hits means nothing in the text was withheld (COMPLETE — any events left
-    # are advisory, e.g. from guarded_restore's H layer merged in later). PARTIAL
-    # does not itself witness whether any in-scope pseudonym was actually present
-    # or substituted, so the warning must not claim it was.
-    outcome = PARTIAL if out_of_scope_hits else COMPLETE
+    outcome = _CORE_OUTCOME[core_outcome]
 
     if events and _warn:
         # Partial restore: in-scope codes were substituted, out-of-scope ones were
