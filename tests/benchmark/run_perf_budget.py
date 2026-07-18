@@ -1,4 +1,4 @@
-"""Performance budget runner — measure 6 workloads with 5-run median.
+"""Performance budget runner — measure 7 workloads with 5-run median.
 
 Usage:
     python tests/benchmark/run_perf_budget.py --output current.json
@@ -25,9 +25,36 @@ _REPO_SRC = str(Path(__file__).parent.parent.parent / "src")
 # ── Test inputs ──
 # The zh/en perf corpora live in _corpus (shared with bench_l1 + perf_profile so
 # all three measure the same bytes — byte-identical to the prior inline copies).
-from _corpus import _EN_1KB, _ZH_1KB  # noqa: E402
+from _corpus import _EN_1KB, _ZH_1KB, _ZH_SHORT  # noqa: E402
 
 _SALT_FOR_PSEUDONYM_LLM = b"perf-budget-fixed-salt-32-bytes!"
+
+# ── Bulk-restore workload input ──
+# A header + ~300 data rows, a few PII-bearing columns per row (phone, email,
+# address), reusing the address slice from _ZH_SHORT (one _ZH_1KB repetition).
+# Built ONCE here at module load. redact_csv also runs ONCE — in main(), before
+# any measurement — so _restore_bulk_workload times restore_csv/the session it
+# builds ALONE, not the redact side.
+_RESTORE_BULK_ROWS = 300
+_RESTORE_BULK_ADDRESS = _ZH_SHORT.split("，")[-1]
+
+
+def _build_restore_bulk_csv() -> str:
+    """~300 rows, each with a distinct phone + email (like a bulk customer
+    export) plus a shared address column. Distinct-per-row cells are the shape
+    that made the pre-session per-cell restore path recompile on every cell
+    instead of once for the whole document."""
+    rows = [
+        f"手机1{38_000_000_00 + i},邮箱wang{i}@corp.com,{_RESTORE_BULK_ADDRESS}"
+        for i in range(_RESTORE_BULK_ROWS)
+    ]
+    return "phone,email,address\n" + "\n".join(rows)
+
+
+_RESTORE_BULK_CSV_TEXT = _build_restore_bulk_csv()
+# Populated once in main() (redact_csv runs there, outside any timed function).
+_restore_bulk_redacted_csv = ""
+_restore_bulk_key: dict = {}
 
 
 def _measure_p50(fn, runs: int = 5) -> float:
@@ -72,9 +99,18 @@ def main() -> None:
 
     sys.path.insert(0, _REPO_SRC)
     from argus_redact import redact, redact_pseudonym_llm
+    from argus_redact.structured import redact_csv
 
     # Warm caches
     redact("warm-up", salt=1)
+
+    # One-time bulk-restore fixture: redact_csv runs HERE, outside any timed
+    # function, so _restore_bulk_workload (below) times restore_csv/the
+    # session it builds ALONE.
+    global _restore_bulk_redacted_csv, _restore_bulk_key
+    _restore_bulk_redacted_csv, _restore_bulk_key = redact_csv(
+        _RESTORE_BULK_CSV_TEXT, mode="fast", lang="zh"
+    )
 
     measurements = {
         "import_time_ms": _measure_import_time(),
@@ -109,6 +145,12 @@ def main() -> None:
         # than a per-chunk p50 (which is µs-scale and noise-flaky against the ±10%
         # gate). Captures the gate optimization as a number that won't flap.
         "streaming_dribble_total_ms": _measure_p50(_streaming_dribble_workload),
+        # Bulk restore_csv over a ~300-row CSV (a few PII columns per row) through
+        # the ONE session restore_csv builds for the whole document (see
+        # _restore_bulk_workload below), instead of recompiling per cell. Reported
+        # as the TOTAL wall-time of one restore_csv call — ms-scale and stable
+        # against the ±10% gate, mirroring streaming_dribble_total_ms's framing.
+        "restore_bulk_csv_total_ms": _measure_p50(_restore_bulk_workload),
     }
 
     output = {
@@ -131,6 +173,22 @@ def _restore_workload() -> None:
 
     redacted, key = redact(_ZH_1KB, salt=42, mode="fast", lang="zh")
     restore(redacted, key)
+
+
+def _restore_bulk_workload() -> None:
+    """Restore the ~300-row bulk-CSV fixture (built + redacted once, above/in
+    main()) through restore_csv, which builds ONE session for the whole
+    document (guard=False internally — the same documented unguarded opt-out
+    as redact_csv's forward path) instead of recompiling a pattern per cell.
+
+    Deliberately calls restore_csv, NOT bare restore(): post guard-by-default,
+    bare restore() with no per-call anchor hits GUARD_NO_ANCHOR and fails
+    closed, which would measure a no-op instead of the real per-document
+    restore path.
+    """
+    from argus_redact.structured import restore_csv
+
+    restore_csv(_restore_bulk_redacted_csv, _restore_bulk_key)
 
 
 def _streaming_workload() -> None:
