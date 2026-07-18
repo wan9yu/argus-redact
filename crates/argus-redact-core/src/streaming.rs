@@ -71,7 +71,7 @@ use fancy_regex::Regex;
 
 use crate::hints::{filter_self_reference, Hint};
 use crate::merger::merge_entities_with_text;
-use crate::restore::{restore_full, RestoreError};
+use crate::restore::{RestoreError, RestoreSession};
 use crate::types::PatternMatch;
 
 /// Sentence-boundary chars that ALWAYS terminate a unit: `\n` and the CJK
@@ -708,11 +708,12 @@ where
 /// Has its OWN boundary logic (distinct from the redactor's carry-window): it
 /// flushes at the LAST occurrence of any boundary char (whole-code matching across
 /// chunk boundaries needs only a complete sentence, not the entity-aware snap),
-/// then restores the complete part via `restore_full`. Mirrors
-/// `StreamingRestorer`. `Sentence` buffers at boundaries; `None` restores every
-/// chunk immediately.
+/// then restores the complete part via a [`RestoreSession`] built once (in `new`)
+/// over the fixed key and replayed across every call, rather than recompiling the
+/// key/alias merge + regex per call. Mirrors `StreamingRestorer`. `Sentence`
+/// buffers at boundaries; `None` restores every chunk immediately.
 pub struct StreamingRestorer {
-    key: HashMap<String, String>,
+    session: Result<RestoreSession, RestoreError>,
     buffer: String,
     strategy: RestoreStrategy,
 }
@@ -755,12 +756,28 @@ pub fn restorer_split(buffer: &str) -> (String, String) {
 
 impl StreamingRestorer {
     /// Build a restorer over `key` with the given strategy.
+    ///
+    /// Precompiles the key/alias merge + regex ONCE, up front, into a cached
+    /// [`RestoreSession`] rather than recompiling on every `feed`/`flush` call
+    /// (`restore_full` would re-derive that state from scratch each time).
+    /// `new` stays INFALLIBLE (crates.io stability: it returns `Self`, not a
+    /// `Result`) even though `RestoreSession::new` can fail closed on a
+    /// corrupted empty-string key entry — that failure is captured in the
+    /// stored `Result` and surfaces the first time `feed`/`flush` actually
+    /// needs the session, never as a panic here.
     pub fn new(key: HashMap<String, String>, strategy: RestoreStrategy) -> Self {
         Self {
-            key,
+            session: RestoreSession::new(&key, None),
             buffer: String::new(),
             strategy,
         }
+    }
+
+    /// The cached session, or the construction-time error re-wrapped (`RestoreError`
+    /// has no `Clone`, so only its message is cloned) for callers that need an owned
+    /// `Result` at the `?`-propagation site.
+    fn session(&self) -> Result<&RestoreSession, RestoreError> {
+        self.session.as_ref().map_err(|e| RestoreError(e.0.clone()))
     }
 
     /// Feed a chunk. Returns restored text based on the strategy. Mirrors
@@ -769,7 +786,7 @@ impl StreamingRestorer {
         if self.strategy == RestoreStrategy::None {
             // No `aliases` are threaded through this streaming path, so
             // `alias_collisions` is always empty — discard it.
-            return restore_full(chunk, &self.key, None, None).map(|(result, _)| result);
+            return self.session()?.restore_cell(chunk).map(|r| r.restored);
         }
 
         self.buffer.push_str(chunk);
@@ -780,7 +797,7 @@ impl StreamingRestorer {
             return Ok("".to_string());
         }
         self.buffer = residual;
-        restore_full(&complete, &self.key, None, None).map(|(result, _)| result)
+        self.session()?.restore_cell(&complete).map(|r| r.restored)
     }
 
     /// Flush the remaining buffer. Mirrors `StreamingRestorer.flush`.
@@ -788,7 +805,10 @@ impl StreamingRestorer {
         if self.buffer.is_empty() {
             return Ok("".to_string());
         }
-        let result = restore_full(&self.buffer, &self.key, None, None).map(|(result, _)| result);
+        // Computed (not `?`-propagated) so the buffer is cleared below
+        // regardless of whether the session errors — matching the prior
+        // `restore_full` call's behavior, which always cleared on this path.
+        let result = self.session().and_then(|s| s.restore_cell(&self.buffer)).map(|r| r.restored);
         self.buffer.clear();
         result
     }

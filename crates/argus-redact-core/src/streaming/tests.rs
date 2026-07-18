@@ -15,6 +15,7 @@ use std::collections::{HashMap, HashSet};
 use super::*;
 use crate::mt19937::MtRandomSource;
 use crate::redact_l1::{detect_l1, redact_l1, RedactL1Args};
+use crate::restore::restore_full;
 use crate::seed::Salt;
 use crate::typeinfo::build_type_info;
 use crate::{kinship_exact, PseudoFactory, TypeInfo, SELF_REF_PRONOUNS};
@@ -1095,4 +1096,71 @@ fn restorer_dotted_fake_ipv4_round_trips_char_by_char() {
     }
     out.push_str(&restorer.flush().unwrap());
     assert_eq!(out, "server 10.1.2.3 up.");
+}
+
+// ── StreamingRestorer over a cached session (internal reimpl parity) ───────────
+
+#[test]
+fn streaming_restorer_reuses_session_across_many_chunks() {
+    // The restorer precompiles its key/alias merge + regex ONCE (in `new`) and
+    // replays that cached session across every feed/flush call rather than
+    // recompiling per call. Feed the SAME key across MANY small chunks and
+    // check the final restored text is byte-identical to a one-shot
+    // `restore_full` over the concatenation — the parity a cached session
+    // must preserve.
+    let mut key = HashMap::new();
+    key.insert("P-1".to_string(), "13812345678".to_string());
+    key.insert("P-2".to_string(), "张三".to_string());
+    key.insert("P-3".to_string(), "user16068@example.net".to_string());
+    key.insert("P-4".to_string(), "192.0.2.50".to_string());
+
+    let full =
+        "第一句P-1联系张三P-2。邮箱P-3发送。地址P-4访问。多句重复P-1和P-2再来一次P-3和P-4。"
+            .to_string();
+
+    let mut restorer = StreamingRestorer::new(key.clone(), RestoreStrategy::Sentence);
+    let chars: Vec<char> = full.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        // 2-char chunks -> many feed() calls over the same cached session.
+        let end = (i + 2).min(chars.len());
+        let chunk: String = chars[i..end].iter().collect();
+        out.push_str(&restorer.feed(&chunk).unwrap());
+        i = end;
+    }
+    out.push_str(&restorer.flush().unwrap());
+
+    let one_shot = restore_full(&full, &key, None, None).unwrap().0;
+    assert_eq!(
+        out, one_shot,
+        "many-chunk streaming restore over a cached session must be byte-identical to one-shot restore_full"
+    );
+}
+
+#[test]
+fn streaming_restorer_empty_string_key_new_does_not_panic_errors_at_feed() {
+    // `StreamingRestorer::new` is infallible (returns `Self`, not `Result`),
+    // but the cached `RestoreSession` it builds eagerly CAN fail closed on a
+    // corrupted empty-string key entry. Construction must not panic; the
+    // error surfaces the first time a call actually needs the session.
+    let mut key = HashMap::new();
+    key.insert(String::new(), "SECRET".to_string());
+    let mut restorer = StreamingRestorer::new(key, RestoreStrategy::None);
+    let err = restorer.feed("hello").unwrap_err();
+    assert!(err.0.contains("empty"), "unexpected error message: {}", err.0);
+}
+
+#[test]
+fn streaming_restorer_empty_string_key_new_does_not_panic_errors_at_flush() {
+    // Same corrupted key, but with `Sentence` buffering: a feed with no
+    // sentence boundary yet never touches the session (it only buffers), so
+    // the error surfaces at `flush` instead of the earlier `feed`.
+    let mut key = HashMap::new();
+    key.insert(String::new(), "SECRET".to_string());
+    let mut restorer = StreamingRestorer::new(key, RestoreStrategy::Sentence);
+    let fed = restorer.feed("no boundary yet").unwrap();
+    assert_eq!(fed, "", "no sentence boundary yet — buffered, session untouched");
+    let err = restorer.flush().unwrap_err();
+    assert!(err.0.contains("empty"), "unexpected error message: {}", err.0);
 }
