@@ -1,13 +1,19 @@
 """Tests for entity merger — dedup overlapping spans from multiple layers."""
 
-from argus_redact._types import PatternMatch
+from unittest.mock import MagicMock, patch
+
+from argus_redact import redact
+from argus_redact._types import NEREntity, PatternMatch
+from argus_redact.impure.ner import NERAdapter
 from argus_redact.pure.merger import merge_entities
 
 
-def _m(text, type, start, end=None, confidence=1.0):
+def _m(text, type, start, end=None, confidence=1.0, layer=0):
     if end is None:
         end = start + len(text)
-    return PatternMatch(text=text, type=type, start=start, end=end, confidence=confidence)
+    return PatternMatch(
+        text=text, type=type, start=start, end=end, confidence=confidence, layer=layer
+    )
 
 
 class TestMergeNoOverlap:
@@ -337,3 +343,96 @@ class TestSelfReferenceContainerHeadGuard:
         result = merge_entities(entities, text)
 
         assert [(e.text, e.type, e.start, e.end) for e in result] == [("公司我", "person", 0, 3)]
+
+
+class TestPersonCrossLayerMerge:
+    """A person span on one detection layer overlapping a person span on another
+    prefers the higher layer (NER over an over-greedy L1 regex candidate), with
+    the loser's non-overlapping tail trimmed and kept — not silently dropped.
+    Scoped to person-vs-person across DIFFERENT layers only; see the SAME-layer
+    control below for the boundary.
+    """
+
+    def test_should_trim_remainder_when_l1_l2_partial_overlap(self):
+        # L1 person "李明明王"[2,6] (fused, wrong) overlaps L2 person "李明明"[2,5]
+        # (correct, starts at the same place). L2 wins the overlap; the L1
+        # loser's tail "王"[5,6] survives as its own person remainder instead
+        # of being dropped into the clear.
+        text = "客户李明明王联系电话13800138000"
+        entities = [
+            _m("李明明王", "person", 2, 6, layer=1),
+            _m("李明明", "person", 2, 5, layer=2),
+        ]
+
+        result = merge_entities(entities, text)
+
+        assert [(e.text, e.type, e.start, e.end, e.layer) for e in result] == [
+            ("李明明", "person", 2, 5, 2),
+            ("王", "person", 5, 6, 1),
+        ]
+
+    def test_should_fully_cover_fused_name_with_two_l2_spans(self):
+        # L1 person "李明明王小丽"[2,8] fuses two real names into one candidate.
+        # Two L2 spans cover each name exactly; together they must claim the
+        # whole range so no trailing character of the second name survives
+        # unredacted.
+        text = "客户李明明王小丽联系电话13800138000"
+        entities = [
+            _m("李明明王小丽", "person", 2, 8, layer=1),
+            _m("李明明", "person", 2, 5, layer=2),
+            _m("王小丽", "person", 5, 8, layer=2),
+        ]
+
+        result = merge_entities(entities, text)
+
+        assert [(e.text, e.type, e.start, e.end, e.layer) for e in result] == [
+            ("李明明", "person", 2, 5, 2),
+            ("王小丽", "person", 5, 8, 2),
+        ]
+
+    def test_should_use_length_then_confidence_when_same_layer(self):
+        # SAME-layer control: the two spans differ only in whether they overlap
+        # at the SAME layer. person_cross_layer_winner returns None for equal
+        # layers, so this must fall through to the pre-existing length-then-
+        # confidence resolution (longer span wins whole, no trim) — proving the
+        # rule above is scoped to a CROSS-layer overlap only. This is the
+        # non-regression guard for the length/confidence resolver everywhere
+        # else in this file.
+        text = "客户李明明王联系电话13800138000"
+        entities = [
+            _m("李明明王", "person", 2, 6, layer=2),
+            _m("李明明", "person", 2, 5, layer=2),
+        ]
+
+        result = merge_entities(entities, text)
+
+        assert [(e.text, e.type, e.start, e.end, e.layer) for e in result] == [
+            ("李明明王", "person", 2, 6, 2),
+        ]
+
+
+class TestKnownIssuesFusedNamePersonRepro:
+    """End-to-end repro of the fused-name person leak documented in
+    docs/known-issues.md, now closed by the cross-layer merge rule above.
+
+    Pre-fix, the L1 person candidate generator fused two adjacent names into
+    one 4-character candidate ("李明明王"), the merge kept that longer L1 span
+    outright, both NER spans were discarded, and "小丽" leaked into the
+    redacted output. The NER adapter is mocked (per project convention) so
+    this runs without a real model — the L1 regex/person layer is real.
+    """
+
+    def test_should_redact_both_names_when_l1_fuses_them(self):
+        text = "客户李明明王小丽联系电话13800138000"
+        adapter = MagicMock(spec=NERAdapter)
+        adapter.detect.return_value = [
+            NEREntity("李明明", "person", 2, 5, 0.95),
+            NEREntity("王小丽", "person", 5, 8, 0.95),
+        ]
+
+        with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
+            redacted, key = redact(text, salt=42, mode="ner", lang="zh")
+
+        assert "小丽" not in redacted
+        assert "李明明" not in redacted
+        assert "王小丽" not in redacted
