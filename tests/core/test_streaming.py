@@ -268,6 +268,26 @@ class TestStreamingRestorerRealisticMode:
         out += restorer.flush()
         assert out == text
 
+    def test_streaming_restorer_session_equivalence(self):
+        """StreamingRestorer restores through a precompiled session (built once
+        at construction) instead of calling ``restore()`` fresh per chunk —
+        dribbling the same downstream text through many tiny feed() calls must
+        be byte-identical to a single one-shot restore over the whole text."""
+        text = "请拨打 13912345678 联系王建国，邮箱 user@company.com。"
+        result = redact_pseudonym_llm(text, salt=b"test-salt-equiv", lang="zh")
+        ds = result.downstream_text
+
+        one_shot = restore(ds, result.key, guard=False)
+
+        restorer = StreamingRestorer(result.key)
+        out = ""
+        for i in range(0, len(ds), 3):
+            out += restorer.feed(ds[i : i + 3])
+        out += restorer.flush()
+
+        assert out == one_shot
+        assert out == text
+
 
 class TestStreamingRedactor:
     """Per-chunk realistic redaction with cross-chunk key continuity.

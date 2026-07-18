@@ -39,9 +39,11 @@ def test_empty_string_key_entry_raises_via_restore_csv():
 
 
 def test_empty_string_key_entry_raises_via_streaming_restorer():
-    restorer = StreamingRestorer({"": "SECRET"}, strategy="none")
+    # StreamingRestorer builds its session once at construction (not lazily
+    # per feed()/flush()), so a corrupted key is now rejected immediately —
+    # fail-fast, before any chunk is ever fed.
     with pytest.raises(ValueError, match="empty"):
-        restorer.feed("abc")
+        StreamingRestorer({"": "SECRET"}, strategy="none")
 
 
 def test_empty_string_alias_also_raises():

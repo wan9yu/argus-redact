@@ -29,7 +29,7 @@ from argus_redact.glue.redact_pseudonym_llm import (
     _check_input_pollution,
     redact_pseudonym_llm,
 )
-from argus_redact.pure.restore import restore
+from argus_redact.pure.restore import make_structured_restorer
 
 
 def _empty_result() -> PseudonymLLMResult:
@@ -82,7 +82,7 @@ class StreamingRestorer:
     bounds the "sentence" strategy's buffer: a reply that never emits a
     terminator is force-flushed instead of accumulating without limit.
 
-    Every restore here runs unguarded (``guard=False`` — no per-call anchor is
+    Every restore here runs through an unguarded session (no per-call anchor is
     possible mid-stream); the first time a ``feed()``/``flush()`` call actually
     reinserts a pseudonym, the instance emits a one-time ``SecurityWarning``
     naming that risk.
@@ -102,6 +102,12 @@ class StreamingRestorer:
 
     def __init__(self, key: dict, strategy: str = "sentence", max_buffer: int = DEFAULT_MAX_BUFFER):
         self._key = key
+        # Precompiles the key merge + regex once, up front, instead of
+        # re-merging/re-compiling on every feed()/flush() call — mirrors
+        # StreamingRedactor's one-time setup cost. self._key is kept
+        # alongside (not replaced) because _force_flush_split's prefix scan
+        # over key fakes still needs the plain dict.
+        self._session = make_structured_restorer(self._key)
         self._buffer = ""
         if strategy not in ("sentence", "none"):
             raise ValueError(f"Unknown strategy '{strategy}'. Use 'sentence' or 'none'.")
@@ -113,9 +119,10 @@ class StreamingRestorer:
         # model output. See ``_force_flush_split`` for the bounded-drain path.
         self._max_buffer = max_buffer
         # H6: one-time signal that this instance actually reinserted a
-        # pseudonym via the unguarded restore path below (see the guard=False
-        # rationale in feed()/flush()) — fires at most once per instance, the
-        # first time a substitution really happens (not on every feed()).
+        # pseudonym via the unguarded session below (see the rationale in
+        # feed()/flush(): the session snapshots the key at construction — a
+        # stored key, no per-call anchor) — fires at most once per instance,
+        # the first time a substitution really happens (not on every feed()).
         self._warned = False
 
     def _warn_if_substituted(self, before: str, after: str) -> None:
@@ -189,12 +196,13 @@ class StreamingRestorer:
         Returns ``(complete, residual)`` (``("", buffer)`` when no real boundary
         is present).
         """
-        # guard=False throughout: a streaming restore has no per-call anchor to
+        # Unguarded throughout: a streaming restore has no per-call anchor to
         # verify against — the provenance nonce only arrives at the end of a
-        # stream, so per-chunk guarding is structurally impossible. This is the
-        # explicit unguarded opt-out, not the fail-closed default.
+        # stream, so per-chunk guarding is structurally impossible. self._session
+        # is the explicit unguarded opt-out (a stored key, no per-call anchor),
+        # not the fail-closed default.
         if self._strategy == "none":
-            result = restore(chunk, self._key, guard=False)
+            result = self._session.restore_cell(chunk)
             self._warn_if_substituted(chunk, result)
             return result
 
@@ -211,7 +219,7 @@ class StreamingRestorer:
             if not complete:
                 return ""
         self._buffer = residual
-        result = restore(complete, self._key, guard=False)
+        result = self._session.restore_cell(complete)
         self._warn_if_substituted(complete, result)
         return result
 
@@ -220,7 +228,7 @@ class StreamingRestorer:
         if not self._buffer:
             return ""
         buffer = self._buffer
-        result = restore(buffer, self._key, guard=False)  # see feed(): no per-call anchor
+        result = self._session.restore_cell(buffer)  # see feed(): no per-call anchor
         self._buffer = ""
         self._warn_if_substituted(buffer, result)
         return result
