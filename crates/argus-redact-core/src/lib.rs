@@ -75,3 +75,4 @@ pub use streaming::{
     RestoreStrategy, StreamingRedactor, StreamingRestorer, CARRY_WINDOW, DEFAULT_MAX_BUFFER,
     EVIDENCE_CONTEXT_WINDOW,
 };
+pub use restore::{Anchor, GuardEvent, GuardEventKind, RestoreOutcome};

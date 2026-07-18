@@ -17,11 +17,65 @@ impl std::fmt::Display for RestoreError {
 /// Result of a full restore pass. `restored` is the text with pseudonyms
 /// replaced back to originals; `alias_collisions` lists every alias string
 /// that two distinct fakes both claimed (mapping to two different originals)
-/// — see `merge_aliases`.
-#[derive(Debug)]
+/// — see `merge_aliases`. `events` records every guard check that fired
+/// (empty when the pass ran unguarded); `outcome` summarizes whether the
+/// restore proceeded in full, was partially withheld, or was blocked outright.
+#[derive(Debug, Clone)]
 pub struct RestoreResult {
     pub restored: String,
     pub alias_collisions: Vec<String>,
+    pub events: Vec<GuardEvent>,
+    pub outcome: RestoreOutcome,
+}
+
+/// A provenance anchor: the nonce a caller must echo back to prove a reply
+/// actually came from the model that saw the redacted prompt, plus the set
+/// of pseudonym codes that reply is scoped to (anything outside `scope` is
+/// out-of-scope for that anchor).
+#[derive(Debug, Clone)]
+pub struct Anchor {
+    pub nonce: String,
+    pub scope: std::collections::HashSet<String>,
+}
+
+/// Summary verdict of a guarded restore pass.
+///
+/// `#[non_exhaustive]`: a later 0.8.x release may add a variant (e.g. a more
+/// granular partial state); downstream `match` expressions must carry a
+/// wildcard arm so they keep compiling across such an addition.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq)]
+pub enum RestoreOutcome {
+    Blocked,
+    Partial,
+    Complete,
+}
+
+/// The kind of guard check a [`GuardEvent`] reports on.
+///
+/// `#[non_exhaustive]` for the same forward-compatibility reason as
+/// [`RestoreOutcome`].
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq)]
+pub enum GuardEventKind {
+    GuardNoAnchor,
+    ProvenanceFailed,
+    EmptyKeyWithScope,
+    OutOfScopePseudonym,
+    AliasCollision,
+}
+
+/// One guard check's outcome. `count` is how many instances the check found;
+/// `detail`, when present, is the SORTED list of the specific tokens involved
+/// (e.g. out-of-scope pseudonym codes) — a bare data carrier, not a
+/// human-readable message. Callers own rendering (Python builds its
+/// `"withheld: {join}"` string, wasm exposes `tokens[]`) so no reason-code
+/// prose lives in this crate.
+#[derive(Debug, Clone)]
+pub struct GuardEvent {
+    pub kind: GuardEventKind,
+    pub count: usize,
+    pub detail: Option<Vec<String>>,
 }
 
 // ── Nonce echo-verify (P guard) ─────────────────────────────────────────────
@@ -331,7 +385,12 @@ pub fn restore_full_guarded(
 
     // Step 2: empty key fast-path.
     if key.is_empty() {
-        return Ok(RestoreResult { restored: text.to_string(), alias_collisions: Vec::new() });
+        return Ok(RestoreResult {
+            restored: text.to_string(),
+            alias_collisions: Vec::new(),
+            events: vec![],
+            outcome: RestoreOutcome::Complete,
+        });
     }
 
     // `restore_tracking_self_ref` (called below at Step 4) rejects an
@@ -364,7 +423,12 @@ pub fn restore_full_guarded(
     // self-ref pronoun OR none of them actually got substituted into `text`.
     let result = apply_grammar_scoped(&result, &self_ref_spans);
 
-    Ok(RestoreResult { restored: result, alias_collisions })
+    Ok(RestoreResult {
+        restored: result,
+        alias_collisions,
+        events: vec![],
+        outcome: RestoreOutcome::Complete,
+    })
 }
 
 /// The `pseudonyms` that appear in `text` as whole tokens (sorted, deduped).
@@ -1065,5 +1129,32 @@ possible hallucination or fabrication"
             tokens_present(&pseudonyms, "P-1 and P-1 again"),
             vec!["P-1".to_string()],
         );
+    }
+
+    // ── guard result types: construction + outcome matching ────────────────
+
+    #[test]
+    fn guard_types_construct_and_match() {
+        let event = GuardEvent {
+            kind: GuardEventKind::OutOfScopePseudonym,
+            count: 2,
+            detail: Some(vec!["P-1".to_string(), "P-2".to_string()]),
+        };
+        let result = RestoreResult {
+            restored: "hello".to_string(),
+            alias_collisions: Vec::new(),
+            events: vec![event],
+            outcome: RestoreOutcome::Partial,
+        };
+        assert_eq!(result.outcome, RestoreOutcome::Partial);
+        match result.outcome {
+            RestoreOutcome::Blocked => panic!("wrong variant"),
+            RestoreOutcome::Partial => {}
+            RestoreOutcome::Complete => panic!("wrong variant"),
+        }
+        assert_eq!(result.events[0].kind, GuardEventKind::OutOfScopePseudonym);
+
+        let anchor = Anchor { nonce: "n".to_string(), scope: std::collections::HashSet::new() };
+        assert!(anchor.scope.is_empty());
     }
 }
