@@ -344,10 +344,15 @@ fn merge_aliases(
     (flat, alias_collisions)
 }
 
-/// Full restore path: alias merge + core substitution + grammar.
+/// Display-marker strip + alias merge + core substitution + grammar, over
+/// exactly the `key` passed in. This is the body shared by the unguarded
+/// path and the guarded path's in-scope restore — the guarded path calls it
+/// with the SCOPED key (never the full key), so an out-of-scope fake's own
+/// display marker is left untouched right alongside its withheld pseudonym.
 ///
-/// 1. If `display_marker` is Some → strip that marker from text.
-/// 2. If key empty → return text.
+/// 1. If `display_marker` is Some → strip that marker from text, scoped to
+///    `key`'s fakes only.
+/// 2. If `key` empty → return text unchanged.
 /// 3. Alias merge: build flat lookup = key ∪ {alias → key[fake]'s original}
 ///    (see `merge_aliases`).
 /// 4. Core substitution (`restore`, single-pass longest-first), tracking the
@@ -359,15 +364,16 @@ fn merge_aliases(
 /// trailing a key is ordinary non-key text, so the single `restore` pass leaves
 /// it verbatim right after the restored value (e.g. `"P-1ⓕ"` → `"<value>ⓕ"`).
 ///
-/// Returns a `RestoreResult` whose `alias_collisions` has one entry per alias
-/// string that two distinct fakes both claimed (mapping to two different
-/// originals) — empty when `aliases` is `None` or no collision occurred.
-pub fn restore_full_guarded(
+/// Returns `(restored_text, alias_collisions)` where `alias_collisions` has
+/// one entry per alias string that two distinct fakes both claimed (mapping
+/// to two different originals) — empty when `aliases` is `None` or no
+/// collision occurred.
+fn restore_body(
     text: &str,
     key: &HashMap<String, String>,
     aliases: Option<&HashMap<String, Vec<String>>>,
     display_marker: Option<&str>,
-) -> Result<RestoreResult, RestoreError> {
+) -> Result<(String, Vec<String>), RestoreError> {
     // Step 1: strip explicit display marker — scoped to this key's fakes
     // only. A global strip would remove the marker character everywhere in
     // `text`, destroying unrelated content that happens to contain it (e.g.
@@ -385,19 +391,13 @@ pub fn restore_full_guarded(
 
     // Step 2: empty key fast-path.
     if key.is_empty() {
-        return Ok(RestoreResult {
-            restored: text.to_string(),
-            alias_collisions: Vec::new(),
-            events: vec![],
-            outcome: RestoreOutcome::Complete,
-        });
+        return Ok((text.to_string(), Vec::new()));
     }
 
     // `restore_tracking_self_ref` (called below at Step 4) rejects an
-    // empty-string key entry too; this is defense in depth so
-    // `restore_full_guarded` fails closed on its own before doing any
-    // alias-merge work, independent of whether the lower-level fn is reached
-    // unchanged.
+    // empty-string key entry too; this is defense in depth so this function
+    // fails closed on its own before doing any alias-merge work, independent
+    // of whether the lower-level fn is reached unchanged.
     reject_empty_key_entry(key)?;
 
     // Step 3: alias merge — build flat lookup.
@@ -423,12 +423,130 @@ pub fn restore_full_guarded(
     // self-ref pronoun OR none of them actually got substituted into `text`.
     let result = apply_grammar_scoped(&result, &self_ref_spans);
 
-    Ok(RestoreResult {
-        restored: result,
-        alias_collisions,
-        events: vec![],
-        outcome: RestoreOutcome::Complete,
-    })
+    Ok((result, alias_collisions))
+}
+
+/// Full restore path: [`restore_body`], optionally preceded by a provenance +
+/// scope guard.
+///
+/// `anchor = None` is the current unguarded path — `restore_body` runs over
+/// the full `key`, unconditionally `RestoreOutcome::Complete`, no events.
+/// This is the byte-identical, non-breaking default every existing caller of
+/// [`restore_full`] keeps getting.
+///
+/// `anchor = Some(a)` runs the P (provenance) + S (scope) guard, mirroring
+/// `pure/restore.py::restore`'s `guard is True` branch (the anchor-is-not-None
+/// half — `anchor is None` under `guard=True` is reported via
+/// `GuardEventKind::GuardNoAnchor` by the Python/wasm callers, never here:
+/// this function only ever sees `Some(anchor)`, so it has nothing to report
+/// for that case):
+///
+/// 1. **(P) Provenance.** If the model's reply doesn't echo `a.nonce`
+///    (`nonce_echoed`), fail closed: return the RAW `text` completely
+///    unrestored (not even nonce-stripped — there was nothing to prove it was
+///    ours), `RestoreOutcome::Blocked`, and a `ProvenanceFailed` event sized to
+///    the whole key (nothing was, or could be, substituted). Otherwise strip
+///    the now-verified nonce (`strip_nonce`) so it never reaches the caller as
+///    part of the restored plaintext.
+/// 2. **(S) Scope.** Restrict substitution to the entries of `key` whose
+///    pseudonym is in `a.scope` (`scoped`). A non-empty `key` whose scope
+///    excludes every entry is advisory (`EmptyKeyWithScope`) rather than an
+///    error — a legitimate non-overlapping scope, not corruption. Any
+///    out-of-scope pseudonym that actually appears in the (nonce-stripped)
+///    text is reported via `OutOfScopePseudonym` (sized/detailed by
+///    `tokens_present`) — cosmetic only, it never changes what gets withheld
+///    (that's `scoped`, structural).
+/// 3. Run [`restore_body`] over `scoped` (never the full `key`) — so an
+///    out-of-scope fake is withheld AND its own display marker, if any, is
+///    left untouched right alongside it. Fold any resulting alias collision
+///    into an `AliasCollision` event.
+/// 4. `RestoreOutcome::Partial` when anything was withheld
+///    (`out_of_scope_hits` non-empty), else `RestoreOutcome::Complete`.
+pub fn restore_full_guarded(
+    text: &str,
+    key: &HashMap<String, String>,
+    aliases: Option<&HashMap<String, Vec<String>>>,
+    display_marker: Option<&str>,
+    anchor: Option<&Anchor>,
+) -> Result<RestoreResult, RestoreError> {
+    let Some(anchor) = anchor else {
+        let (result, alias_collisions) = restore_body(text, key, aliases, display_marker)?;
+        return Ok(RestoreResult {
+            restored: result,
+            alias_collisions,
+            events: vec![],
+            outcome: RestoreOutcome::Complete,
+        });
+    };
+
+    // (P) Provenance: the model must have echoed the nonce we asked it to.
+    if !nonce_echoed(text, &anchor.nonce) {
+        return Ok(RestoreResult {
+            restored: text.to_string(),
+            alias_collisions: Vec::new(),
+            events: vec![GuardEvent {
+                kind: GuardEventKind::ProvenanceFailed,
+                count: key.len(),
+                detail: None,
+            }],
+            outcome: RestoreOutcome::Blocked,
+        });
+    }
+    // Provenance holds — strip the token so it never reaches the caller as
+    // part of the restored plaintext (it is not a pseudonym, so the
+    // substitution pass below would otherwise carry it straight through).
+    let text = strip_nonce(text, &anchor.nonce);
+
+    // (S) Scope: restrict substitution to pseudonyms this reply is scoped to.
+    let scoped: HashMap<String, String> = key
+        .iter()
+        .filter(|(k, _)| anchor.scope.contains(*k))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+
+    let mut events: Vec<GuardEvent> = Vec::new();
+
+    // Advisory: the key was non-empty and anchor.scope is non-empty, but scope
+    // excluded EVERY entry — the restore below is a silent no-op that would
+    // otherwise be reported COMPLETE with no hint that nothing was
+    // substituted. Distinct from the corruption empty-string-key case (that
+    // fails closed in `restore_body`); this is a legitimate, non-overlapping
+    // scope and key, so it only advises, never blocks.
+    if !key.is_empty() && scoped.is_empty() && !anchor.scope.is_empty() {
+        events.push(GuardEvent { kind: GuardEventKind::EmptyKeyWithScope, count: key.len(), detail: None });
+    }
+
+    // Detect out-of-scope pseudonyms that appear in text — see
+    // `tokens_present`. Cosmetic only: it sizes the event's `count`/`detail`,
+    // never which pseudonyms get withheld (that is `scoped` above).
+    let out_of_scope_codes: Vec<String> =
+        key.keys().filter(|k| !anchor.scope.contains(*k)).cloned().collect();
+    let out_of_scope = tokens_present(&out_of_scope_codes, &text);
+    if !out_of_scope.is_empty() {
+        events.push(GuardEvent {
+            kind: GuardEventKind::OutOfScopePseudonym,
+            count: out_of_scope.len(),
+            detail: Some(out_of_scope.clone()),
+        });
+    }
+
+    // Restore only in-scope pseudonyms.
+    let (result, alias_collisions) = restore_body(&text, &scoped, aliases, display_marker)?;
+    if !alias_collisions.is_empty() {
+        events.push(GuardEvent {
+            kind: GuardEventKind::AliasCollision,
+            count: alias_collisions.len(),
+            detail: Some(alias_collisions.clone()),
+        });
+    }
+
+    // out_of_scope means some pseudonyms present in the text were outside
+    // this call's scope and withheld (Partial — the restore was limited to
+    // scope); no hits means nothing in the text was withheld (Complete — any
+    // events left, e.g. EmptyKeyWithScope or AliasCollision, are advisory).
+    let outcome = if out_of_scope.is_empty() { RestoreOutcome::Complete } else { RestoreOutcome::Partial };
+
+    Ok(RestoreResult { restored: result, alias_collisions, events, outcome })
 }
 
 /// The `pseudonyms` that appear in `text` as whole tokens (sorted, deduped).
@@ -500,7 +618,7 @@ pub fn restore_full(
     aliases: Option<&HashMap<String, Vec<String>>>,
     display_marker: Option<&str>,
 ) -> Result<(String, Vec<String>), RestoreError> {
-    restore_full_guarded(text, key, aliases, display_marker).map(|r| (r.restored, r.alias_collisions))
+    restore_full_guarded(text, key, aliases, display_marker, None).map(|r| (r.restored, r.alias_collisions))
 }
 
 // ── Danger patterns for check_restore_safety ────────────────────────────────
@@ -878,11 +996,164 @@ mod tests {
         aliases.insert("P-1".to_string(), vec!["Shared".to_string()]);
         aliases.insert("P-2".to_string(), vec!["Shared".to_string()]);
 
-        let guarded = restore_full_guarded("hello Shared", &k, Some(&aliases), None).unwrap();
+        let guarded = restore_full_guarded("hello Shared", &k, Some(&aliases), None, None).unwrap();
         let tuple = restore_full("hello Shared", &k, Some(&aliases), None).unwrap();
 
         assert_eq!(guarded.restored, tuple.0);
         assert_eq!(guarded.alias_collisions, tuple.1);
+        // anchor=None is the current unguarded path: no guard checks ran, so
+        // there is nothing to report and the pass is unconditionally COMPLETE.
+        assert!(guarded.events.is_empty());
+        assert_eq!(guarded.outcome, RestoreOutcome::Complete);
+    }
+
+    #[test]
+    fn full_guarded_none_anchor_byte_identical_on_existing_fixtures() {
+        // anchor=None must reproduce restore_full's tuple projection exactly —
+        // on a handful of the pre-existing `full_*` fixtures above, not just
+        // the alias-collision one — with zero events and outcome Complete.
+        // This is the non-breaking proof that adding the 5th param didn't
+        // change the default (no-anchor) path at all.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "张三".to_string());
+        k.insert("P-2".to_string(), "I".to_string());
+        let text = "P-1 says P-2 is here.ⓕ";
+
+        let guarded = restore_full_guarded(text, &k, None, None, None).unwrap();
+        let tuple = restore_full(text, &k, None, None).unwrap();
+
+        assert_eq!(guarded.restored, tuple.0);
+        assert_eq!(guarded.alias_collisions, tuple.1);
+        assert!(guarded.events.is_empty());
+        assert_eq!(guarded.outcome, RestoreOutcome::Complete);
+    }
+
+    // ── restore_full_guarded assembly: anchor=Some(..) drives the P+S guard ──
+    //
+    // Mirrors `pure/restore.py::restore`'s `guard is True` branch (the
+    // anchor-is-not-None half only — `anchor is None` under `guard=True`
+    // stays a Python/wasm-layer concern, see GuardEventKind::GuardNoAnchor).
+
+    #[test]
+    fn guarded_happy_path_strips_nonce_restores_in_scope_complete_no_events() {
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "张三".to_string());
+        let mut scope = std::collections::HashSet::new();
+        scope.insert("P-1".to_string());
+        let anchor = Anchor { nonce: NONCE.to_string(), scope };
+
+        let text = format!("P-1 says hello.\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, None, None, Some(&anchor)).unwrap();
+
+        assert_eq!(result.restored, "张三 says hello.");
+        assert_eq!(result.outcome, RestoreOutcome::Complete);
+        assert!(result.events.is_empty());
+        assert!(result.alias_collisions.is_empty());
+    }
+
+    #[test]
+    fn guarded_no_nonce_echoed_fails_closed_raw_text_provenance_failed() {
+        // No echo at all: `nonce_echoed` is false, so this must fail closed
+        // exactly like Python's `_fail_closed(text, ...)` — the RAW text as
+        // passed in, untouched (not nonce-stripped, since the nonce was never
+        // found to strip; not restored, since the guard never reaches the
+        // substitution step at all).
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "张三".to_string());
+        let mut scope = std::collections::HashSet::new();
+        scope.insert("P-1".to_string());
+        let anchor = Anchor { nonce: NONCE.to_string(), scope };
+
+        let text = "P-1 says hello, no nonce here.";
+        let result = restore_full_guarded(text, &k, None, None, Some(&anchor)).unwrap();
+
+        assert_eq!(result.restored, text, "fail-closed must return the raw text, not restore anything");
+        assert_eq!(result.outcome, RestoreOutcome::Blocked);
+        assert!(result.alias_collisions.is_empty());
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(result.events[0].kind, GuardEventKind::ProvenanceFailed);
+        assert_eq!(result.events[0].count, k.len());
+        assert!(result.events[0].detail.is_none());
+    }
+
+    #[test]
+    fn guarded_partial_scope_out_of_scope_pseudonym_withheld() {
+        // "P-2" is present in the reply but NOT in anchor.scope: it must be
+        // withheld (never substituted) and reported via the sized/detailed
+        // `OutOfScopePseudonym` event; the in-scope "P-1" still restores.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "张三".to_string());
+        k.insert("P-2".to_string(), "李四".to_string());
+        let mut scope = std::collections::HashSet::new();
+        scope.insert("P-1".to_string());
+        let anchor = Anchor { nonce: NONCE.to_string(), scope };
+
+        let text = format!("P-1 met P-2 yesterday.\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, None, None, Some(&anchor)).unwrap();
+
+        assert_eq!(result.restored, "张三 met P-2 yesterday.");
+        assert_eq!(result.outcome, RestoreOutcome::Partial);
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(result.events[0].kind, GuardEventKind::OutOfScopePseudonym);
+        assert_eq!(result.events[0].count, 1);
+        assert_eq!(result.events[0].detail, Some(vec!["P-2".to_string()]));
+    }
+
+    #[test]
+    fn guarded_empty_key_with_scope_advisory_when_scope_excludes_every_entry() {
+        // The key is non-empty and anchor.scope is non-empty, but scope
+        // excludes EVERY key entry — a legitimate non-overlapping scope, not
+        // corruption. This only advises (EmptyKeyWithScope); since the
+        // excluded code never actually appears in the reply, there is
+        // nothing to withhold either, so the outcome is Complete (a no-op
+        // restore), not Partial.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "张三".to_string());
+        let mut scope = std::collections::HashSet::new();
+        scope.insert("P-9".to_string()); // not a key in `k` at all
+        let anchor = Anchor { nonce: NONCE.to_string(), scope };
+
+        let text = format!("hello, nothing pseudonymous here.\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, None, None, Some(&anchor)).unwrap();
+
+        assert_eq!(result.restored, "hello, nothing pseudonymous here.");
+        assert_eq!(result.outcome, RestoreOutcome::Complete);
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(result.events[0].kind, GuardEventKind::EmptyKeyWithScope);
+        assert_eq!(result.events[0].count, k.len());
+        assert!(result.events[0].detail.is_none());
+    }
+
+    #[test]
+    fn guarded_alias_collision_folded_into_event_alongside_partial_scope() {
+        // A guarded restore that ALSO hits an alias collision among the
+        // in-scope entries must fold it into an AliasCollision event, in
+        // addition to (not instead of) the OutOfScopePseudonym event from an
+        // out-of-scope hit — mirrors Python's guarded branch, which appends
+        // its `alias_collision` event after the scope-check events.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        k.insert("P-2".to_string(), "Bob".to_string());
+        k.insert("P-3".to_string(), "Carol".to_string());
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        aliases.insert("P-1".to_string(), vec!["Shared".to_string()]);
+        aliases.insert("P-2".to_string(), vec!["Shared".to_string()]);
+        let mut scope = std::collections::HashSet::new();
+        scope.insert("P-1".to_string());
+        scope.insert("P-2".to_string());
+        let anchor = Anchor { nonce: NONCE.to_string(), scope };
+
+        let text = format!("hello Shared, and P-3 too.\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, Some(&aliases), None, Some(&anchor)).unwrap();
+
+        assert_eq!(result.restored, "hello Alice, and P-3 too.");
+        assert_eq!(result.outcome, RestoreOutcome::Partial); // P-3 withheld
+        assert_eq!(result.alias_collisions, vec!["Shared".to_string()]);
+        assert_eq!(result.events.len(), 2);
+        assert_eq!(result.events[0].kind, GuardEventKind::OutOfScopePseudonym);
+        assert_eq!(result.events[1].kind, GuardEventKind::AliasCollision);
+        assert_eq!(result.events[1].count, result.alias_collisions.len());
+        assert_eq!(result.events[1].detail, Some(result.alias_collisions.clone()));
     }
 
     // ── check_restore_safety tests ──────────────────────────────────────────
