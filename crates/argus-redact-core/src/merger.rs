@@ -232,6 +232,20 @@ fn merge_priority(
             // confidence. Port of `_merge_priority`'s final branch (the two
             // Python sub-conditions both replace `final[-1]`, so they fold into
             // one `||`).
+            //
+            // This resolver is NOT layer-aware (unlike `merge_entities_text`'s
+            // `person_cross_layer_winner` check) — deliberately: `others` is
+            // always pre-merged via `merge_entities_text(others, text)` before
+            // `merge_priority` runs (see `merge_entities_with_text`), so every
+            // non-priority entity reaching this loop is already pairwise
+            // non-overlapping with its neighbors. Folding a priority entity in
+            // can only shrink a survivor (trim moves its start forward, keeps
+            // its end), which can only widen an existing gap, never narrow one
+            // into a fresh overlap — so this branch can never actually see an
+            // unresolved cross-layer person/person pair. See
+            // `priority_path_person_cross_layer_seam_no_leak` and
+            // `priority_path_person_cross_layer_pre_merge_boundary_holds_under_trim`
+            // for the constructed reachability attempts that confirm this.
             let last = final_.last().unwrap();
             let idx = final_.len() - 1;
             let longer = (current.end - current.start) > (last.end - last.start);
@@ -608,6 +622,94 @@ mod tests {
             pmt("李明明", "person", 2, 5, 1.0, 2),
         ]);
         assert_merged(&out, &[("李明明王", "person", 2, 6, 1.0, 1)]);
+    }
+
+    // ── Reachability probe: merge_priority's neither-priority ELSE branch ─────
+    //
+    // `merge_priority`'s final `else` (neither entity is priority, or both are)
+    // resolves overlaps by plain length/confidence — it does NOT consult
+    // `person_cross_layer_winner`. These tests try to construct a case where
+    // that branch actually sees an unresolved cross-layer person/person
+    // overlap, to check whether it is a live leak site or whether the `others`
+    // pre-merge (run with real `text`, see `has_priority_path_cross_layer_person_keeps_remainder`)
+    // always resolves such pairs upstream. It always does: `others` is merged
+    // via `merge_entities_text` before `merge_priority` ever runs, so its
+    // output is already pairwise non-overlapping; folding the self_reference
+    // back in only ever *trims* those survivors (start moves forward, end is
+    // preserved), which can only widen an existing gap between two neighbors,
+    // never narrow one into a fresh overlap. So no matter where the
+    // self_reference lands relative to the cross-layer survivors, the else
+    // branch's overlap gate (`current.start >= last_end`) never lets it see
+    // them as overlapping. These are regression guards for that invariant, not
+    // leak reproductions — kept green on purpose.
+
+    #[test]
+    fn priority_path_person_cross_layer_seam_no_leak() {
+        // self_reference "明王"[4,6] straddles the seam between the two L1/L2
+        // survivors of a three-way cross-layer chain (L1 person[2,6] layer1,
+        // L2 person[2,5] layer2, L2 person[5,8] layer2). The `others` pre-merge
+        // resolves the three down to two non-overlapping layer-2 survivors,
+        // ["李明明"(2,5), "王道人"(5,8)], covering [2,8) before self_reference
+        // ever enters the picture (mirrors
+        // `person_cross_layer_partial_overlap_trims_remainder` chained twice).
+        // Folding the self_reference in via merge_priority: it starts INTERIOR
+        // to both survivors it touches, so the containment guard drops it
+        // outright (its range is already covered) — no plaintext tail, and
+        // the else branch is never invoked for this pair at all.
+        let text = "客户李明明王道人电话";
+        let out = merge_entities_with_text(
+            vec![
+                pmt("明王", "self_reference", 4, 6, 1.0, 0),
+                pmt("李明明王", "person", 2, 6, 1.0, 1),
+                pmt("李明明", "person", 2, 5, 1.0, 2),
+                pmt("王道人", "person", 5, 8, 1.0, 2),
+            ],
+            text,
+        );
+        assert_merged(
+            &out,
+            &[
+                ("李明明", "person", 2, 5, 1.0, 2),
+                ("王道人", "person", 5, 8, 1.0, 2),
+            ],
+        );
+    }
+
+    #[test]
+    fn priority_path_person_cross_layer_pre_merge_boundary_holds_under_trim() {
+        // Sharper adversarial attempt: self_reference "李明"[2,4] starts AT the
+        // seam's leading survivor's start (not interior), so it wins the
+        // overlap and TRIMS the layer-2 survivor down (via merge_priority's
+        // `cur_priority && !last_priority` branch) instead of being dropped —
+        // the closest this algorithm gets to reshaping a cross-layer survivor
+        // after the pre-merge already ran. The two-entity chain (L1
+        // person[2,6] layer1 + L2 person[2,5] layer2) pre-merges to
+        // ["李明明"(2,5) layer2, "王"(5,6) layer1] (different layers, adjacent at
+        // the seam start=end=5 — see `person_cross_layer_partial_overlap_trims_remainder`).
+        // Trimming the layer-2 survivor only moves ITS start forward
+        // (2->4), which cannot move the seam itself (still exactly 5): the
+        // layer-1 remainder's start and the trimmed layer-2 remainder's end
+        // never cross, so merge_priority's overlap gate (`current.start >=
+        // last_end`) still short-circuits before the else branch's
+        // length/confidence resolver ever runs on this pair. Full [2,6)
+        // coverage survives.
+        let text = "客户李明明王联系电话";
+        let out = merge_entities_with_text(
+            vec![
+                pmt("李明", "self_reference", 2, 4, 1.0, 0),
+                pmt("李明明王", "person", 2, 6, 1.0, 1),
+                pmt("李明明", "person", 2, 5, 1.0, 2),
+            ],
+            text,
+        );
+        assert_merged(
+            &out,
+            &[
+                ("李明", "self_reference", 2, 4, 1.0, 0),
+                ("明", "person", 4, 5, 1.0, 2),
+                ("王", "person", 5, 6, 1.0, 1),
+            ],
+        );
     }
 
     #[test]
