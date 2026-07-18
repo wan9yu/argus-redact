@@ -332,6 +332,17 @@ def restore(
     )
     events.extend(_event_from_core(event) for event in core_events)
 
+    # A blocked outcome is, by construction, a provenance failure — the ONLY
+    # fail-closed the core produces (EmptyKeyWithScope/OutOfScopePseudonym yield
+    # complete/partial, never blocked). Route it through `_fail_closed` exactly
+    # as the pre-refactor nonce-mismatch branch did, so it keeps that path's
+    # per-occurrence ops-channel `logger.warning` (which `warn_security_events`
+    # alone does NOT emit) alongside the same SecurityWarning. `result` is core's
+    # raw un-restored text on a block, so the returned shape is identical, and
+    # `_fail_closed` also owns the strict-raise for this case.
+    if core_outcome == BLOCKED:
+        return _fail_closed(result, events, strict=strict, detailed=detailed, warn=_warn)
+
     if strict and events:
         raise RestoreGuardError(events)
 

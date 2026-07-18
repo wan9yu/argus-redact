@@ -71,13 +71,21 @@ def test_fail_closed_no_anchor_warns():
     assert "13912345678" not in out  # still fail-closed: no PII substituted
 
 
-def test_fail_closed_bad_nonce_warns():
+def test_fail_closed_bad_nonce_warns(caplog):
+    import logging
+
     original, key, anchor, _ = _round_trip()
     redacted, _ = redact(original, lang="zh", mode="fast", key=dict(key))
     tampered = redacted + "\ndeadbeef" * 4  # nonce absent
-    with pytest.warns(SecurityWarning, match="provenance_failed"):
-        out = restore(tampered, key, guard=True, anchor=anchor)
+    with caplog.at_level(logging.WARNING, logger="argus_redact.pure.restore"):
+        with pytest.warns(SecurityWarning, match="provenance_failed"):
+            out = restore(tampered, key, guard=True, anchor=anchor)
     assert "13912345678" not in out
+    # The bad-nonce fail-closed must ALSO emit the per-occurrence ops-channel log
+    # line, exactly like the no-anchor path — warnings dedup per callsite but the
+    # log stream does not, so an operator watching it sees every fail-closed. This
+    # is the _fail_closed contract; warn_security_events alone would not log it.
+    assert any("restore fail-closed" in r.message for r in caplog.records)
 
 
 def test_fail_closed_warning_is_attributed_to_the_caller():
