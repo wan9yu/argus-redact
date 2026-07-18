@@ -35,6 +35,7 @@ use argus_redact_core::redact_l1::{detect_l1, redact_l1, RedactL1Args};
 use argus_redact_core::replace::{replace, ReplaceArgs};
 use argus_redact_core::restore::restore_full;
 use argus_redact_core::seed::Salt;
+use argus_redact_core::{restore_full_guarded, Anchor, GuardEventKind, RestoreOutcome};
 use argus_redact_core::streaming::{
     DetectSpans, RedactSegment, StreamingRedactor as CoreStreamingRedactor,
 };
@@ -418,6 +419,144 @@ pub fn restore(text: &str, key: JsValue) -> Result<String, JsValue> {
     restore_full(text, &key, None, None)
         .map(|(result, _)| result)
         .map_err(|e| JsValue::from_str(&e.0))
+}
+
+// ── restore_guarded: anchor-taking (P)rovenance + (S)cope guard ───────────────
+
+/// The `anchor` object shape `{ nonce: string, scope: string[] }` a JS caller
+/// passes to [`restore_guarded`] — mirrors how `src/argus_redact/server.py`
+/// reconstructs a core [`Anchor`] from a JSON `{"nonce": str, "scope": [...]}`
+/// request field.
+#[derive(Deserialize)]
+struct AnchorSpec {
+    nonce: String,
+    scope: Vec<String>,
+}
+
+/// One guard check's outcome, for JS. `kind` is the guard event's stable
+/// snake_case name — the SAME vocabulary the PyO3 `restore_guarded` binding
+/// uses (`crates/argus-redact-py/src/restore.rs`), so a caller sees identical
+/// strings regardless of which binding served the restore. `tokens` is the
+/// core [`GuardEvent`](argus_redact_core::GuardEvent)'s `detail` verbatim — a
+/// bare data carrier, NO prose; the demo layer owns any human-readable
+/// rendering.
+#[derive(Serialize)]
+struct GuardEventJs {
+    kind: String,
+    count: usize,
+    tokens: Option<Vec<String>>,
+}
+
+/// [`restore_guarded`]'s return shape `{ restored, outcome, events }` —
+/// STRUCTURED-ONLY, no human-readable prose. Mirrors the PyO3
+/// `restore_guarded` binding's `(restored, alias_collisions, events,
+/// outcome)` tuple, minus `alias_collisions` (not part of this browser-facing
+/// contract — a JS caller that needs it can still read it from `redact`'s
+/// `aliases`-free `key`-only roundtrip).
+#[derive(Serialize)]
+struct GuardedRestoreJs {
+    restored: String,
+    outcome: String,
+    events: Vec<GuardEventJs>,
+}
+
+/// Map a core [`GuardEventKind`] to its stable snake_case name — identical to
+/// the PyO3 binding's `guard_event_kind_str`. `#[non_exhaustive]` on the core
+/// enum means a future variant compiles here as `"unknown"` rather than
+/// breaking the build; this mapping is expected to grow in lockstep.
+fn guard_event_kind_str(kind: &GuardEventKind) -> &'static str {
+    match kind {
+        GuardEventKind::GuardNoAnchor => "guard_no_anchor",
+        GuardEventKind::ProvenanceFailed => "provenance_failed",
+        GuardEventKind::EmptyKeyWithScope => "empty_key_with_scope",
+        GuardEventKind::OutOfScopePseudonym => "out_of_scope_pseudonym",
+        GuardEventKind::AliasCollision => "alias_collision",
+        _ => "unknown",
+    }
+}
+
+/// Map a core [`RestoreOutcome`] to its stable snake_case name — identical to
+/// the PyO3 binding's `restore_outcome_str`. Same `#[non_exhaustive]`
+/// fallback reasoning as [`guard_event_kind_str`].
+fn restore_outcome_str(outcome: &RestoreOutcome) -> &'static str {
+    match outcome {
+        RestoreOutcome::Blocked => "blocked",
+        RestoreOutcome::Partial => "partial",
+        RestoreOutcome::Complete => "complete",
+        _ => "unknown",
+    }
+}
+
+/// Anchor-taking guarded restore — the browser-facing counterpart to the
+/// PyO3 `restore_guarded` binding. Runs the core (P)rovenance + (S)cope guard
+/// (`restore_full_guarded`) and returns a STRUCTURED-ONLY `{ restored,
+/// outcome, events }` object; no human-readable prose crosses this boundary
+/// (the demo layer owns any zh/en copy over these codes).
+///
+/// `anchor` is deserialized as `{ nonce: string, scope: string[] }`
+/// ([`AnchorSpec`]), mirroring `src/argus_redact/server.py`'s reconstruction
+/// of an `Anchor` from a JSON request body.
+///
+/// `anchor` `undefined`/`null` means the caller supplied no provenance anchor
+/// at all. This wasm binding is the TOP-LEVEL browser caller of the guard —
+/// there is no further Python/JS shim above it — so it owns the no-anchor
+/// policy itself, mirroring the Python `restore()` shim's `anchor is None`
+/// branch (`src/argus_redact/pure/restore.py`): fail closed with a single
+/// `guard_no_anchor` event (`count` = the key's size) rather than falling
+/// through to an unguarded restore. `restored` in that case is the raw input
+/// `text`, byte-for-byte UNCHANGED — not even nonce-stripped, since no anchor
+/// means nothing was there to prove any nonce is ours.
+#[wasm_bindgen]
+pub fn restore_guarded(text: &str, key: JsValue, anchor: JsValue) -> Result<JsValue, JsValue> {
+    set_panic_hook();
+
+    let key: HashMap<String, String> = if key.is_undefined() || key.is_null() {
+        HashMap::new()
+    } else {
+        serde_wasm_bindgen::from_value(key)
+            .map_err(|e| JsValue::from_str(&format!("invalid key: {e}")))?
+    };
+
+    if anchor.is_undefined() || anchor.is_null() {
+        let out = GuardedRestoreJs {
+            restored: text.to_string(),
+            outcome: restore_outcome_str(&RestoreOutcome::Blocked).to_string(),
+            events: vec![GuardEventJs {
+                kind: guard_event_kind_str(&GuardEventKind::GuardNoAnchor).to_string(),
+                count: key.len(),
+                tokens: None,
+            }],
+        };
+        return out
+            .serialize(&to_object_serializer())
+            .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")));
+    }
+
+    let spec: AnchorSpec = serde_wasm_bindgen::from_value(anchor)
+        .map_err(|e| JsValue::from_str(&format!("invalid anchor: {e}")))?;
+    let core_anchor = Anchor {
+        nonce: spec.nonce,
+        scope: spec.scope.into_iter().collect(),
+    };
+
+    let result = restore_full_guarded(text, &key, None, None, Some(&core_anchor))
+        .map_err(|e| JsValue::from_str(&e.0))?;
+
+    let out = GuardedRestoreJs {
+        restored: result.restored,
+        outcome: restore_outcome_str(&result.outcome).to_string(),
+        events: result
+            .events
+            .iter()
+            .map(|ev| GuardEventJs {
+                kind: guard_event_kind_str(&ev.kind).to_string(),
+                count: ev.count,
+                tokens: ev.detail.clone(),
+            })
+            .collect(),
+    };
+    out.serialize(&to_object_serializer())
+        .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
 }
 
 // ── streaming: feed / flush over the core carry-window engine ─────────────────
