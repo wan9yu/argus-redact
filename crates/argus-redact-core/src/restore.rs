@@ -191,7 +191,19 @@ fn restore_tracking_self_ref(
     let re = Regex::new(&pattern_str)
         .map_err(|e| RestoreError(format!("Invalid restore pattern: {e}")))?;
 
-    // Single-pass replacement
+    Ok(substitute_with(&re, key, text))
+}
+
+/// Single-pass, longest-first substitution of every match of `re` in `text`
+/// using `flat` as the lookup, tracking the byte-offset span (in the OUTPUT
+/// string) of every self-referential pronoun value it splices in — the exact
+/// substitution body `restore_tracking_self_ref` used to run inline.
+///
+/// Shared by `restore_tracking_self_ref` (which compiles `re` fresh from
+/// `key` on every call) and `RestoreSession::restore_cell` (which reuses one
+/// `re` precompiled once in `RestoreSession::new` across many calls over the
+/// same `flat` map) — factored out so the two call sites can never drift.
+fn substitute_with(re: &Regex, flat: &HashMap<String, String>, text: &str) -> (String, Vec<(usize, usize)>) {
     let mut result = String::with_capacity(text.len());
     let mut last_end = 0;
     let mut self_ref_spans: Vec<(usize, usize)> = Vec::new();
@@ -205,7 +217,7 @@ fn restore_tracking_self_ref(
         };
 
         result.push_str(&text[last_end..m.start()]);
-        if let Some(replacement) = key.get(m.as_str()) {
+        if let Some(replacement) = flat.get(m.as_str()) {
             let span_start = result.len();
             result.push_str(replacement);
             if is_self_ref(replacement) {
@@ -219,7 +231,7 @@ fn restore_tracking_self_ref(
     }
     result.push_str(&text[last_end..]);
 
-    Ok((result, self_ref_spans))
+    (result, self_ref_spans)
 }
 
 /// Chars to scan past a restored self-ref pronoun for a verb to fix. Covers
@@ -631,6 +643,97 @@ pub fn restore_full(
     display_marker: Option<&str>,
 ) -> Result<(String, Vec<String>), RestoreError> {
     restore_full_guarded(text, key, aliases, display_marker, None).map(|r| (r.restored, r.alias_collisions))
+}
+
+/// A reusable restore pass over a FIXED key + aliases.
+///
+/// `restore_full`/`restore_full_guarded` merge aliases and compile the
+/// alternation regex from scratch on every call — fine for a single restore,
+/// wasteful for a bulk caller (CSV per-cell, streaming per-sentence) that
+/// restores many small texts against the SAME key. `RestoreSession::new`
+/// does that work ONCE; `restore_cell` replays the substitution per text.
+///
+/// Sits BELOW the guard: a session caches only key-derived state, no
+/// guard/scope semantics. It always runs the unguarded path — the same one
+/// `restore_full`/`restore_full_guarded(..., None)` take — so bulk callers
+/// restore over a fixed key without provenance or scope checks.
+#[derive(Debug)]
+pub struct RestoreSession {
+    flat: HashMap<String, String>,
+    re: Option<Regex>,
+    alias_collisions: Vec<String>,
+}
+
+impl RestoreSession {
+    /// Precompute the alias-merged flat map (via `merge_aliases`, the same
+    /// helper `restore_body` uses) and the compiled longest-first
+    /// alternation regex, once, for the lifetime of the session.
+    ///
+    /// Fails closed on an empty-string key entry exactly like `restore_body`
+    /// does — checked on both the raw `key` and the merged `flat` map
+    /// (defense in depth: a corrupted entry could also enter only through
+    /// the alias merge). An empty `flat` (i.e. an empty `key`) leaves `re`
+    /// as `None` rather than compiling a pattern that would never match
+    /// anything.
+    pub fn new(
+        key: &HashMap<String, String>,
+        aliases: Option<&HashMap<String, Vec<String>>>,
+    ) -> Result<RestoreSession, RestoreError> {
+        reject_empty_key_entry(key)?;
+        let (flat, alias_collisions) = merge_aliases(key, aliases);
+        reject_empty_key_entry(&flat)?;
+
+        let re = if flat.is_empty() {
+            None
+        } else {
+            let mut keys: Vec<&String> = flat.keys().collect();
+            keys.sort_by(|a, b| b.len().cmp(&a.len()));
+            let pattern_str = escaped_alternation_digit_bounded(&keys);
+            Some(
+                Regex::new(&pattern_str)
+                    .map_err(|e| RestoreError(format!("Invalid restore pattern: {e}")))?,
+            )
+        };
+
+        Ok(RestoreSession { flat, re, alias_collisions })
+    }
+
+    /// Restore one cell of text against the precomputed key. Unguarded and
+    /// display-marker-free (bulk callers pass none — equivalence is checked
+    /// against `restore_full(..., None, None)`), so `events` is always empty
+    /// and `outcome` is always `Complete`.
+    pub fn restore_cell(&self, text: &str) -> Result<RestoreResult, RestoreError> {
+        let Some(re) = &self.re else {
+            return Ok(RestoreResult {
+                restored: text.to_string(),
+                alias_collisions: self.alias_collisions.clone(),
+                events: vec![],
+                outcome: RestoreOutcome::Complete,
+            });
+        };
+        let (result, spans) = substitute_with(re, &self.flat, text);
+        let result = apply_grammar_scoped(&result, &spans);
+        Ok(RestoreResult {
+            restored: result,
+            alias_collisions: self.alias_collisions.clone(),
+            events: vec![],
+            outcome: RestoreOutcome::Complete,
+        })
+    }
+
+    /// Drop all cached state. After this, `restore_cell` returns its input
+    /// unchanged — the same behavior as a session built from an empty key.
+    pub fn wipe(&mut self) {
+        self.flat.clear();
+        self.re = None;
+        self.alias_collisions.clear();
+    }
+
+    /// Same effect as [`RestoreSession::wipe`], named for callers that model
+    /// a session as a resource to explicitly close.
+    pub fn close(&mut self) {
+        self.wipe();
+    }
 }
 
 // ── Danger patterns for check_restore_safety ────────────────────────────────
@@ -1492,5 +1595,108 @@ possible hallucination or fabrication"
 
         let anchor = Anchor { nonce: "n".to_string(), scope: std::collections::HashSet::new() };
         assert!(anchor.scope.is_empty());
+    }
+
+    // ── RestoreSession: precompiled reusable restore over a fixed key ──────
+    //
+    // Sits BELOW the guard: a session caches only key-derived state (the
+    // alias-merged flat map + compiled regex), so every fixture here is
+    // checked against `restore_full(..., None)` — the unguarded, no
+    // display-marker one-shot path — never `restore_full_guarded` with an
+    // anchor.
+
+    #[test]
+    fn session_matches_one_shot() {
+        struct Fixture {
+            text: &'static str,
+            key: Vec<(&'static str, &'static str)>,
+            aliases: Vec<(&'static str, Vec<&'static str>)>,
+        }
+
+        let fixtures = vec![
+            // Plain single-entry round trip.
+            Fixture { text: "P-1 ok", key: vec![("P-1", "张三")], aliases: vec![] },
+            // Numeric digit-bounded key: a longer digit run containing the
+            // key as a substring must NOT match (digit-boundary check).
+            Fixture {
+                text: "call 19999123456 now, but not 199991234560",
+                key: vec![("19999123456", "13912345678")],
+                aliases: vec![],
+            },
+            // zh chained-marker case: a COMPLETE marker following a key must
+            // not let the key be re-scanned and replaced a second time under
+            // a chained map (张三→李明, 李明→王芳).
+            Fixture {
+                text: "张三(假)",
+                key: vec![("张三", "李明"), ("李明", "王芳")],
+                aliases: vec![],
+            },
+            // Alias-collision case: two distinct fakes alias to the same
+            // string; the sorted-first fake wins and the collision is
+            // recorded in `alias_collisions`.
+            Fixture {
+                text: "hello Shared",
+                key: vec![("P-1", "Alice"), ("P-2", "Bob")],
+                aliases: vec![("P-1", vec!["Shared"]), ("P-2", vec!["Shared"])],
+            },
+            // Self-ref pronoun restore must still trigger the scoped grammar
+            // fix (`apply_grammar_scoped`) through the session path.
+            Fixture { text: "P-1 is ok", key: vec![("P-1", "I")], aliases: vec![] },
+        ];
+
+        for fx in fixtures {
+            let key: HashMap<String, String> =
+                fx.key.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+            let aliases: Option<HashMap<String, Vec<String>>> = if fx.aliases.is_empty() {
+                None
+            } else {
+                Some(
+                    fx.aliases
+                        .iter()
+                        .map(|(k, vs)| (k.to_string(), vs.iter().map(|v| v.to_string()).collect()))
+                        .collect(),
+                )
+            };
+
+            let session = RestoreSession::new(&key, aliases.as_ref()).unwrap();
+            let session_result = session.restore_cell(fx.text).unwrap();
+            let one_shot = restore_full(fx.text, &key, aliases.as_ref(), None).unwrap();
+
+            assert_eq!(
+                session_result.restored, one_shot.0,
+                "session/one-shot mismatch for text={:?}", fx.text
+            );
+            assert_eq!(session_result.alias_collisions, one_shot.1, "alias_collisions mismatch for text={:?}", fx.text);
+            assert!(session_result.events.is_empty());
+            assert_eq!(session_result.outcome, RestoreOutcome::Complete);
+        }
+    }
+
+    #[test]
+    fn session_wipe_drops_state() {
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "张三".to_string());
+        let mut session = RestoreSession::new(&k, None).unwrap();
+        assert_eq!(session.restore_cell("P-1 ok").unwrap().restored, "张三 ok");
+
+        session.wipe();
+        assert_eq!(session.restore_cell("P-1 ok").unwrap().restored, "P-1 ok");
+    }
+
+    #[test]
+    fn session_close_drops_state() {
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "张三".to_string());
+        let mut session = RestoreSession::new(&k, None).unwrap();
+        session.close();
+        assert_eq!(session.restore_cell("P-1 ok").unwrap().restored, "P-1 ok");
+    }
+
+    #[test]
+    fn session_rejects_empty_key_entry() {
+        let mut k = HashMap::new();
+        k.insert(String::new(), "SECRET".to_string());
+        let err = RestoreSession::new(&k, None).unwrap_err();
+        assert!(err.0.contains("empty"), "unexpected error message: {}", err.0);
     }
 }
