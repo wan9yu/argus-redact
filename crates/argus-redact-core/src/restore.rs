@@ -3,6 +3,7 @@ use fancy_regex::Regex;
 
 use crate::display_marker::strip_display_markers_scoped;
 use crate::grammar::{is_self_ref, restore_grammar_en};
+use crate::hints::{py_rstrip, py_strip};
 use crate::reserved_range::{
     byte_to_char_offset, escaped_alternation_digit_bounded, scan_for_pollution,
 };
@@ -21,6 +22,61 @@ impl std::fmt::Display for RestoreError {
 pub struct RestoreResult {
     pub restored: String,
     pub alias_collisions: Vec<String>,
+}
+
+// ── Nonce echo-verify (P guard) ─────────────────────────────────────────────
+//
+// Port of `pure/restore.py::_MIN_NONCE_LEN` / `_nonce_echoed` / `_strip_nonce`.
+// A `make_anchor` nonce is `secrets.token_hex(16)` = 32 hex chars. A floor
+// well below that (real nonces pass) but far above any incidental text-suffix
+// collision rejects short degenerate nonces as provenance proofs.
+
+/// Mirrors `pure/restore.py::_MIN_NONCE_LEN`.
+const MIN_NONCE_LEN: usize = 16;
+
+/// True only if the model echoed `nonce` as instructed — as a whole token, on
+/// its own line or as the trailing token (the shape `prompt_anchor` asks for
+/// and `strip_nonce` removes). Port of `_nonce_echoed`.
+///
+/// `nonce.chars().count()` (NOT `.len()`) mirrors Python `len()`, which counts
+/// codepoints rather than bytes, so the floor check lands on the same value
+/// for any non-ASCII nonce too.
+fn nonce_echoed(text: &str, nonce: &str) -> bool {
+    if nonce.chars().count() < MIN_NONCE_LEN {
+        return false;
+    }
+    if py_rstrip(text).ends_with(nonce) {
+        return true; // documented trailing echo
+    }
+    text.split('\n').any(|line| py_strip(line) == nonce) // own-line echo
+}
+
+/// Remove the echoed verification token from the model's reply. Port of
+/// `_strip_nonce`.
+///
+/// The documented shape (token last) is handled in one pass; the fallbacks
+/// cover a model that puts it on its own line mid-reply or echoes it inline.
+fn strip_nonce(text: &str, nonce: &str) -> String {
+    if nonce.chars().count() < MIN_NONCE_LEN {
+        // Defense in depth: a degenerate nonce has no valid echo to strip, and
+        // stripping it WOULD destroy or corrupt the text. The only caller
+        // gates on `nonce_echoed` first, so this never fires today — but a
+        // function whose failure mode is "silently destroy the caller's
+        // plaintext" must refuse degenerate input regardless of caller.
+        return text.to_string();
+    }
+    let trimmed = py_rstrip(text);
+    if trimmed.ends_with(nonce) {
+        // the documented case — no full-text rebuild needed
+        return py_rstrip(&trimmed[..trimmed.len() - nonce.len()]).to_string();
+    }
+    let kept: Vec<&str> = text.split('\n').filter(|line| py_strip(line) != nonce).collect();
+    let mut out = kept.join("\n");
+    if out.contains(nonce) {
+        // defensive: echoed inline rather than on its own line
+        out = out.replace(nonce, "");
+    }
+    py_rstrip(&out).to_string()
 }
 
 /// Fail closed on a key containing an empty-string surrogate. argus never
@@ -863,5 +919,52 @@ possible hallucination or fabrication"
         let k = HashMap::new();
         let warns = check_restore_safety("普通文本", "普通回复", &k);
         assert!(warns.is_empty());
+    }
+
+    // ── nonce echo-verify (P guard): nonce_echoed / strip_nonce ────────────
+    // Port of `pure/restore.py::_nonce_echoed` / `_strip_nonce`. A real
+    // `make_anchor` nonce is `secrets.token_hex(16)` = 32 lowercase hex chars.
+    const NONCE: &str = "0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn nonce_trailing_echo_strips_to_body() {
+        let text = format!("Here is the reply body.\n{NONCE}");
+        assert!(nonce_echoed(&text, NONCE));
+        assert_eq!(strip_nonce(&text, NONCE), "Here is the reply body.");
+    }
+
+    #[test]
+    fn nonce_own_line_mid_reply_echo_removed() {
+        let text = format!("Before.\n{NONCE}\nAfter.");
+        assert!(nonce_echoed(&text, NONCE));
+        assert_eq!(strip_nonce(&text, NONCE), "Before.\nAfter.");
+    }
+
+    #[test]
+    fn nonce_inline_fallback_echo_removed() {
+        // Neither trailing nor on its own line — embedded inline within a line
+        // alongside other text. `strip_nonce`'s defensive inline-replace
+        // fallback (`if out.contains(nonce) { out = out.replace(nonce, "") }`)
+        // must still remove it.
+        let text = format!("prefix {NONCE} suffix");
+        assert_eq!(strip_nonce(&text, NONCE), "prefix  suffix");
+    }
+
+    #[test]
+    fn nonce_control_char_suffixed_line_stripped() {
+        // U+001C is Python `str.isspace()`-true but not Rust
+        // `char::is_whitespace()`; `py_strip` (not `str::trim`) is required to
+        // recognize the nonce line as a bare echo despite the trailing control char.
+        let text = format!("Reply body.\n{NONCE}\u{1c}\nTail.");
+        assert!(nonce_echoed(&text, NONCE));
+        assert_eq!(strip_nonce(&text, NONCE), "Reply body.\nTail.");
+    }
+
+    #[test]
+    fn nonce_below_floor_fails_echoed_and_strip_is_noop() {
+        let short_nonce = "abcd"; // 4 chars, well under MIN_NONCE_LEN
+        let text = format!("Reply.\n{short_nonce}");
+        assert!(!nonce_echoed(&text, short_nonce));
+        assert_eq!(strip_nonce(&text, short_nonce), text);
     }
 }
