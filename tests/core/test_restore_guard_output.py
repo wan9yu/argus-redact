@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import warnings
 
+import argus_redact._core as _core
 import pytest
 
 from argus_redact import make_anchor, redact, restore
@@ -145,3 +146,86 @@ def test_deprecation_warning_is_attributed_to_the_caller():
     assert dep.filename == __file__, (
         f"deprecation warning attributed to {dep.filename}, not the caller ({__file__})"
     )
+
+
+# ── `_core.restore_guarded` — the Rust binding's own event/outcome shape ─────
+#
+# Everything above exercises the Python `restore()` shim. These tests call the
+# PyO3 binding directly: `nonce`/`scope` in, `(restored, alias_collisions,
+# events, outcome)` out, with `events` as plain `{"kind", "count", "tokens"}`
+# dicts — no reason-code prose, that is the Python layer's job.
+
+
+def _redact_two(text: str = "张三的电话是13912345678，李四的电话是13800000000"):
+    redacted, key = redact(text, lang="zh", mode="fast")
+    return redacted, key
+
+
+def test_core_restore_guarded_complete_with_echoed_nonce():
+    """A real anchor's nonce, echoed as the prompt asks, restores in full: the
+    binding reports outcome == 'complete', no events, and the nonce is gone."""
+    original, key, anchor, llm_reply = _round_trip()
+    restored, alias_collisions, events, outcome = _core.restore_guarded(
+        llm_reply, key, nonce=anchor.nonce, scope=list(anchor.scope)
+    )
+    assert outcome == "complete"
+    assert restored == original
+    assert anchor.nonce not in restored
+    assert alias_collisions == []
+    assert events == []
+
+
+def test_core_restore_guarded_unguarded_when_nonce_is_none():
+    """`nonce=None` takes the unguarded core path — no `Anchor` is built at
+    all — so it is always 'complete', and nothing strips a trailing token that
+    was never a pseudonym in the first place. Distinct from the next test,
+    where a real nonce IS supplied but the reply never echoes it."""
+    _original, key, anchor, llm_reply = _round_trip()
+    restored, _alias_collisions, events, outcome = _core.restore_guarded(llm_reply, key, nonce=None)
+    assert outcome == "complete"
+    assert events == []
+    assert anchor.nonce in restored  # unguarded: no provenance check to strip it
+
+
+def test_core_restore_guarded_blocked_when_nonce_not_echoed():
+    """A real `nonce` is supplied (an `Anchor` IS built) but the reply never
+    echoes it — the provenance check fails closed: raw text back, untouched,
+    outcome 'blocked', one `provenance_failed` event with no `tokens`."""
+    original, key, anchor, _llm_reply = _round_trip()
+    redacted, _ = redact(original, lang="zh", mode="fast", key=dict(key))
+    tampered = redacted + "\ndeadbeef" * 4  # anchor.nonce never appears
+    restored, alias_collisions, events, outcome = _core.restore_guarded(
+        tampered, key, nonce=anchor.nonce, scope=list(anchor.scope)
+    )
+    assert outcome == "blocked"
+    assert restored == tampered
+    assert alias_collisions == []
+    assert [e["kind"] for e in events] == ["provenance_failed"]
+    assert events[0]["tokens"] is None
+
+
+def test_core_restore_guarded_partial_on_out_of_scope_pseudonym():
+    """A scope narrower than `key` withholds the excluded pseudonym(s) and
+    reports them via an `out_of_scope_pseudonym` event carrying the withheld
+    codes in `tokens`."""
+    redacted, key = _redact_two()
+    assert len(key) >= 2, "need two distinct pseudonyms for a real out-of-scope case"
+    anchor = make_anchor(key)
+    in_scope_code = sorted(key)[0]
+    reply = redacted + "\n" + anchor.nonce
+
+    restored, _alias_collisions, events, outcome = _core.restore_guarded(
+        reply, key, nonce=anchor.nonce, scope=[in_scope_code]
+    )
+
+    assert outcome == "partial"
+    out_of_scope_events = [e for e in events if e["kind"] == "out_of_scope_pseudonym"]
+    assert len(out_of_scope_events) == 1
+    withheld_codes = out_of_scope_events[0]["tokens"]
+    assert withheld_codes
+    assert in_scope_code not in withheld_codes
+    # the in-scope pseudonym still resolved back to its original ...
+    assert key[in_scope_code] in restored
+    # ... and every withheld code is still present, untouched, in the output
+    for code in withheld_codes:
+        assert code in restored

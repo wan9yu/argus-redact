@@ -5,6 +5,8 @@ use pyo3::types::PyDict;
 
 use argus_redact_core::check_restore_safety as core_check_safety;
 use argus_redact_core::restore_full as core_restore_full;
+use argus_redact_core::restore_full_guarded as core_restore_full_guarded;
+use argus_redact_core::{Anchor, GuardEventKind, RestoreOutcome};
 
 /// Restore redacted text by replacing pseudonyms with originals (simple 2-arg form).
 /// Kept for back-compat; new callers should prefer `restore` with keyword args.
@@ -41,6 +43,92 @@ pub fn restore<'py>(
     signals.set_item("alias_collisions", alias_collisions)?;
 
     Ok((restored, signals.unbind()))
+}
+
+/// Map a [`GuardEventKind`] to its stable snake_case name. `#[non_exhaustive]`
+/// on the core enum means a future variant compiles here as "unknown" rather
+/// than breaking the build — the Python layer (a later addition) is expected
+/// to grow its own mapping in lockstep, this is just the fallback until it does.
+fn guard_event_kind_str(kind: &GuardEventKind) -> &'static str {
+    match kind {
+        GuardEventKind::GuardNoAnchor => "guard_no_anchor",
+        GuardEventKind::ProvenanceFailed => "provenance_failed",
+        GuardEventKind::EmptyKeyWithScope => "empty_key_with_scope",
+        GuardEventKind::OutOfScopePseudonym => "out_of_scope_pseudonym",
+        GuardEventKind::AliasCollision => "alias_collision",
+        _ => "unknown",
+    }
+}
+
+/// Map a [`RestoreOutcome`] to its stable snake_case name. Same
+/// `#[non_exhaustive]` fallback reasoning as [`guard_event_kind_str`].
+fn restore_outcome_str(outcome: &RestoreOutcome) -> &'static str {
+    match outcome {
+        RestoreOutcome::Blocked => "blocked",
+        RestoreOutcome::Partial => "partial",
+        RestoreOutcome::Complete => "complete",
+        _ => "unknown",
+    }
+}
+
+/// Guarded restore: the (P)rovenance + (S)cope checks live in
+/// `restore_full_guarded`; this binding only shapes its `RestoreResult` for
+/// Python and never re-derives any of the guard logic.
+///
+/// `nonce=None` skips building an `Anchor` at all, so `restore_full_guarded`
+/// takes its unguarded branch — same as calling `restore()` with no anchor,
+/// always `outcome="complete"`. Passing a real `nonce` that the text never
+/// echoes is a different case: an `Anchor` IS built, and the provenance check
+/// inside `restore_full_guarded` is the thing that fails closed
+/// (`outcome="blocked"`). Deciding when a bare `guard=True` call (no anchor at
+/// all) should count as the latter is a policy call for the Python `restore()`
+/// shim to make, not this binding.
+///
+/// Returns `(restored, alias_collisions, events, outcome)` where each event is
+/// `{"kind": str, "count": int, "tokens": list[str] | None}` — `tokens` is the
+/// core `GuardEvent.detail` carrier verbatim, no reason-code prose. Python
+/// owns rendering any human-readable message from these.
+#[pyfunction]
+#[pyo3(signature = (text, key, aliases=None, display_marker=None, nonce=None, scope=None))]
+#[allow(clippy::too_many_arguments)]
+pub fn restore_guarded<'py>(
+    py: Python<'py>,
+    text: &str,
+    key: HashMap<String, String>,
+    aliases: Option<HashMap<String, Vec<String>>>,
+    display_marker: Option<String>,
+    nonce: Option<String>,
+    scope: Option<Vec<String>>,
+) -> PyResult<(String, Vec<String>, Vec<Py<PyDict>>, &'static str)> {
+    let anchor = nonce.map(|nonce| Anchor {
+        nonce,
+        scope: scope.unwrap_or_default().into_iter().collect(),
+    });
+
+    let result = core_restore_full_guarded(
+        text,
+        &key,
+        aliases.as_ref(),
+        display_marker.as_deref(),
+        anchor.as_ref(),
+    )
+    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+    let events: Vec<Py<PyDict>> = result
+        .events
+        .iter()
+        .map(|event| {
+            let d = PyDict::new(py);
+            d.set_item("kind", guard_event_kind_str(&event.kind))?;
+            d.set_item("count", event.count)?;
+            d.set_item("tokens", event.detail.clone())?;
+            Ok(d.unbind())
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+
+    let outcome = restore_outcome_str(&result.outcome);
+
+    Ok((result.restored, result.alias_collisions, events, outcome))
 }
 
 /// Check whether LLM output has suspicious pseudonym usage (possible injection).
