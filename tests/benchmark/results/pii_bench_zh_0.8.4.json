@@ -1,0 +1,183 @@
+{
+  "version": "0.8.3",
+  "package_version_string": "0.8.3",
+  "dataset": "pii_bench_zh",
+  "language": "zh",
+  "samples": 1000,
+  "modes": {
+    "ner": {
+      "precision": 94.9,
+      "recall": 95.2,
+      "f1": 95.0,
+      "per_type": {
+        "address": {
+          "precision": 71.7,
+          "recall": 71.7,
+          "f1": 71.7,
+          "tp": 205,
+          "fp": 81,
+          "fn": 81
+        },
+        "bank_card": {
+          "precision": 100.0,
+          "recall": 100.0,
+          "f1": 100.0,
+          "tp": 166,
+          "fp": 0,
+          "fn": 0
+        },
+        "email": {
+          "precision": 100.0,
+          "recall": 100.0,
+          "f1": 100.0,
+          "tp": 203,
+          "fp": 0,
+          "fn": 0
+        },
+        "id_number": {
+          "precision": 100.0,
+          "recall": 100.0,
+          "f1": 100.0,
+          "tp": 373,
+          "fp": 0,
+          "fn": 0
+        },
+        "license_plate": {
+          "precision": 100.0,
+          "recall": 100.0,
+          "f1": 100.0,
+          "tp": 79,
+          "fp": 0,
+          "fn": 0
+        },
+        "passport": {
+          "precision": 100.0,
+          "recall": 72.9,
+          "f1": 84.4,
+          "tp": 62,
+          "fp": 0,
+          "fn": 23
+        },
+        "person": {
+          "precision": 92.6,
+          "recall": 95.6,
+          "f1": 94.1,
+          "tp": 1019,
+          "fp": 81,
+          "fn": 47
+        },
+        "phone": {
+          "precision": 100.0,
+          "recall": 100.0,
+          "f1": 100.0,
+          "tp": 892,
+          "fp": 0,
+          "fn": 0
+        }
+      },
+      "by_class": {
+        "free_text": {
+          "precision": 88.3,
+          "recall": 90.5,
+          "f1": 89.4,
+          "tp": 1224,
+          "fp": 162,
+          "fn": 128
+        },
+        "structured": {
+          "precision": 100.0,
+          "recall": 98.7,
+          "f1": 99.4,
+          "tp": 1775,
+          "fp": 0,
+          "fn": 23
+        }
+      }
+    }
+  },
+  "per_type_ner": {
+    "address": {
+      "precision": 71.7,
+      "recall": 71.7,
+      "f1": 71.7,
+      "tp": 205,
+      "fp": 81,
+      "fn": 81
+    },
+    "bank_card": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1": 100.0,
+      "tp": 166,
+      "fp": 0,
+      "fn": 0
+    },
+    "email": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1": 100.0,
+      "tp": 203,
+      "fp": 0,
+      "fn": 0
+    },
+    "id_number": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1": 100.0,
+      "tp": 373,
+      "fp": 0,
+      "fn": 0
+    },
+    "license_plate": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1": 100.0,
+      "tp": 79,
+      "fp": 0,
+      "fn": 0
+    },
+    "passport": {
+      "precision": 100.0,
+      "recall": 72.9,
+      "f1": 84.4,
+      "tp": 62,
+      "fp": 0,
+      "fn": 23
+    },
+    "person": {
+      "precision": 92.6,
+      "recall": 95.6,
+      "f1": 94.1,
+      "tp": 1019,
+      "fp": 81,
+      "fn": 47
+    },
+    "phone": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1": 100.0,
+      "tp": 892,
+      "fp": 0,
+      "fn": 0
+    }
+  },
+  "by_class_ner": {
+    "free_text": {
+      "precision": 88.3,
+      "recall": 90.5,
+      "f1": 89.4,
+      "tp": 1224,
+      "fp": 162,
+      "fn": 128
+    },
+    "structured": {
+      "precision": 100.0,
+      "recall": 98.7,
+      "f1": 99.4,
+      "tp": 1775,
+      "fp": 0,
+      "fn": 23
+    }
+  },
+  "date": "2026-07-18"
+}

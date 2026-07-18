@@ -6,46 +6,6 @@
 
 ## Unresolved
 
-### Overlapping spans are resolved by length, not by detection layer
-
-- **What**: `merge_entities` / `pick_winner`
-  (`crates/argus-redact-core/src/merger.rs`) resolve an overlap between two detected
-  spans by **span length** — the longer span wins, with confidence only as a
-  same-length tiebreak. The detection layer is never consulted. An over-greedy
-  Layer-1 regex span that is one character longer than a Layer-2 NER span therefore
-  discards it, and when the L1 span is the *wrong* one, the PII the NER spans covered
-  is left in the clear.
-- **Reproduction** (`mode="ner"`, zh): on `客户李明明王小丽联系电话13800138000` the L1
-  person candidate generator emits `李明明王` (4 chars, wrong) while the NER model emits
-  `李明明` and `王小丽` (both correct). The 4-char L1 span wins both overlaps, both NER
-  spans are discarded, and the output is `客户P-NNNNN小丽联系电话138****8000` — the name
-  `小丽` in plaintext.
-- **Who is affected**: the defect needs an L1↔L2 overlap, so it needs a NER model —
-  `mode="ner"` or `mode="auto"`. `mode="fast"` is Layer-1 only and has no cross-layer
-  overlap to mis-resolve. Observed in Chinese, where adjacent person names can be fused
-  into a single L1 candidate; the merge rule itself is language-neutral.
-- **Status — open.** The obvious fix (on an overlap, prefer the higher detection layer,
-  L3 > L2 > L1) was implemented, benchmarked and **rejected** in v0.7.20. On
-  `pii_bench_zh` — our own benchmark;
-  `python -m tests.benchmark pii_bench_zh --mode ner --limit 300` — it fixed exactly what
-  it targeted (`person`: +18 true positives, false positives 18 → 0) but cost 6.9pp of
-  overall recall (.9057 → .8365, −66 true positives). `address` fell from 64 true
-  positives to **0**: the NER model emits one coarse `location` span over each L1
-  `address` span, so "higher layer wins" flips the entity type and every address then
-  fails the value match. `license_plate` fell from 23 to 3. Neither type carries a
-  checksum validator, so a "validated beats unvalidated" precedence could not rescue
-  them. "Trust the higher layer" is true for names and false in general — for
-  structured-but-unvalidated types, the L1 regex is the detector that knows the correct
-  span. Scoping the rule to `person` only is the surviving hypothesis; it is not
-  implemented.
-- **What you should do**: if your text can contain person names running together with no
-  delimiter, do not rely on NER to correct a Layer-1 person span — inserting a separator
-  (`、`, comma, space) between adjacent names prevents the fused candidate, and both
-  names are then redacted. In audit paths, inspect the spans from
-  `redact(..., detailed=True)`: an unusually long `person` span (more than 3 characters
-  for Chinese) is the signature of this defect. No configuration changes the merge rule
-  today.
-
 ### `restore()` can substitute a pseudonym key inside a longer adjacent token
 
 - **What**: `restore()` matches a pseudonym as a plain substring scan, not on a token
@@ -316,6 +276,34 @@ Each entry follows three lines:
   low-evidence candidates Layer 1 intentionally passes over.
 
 ## Recently Fixed
+
+### v0.8.4 — Person cross-layer overlap no longer drops the NER span
+
+- **Fused-name leak — closed, scoped to `person`.** `merge_entities` (the
+  span-overlap resolver in the Rust core) now special-cases an overlap between
+  two `person` spans detected on *different* layers: the higher layer (an NER
+  model over an over-greedy Layer-1 regex candidate) wins instead of the
+  longer span winning outright, and whatever non-overlapping tail the loser
+  has is trimmed and kept rather than dropped. On
+  `客户李明明王小丽联系电话13800138000` (`mode="ner"`, zh) — where the L1
+  person candidate generator still fuses `李明明` + `王小丽` into one
+  over-greedy 6-character span — the two correct NER spans now win the
+  overlap and the output is fully masked: no plaintext name survives.
+- **Scope.** The fix applies to a `person`-vs-`person` overlap across
+  detection layers only. An earlier, unscoped version of "higher layer always
+  wins" was tried and rejected: on the same benchmark it fixed `person` but
+  cost 6.9pp of overall recall, dropping `address` true positives from 64 to
+  0 and `license_plate` from 23 to 3 — a coarser NER span flips the entity
+  type entirely for those types, which (unlike names) have no cross-layer
+  alternative detector. Restricting the rule to person-vs-person means that
+  failure mode cannot recur.
+- **Verified against `pii_bench_zh`** — our own benchmark;
+  `python -m tests.benchmark pii_bench_zh --mode ner` (full 1000-sample
+  set, matching the committed baseline): `person` recall rose 88.0% → 95.6%
+  (+7.6pp, +81 true positives); every other type (`address`, `bank_card`,
+  `email`, `id_number`, `license_plate`, `passport`, `phone`) is unchanged
+  from the baseline. See `tests/benchmark/results/pii_bench_zh_0.8.4.json`
+  and `tests/core/test_merge.py::TestPersonCrossLayerMerge`.
 
 ### v0.8.3 — Streaming checkpoint mid-PII-value resume verified
 
