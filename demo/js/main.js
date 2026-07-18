@@ -1,9 +1,10 @@
-import init, { redact, restore, StreamingRedactor } from '../pkg-web/argus_redact_wasm.js';
+import init, { redact, restore, restore_guarded, StreamingRedactor } from '../pkg-web/argus_redact_wasm.js';
 import { T } from './strings.js';
 import { initHero } from './hero.js';
 import { initDeveloper } from './developer.js';
 import { initStreaming } from './streaming.js';
 import { renderLlmProof } from './llm_proof.js';
+import { makeNonce, promptAnchor, buildAnchor } from './guarded.js';
 
 function applyStatic() {
   document.getElementById('headline').textContent = T.headline;
@@ -23,7 +24,11 @@ function applyStatic() {
   document.getElementById('dev-summary').textContent = T.devFold;
 }
 
-const api = { redact, restore, StreamingRedactor };
+// makeNonce/promptAnchor/buildAnchor are the JS producer side of the
+// guarded restore flow: they build the anchor restore_guarded expects.
+// Exposed here (not just used internally) so the demo panel that drives
+// the guarded flow can call them the same way it calls redact/restore.
+const api = { redact, restore, restore_guarded, StreamingRedactor, makeNonce, promptAnchor, buildAnchor };
 
 window.argusReady = (async () => {
   applyStatic();
