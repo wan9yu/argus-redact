@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use argus_redact_core::check_restore_safety as core_check_safety;
 use argus_redact_core::restore_full as core_restore_full;
 use argus_redact_core::restore_full_guarded as core_restore_full_guarded;
-use argus_redact_core::{Anchor, GuardEventKind, RestoreOutcome};
+use argus_redact_core::{Anchor, GuardEventKind, RestoreOutcome, RestoreSession};
 
 /// Restore redacted text by replacing pseudonyms with originals (simple 2-arg form).
 /// Kept for back-compat; new callers should prefer `restore` with keyword args.
@@ -143,4 +144,53 @@ pub fn check_restore_safety(
     key: HashMap<String, String>,
 ) -> Vec<String> {
     core_check_safety(redacted, llm_output, &key)
+}
+
+/// Stateful, unguarded restore session.
+///
+/// Owns a [`RestoreSession`]: the key/alias merge and the compiled
+/// longest-first alternation regex are built once at construction, then
+/// reused across every `restore_cell` call — mirrors `StructuredRedactor`
+/// (`replace.rs`) on the redact side, but the session here is just owned
+/// data plus a compiled `Regex`, so it needs neither a factory nor a
+/// `'static` lifetime bound. Bulk callers (structured CSV/JSON, streaming)
+/// route through this instead of the stateless [`restore`] to avoid
+/// re-merging and re-compiling the same key on every cell.
+#[pyclass]
+pub struct StructuredRestorer {
+    session: RestoreSession,
+}
+
+#[pymethods]
+impl StructuredRestorer {
+    #[new]
+    #[pyo3(signature = (key, aliases=None))]
+    fn new(
+        key: HashMap<String, String>,
+        aliases: Option<HashMap<String, Vec<String>>>,
+    ) -> PyResult<Self> {
+        RestoreSession::new(&key, aliases.as_ref())
+            .map(|session| Self { session })
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// Restore one cell of text against the session's precomputed key.
+    fn restore_cell(&self, text: &str) -> PyResult<String> {
+        self.session
+            .restore_cell(text)
+            .map(|r| r.restored)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    /// Drop all cached key/alias/regex state. After this, `restore_cell`
+    /// returns its input unchanged.
+    fn wipe(&mut self) {
+        self.session.wipe();
+    }
+
+    /// Same effect as [`wipe`](Self::wipe), for callers that model the
+    /// session as a resource to explicitly close.
+    fn close(&mut self) {
+        self.session.close();
+    }
 }

@@ -178,8 +178,30 @@ def wipe_key(key: dict) -> None:
     Python strings are immutable and cannot be securely erased from memory,
     but clearing the dict removes references, allowing garbage collection sooner.
     For high-security scenarios, run argus-redact in a short-lived process.
+
+    This only clears the CALLER's dict — it has no effect on a
+    `make_structured_restorer` session, which took its own copy of `key` at
+    construction. A session manages its own lifetime via its own `wipe()` /
+    `close()` methods.
     """
     key.clear()
+
+
+def make_structured_restorer(key: dict[str, str]):
+    """Build a stateful `_core.StructuredRestorer` session for restoring many
+    cells (structured CSV/JSON, streaming) against the same key.
+
+    The session precomputes the key/alias merge and compiled regex once at
+    construction, then reuses them across every `restore_cell` call — mirrors
+    `pure.replacer.make_structured_session` on the redact side.
+
+    `dict(key)` is deliberate: the session gets its OWN copy, so a later
+    `wipe_key(key)` on the caller's dict cannot reach the session's copy.
+    Wipe the session itself via its `wipe()` / `close()` methods.
+    """
+    from argus_redact import _core
+
+    return _core.StructuredRestorer(dict(key))
 
 
 def restore(
