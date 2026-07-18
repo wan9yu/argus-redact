@@ -73,6 +73,13 @@ pub(crate) fn py_strip(s: &str) -> &str {
     s.trim_matches(py_is_space)
 }
 
+/// Python `str.rstrip()` (no args): trim trailing `py_is_space` chars.
+///
+/// Deliberately NOT `str::trim_end()`, which would miss U+001C–U+001F.
+pub(crate) fn py_rstrip(s: &str) -> &str {
+    s.trim_end_matches(py_is_space)
+}
+
 // ── Predicates ────────────────────────────────────────────────────────────────
 
 /// Port of `_is_kinship`: exact-set membership OR any kinship-prefix `startswith`.
@@ -587,6 +594,14 @@ mod tests {
         assert_eq!(py_strip(s), "hello");
         // Mixed with ordinary whitespace.
         assert_eq!(py_strip(" \t\u{1f}x\u{1c}\n "), "x");
+    }
+
+    #[test]
+    fn py_rstrip_trims_trailing_information_separators() {
+        // py_rstrip removes trailing FS/GS/RS/US, leaving leading intact.
+        assert_eq!(py_rstrip("abc\u{1c}\u{1f}"), "abc");
+        // Preserves trailing whitespace on the left side.
+        assert_eq!(py_rstrip("  x  "), "  x");
     }
 
     #[test]
