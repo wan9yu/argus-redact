@@ -2,6 +2,55 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.4 — guarded restore in the browser, precompiled bulk restore, person merge fix
+
+No breaking API changes. `redact()`/`restore()` public signatures are unchanged, and the wasm
+`restore(text, key) -> String` is unchanged; every addition below is either a new opt-in call or
+an additive field on an existing result.
+
+### Fixed
+
+- **A fused Chinese name after another detected name could leave the trailing name unredacted**
+  (`mode="ner"`/`"auto"` only). When a Layer-1 person candidate overlapped correct NER spans, the
+  cross-layer merge used to keep the LONGER span outright, which could drop the second name
+  entirely. It now keeps the higher-layer span and re-inserts the trimmed remainder of the
+  lower-layer one, so both names survive. On the `pii_bench_zh` reference suite, person recall
+  rose 88.0% → 95.6% (+7.6pp); every other type's recall/precision is unchanged, and `mode="fast"`
+  is unaffected (it has no cross-layer overlap to resolve).
+
+### Added
+
+- **The in-browser (wasm) build now runs the restore guard client-side**, matching the Python
+  wheel: `restore_guarded(text, key, anchor)` returns `{ restored, outcome, events }` after the
+  same provenance (P) and scope (S) checks — no server round-trip. The in-repo demo drives this
+  with a simulated echoed reply (editable, so you can also see the guard refuse a restore); it
+  does not call a live LLM.
+- **wasm `redact()` results gain `keep_downgraded` (boolean) and `mask_collisions` (string array)**
+  — the same two compliance signals the Python API already exposes, now on the wasm surface too.
+  Additive: existing callers reading only `text`/`key`/`aliases` are unaffected.
+- **Guarded restore reports alias collisions as a security event.** When two originals' aliases
+  collide on the same string within an anchor's scope, `restore(..., guard=True, detailed=True)`
+  now carries an `alias_collision` event with a deduped collision count, alongside the existing
+  `SecurityWarning`.
+- **New additive Rust API in `argus-redact-core`:** `restore_full_guarded`, `RestoreResult`,
+  `RestoreSession`, `Anchor`, `GuardEvent`, `GuardEventKind`, `RestoreOutcome` (enums and new
+  structs are `#[non_exhaustive]`). `restore_full` is unchanged — it's now a thin wrapper over
+  `restore_full_guarded`.
+
+### Performance
+
+- **Bulk restore now runs through a precompiled session instead of recompiling per item.**
+  `restore_json`, `restore_csv`, and the Python `StreamingRestorer` build the key/alias merge and
+  substitution pattern once per document/stream, then replay it per leaf/cell/chunk. On a
+  ~300-row bulk-CSV fixture in the perf-budget suite, this took the restore side from ~2.3s to
+  ~4ms (about 555x) for that fixture; output is byte-identical to the un-optimized path.
+
+### Changed
+
+- **`StreamingRestorer` now rejects a corrupted empty-string key at construction**, not at the
+  first `feed`/`flush` call — the same fail-closed check the Python wheel's plain `restore()`
+  already applies, just moved earlier so a bad key can't be fed any data first.
+
 ## v0.8.3 — symmetry invariants: restore-side defense, determinism, CI coverage
 
 A hardening release. Where the previous release fixed each defect at the site where it was

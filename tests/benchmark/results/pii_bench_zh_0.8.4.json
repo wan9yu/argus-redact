@@ -1,6 +1,6 @@
 {
-  "version": "0.8.3",
-  "package_version_string": "0.8.3",
+  "version": "0.8.4",
+  "package_version_string": "0.8.4",
   "dataset": "pii_bench_zh",
   "language": "zh",
   "samples": 1000,
