@@ -11,7 +11,31 @@ v<from> → v<to>: <workload> <old>ms → <new>ms (<+/-pct>); reason: <why>
 
 (initial baseline established — no change to record)
 
-## Estimator change — minimum of 7 runs (baseline NOT refreshed)
+## Baseline refresh — CI Linux, minimum-of-7 (2026-07-27)
+
+The previous numbers were taken on 2026-06-29 and had never been checked against
+a `main` commit: the budget workflow only triggered on pull requests, and this
+project pushes to `main` directly. The first runs after wiring it to `main`
+failed on all eight workloads at once, 20-59% slower each.
+
+That shape is a slower machine, not slower code. `import_time_ms` moved 44%, and
+it is measured by spawning subprocesses — untouched by the estimator change. The
+Rust redact path moved the same 25-30% while the release that exposed this
+changed nothing in it (it deleted dead code and fixed documentation). A uniform
+shift across workloads that share nothing but the runner they execute on is the
+runner.
+
+The numbers below replace them, measured on ubuntu-latest with the minimum-of-7
+estimator. They come from a single run: the estimator's own spread is around 3%,
+well inside the +-10% gate, but if the gate proves flaky at these values the
+answer is more samples per workload, not a wider band.
+
+Still outstanding: `restore_1kb_p50_ms` times a `restore()` call with no anchor,
+which has failed closed since guard-by-default in v0.8.0 — so it measures a
+rejected restore, not a restore. Fixing that changes what the number means and
+needs its own refresh.
+
+## Estimator change — minimum of 7 runs (baseline refreshed shortly after, see above)
 
 `run_perf_budget.py` now reports each workload as the **minimum** wall-clock over
 7 runs instead of the median of 5. Scheduling noise on a shared CI runner only

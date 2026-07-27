@@ -2,15 +2,15 @@
   "schema_version": 1,
   "platform": "ubuntu-latest",
   "python": "3.12",
-  "commit": "refresh-2026-06-29-detect-on-emit",
+  "commit": "refresh-2026-07-27-ci-linux-min-of-7",
   "measurements": {
-    "import_time_ms": 56.60,
-    "redact_zh_fast_1kb_p50_ms": 2.23,
-    "redact_en_fast_1kb_p50_ms": 1.22,
-    "redact_pseudonym_llm_zh_1kb_p50_ms": 2.56,
-    "restore_1kb_p50_ms": 2.34,
-    "streaming_feed_per_chunk_p50_ms": 2.36,
-    "streaming_dribble_total_ms": 10.58,
-    "restore_bulk_csv_total_ms": 4.19
+    "import_time_ms": 81.56,
+    "redact_zh_fast_1kb_p50_ms": 2.86,
+    "redact_en_fast_1kb_p50_ms": 1.52,
+    "redact_pseudonym_llm_zh_1kb_p50_ms": 3.32,
+    "restore_1kb_p50_ms": 3.03,
+    "streaming_feed_per_chunk_p50_ms": 2.84,
+    "streaming_dribble_total_ms": 12.77,
+    "restore_bulk_csv_total_ms": 6.67
   }
 }
