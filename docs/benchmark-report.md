@@ -35,16 +35,17 @@ argus-redact combines PII detection with **reversible encryption and per-message
 |  | argus-redact | Presidio |
 |--|:-----------:|:--------:|
 | Reversible | **Yes** (per-message key) | No (one-way; reversible only via custom operator) |
-| Chinese PII out-of-the-box | **Yes** (8 types) | No (add via custom recognizers) |
-| 7 languages | **Yes** | Configurable (mostly English) |
+| Chinese PII out-of-the-box | **Yes** (36 types) | No (add via custom recognizers) |
+| 8 languages | **Yes** | Configurable (mostly English) |
 | Local / offline | **Yes** | **Yes** |
 | Semantic detection | **Yes** (Layer 3 LLM) | No (add via custom recognizer) |
 
 **Benchmark coverage is `zh` + `en` only.** The other six packs
-(`de`, `uk`, `br`, `in`, `ja`, `ko`) ship L1 patterns and NER adapters but have
+(`de`, `uk`, `br`, `in`, `ja`, `ko`) ship L1 patterns — all but `br` also ship a
+NER adapter — but have
 **no measured recall** in this report — they are best-effort and reach them via
 an explicit `lang="…"` (they are not auto-selected under `lang="auto"`; see
-[language-packs.md](language-packs.md#benchmark-status)). The "7 languages" row
+[language-packs.md](language-packs.md#benchmark-status)). The "8 languages" row
 above is a coverage claim, not a benchmarked-recall claim.
 
 ---
@@ -290,7 +291,7 @@ here has committed — treat any specific ratio as unsubstantiated until it is.
 | **Reversible encryption** | **Yes** | No | No | Yes (OpenAI) |
 | **Per-message keys** | **Yes** | No | No | No |
 | **Chinese PII** (phone, ID, card) | **Yes** | No | Limited | No |
-| **7 languages** | **Yes** | Configurable | 50+ (claimed) | 1 |
+| **8 languages** | **Yes** | Configurable | 50+ (claimed) | 1 |
 | **Fully local** | **Yes** | **Yes** | No (SaaS) | No (OpenAI) |
 | **Semantic detection** | **Yes** (local LLM) | No | Yes | No |
 | **Two-line API** | **Yes** | No | No | Yes |

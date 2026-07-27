@@ -45,6 +45,7 @@ argus-redact redact [input] [options]
 | `-c, --config` | | none | Path to config file (JSON or YAML) with per-type strategy overrides. |
 | `--profile` | | none | Compliance profile: `default`, `pipl`, `gdpr`, `hipaa`, or `pseudonym-llm`. |
 | `--strategy-override` | | none | Per-type strategy override for `--profile pseudonym-llm`, e.g. `"phone:remove,address:realistic"`. Strategy names: `pseudonym`, `realistic`, `mask`, `remove`, `category`, `name_mask`, `landline_mask`. |
+| `--unified-prefix` | | none | Unify all reversible-strategy types under one prefix instead of per-type prefixes, e.g. `--unified-prefix R` → `R-NNNNN`. |
 
 > **Note on `-l uk` / `-l in`.** These are argus locale-pack codes, not
 > ISO-639-1 language codes. `uk` selects the **British English** pack
@@ -189,7 +190,7 @@ Languages:
   de  German     regex (4 patterns) + NER
   uk  British    regex (5 patterns) + NER
   in  Indian     regex (4 patterns) + NER
-  br  Brazilian  regex (3 patterns) + NER
+  br  Brazilian  regex (3 patterns)
 
 Layers:
   1 Pattern (regex)       ✓
@@ -204,6 +205,8 @@ Layers:
 Start an HTTP API server.
 
 ```bash
+pip install argus-redact[serve]
+
 argus-redact serve                    # default port 8000
 argus-redact serve --port 9000        # custom port
 ```
@@ -388,8 +391,6 @@ All commands use the same exit codes:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ARGUS_REDACT_LANG` | `zh` | Default language |
-| `ARGUS_REDACT_LOG_LEVEL` | `WARNING` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `ARGUS_API_KEY` | *(unset)* | Bearer token for HTTP server auth |
 | `ARGUS_PERF_LOG` | *(unset)* | Path to JSONL file for performance telemetry |
 | `ARGUS_PERF_SLOW_MS` | `50` | Slow call threshold (ms), always logged |

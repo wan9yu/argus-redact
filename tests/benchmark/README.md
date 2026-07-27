@@ -7,7 +7,7 @@ Evaluate argus-redact against public PII datasets. Measure precision, recall, F1
 Most PII tools only benchmark against English regex patterns. We evaluate across **three dimensions**:
 
 1. **Multi-layer detection** — regex alone misses names, addresses, and context-dependent PII. We measure how each layer (regex → NER → semantic) adds recall without sacrificing precision.
-2. **Multilingual coverage** — 7 languages, each with locale-specific PII formats. WikiANN covers all of them; most other tools only benchmark English.
+2. **Multilingual coverage** — 8 languages, each with locale-specific PII formats. WikiANN covers all of them; most other tools only benchmark English.
 3. **Reversibility** — unique to argus-redact. Other tools delete PII permanently. We measure whether every detected entity can be perfectly restored from the key, which no other benchmark considers.
 
 ## Datasets

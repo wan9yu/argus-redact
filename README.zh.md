@@ -113,7 +113,7 @@ Unicode 加固：NFKC 规范化、零宽字符剥离、西里尔/希腊伪装字
 
 核心引擎（regex 匹配、实体合并、还原、假名生成）用 **Rust + PyO3** 写，追求极致性能；Python 负责编排、NER 模型、LLM 集成。
 
-**63 类 PII，覆盖 3 层**（完整清单见[类型目录](docs/pii-types.md)，由注册表自动生成）— 从电话号码到医疗诊断、宗教信仰、政治立场。默认 `mode="fast"`（仅 L1，零依赖，亚毫秒）；可选 `mode="ner"`（+ NER 模型）→ `mode="auto"`（全部 3 层）。
+**74 类 PII，覆盖 3 层**（完整清单见[类型目录](docs/pii-types.md)，由注册表自动生成）— 从电话号码到医疗诊断、宗教信仰、政治立场。默认 `mode="fast"`（仅 L1，零依赖，亚毫秒）；可选 `mode="ner"`（+ NER 模型）→ `mode="auto"`（全部 3 层）。
 
 **部署位置很重要** — 三种 mode 的延迟差三个数量级，按你在请求路径中的位置选：
 
@@ -137,7 +137,7 @@ Unicode 加固：NFKC 规范化、零宽字符剥离、西里尔/希腊伪装字
 
 混合使用：`lang=["zh", "en", "de"]`；提供已知人名：`names=["王一", "张三"]`。
 
-**基准范围：** 只有 **zh** 和 **en** 有已提交的召回率基准。其余六个语言包（**de、uk、br、in、ja、ko**）附带 L1 模式 + NER 适配器，但没有实测召回率 —— 视为 **best-effort**，请通过显式 `lang="…"` 使用。它们不会在 `lang="auto"` 下被自动选中：仅凭脚本的检测会把所有拉丁字母文本判定为 `en`。详见 [language-packs.md](docs/language-packs.md#benchmark-status)。
+**基准范围：** 只有 **zh** 和 **en** 有已提交的召回率基准。其余六个语言包（**de、uk、br、in、ja、ko**）附带 L1 模式（除 **br** 外还附带 NER 适配器），但没有实测召回率 —— 视为 **best-effort**，请通过显式 `lang="…"` 使用。它们不会在 `lang="auto"` 下被自动选中：仅凭脚本的检测会把所有拉丁字母文本判定为 `en`。详见 [language-packs.md](docs/language-packs.md#benchmark-status)。
 
 ## 性能
 
@@ -171,7 +171,7 @@ _ai4privacy en，500 样本，v0.7.16 run（结果 JSON：`tests/benchmark/resul
 
 | 维度 | 当前 (v0.8.4) | 下一里程碑 |
 |-----------|:----------------:|:---:|
-| **保护** | 63 类 PII，L1-L3。在 [PRvL](docs/prvl-standard.md) 参考套件中（24 个用例，每个模型 42 处 PII）：**`default` profile 在四个模型上均无泄漏** —— GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.6。可逆的 profile 并不干净：`pseudonym` 在 Claude-Opus-4.5 和 GLM-4.6 上各泄漏 1/42，`realistic` 在 Claude-Opus-4.5 上泄漏 1/42。参考套件不等于对抗性输入下的保证 —— 完整矩阵见 prvl-standard.md。8 语言跨层 hints（zh/en/ja/ko/de/uk/in/br）。SHAKE-256 派生 + 全盐熵 + faker 身份通过守卫。状态导出默认省略 salt；HTTP server 拒绝无认证启动；CLI 写入 O_NOFOLLOW + key 文件 mode 0600；MCP token 存储 TTL+LRU (v0.6.2)。Windows CI + 属性测试不变量 + 变异测试核心 (v0.6.3) + 性能预算 CI 门控 (v0.6.4) + 集成层会话隔离 (v0.6.6) + README pinned-to-doctest + 版本同步 CI 守卫 (v0.6.6) + compose 命名空间 + 纯层纯净守卫 (v0.6.7) + seed→salt API rename + PIITypeDef SSOT + Presidio bridge through public redact + 3 new types (v0.6.8) + compose 辅助函数 (v0.6.9) + Layer 1 冻结守卫/KDF replay 向量/死代码精简/manylinux 摘要锁定 (v0.6.10) + 适配器编写接口（compose.register_pii_type / PIITypeDef / PatternMatch）+ Layer 2 签名快照 (v0.6.11) + 港澳通行证/公积金 zh L1 覆盖 (v0.6.12)。**v0.7.x — 100% Rust 核心 SSOT**：argus-redact-core crate + crates.io 发布，patterns/校验器/归一化/替换+还原/fakers/人名打分 + 完整 L1 redact/restore 引擎迁入 Rust (v0.7.0–v0.7.8) + fail-closed 加固与检测正确性 (v0.7.9–v0.7.10) + 浏览器内 **wasm** 构建 (v0.7.11)。**v0.7.12 — 准标识符检测广度**：证据门控的中文裸地区、职业、医疗病症/过敏、以及新类型 **hobby** 检测（经由共享的 evidence_detector 框架），加上重识别评测（PRvL+ X 轴）；移除未发布的 generalize 策略。**v0.7.18–v0.7.20 — 守卫式还原**：`restore()` 增加确定性守卫（每次调用的溯源 nonce + 作用域绑定），关闭"LLM 输出里被注入的假名会被静默还原"这一窗口 (v0.7.18)；修复真实泄漏 —— 在 `mode="fast"` 下，一个 Luhn 合法的银行卡号在八个语言包中的六个（ja/ko/de/uk/in/br，即自身不带卡号 pattern 的语言包）会原样透传，现已改为不依赖周边文字语种即可检出 (v0.7.19)；整个流程收敛为一个公开的 `guarded_restore()`，五个集成层全部包装它 (v0.7.20)。**v0.8.0（破坏性）** —— `guard=True` 现为默认（裸 restore 无 anchor 时 fail-closed）；`residual_personal_data` 对 mask 配置如实上报；修复了 `unified_prefix` 下会导致还原张冠李戴的假名撞码 | 对抗性测试 |
+| **保护** | 74 类 PII，L1-L3。在 [PRvL](docs/prvl-standard.md) 参考套件中（24 个用例，每个模型 42 处 PII）：**`default` profile 在四个模型上均无泄漏** —— GPT-5 / Claude-Opus-4.5 / Gemini-2.5-Pro / GLM-4.6。可逆的 profile 并不干净：`pseudonym` 在 Claude-Opus-4.5 和 GLM-4.6 上各泄漏 1/42，`realistic` 在 Claude-Opus-4.5 上泄漏 1/42。参考套件不等于对抗性输入下的保证 —— 完整矩阵见 prvl-standard.md。8 语言跨层 hints（zh/en/ja/ko/de/uk/in/br）。SHAKE-256 派生 + 全盐熵 + faker 身份通过守卫。状态导出默认省略 salt；HTTP server 拒绝无认证启动；CLI 写入 O_NOFOLLOW + key 文件 mode 0600；MCP token 存储 TTL+LRU (v0.6.2)。Windows CI + 属性测试不变量 + 变异测试核心 (v0.6.3) + 性能预算 CI 门控 (v0.6.4) + 集成层会话隔离 (v0.6.6) + README pinned-to-doctest + 版本同步 CI 守卫 (v0.6.6) + compose 命名空间 + 纯层纯净守卫 (v0.6.7) + seed→salt API rename + PIITypeDef SSOT + Presidio bridge through public redact + 3 new types (v0.6.8) + compose 辅助函数 (v0.6.9) + Layer 1 冻结守卫/KDF replay 向量/死代码精简/manylinux 摘要锁定 (v0.6.10) + 适配器编写接口（compose.register_pii_type / PIITypeDef / PatternMatch）+ Layer 2 签名快照 (v0.6.11) + 港澳通行证/公积金 zh L1 覆盖 (v0.6.12)。**v0.7.x — 100% Rust 核心 SSOT**：argus-redact-core crate + crates.io 发布，patterns/校验器/归一化/替换+还原/fakers/人名打分 + 完整 L1 redact/restore 引擎迁入 Rust (v0.7.0–v0.7.8) + fail-closed 加固与检测正确性 (v0.7.9–v0.7.10) + 浏览器内 **wasm** 构建 (v0.7.11)。**v0.7.12 — 准标识符检测广度**：证据门控的中文裸地区、职业、医疗病症/过敏、以及新类型 **hobby** 检测（经由共享的 evidence_detector 框架），加上重识别评测（PRvL+ X 轴）；移除未发布的 generalize 策略。**v0.7.18–v0.7.20 — 守卫式还原**：`restore()` 增加确定性守卫（每次调用的溯源 nonce + 作用域绑定），关闭"LLM 输出里被注入的假名会被静默还原"这一窗口 (v0.7.18)；修复真实泄漏 —— 在 `mode="fast"` 下，一个 Luhn 合法的银行卡号在八个语言包中的六个（ja/ko/de/uk/in/br，即自身不带卡号 pattern 的语言包）会原样透传，现已改为不依赖周边文字语种即可检出 (v0.7.19)；整个流程收敛为一个公开的 `guarded_restore()`，五个集成层全部包装它 (v0.7.20)。**v0.8.0（破坏性）** —— `guard=True` 现为默认（裸 restore 无 anchor 时 fail-closed）；`residual_personal_data` 对 mask 配置如实上报；修复了 `unified_prefix` 下会导致还原张冠李戴的假名撞码。**v0.8.4** —— 浏览器内 wasm 构建现在在客户端本地跑还原守卫（`restore_guarded`，不再请求服务器）；person 跨层合并改为保留更高层的 span 并把被截断的剩余部分重新插入，而不是直接丢弃，pii_bench_zh 参考套件上人名召回率从 88.0% 提升到 95.6%，其他类型无回归；批量 `restore_json`/`restore_csv`/`StreamingRestorer` 现在每次调用只编译一次替换模式，而不是逐条编译（在一个实测样例上约 555 倍提速，非普遍性能承诺） | 对抗性测试 |
 | **可用** | PRvL U=100%。假名编码 + 真实模式（zh + en + RFC 共享）+ 按调用策略覆盖 + `keep` 策略（白名单）+ 可续流式会话 + 增量流式默认 + 跨语言别名还原（zh ↔ en） | 任务感知引导 |
 | **可逆** | PRvL R 按任务：引用 100%，提取 50%，创意 0%（设计如此）。跨语言 LLM 改写（`张三` → `Zhang San`）通过 `result.aliases` + `restore(text, key, aliases=...)` 自动还原 | 任务感知引导 |
 | **合规** | 覆盖 PIPL Art.28 敏感 PII 范畴；提供风险评估 + 合规 profiles | PIPL/GDPR/HIPAA（副产品） |
@@ -224,10 +224,12 @@ en.audit_text       # "Call [PHONE-23801], SSN [SSN-15772]"  → 合规归档
 # 混合（自动检测）
 mx = redact_pseudonym_llm("客户Wang at user@company.com", lang="auto")
 
-# 三种形式均可完整还原，跨语言通用
-restore(zh.downstream_text, zh.key)   # → 原文
-restore(en.downstream_text, en.key)   # → 原文
-restore(mx.downstream_text, mx.key)   # → 原文
+# 三种形式均可完整还原，跨语言通用。
+# 这里用 guard=False：还原的是库自己刚产出的文本，不是 LLM 的回复 ——
+# 真正的 LLM 往返请看"安全地还原 LLM 输出"一节的守卫式还原。
+restore(zh.downstream_text, zh.key, guard=False)   # → 原文
+restore(en.downstream_text, en.key, guard=False)   # → 原文
+restore(mx.downstream_text, mx.key, guard=False)   # → 原文
 ```
 
 ```bash
@@ -280,12 +282,13 @@ argus-redact 是 PII **数据最小化辅助工具**，不是匿名化或合规�
 - **L1 fast (regex)** 匹配定义良好的格式；新型或混淆变种、跨字段推断攻击会漏过。
 - **L2 NER** 是统计推断；分布外文本（口语、错字、少数民族姓名）漏检率更高。
 - **不保证对抗性输入** — 攻击者可以构造规避检测的文本。
+- **消除显式 PII 不等于匿名。** LLM agent 可以把残留的、单独看不具身份指向性的线索与公开数据组合，从而重新识别出个人 —— 即使在已脱敏的文本上，即使在良性任务中（[Ko et al. 2026](https://arxiv.org/abs/2603.18382)）。可逆替换保护的是显式标识符、并保留 LLM 的可用性；它**不能**防御基于推断的重识别，而这是单文档级别的 redactor 无法完全阻止的 —— 残留风险来自准标识符的*组合*，而非单个字段（[为什么把单个字段泛化并不能解决问题](docs/design-quasi-identifier-generalization.md)；[以及为什么扩大英文准标识符检测范围也没能降低重识别率](docs/design-english-detection-breadth.md)）。
 - **不是 GDPR/PIPL 匿名化框架** — 匿名化是合规过程决策，不是单一库的输出。
 - **restore 是一次替换，不是一次鉴权。** 未守卫的还原（`guard=False`）会把原文替换进**任何**带有对应假名的文本 —— 包括攻击者诱导模型产出的回复。自 v0.8.0 起默认 `guard=True`，无有效 anchor 时 fail-closed；请用[守卫式还原](#安全)把一次 restore 绑定到产生该 key 的那次交互。
 
 **适合用 argus-redact**：LLM 流水线里需要 `redact() → LLM → guarded_restore()`，零 PII 跨过网络边界的可逆假名化。
 
-**考虑替代品**：单向英文 PII 掩码 + 单次模型调用 → [OpenAI Privacy Filter](https://huggingface.co/openai/privacy-filter) 等基于模型的方案可能更适合。argus-redact 最强的地方是**可逆假名化 + 按消息独立 key**；中文支持最深（HanLP + 本土校验器），其他 7 种语言走 regex + spaCy NER。按工作负载选，不按排他性选。
+**考虑替代品**：单向英文 PII 掩码 + 单次模型调用 → [OpenAI Privacy Filter](https://huggingface.co/openai/privacy-filter) 等基于模型的方案可能更适合。argus-redact 最强的地方是**可逆假名化 + 按消息独立 key**；中文支持最深（HanLP + 本土校验器），其他七种语言里有六种（en、ja、ko、de、uk、in）走 regex + spaCy NER，`br` 只有 regex、没有 NER 适配器。按工作负载选，不按排他性选。
 
 ## 集成
 

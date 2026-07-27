@@ -12,13 +12,16 @@ redact(
     lang: str | list[str] = "zh",
     mode: str = "fast",
     salt: int | bytes | None = None,
-    config: dict | None = None,
+    config: dict | str | None = None,
     names: list[str] | None = None,
     detailed: bool = False,
     report: bool = False,
+    with_types: bool = False,
     profile: str | None = None,
     types: list[str] | None = None,
     types_exclude: list[str] | None = None,
+    unified_prefix: str | None = None,
+    strict: bool = False,
 ) -> tuple[str, dict] | tuple[str, dict, dict]
 ```
 
@@ -37,9 +40,12 @@ Detect and replace PII in the input text. Returns `(redacted_text, key)`, or `(r
 | `names` | `list[str] \| None` | `None` | Known names to always redact (no NER needed). Combined with NER for best results. |
 | `detailed` | `bool` | `False` | If `True`, return a 3-tuple with detection details (entities, stats). |
 | `report` | `bool` | `False` | Return a `RedactReport` with risk assessment and compliance info. |
+| `with_types` | `bool` | `False` | Return a 3-tuple `(redacted, key, types)` where `types` maps replacement → PII type. Ignored if `detailed` or `report` is also set — `detailed` wins. |
 | `profile` | `str \| None` | `None` | Compliance profile: `"default"`, `"pipl"`, `"gdpr"`, `"hipaa"`. |
 | `types` | `list[str] \| None` | `None` | Whitelist — only detect these PII types. |
 | `types_exclude` | `list[str] \| None` | `None` | Blacklist — skip these PII types. Mutually exclusive with `types`. |
+| `unified_prefix` | `str \| None` | `None` | Unify all reversible-strategy types under one prefix (e.g. `"R"` → `R-NNNNN`) instead of per-type prefixes. |
+| `strict` | `bool` | `False` | With `mode="auto"`, raise `LayerUnavailableError` instead of warning + degrading when a requested layer (NER or semantic) isn't available. |
 
 ### Returns
 
@@ -127,7 +133,7 @@ text, key = redact("张三 13812345678", salt=42, mode="fast")
 assert text == "张三 [手机号已脱敏]"  # deterministic
 assert key == {"[手机号已脱敏]": "13812345678"}  # deterministic
 
-restored = restore(text, key)
+restored = restore(text, key, guard=False)  # local text, no LLM round-trip
 assert restored == "张三 13812345678"  # pure
 ```
 
@@ -158,7 +164,7 @@ restored = restore("any text", {})
 # Pseudonym appears as substring in a word — still matched
 redacted, key = redact("王五说了话")
 # redacted = "P-037说了话"
-restored = restore("关于P-037的建议", key)
+restored = restore("关于P-037的建议", key, guard=False)  # local text, no LLM round-trip
 # "关于王五的建议"  ← P-037 matched even without whitespace boundaries
 
 # Unknown pseudonyms left unchanged
@@ -339,10 +345,12 @@ result.audit_text       # "请拨打 [TEL-79329] 联系 P-164"
 result.downstream_text  # "请拨打 19999123456 联系张明"
 result.display_text     # "请拨打 19999123456ⓕ 联系张明ⓕ"
 
-# Round-trip works on any of the three forms
-restore(result.downstream_text, result.key)                       # → original
-restore(result.audit_text, result.key)                            # → original
-restore(result.display_text, result.key, display_marker="ⓕ")     # → original (marker stripped first)
+# Round-trip works on any of the three forms. guard=False here: this restores
+# the library's own output, not an LLM reply — see guarded_restore() below
+# for the guarded path a real LLM round-trip needs.
+restore(result.downstream_text, result.key, guard=False)                       # → original
+restore(result.audit_text, result.key, guard=False)                            # → original
+restore(result.display_text, result.key, display_marker="ⓕ", guard=False)     # → original (marker stripped first)
 
 # Cross-process stable mapping
 result1 = redact_pseudonym_llm(text, salt=b"shared-secret-32-bytes-min")
@@ -355,11 +363,11 @@ en = redact_pseudonym_llm(
     lang="en",
 )
 en.downstream_text  # "Call John Doe at (555) 555-0142, email user42@example.com"
-restore(en.downstream_text, en.key)  # → original
+restore(en.downstream_text, en.key, guard=False)  # → original (local text, no LLM round-trip)
 
 # Mixed zh + en (auto-detect)
 mx = redact_pseudonym_llm("客户Wang at user@company.com", lang="auto")
-restore(mx.downstream_text, mx.key)  # → original
+restore(mx.downstream_text, mx.key, guard=False)  # → original (local text, no LLM round-trip)
 
 # Per-call strategy override (v0.5.5+): keep address realistic, but force
 # phone to placeholder. audit_text is unchanged either way.
@@ -1328,7 +1336,7 @@ State is a plain dict: `version` (integer schema version, decoupled from the pac
 - Strict input check applies per-chunk: realistic-faked output from one chunk fed back as input to another raises `PseudonymPollutionError`.
 - Detection mode (`mode="ner"` / `"auto"`) runs full pipeline per chunk; cost scales linearly with chunk count.
 
-> ℹ️ True byte-level streaming with realistic mode requires complete entity boundary detection across chunks; that is roadmapped for a later release. v0.5.2 supports logical-unit chunking only.
+> ℹ️ True byte-level streaming with realistic mode requires complete entity boundaries and is roadmapped for a later release.
 
 ---
 

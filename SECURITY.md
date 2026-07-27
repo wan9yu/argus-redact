@@ -7,8 +7,8 @@ key restoration, or cryptographic derivation are treated as high priority.
 
 | Version | Supported |
 |---------|-----------|
-| 0.7.x   | ✅ |
-| < 0.7   | ❌ (please upgrade) |
+| 0.8.x   | ✅ |
+| < 0.8   | ❌ (please upgrade) |
 
 ## Reporting a Vulnerability
 

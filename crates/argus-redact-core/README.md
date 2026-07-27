@@ -8,8 +8,9 @@ Pure-Rust PII detection and redaction primitives — the core that powers the
 [`argus-redact`](https://github.com/wan9yu/argus-redact) Python package.
 
 No PyO3, no Python: just the algorithms. The Python wheel binds to this crate,
-and the same core is the foundation for the project's planned C / Swift (iOS) /
-WASM targets.
+and the in-browser [`argus-redact-wasm`](https://github.com/wan9yu/argus-redact/tree/main/crates/argus-redact-wasm)
+crate binds to it too (shipped v0.7.11). The same core is the foundation for
+the project's planned C / Swift (iOS) targets.
 
 > **Most users want the Python package**, not this crate:
 > ```bash
@@ -37,6 +38,7 @@ let patterns = vec![PatternConfig {
     pattern: r"1[3-9]\d{9}".into(),
     check_context: false,
     group: None,
+    validator: None,
 }];
 
 let hits = match_patterns("call me at 13812345678", &patterns).unwrap();

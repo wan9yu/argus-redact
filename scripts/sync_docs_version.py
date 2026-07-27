@@ -20,11 +20,27 @@ from pathlib import Path
 _REPO = Path(__file__).parent.parent
 
 # Authoritative PII-type count. SSOT is `argus_redact.specs.list_types()` /
-# `make catalog` (the catalog header reports "Total: N types"). Hardcoded here
-# (not imported) so this docs-sync script stays free of the native `_core`
-# import. Bump this when `make catalog` reports a different total; the README
-# count targets below are then re-asserted by `make sync-docs-version-check`.
-_PII_TYPE_COUNT = 63
+# `make catalog` (the catalog header reports "Total: N types"). Parsed at run
+# time from the generated `docs/pii-types.md` header (not imported from
+# `argus_redact` so this docs-sync script stays free of the native `_core`
+# import) so it can never drift from the catalog again.
+_PII_TYPE_COUNT_RE = re.compile(r"^Total:\s*(\d+)\s*types", re.MULTILINE)
+
+
+def _read_pii_type_count() -> int:
+    path = _REPO / "docs/pii-types.md"
+    text = path.read_text(encoding="utf-8")
+    m = _PII_TYPE_COUNT_RE.search(text)
+    if m is None:
+        raise RuntimeError(
+            f"Could not find a 'Total: N types' line in {path.relative_to(_REPO)}. "
+            "Run `make catalog` to regenerate it, or fix the header format this "
+            "script parses."
+        )
+    return int(m.group(1))
+
+
+_PII_TYPE_COUNT = _read_pii_type_count()
 
 _TARGETS = [
     # (path, regex pattern, replacement template — single {v} placeholder)

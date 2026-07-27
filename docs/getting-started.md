@@ -40,8 +40,11 @@ encrypt(plaintext)       → (ciphertext, key)     # GPG
 redact(plaintext)        → (redacted_text, key)   # argus-redact
 
 decrypt(ciphertext, key) → plaintext              # GPG
-restore(text, key)       → plaintext              # argus-redact
+restore(text, key)       → plaintext*             # argus-redact
 ```
+
+\* Since v0.8.0, a bare `restore(text, key)` needs a valid anchor (or an explicit
+`guard=False`) to actually substitute — see [Restoring LLM output safely](#restoring-llm-output-safely).
 
 The key is a plain dict mapping pseudonyms to originals. Treat it like a private key.
 
@@ -156,7 +159,7 @@ Chinese names → Chinese NER. English names → English NER. Phone patterns →
 
 `lang="auto"` routes based on script detection (Hiragana/Katakana → `ja`, Hangul → `ko`, CJK ideographs → `zh`, Latin letters → `en`). If you know the language set in advance, passing an explicit list like `lang=["zh", "en"]` is equivalent and avoids the detection pass.
 
-Because detection is script-only, the Latin-script packs `de`/`uk`/`br`/`in` are **never auto-selected** — all Latin text resolves to `en`. To use them, pass an explicit `lang` (e.g. `lang=["de", "en"]`). Note that only `zh` and `en` have committed recall benchmarks; `de`/`uk`/`br`/`in`/`ja`/`ko` ship patterns + NER adapters but are best-effort (unbenchmarked). See [language-packs.md](language-packs.md#benchmark-status).
+Because detection is script-only, the Latin-script packs `de`/`uk`/`br`/`in` are **never auto-selected** — all Latin text resolves to `en`. To use them, pass an explicit `lang` (e.g. `lang=["de", "en"]`). Note that only `zh` and `en` have committed recall benchmarks; `de`/`uk`/`br`/`in`/`ja`/`ko` ship patterns (and, except for `br`, a NER adapter) but are best-effort (unbenchmarked). See [language-packs.md](language-packs.md#benchmark-status).
 
 ## Detection Modes
 
