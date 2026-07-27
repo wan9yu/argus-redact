@@ -36,9 +36,17 @@ def fake_repo(tmp_path: Path) -> Path:
         '[project]\nname = "argus-redact"\nversion = "9.9.9"\n'
     )
     (tmp_path / "src" / "argus_redact" / "__init__.py").write_text('__version__ = "0.0.0"\n')
-    (tmp_path / "README.md").write_text("Current (v0.0.0) something\n")
+    (tmp_path / "README.md").write_text(
+        "Current (v0.0.0) something\n\n3 PII types across 3 layers\n"
+    )
     (tmp_path / "docs" / "cli-reference.md").write_text("argus-redact v0.0.0 (info)\n")
     (tmp_path / "docs" / "benchmark-report.md").write_text("argus-redact v0.0.0 on Apple M1\n")
+    # The generated catalog header is the PII-type-count SSOT the script parses.
+    (tmp_path / "docs" / "pii-types.md").write_text("# PII Type Catalog\n\nTotal: 7 types\n")
+    (tmp_path / "README.zh.md").write_text("当前 (v0.0.0)，3 类 PII\n")
+    (tmp_path / "demo").mkdir()
+    (tmp_path / "demo" / "js").mkdir()
+    (tmp_path / "demo" / "js" / "strings.js").write_text("badges: ['60+ 类隐私信息'],\n")
     # Cargo workspace manifest — version line plus a dependency `version` and a
     # `rust-version` that must NOT be rewritten (anchor specificity guard).
     (tmp_path / "Cargo.toml").write_text(
@@ -72,6 +80,41 @@ def test_sync_writes_pyproject_version_to_all_targets(fake_repo: Path):
     assert 'version      = "9.9.9"' in cargo, "workspace version not synced (alignment preserved)"
     assert 'rust-version = "1.85"' in cargo, "rust-version must not be rewritten"
     assert 'pyo3 = { version = "0.28" }' in cargo, "dependency version must not be rewritten"
+
+
+def test_sync_writes_catalog_pii_type_count_to_every_surface(fake_repo: Path):
+    """The `Total: N types` catalog header owns every count claim, not a human."""
+    result = _run_script(cwd=fake_repo)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "7 PII types" in (fake_repo / "README.md").read_text()
+    assert "7 类 PII" in (fake_repo / "README.zh.md").read_text()
+    assert "7 类隐私信息" in (fake_repo / "demo/js/strings.js").read_text()
+
+
+def test_missing_catalog_header_fails_loudly(fake_repo: Path):
+    """A catalog without the parsed header must abort, not silently skip counts."""
+    (fake_repo / "docs" / "pii-types.md").write_text("# PII Type Catalog\n\nno header here\n")
+    result = _run_script(cwd=fake_repo)
+    assert result.returncode != 0
+    assert "Total: N types" in result.stderr
+
+
+def test_import_does_no_filesystem_reads(tmp_path: Path):
+    """Importing the module must not depend on any repo file existing.
+
+    Guards the module-scope-read regression: a target table built at import
+    time made the module unimportable wherever `docs/pii-types.md` was absent.
+    """
+    import importlib.util
+
+    (tmp_path / "scripts").mkdir()
+    copied = tmp_path / "scripts" / "sync_docs_version.py"
+    shutil.copy(_SCRIPT, copied)
+    spec = importlib.util.spec_from_file_location("sync_docs_version_isolated", copied)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # tmp_path holds no docs/pii-types.md
+    assert mod._REPO == tmp_path
+    assert callable(mod._targets)
 
 
 def test_check_passes_after_sync(fake_repo: Path):

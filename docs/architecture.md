@@ -302,7 +302,7 @@ Merged:  [(0, 2, "person", "张三", 0.95, layer=2),
 
 The obvious general fix — "when spans cross, prefer the higher detection layer" — was implemented and benchmarked for v0.7.20, and **rejected** unscoped. It did fix what it targeted (person false positives went to zero), but it cost roughly 7 percentage points of overall recall on the Chinese benchmark suite: NER routinely lays a coarse `location` span across an L1 `address` match, so under a layer-first rule the coarse span wins, the entity type flips from `address` to `location`, and the address value no longer matches — address detection collapsed to nothing. "Trust the higher layer" is true for names and false in general. See the *Not shipped* note under v0.7.20 in [CHANGELOG.md](../CHANGELOG.md).
 
-The defect is therefore **still open for non-person types**: no general fix is shipped, and the length-first rule above is what runs today outside person-vs-person overlaps. The narrower, person-scoped variant that was the surviving hypothesis **shipped in v0.8.4** (`person_cross_layer_winner`) — it fixes person false positives without the address-recall regression, but deliberately does not extend to other types.
+The defect is therefore **still open for non-person types**: no general fix is shipped, and the length-first rule above is what runs today outside person-vs-person overlaps. The narrower, person-scoped variant that was the surviving hypothesis is the v0.8.4 exception described above — it deliberately does not extend to other types.
 
 **Cross-layer agreement:** After merging, if the same span (or compatible types like address/location) was detected by both L1 and L2, confidence is boosted by 0.1. This rewards entities that multiple independent detectors agree on.
 

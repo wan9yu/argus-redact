@@ -23,13 +23,7 @@ jobs:
       - name: Tag matches pyproject version
         env:
           TAG: ${{ github.ref_name }}
-        run: |
-          PP=$(awk -F'"' '/^version = "/ {print $2; exit}' pyproject.toml)
-          if [ "$TAG" != "v$PP" ]; then
-            echo "::error::tag $TAG does not match pyproject.toml version $PP"
-            exit 1
-          fi
-          echo "tag $TAG matches pyproject.toml v$PP"
+        run: make tag-version-check TAG="$TAG"
       - name: CHANGELOG matches pyproject version
         run: make changelog-version-check
 

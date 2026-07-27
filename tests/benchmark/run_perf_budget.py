@@ -6,9 +6,7 @@ Usage:
         --platform Linux --commit abc1234
 
 Estimator: each workload is reported as the MINIMUM wall-clock over repeated
-runs (see `_measure_min`), not a median. On a shared CI runner, scheduling noise
-only ever ADDS time, so the minimum is the closest available estimate of the
-code's own cost and is far more stable run-to-run than a median.
+runs, not a median — see `_measure_min` for why.
 
 Output JSON shape lives in `tests/benchmark/baseline.json`. The measurement keys
 still carry the historical `_p50_` infix so a current run keeps comparing against

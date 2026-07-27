@@ -69,7 +69,10 @@ target-version = "py310"
 select = ["E", "F", "W", "I"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# `scripts` carries one test file (the version-sync script's own harness).
+# Listing it here is what makes CI collect it — without it the script's guards
+# were silently never run.
+testpaths = ["tests", "scripts"]
 pythonpath = ["src"]
 markers = [
     "slow: marks tests that require model loading (deselect with '-m \"not slow\"')",

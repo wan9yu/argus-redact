@@ -15,6 +15,21 @@ on:
 permissions:
   contents: read
 
+# Supersede an in-flight run when a newer commit lands on the same ref.
+#
+# Safety against cancelling a RELEASE's test run: in a `workflow_call` invocation
+# the `github` context belongs to the CALLER, so a release (tag push) evaluates
+# this group with `github.ref == refs/tags/vX.Y.Z`, while a branch push evaluates
+# it with `github.ref == refs/heads/main` and a pull_request with
+# `refs/pull/<n>/merge`. Those three ref namespaces are disjoint, so no branch or
+# PR run can ever share a group with — and therefore cancel — a tag-triggered
+# release run, regardless of whether `github.workflow` resolves to the caller's
+# name or this file's. `make release` pushes main and the tag together, and the
+# two resulting runs land in different groups by construction.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest

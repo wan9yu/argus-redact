@@ -17,6 +17,14 @@ on:
 permissions:
   contents: read
 
+# Supersede an in-flight run when a newer commit lands on the same ref. The group
+# keys on both the workflow name and the ref, so a push to main can only ever
+# cancel another push to main — never a pull_request run (whose ref is
+# `refs/pull/<n>/merge`) and never a tag run (`refs/tags/…`).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   perf:
     runs-on: ubuntu-latest
@@ -31,6 +39,18 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable @ 2026-05-03
+
+      # `pip install -e ".[dev]"` below compiles the Rust extension, which is the
+      # bulk of this job's wall time. Same cache shape as test.yml/mutants.yml,
+      # with its own key prefix so the entries don't collide across workflows.
+      - name: Cache Rust
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-perf-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
 
       - name: Install
         run: |
@@ -51,21 +71,21 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+          # RANGE is a single git revision-range token; empty means "no range is
+          # available for this event", which yields no exemption.
           if [ "${EVENT_NAME}" = "pull_request" ]; then
             git fetch origin main
-            RANGE_ARGS=(origin/main...HEAD)
+            RANGE="origin/main...HEAD"
+          elif [ -n "${EVENT_BEFORE:-}" ] && [ "${EVENT_BEFORE}" != "0000000000000000000000000000000000000000" ] \
+             && git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
+            RANGE="${EVENT_BEFORE}..${EVENT_SHA}"
+          elif git rev-parse -q --verify HEAD~1 >/dev/null; then
+            RANGE="HEAD~1..HEAD"
           else
-            if [ -n "${EVENT_BEFORE:-}" ] && [ "${EVENT_BEFORE}" != "0000000000000000000000000000000000000000" ] \
-               && git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
-              RANGE_ARGS=("${EVENT_BEFORE}" "${EVENT_SHA}")
-            elif git rev-parse -q --verify HEAD~1 >/dev/null; then
-              RANGE_ARGS=(HEAD~1 HEAD)
-            else
-              RANGE_ARGS=()
-            fi
+            RANGE=""
           fi
-          if [ ${#RANGE_ARGS[@]} -gt 0 ] \
-             && git diff --name-only "${RANGE_ARGS[@]}" | grep -q "^tests/benchmark/baseline\.json$"; then
+          if [ -n "${RANGE}" ] \
+             && git diff --name-only "${RANGE}" | grep -q "^tests/benchmark/baseline\.json$"; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "Baseline file modified in this change — skipping perf gate."
           else

@@ -40,68 +40,87 @@ def _read_pii_type_count() -> int:
     return int(m.group(1))
 
 
-_PII_TYPE_COUNT = _read_pii_type_count()
+def _targets() -> list[tuple[Path, str, str]]:
+    """Build the rewrite table. Called at run time, never at import.
 
-_TARGETS = [
-    # (path, regex pattern, replacement template — single {v} placeholder)
-    (
-        _REPO / "src/argus_redact/__init__.py",
-        r'^__version__ = "([0-9.]+)"',
-        '__version__ = "{v}"',
-    ),
-    # Cargo workspace version (the three crates inherit it via
-    # `version.workspace = true`). `^version` anchors to the
-    # `[workspace.package]` line only — dependency `version = ` lives after a
-    # crate name and `rust-version`/`edition` start with other words. `\g<1>`
-    # preserves the column alignment so re-sync is idempotent.
-    (
-        _REPO / "Cargo.toml",
-        r'^version(\s+)= "([0-9.]+)"',
-        r'version\g<1>= "{v}"',
-    ),
-    (
-        _REPO / "README.md",
-        r"Current \(v([0-9.]+)\)",
-        "Current (v{v})",
-    ),
-    # README.zh.md hardcoded milestone version ("当前 (vX.Y.Z)") — keep in
-    # lockstep with pyproject; the crates badge below is synced separately.
-    (
-        _REPO / "README.zh.md",
-        r"当前 \(v([0-9.]+)\)",
-        "当前 (v{v})",
-    ),
-    # README.zh.md PII-type count ("N 类 PII"). Replacement carries no {v}
-    # placeholder, so `.format(v=...)` leaves the SSOT count untouched; the
-    # regex re-asserts both occurrences (intro bullet + North Star table).
-    (
-        _REPO / "README.zh.md",
-        r"[0-9]+ 类 PII",
-        f"{_PII_TYPE_COUNT} 类 PII",
-    ),
-    # Static crates.io version badge (shields' dynamic crates/v endpoint is
-    # intermittently "invalid"; a static badge is reliable, bumped here).
-    (
-        _REPO / "README.md",
-        r"crates\.io-v([0-9.]+)-orange",
-        "crates.io-v{v}-orange",
-    ),
-    (
-        _REPO / "README.zh.md",
-        r"crates\.io-v([0-9.]+)-orange",
-        "crates.io-v{v}-orange",
-    ),
-    (
-        _REPO / "docs/cli-reference.md",
-        r"argus-redact v([0-9.]+)",
-        "argus-redact v{v}",
-    ),
-    (
-        _REPO / "docs/benchmark-report.md",
-        r"argus-redact v([0-9.]+) on",
-        "argus-redact v{v} on",
-    ),
-]
+    The PII-type count is read from disk here rather than at module scope so
+    that importing this module stays side-effect free — an import must not
+    depend on `docs/pii-types.md` existing.
+    """
+    count = _read_pii_type_count()
+    return [
+        # (path, regex pattern, replacement template — single {v} placeholder)
+        (
+            _REPO / "src/argus_redact/__init__.py",
+            r'^__version__ = "([0-9.]+)"',
+            '__version__ = "{v}"',
+        ),
+        # Cargo workspace version (the three crates inherit it via
+        # `version.workspace = true`). `^version` anchors to the
+        # `[workspace.package]` line only — dependency `version = ` lives after
+        # a crate name and `rust-version`/`edition` start with other words.
+        # `\g<1>` preserves the column alignment so re-sync is idempotent.
+        (
+            _REPO / "Cargo.toml",
+            r'^version(\s+)= "([0-9.]+)"',
+            r'version\g<1>= "{v}"',
+        ),
+        (
+            _REPO / "README.md",
+            r"Current \(v([0-9.]+)\)",
+            "Current (v{v})",
+        ),
+        # README.zh.md hardcoded milestone version ("当前 (vX.Y.Z)") — keep in
+        # lockstep with pyproject; the crates badge below is synced separately.
+        (
+            _REPO / "README.zh.md",
+            r"当前 \(v([0-9.]+)\)",
+            "当前 (v{v})",
+        ),
+        # PII-type count, in every surface that states one. Replacements carry
+        # no {v} placeholder, so `.format(v=...)` leaves the SSOT count
+        # untouched; each regex re-asserts every occurrence in its file.
+        (
+            _REPO / "README.zh.md",
+            r"[0-9]+ 类 PII",
+            f"{count} 类 PII",
+        ),
+        (
+            _REPO / "README.md",
+            r"[0-9]+ PII types",
+            f"{count} PII types",
+        ),
+        # Demo hero badge. `\+?` also matches the older soft "60+" phrasing so
+        # a rounded claim gets pulled back onto the exact catalog count.
+        (
+            _REPO / "demo/js/strings.js",
+            r"[0-9]+\+? 类隐私信息",
+            f"{count} 类隐私信息",
+        ),
+        # Static crates.io version badge (shields' dynamic crates/v endpoint is
+        # intermittently "invalid"; a static badge is reliable, bumped here).
+        (
+            _REPO / "README.md",
+            r"crates\.io-v([0-9.]+)-orange",
+            "crates.io-v{v}-orange",
+        ),
+        (
+            _REPO / "README.zh.md",
+            r"crates\.io-v([0-9.]+)-orange",
+            "crates.io-v{v}-orange",
+        ),
+        (
+            _REPO / "docs/cli-reference.md",
+            r"argus-redact v([0-9.]+)",
+            "argus-redact v{v}",
+        ),
+        (
+            _REPO / "docs/benchmark-report.md",
+            r"argus-redact v([0-9.]+) on",
+            "argus-redact v{v} on",
+        ),
+    ]
+
 
 _PYPROJECT_VERSION = re.compile(r'^version = "([0-9.]+)"', re.MULTILINE)
 
@@ -117,7 +136,7 @@ def _read_version() -> str:
 def _sync(check_only: bool) -> int:
     version = _read_version()
     drift: list[str] = []
-    for path, pattern, replacement in _TARGETS:
+    for path, pattern, replacement in _targets():
         if not path.exists():
             continue
         text = path.read_text(encoding="utf-8")

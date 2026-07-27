@@ -98,7 +98,7 @@ pub struct GuardEvent {
 // well below that (real nonces pass) but far above any incidental text-suffix
 // collision rejects short degenerate nonces as provenance proofs.
 
-/// The single source of the minimum nonce length the guard will accept.
+/// Minimum nonce length the guard will accept.
 const MIN_NONCE_LEN: usize = 16;
 
 /// True only if the model echoed `nonce` as instructed — as a whole token, on

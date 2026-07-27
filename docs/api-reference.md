@@ -337,22 +337,30 @@ A frozen `PseudonymLLMResult` dataclass with four fields:
 
 ### Examples
 
+The realistic strategy requires an explicit `salt`; `salt=42` below keeps the
+output reproducible, production should pass a real secret.
+
+<!-- pin -->
 ```python
 from argus_redact import redact_pseudonym_llm, restore
 
-result = redact_pseudonym_llm("请拨打 13912345678 联系王建国")
-result.audit_text       # "请拨打 [TEL-79329] 联系 P-164"
-result.downstream_text  # "请拨打 19999123456 联系张明"
-result.display_text     # "请拨打 19999123456ⓕ 联系张明ⓕ"
+result = redact_pseudonym_llm("请拨打 13912345678 联系王建国", salt=42)
+result.audit_text       # "请拨打 PHON-68060 联系P-76865"
+result.downstream_text  # "请拨打 19999946823 联系毕马温"
+result.display_text     # "请拨打 19999946823ⓕ 联系毕马温ⓕ"
 
 # Round-trip works on any of the three forms. guard=False here: this restores
 # the library's own output, not an LLM reply — see guarded_restore() below
 # for the guarded path a real LLM round-trip needs.
-restore(result.downstream_text, result.key, guard=False)                       # → original
-restore(result.audit_text, result.key, guard=False)                            # → original
-restore(result.display_text, result.key, display_marker="ⓕ", guard=False)     # → original (marker stripped first)
+print(restore(result.downstream_text, result.key, guard=False))
+# expected: 请拨打 13912345678 联系王建国
+print(restore(result.audit_text, result.key, guard=False))
+# expected: 请拨打 13912345678 联系王建国
+print(restore(result.display_text, result.key, display_marker="ⓕ", guard=False))
+# expected: 请拨打 13912345678 联系王建国
 
 # Cross-process stable mapping
+text = "请拨打 13912345678 联系王建国"
 result1 = redact_pseudonym_llm(text, salt=b"shared-secret-32-bytes-min")
 result2 = redact_pseudonym_llm(text, salt=b"shared-secret-32-bytes-min")
 assert result1.downstream_text == result2.downstream_text
@@ -361,22 +369,26 @@ assert result1.downstream_text == result2.downstream_text
 en = redact_pseudonym_llm(
     "Call John Smith at (415) 555-1234, email john@company.com",
     lang="en",
+    salt=42,
 )
-en.downstream_text  # "Call John Doe at (555) 555-0142, email user42@example.com"
-restore(en.downstream_text, en.key, guard=False)  # → original (local text, no LLM round-trip)
+en.downstream_text  # "Call Richard Roe at (555) 555-0123, email user64058@example.org"
+print(restore(en.downstream_text, en.key, guard=False))
+# expected: Call John Smith at (415) 555-1234, email john@company.com
 
 # Mixed zh + en (auto-detect)
-mx = redact_pseudonym_llm("客户Wang at user@company.com", lang="auto")
-restore(mx.downstream_text, mx.key, guard=False)  # → original (local text, no LLM round-trip)
+mx = redact_pseudonym_llm("客户Wang at user@company.com", lang="auto", salt=42)
+print(restore(mx.downstream_text, mx.key, guard=False))
+# expected: 客户Wang at user@company.com
 
-# Per-call strategy override (v0.5.5+): keep address realistic, but force
-# phone to placeholder. audit_text is unchanged either way.
+# Per-call strategy override (v0.5.5+): force phone to a placeholder while the
+# rest of the profile stands. audit_text is unchanged either way.
 custom = redact_pseudonym_llm(
     "电话13912345678 地址北京市朝阳路100号",
     lang="zh",
-    strategy_overrides={"phone": "remove", "address": "realistic"},
+    salt=42,
+    strategy_overrides={"phone": "remove"},
 )
-custom.downstream_text  # phone → "PHON-NNNNN", address still realistic
+custom.downstream_text  # "电话PHON-68060 地址LOCA-59624朝阳路100号"
 ```
 
 ### Reserved-range coverage

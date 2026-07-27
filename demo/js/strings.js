@@ -14,7 +14,7 @@ export const T = {
   restoredOk: '✓ 还能一字不差地还原 · restored exactly',
   howTitle: '怎么做到的 · How it works',
   steps: ['① 找出隐私信息 · find personal info', '② 换成安全替身 · swap in safe look-alikes', '③ 回复里再换回来 · restore from the reply'],
-  badges: ['60+ 类隐私信息', '8 种语言', '可逆还原', '开源 Apache-2.0', '身份证/银行卡校验'],
+  badges: ['74 类隐私信息', '8 种语言', '可逆还原', '开源 Apache-2.0', '身份证/银行卡校验'],
   limitNote: '⚠ 脱敏移除显式 PII，但不能保证抵御从残留上下文的推理式重识别 · removes explicit PII, not a guarantee against inference-based re-identification',
   llmProof: '真实大模型，这个场景零泄漏 · Real AIs, zero leaks in this case',
   llmProvenance: '来源 · Source: ',

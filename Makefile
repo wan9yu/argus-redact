@@ -1,4 +1,4 @@
-.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check gen-confusables gen-confusables-check perf-update perf-check detection-update sync-docs-version sync-docs-version-check changelog-version-check mutants-core demo
+.PHONY: install dev test cov lint build clean release catalog catalog-check gen-risk-data gen-risk-data-check gen-confusables gen-confusables-check perf-update perf-check detection-update sync-docs-version sync-docs-version-check changelog-version-check tag-version-check mutants-core demo
 
 install:
 	pip install -e .
@@ -93,6 +93,22 @@ changelog-version-check:
 		exit 1; \
 	fi; \
 	echo "CHANGELOG.md and pyproject.toml agree on v$$PP"
+
+# Assert a release tag names the version pyproject declares. Called with the tag
+# under test: `make tag-version-check TAG=v1.2.3`. Release CI runs this on the
+# pushed tag so a mis-tagged release fails before anything is built or published.
+# `TAG` is read from the recipe ENVIRONMENT (make places a command-line
+# assignment there too), never interpolated as a make variable — a tag name is
+# attacker-influenced and git permits `$` and backticks in refnames.
+tag-version-check:
+	@if [ -z "$$TAG" ]; then echo "ERROR: TAG is required, e.g. make tag-version-check TAG=v1.2.3" >&2; exit 1; fi; \
+	PP=$$(awk -F'"' '/^version = "/ {print $$2; exit}' pyproject.toml); \
+	if [ -z "$$PP" ]; then echo "ERROR: could not extract version from pyproject.toml" >&2; exit 1; fi; \
+	if [ "$$TAG" != "v$$PP" ]; then \
+		echo "Version mismatch: tag $$TAG, pyproject.toml = $$PP (expected tag v$$PP)" >&2; \
+		exit 1; \
+	fi; \
+	echo "tag $$TAG matches pyproject.toml v$$PP"
 
 # Run cargo-mutants over the security-critical Rust core (crypto / checksum /
 # restore / seed / pseudonym) AND the Layer-1 detection core (normalize /

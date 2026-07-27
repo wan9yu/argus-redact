@@ -208,28 +208,34 @@ argus-redact assess <<< "身份证110101199003074610"
 | `downstream_text` | `请拨打 19999123456 联系张明` | 喂给 LLM — 语义结构保留 |
 | `display_text` | `请拨打 19999123456ⓕ 联系张明ⓕ` | UI 渲染 — `ⓕ` 标记防混淆 |
 
+realistic 策略要求显式 `salt`（下面用 `salt=42` 让输出可复现；生产请用真实密钥）。
+
+<!-- pin -->
 ```python
 from argus_redact import redact_pseudonym_llm, restore
 
 # 中文
-zh = redact_pseudonym_llm("请拨打 13912345678 联系王建国", lang="zh")
-zh.downstream_text  # "请拨打 19999123456 联系张明"           → LLM
-zh.display_text     # "请拨打 19999123456ⓕ 联系张明ⓕ"        → UI
+zh = redact_pseudonym_llm("请拨打 13912345678 联系王建国", lang="zh", salt=42)
+zh.downstream_text  # "请拨打 19999946823 联系毕马温"    → LLM
+zh.display_text     # "请拨打 19999946823ⓕ 联系毕马温ⓕ" → UI
 
 # 英文
-en = redact_pseudonym_llm("Call (415) 555-1234, SSN 123-45-6789", lang="en")
-en.downstream_text  # "Call (555) 555-0142, SSN 999-37-2811" → LLM
-en.audit_text       # "Call [PHONE-23801], SSN [SSN-15772]"  → 合规归档
+en = redact_pseudonym_llm("Call (415) 555-1234, SSN 123-45-6789", lang="en", salt=42)
+en.downstream_text  # "Call (555) 555-0123, SSN 999-47-9373" → LLM
+en.audit_text       # "Call PHON-68060, SSN SSN-54474"       → 合规归档
 
 # 混合（自动检测）
-mx = redact_pseudonym_llm("客户Wang at user@company.com", lang="auto")
+mx = redact_pseudonym_llm("客户Wang at user@company.com", lang="auto", salt=42)
 
 # 三种形式均可完整还原，跨语言通用。
 # 这里用 guard=False：还原的是库自己刚产出的文本，不是 LLM 的回复 ——
 # 真正的 LLM 往返请看"安全地还原 LLM 输出"一节的守卫式还原。
-restore(zh.downstream_text, zh.key, guard=False)   # → 原文
-restore(en.downstream_text, en.key, guard=False)   # → 原文
-restore(mx.downstream_text, mx.key, guard=False)   # → 原文
+print(restore(zh.downstream_text, zh.key, guard=False))
+# expected: 请拨打 13912345678 联系王建国
+print(restore(en.downstream_text, en.key, guard=False))
+# expected: Call (415) 555-1234, SSN 123-45-6789
+print(restore(mx.downstream_text, mx.key, guard=False))
+# expected: 客户Wang at user@company.com
 ```
 
 ```bash

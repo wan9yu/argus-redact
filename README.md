@@ -232,29 +232,36 @@ Each call returns **three text forms** sharing one key dict:
 | `downstream_text` | `请拨打 19999123456 联系张明` | LLM input — semantic structure preserved |
 | `display_text` | `请拨打 19999123456ⓕ 联系张明ⓕ` | UI rendering — visible `ⓕ` marker prevents confusion |
 
+The realistic strategy needs an explicit `salt` (`salt=42` below keeps the
+output reproducible; use a real secret in production).
+
+<!-- pin -->
 ```python
 from argus_redact import redact_pseudonym_llm, restore
 
 # Chinese
-zh = redact_pseudonym_llm("请拨打 13912345678 联系王建国", lang="zh")
-zh.downstream_text  # "请拨打 19999123456 联系张明"           → LLM
-zh.display_text     # "请拨打 19999123456ⓕ 联系张明ⓕ"        → UI
+zh = redact_pseudonym_llm("请拨打 13912345678 联系王建国", lang="zh", salt=42)
+zh.downstream_text  # "请拨打 19999946823 联系毕马温"    → LLM
+zh.display_text     # "请拨打 19999946823ⓕ 联系毕马温ⓕ" → UI
 
 # English
-en = redact_pseudonym_llm("Call (415) 555-1234, SSN 123-45-6789", lang="en")
-en.downstream_text  # "Call (555) 555-0142, SSN 999-37-2811" → LLM
-en.audit_text       # "Call [PHONE-23801], SSN [SSN-15772]"  → audit
+en = redact_pseudonym_llm("Call (415) 555-1234, SSN 123-45-6789", lang="en", salt=42)
+en.downstream_text  # "Call (555) 555-0123, SSN 999-47-9373" → LLM
+en.audit_text       # "Call PHON-68060, SSN SSN-54474"       → audit
 
 # Mixed (auto-detect)
-mx = redact_pseudonym_llm("客户Wang at user@company.com", lang="auto")
+mx = redact_pseudonym_llm("客户Wang at user@company.com", lang="auto", salt=42)
 
 # Round-trip works on any of the three forms, in any language.
 # guard=False here: this restores the library's own output, not an LLM
 # reply — see "Restoring LLM output safely" for the guarded path a real
 # LLM round-trip needs.
-restore(zh.downstream_text, zh.key, guard=False)   # → original
-restore(en.downstream_text, en.key, guard=False)   # → original
-restore(mx.downstream_text, mx.key, guard=False)   # → original
+print(restore(zh.downstream_text, zh.key, guard=False))
+# expected: 请拨打 13912345678 联系王建国
+print(restore(en.downstream_text, en.key, guard=False))
+# expected: Call (415) 555-1234, SSN 123-45-6789
+print(restore(mx.downstream_text, mx.key, guard=False))
+# expected: 客户Wang at user@company.com
 ```
 
 ```bash

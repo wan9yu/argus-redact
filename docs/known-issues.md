@@ -178,6 +178,28 @@ Each entry follows three lines:
 - **What you should do**: For deployments that don't need Layer 3, use the
   fast-mode subset image (no PyTorch — typically <1GB).
 
+### `main` has no branch protection — CI gates bind by visibility, not by blocking
+
+- **What**: This repository is trunk-based: changes land directly on `main`, and
+  `main` carries no branch-protection rule and no required status checks. Every CI
+  workflow (`test.yml`, `perf.yml`, the wasm / demo / integration legs) therefore
+  reports a result *after* the code is already on `main`. A red run makes `main`
+  visibly red; it does not prevent the commit that caused it, and nothing mechanically
+  stops a subsequent push or a release tag on top of it.
+- **Why we won't fix**: required status checks only bind changes that arrive through a
+  pull request, so enabling them means adopting a PR-gated flow — a change to how the
+  project is developed, not a settings toggle. For a single-maintainer, trunk-based
+  repo the cost (every change round-trips through a PR and waits on the full matrix)
+  is not currently judged worth the guarantee.
+- **What you should do**: the compensating control is at the point where an unreviewed
+  red `main` would actually cause harm — publication. `release.yml` re-runs the
+  **entire** `test.yml` suite against the tagged commit via `workflow_call`, and that
+  run blocks wheel building, PyPI, the GitHub Release, and the crates.io publish. The
+  duplicated compute is deliberate: a tag push and the branch push that precedes it
+  dispatch concurrently, so a release cannot simply observe "the Tests run for this
+  SHA". If you are consuming from `main` rather than a release, check the workflow
+  status for the exact commit you are pinning — do not assume it was gated.
+
 ### Perf-budget baseline is platform-specific and drifts
 
 - **What**: The performance gate (`.github/workflows/perf.yml`) compares each
