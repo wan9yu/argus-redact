@@ -2,6 +2,71 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.5 — correct the docs that drifted, delete dark code, make the CI gates bind
+
+A maintenance release. No API change and no behaviour change in the library itself:
+`redact()`, `restore()`, the wasm surface and the `argus-redact-core` Rust API are all
+untouched. What changed is that several things which looked like they were working were
+not, and the ones that can be checked by a machine now are.
+
+### Fixed
+
+- **The quickstart round-trip examples had been wrong since v0.8.0.** `restore(text, key)`
+  defaults to `guard=True`, so with no anchor it fails closed and returns the text
+  unrestored — while the examples annotated it `# → original`. Every bare-restore example
+  in the READMEs, the API reference and the getting-started guide now either passes
+  `guard=False` with the reason, or points at the guarded path.
+- **The version-sync script was enforcing a stale PII-type count.** It hardcoded 63 while
+  the generated catalog reported 74, so each CI run wrote the undercount back into
+  `README.zh.md`. The count is now read from the catalog at run time.
+- Assorted doc claims corrected against their code source: the `br` language pack ships
+  regex only and has no NER adapter (four places said otherwise, including a flat
+  `regex (3 patterns) + NER` row in the CLI reference); the crates.io quickstart was
+  missing `PatternConfig`'s `validator` field and still called wasm "planned" nine
+  releases after it shipped; `architecture.md` still said the detection layer plays no
+  part in merging, which v0.8.4's person-scoped cross-layer rule made false; `SECURITY.md`
+  still listed 0.7.x as the supported line; and the demo headline claimed "zero leaks"
+  without naming the reference case it rests on.
+
+### Removed
+
+- Dark code with no consumer: the nonce fossil left in `pure/restore.py` when v0.8.4 ported
+  the guard to Rust (its two test pins asserted against the Python copy, so the core's own
+  floor could have drifted while they stayed green), the `_core.mask_value` and
+  `person_common_words_en` PyO3 bindings, and the demo's unused `renderFindings` export.
+  `specs/_fakers_util.py` moved into the benchmark generators rather than being deleted —
+  it was test-only code that shipped inside the wheel. Net -108 lines.
+
+### Changed — CI
+
+- **The performance budget now runs on `main`.** It triggered on `pull_request` only, and
+  development here is trunk-based, so it had never run on the code it guards. Its estimator
+  changed from a median of five samples to the minimum of seven first: interference on a
+  shared runner only ever adds time, so the minimum isolates the code's own cost (measured
+  spread 11.3% → 3.4%). It also caches the Rust build like the other workflows, and uploads
+  its measurement so a failing gate still leaves the numbers behind.
+- **Publishing is gated on the whole test suite.** Releases previously hung off an
+  ubuntu-only pytest job that skipped lint, the Rust core tests, Windows, and the
+  integration, wasm and demo legs. A release preflight also checks that the tag, the
+  packaged version and the changelog agree — `make changelog-version-check` had no caller
+  until now.
+- `deploy-demo` runs the browser check before it uploads to the Space instead of racing it,
+  and `mutants-core`, previously invocable only by hand, runs weekly.
+
+### Added — guards against the classes that keep recurring
+
+- An architecture test that fails when a `#[pyfunction]`/`#[pyclass]` is registered in the
+  `_core` module but referenced from neither `src/` nor `tests/`. Neither toolchain can see
+  this: rustc counts the symbol as used because `wrap_pyfunction!` names it, and Python has
+  no notion of a caller across the FFI boundary. This was the second such fossil in roughly
+  six weeks.
+- A parity test pinning the language-pack count and the per-language NER coverage claims to
+  `_LANG_PATTERNS` and `_LANG_NER_ADAPTERS`, and sync-script targets for the English PII
+  count and the demo badge.
+- The `<!-- pin -->` harness that executes documentation examples now covers the `restore()`
+  blocks. Bringing them under it showed they had never run as written — one needed an
+  explicit salt, another referenced an undefined name.
+
 ## v0.8.4 — guarded restore in the browser, precompiled bulk restore, person merge fix
 
 No breaking API changes. `redact()`/`restore()` public signatures are unchanged, and the wasm
