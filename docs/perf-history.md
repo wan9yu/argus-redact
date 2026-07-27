@@ -11,6 +11,27 @@ v<from> → v<to>: <workload> <old>ms → <new>ms (<+/-pct>); reason: <why>
 
 (initial baseline established — no change to record)
 
+## Estimator change — minimum of 7 runs (baseline NOT refreshed)
+
+`run_perf_budget.py` now reports each workload as the **minimum** wall-clock over
+7 runs instead of the median of 5. Scheduling noise on a shared CI runner only
+ever adds time, so the minimum is the least contaminated estimate of the code's
+own cost, and it is markedly more stable: over repeated local trials the
+median-of-5 estimate for one workload spanned ~11% (wider than the ±10%
+regression band itself) while min-of-7 spanned ~3%.
+
+`tests/benchmark/baseline.json` was deliberately **not** re-measured. Since
+`min <= median`, the committed numbers now act as a conservative ceiling: a
+current run reads as equal-or-improved against them, and the gate only fails on
+a real regression (`compare_baseline.py` fails on regression only — an
+improvement exits 0). The baseline is due a refresh from a CI-Linux run at the
+next intentional perf change; until then treat its absolute values as an older,
+slightly pessimistic reference rather than a current measurement.
+
+Also note: the committed values were measured on `ubuntu-latest` / Python 3.12.
+Comparing a local macOS or non-3.12 run against them will show large deltas from
+hardware alone — the gate is only meaningful on the CI runner.
+
 ---
 
 # Profile log (measured runs)

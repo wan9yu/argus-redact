@@ -1,6 +1,14 @@
 name: Performance Budget
 
+# Runs on PRs AND on direct pushes to main. This repo is trunk-based (changes land
+# on main directly), so a pull_request-only trigger would leave the gate never
+# running on the code it guards.
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
   pull_request:
     paths-ignore:
       - "**/*.md"
@@ -31,11 +39,35 @@ jobs:
 
       - name: Detect baseline-touch (gate exemption)
         id: gate
+        env:
+          # On a push event, HEAD *is* origin/main, so a three-dot diff against
+          # origin/main is always empty and the exemption could never fire. Compare
+          # against the pushed range instead. github.event.before is the all-zeros
+          # SHA for the first push of a branch — fall back to HEAD~ then to "no
+          # exemption" so a fresh branch can't crash the step.
+          EVENT_BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+        shell: bash
         run: |
-          git fetch origin main
-          if git diff --name-only origin/main...HEAD | grep -q "^tests/benchmark/baseline\.json$"; then
+          set -uo pipefail
+          if [ "${EVENT_NAME}" = "pull_request" ]; then
+            git fetch origin main
+            RANGE_ARGS=(origin/main...HEAD)
+          else
+            if [ -n "${EVENT_BEFORE:-}" ] && [ "${EVENT_BEFORE}" != "0000000000000000000000000000000000000000" ] \
+               && git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
+              RANGE_ARGS=("${EVENT_BEFORE}" "${EVENT_SHA}")
+            elif git rev-parse -q --verify HEAD~1 >/dev/null; then
+              RANGE_ARGS=(HEAD~1 HEAD)
+            else
+              RANGE_ARGS=()
+            fi
+          fi
+          if [ ${#RANGE_ARGS[@]} -gt 0 ] \
+             && git diff --name-only "${RANGE_ARGS[@]}" | grep -q "^tests/benchmark/baseline\.json$"; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Baseline file modified in PR — skipping perf gate."
+            echo "Baseline file modified in this change — skipping perf gate."
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
@@ -46,7 +78,7 @@ jobs:
           PYTHONPATH=src python tests/benchmark/run_perf_budget.py \
             --output current.json \
             --platform "ubuntu-latest" \
-            --commit "${{ github.event.pull_request.head.sha }}"
+            --commit "${{ github.event.pull_request.head.sha || github.sha }}"
           cat current.json
 
       - name: Compare against baseline

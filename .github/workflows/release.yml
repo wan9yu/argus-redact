@@ -12,28 +12,36 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  # Cheap release-shape checks, first and blocking: the pushed tag must name the
+  # version pyproject declares, and the CHANGELOG's top entry must match it too.
+  # Both are release-time invariants (they are deliberately NOT enforced on every
+  # main push, where a CHANGELOG-ahead-of-pyproject state is legitimate).
+  preflight:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable @ 2026-05-03
-
-      - name: Install dependencies
+      - name: Tag matches pyproject version
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
-          pip install maturin
-          pip install -e ".[dev]"
+          PP=$(awk -F'"' '/^version = "/ {print $2; exit}' pyproject.toml)
+          if [ "$TAG" != "v$PP" ]; then
+            echo "::error::tag $TAG does not match pyproject.toml version $PP"
+            exit 1
+          fi
+          echo "tag $TAG matches pyproject.toml v$PP"
+      - name: CHANGELOG matches pyproject version
+        run: make changelog-version-check
 
-      - name: Run tests
-        run: pytest -p no:recording -q -m "not ner and not semantic and not slow"
+  # The FULL test suite, re-run on the release SHA. `make release` pushes main and
+  # the tag in one command, so the branch-push Tests run and this tag-push Release
+  # run dispatch concurrently — a workflow_run trigger cannot express "the Tests
+  # run for this exact SHA". Calling test.yml as a reusable workflow makes the
+  # dependency explicit at the cost of duplicated compute.
+  test:
+    needs: preflight
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
 
   build-wheels:
     needs: test

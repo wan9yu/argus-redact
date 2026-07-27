@@ -1,6 +1,6 @@
 """Full-distribution performance profile — the reproducible source for the paper perf table.
 
-`run_perf_budget.py` is the CI regression gate (5-run median, ±10% threshold).
+`run_perf_budget.py` is the CI regression gate (minimum of 7 runs, ±10% threshold).
 This is its paper-facing companion: it captures the FULL latency distribution
 (min / p50 / p90 / p95 / p99 / max / mean / stdev) plus throughput (docs/s) for
 end-to-end ``redact(mode="fast")`` and raw ``_core.detect_l1``, per corpus, with

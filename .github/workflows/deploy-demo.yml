@@ -64,6 +64,20 @@ jobs:
             demo/pkg-web/argus_redact_wasm_bg.wasm -o demo/pkg-web/argus_redact_wasm_bg.wasm
           echo "demo wasm gzipped: $(gzip -c demo/pkg-web/argus_redact_wasm_bg.wasm | wc -c) bytes"
 
+      # Validate the EXACT bytes about to be uploaded, before uploading them. This
+      # workflow push-triggers on demo/, the wasm crate AND the core, so without a
+      # gate here a demo-breaking core change would deploy to the live Space while
+      # test.yml's demo-e2e job was still validating the same push in parallel.
+      # Playwright serves ../../demo — the same folder upload_folder ships — so a
+      # failure here blocks the deploy instead of racing it. Mirrors test.yml's
+      # demo-e2e steps; that job stays as the PR-time signal.
+      - name: Validate built demo end-to-end (Playwright)
+        working-directory: tests/demo
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+          npx playwright test
+
       - name: Deploy HF Space (static)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}

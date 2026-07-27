@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Callable as a reusable workflow so release.yml can gate publishing on this
+  # ENTIRE suite (lint + Rust core tests + the Windows leg + version sync +
+  # integration + presidio + sdist-install + wasm + demo-e2e) rather than on a
+  # release-local subset. Additive: the push/pull_request triggers above are
+  # unaffected. Callers pass `secrets: inherit` so the Codecov uploads keep working.
+  workflow_call:
 
 permissions:
   contents: read
