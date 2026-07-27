@@ -51,10 +51,10 @@ estimator. They come from a single run: the estimator's own spread is around 3%,
 well inside the +-10% gate, but if the gate proves flaky at these values the
 answer is more samples per workload, not a wider band.
 
-Still outstanding: `restore_1kb_p50_ms` times a `restore()` call with no anchor,
-which has failed closed since guard-by-default in v0.8.0 — so it measures a
-rejected restore, not a restore. Fixing that changes what the number means and
-needs its own refresh.
+Outstanding at the time of this entry, resolved by the one above it:
+`restore_1kb_p50_ms` timed a `restore()` call with no anchor, which has failed
+closed since guard-by-default in v0.8.0 — so it measured a rejected restore
+rather than a restore.
 
 ## Estimator change — minimum of 7 runs (baseline refreshed shortly after, see above)
 
