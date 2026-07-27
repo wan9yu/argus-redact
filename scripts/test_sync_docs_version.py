@@ -33,20 +33,30 @@ def fake_repo(tmp_path: Path) -> Path:
     (tmp_path / "src" / "argus_redact").mkdir(parents=True)
     (tmp_path / "docs").mkdir()
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname = "argus-redact"\nversion = "9.9.9"\n'
+        '[project]\nname = "argus-redact"\nversion = "9.9.9"\n', encoding="utf-8"
     )
-    (tmp_path / "src" / "argus_redact" / "__init__.py").write_text('__version__ = "0.0.0"\n')
+    (tmp_path / "src" / "argus_redact" / "__init__.py").write_text(
+        '__version__ = "0.0.0"\n', encoding="utf-8"
+    )
     (tmp_path / "README.md").write_text(
-        "Current (v0.0.0) something\n\n3 PII types across 3 layers\n"
+        "Current (v0.0.0) something\n\n3 PII types across 3 layers\n", encoding="utf-8"
     )
-    (tmp_path / "docs" / "cli-reference.md").write_text("argus-redact v0.0.0 (info)\n")
-    (tmp_path / "docs" / "benchmark-report.md").write_text("argus-redact v0.0.0 on Apple M1\n")
+    (tmp_path / "docs" / "cli-reference.md").write_text(
+        "argus-redact v0.0.0 (info)\n", encoding="utf-8"
+    )
+    (tmp_path / "docs" / "benchmark-report.md").write_text(
+        "argus-redact v0.0.0 on Apple M1\n", encoding="utf-8"
+    )
     # The generated catalog header is the PII-type-count SSOT the script parses.
-    (tmp_path / "docs" / "pii-types.md").write_text("# PII Type Catalog\n\nTotal: 7 types\n")
-    (tmp_path / "README.zh.md").write_text("当前 (v0.0.0)，3 类 PII\n")
+    (tmp_path / "docs" / "pii-types.md").write_text(
+        "# PII Type Catalog\n\nTotal: 7 types\n", encoding="utf-8"
+    )
+    (tmp_path / "README.zh.md").write_text("当前 (v0.0.0)，3 类 PII\n", encoding="utf-8")
     (tmp_path / "demo").mkdir()
     (tmp_path / "demo" / "js").mkdir()
-    (tmp_path / "demo" / "js" / "strings.js").write_text("badges: ['60+ 类隐私信息'],\n")
+    (tmp_path / "demo" / "js" / "strings.js").write_text(
+        "badges: ['60+ 类隐私信息'],\n", encoding="utf-8"
+    )
     # Cargo workspace manifest — version line plus a dependency `version` and a
     # `rust-version` that must NOT be rewritten (anchor specificity guard).
     (tmp_path / "Cargo.toml").write_text(
@@ -54,7 +64,8 @@ def fake_repo(tmp_path: Path) -> Path:
         'version      = "0.0.0"\n'
         'rust-version = "1.85"\n\n'
         "[workspace.dependencies]\n"
-        'pyo3 = { version = "0.28" }\n'
+        'pyo3 = { version = "0.28" }\n',
+        encoding="utf-8",
     )
     # Copy the script into the fake repo's scripts/ dir
     (tmp_path / "scripts").mkdir()
@@ -72,11 +83,11 @@ def test_check_detects_drift(fake_repo: Path):
 def test_sync_writes_pyproject_version_to_all_targets(fake_repo: Path):
     result = _run_script(cwd=fake_repo)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert '"9.9.9"' in (fake_repo / "src/argus_redact/__init__.py").read_text()
-    assert "v9.9.9" in (fake_repo / "README.md").read_text()
-    assert "v9.9.9" in (fake_repo / "docs/cli-reference.md").read_text()
-    assert "v9.9.9 on" in (fake_repo / "docs/benchmark-report.md").read_text()
-    cargo = (fake_repo / "Cargo.toml").read_text()
+    assert '"9.9.9"' in (fake_repo / "src/argus_redact/__init__.py").read_text(encoding="utf-8")
+    assert "v9.9.9" in (fake_repo / "README.md").read_text(encoding="utf-8")
+    assert "v9.9.9" in (fake_repo / "docs/cli-reference.md").read_text(encoding="utf-8")
+    assert "v9.9.9 on" in (fake_repo / "docs/benchmark-report.md").read_text(encoding="utf-8")
+    cargo = (fake_repo / "Cargo.toml").read_text(encoding="utf-8")
     assert 'version      = "9.9.9"' in cargo, "workspace version not synced (alignment preserved)"
     assert 'rust-version = "1.85"' in cargo, "rust-version must not be rewritten"
     assert 'pyo3 = { version = "0.28" }' in cargo, "dependency version must not be rewritten"
@@ -86,14 +97,16 @@ def test_sync_writes_catalog_pii_type_count_to_every_surface(fake_repo: Path):
     """The `Total: N types` catalog header owns every count claim, not a human."""
     result = _run_script(cwd=fake_repo)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "7 PII types" in (fake_repo / "README.md").read_text()
-    assert "7 类 PII" in (fake_repo / "README.zh.md").read_text()
-    assert "7 类隐私信息" in (fake_repo / "demo/js/strings.js").read_text()
+    assert "7 PII types" in (fake_repo / "README.md").read_text(encoding="utf-8")
+    assert "7 类 PII" in (fake_repo / "README.zh.md").read_text(encoding="utf-8")
+    assert "7 类隐私信息" in (fake_repo / "demo/js/strings.js").read_text(encoding="utf-8")
 
 
 def test_missing_catalog_header_fails_loudly(fake_repo: Path):
     """A catalog without the parsed header must abort, not silently skip counts."""
-    (fake_repo / "docs" / "pii-types.md").write_text("# PII Type Catalog\n\nno header here\n")
+    (fake_repo / "docs" / "pii-types.md").write_text(
+        "# PII Type Catalog\n\nno header here\n", encoding="utf-8"
+    )
     result = _run_script(cwd=fake_repo)
     assert result.returncode != 0
     assert "Total: N types" in result.stderr
