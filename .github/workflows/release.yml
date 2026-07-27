@@ -40,6 +40,13 @@ jobs:
   build-wheels:
     needs: test
     strategy:
+      # Each leg produces an independent artifact, so one leg's failure says
+      # nothing about the others — and these legs are exactly where transient
+      # infrastructure bites (the QEMU setup pulls from Docker Hub, the
+      # manylinux/musllinux legs pull their images). Under the default,
+      # a single registry timeout cancelled six healthy builds and forced a
+      # full re-run; without it the re-run is one leg. Matches the test matrix.
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
