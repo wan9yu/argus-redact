@@ -61,6 +61,11 @@ _RESTORE_BULK_CSV_TEXT = _build_restore_bulk_csv()
 _restore_bulk_redacted_csv = ""
 _restore_bulk_key: dict = {}
 
+# Same arrangement for the single-document restore: redact once in main(), so the
+# timed function does nothing but restore.
+_restore_1kb_redacted = ""
+_restore_1kb_key: dict = {}
+
 
 def _measure_min(fn, runs: int = 7) -> float:
     """Return the MINIMUM wall-clock duration over `runs` calls (milliseconds).
@@ -124,6 +129,9 @@ def main() -> None:
         _RESTORE_BULK_CSV_TEXT, mode="fast", lang="zh"
     )
 
+    global _restore_1kb_redacted, _restore_1kb_key
+    _restore_1kb_redacted, _restore_1kb_key = redact(_ZH_1KB, salt=42, mode="fast", lang="zh")
+
     measurements = {
         "import_time_ms": _measure_import_time(),
         "redact_zh_fast_1kb_p50_ms": _measure_min(
@@ -181,10 +189,19 @@ def main() -> None:
 
 
 def _restore_workload() -> None:
-    from argus_redact import redact, restore
+    """Restore one ~1KB redacted document (redacted once in main(), above).
 
-    redacted, key = redact(_ZH_1KB, salt=42, mode="fast", lang="zh")
-    restore(redacted, key)
+    `guard=False` is required, not incidental: since guard-by-default in v0.8.0 a
+    bare `restore()` with no anchor hits GUARD_NO_ANCHOR and fails closed, so it
+    would time a rejection rather than a restore. This fixture is the library's
+    own output being reversed from a stored key — the same unguarded case
+    `restore_csv`/`restore_json` document — not a model reply, which is what the
+    guard exists to check. The guarded path's overhead is a different question
+    and would deserve its own workload.
+    """
+    from argus_redact import restore
+
+    restore(_restore_1kb_redacted, _restore_1kb_key, guard=False)
 
 
 def _restore_bulk_workload() -> None:

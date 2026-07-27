@@ -82,6 +82,15 @@ def main() -> int:
             "\nConsider running `make perf-update` to lock in the gain "
             "(updates tests/benchmark/baseline.json)."
         )
+
+    # Report the measurements on a passing run too. Refreshing a baseline needs
+    # numbers from the runner, and a green run is where the trustworthy ones are;
+    # without this they exist only in the log and the artifact.
+    _annotate(
+        "notice",
+        "Performance measurements",
+        [f"- {k}: {v}ms" for k, v in sorted(current["measurements"].items())],
+    )
     return 0
 
 
