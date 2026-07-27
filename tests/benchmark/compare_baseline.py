@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -39,6 +40,17 @@ def _compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:
     return regressions, improvements
 
 
+def _annotate(level: str, title: str, lines: list[str]) -> None:
+    """Emit a GitHub workflow annotation; a no-op outside Actions.
+
+    Newlines have to be percent-encoded or the runner keeps only the first line.
+    """
+    if not os.environ.get("GITHUB_ACTIONS"):
+        return
+    body = "%0A".join(line.strip() for line in lines)
+    print(f"::{level} title={title}::{body}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("current_json")
@@ -54,6 +66,12 @@ def main() -> int:
         print(f"Performance regressions detected (>{_THRESHOLD:.0%} slower):")
         for line in regressions:
             print(line)
+        # Also emit the verdict as a workflow annotation. Stdout only reaches the
+        # job log, which is not always retrievable; an annotation rides the API
+        # the run page itself uses, so a red gate can explain itself from
+        # anywhere — including to whoever has to decide whether the baseline or
+        # the code is at fault.
+        _annotate("error", f"Performance regression (>{_THRESHOLD:.0%})", regressions)
         return 1
 
     if improvements:
