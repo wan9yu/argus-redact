@@ -101,6 +101,17 @@ jobs:
             --commit "${{ github.event.pull_request.head.sha || github.sha }}"
           cat current.json
 
+      # Uploaded before the comparison so the numbers survive a failing gate —
+      # a regression is exactly when you need them, and refreshing the baseline
+      # requires measurements taken on this runner, not a developer's laptop.
+      - name: Upload measurement
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: perf-current-${{ github.sha }}
+          path: current.json
+          retention-days: 14
+
       - name: Compare against baseline
         if: steps.gate.outputs.skip != 'true'
         run: |
