@@ -11,6 +11,27 @@ v<from> → v<to>: <workload> <old>ms → <new>ms (<+/-pct>); reason: <why>
 
 (initial baseline established — no change to record)
 
+## restore_1kb re-measured — 3.03ms to 0.09ms (2026-07-27)
+
+Not a speedup: the workload was measuring the wrong thing. It called `redact()`
+inside the timed function and then a bare `restore()`, which has failed closed
+for want of an anchor since guard-by-default in v0.8.0 — so the number was a
+redaction plus a rejection. The redaction now happens once outside the timer and
+the restore opts out of the guard explicitly, which is the case this fixture
+represents: the library's own output reversed from a stored key, not a model
+reply.
+
+The same run confirmed the refresh above is stable — the other seven workloads
+all landed within 3.5% of it (import -3.5%, redact_zh +2.7%, restore_bulk +2.3%,
+streaming_dribble +0.1%), comfortably inside the +-10% gate.
+
+Watch item: at 0.09ms this workload is the smallest number in the budget, and a
+10% band on it is 9 microseconds. Taking the minimum of seven filters the noise
+that would otherwise dominate at that scale, but if the gate starts flapping
+here the answer is more work per sample — restore the document N times and
+report the total, as `streaming_dribble_total_ms` already does — not a wider
+band.
+
 ## Baseline refresh — CI Linux, minimum-of-7 (2026-07-27)
 
 The previous numbers were taken on 2026-06-29 and had never been checked against
