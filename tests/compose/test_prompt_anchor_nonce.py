@@ -18,13 +18,13 @@ def test_prompt_anchor_backward_compatible_without_anchor():
 
 
 def test_nonce_echo_instruction_shape():
-    """Pin the cross-module contract that D0's fix depends on.
+    """Pin the cross-module contract the guarded restore depends on.
 
-    `pure.restore._strip_nonce` removes the token by the shape these instructions
-    ask for: LAST in the reply, on its OWN LINE. Reword them without updating the
-    stripper and the token silently rides back into the caller's plaintext — which
-    is exactly the v0.7.19 D0 defect, and it regressed with zero test failures
-    because nothing pinned the wording. This is that pin.
+    The nonce stripper (`strip_nonce`, in the Rust core's restore module) removes
+    the token by the shape these instructions ask for: LAST in the reply, on its
+    OWN LINE. Reword them without updating the stripper and the token silently
+    rides back into the caller's plaintext — a defect that once regressed with zero
+    test failures because nothing pinned the wording. This is that pin.
     """
     from argus_redact.compose.anchor import _NONCE_ECHO_EN, _NONCE_ECHO_ZH
 

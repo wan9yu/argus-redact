@@ -1,4 +1,7 @@
-"""Internal helpers shared across reserved-range and real-prefix fakers."""
+"""Internal helper shared by the benchmark corpus fakers in this package.
+
+Test-side only: production fake generation lives in the Rust core, not here.
+"""
 
 from __future__ import annotations
 

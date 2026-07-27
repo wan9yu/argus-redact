@@ -34,75 +34,6 @@ class RestoreGuardError(Exception):
         super().__init__(f"restore guard failed: {codes}")
 
 
-# A make_anchor nonce is secrets.token_hex(16) = 32 chars. A floor well below
-# that (real nonces pass) but far above any incidental text-suffix collision
-# rejects short degenerate nonces as provenance proofs. The coupling to
-# make_anchor's token length is enforced by test_make_anchor_nonce_clears_floor
-# so the producer can't shrink its token below what this consumer accepts.
-#
-# The Rust core (`_core.restore_guarded`) now owns the LIVE enforcement of this
-# floor for restore()'s guarded path — see restore()'s `guard is True` branch
-# below. This constant and the two functions after it stay here, unchanged, so
-# the direct-import pins in test_guard_degenerate_nonce.py and
-# test_make_anchor_nonce_clears_floor keep testing the exact values the port
-# was checked against.
-_MIN_NONCE_LEN = 16
-
-
-def _nonce_echoed(text: str, nonce: object) -> bool:
-    """True only if the model echoed ``nonce`` as instructed — as a whole token,
-    on its own line or as the trailing token (the shape ``prompt_anchor`` asks for
-    and ``_strip_nonce`` removes).
-
-    Provenance means the model reproduced OUR verification token, not that the
-    token happens to appear somewhere in the reply. A bare ``nonce in text`` test
-    accepted three degenerate nonces that are not proofs at all: an empty nonce
-    (a substring of everything), a nonce that is an incidental substring of the
-    text (a common character), and — via ``in`` on a non-str — ``None`` (a
-    TypeError). All three must read as "not echoed" so the guard fails closed
-    instead of trusting the anchor and letting ``_strip_nonce`` destroy or corrupt
-    the caller's text. A genuine ``make_anchor`` nonce (32 hex chars on its own
-    line) satisfies this; nothing incidental does.
-    """
-    # Reject sub-token-length nonces before the shape check (rationale on
-    # _MIN_NONCE_LEN): a short string can incidentally be a text suffix and pass
-    # `endswith`, and an empty/None one is never a proof.
-    if not isinstance(nonce, str) or len(nonce) < _MIN_NONCE_LEN:
-        return False
-    if text.rstrip().endswith(nonce):  # documented trailing echo
-        return True
-    return any(line.strip() == nonce for line in text.split("\n"))  # own-line echo
-
-
-def _strip_nonce(text: str, nonce: str) -> str:
-    """Remove the echoed verification token from the model's reply.
-
-    ``prompt_anchor`` instructs the model to end its reply with the token **on its
-    own line** (see ``compose/anchor.py`` ``_NONCE_ECHO_*`` — if that wording ever
-    changes, this stripper must change with it). Without this the token, which is
-    not a pseudonym and so is invisible to the substitution pass, would be handed
-    back to the caller as part of the restored plaintext.
-
-    The documented shape (token last) is handled in one pass; the fallbacks cover a
-    model that puts it on its own line mid-reply or echoes it inline.
-    """
-    if not isinstance(nonce, str) or len(nonce) < _MIN_NONCE_LEN:
-        # Defense in depth: a degenerate nonce has no valid echo to strip, and
-        # stripping it WOULD destroy or corrupt the text (an empty nonce slices the
-        # whole string away). The only caller gates on _nonce_echoed first, so this
-        # never fires today — but a function whose failure mode is "silently destroy
-        # the caller's plaintext" must refuse degenerate input regardless of caller.
-        return text
-    trimmed = text.rstrip()
-    if trimmed.endswith(nonce):  # the documented case — no full-text rebuild needed
-        return trimmed[: -len(nonce)].rstrip()
-    kept = [line for line in text.split("\n") if line.strip() != nonce]
-    out = "\n".join(kept)
-    if nonce in out:  # defensive: echoed inline rather than on its own line
-        out = out.replace(nonce, "")
-    return out.rstrip()
-
-
 def check_restore_safety(
     redacted: str,
     llm_output: str,
@@ -337,8 +268,9 @@ def restore(
     # with a degenerate (non-str) nonce, e.g. `Anchor(nonce=None, ...)`. That
     # must still fail closed as a provenance failure, not slip through as
     # unguarded-complete. Coerce any non-str nonce to "" — a string core's own
-    # length-floor check (mirroring `_MIN_NONCE_LEN`) rejects exactly like a
-    # missing one, so the Anchor is still built and provenance still fails.
+    # length-floor check (`MIN_NONCE_LEN`, in the core's restore module) rejects
+    # exactly like a missing one, so the Anchor is still built and provenance
+    # still fails.
     nonce = anchor.nonce if isinstance(anchor.nonce, str) else ""
 
     # `_alias_collisions` (the raw, undeduped list) is discarded here: core's own

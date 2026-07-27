@@ -3,7 +3,7 @@
 // prefixes (DEFAULT_PREFIXES): person -> "P", ip_address -> "IP", organization -> "O".
 // Tokens are formed as `{prefix}-{code}`, so the keys here carry the trailing "-".
 // Unmapped prefixes fall back to their lowercased prefix label; fakes with no
-// `X-` prefix (mask / realistic) count toward the total but get no chip.
+// `X-` prefix (mask / realistic) count toward the total but land under "other".
 const PREFIX_TYPE = { 'P-': 'person', 'IP-': 'ip', 'O-': 'organization' };
 
 export function escapeHtml(s) {
@@ -42,12 +42,4 @@ export function highlight(redactedText, key) {
   }
   out += escapeHtml(redactedText.slice(last));
   return out;
-}
-
-export function renderFindings(el, result, label) {
-  const { count, types } = summarizeFindings(result);
-  const chips = Object.entries(types)
-    .map(([t, n]) => `<span class="chip">${escapeHtml(t)}: ${n}</span>`)
-    .join('');
-  el.innerHTML = `<strong>${count}</strong> ${escapeHtml(label)} ${chips}`;
 }

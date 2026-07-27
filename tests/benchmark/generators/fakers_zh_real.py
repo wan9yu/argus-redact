@@ -12,7 +12,7 @@ from __future__ import annotations
 import random
 import string
 
-from argus_redact.specs._fakers_util import rand_digits
+from ._fakers_util import rand_digits
 
 # ── Data pools (canonical source — do not duplicate elsewhere) ──
 

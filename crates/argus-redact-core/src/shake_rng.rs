@@ -109,8 +109,9 @@ impl ShakeRng {
         self.randint(0, len as i64 - 1) as usize
     }
 
-    /// `n` random ASCII digits, joined. Mirrors `_fakers_util.rand_digits`:
-    /// `n ×` `randint(0, 9)`.
+    /// `n` random ASCII digits, joined. Mirrors the benchmark generators'
+    /// `_fakers_util.rand_digits` (`tests/benchmark/generators/`): `n ×`
+    /// `randint(0, 9)`.
     pub fn rand_digits(&mut self, n: usize) -> String {
         (0..n)
             .map(|_| char::from(b'0' + self.randint(0, 9) as u8))

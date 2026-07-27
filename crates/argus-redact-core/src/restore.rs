@@ -92,17 +92,18 @@ pub struct GuardEvent {
 
 // ── Nonce echo-verify (P guard) ─────────────────────────────────────────────
 //
-// Port of `pure/restore.py::_MIN_NONCE_LEN` / `_nonce_echoed` / `_strip_nonce`.
+// The sole implementation of the nonce floor / echo check / stripper; the Python
+// shim calls into these and keeps no copy of its own.
 // A `make_anchor` nonce is `secrets.token_hex(16)` = 32 hex chars. A floor
 // well below that (real nonces pass) but far above any incidental text-suffix
 // collision rejects short degenerate nonces as provenance proofs.
 
-/// Mirrors `pure/restore.py::_MIN_NONCE_LEN`.
+/// The single source of the minimum nonce length the guard will accept.
 const MIN_NONCE_LEN: usize = 16;
 
 /// True only if the model echoed `nonce` as instructed — as a whole token, on
 /// its own line or as the trailing token (the shape `prompt_anchor` asks for
-/// and `strip_nonce` removes). Port of `_nonce_echoed`.
+/// and `strip_nonce` removes).
 ///
 /// `nonce.chars().count()` (NOT `.len()`) mirrors Python `len()`, which counts
 /// codepoints rather than bytes, so the floor check lands on the same value
@@ -117,8 +118,7 @@ fn nonce_echoed(text: &str, nonce: &str) -> bool {
     text.split('\n').any(|line| py_strip(line) == nonce) // own-line echo
 }
 
-/// Remove the echoed verification token from the model's reply. Port of
-/// `_strip_nonce`.
+/// Remove the echoed verification token from the model's reply.
 ///
 /// The documented shape (token last) is handled in one pass; the fallbacks
 /// cover a model that puts it on its own line mid-reply or echoes it inline.
@@ -1497,8 +1497,8 @@ possible hallucination or fabrication"
     }
 
     // ── nonce echo-verify (P guard): nonce_echoed / strip_nonce ────────────
-    // Port of `pure/restore.py::_nonce_echoed` / `_strip_nonce`. A real
-    // `make_anchor` nonce is `secrets.token_hex(16)` = 32 lowercase hex chars.
+    // A real `make_anchor` nonce is `secrets.token_hex(16)` = 32 lowercase hex
+    // chars.
     const NONCE: &str = "0123456789abcdef0123456789abcdef";
 
     #[test]

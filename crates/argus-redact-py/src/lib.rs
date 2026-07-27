@@ -67,7 +67,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(shake_rng::seed_from_value, m)?)?;
     m.add_function(wrap_pyfunction!(seed::resolve_salt, m)?)?;
     m.add_function(wrap_pyfunction!(seed::type_seed_offset, m)?)?;
-    m.add_function(wrap_pyfunction!(masks::mask_value, m)?)?;
     m.add_function(wrap_pyfunction!(masks::mask_name, m)?)?;
     m.add_function(wrap_pyfunction!(masks::mask_landline, m)?)?;
     m.add_function(wrap_pyfunction!(masks::resolve_collision, m)?)?;
@@ -98,7 +97,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // ── person-name pool accessors (en) ──
     m.add_function(wrap_pyfunction!(pools::person_given_names_en, m)?)?;
     m.add_function(wrap_pyfunction!(pools::person_surnames_en, m)?)?;
-    m.add_function(wrap_pyfunction!(pools::person_common_words_en, m)?)?;
     // ── cross-layer hint pool accessors ──
     m.add_function(wrap_pyfunction!(pools::hint_kinship_exact, m)?)?;
     m.add_function(wrap_pyfunction!(pools::hint_kinship_prefixes, m)?)?;

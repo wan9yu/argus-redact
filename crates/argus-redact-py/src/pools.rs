@@ -138,13 +138,6 @@ pub fn person_surnames_en() -> Vec<String> {
     argus_redact_core::person_data::surnames_en().to_vec()
 }
 
-/// En common-word lexicon (lowercased) — the pool-independent name-like
-/// corroboration set for the en person detector. Exposed for tests / inspection.
-#[pyfunction]
-pub fn person_common_words_en() -> Vec<String> {
-    argus_redact_core::person_data::common_words_en().to_vec()
-}
-
 // ── cross-layer hint pool accessors (RON-backed) ─────────────────────────────
 
 /// Exact kinship phrases pool (matches `pure.hints._KINSHIP_EXACT` as a set).

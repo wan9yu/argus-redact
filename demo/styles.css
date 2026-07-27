@@ -12,7 +12,6 @@ textarea { width: 100%; box-sizing: border-box; padding: .5rem; font: inherit; }
 .three-up pre { white-space: pre-wrap; word-break: break-word; background: #f7f7fb; padding: .5rem; border-radius: 6px; min-height: 3rem; }
 @media (max-width: 720px) { .three-up { grid-template-columns: 1fr; } }
 .findings mark { background: #ffe08a; padding: 0 .1em; border-radius: 3px; }
-.chip { display: inline-block; background: #ede9fb; color: #4a32b0; border-radius: 12px; padding: .1rem .5rem; margin: .15rem; font-size: .85em; }
 .error { color: #c62828; margin-top: .5rem; white-space: pre-wrap; }
 table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #e0e0e8; padding: .4rem; text-align: left; vertical-align: top; font-size: .9em; }
 caption { caption-side: bottom; color: #666; font-size: .8em; padding-top: .4rem; }

@@ -4,23 +4,8 @@ use std::collections::HashSet;
 
 use argus_redact_core::masks::{
     mask_landline as core_mask_landline, mask_name as core_mask_name,
-    mask_value as core_mask_value, resolve_collision as core_resolve_collision,
+    resolve_collision as core_resolve_collision,
 };
-
-/// Apply mask strategy: show `visible_prefix` + `visible_suffix` chars, mask middle.
-///
-/// Delegates to `argus_redact_core::masks::mask_value`.
-/// Per-type defaults (when both visible args are 0): phone(3,4), bank_card(6,4),
-/// credit_card(6,4), id_number(4,4), email (special local+@domain rule).
-#[pyfunction]
-pub fn mask_value(
-    value: &str,
-    entity_type: &str,
-    visible_prefix: usize,
-    visible_suffix: usize,
-) -> String {
-    core_mask_value(value, entity_type, visible_prefix, visible_suffix)
-}
 
 /// Chinese name mask: 张* / 李** / 欧阳**.
 ///
