@@ -17,6 +17,7 @@ from argus_redact.exceptions import LayerUnavailableError, SecurityWarning
 from argus_redact.lang._loader import core_patterns
 from argus_redact.layers import LAYER_NER, LAYER_SEMANTIC
 from argus_redact.pure.coverage import restore_lost_coverage
+from argus_redact.pure.coverage_table import coverage_for
 from argus_redact.pure.grammar import normalize_grammar_en
 from argus_redact.pure.hints import (
     _apply_ablation,
@@ -917,7 +918,7 @@ def redact(
 
         if report:
             # Precedence 1: report wins over everything
-            from argus_redact._types import RedactReport
+            from argus_redact._types import CoverageAdvisory, RedactReport
             from argus_redact.pure.risk import assess_risk
             from argus_redact.specs import lookup
 
@@ -932,6 +933,22 @@ def redact(
                 risk_entities.append({"type": t, "sensitivity": sens_cache[t]})
             risk = assess_risk(risk_entities, lang=lang if isinstance(lang, str) else lang[0])
 
+            _uncovered, _narrow = coverage_for(langs[0] if langs else "zh", mode)
+            _coverage = CoverageAdvisory(uncovered=_uncovered, narrow=_narrow)
+            # From the entities' own layer, NOT from layer_stats: the
+            # _pre_detected branch above hardcodes layer_stats to
+            # all-zero/skipped even when entities were really detected, while
+            # `.layer` is correct on every path.
+            #
+            # Layer 0 is KEPT, not filtered out. A caller-supplied entity that
+            # never set `layer` (the Presidio bridge builds PatternMatch
+            # without it) lands at 0, and dropping those would report `()` —
+            # indistinguishable from "nothing was found", which is precisely
+            # the ambiguity this field exists to remove. `(0,)` says "entities
+            # came from a source that did not tag its layer"; `()` says "there
+            # were none".
+            _layers_used = tuple(sorted({e.layer for e in entities}))
+
             return RedactReport(
                 redacted_text=redacted,
                 key=result_key,
@@ -940,6 +957,8 @@ def redact(
                 risk=risk,
                 residual_personal_data=residual_personal_data(entities),
                 security_events=tuple(security_events),
+                coverage=_coverage,
+                layers_used=_layers_used,
             )
 
         # Precedence 2: detailed (no report) — wins over with_types

@@ -27,6 +27,7 @@ import inspect
 import pytest
 
 import argus_redact.compose as c
+from argus_redact import RedactReport
 
 COMPOSE_SIGNATURES = {
     "prompt_anchor": "(key: 'dict', lang: 'str' = 'zh', *, anchor: 'Anchor | None' = None) -> 'str'",  # noqa: E501
@@ -74,6 +75,20 @@ PATTERNMATCH_FIELDS = frozenset(
     }
 )
 
+REDACTREPORT_FIELDS = frozenset(
+    {
+        "redacted_text",
+        "key",
+        "entities",
+        "stats",
+        "risk",
+        "residual_personal_data",
+        "security_events",
+        "coverage",
+        "layers_used",
+    }
+)
+
 
 @pytest.mark.parametrize("name,expected", list(COMPOSE_SIGNATURES.items()))
 def test_compose_signature_snapshot(name, expected):
@@ -105,4 +120,14 @@ def test_pattern_match_fields_snapshot():
         f"  expected: {sorted(PATTERNMATCH_FIELDS)}\n"
         f"  actual:   {sorted(actual)}\n"
         f"If intentional: update PATTERNMATCH_FIELDS + CHANGELOG."
+    )
+
+
+def test_redact_report_fields_snapshot():
+    actual = frozenset(f.name for f in dataclasses.fields(RedactReport))
+    assert actual == REDACTREPORT_FIELDS, (
+        f"RedactReport field set changed.\n"
+        f"  expected: {sorted(REDACTREPORT_FIELDS)}\n"
+        f"  actual:   {sorted(actual)}\n"
+        f"If intentional: update REDACTREPORT_FIELDS + CHANGELOG."
     )

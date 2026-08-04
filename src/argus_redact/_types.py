@@ -57,6 +57,33 @@ class NEREntity:
 
 
 @dataclass(frozen=True)
+class CoverageAdvisory:
+    """What this configuration could NOT have found.
+
+    Derived from ``(lang, mode)`` alone — it does not inspect the text and makes
+    no claim about this document. It is the denominator that makes an empty
+    result readable: "we found nothing" means something different when the
+    configuration had no detector for half the categories in the first place.
+
+    Named ``CoverageAdvisory`` rather than ``ResidualAdvisory`` deliberately.
+    "Residual" would imply a finding about what survived this document; this is
+    a capability declaration. A name that overstates is the hardest kind of
+    error to catch later.
+    """
+
+    uncovered: tuple[str, ...] = ()
+    """Categories with no detector at all under this configuration."""
+
+    narrow: tuple[str, ...] = ()
+    """Categories detected only in some forms, or only as a different type."""
+
+    exhaustive: bool = False
+    """Always ``False``. The taxonomy is not exhaustive of what can re-identify
+    a person, so this is a field rather than a sentence in the docs — consumers
+    read fields."""
+
+
+@dataclass(frozen=True)
 class RedactReport:
     """Structured audit report from redact(report=True)."""
 
@@ -67,6 +94,8 @@ class RedactReport:
     risk: RiskResult | None = None
     residual_personal_data: bool = True
     security_events: tuple[dict, ...] = ()
+    coverage: "CoverageAdvisory | None" = None
+    layers_used: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
