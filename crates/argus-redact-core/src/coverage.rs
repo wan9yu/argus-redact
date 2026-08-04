@@ -120,6 +120,7 @@ pub fn restore_lost_coverage(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hints::HintKind;
     use std::collections::HashSet;
 
     fn pm(text: &str, type_: &str, start: usize, end: usize) -> PatternMatch {
@@ -139,6 +140,13 @@ mod tests {
 
     fn spans(entities: &[PatternMatch]) -> Vec<(usize, usize)> {
         entities.iter().map(|e| (e.start, e.end)).collect()
+    }
+
+    // Built the same way `hints.rs`'s own `srt` test helper builds it.
+    fn srt(tier: u8) -> Hint {
+        Hint {
+            kind: HintKind::SelfReferenceTier { tier, has_kinship: false },
+        }
     }
 
     #[test]
@@ -277,5 +285,74 @@ mod tests {
         );
         assert_eq!(restored, vec!["id_number".to_string(), "phone".to_string()]);
         assert_eq!(out.len(), 3);
+    }
+
+    #[test]
+    fn from_hints_drops_self_reference_except_at_tier_1() {
+        // Mirrors `filter_self_reference`: tier 1 keeps self_reference, every
+        // other tier drops it, and no tier hint at all is treated as "not
+        // tier 1" — drop.
+        let tier1 = FilterScope::from_hints(None, None, &[srt(1)]);
+        assert!(!tier1.drop_self_reference);
+
+        for tier in [2u8, 3u8] {
+            let scope = FilterScope::from_hints(None, None, &[srt(tier)]);
+            assert!(scope.drop_self_reference, "tier {tier} should drop self_reference");
+        }
+
+        let no_hint = FilterScope::from_hints(None, None, &[]);
+        assert!(no_hint.drop_self_reference);
+    }
+
+    #[test]
+    fn from_hints_passes_types_and_types_exclude_through_unchanged() {
+        let keep = set(&["phone"]);
+        let scope = FilterScope::from_hints(Some(&keep), None, &[]);
+        assert!(scope.admits(&pm("x", "phone", 0, 1)));
+        assert!(!scope.admits(&pm("x", "medical", 0, 1)));
+
+        let drop = set(&["medical"]);
+        let scope = FilterScope::from_hints(None, Some(&drop), &[]);
+        assert!(scope.admits(&pm("x", "phone", 0, 1)));
+        assert!(!scope.admits(&pm("x", "medical", 0, 1)));
+    }
+
+    #[test]
+    fn admits_all_is_true_only_when_every_entity_is_admitted() {
+        let keep = set(&["phone"]);
+        let type_scope =
+            FilterScope { types: Some(&keep), types_exclude: None, drop_self_reference: false };
+        assert!(type_scope.admits_all(&[pm("x", "phone", 0, 1), pm("y", "phone", 2, 3)]));
+        // Type-filter reason: `medical` is not in the keep-list.
+        assert!(!type_scope.admits_all(&[pm("x", "phone", 0, 1), pm("y", "medical", 2, 3)]));
+
+        let sr_scope = FilterScope { types: None, types_exclude: None, drop_self_reference: true };
+        assert!(sr_scope.admits_all(&[pm("x", "phone", 0, 1)]));
+        // Self-reference reason.
+        assert!(!sr_scope.admits_all(&[pm("x", "phone", 0, 1), pm("我们", "self_reference", 2, 4)]));
+    }
+
+    #[test]
+    fn admits_all_true_on_pre_merge_guarantees_restore_is_a_no_op() {
+        // This is the property a caller's fast path relies on: if `admits_all`
+        // is true for the pre-merge set, no filter configured by that same
+        // scope can drop a merge winner, so running the full restore path
+        // anyway must find nothing to restore. If this ever fails, the fast
+        // path is unsound: it would skip the pre-merge snapshot on inputs
+        // where coverage can still be lost.
+        let phone = pm("13800138000", "phone", 15, 26);
+        let id = pm("110101199003074610", "id_number", 30, 48);
+        let pre = vec![phone.clone(), id.clone()];
+        let scope = FilterScope { types: None, types_exclude: None, drop_self_reference: false };
+        assert!(scope.admits_all(&pre));
+
+        // Nothing the filters legitimately remove, so the filtered set is
+        // whatever the merge produced, untouched.
+        let merged = pre.clone();
+        let filtered = merged.clone();
+        let (out, restored) =
+            restore_lost_coverage(&pre, &spans(&merged), filtered.clone(), &scope, "irrelevant");
+        assert_eq!(out, filtered);
+        assert!(restored.is_empty());
     }
 }
