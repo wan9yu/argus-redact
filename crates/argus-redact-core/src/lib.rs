@@ -7,6 +7,7 @@ pub const MAX_INPUT_SIZE: usize = 1024 * 1024;
 
 pub mod types;
 pub mod merger;
+pub mod coverage;
 pub mod restore;
 pub mod patterns;
 pub mod pseudonym;
@@ -42,6 +43,7 @@ pub mod hobbies;
 
 pub use types::PatternMatch;
 pub use merger::{merge_entities, merge_entities_with_text};
+pub use coverage::{restore_lost_coverage, FilterScope};
 pub use restore::{restore, restore_full, restore_full_guarded, check_restore_safety, RestoreError, RestoreResult, RestoreSession};
 pub use patterns::{match_patterns, PatternConfig, PatternError};
 pub use pseudonym::{PseudonymGenerator, RandomSource};

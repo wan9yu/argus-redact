@@ -239,7 +239,7 @@ pub fn get_person_threshold(hints: &[Hint]) -> f64 {
 }
 
 /// First `self_reference_tier` hint's tier, if any (port of `_get_self_reference_tier`).
-fn get_self_reference_tier(hints: &[Hint]) -> Option<u8> {
+pub(crate) fn get_self_reference_tier(hints: &[Hint]) -> Option<u8> {
     for h in hints {
         if let HintKind::SelfReferenceTier { tier, .. } = &h.kind {
             return Some(*tier);

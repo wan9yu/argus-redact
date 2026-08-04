@@ -1,0 +1,281 @@
+//! Post-merge coverage invariant.
+//!
+//! Detection ends with a priority-aware merge followed by one or more DROPPING
+//! filters (`filter_self_reference`, the `types`/`types_exclude` filter). The
+//! merge is *absorbing*: when two spans overlap one wins and the loser is
+//! discarded, which is safe because the winner covers the loser's bytes. A
+//! filter that then drops a winner un-covers everything that winner absorbed,
+//! leaving that PII unredacted in the output.
+//!
+//! This module owns the ONE predicate the filters and the restorer share, so
+//! the two can never disagree about what a filter legitimately removes.
+//!
+//! The restorer deliberately does NOT undo the merge. An entity the merge
+//! trimmed away (a false-positive `person` absorbed into an `address`, say) is
+//! left alone: only entities the MERGED set still covered, and the FILTERED set
+//! no longer covers, are re-admitted. Without that condition the invariant would
+//! resurrect false positives on ordinary text.
+
+use std::collections::HashSet;
+
+use crate::hints::{get_self_reference_tier, Hint};
+use crate::merger::merge_entities_with_text;
+use crate::types::PatternMatch;
+
+/// What the post-merge filters legitimately remove.
+pub struct FilterScope<'a> {
+    /// Type allow-list: when set, only these types survive.
+    pub types: Option<&'a HashSet<String>>,
+    /// Type deny-list: consulted only when `types` is `None`.
+    pub types_exclude: Option<&'a HashSet<String>>,
+    /// True when the self-reference tier filter will drop `self_reference` spans.
+    pub drop_self_reference: bool,
+}
+
+impl<'a> FilterScope<'a> {
+    /// Build the scope the way the pipeline's own filters are configured:
+    /// `drop_self_reference` mirrors `filter_self_reference`, which keeps every
+    /// entity at tier 1 and drops `self_reference` at any other tier — including
+    /// when no tier hint was emitted at all.
+    pub fn from_hints(
+        types: Option<&'a HashSet<String>>,
+        types_exclude: Option<&'a HashSet<String>>,
+        hints: &[Hint],
+    ) -> Self {
+        FilterScope {
+            types,
+            types_exclude,
+            drop_self_reference: get_self_reference_tier(hints) != Some(1),
+        }
+    }
+
+    /// The single predicate. Both the filters and the restorer consult it.
+    ///
+    /// Precedence mirrors `redact_l1`'s step 5 exactly: `types` wins over
+    /// `types_exclude` (`if ... else if ...`), so when a keep-list is present
+    /// the deny-list is never consulted.
+    pub fn admits(&self, e: &PatternMatch) -> bool {
+        if self.drop_self_reference && e.type_ == "self_reference" {
+            return false;
+        }
+        match (self.types, self.types_exclude) {
+            (Some(keep), _) => keep.contains(&e.type_),
+            (None, Some(drop)) => !drop.contains(&e.type_),
+            (None, None) => true,
+        }
+    }
+
+    /// True when no entity in `entities` can be dropped by the filters this
+    /// scope describes. Callers use it to skip snapshotting the pre-merge set on
+    /// the hot path: a merged entity's type is always some pre-merge entity's
+    /// type, so "every pre-merge entity is admitted" implies "no filter drops
+    /// anything", which implies no coverage can be lost.
+    pub fn admits_all(&self, entities: &[PatternMatch]) -> bool {
+        entities.iter().all(|e| self.admits(e))
+    }
+}
+
+/// True when `[start, end)` is fully contained in some span of `set`.
+fn covered(start: usize, end: usize, set: &[(usize, usize)]) -> bool {
+    set.iter().any(|&(s, e)| s <= start && e >= end)
+}
+
+/// Re-admit pre-merge entities whose coverage a post-merge filter destroyed.
+///
+/// Returns the corrected entity list and the sorted, de-duplicated TYPES of the
+/// entities restored — a PII-free signal safe for the audit ledger.
+///
+/// Returns `filtered` untouched (and an empty type list) whenever nothing was
+/// lost, which is the overwhelmingly common case.
+pub fn restore_lost_coverage(
+    pre_merge: &[PatternMatch],
+    merged_spans: &[(usize, usize)],
+    filtered: Vec<PatternMatch>,
+    scope: &FilterScope<'_>,
+    text: &str,
+) -> (Vec<PatternMatch>, Vec<String>) {
+    let surviving: Vec<(usize, usize)> = filtered.iter().map(|e| (e.start, e.end)).collect();
+
+    let lost: Vec<PatternMatch> = pre_merge
+        .iter()
+        .filter(|p| scope.admits(p))
+        .filter(|p| covered(p.start, p.end, merged_spans))
+        .filter(|p| !covered(p.start, p.end, &surviving))
+        .cloned()
+        .collect();
+
+    if lost.is_empty() {
+        return (filtered, Vec::new());
+    }
+
+    let mut types: Vec<String> = lost.iter().map(|e| e.type_.clone()).collect();
+    types.sort();
+    types.dedup();
+
+    let mut all = filtered;
+    all.extend(lost);
+    (merge_entities_with_text(all, text), types)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    fn pm(text: &str, type_: &str, start: usize, end: usize) -> PatternMatch {
+        PatternMatch {
+            text: text.to_string(),
+            type_: type_.to_string(),
+            start,
+            end,
+            confidence: 1.0,
+            layer: 1,
+        }
+    }
+
+    fn set(items: &[&str]) -> HashSet<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn spans(entities: &[PatternMatch]) -> Vec<(usize, usize)> {
+        entities.iter().map(|e| (e.start, e.end)).collect()
+    }
+
+    #[test]
+    fn admits_everything_with_an_empty_scope() {
+        let scope = FilterScope { types: None, types_exclude: None, drop_self_reference: false };
+        assert!(scope.admits(&pm("x", "phone", 0, 1)));
+        assert!(scope.admits(&pm("x", "self_reference", 0, 1)));
+    }
+
+    #[test]
+    fn types_wins_over_types_exclude() {
+        // Mirrors redact_l1.rs step 5: `if types { .. } else if types_exclude { .. }`.
+        let keep = set(&["phone"]);
+        let drop = set(&["phone"]);
+        let scope = FilterScope {
+            types: Some(&keep),
+            types_exclude: Some(&drop),
+            drop_self_reference: false,
+        };
+        assert!(scope.admits(&pm("x", "phone", 0, 1)));
+        assert!(!scope.admits(&pm("x", "medical", 0, 1)));
+    }
+
+    #[test]
+    fn drops_self_reference_only_when_flagged() {
+        let on = FilterScope { types: None, types_exclude: None, drop_self_reference: true };
+        let off = FilterScope { types: None, types_exclude: None, drop_self_reference: false };
+        assert!(!on.admits(&pm("我们", "self_reference", 0, 2)));
+        assert!(off.admits(&pm("我们", "self_reference", 0, 2)));
+    }
+
+    #[test]
+    fn no_loss_returns_the_filtered_list_untouched() {
+        let pre = vec![pm("13800138000", "phone", 15, 26)];
+        let merged = pre.clone();
+        let scope = FilterScope { types: None, types_exclude: None, drop_self_reference: false };
+        let (out, restored) =
+            restore_lost_coverage(&pre, &spans(&merged), merged.clone(), &scope, "irrelevant");
+        assert_eq!(out, merged);
+        assert!(restored.is_empty());
+    }
+
+    #[test]
+    fn restores_a_phone_absorbed_by_a_dropped_self_reference() {
+        // Variant A: an L3 self_reference span swallows the L1 phone, then the
+        // tier filter drops the winner.
+        let phone = pm("13800138000", "phone", 15, 26);
+        let sr = pm("number 13800138000", "self_reference", 8, 26);
+        let pre = vec![phone.clone(), sr.clone()];
+        let merged = vec![sr];              // merge picked the priority span
+        let filtered: Vec<PatternMatch> = vec![]; // tier filter dropped it
+        let scope = FilterScope { types: None, types_exclude: None, drop_self_reference: true };
+        let (out, restored) = restore_lost_coverage(
+            &pre,
+            &spans(&merged),
+            filtered,
+            &scope,
+            "Contact number 13800138000 for details",
+        );
+        assert_eq!(out, vec![phone]);
+        assert_eq!(restored, vec!["phone".to_string()]);
+    }
+
+    #[test]
+    fn restores_a_phone_absorbed_by_a_type_filtered_winner() {
+        // Variant B: a benign coarse L3 `medical` span swallows the phone, then
+        // `types=["phone"]` drops the winner.
+        let phone = pm("13800138000", "phone", 15, 26);
+        let med = pm("number 13800138000", "medical", 8, 26);
+        let pre = vec![phone.clone(), med.clone()];
+        let merged = vec![med];
+        let filtered: Vec<PatternMatch> = vec![];
+        let keep = set(&["phone"]);
+        let scope =
+            FilterScope { types: Some(&keep), types_exclude: None, drop_self_reference: false };
+        let (out, restored) = restore_lost_coverage(
+            &pre,
+            &spans(&merged),
+            filtered,
+            &scope,
+            "Contact number 13800138000 for details",
+        );
+        assert_eq!(out, vec![phone]);
+        assert_eq!(restored, vec!["phone".to_string()]);
+    }
+
+    #[test]
+    fn never_restores_what_the_merge_itself_trimmed() {
+        // A false-positive `person` the merge legitimately absorbed into an
+        // `address` must NOT come back — this is the condition that keeps the
+        // invariant golden-neutral on ordinary text.
+        let fp = pm("于江苏省", "person", 58, 62);
+        let addr = pm("江苏省南京市鼓楼区1号", "address", 59, 70);
+        let pre = vec![fp, addr.clone()];
+        let merged = vec![addr.clone()];   // `fp` is NOT covered by `addr` (58 < 59)
+        let filtered = vec![addr.clone()];
+        let scope = FilterScope { types: None, types_exclude: None, drop_self_reference: false };
+        let (out, restored) =
+            restore_lost_coverage(&pre, &spans(&merged), filtered, &scope, "irrelevant");
+        assert_eq!(out, vec![addr]);
+        assert!(restored.is_empty());
+    }
+
+    #[test]
+    fn never_restores_an_entity_the_filter_itself_excludes() {
+        // The self_reference filter is MEANT to drop self_reference spans;
+        // re-admitting them would defeat it.
+        let sr = pm("我们", "self_reference", 11, 13);
+        let pre = vec![sr.clone()];
+        let merged = vec![sr];
+        let filtered: Vec<PatternMatch> = vec![];
+        let scope = FilterScope { types: None, types_exclude: None, drop_self_reference: true };
+        let (out, restored) =
+            restore_lost_coverage(&pre, &spans(&merged), filtered, &scope, "irrelevant");
+        assert!(out.is_empty());
+        assert!(restored.is_empty());
+    }
+
+    #[test]
+    fn restored_types_are_sorted_and_deduplicated() {
+        let phone = pm("13800138000", "phone", 15, 26);
+        let id = pm("110101199003074610", "id_number", 30, 48);
+        let phone2 = pm("13900139000", "phone", 55, 66);
+        let big = pm("all of it", "medical", 0, 70);
+        let pre = vec![phone, id, phone2, big.clone()];
+        let merged = vec![big];
+        let keep = set(&["phone", "id_number"]);
+        let scope =
+            FilterScope { types: Some(&keep), types_exclude: None, drop_self_reference: false };
+        let (out, restored) = restore_lost_coverage(
+            &pre,
+            &spans(&merged),
+            vec![],
+            &scope,
+            "x".repeat(70).as_str(),
+        );
+        assert_eq!(restored, vec!["id_number".to_string(), "phone".to_string()]);
+        assert_eq!(out.len(), 3);
+    }
+}
