@@ -2,6 +2,81 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.7 — say what a configuration cannot find
+
+A feature release. `redact(report=True)` gains a capability declaration: what the
+configuration that just ran could **not** have found. It is a property of `(lang,
+mode)` alone, present even — deliberately, especially — when nothing was detected,
+because an empty result looks identical whether the text was genuinely clean or the
+configuration had no detector for what was in it.
+
+### Added
+
+- **`RedactReport.coverage: CoverageAdvisory | None`** — `uncovered` (categories with
+  no detector at all under this configuration) and `narrow` (categories detected only
+  in some forms, or only as a different type), over the 9 standard inference-attribute
+  categories (age, sex, location, occupation, education, relationship_status, income,
+  place_of_birth, medical_condition) the project's own re-identification fixtures are
+  built from — not an exhaustive account of everything that can re-identify a person.
+  `exhaustive` is a field, permanently `False`, rather than a sentence in a docstring,
+  because consumers read fields. `coverage` is derived from `(lang, mode)` alone: it
+  never inspects the text and makes no claim about this document. That distinction is
+  why the type is named `CoverageAdvisory`, not `ResidualAdvisory` — "residual" would
+  imply a finding about what survived this input, and that is not what this field
+  measures. See `docs/security-model.md`'s "`RedactReport.coverage` and
+  `.layers_used`" section.
+- **The measured capability table** (`src/argus_redact/pure/coverage_table.py`),
+  hand-authored and pinned cell-by-cell to live `redact()` probes rather than to a
+  reading of detector source or a projection of the type registry — an earlier draft
+  tried deriving from the registry and was wrong in both directions (see the module
+  docstring). Read plainly, because softening it would defeat the reason it exists:
+  only `age` is fully covered (`have`) in **all four** measured configurations (zh/en
+  × fast/ner). English has no detector at all for `occupation`,
+  `education`, `relationship_status`, or `income`, at either mode. English `sex` is
+  `narrow`, not `have`: it matches the labelled form (`"Gender: female."`) but not
+  prose (`"She is a woman."`) — and the project's own English re-identification
+  fixture (`tests/benchmark/fixtures/reid_profiles_en.json`) states sex as prose
+  ("I'm a woman"), so its own reference profiles fall on the missed side of that line.
+  `mode="ner"` adds `location` and `place_of_birth` coverage in both languages (a
+  generic Layer-2 location entity fires on any recognized place name, birth-specific
+  phrasing or not), but does not touch the four English zeroes above — those detectors
+  don't exist at any mode. `mode="auto"` reads the `ner` row rather than getting a
+  column of its own, so it never claims a Layer-3 coverage improvement a deployment
+  without a served model does not actually have.
+- **`RedactReport.layers_used: tuple[int, ...]`** — which detection layers contributed
+  a surviving entity to *this* call, derived from the entities' own `.layer` rather
+  than from `stats` (which is hardcoded to all-zero on the `_pre_detected` path even
+  when real detection happened upstream — deriving from `stats` there would silently
+  misreport it). Layer `0` is kept, not filtered out: a caller-supplied entity that
+  never tagged a layer (the Presidio bridge builds `PatternMatch` without one) reports
+  `(0,)`, distinguishable from `()`, which means no entity survived at all.
+- The same live-probe methodology that built the table surfaced two detector defects,
+  now recorded — not fixed — in `docs/known-issues.md`: zh `occupation` over-captures
+  its cue word when the value directly follows it with no separator, and English
+  `mode="ner"` can tag a sentence-initial capitalized verb as an organisation. Either
+  fix is a detector change with its own recall/precision measurement, out of scope
+  here.
+
+### Changed
+
+- **Six dependency caps.** `uvicorn` and `starlette` (`serve` extra) and `pytest`,
+  `pytest-asyncio`, `pytest-cov`, and `ruff` (`dev` extra) now carry an upper bound at
+  the next major version this project does not test against. The rule: cap when an
+  untested major already exists; otherwise leave the pin open and let CI find out when
+  one actually ships. `presidio-analyzer`, `presidio-anonymizer`, `build`, `requests`,
+  and `hypothesis` were deliberately left uncapped for exactly that reason — no
+  untested major exists for any of them yet.
+
+### Fixed
+
+- A Hypothesis property test's pollution precondition
+  (`tests/security/property/test_state_round_trip.py`) filtered by scanning the
+  chunks joined into one string, while `StreamingRedactor.feed()` validates each chunk
+  independently. A joined string can hide a reserved value that is visible in an
+  individual chunk, so the filter could pass inputs the production path would have
+  rejected outright. It now scans each chunk on its own, matching what `feed()`
+  actually does.
+
 ## v0.8.6 — the post-merge coverage invariant (security patch)
 
 A security patch. One structural defect, present in four independent detection

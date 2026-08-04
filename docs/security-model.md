@@ -357,6 +357,71 @@ assert report_masked.residual_personal_data is True  # the key still maps 138***
 structured event dicts described above — so a single `redact(report=True)` call
 gives you both the residual-data flag and any security events.
 
+### `RedactReport.coverage` and `.layers_used` (v0.8.7)
+
+`residual_personal_data` tells you what happened to the PII this call *found*.
+It says nothing about the PII this call could never have found in the first
+place — an empty `key` looks identical whether the text was genuinely clean or
+the configuration had no detector for what was in it. `report.coverage`
+closes that gap: a `CoverageAdvisory` stating what this `(lang, mode)`
+configuration could **not** have found.
+
+```python
+from argus_redact import redact
+
+report = redact("Nothing identifying here.", lang="en", mode="fast", report=True)
+assert report.key == {}
+assert "occupation" in report.coverage.uncovered  # no English occupation detector at all
+assert "sex" in report.coverage.narrow            # only the labelled form, see below
+```
+
+`CoverageAdvisory` has three fields:
+
+- `uncovered: tuple[str, ...]` — categories with no detector at all under this
+  configuration.
+- `narrow: tuple[str, ...]` — categories detected only in some forms, or only
+  as a different type.
+- `exhaustive: bool` — always `False`. The 9 categories are the standard
+  inference-attribute taxonomy (age, sex, location, occupation, education,
+  relationship_status, income, place_of_birth, medical_condition) that the
+  project's own re-identification fixtures are built from — not an exhaustive
+  account of everything that can re-identify a person. It is a field rather
+  than a sentence in this doc because consumers read fields, not prose.
+
+It is derived from `(lang, mode)` alone: `coverage` never inspects the text and
+makes no claim about this document, only about the configuration that ran.
+That distinction is why the dataclass is named `CoverageAdvisory` and not
+`ResidualAdvisory` — "residual" would imply a finding about what survived
+this specific input, and that is not what this field measures.
+
+The measured table (`src/argus_redact/pure/coverage_table.py`) is blunter than
+you might expect, on purpose — softening it would defeat the reason it exists.
+At `mode="fast"`, only `age` is fully covered (`have`) in both languages.
+English has **no detector at all** for `occupation`, `education`,
+`relationship_status`, or `income`. English `sex` is `narrow`, not `have`: it
+matches the labelled form (`"Gender: female."`) but not prose (`"She is a
+woman."`) — and the project's own English re-identification fixture states sex
+as prose ("I'm a woman"), so its own reference profiles fall on the missed
+side of that line. `mode="ner"` adds `location` and `place_of_birth` coverage
+in both languages (a generic Layer-2 location entity fires on any recognized
+place name, birth-specific phrasing or not), but does not touch the English
+`occupation` / `education` / `relationship_status` / `income` zeroes — those
+detectors don't exist at any mode. `mode="auto"` reads the `ner` row rather
+than getting a column of its own, because it would otherwise claim a Layer-3
+coverage improvement a deployment without a served model does not actually
+have.
+
+`report.layers_used: tuple[int, ...]` is the companion signal for *this call*,
+not the configuration — which detection layers actually contributed a
+surviving entity. It is derived from the entities' own `.layer`, never from
+`stats`: `stats["layer_1"]` and friends are hardcoded to zero on the
+`_pre_detected` path even when real detection happened upstream, so deriving
+`layers_used` from `stats` there would silently misreport it. Layer `0` is
+kept rather than filtered out — a caller-supplied entity that never tagged a
+layer (the Presidio bridge builds `PatternMatch` without one) reports
+`layers_used == (0,)`, distinguishable from `()`, which means no entity
+survived at all.
+
 ### `AuditLedger`
 
 `AuditLedger` is a caller-owned, append-only, PII-free, hash-chained structure
