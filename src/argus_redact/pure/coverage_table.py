@@ -21,6 +21,20 @@ a table honest is being pinned to a live detection, which is what
 best-effort Ollama pass that contributes nothing when no model is served, while
 still reporting `layer_3_status="ok"`. Giving it a column would claim Layer-3
 coverage a deployment may not have, so it reads the `ner` row.
+
+The `ner` rows are measured independently at `mode="ner"`, not copied from the
+`fast` rows with an override — a first draft of this table did exactly that
+copy and was wrong: `place_of_birth` was carried over as `narrow` (zh) / `none`
+(en) on the theory that ner only adds spaCy's English `location`. Live probes
+at ner showed otherwise: a generic layer-2 location entity fires on any
+recognized place name (city, province, state) with no birth-specific cue
+needed at all — `籍贯江苏。` and `Born in Ohio.`, both misses at fast, both
+fire at ner (`type="location", layer=2, confidence=0.85`). That erases the
+fast-mode narrow/none distinction in both languages, so `place_of_birth` is
+`have` at ner for zh and en alike. See
+`tests/architecture/test_coverage_table_honesty.py` for the pinning probes,
+including the one that caught this (the fast-mode NARROW miss-probe, reused as
+the ner HAVE probe).
 """
 
 from __future__ import annotations
@@ -68,11 +82,38 @@ _TABLE: dict[tuple[str, str], dict[str, str]] = {
         "place_of_birth": _NONE,
         "medical_condition": _NARROW,
     },
+    # Each ner row below is its own live measurement at mode="ner", not the
+    # fast row with an override — see the module docstring for why that
+    # distinction matters. Every cell that matches its fast-row counterpart
+    # was re-probed, not assumed to carry over.
+    ("zh", "ner"): {
+        "age": _HAVE,
+        "sex": _HAVE,
+        "location": _HAVE,
+        "occupation": _HAVE,
+        "education": _NONE,
+        "relationship_status": _NONE,
+        "income": _NARROW,
+        # Changed from `narrow` at fast: the layer-2 location entity fires on
+        # a bare province name with no admin suffix and no `籍贯`-style cue.
+        "place_of_birth": _HAVE,
+        "medical_condition": _NARROW,
+    },
+    ("en", "ner"): {
+        "age": _HAVE,
+        "sex": _NARROW,
+        # spaCy's NER supplies `location`, absent at fast.
+        "location": _HAVE,
+        "occupation": _NONE,
+        "education": _NONE,
+        "relationship_status": _NONE,
+        "income": _NONE,
+        # Changed from `none` at fast: the same layer-2 location entity fires
+        # on "Born in Ohio." with no birth-specific detector involved.
+        "place_of_birth": _HAVE,
+        "medical_condition": _NARROW,
+    },
 }
-# zh gains nothing at ner: every zh detector above is L1/L1b.
-_TABLE[("zh", "ner")] = dict(_TABLE[("zh", "fast")])
-# en gains exactly one cell at ner: spaCy supplies `location`.
-_TABLE[("en", "ner")] = {**_TABLE[("en", "fast")], "location": _HAVE}
 
 
 def coverage_for(lang: str, mode: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -85,7 +126,10 @@ def coverage_for(lang: str, mode: str) -> tuple[tuple[str, ...], tuple[str, ...]
     row_mode = "ner" if mode in ("ner", "auto") else "fast"
     row = _TABLE.get((lang, row_mode))
     if row is None:
-        return CATEGORIES, ()
+        # CATEGORIES is spelled in taxonomy order, not alphabetical — sort it
+        # here so an unmeasured language still honors the "both sorted"
+        # contract this docstring promises.
+        return tuple(sorted(CATEGORIES)), ()
     uncovered = tuple(sorted(c for c, v in row.items() if v == _NONE))
     narrow = tuple(sorted(c for c, v in row.items() if v == _NARROW))
     return uncovered, narrow
