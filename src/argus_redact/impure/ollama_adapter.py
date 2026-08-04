@@ -131,6 +131,15 @@ class OllamaAdapter(SemanticAdapter):
                     f"{self._base_url}/api/generate",
                     json=payload,
                     timeout=self._profile.timeout,
+                    # _validate_ollama_host() only checks the URL; requests still
+                    # honours HTTP_PROXY/HTTPS_PROXY/ALL_PROXY from the environment
+                    # and does NOT exempt loopback targets from them. Left ambient,
+                    # a proxy silently re-routes this loopback-validated request off
+                    # the box — no error, no SecurityWarning, no opt-in required —
+                    # defeating the whole point of the loopback check above. Do not
+                    # drop this as "redundant" with that check; it is what makes the
+                    # check actually binding.
+                    proxies={"http": None, "https": None},
                 )
                 if resp.status_code == 200:
                     return resp

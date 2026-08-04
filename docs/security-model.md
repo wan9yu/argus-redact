@@ -108,6 +108,15 @@ The attack relies on correlating pseudonymous activity across multiple requests.
 > that host for Layer-3 semantic detection. argus-redact default-denies this: a
 > non-loopback host requires the explicit `ARGUS_ALLOW_REMOTE_OLLAMA=1` opt-in and
 > emits a `SecurityWarning` (naming the host) before any text is sent.
+>
+> That loopback check validates the `OLLAMA_HOST` URL, not the request's transport:
+> an `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` environment variable can still
+> redirect a request to a validated-loopback host wherever the proxy points, since
+> `requests` does not exempt loopback targets from a configured proxy. The outbound
+> call pins `proxies={"http": None, "https": None}`, so a loopback `OLLAMA_HOST` is
+> unaffected by any proxy variable in the process environment — only the explicit
+> `ARGUS_ALLOW_REMOTE_OLLAMA=1` opt-in above (with its `SecurityWarning`) can send
+> this text to a non-loopback destination.
 
 ---
 

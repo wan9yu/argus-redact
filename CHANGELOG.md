@@ -98,6 +98,34 @@ configuration had no detector for what was in it.
   rejected outright. It now scans each chunk on its own, matching what `feed()`
   actually does.
 
+### Security
+
+- **The Layer-3 loopback check validated the URL but not the transport, so a proxy
+  environment variable could still send the pre-redaction prompt off-box.**
+  `OllamaAdapter` (`mode="auto"` only — `fast` and `ner` never call it) rejects a
+  non-loopback `base_url` at construction and requires `ARGUS_ALLOW_REMOTE_OLLAMA=1`
+  plus a `SecurityWarning` to override that (see `docs/security-model.md`'s egress
+  scope note). That check inspects the URL alone. The outbound call itself used a bare
+  `requests.post`, which honours `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` from the
+  process environment — and `requests` does not exempt loopback targets from a
+  configured proxy. With one of those variables set, a request to a validated-loopback
+  `base_url` was actually delivered to whatever host the proxy variable named, with no
+  error and no warning: the same off-box egress the opt-in gate exists to require
+  consent for, reached through a different door that had no gate at all. Reproducing
+  it needs a proxy variable already present in the deployment environment — common on
+  corporate networks and behind VPN clients, but not a machine's default state — and
+  every previously released version carries this equally; no published version behaved
+  differently from any other here. The outbound call
+  (`src/argus_redact/impure/ollama_adapter.py`) now pins `proxies={"http": None,
+  "https": None}` on that request, so it resolves to no proxy regardless of the
+  ambient environment. A test defect that had hidden this is fixed alongside it: the
+  egress test covering the failure-logging path assumed a real socket connecting to
+  nothing raises `ConnectionError`; under a proxy it instead received an ordinary HTTP
+  response, so the test's safety assertions silently never ran while the test still
+  reported green. That test now mocks the failure directly instead of depending on
+  ambient network conditions, and a new sibling test covers the non-200-response
+  branch a proxy actually drives, asserting the same no-leak properties.
+
 ## v0.8.6 — the post-merge coverage invariant (security patch)
 
 A security patch. One structural defect, present in four independent detection
