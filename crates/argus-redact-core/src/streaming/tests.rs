@@ -51,9 +51,9 @@ fn keep_whitelist() -> HashSet<String> {
 
 /// A detect closure returning the RAW `(layer1 ++ person, hints)` over `text` —
 /// the carry-window's entity-snap input (same detection params as the redact
-/// closure). The snap normalizes these internally (merge + self-reference filter,
-/// mirroring `_detect` fast), so callers may thread the RAW overlapping set and
-/// still get the merged-cut behavior.
+/// closure). The snap normalizes these internally (merge → self-reference filter
+/// → coverage restore, mirroring `_detect` fast), so callers may thread the RAW
+/// overlapping set and still get the merged-cut behavior.
 fn make_detect(lang: Vec<String>) -> impl Fn(&str) -> DetectSpans {
     move |text: &str| {
         let r = detect_l1(text, &lang, &[]).expect("detect_l1");

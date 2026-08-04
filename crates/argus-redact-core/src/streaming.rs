@@ -169,9 +169,9 @@ pub fn last_boundary_index(text: &str) -> isize {
 /// Raw detection input for the [`StreamingRedactor`] detect closure: the
 /// `layer1 ++ person` (+ evidence-gated) entities plus the L1 `hints`, exactly as
 /// a fast-mode `detect_l1` produces them. [`StreamingRedactor::detect_final`]
-/// normalizes them internally (`merge_entities_with_text` → `filter_self_reference`)
-/// before the cut and redaction steps, so callers may thread the RAW overlapping
-/// set unchanged.
+/// normalizes them internally (`merge_entities_with_text` → `filter_self_reference`
+/// → `restore_lost_coverage`) before the cut and redaction steps, so callers may
+/// thread the RAW overlapping set unchanged.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct DetectSpans {
     /// Raw `layer1 ++ person` entities over the combined buffer (CHAR-space spans).
@@ -627,8 +627,8 @@ where
     }
 
     /// Detect once over `buffer` and reduce to the FINAL entity set (merge →
-    /// self-ref filter), exactly as batch `_detect` does — the set that drives both
-    /// the cut and the redaction.
+    /// self-ref filter → coverage restore), exactly as batch `_detect` does — the
+    /// set that drives both the cut and the redaction.
     fn detect_final(&self, buffer: &str) -> Vec<PatternMatch> {
         let DetectSpans { entities, hints } = (self.detect)(buffer);
         // The streaming face applies no type filter — the caller-supplied

@@ -487,7 +487,7 @@ pub fn detect_l1(
 ///    drop entities whose type is in `types_exclude`. `types` wins (Python
 ///    `if ... elif ...`); the caller is responsible for rejecting the both-set
 ///    combination, exactly as `redact()` does up front.
-/// 5a. **Post-merge coverage invariant** (`crate::coverage::restore_lost_coverage`):
+///    5a. **Post-merge coverage invariant** (`crate::coverage::restore_lost_coverage`):
 ///    steps 4 and 5 drop entities by type, and a dropped entity may have
 ///    absorbed a different real entity during the merge at step 2. Any
 ///    pre-merge entity the merged set covered, the filters left uncovered, and
