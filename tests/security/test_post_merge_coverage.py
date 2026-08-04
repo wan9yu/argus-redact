@@ -12,17 +12,19 @@ assertions are about what the CALLER receives, not about internal state:
 Variant B needs no hostile model at all, and both `mode` and `types` are
 forwarded from HTTP request bodies by src/argus_redact/server.py.
 
-The invariant is wired into FOUR merge/filter sites, and this file covers all
-of them: `redact()`'s internal `_detect` pipeline, `redact()`'s `_pre_detected`
-branch, `redact_pseudonym_llm()`'s `_pre_detected` branch, and the structured
-(`redact_json`/`redact_csv`) and streaming (`StreamingRedactor`) callers that
-route through `_detect`/`_context_cut` without threading the signal — the data
-is safe at all four (the restore itself is unconditional), but a caller that
-never sees the `coverage_restored` signal cannot know a filter tried to drop
-something it shouldn't have.
+This file exercises every public entry point the invariant has to hold at:
+`redact()`'s internal `_detect` pipeline, the `_pre_detected` path (shared by
+`redact()` and `redact_pseudonym_llm()` through `_pre_detected_pipeline` — they
+each had their own copy of it, which is how the leak survived in the second one
+after the first was fixed), and the structured (`redact_json`/`redact_csv`) and
+streaming (`StreamingRedactor`) callers. The data is safe at all of them (the
+restore itself is unconditional), but a caller that never sees the
+`coverage_restored` signal cannot know a filter tried to drop something it
+shouldn't have — so the signal is asserted per entry point, not just once.
 """
 
 import warnings
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -53,17 +55,33 @@ def _no_ner():
     return ner
 
 
-def _run(entity_type, start, end, **kwargs):
+@contextmanager
+def _stubbed_layers(entity_type, start, end):
+    """Both adapter getters patched on the CONSUMING module path.
+
+    Patching only the semantic one would make the result depend on whether NER
+    models happen to be installed locally — the documented false-green class in
+    this repo.
+    """
     with (
         patch("argus_redact.glue.redact._get_ner_adapters", return_value=[_no_ner()]),
         patch(
             "argus_redact.glue.redact._get_semantic_adapter",
             return_value=_semantic(entity_type, start, end),
         ),
-        warnings.catch_warnings(),
     ):
-        warnings.simplefilter("ignore", SecurityWarning)
-        return redact(TEXT, lang="en", mode="auto", salt=42, **kwargs)
+        yield
+
+
+def _run(entity_type, start, end, *, suppress_warnings=True, **kwargs):
+    """Drive `redact()` with L2/L3 stubbed. Pass ``suppress_warnings=False`` to
+    observe the SecurityWarning from an enclosing ``pytest.warns`` block."""
+    with _stubbed_layers(entity_type, start, end):
+        if not suppress_warnings:
+            return redact(TEXT, lang="en", mode="auto", salt=42, **kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SecurityWarning)
+            return redact(TEXT, lang="en", mode="auto", salt=42, **kwargs)
 
 
 def _pre_detected_pair(entity_type: str, start: int, end: int) -> list[PatternMatch]:
@@ -140,15 +158,8 @@ class TestTheComplianceArtifactsTellTheTruth:
 
 class TestTheDefaultTupleCallerIsWarned:
     def test_a_firing_warns_even_on_the_two_tuple_path(self):
-        with (
-            patch("argus_redact.glue.redact._get_ner_adapters", return_value=[_no_ner()]),
-            patch(
-                "argus_redact.glue.redact._get_semantic_adapter",
-                return_value=_semantic("medical", 8, 26),
-            ),
-            pytest.warns(SecurityWarning, match="lost redaction coverage"),
-        ):
-            redacted, _key = redact(TEXT, lang="en", mode="auto", salt=42, types=["phone"])
+        with pytest.warns(SecurityWarning, match="lost redaction coverage"):
+            redacted, _key = _run("medical", 8, 26, types=["phone"], suppress_warnings=False)
         assert PHONE not in redacted
 
     def test_an_ordinary_call_does_not_warn_about_coverage(self):

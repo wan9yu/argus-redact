@@ -7,10 +7,11 @@ from __future__ import annotations
 
 from argus_redact._types import PatternMatch, PseudonymLLMResult
 from argus_redact.glue import redact as _redact_module
-from argus_redact.glue.redact import _apply_type_filter, _reject_unknown_type_names
-from argus_redact.pure.coverage import restore_lost_coverage
+from argus_redact.glue.redact import (
+    _pre_detected_pipeline,
+    _reject_unknown_type_names,
+)
 from argus_redact.pure.display_marker import mark_for_display, resolve_marker
-from argus_redact.pure.merger import merge_entities
 from argus_redact.pure.normalize import MAX_INPUT_SIZE
 from argus_redact.pure.replacer import VALID_STRATEGIES, warn_coverage_restored
 from argus_redact.pure.reserved_range_scanner import scan_for_pollution
@@ -152,24 +153,10 @@ def redact_pseudonym_llm(
 
     _restored_types: list[str] = []
     if _pre_detected is not None:
-        # Merge (dedupe overlapping spans, same as the internal _detect path)
-        # then apply the same types/types_exclude filter — a pre-detected list
-        # is caller-supplied and must not skip either guard. Mirrors the
-        # _pre_detected branch of redact() in glue/redact.py, including the
-        # post-merge coverage invariant: this branch never runs
-        # filter_self_reference, so hints=None (no self_reference entity was
-        # ever dropped here — only the type filter can have dropped a winner).
-        merged = merge_entities(_pre_detected, text=text)
-        entities = _apply_type_filter(merged, types, types_exclude)
-        entities, _restored = restore_lost_coverage(
-            _pre_detected,
-            merged,
-            entities,
-            types=types,
-            types_exclude=types_exclude,
-            hints=None,
-            text=text,
-        )
+        # Shared with redact()'s _pre_detected branch — see _pre_detected_pipeline.
+        # This file had a byte-identical copy of that block; the copy is what let
+        # the post-merge coverage leak survive here after redact() was fixed.
+        entities, _restored = _pre_detected_pipeline(_pre_detected, types, types_exclude, text)
         _restored_types.extend(_restored)
         langs = resolved_lang if isinstance(resolved_lang, list) else [resolved_lang]
         timing = {}

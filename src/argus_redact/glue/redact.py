@@ -247,6 +247,40 @@ def _apply_type_filter(
     return entities
 
 
+def _pre_detected_pipeline(
+    pre_detected: list[PatternMatch],
+    types: list[str] | None,
+    types_exclude: list[str] | None,
+    text: str,
+) -> tuple[list[PatternMatch], list[str]]:
+    """Merge, type-filter and restore coverage for a caller-supplied entity list.
+
+    THE single implementation of the ``_pre_detected`` path, shared by
+    ``redact()`` and ``redact_pseudonym_llm()`` — they had byte-identical copies,
+    and a fix landing in one and not the other is exactly how the post-merge
+    coverage leak reached a public export unnoticed.
+
+    A pre-detected list is caller-supplied, so it must not skip either guard.
+    This path never runs ``filter_self_reference`` and produces no hints, hence
+    ``hints=None``: no ``self_reference`` entity was ever dropped here, so only
+    the type filter can have dropped a merge winner.
+
+    Returns ``(entities, restored_types)``; ``restored_types`` is PII-free (type
+    names only) and empty when the invariant did not fire.
+    """
+    merged = merge_entities(pre_detected, text=text)
+    entities = _apply_type_filter(merged, types, types_exclude)
+    return restore_lost_coverage(
+        pre_detected,
+        merged,
+        entities,
+        types=types,
+        types_exclude=types_exclude,
+        hints=None,
+        text=text,
+    )
+
+
 _LANG_NER_ADAPTERS = {
     "zh": "argus_redact.lang.zh.ner_adapter",
     "en": "argus_redact.lang.en.ner_adapter",
@@ -791,20 +825,7 @@ def redact(
     # shim — it is the entry point reserved for the upcoming iOS C ABI.
     _restored_types: list[str] = []
     if _pre_detected is not None:
-        # Merge (dedupe overlapping spans, same as the internal _detect path)
-        # then apply the same types/types_exclude filter — a pre-detected list
-        # is caller-supplied and must not skip either guard.
-        merged = merge_entities(_pre_detected, text=text)
-        entities = _apply_type_filter(merged, types, types_exclude)
-        entities, _restored = restore_lost_coverage(
-            _pre_detected,
-            merged,
-            entities,
-            types=types,
-            types_exclude=types_exclude,
-            hints=None,
-            text=text,
-        )
+        entities, _restored = _pre_detected_pipeline(_pre_detected, types, types_exclude, text)
         _restored_types.extend(_restored)
         langs = [lang] if isinstance(lang, str) else list(lang)
         timing: dict[str, float] = {}

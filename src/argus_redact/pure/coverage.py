@@ -54,6 +54,14 @@ def restore_lost_coverage(
         and not any(e.type == "self_reference" for e in pre_merge)
     ):
         return filtered, []
+    # Second fast path, O(1), for the type-filtered callers the check above lets
+    # through: both post-merge filters only ever REMOVE entities, never add or
+    # replace, so an unchanged length means nothing was dropped — and coverage
+    # can only be lost by a drop. This is a length comparison, not a second
+    # implementation of the coverage predicate: reimplementing that in Python is
+    # exactly the drift this module exists to prevent.
+    if len(filtered) == len(merged):
+        return filtered, []
     drop_self_reference = hints is not None and _get_self_reference_tier(hints) != 1
     out, restored = _core.restore_lost_coverage(
         [_RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in pre_merge],

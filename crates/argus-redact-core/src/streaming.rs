@@ -639,15 +639,15 @@ where
         let pre_merge: Option<Vec<PatternMatch>> =
             if scope.admits_all(&entities) { None } else { Some(entities.clone()) };
         let merged = merge_entities_with_text(entities, buffer);
-        let merged_spans: Option<Vec<(usize, usize)>> = pre_merge
-            .as_ref()
-            .map(|_| merged.iter().map(|e| (e.start, e.end)).collect());
+        // One Option carrying both halves — `merged` is moved into the filter
+        // below, so its spans must be taken first, and the snapshot is only
+        // ever useful paired with them. See the twin in `redact_l1`.
+        let snapshot: Option<(Vec<PatternMatch>, Vec<(usize, usize)>)> =
+            pre_merge.map(|pre| (pre, merged.iter().map(|e| (e.start, e.end)).collect()));
         let filtered = filter_self_reference(merged, &hints);
-        match (pre_merge, merged_spans) {
-            (Some(pre), Some(spans)) => {
-                restore_lost_coverage(&pre, &spans, filtered, &scope, buffer).0
-            }
-            _ => filtered,
+        match snapshot {
+            Some((pre, spans)) => restore_lost_coverage(&pre, &spans, filtered, &scope, buffer).0,
+            None => filtered,
         }
     }
 

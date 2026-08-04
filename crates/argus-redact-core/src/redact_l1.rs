@@ -583,9 +583,13 @@ pub fn redact_l1<F: PseudoFactory>(
     let pre_merge: Option<Vec<PatternMatch>> =
         if scope.admits_all(&entities) { None } else { Some(entities.clone()) };
     let merged = merge_entities_with_text(entities, text);
-    let merged_spans: Option<Vec<(usize, usize)>> = pre_merge
-        .as_ref()
-        .map(|_| merged.iter().map(|e| (e.start, e.end)).collect());
+    //     Pair the pre-merge snapshot with the merged spans NOW, in ONE Option:
+    //     `merged` is moved into the filter below so its spans must be taken
+    //     before that, and the two values are only ever needed together. Two
+    //     separate Options would leave "always both or neither" to convention;
+    //     one tuple lets the compiler hold it.
+    let snapshot: Option<(Vec<PatternMatch>, Vec<(usize, usize)>)> =
+        pre_merge.map(|pre| (pre, merged.iter().map(|e| (e.start, e.end)).collect()));
 
     // 3. boost_cross_layer: NO-OP in fast mode (single layer) — skipped.
 
@@ -605,11 +609,9 @@ pub fn redact_l1<F: PseudoFactory>(
     //     and a dropped entity may have absorbed a DIFFERENT real entity during
     //     the merge. Re-admit anything whose coverage they destroyed. See
     //     `crate::coverage`.
-    let filtered = match (pre_merge, merged_spans) {
-        (Some(pre), Some(spans)) => {
-            restore_lost_coverage(&pre, &spans, filtered, &scope, text).0
-        }
-        _ => filtered,
+    let filtered = match snapshot {
+        Some((pre, spans)) => restore_lost_coverage(&pre, &spans, filtered, &scope, text).0,
+        None => filtered,
     };
 
     // 6. Replace. Both detect (above) and replace surface their error as a

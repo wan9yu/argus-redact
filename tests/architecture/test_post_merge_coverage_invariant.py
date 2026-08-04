@@ -2,33 +2,42 @@
 
 The merge is absorbing: an overlapping loser is discarded because the winner
 covers its bytes. A filter that then drops a winner un-covers everything that
-winner absorbed. Four sites run merge-then-drop today:
+winner absorbed. Three files run merge-then-drop today:
 
   - `src/argus_redact/glue/redact.py` — TWO independent blocks in the same
     file: `redact()`'s internal `_detect` pipeline (merge, then
-    `filter_self_reference`, then the type filter) and `redact()`'s own
-    `_pre_detected` branch (merge, then the type filter only — it never runs
-    `filter_self_reference`).
-  - `src/argus_redact/glue/redact_pseudonym_llm.py` — its own `_pre_detected`
-    branch, a separate copy of the same shape (merge, then the type filter),
-    not a call-through to `redact.py`. This is the site a prior version of
-    this gate could not see: it hardcoded `filter_self_reference` as the
-    "this is a post-merge pipeline" anchor, and this file never calls that
-    function, so the gate silently had no opinion about it while it leaked.
+    `filter_self_reference`, then the type filter) and `_pre_detected_pipeline`
+    (merge, then the type filter only — it never runs `filter_self_reference`).
   - `crates/argus-redact-core/src/redact_l1.rs` — the Rust fast path (merge,
     `filter_self_reference`, type filter).
   - `crates/argus-redact-core/src/streaming.rs` — the Rust streaming path
     (same shape as `redact_l1.rs`).
 
+`src/argus_redact/glue/redact_pseudonym_llm.py` used to be a fourth site: it
+carried its own byte-identical copy of the `_pre_detected` block rather than
+calling through to `redact.py`. That copy is why the leak survived there after
+`redact()` was fixed, and why an earlier version of this gate could not see it
+(the gate hardcoded `filter_self_reference` as its "this is a post-merge
+pipeline" anchor, and that file never called it). The copy is now gone — the
+file delegates to `_pre_detected_pipeline` — so instead of guarding a pipeline
+there, `test_pseudonym_llm_delegates_instead_of_copying_the_pipeline` asserts
+it still has no pipeline of its own to guard.
+
 This gate asserts every block above is followed by a `restore_lost_coverage`
 call before the NEXT dropping block in the same file (or EOF, for the last
 block) — not just "somewhere in the file" — so removing the restorer for one
-block cannot hide behind a second block's restorer elsewhere in the same
-file. A new dropping filter in an existing pipeline, or a fifth copy of the
-pipeline anywhere else, should make this gate fail loudly rather than pass
-silently.
+block cannot hide behind a second block's restorer elsewhere in the same file.
 
-A separate anti-rot check pins the per-file ANCHOR COUNT in `_PIPELINES`
+What this gate does NOT do, stated plainly so nobody relies on more than it
+gives: it checks the hardcoded anchors in `_PIPELINES`, nothing else. A brand
+new merge-then-drop pipeline in a file not listed here is invisible to it, and
+so is a new dropping filter inserted into a listed file without a matching
+`_PIPELINES` entry. It is a regression lock on today's known sites, not a
+discovery mechanism for tomorrow's. The anti-rot check below is what keeps the
+list from quietly shrinking; keeping it from quietly falling BEHIND the code is
+a human review responsibility.
+
+That anti-rot check pins the per-file ANCHOR COUNT in `_PIPELINES`
 (`redact.py` → 2, everything else → 1), not just the set of files present —
 a file-set check alone would stay green if `redact.py`'s two independent
 blocks were collapsed to one entry, silently un-guarding whichever block's
@@ -49,13 +58,14 @@ _ROOT = Path(__file__).resolve().parents[2]
 _PIPELINES: list[tuple[str, str]] = [
     ("src/argus_redact/glue/redact.py", "filter_self_reference(entities, hints)"),
     ("src/argus_redact/glue/redact.py", "_apply_type_filter(merged, types, types_exclude)"),
-    (
-        "src/argus_redact/glue/redact_pseudonym_llm.py",
-        "_apply_type_filter(merged, types, types_exclude)",
-    ),
     ("crates/argus-redact-core/src/redact_l1.rs", "filter_self_reference(merged, &hints)"),
     ("crates/argus-redact-core/src/streaming.rs", "filter_self_reference(merged, &hints)"),
 ]
+
+# The one caller that must NOT grow a pipeline of its own. It had a
+# byte-identical copy of `redact()`'s `_pre_detected` block, which is how the
+# leak survived here after `redact()` was fixed; it now delegates instead.
+_DELEGATOR = "src/argus_redact/glue/redact_pseudonym_llm.py"
 
 # file -> expected number of independent _PIPELINES anchors in that file. A
 # FILE-SET check alone is not enough: `redact.py` legitimately carries TWO
@@ -67,7 +77,6 @@ _PIPELINES: list[tuple[str, str]] = [
 # for a live demonstration in the same style as the rest of this file).
 _KNOWN_ANCHOR_COUNTS = {
     "src/argus_redact/glue/redact.py": 2,
-    "src/argus_redact/glue/redact_pseudonym_llm.py": 1,
     "crates/argus-redact-core/src/redact_l1.rs": 1,
     "crates/argus-redact-core/src/streaming.rs": 1,
 }
@@ -114,7 +123,29 @@ def test_every_post_merge_pipeline_restores_lost_coverage():
             )
 
 
-def test_the_pipeline_list_still_covers_all_four_known_sites():
+def test_pseudonym_llm_delegates_instead_of_copying_the_pipeline():
+    """`redact_pseudonym_llm` must have NO merge-then-drop pipeline of its own.
+
+    It used to carry a byte-identical copy of `redact()`'s `_pre_detected`
+    block. A fix landing in `redact.py` and not in the copy is exactly how the
+    post-merge coverage leak reached a public export unnoticed. Asserting the
+    copy is absent is a stronger guarantee than asserting the copy calls the
+    restorer: there is no second implementation left to drift.
+    """
+    source = (_ROOT / _DELEGATOR).read_text(encoding="utf-8")
+    assert "_pre_detected_pipeline(" in source, (
+        f"{_DELEGATOR} no longer delegates to _pre_detected_pipeline — if it "
+        f"grew its own merge-then-drop block again, add it to _PIPELINES and "
+        f"_KNOWN_ANCHOR_COUNTS so the restorer check covers it."
+    )
+    assert "merge_entities(" not in source, (
+        f"{_DELEGATOR} calls merge_entities directly — it has grown a pipeline "
+        f"of its own again. Either delegate to _pre_detected_pipeline, or add "
+        f"this file back to _PIPELINES so its restorer call is guarded."
+    )
+
+
+def test_the_pipeline_list_still_covers_all_known_sites():
     """Anti-rot for the LIST itself, not just its contents: pins how many
     independent anchors `_PIPELINES` carries PER FILE, not merely which files
     appear at all. A file-set-only check would stay green if one of

@@ -118,6 +118,19 @@ def _keep_downgraded_entities(entities, config: dict | None):
     return out
 
 
+def _types_event(reason_code: str, count: int, types) -> dict:
+    """Build a PII-free security_event whose detail names entity TYPES only.
+
+    THE single source of the ``"types: a, b"`` detail convention, shared by
+    every redact-side builder below. That string is what reaches the PII-free
+    audit ledger, so it must never carry a raw or masked value — keeping one
+    formatter means a change to the convention cannot land in some builders and
+    not others.
+    """
+    detail = "types: " + ", ".join(sorted(set(types)))
+    return security_event(reason_code, count=count, detail=detail)
+
+
 def keep_downgraded_event(entities, config: dict | None) -> dict | None:
     """A PII-free KEEP_DOWNGRADED security_event, or None if nothing downgraded.
     count = unique downgraded entity texts; detail names the TYPES only (never raw
@@ -125,8 +138,7 @@ def keep_downgraded_event(entities, config: dict | None) -> dict | None:
     ents = _keep_downgraded_entities(entities, config)
     if not ents:
         return None
-    types = sorted({e.type for e in ents})
-    return security_event(KEEP_DOWNGRADED, count=len(ents), detail="types: " + ", ".join(types))
+    return _types_event(KEEP_DOWNGRADED, len(ents), (e.type for e in ents))
 
 
 def mask_collision_event(mask_collisions: list[str]) -> dict | None:
@@ -138,10 +150,7 @@ def mask_collision_event(mask_collisions: list[str]) -> dict | None:
     TYPES only (never the raw or masked value) — mirrors ``keep_downgraded_event``."""
     if not mask_collisions:
         return None
-    types = sorted(set(mask_collisions))
-    return security_event(
-        MASK_COLLISION, count=len(mask_collisions), detail="types: " + ", ".join(types)
-    )
+    return _types_event(MASK_COLLISION, len(mask_collisions), mask_collisions)
 
 
 def warn_mask_collisions(mask_collisions: list[str]) -> None:
@@ -172,10 +181,7 @@ def coverage_restored_event(restored_types: list[str]) -> dict | None:
     """
     if not restored_types:
         return None
-    types = sorted(set(restored_types))
-    return security_event(
-        COVERAGE_RESTORED, count=len(restored_types), detail="types: " + ", ".join(types)
-    )
+    return _types_event(COVERAGE_RESTORED, len(restored_types), restored_types)
 
 
 def warn_coverage_restored(restored_types: list[str]) -> None:
