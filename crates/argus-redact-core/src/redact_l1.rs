@@ -49,6 +49,7 @@
 
 use std::collections::HashSet;
 
+use crate::coverage::{restore_lost_coverage, FilterScope};
 use crate::data::{all_langs, builtin_patterns};
 use crate::grammar::normalize_grammar_en;
 use crate::hints::{filter_self_reference, get_person_threshold, produce_hints_l1, Hint};
@@ -486,6 +487,12 @@ pub fn detect_l1(
 ///    drop entities whose type is in `types_exclude`. `types` wins (Python
 ///    `if ... elif ...`); the caller is responsible for rejecting the both-set
 ///    combination, exactly as `redact()` does up front.
+/// 5a. **Post-merge coverage invariant** (`crate::coverage::restore_lost_coverage`):
+///    steps 4 and 5 drop entities by type, and a dropped entity may have
+///    absorbed a different real entity during the merge at step 2. Any
+///    pre-merge entity the merged set covered, the filters left uncovered, and
+///    the same filter predicate still admits is re-admitted. A no-op unless a
+///    filter actually dropped something.
 /// 6. `replace(...)` — value-passing the SAME `type_info` / prefixes / whitelist
 ///    / factories the Python `_build_type_info` resolves and threads through
 ///    `_core.replace` (the T7 binding adapts the Python factories to these
@@ -565,7 +572,20 @@ pub fn redact_l1<F: PseudoFactory>(
     entities.extend(framework);
 
     // 2. Priority-aware merge over the ORIGINAL text.
+    //
+    //    Snapshot the pre-merge set ONLY when a post-merge filter can actually
+    //    drop something — step 5a needs it to restore lost coverage. A merged
+    //    entity's type is always some pre-merge entity's type, so when every
+    //    pre-merge entity is admitted no filter drops anything and no coverage
+    //    can be lost. On the common path (no type filter, tier 1 or no
+    //    self_reference at all) this costs one pass and zero allocations.
+    let scope = FilterScope::from_hints(types, types_exclude, &hints);
+    let pre_merge: Option<Vec<PatternMatch>> =
+        if scope.admits_all(&entities) { None } else { Some(entities.clone()) };
     let merged = merge_entities_with_text(entities, text);
+    let merged_spans: Option<Vec<(usize, usize)>> = pre_merge
+        .as_ref()
+        .map(|_| merged.iter().map(|e| (e.start, e.end)).collect());
 
     // 3. boost_cross_layer: NO-OP in fast mode (single layer) — skipped.
 
@@ -579,6 +599,17 @@ pub fn redact_l1<F: PseudoFactory>(
         filtered.into_iter().filter(|e| !drop.contains(&e.type_)).collect()
     } else {
         filtered
+    };
+
+    // 5a. Post-merge coverage invariant: steps 4 and 5 drop entities by type,
+    //     and a dropped entity may have absorbed a DIFFERENT real entity during
+    //     the merge. Re-admit anything whose coverage they destroyed. See
+    //     `crate::coverage`.
+    let filtered = match (pre_merge, merged_spans) {
+        (Some(pre), Some(spans)) => {
+            restore_lost_coverage(&pre, &spans, filtered, &scope, text).0
+        }
+        _ => filtered,
     };
 
     // 6. Replace. Both detect (above) and replace surface their error as a
@@ -1417,6 +1448,96 @@ mod redact_l1_tests {
         )
         .unwrap();
         assert_eq!(r.redacted, "电话13812345678 银行卡621700******0000");
+    }
+
+    // ── Post-merge coverage invariant: a type filter must not un-redact PII
+    //    another type's winner absorbed during the merge.
+    //
+    //    Fixture note: "北京市朝阳区建国路88号" is a REAL absorption, not a
+    //    synthetic one — `merge_entities_with_text` collapses the two
+    //    `location` region candidates ("北京市" / "北京市朝阳区") AND the shorter
+    //    `address` candidate into the single longest `address` span (0..12).
+    //    Dropping that `address` winner (by either filter below) must not
+    //    un-cover the `location` text it absorbed. ─────────────────────────────
+    #[test]
+    fn type_filter_does_not_un_redact_an_absorbed_entity() {
+        // A `types=["location"]` caller must never receive "北京市朝阳区" in
+        // plaintext because the longer overlapping `address` span won the merge
+        // and was then filtered away for not being "location".
+        let mut info = HashMap::new();
+        info.insert(
+            "location".into(),
+            ti("category", "category", "LOC", None, None, None, "[location]"),
+        );
+        let wl: HashSet<String> = HashSet::new();
+        let keep: HashSet<String> = ["location"].iter().map(|x| x.to_string()).collect();
+        let lang_v = s(&["zh"]);
+        let text = "北京市朝阳区建国路88号";
+        let r = redact_l1(
+            RedactL1Args {
+                text,
+                lang: &lang_v,
+                names: &[],
+                type_info: &info,
+                salt: Some(&Salt::Int(SALT)),
+                key: None,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+                types: Some(&keep),
+                types_exclude: None,
+            },
+            &UnusedFactory,
+            None,
+        )
+        .unwrap();
+        assert!(
+            !r.redacted.contains("北京市朝阳区"),
+            "the caller's explicitly requested type leaked: {}",
+            r.redacted
+        );
+    }
+
+    #[test]
+    fn types_exclude_does_not_un_redact_an_absorbed_entity() {
+        // A `types_exclude=["address"]` caller excludes only `address`, but
+        // "北京市朝阳区" (`location`) was absorbed into that same `address` span
+        // during the merge — dropping the winner must not take the location
+        // down with it.
+        let mut info = HashMap::new();
+        info.insert(
+            "location".into(),
+            ti("category", "category", "LOC", None, None, None, "[location]"),
+        );
+        let wl: HashSet<String> = HashSet::new();
+        let drop: HashSet<String> = ["address"].iter().map(|x| x.to_string()).collect();
+        let lang_v = s(&["zh"]);
+        let text = "北京市朝阳区建国路88号";
+        let r = redact_l1(
+            RedactL1Args {
+                text,
+                lang: &lang_v,
+                names: &[],
+                type_info: &info,
+                salt: Some(&Salt::Int(SALT)),
+                key: None,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+                types: None,
+                types_exclude: Some(&drop),
+            },
+            &UnusedFactory,
+            None,
+        )
+        .unwrap();
+        assert!(
+            !r.redacted.contains("北京市朝阳区"),
+            "an unrelated type leaked when address was excluded: {}",
+            r.redacted
+        );
     }
 }
 

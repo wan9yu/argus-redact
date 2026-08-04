@@ -69,6 +69,7 @@ use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
+use crate::coverage::{restore_lost_coverage, FilterScope};
 use crate::hints::{filter_self_reference, Hint};
 use crate::merger::merge_entities_with_text;
 use crate::restore::{RestoreError, RestoreSession};
@@ -630,8 +631,24 @@ where
     /// the cut and the redaction.
     fn detect_final(&self, buffer: &str) -> Vec<PatternMatch> {
         let DetectSpans { entities, hints } = (self.detect)(buffer);
+        // The streaming face applies no type filter — the caller-supplied
+        // redact closure owns that — so the only dropping filter here is the
+        // self-reference tier filter. The coverage invariant still applies:
+        // a dropped self_reference span may have absorbed a real entity.
+        let scope = FilterScope::from_hints(None, None, &hints);
+        let pre_merge: Option<Vec<PatternMatch>> =
+            if scope.admits_all(&entities) { None } else { Some(entities.clone()) };
         let merged = merge_entities_with_text(entities, buffer);
-        filter_self_reference(merged, &hints)
+        let merged_spans: Option<Vec<(usize, usize)>> = pre_merge
+            .as_ref()
+            .map(|_| merged.iter().map(|e| (e.start, e.end)).collect());
+        let filtered = filter_self_reference(merged, &hints);
+        match (pre_merge, merged_spans) {
+            (Some(pre), Some(spans)) => {
+                restore_lost_coverage(&pre, &spans, filtered, &scope, buffer).0
+            }
+            _ => filtered,
+        }
     }
 
     /// The snap input for [`context_cut`]: the final spans as `(start, end, type)`
