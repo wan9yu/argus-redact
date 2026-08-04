@@ -2,6 +2,82 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.6 — the post-merge coverage invariant (security patch)
+
+A security patch. One structural defect, present in four independent detection
+pipelines (three of them live, reproducible leaks), was found during an internal
+review and closed with a single shared fix. No API changes; upgrading is recommended.
+
+### Security
+
+- **A filter running after the entity merge could return PII the merge had already
+  absorbed, in plaintext.** Detection ends with a priority-aware merge — when two
+  detected spans overlap, one wins and the loser is discarded, which is safe because
+  the winner's bytes cover the loser's — followed by filters that drop entities by
+  type: the self-reference tier filter, and the `types=`/`types_exclude=` filter.
+  When one of those filters dropped a winner, everything it had absorbed during the
+  merge was left unredacted, with no warning and no event, while
+  `residual_personal_data`, `risk` and `security_events` all still reported a clean
+  result.
+
+  Four pipelines ran this merge-then-drop shape: `redact()`'s internal detection path
+  (used by every Python caller, including the HTTP server and MCP), `redact()`'s own
+  `_pre_detected` branch (the Presidio bring-your-own-detector path),
+  `redact_pseudonym_llm()`'s separate `_pre_detected` branch (a public export found
+  during review, not a call-through to `redact()`), and the Rust core's two copies of
+  the same pipeline (the fast-mode path and the streaming path, both reachable from
+  the browser/wasm build). The first three were live, reproducible leaks. The
+  Rust-only paths were not: the hint that decides the self-reference tier is forced to
+  tier 1 whenever any other PII entity is present in the document, and tier 1 is kept
+  in full — so a self-reference span there could never both absorb another entity
+  during merge and be dropped by the tier filter afterward. That is defense in depth,
+  not a leak the browser build ever had.
+
+  Reachable two ways. In `mode="auto"`, a Layer-3 model returning
+  `type="self_reference"` over a span containing real PII wins the priority merge and
+  is then dropped by the self-reference tier filter — the HTTP endpoint forwards a
+  client-supplied `mode`, so this is remotely selectable, but it needs a poisoned or
+  prompt-injected local model; a well-behaved model cannot trigger it. Separately, and
+  needing no model at all: whenever the merge absorbed one detected span into a
+  neighboring span of a different type — which happens in the shipped default
+  `mode="fast"` too, from ordinary overlapping detectors — a caller's own
+  `types=`/`types_exclude=` filter dropping the surviving type exposed the span it had
+  absorbed, so `redact(text, types=["phone"])` could return the phone in plaintext
+  with no model involved at all. The HTTP endpoint forwards `types`/`types_exclude`
+  from the request body too.
+
+  Both routes are closed by one rule instead of separate patches: the filters and a
+  new coverage check now share a single predicate, so any entity a filter still
+  admits, that the merged set covered and the filtered set no longer covers, is
+  re-admitted. A firing emits a PII-free `coverage_restored` security event (entity
+  types only, never values) and a `SecurityWarning`, on all four entry points. Two CI
+  gates back this: a structural one that fails if any merge-then-drop pipeline stops
+  calling the restorer, and a behavioural one that pins how often it fires.
+
+  **Callers using `types=`/`types_exclude=` will see more redaction than before** —
+  those were exactly the calls that had been leaking. Measured on the repository's own
+  zh document generator (200 documents, seed 7, `mode="fast"`): no filter and
+  `types=["phone"]` both fire on 0% of samples; `types=["person"]` fires on 13.0%;
+  `types_exclude=["address"]` fires on 28.0%. Unfiltered output is unchanged — the fix
+  does not fire on ordinary, unfiltered input, checked against that corpus and a
+  second, independent set of hand-written scenarios — which is why this shipped
+  without a benchmark rebaseline. It is not unchanged for type-filtered calls; those
+  numbers are the fix working, not a regression.
+
+### Fixed
+
+- The performance-budget workload `restore_1kb` was timing a redaction plus a bare
+  `restore()` call, which has failed closed for want of an anchor since
+  guard-by-default in v0.8.0 — so it mostly measured the rejection (0.06ms of a
+  2.17ms local sample), not a restore. It now redacts once outside the timer and
+  restores with the guard explicitly opted out; the baseline was re-pinned to the
+  corrected number (0.09ms, measured on the CI runner).
+- The release workflow's wheel-build matrix now fails independently per leg, so a
+  transient failure in one (a Docker Hub timeout during QEMU setup, in the case that
+  prompted this) no longer cancels the other, healthy builds.
+- Routine CI Action version bumps: `actions/checkout`, `actions/setup-python`,
+  `docker/setup-qemu-action`, `taiki-e/install-action`, `pypa/gh-action-pypi-publish`.
+
 ## v0.8.5 — correct the docs that drifted, delete dark code, make the CI gates bind
 
 A maintenance release. No API change and no behaviour change in the library itself:
