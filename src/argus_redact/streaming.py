@@ -29,6 +29,7 @@ from argus_redact.glue.redact_pseudonym_llm import (
     _check_input_pollution,
     redact_pseudonym_llm,
 )
+from argus_redact.pure.replacer import warn_coverage_restored
 from argus_redact.pure.restore import make_structured_restorer
 
 
@@ -322,6 +323,7 @@ class StreamingRedactor:
             _check_input_pollution(chunk, reserved_names=self._reserved_names)
 
         self._inc_buffer += chunk
+        _restored_types: list[str] = []
         cut, redetect, entities = _context_cut(
             self._inc_buffer,
             self._ctx_len,
@@ -332,7 +334,12 @@ class StreamingRedactor:
             types_exclude=self._types_exclude,
             max_buffer=DEFAULT_MAX_BUFFER,
             force_flush=False,
+            restored_types=_restored_types,
         )
+        # Warn regardless of the emit-or-hold branch below: the restoration
+        # already happened inside this round's _detect call (over the full
+        # buffer), even on a round that ends up holding everything back.
+        warn_coverage_restored(_restored_types)
         if cut <= self._ctx_len:
             return _empty_result()
 
@@ -364,6 +371,7 @@ class StreamingRedactor:
             self._inc_buffer = ""
             self._ctx_len = 0
             return _empty_result()
+        _restored_types: list[str] = []
         cut, _redetect, entities = _context_cut(
             self._inc_buffer,
             self._ctx_len,
@@ -374,7 +382,9 @@ class StreamingRedactor:
             types_exclude=self._types_exclude,
             max_buffer=DEFAULT_MAX_BUFFER,
             force_flush=True,
+            restored_types=_restored_types,
         )
+        warn_coverage_restored(_restored_types)
         # force_flush never sets redetect (it drains to len with full-buffer
         # context ≡ batch's view of the tail), so always range-shift.
         ctx = self._ctx_len  # snapshot before reset

@@ -14,6 +14,7 @@ from argus_redact.pure.lang_detect import detect_languages
 from argus_redact.pure.replacer import (
     make_structured_session,
     replace_into_session,
+    warn_coverage_restored,
     warn_mask_collisions,
 )
 from argus_redact.pure.restore import make_structured_restorer
@@ -40,6 +41,7 @@ def _redact_cell(
     mode: str,
     lang: str | list[str],
     config: dict | None,
+    restored_types: list[str] | None = None,
 ) -> tuple[str, list]:
     """Detect PII in one cell/leaf and redact it through the shared session.
 
@@ -47,6 +49,12 @@ def _redact_cell(
     ``redact()`` runs (glue ``_detect``); only the replace step is routed through
     the stateful session so the accumulation key + pseudonym generators stay in
     Rust across cells (O(N) over the document instead of O(N²)).
+
+    ``restored_types``, if given, is MUTATED in place (extended, not
+    replaced) with the PII-free type names of any entity the post-merge
+    coverage invariant had to re-admit for THIS cell — same out-param idiom
+    as ``_detect``. Callers accumulate across cells and warn once per
+    document, mirroring ``session.mask_collisions``.
     """
     cell_lang = detect_languages(text) if lang == "auto" else lang
     entities, langs, _timing, _stats = _detect(
@@ -56,6 +64,7 @@ def _redact_cell(
         names=None,
         types=None,
         types_exclude=None,
+        restored_types=restored_types,
     )
     redacted = replace_into_session(session, text, entities, config=config, langs=langs)
     return redacted, entities
@@ -127,6 +136,10 @@ def redact_json(
     # Entities accumulate across leaves ONLY to build the with_types map at the
     # end (fake → PII type). The key itself lives in the Rust session.
     all_entities: list = []
+    # Same accumulate-then-warn-once shape as mask_collisions below — the
+    # post-merge coverage invariant is evaluated per cell (_redact_cell), so
+    # this collects every cell's restored types for one document-level warning.
+    restored_types: list[str] = []
 
     def _walk(obj: Any, current_path: list[str] | None = None) -> Any:
         if current_path is None:
@@ -136,7 +149,7 @@ def redact_json(
             if parsed_paths is not None and not _path_matches(current_path, parsed_paths):
                 return obj
             redacted_text, entities = _redact_cell(
-                session, obj, mode=mode, lang=lang, config=config
+                session, obj, mode=mode, lang=lang, config=config, restored_types=restored_types
             )
             if with_types:
                 all_entities.extend(entities)
@@ -153,6 +166,7 @@ def redact_json(
     # column of similarly-masked values (e.g. phone numbers) is exactly the
     # highest collision-risk shape this path exists to redact.
     warn_mask_collisions(list(session.mask_collisions))
+    warn_coverage_restored(restored_types)
     combined_key = session.into_key()
     if with_types:
         # Same fake → type map as redact(with_types=True), built once over all
@@ -244,6 +258,8 @@ def redact_csv(
     session = make_structured_session(salt=salt, config=config)
     output_rows: list[list[str]] = []
     data_rows = rows
+    # Same accumulate-then-warn-once shape as mask_collisions below.
+    restored_types: list[str] = []
 
     if has_header:
         output_rows.append(rows[0])  # preserve header verbatim
@@ -261,7 +277,7 @@ def redact_csv(
         redacted_row = []
         for cell in row:
             redacted_cell, _entities = _redact_cell(
-                session, cell, mode=mode, lang=lang, config=config
+                session, cell, mode=mode, lang=lang, config=config, restored_types=restored_types
             )
             redacted_row.append(redacted_cell)
         output_rows.append(redacted_row)
@@ -271,6 +287,7 @@ def redact_csv(
     # column of similarly-masked values (e.g. phone numbers) is exactly the
     # highest collision-risk shape this path exists to redact.
     warn_mask_collisions(list(session.mask_collisions))
+    warn_coverage_restored(restored_types)
     return _serialize_csv_rows(output_rows), session.into_key()
 
 

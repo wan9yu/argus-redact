@@ -41,6 +41,19 @@ def restore_lost_coverage(
     """
     if not pre_merge:
         return filtered, []
+    # Fast path: with no type filter and no self_reference entity anywhere in
+    # pre_merge, neither `_apply_type_filter` nor `filter_self_reference` could
+    # have dropped anything (the former is an identity transform when both
+    # `types` and `types_exclude` are None; the latter only ever drops entities
+    # typed exactly "self_reference", and merge never invents that type on an
+    # entity that wasn't already present pre-merge) — `filtered` already equals
+    # `merged`, so skip the PatternMatch round-trip into Rust entirely.
+    if (
+        types is None
+        and types_exclude is None
+        and not any(e.type == "self_reference" for e in pre_merge)
+    ):
+        return filtered, []
     drop_self_reference = hints is not None and _get_self_reference_tier(hints) != 1
     out, restored = _core.restore_lost_coverage(
         [_RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in pre_merge],

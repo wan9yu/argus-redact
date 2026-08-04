@@ -183,17 +183,22 @@ def warn_coverage_restored(restored_types: list[str]) -> None:
 
     This exists because the structured event is assembled only inside
     ``if report or detailed:``; the warning is what reaches the default 2-tuple
-    caller. A firing means a post-merge filter tried to remove PII coverage,
-    which does not happen on ordinary input — treat it as a real signal, not
-    noise. See ``coverage_restored_event`` for the sibling structured channel.
+    caller. A firing means the merge absorbed one entity into another (an
+    overlapping span won and the loser's bytes were folded into it), and a
+    later filter — a type filter or the self-reference tier — then dropped
+    that winning span; the invariant re-admitted the entities it had absorbed
+    so they stay redacted. Expected on type-filtered calls (``types=``/
+    ``types_exclude=`` legitimately excluding a winner that had absorbed
+    something else during merge); rare on an unfiltered call. See
+    ``coverage_restored_event`` for the sibling structured channel.
     """
     if not restored_types:
         return
     types = ", ".join(sorted(set(restored_types)))
     warnings.warn(
         f"{len(restored_types)} entity/entities ({types}) lost redaction coverage "
-        f"to a post-merge filter and were re-admitted; the output is redacted, "
-        f"but the filter configuration produced a result it did not intend.",
+        f"when a filter removed a span that had absorbed them during the merge; "
+        f"they were re-admitted and remain redacted in the output.",
         SecurityWarning,
         stacklevel=2,
     )

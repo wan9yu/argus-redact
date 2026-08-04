@@ -75,6 +75,7 @@ def _context_cut(
     types_exclude: list[str] | None,
     max_buffer: int = DEFAULT_MAX_BUFFER,
     force_flush: bool = False,
+    restored_types: list[str] | None = None,
 ) -> tuple[int, bool, list[PatternMatch]]:
     """Detect once over the full buffer and pick the detection-context emit cut.
 
@@ -100,6 +101,12 @@ def _context_cut(
     range: one detection pass per round drives both the cut decision AND the
     redaction (no re-detect of the bare emit slice — except on the ``redetect``
     drain path).
+
+    ``restored_types``, if given, is MUTATED in place with the PII-free type
+    names of any entity the post-merge coverage invariant had to re-admit
+    during this round's ``_detect`` call — same out-param idiom as ``_detect``
+    itself. The caller (``StreamingRedactor``) is responsible for warning; this
+    function only forwards.
     """
     # Raise the max_buffer ceiling while any PEM private-key BEGIN is present
     # (opened or closed) so a complete key larger than DEFAULT_MAX_BUFFER is
@@ -128,6 +135,7 @@ def _context_cut(
         names=names,
         types=types,
         types_exclude=types_exclude,
+        restored_types=restored_types,
     )
     spans = [(e.start, e.end, e.type) for e in entities]
     # An in-flight PEM private key (BEGIN seen, END not yet) is not a detected
