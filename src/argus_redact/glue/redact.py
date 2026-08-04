@@ -933,8 +933,28 @@ def redact(
                 risk_entities.append({"type": t, "sensitivity": sens_cache[t]})
             risk = assess_risk(risk_entities, lang=lang if isinstance(lang, str) else lang[0])
 
-            _uncovered, _narrow = coverage_for(langs[0] if langs else "zh", mode)
-            _coverage = CoverageAdvisory(uncovered=_uncovered, narrow=_narrow)
+            # `None` on the `_pre_detected` path: the caller supplied its own
+            # entities and argus ran no detection at all, so a (lang, mode)
+            # capability claim would assert that this configuration looked
+            # for — and didn't find — every category the table lists as
+            # uncovered/narrow, when in truth argus never looked at all. Only
+            # build the advisory when detection actually ran through this
+            # configuration.
+            if _pre_detected is not None:
+                _coverage = None
+            else:
+                # `langs[0]`, not a proper union, when several language packs
+                # ran: this only ever OVER-warns, never under-warns.
+                # `coverage_for` reports what `langs[0]` alone cannot find —
+                # it never credits coverage another active pack might supply,
+                # so the reported uncovered/narrow sets are a
+                # superset-or-equal of the true per-call union. Picking the
+                # "wrong" first language can only make the advisory too
+                # pessimistic, never falsely reassuring — the safe direction
+                # for a field whose entire purpose is not overstating
+                # coverage.
+                _uncovered, _narrow = coverage_for(langs[0] if langs else "zh", mode)
+                _coverage = CoverageAdvisory(uncovered=_uncovered, narrow=_narrow)
             # From the entities' own layer, NOT from layer_stats: the
             # _pre_detected branch above hardcodes layer_stats to
             # all-zero/skipped even when entities were really detected, while

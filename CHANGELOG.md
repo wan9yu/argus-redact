@@ -23,26 +23,39 @@ configuration had no detector for what was in it.
   never inspects the text and makes no claim about this document. That distinction is
   why the type is named `CoverageAdvisory`, not `ResidualAdvisory` — "residual" would
   imply a finding about what survived this input, and that is not what this field
-  measures. See `docs/security-model.md`'s "`RedactReport.coverage` and
+  measures. `coverage` is `None` on the `_pre_detected` path: the caller supplied its
+  own entities there and argus ran no detection at all, so a `(lang, mode)` capability
+  claim would falsely imply argus looked for — and missed — categories it never looked
+  for in the first place. See `docs/security-model.md`'s "`RedactReport.coverage` and
   `.layers_used`" section.
 - **The measured capability table** (`src/argus_redact/pure/coverage_table.py`),
   hand-authored and pinned cell-by-cell to live `redact()` probes rather than to a
   reading of detector source or a projection of the type registry — an earlier draft
   tried deriving from the registry and was wrong in both directions (see the module
-  docstring). Read plainly, because softening it would defeat the reason it exists:
-  only `age` is fully covered (`have`) in **all four** measured configurations (zh/en
-  × fast/ner). English has no detector at all for `occupation`,
-  `education`, `relationship_status`, or `income`, at either mode. English `sex` is
-  `narrow`, not `have`: it matches the labelled form (`"Gender: female."`) but not
-  prose (`"She is a woman."`) — and the project's own English re-identification
-  fixture (`tests/benchmark/fixtures/reid_profiles_en.json`) states sex as prose
-  ("I'm a woman"), so its own reference profiles fall on the missed side of that line.
-  `mode="ner"` adds `location` and `place_of_birth` coverage in both languages (a
-  generic Layer-2 location entity fires on any recognized place name, birth-specific
-  phrasing or not), but does not touch the four English zeroes above — those detectors
-  don't exist at any mode. `mode="auto"` reads the `ner` row rather than getting a
-  column of its own, so it never claims a Layer-3 coverage improvement a deployment
-  without a served model does not actually have.
+  docstring). Read plainly, because softening it would defeat the reason it exists,
+  and read `have` precisely: it means the one pinned probe for that cell fired under
+  its exact phrasing, not that every phrasing of the category is caught. `age` looked
+  like an exception to the rest of the table in an earlier draft — `have` in all four
+  measured configurations (zh/en × fast/ner) — until a live probe found the same
+  hit/miss asymmetry that already made `sex` `narrow`: a labelled or reformatted age
+  (`"Age: 42"`; a Chinese-numeral or `周岁`-suffixed age) is left untouched everywhere,
+  so `age` is `narrow`, not `have`, in every measured row. English has no detector at
+  all for `occupation`, `education`, `relationship_status`, or `income`, at either
+  mode. English `sex` is `narrow`, not `have`: it matches the labelled form
+  (`"Gender: female."`) but not prose (`"She is a woman."`) — and the project's own
+  English re-identification fixture (`tests/benchmark/fixtures/reid_profiles_en.json`)
+  states sex as prose ("I'm a woman"), so its own reference profiles fall on the missed
+  side of that line. `mode="ner"` adds English `location` (uncovered at fast) and
+  strengthens `place_of_birth` in both languages via a generic Layer-2 location entity
+  that fires when a separator follows a place name — but not identically: it covers
+  English `place_of_birth` fully (`have`, no documented miss), while for Chinese it
+  still misses the bare `X籍` construction (`籍贯` fixtures spell it, e.g. `湖南籍`), so
+  Chinese `place_of_birth` at ner is `narrow`, not `have`. Chinese `location` was
+  already `have` at `fast`, so ner does not "add" it there. None of this touches the
+  four English zeroes above — those detectors don't exist at any mode. `mode="auto"`
+  reads the `ner` row rather than getting a column of its own, so it never claims a
+  Layer-3 coverage improvement a deployment without a served model does not actually
+  have.
 - **`RedactReport.layers_used: tuple[int, ...]`** — which detection layers contributed
   a surviving entity to *this* call, derived from the entities' own `.layer` rather
   than from `stats` (which is hardcoded to all-zero on the `_pre_detected` path even

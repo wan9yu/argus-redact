@@ -394,17 +394,34 @@ That distinction is why the dataclass is named `CoverageAdvisory` and not
 `ResidualAdvisory` — "residual" would imply a finding about what survived
 this specific input, and that is not what this field measures.
 
+`report.coverage` is `None` when the call went through `_pre_detected` (a
+caller supplying its own already-detected entities, as the Presidio bridge
+does internally) — argus ran no detection pass in that case, so a
+`(lang, mode)` capability claim would falsely say this configuration looked
+for a category and missed it, when in truth nothing was looked for at all.
+
 The measured table (`src/argus_redact/pure/coverage_table.py`) is blunter than
 you might expect, on purpose — softening it would defeat the reason it exists.
-At `mode="fast"`, only `age` is fully covered (`have`) in both languages.
-English has **no detector at all** for `occupation`, `education`,
-`relationship_status`, or `income`. English `sex` is `narrow`, not `have`: it
-matches the labelled form (`"Gender: female."`) but not prose (`"She is a
+Read `have` precisely, too: it means the one probe pinned for that cell fired
+under its exact phrasing, not that every phrasing of the category is caught.
+`age` is a `have`-shaped cell that turned out not to be one: at `mode="fast"`
+it fires on full prose ("... years old") but misses a labelled or reformatted
+age ("Age: 42"; a Chinese-numeral or `周岁`-suffixed age) in both languages —
+the same hit/miss shape that already makes `sex` `narrow` — so `age` is
+`narrow`, not `have`, at every measured configuration. English has **no
+detector at all** for `occupation`, `education`, `relationship_status`, or
+`income`. English `sex` is `narrow`, not `have`: it matches the labelled form
+(`"Gender: female."`) but not prose (`"She is a
 woman."`) — and the project's own English re-identification fixture states sex
 as prose ("I'm a woman"), so its own reference profiles fall on the missed
-side of that line. `mode="ner"` adds `location` and `place_of_birth` coverage
-in both languages (a generic Layer-2 location entity fires on any recognized
-place name, birth-specific phrasing or not), but does not touch the English
+side of that line. `mode="ner"` adds English `location` (uncovered at fast)
+and strengthens `place_of_birth` in both languages via a generic Layer-2
+location entity that fires when a separator follows a place name — but not
+identically: English `place_of_birth` becomes fully `have` (no documented
+miss), while Chinese `place_of_birth` stays `narrow`, because the same entity
+still misses the bare `X籍` construction (`籍贯` fixtures spell it, e.g.
+`湖南籍`). Chinese `location` was already `have` at `fast`, so `ner` does not
+add it there — only English gains it. None of this touches the English
 `occupation` / `education` / `relationship_status` / `income` zeroes — those
 detectors don't exist at any mode. `mode="auto"` reads the `ner` row rather
 than getting a column of its own, because it would otherwise claim a Layer-3

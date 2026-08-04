@@ -9,8 +9,7 @@ import json
 
 import pytest
 
-from argus_redact import redact
-from argus_redact._types import CoverageAdvisory
+from argus_redact import CoverageAdvisory, redact
 
 
 def test_report_carries_a_coverage_advisory():
@@ -72,6 +71,26 @@ def test_layers_used_is_honest_on_the_pre_detected_path():
     )
     assert report.stats["layer_1"] == 0  # the lie this path tells
     assert report.layers_used == (1, 2)  # the truth, from the entities
+
+
+def test_coverage_is_none_on_the_pre_detected_path():
+    """`coverage` is built from `(lang, mode)` alone — a claim about what an
+    argus *detection pass* over this configuration could not have found. On
+    the `_pre_detected` path argus runs no detection at all: the caller
+    supplied its own entities. Before this test, `coverage_for(lang, mode)`
+    ran unconditionally here, so a caller passing `_pre_detected=` got back a
+    populated `uncovered`/`narrow` — implicitly asserting that categories like
+    age/sex/location/occupation were looked for and missed, when in truth
+    nothing was looked for. `None` is the honest value: 'no
+    configuration-derived claim applies, because this call's detection did
+    not come from argus'."""
+    from argus_redact._types import PatternMatch
+
+    pre = [PatternMatch(text="13800138000", type="phone", start=3, end=14, confidence=1.0)]
+    report = redact(
+        "手机是13800138000", lang="zh", mode="fast", salt=42, report=True, _pre_detected=pre
+    )
+    assert report.coverage is None
 
 
 def test_layers_used_keeps_layer_zero_for_an_untagged_pre_detected_entity():

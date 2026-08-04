@@ -6,7 +6,7 @@ from argus_redact._metadata import (
     HIPAA_PHI_CATEGORIES,
     PIPL_REFERENCES,
 )
-from argus_redact._types import PseudonymLLMResult, RedactReport
+from argus_redact._types import CoverageAdvisory, PseudonymLLMResult, RedactReport
 from argus_redact.compose.anchor import Anchor, make_anchor
 from argus_redact.compose.audit import AuditEntry, AuditLedger, collect_security_events
 from argus_redact.exceptions import LayerUnavailableError, SecurityWarning, SessionStateError
@@ -55,6 +55,7 @@ __all__ = [
     # ─── Type aliases ───
     "PseudonymLLMResult",
     "RedactReport",
+    "CoverageAdvisory",
     # ─── Internal SSOT modules ───
     "layers",
     # ─── Version ───

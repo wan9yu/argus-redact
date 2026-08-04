@@ -26,9 +26,12 @@ from argus_redact import redact
 from argus_redact.pure.coverage_table import CATEGORIES, coverage_for
 
 # (category, lang, probe_text) — the probe MUST be redacted at fast mode.
+# `age` is NOT here — see `_NARROW_FAST`: it hits this exact digit+cue form but
+# misses a Chinese-numeral or `了`-suffixed age, so it is pinned as NARROW
+# (both edges), not HAVE (one edge only). Coverage_table.py's module docstring
+# explains why a `have` cell with a known, reproducible miss is a bug, not a
+# nuance.
 _HAVE_FAST = [
-    ("age", "zh", "受访者今年28岁。"),
-    ("age", "en", "The subject is 28 years old."),
     ("sex", "zh", "性别：男。"),
     ("location", "zh", "现居上海市浦东新区。"),
     ("occupation", "zh", "职业是后端工程师。"),
@@ -48,6 +51,8 @@ _NONE_FAST = [
 
 # (category, lang, hit_probe, miss_probe) — NARROW means BOTH must hold.
 _NARROW_FAST = [
+    ("age", "zh", "受访者今年28岁。", "我今年三十五岁了。"),
+    ("age", "en", "The subject is 28 years old.", "Age: 42."),
     ("sex", "en", "Gender: female.", "She is a woman."),
     ("income", "zh", "月薪2万元。", "月入三四万。"),
     ("place_of_birth", "zh", "籍贯江苏省。", "籍贯江苏。"),
@@ -56,12 +61,12 @@ _NARROW_FAST = [
 ]
 
 # (category, lang, probe_text) — the probe MUST be redacted at ner mode.
-# `occupation`/en, `medical_condition`/en, and `location`/zh are deliberately
-# absent: they are covered by the dedicated structural/flip tests below, which
-# also assert the fast-vs-ner contrast directly.
+# `age` is NOT here for the same reason as `_HAVE_FAST` above (see
+# `_NARROW_NER`). `occupation`/en and `medical_condition`/en are genuinely
+# absent — they are NONE at ner (see `_NONE_NER`) and covered by the dedicated
+# structural test below, which asserts the fast-vs-ner contrast directly.
+# `location`/zh IS one of the cells measured here, not absent from this list.
 _HAVE_NER = [
-    ("age", "zh", "受访者今年28岁。"),
-    ("age", "en", "The subject is 28 years old."),
     ("sex", "zh", "性别：男。"),
     ("location", "zh", "现居上海市浦东新区。"),
     ("occupation", "zh", "职业是后端工程师。"),
@@ -84,10 +89,19 @@ _NONE_NER = [
 
 # (category, lang, hit_probe, miss_probe) — NARROW means BOTH must hold, at ner.
 _NARROW_NER = [
+    ("age", "zh", "受访者今年28岁。", "我今年三十五岁了。"),
+    ("age", "en", "The subject is 28 years old.", "Age: 42."),
     ("income", "zh", "月薪2万元。", "月入三四万。"),
     ("sex", "en", "Gender: female.", "She is a woman."),
     ("medical_condition", "zh", "对花生过敏。", "腰椎间盘突出。"),
     ("medical_condition", "en", "Has asthma.", "Has migraines."),
+    # `place_of_birth`/zh is NOT `have` at ner despite the location entity
+    # firing here: it fires when a separator follows the place name but
+    # misses the bare `X籍` construction this project's own re-id fixtures use
+    # to spell place_of_birth (`江苏籍`, `湖南籍`) — see
+    # `test_place_of_birth_is_covered_only_at_ner` and coverage_table.py's
+    # module docstring.
+    ("place_of_birth", "zh", "籍贯江苏。", "湖南籍。"),
 ]
 
 
@@ -226,13 +240,17 @@ def test_english_location_is_covered_only_at_ner():
 
 @pytest.mark.ner
 def test_place_of_birth_is_covered_only_at_ner():
-    """The second cell that flips by mode, in both languages at once. At fast,
-    coverage is asymmetric and cue-shaped (zh needs the full administrative
-    name; en has no signal at all). At ner a generic layer-2 location entity
-    fires on any recognized place name regardless of birth-specific phrasing,
-    which erases the fast-mode distinction entirely: both languages become
-    fully covered. The probes here are exactly the fast-mode MISS probes,
-    reused to demonstrate the flip directly."""
+    """The second cell that flips by mode, in both languages, but NOT to the
+    same classification. At fast, coverage is asymmetric and cue-shaped (zh
+    needs the full administrative name; en has no signal at all). At ner a
+    generic layer-2 location entity fires when a separator follows the place
+    name, which is enough to fully cover English (no documented miss) but
+    only enough to make zh `narrow`: the same entity misses the bare `X籍`
+    construction (pinned as the miss probe in `_NARROW_NER`) that this
+    project's own re-id fixtures use to spell place_of_birth. The zh probe
+    here is exactly the fast-mode MISS probe, reused to demonstrate the flip
+    from `narrow`-at-fast to `narrow`-at-ner-for-a-different-reason; the en
+    probe flips from `none` to `have`."""
     zh_probe = "籍贯江苏。"
     en_probe = "Born in Ohio."
     assert _redacted(zh_probe, "zh", mode="fast") == zh_probe
@@ -248,9 +266,9 @@ def test_place_of_birth_is_covered_only_at_ner():
     assert "place_of_birth" in narrow_fast_zh
     assert "place_of_birth" in uncovered_fast_en
     assert "place_of_birth" not in uncovered_ner_zh
-    assert "place_of_birth" not in narrow_ner_zh
+    assert "place_of_birth" in narrow_ner_zh  # narrow at ner too — see _NARROW_NER
     assert "place_of_birth" not in uncovered_ner_en
-    assert "place_of_birth" not in narrow_ner_en
+    assert "place_of_birth" not in narrow_ner_en  # fully `have` at ner for en
 
 
 def test_coverage_for_unknown_language_returns_everything_sorted():

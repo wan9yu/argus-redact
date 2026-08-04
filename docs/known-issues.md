@@ -46,7 +46,7 @@
 - **Who is affected**: zh callers whose input states an occupation directly after `职业`
   with no separator (continuous prose using `是`/`为` rather than punctuation between the
   cue and the value).
-- **Why we won't fix here**: this release derives its capability table from live
+- **Why we won't fix**: this release derives its capability table from live
   `redact()` probes and is scoped to declaring current detector behaviour, not changing
   it — the capability table's own tests deliberately don't assert the exact captured text
   for this cell so the defect isn't locked in as intended behaviour by a test. Correcting
@@ -63,13 +63,15 @@
   ordinary sentence-initial verb as an `ORG` entity. `redact("Holds a master's degree.",
   lang='en', mode='ner')` returns `"O-… a master's degree."` — the word `Holds` is
   redacted as an organisation, while the actual education attribute (`master's degree`)
-  is left untouched. The same model tags a genuine institution correctly in the same
-  sentence position: `redact('Graduated from Stanford University.', lang='en',
-  mode='ner')` returns `'Graduated from O-….'` with entity text `Stanford University`.
+  is left untouched. The same model correctly tags a genuine institution as `ORG` even
+  when it opens the sentence: `redact('Stanford University is a research university.',
+  lang='en', mode='ner')` returns `'O-… is a research university.'` with entity text
+  `Stanford University` — so this is not a general sentence-initial-capitalization
+  problem, only a verb-vs-institution one.
 - **Who is affected**: English callers on `mode="ner"` / `"auto"` whose text opens with a
   capitalized verb that spaCy's small model associates with organisation-shaped context.
   `mode="fast"` never runs spaCy, so it is not affected by this failure mode.
-- **Why we won't fix here**: as above — this release's capability probing surfaced the
+- **Why we won't fix**: as above — this release's capability probing surfaced the
   defect but is scoped to declaring current behaviour, not changing it. A fix sits inside
   the Layer 2 English NER adapter and would need its own release with its own
   recall/precision measurement, on top of English `mode="ner"` already being documented
