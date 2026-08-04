@@ -62,8 +62,8 @@ _NARROW_FAST = [
 
 # (category, lang, probe_text) — the probe MUST be redacted at ner mode.
 # `age` is NOT here for the same reason as `_HAVE_FAST` above (see
-# `_NARROW_NER`). `occupation`/en and `medical_condition`/en are genuinely
-# absent — they are NONE at ner (see `_NONE_NER`) and covered by the dedicated
+# `_NARROW_NER`). `occupation`/en is NONE at ner (see `_NONE_NER`). `medical_condition`/en is
+# NARROW at ner (see `_NARROW_NER`). Both are absent from this list and covered by the dedicated
 # structural test below, which asserts the fast-vs-ner contrast directly.
 # `location`/zh IS one of the cells measured here, not absent from this list.
 _HAVE_NER = [
