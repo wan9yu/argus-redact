@@ -16,6 +16,7 @@ from argus_redact._types import PatternMatch
 from argus_redact.exceptions import LayerUnavailableError, SecurityWarning
 from argus_redact.lang._loader import core_patterns
 from argus_redact.layers import LAYER_NER, LAYER_SEMANTIC
+from argus_redact.pure.coverage import restore_lost_coverage
 from argus_redact.pure.grammar import normalize_grammar_en
 from argus_redact.pure.hints import (
     _apply_ablation,
@@ -27,7 +28,7 @@ from argus_redact.pure.hints import (
 from argus_redact.pure.lang_detect import detect_languages
 from argus_redact.pure.merger import merge_entities
 from argus_redact.pure.normalize import MAX_INPUT_SIZE
-from argus_redact.pure.replacer import replace
+from argus_redact.pure.replacer import coverage_restored_event, replace, warn_coverage_restored
 from argus_redact.telemetry import PerfRecord, emit, get_perf_hook
 
 logger = logging.getLogger(__name__)
@@ -392,6 +393,7 @@ def _detect(
     types: list[str] | None,
     types_exclude: list[str] | None,
     strict: bool = False,
+    restored_types: list[str] | None = None,
 ) -> tuple[list[PatternMatch], list[str], dict, dict]:
     """Run the full detection pipeline (L1 regex + L1b person + L2 NER + L3 LLM + merge).
 
@@ -400,6 +402,11 @@ def _detect(
         langs: resolved language list (after auto-detect)
         timing: numeric per-stage timings (ms) — values summed for total_ms
         layer_stats: counts/status per layer (for detailed/report output)
+
+    ``restored_types``, if given, is MUTATED in place with the PII-free type
+    names of any entity the post-merge coverage invariant had to re-admit. Same
+    out-param idiom as ``timing``, kept out of the 4-tuple return, which three
+    tests unpack positionally.
     """
     timing: dict[str, float] = {}
     entities: list[PatternMatch] = []
@@ -521,11 +528,28 @@ def _detect(
     entities = merge_entities(pre_merge, text=text)
     if os.environ.get("ARGUS_ABLATION_NO_BOOST") != "1":
         entities = boost_cross_layer(entities, pre_merge)
+    merged = entities
     entities = filter_self_reference(entities, hints)
     timing["merge_ms"] = (time.perf_counter() - t0) * 1000
 
     # Apply type filtering (shared with the _pre_detected branch of redact()).
     entities = _apply_type_filter(entities, types, types_exclude)
+
+    # Post-merge coverage invariant: both filters above drop entities by type,
+    # and a dropped entity may have absorbed a DIFFERENT real entity during the
+    # merge. Re-admit anything whose coverage they destroyed. See
+    # argus_redact.pure.coverage.
+    entities, _restored = restore_lost_coverage(
+        pre_merge,
+        merged,
+        entities,
+        types=types,
+        types_exclude=types_exclude,
+        hints=hints,
+        text=text,
+    )
+    if restored_types is not None:
+        restored_types.extend(_restored)
 
     layer_stats = {
         "layer1_count": layer1_count,
@@ -765,12 +789,23 @@ def redact(
     # _core.redact_l1 (detect_l1 → merge → filter → replace, all in Rust as a
     # single bundled call) is built, bound, and tested, but is NOT used by this
     # shim — it is the entry point reserved for the upcoming iOS C ABI.
+    _restored_types: list[str] = []
     if _pre_detected is not None:
         # Merge (dedupe overlapping spans, same as the internal _detect path)
         # then apply the same types/types_exclude filter — a pre-detected list
         # is caller-supplied and must not skip either guard.
-        entities = merge_entities(_pre_detected, text=text)
-        entities = _apply_type_filter(entities, types, types_exclude)
+        merged = merge_entities(_pre_detected, text=text)
+        entities = _apply_type_filter(merged, types, types_exclude)
+        entities, _restored = restore_lost_coverage(
+            _pre_detected,
+            merged,
+            entities,
+            types=types,
+            types_exclude=types_exclude,
+            hints=None,
+            text=text,
+        )
+        _restored_types.extend(_restored)
         langs = [lang] if isinstance(lang, str) else list(lang)
         timing: dict[str, float] = {}
         layer_stats = {
@@ -789,7 +824,10 @@ def redact(
             types=types,
             types_exclude=types_exclude,
             strict=strict,
+            restored_types=_restored_types,
         )
+
+    warn_coverage_restored(_restored_types)
 
     _security_events: list[dict] = []
     redacted, result_key, _aliases = _replace_and_emit(
@@ -851,6 +889,9 @@ def redact(
 
         _kd_event = keep_downgraded_event(entities, config)
         security_events = [_kd_event] if _kd_event else []
+        _cr_event = coverage_restored_event(_restored_types)
+        if _cr_event:
+            security_events.append(_cr_event)
         security_events.extend(_security_events)
 
         if report:
