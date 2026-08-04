@@ -26,6 +26,9 @@ use std::collections::{HashMap, HashSet};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 
+use argus_redact_core::coverage::{
+    restore_lost_coverage as core_restore_lost_coverage, FilterScope,
+};
 use argus_redact_core::hints::{
     filter_self_reference as core_filter_self_reference,
     get_person_threshold as core_get_person_threshold, produce_hints_l1 as core_produce_hints_l1,
@@ -309,4 +312,37 @@ pub fn filter_self_reference(
     let core_hints = hints_from_py(hints)?;
     let out = core_filter_self_reference(core_entities, &core_hints);
     Ok(out.into_iter().map(PyPatternMatch::from).collect())
+}
+
+/// Re-admit entities whose coverage a post-merge filter destroyed.
+///
+/// `merged_spans` is the `(start, end)` snapshot of the post-merge, pre-filter
+/// entity set — a span list rather than the entities themselves because the
+/// callers take it before the filters consume the merged vector.
+///
+/// Returns `(entities, restored_types)`; `restored_types` is sorted, deduplicated
+/// and PII-free (type names only).
+#[pyfunction]
+#[pyo3(signature = (pre_merge, merged_spans, filtered, types, types_exclude, drop_self_reference, text))]
+pub fn restore_lost_coverage(
+    pre_merge: Vec<PyPatternMatch>,
+    merged_spans: Vec<(usize, usize)>,
+    filtered: Vec<PyPatternMatch>,
+    types: Option<Vec<String>>,
+    types_exclude: Option<Vec<String>>,
+    drop_self_reference: bool,
+    text: &str,
+) -> PyResult<(Vec<PyPatternMatch>, Vec<String>)> {
+    let core_pre: Vec<CorePM> = pre_merge.iter().map(CorePM::from).collect();
+    let core_filtered: Vec<CorePM> = filtered.iter().map(CorePM::from).collect();
+    let keep: Option<HashSet<String>> = types.map(|v| v.into_iter().collect());
+    let drop: Option<HashSet<String>> = types_exclude.map(|v| v.into_iter().collect());
+    let scope = FilterScope {
+        types: keep.as_ref(),
+        types_exclude: drop.as_ref(),
+        drop_self_reference,
+    };
+    let (out, restored) =
+        core_restore_lost_coverage(&core_pre, &merged_spans, core_filtered, &scope, text);
+    Ok((out.into_iter().map(PyPatternMatch::from).collect(), restored))
 }

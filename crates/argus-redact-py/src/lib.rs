@@ -55,6 +55,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(redact_l1::produce_hints_l1, m)?)?;
     m.add_function(wrap_pyfunction!(redact_l1::get_person_threshold, m)?)?;
     m.add_function(wrap_pyfunction!(redact_l1::filter_self_reference, m)?)?;
+    m.add_function(wrap_pyfunction!(redact_l1::restore_lost_coverage, m)?)?;
     // ── streaming carry-window engine bindings ──
     m.add_function(wrap_pyfunction!(streaming::streaming_last_boundary_index, m)?)?;
     m.add_function(wrap_pyfunction!(streaming::streaming_restorer_split, m)?)?;
