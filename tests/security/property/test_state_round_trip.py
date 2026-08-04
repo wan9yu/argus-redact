@@ -26,8 +26,13 @@ from tests.security.property.conftest import PROPERTY_SETTINGS
 # test ("aggregate_key round-trips for *valid*, non-polluted input"). Filter
 # pathological inputs out at the strategy level rather than loosening the
 # assertion: the bit-equality assertion is the real contract we want to lock.
+#
+# Crucially: feed() validates EACH CHUNK independently (see
+# src/argus_redact/streaming.py:322-323), so the precondition must filter
+# per-chunk, not on the joined result. A joined string can hide reserved
+# values that are visible in individual chunks.
 def _is_unpolluted(chunks: list[str]) -> bool:
-    return not scan_for_pollution("".join(chunks))
+    return not any(scan_for_pollution(c) for c in chunks)
 
 
 @settings(parent=PROPERTY_SETTINGS, max_examples=50)
