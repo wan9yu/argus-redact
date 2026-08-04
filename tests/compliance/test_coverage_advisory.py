@@ -74,6 +74,26 @@ def test_layers_used_is_honest_on_the_pre_detected_path():
     assert report.layers_used == (1, 2)  # the truth, from the entities
 
 
+def test_layers_used_keeps_layer_zero_for_an_untagged_pre_detected_entity():
+    """`integrations/presidio.py:106-112` builds `PatternMatch` WITHOUT
+    `layer=`, so a caller feeding Presidio-bridged entities through
+    `_pre_detected` produces entities left at the dataclass default
+    `layer=0` — this is the live production case, not a hypothetical. If
+    `layers_used` filtered `layer == 0` out (e.g. `{e.layer for e in
+    entities if e.layer}`), that caller would get `layers_used == ()`,
+    indistinguishable from "nothing was found" — exactly the ambiguity this
+    field exists to remove. This test fails under that filtered mutation and
+    passes only when layer 0 is kept."""
+    from argus_redact._types import PatternMatch
+
+    pre = [PatternMatch(text="13800138000", type="phone", start=3, end=14, confidence=1.0)]
+    report = redact(
+        "手机是13800138000", lang="zh", mode="fast", salt=42, report=True, _pre_detected=pre
+    )
+    assert 0 in report.layers_used
+    assert report.layers_used == (0,)
+
+
 def test_stats_stays_json_serialisable():
     """`argus-redact assess` runs json.dumps over report.stats
     (cli/main.py:227-246). A dataclass or enum in there raises TypeError, so the

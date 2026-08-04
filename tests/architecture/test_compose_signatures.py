@@ -13,12 +13,21 @@ To regenerate after an intentional Layer 2 evolution:
     python -c "
     import inspect, dataclasses
     import argus_redact.compose as c
+    from argus_redact import RedactReport
     fns = ['prompt_anchor', 'expand_aliases', 'register_pii_type']
     for n in fns:
         print(repr(n), ':', repr(str(inspect.signature(getattr(c, n)))) + ',')
     print('PIITypeDef:', sorted(f.name for f in dataclasses.fields(c.PIITypeDef)))
     print('PatternMatch:', sorted(f.name for f in dataclasses.fields(c.PatternMatch)))
+    print('RedactReport:', sorted(f.name for f in dataclasses.fields(RedactReport)))
     "
+
+``RedactReport`` is imported from top-level ``argus_redact``, not ``c`` — it
+is a Layer 1 type (see ``tests/architecture/test_frozen_api.py``) that has
+never been re-exported through ``argus_redact.compose``; its field-set is
+pinned in this Layer-2 file only because it is consumed by the same
+best-effort-evolution SLA as ``PIITypeDef``/``PatternMatch``, not because it
+lives in ``compose``.
 """
 
 import dataclasses
