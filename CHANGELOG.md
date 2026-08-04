@@ -125,6 +125,14 @@ over every known `reason_code`) needs to know about:
 - Routine CI Action version bumps: `actions/checkout`, `actions/setup-python`,
   `docker/setup-qemu-action`, `taiki-e/install-action`, `pypa/gh-action-pypi-publish`.
 
+### Changed
+
+- **The `mcp` extra now requires mcp 2.x** (`mcp>=2.0,<3.0`, was `mcp>=1.0`). mcp 2.0
+  removed the `mcp.server.fastmcp` module and renamed `FastMCP` to `MCPServer`
+  (`mcp.server.MCPServer`); the MCP integration is migrated to the new class and
+  import path. Projects pinned to `mcp` 1.x should stay on argus-redact 0.8.5 until
+  they can upgrade.
+
 ## v0.8.5 — correct the docs that drifted, delete dark code, make the CI gates bind
 
 A maintenance release. No API change and no behaviour change in the library itself:

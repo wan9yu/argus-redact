@@ -19,23 +19,27 @@ class TestMCPServer:
 
         return mcp
 
-    def test_should_expose_redact_tool(self, mcp_app):
-        tool_names = [t.name for t in mcp_app._tool_manager.list_tools()]
+    @pytest.mark.asyncio
+    async def test_should_expose_redact_tool(self, mcp_app):
+        tool_names = [t.name for t in await mcp_app.list_tools()]
 
         assert "redact" in tool_names
 
-    def test_should_expose_restore_tool(self, mcp_app):
-        tool_names = [t.name for t in mcp_app._tool_manager.list_tools()]
+    @pytest.mark.asyncio
+    async def test_should_expose_restore_tool(self, mcp_app):
+        tool_names = [t.name for t in await mcp_app.list_tools()]
 
         assert "restore" in tool_names
 
-    def test_should_expose_info_tool(self, mcp_app):
-        tool_names = [t.name for t in mcp_app._tool_manager.list_tools()]
+    @pytest.mark.asyncio
+    async def test_should_expose_info_tool(self, mcp_app):
+        tool_names = [t.name for t in await mcp_app.list_tools()]
 
         assert "info" in tool_names
 
-    def test_should_expose_assess_tool(self, mcp_app):
-        tool_names = [t.name for t in mcp_app._tool_manager.list_tools()]
+    @pytest.mark.asyncio
+    async def test_should_expose_assess_tool(self, mcp_app):
+        tool_names = [t.name for t in await mcp_app.list_tools()]
 
         assert "assess" in tool_names
 
@@ -51,12 +55,12 @@ class TestMCPToolExecution:
 
     @pytest.mark.asyncio
     async def test_should_redact_and_return_key_token(self, mcp_app):
-        result = await mcp_app._tool_manager.call_tool(
+        result = await mcp_app.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
 
-        content = result if isinstance(result, str) else result[0].text
+        content = result.content[0].text
         data = json.loads(content)
         assert "redacted" in data
         assert "key_token" in data
@@ -64,11 +68,11 @@ class TestMCPToolExecution:
 
     @pytest.mark.asyncio
     async def test_should_restore_with_key_token(self, mcp_app):
-        result = await mcp_app._tool_manager.call_tool(
+        result = await mcp_app.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
-        content = result if isinstance(result, str) else result[0].text
+        content = result.content[0].text
         data = json.loads(content)
 
         # Guard-by-default restore requires the anchor nonce to appear in the text.
@@ -77,11 +81,11 @@ class TestMCPToolExecution:
         # text is equivalent to the LLM replying with the nonce-echo line.
         text_with_nonce = data["redacted"] + "\n" + data["anchor_prompt"]
 
-        result2 = await mcp_app._tool_manager.call_tool(
+        result2 = await mcp_app.call_tool(
             "restore",
             {"text": text_with_nonce, "key_token": data["key_token"]},
         )
-        content2 = result2 if isinstance(result2, str) else result2[0].text
+        content2 = result2.content[0].text
         restored = json.loads(content2)
 
         assert "13812345678" in restored["restored"]
@@ -93,9 +97,8 @@ class TestMCPToolExecution:
         # deterministic / grid-searchable across calls. An explicit int salt remains
         # a determinism override. Both must still redact the original.
         async def red(args):
-            r = await mcp_app._tool_manager.call_tool("redact", args)
-            c = r if isinstance(r, str) else r[0].text
-            return json.loads(c)
+            r = await mcp_app.call_tool("redact", args)
+            return json.loads(r.content[0].text)
 
         a = await red({"text": "我住在西湖区", "mode": "fast"})
         b = await red({"text": "我住在西湖区", "mode": "fast"})
@@ -115,12 +118,12 @@ class TestMCPToolExecution:
         # the actual detection count (non-vacuous: would fail if assess broke or
         # stats["total"] silently returned 0 instead of raising on a missing key).
         text = "联系电话：13812345678"
-        result = await mcp_app._tool_manager.call_tool(
+        result = await mcp_app.call_tool(
             "assess",
             {"text": text, "mode": "fast"},
         )
 
-        content = result if isinstance(result, str) else result[0].text
+        content = result.content[0].text
         data = json.loads(content)
 
         assert "entities_found" in data
@@ -138,9 +141,9 @@ class TestMCPToolExecution:
 
     @pytest.mark.asyncio
     async def test_should_return_info(self, mcp_app):
-        result = await mcp_app._tool_manager.call_tool("info", {})
+        result = await mcp_app.call_tool("info", {})
 
-        content = result if isinstance(result, str) else result[0].text
+        content = result.content[0].text
         assert "argus-redact" in content or "version" in content
 
     @pytest.mark.asyncio
@@ -149,12 +152,12 @@ class TestMCPToolExecution:
         string segment in the split list, which _load_patterns/_validate_langs
         rejected as an unknown language code. The empty segment must be
         filtered out."""
-        result = await mcp_app._tool_manager.call_tool(
+        result = await mcp_app.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "lang": "zh,", "salt": 42},
         )
 
-        content = result if isinstance(result, str) else result[0].text
+        content = result.content[0].text
         data = json.loads(content)
         assert "13812345678" not in data["redacted"]
 
@@ -162,23 +165,23 @@ class TestMCPToolExecution:
     async def test_redact_multi_lang_csv_still_works(self, mcp_app):
         """Positive control: a genuine multi-lang CSV (no empty segment)
         still works after the fix."""
-        result = await mcp_app._tool_manager.call_tool(
+        result = await mcp_app.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "lang": "zh,en", "salt": 42},
         )
 
-        content = result if isinstance(result, str) else result[0].text
+        content = result.content[0].text
         data = json.loads(content)
         assert "13812345678" not in data["redacted"]
 
     @pytest.mark.asyncio
     async def test_assess_trailing_comma_lang_does_not_crash(self, mcp_app):
         """F6 — same empty-segment fix applies to the assess tool's lang split."""
-        result = await mcp_app._tool_manager.call_tool(
+        result = await mcp_app.call_tool(
             "assess",
             {"text": "联系电话：13812345678", "mode": "fast", "lang": "zh,"},
         )
 
-        content = result if isinstance(result, str) else result[0].text
+        content = result.content[0].text
         data = json.loads(content)
         assert data["entities_found"] > 0

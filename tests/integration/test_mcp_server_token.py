@@ -35,12 +35,11 @@ def mcp_app():
 class TestRedactToolReturnsOnlyToken:
     @pytest.mark.asyncio
     async def test_should_return_key_token(self, mcp_app):
-        result = await mcp_app._tool_manager.call_tool(
+        result = await mcp_app.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
-        content = result if isinstance(result, str) else result[0].text
-        data = json.loads(content)
+        data = json.loads(result.content[0].text)
         assert "redacted" in data
         assert "key_token" in data, "key_token is the v0.5.4+ secure path"
         assert isinstance(data["key_token"], str) and len(data["key_token"]) > 10
@@ -48,12 +47,11 @@ class TestRedactToolReturnsOnlyToken:
     @pytest.mark.asyncio
     async def test_redact_response_no_longer_has_key_field(self, mcp_app):
         # Regression guard: the deprecated raw `key` field was removed in v0.5.5.
-        result = await mcp_app._tool_manager.call_tool(
+        result = await mcp_app.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
-        content = result if isinstance(result, str) else result[0].text
-        data = json.loads(content)
+        data = json.loads(result.content[0].text)
         assert "key" not in data, (
             "raw `key` was removed in v0.5.5 (deprecated v0.5.4); callers must use key_token"
         )
@@ -61,12 +59,11 @@ class TestRedactToolReturnsOnlyToken:
     @pytest.mark.asyncio
     async def test_should_return_anchor_prompt(self, mcp_app):
         """redact tool returns anchor_prompt with nonce for LLM injection."""
-        result = await mcp_app._tool_manager.call_tool(
+        result = await mcp_app.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
-        content = result if isinstance(result, str) else result[0].text
-        data = json.loads(content)
+        data = json.loads(result.content[0].text)
         assert "anchor_prompt" in data
         # anchor_prompt is non-empty when PII was detected
         assert isinstance(data["anchor_prompt"], str)
@@ -77,11 +74,11 @@ class TestRestoreToolViaToken:
     @pytest.mark.asyncio
     async def test_should_round_trip_via_key_token_with_nonce(self, mcp_app):
         """Round-trip succeeds when the LLM response echoes the nonce."""
-        result = await mcp_app._tool_manager.call_tool(
+        result = await mcp_app.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
-        data = json.loads(result if isinstance(result, str) else result[0].text)
+        data = json.loads(result.content[0].text)
 
         # Simulate LLM echoing the nonce (extracted from anchor_prompt)
         from argus_redact.integrations.mcp_server import _TOKEN_STORE
@@ -90,28 +87,28 @@ class TestRestoreToolViaToken:
         _key, anchor, _redacted, _ts = _TOKEN_STORE[token]
         simulated_llm_response = data["redacted"] + f"\n{anchor.nonce}"
 
-        result2 = await mcp_app._tool_manager.call_tool(
+        result2 = await mcp_app.call_tool(
             "restore",
             {"text": simulated_llm_response, "key_token": data["key_token"]},
         )
-        restored = json.loads(result2 if isinstance(result2, str) else result2[0].text)
+        restored = json.loads(result2.content[0].text)
         assert "13812345678" in restored["restored"]
 
     @pytest.mark.asyncio
     async def test_should_fail_closed_when_nonce_absent(self, mcp_app):
         """Restore fail-closes (does not leak originals) when nonce is absent."""
-        result = await mcp_app._tool_manager.call_tool(
+        result = await mcp_app.call_tool(
             "redact",
             {"text": "电话13812345678", "mode": "fast", "salt": 42},
         )
-        data = json.loads(result if isinstance(result, str) else result[0].text)
+        data = json.loads(result.content[0].text)
 
         # Response does NOT contain the nonce (no LLM echo)
-        result2 = await mcp_app._tool_manager.call_tool(
+        result2 = await mcp_app.call_tool(
             "restore",
             {"text": data["redacted"], "key_token": data["key_token"]},
         )
-        restored = json.loads(result2 if isinstance(result2, str) else result2[0].text)
+        restored = json.loads(result2.content[0].text)
         # Originals must not leak
         assert "13812345678" not in restored["restored"]
         # Security events are surfaced
@@ -121,7 +118,7 @@ class TestRestoreToolViaToken:
     @pytest.mark.asyncio
     async def test_should_raise_when_token_unknown(self, mcp_app):
         with pytest.raises(Exception) as exc:
-            await mcp_app._tool_manager.call_tool(
+            await mcp_app.call_tool(
                 "restore",
                 {"text": "x", "key_token": "this-token-does-not-exist"},
             )
@@ -130,7 +127,7 @@ class TestRestoreToolViaToken:
     @pytest.mark.asyncio
     async def test_should_raise_when_no_token(self, mcp_app):
         with pytest.raises(Exception) as exc:
-            await mcp_app._tool_manager.call_tool("restore", {"text": "x"})
+            await mcp_app.call_tool("restore", {"text": "x"})
         assert "key_token" in str(exc.value).lower() or "token" in str(exc.value).lower()
 
 
@@ -139,11 +136,11 @@ class TestTokenStoreLifecycle:
     async def test_token_persists_within_process(self, mcp_app):
         from argus_redact.integrations.mcp_server import _TOKEN_STORE
 
-        result = await mcp_app._tool_manager.call_tool(
+        result = await mcp_app.call_tool(
             "redact",
             {"text": "phone 13812345678", "mode": "fast", "salt": 42},
         )
-        data = json.loads(result if isinstance(result, str) else result[0].text)
+        data = json.loads(result.content[0].text)
         assert data["key_token"] in _TOKEN_STORE
 
 
