@@ -17,6 +17,7 @@ from argus_redact.glue.redact_pseudonym_llm import (
     redact_pseudonym_llm,
 )
 from argus_redact.glue.restore import restore
+from argus_redact.pure.coverage_table import coverage_for_langs
 from argus_redact.pure.pseudonym import max_pseudonym_length
 from argus_redact.pure.replacer import is_strategy_reversible
 from argus_redact.pure.restore import RestoreGuardError, check_restore_safety, wipe_key
@@ -56,6 +57,11 @@ __all__ = [
     "PseudonymLLMResult",
     "RedactReport",
     "CoverageAdvisory",
+    # ─── Coverage advisory helper (v0.8.7) — same precedent as assess_risk/
+    # check_restore_safety: a caller on the `_pre_detected` path built their
+    # own detection and has no other supported way to ask what a (lang, mode)
+    # configuration could not have found. ───
+    "coverage_for_langs",
     # ─── Internal SSOT modules ───
     "layers",
     # ─── Version ───

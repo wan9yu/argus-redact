@@ -23,7 +23,7 @@ no `ner` marker even when they pass the string `"ner"` as an argument.
 import pytest
 
 from argus_redact import redact
-from argus_redact.pure.coverage_table import CATEGORIES, coverage_for
+from argus_redact.pure.coverage_table import _TABLE, CATEGORIES, coverage_for
 
 # (category, lang, probe_text) — the probe MUST be redacted at fast mode.
 # `age` is NOT here — see `_NARROW_FAST`: it hits this exact digit+cue form but
@@ -108,81 +108,60 @@ def _redacted(text: str, lang: str, mode: str = "fast") -> str:
     return out
 
 
-@pytest.mark.parametrize(("category", "lang", "probe"), _HAVE_FAST)
-def test_have_cells_actually_detect(category, lang, probe):
+@pytest.mark.parametrize(
+    ("category", "lang", "probe", "mode"),
+    [pytest.param(c, lg, p, "fast") for c, lg, p in _HAVE_FAST]
+    + [pytest.param(c, lg, p, "ner", marks=pytest.mark.ner) for c, lg, p in _HAVE_NER],
+)
+def test_have_cells_actually_detect(category, lang, probe, mode):
     """A HAVE cell must change the text. Note this asserts CHANGE, not an exact
     output: zh `occupation` over-captures its cue word (`职业是后端工程师。` ->
     `职TITLE-…。`, entity text `业是后端工程师`), a real defect recorded in
     docs/known-issues.md. Asserting an exact string here would lock that defect
-    in as expected behaviour."""
+    in as expected behaviour.
+
+    Covers both fast (`_HAVE_FAST`) and ner (`_HAVE_NER`) rows in one body —
+    a cell that is HAVE at fast is not guaranteed to stay HAVE at ner by
+    construction, so the ner rows are re-probed here rather than assumed."""
     assert category in CATEGORIES
-    assert _redacted(probe, lang) != probe, (
-        f"table says {category}/{lang}/fast is HAVE, but the probe came back "
+    assert _redacted(probe, lang, mode=mode) != probe, (
+        f"table says {category}/{lang}/{mode} is HAVE, but the probe came back "
         f"unchanged — the detector is gone and the table now lies"
     )
 
 
-@pytest.mark.parametrize(("category", "lang", "probe"), _NONE_FAST)
-def test_none_cells_really_detect_nothing(category, lang, probe):
-    assert _redacted(probe, lang) == probe, (
-        f"table says {category}/{lang}/fast is NONE, but the probe WAS "
+@pytest.mark.parametrize(
+    ("category", "lang", "probe", "mode"),
+    [pytest.param(c, lg, p, "fast") for c, lg, p in _NONE_FAST]
+    + [pytest.param(c, lg, p, "ner", marks=pytest.mark.ner) for c, lg, p in _NONE_NER],
+)
+def test_none_cells_really_detect_nothing(category, lang, probe, mode):
+    """Covers both fast (`_NONE_FAST`) and ner (`_NONE_NER`) rows in one body."""
+    assert _redacted(probe, lang, mode=mode) == probe, (
+        f"table says {category}/{lang}/{mode} is NONE, but the probe WAS "
         f"redacted — coverage improved and the table now understates it"
     )
-    uncovered, _narrow = coverage_for(lang, "fast")
+    uncovered, _narrow = coverage_for(lang, mode)
     assert category in uncovered
 
 
-@pytest.mark.parametrize(("category", "lang", "hit", "miss"), _NARROW_FAST)
-def test_narrow_cells_hit_one_form_and_miss_another(category, lang, hit, miss):
+@pytest.mark.parametrize(
+    ("category", "lang", "hit", "miss", "mode"),
+    [pytest.param(c, lg, h, m, "fast") for c, lg, h, m in _NARROW_FAST]
+    + [pytest.param(c, lg, h, m, "ner", marks=pytest.mark.ner) for c, lg, h, m in _NARROW_NER],
+)
+def test_narrow_cells_hit_one_form_and_miss_another(category, lang, hit, miss, mode):
     """NARROW is the easiest classification to rot, because it decays silently
-    in both directions. Pin both edges."""
-    assert _redacted(hit, lang) != hit, (
-        f"{category}/{lang}/fast is NARROW but its hit-probe no longer fires — it has become NONE"
+    in both directions. Pin both edges — at fast (`_NARROW_FAST`) and at ner
+    (`_NARROW_NER`), covered by one body."""
+    assert _redacted(hit, lang, mode=mode) != hit, (
+        f"{category}/{lang}/{mode} is NARROW but its hit-probe no longer fires — it has become NONE"
     )
-    assert _redacted(miss, lang) == miss, (
-        f"{category}/{lang}/fast is NARROW but its miss-probe now fires — "
+    assert _redacted(miss, lang, mode=mode) == miss, (
+        f"{category}/{lang}/{mode} is NARROW but its miss-probe now fires — "
         f"coverage widened and the cell may be HAVE"
     )
-    _uncovered, narrow = coverage_for(lang, "fast")
-    assert category in narrow
-
-
-@pytest.mark.ner
-@pytest.mark.parametrize(("category", "lang", "probe"), _HAVE_NER)
-def test_have_cells_actually_detect_at_ner(category, lang, probe):
-    """The ner counterpart of `test_have_cells_actually_detect`. A cell that
-    is HAVE at fast is not guaranteed to stay HAVE at ner by construction —
-    it is re-probed here rather than assumed."""
-    assert _redacted(probe, lang, mode="ner") != probe, (
-        f"table says {category}/{lang}/ner is HAVE, but the probe came back "
-        f"unchanged — the detector is gone and the table now lies"
-    )
-
-
-@pytest.mark.ner
-@pytest.mark.parametrize(("category", "lang", "probe"), _NONE_NER)
-def test_none_cells_really_detect_nothing_at_ner(category, lang, probe):
-    assert _redacted(probe, lang, mode="ner") == probe, (
-        f"table says {category}/{lang}/ner is NONE, but the probe WAS "
-        f"redacted — coverage improved and the table now understates it"
-    )
-    uncovered, _narrow = coverage_for(lang, "ner")
-    assert category in uncovered
-
-
-@pytest.mark.ner
-@pytest.mark.parametrize(("category", "lang", "hit", "miss"), _NARROW_NER)
-def test_narrow_cells_hit_one_form_and_miss_another_at_ner(category, lang, hit, miss):
-    """NARROW is the easiest classification to rot, because it decays silently
-    in both directions. Pin both edges — at ner as well as at fast."""
-    assert _redacted(hit, lang, mode="ner") != hit, (
-        f"{category}/{lang}/ner is NARROW but its hit-probe no longer fires — it has become NONE"
-    )
-    assert _redacted(miss, lang, mode="ner") == miss, (
-        f"{category}/{lang}/ner is NARROW but its miss-probe now fires — "
-        f"coverage widened and the cell may be HAVE"
-    )
-    _uncovered, narrow = coverage_for(lang, "ner")
+    _uncovered, narrow = coverage_for(lang, mode)
     assert category in narrow
 
 
@@ -201,6 +180,20 @@ def test_the_probes_are_not_vacuous():
     already covers vacuity — it does not."""
     assert _redacted("现居上海市浦东新区。", "zh") != "现居上海市浦东新区。"
     assert _redacted("no pii here at all", "en") == "no pii here at all"
+
+
+def test_every_row_has_exactly_the_categories():
+    """A typo or rename in one row's key (e.g. `medical_condition` renamed to
+    `medical_conditions` in that row alone) would silently drop the key from
+    the row. `coverage_for` reads a missing key as implicitly `have` — a
+    false "covered" backed by zero probes, through the one path this table
+    has no other guard on. Assert the key set directly so that failure mode
+    is loud in CI instead of waiting on some future probe to notice."""
+    for (lang, mode), row in _TABLE.items():
+        assert set(row) == set(CATEGORIES), (
+            f"({lang!r}, {mode!r}) row's keys don't match CATEGORIES — "
+            f"missing={set(CATEGORIES) - set(row)}, extra={set(row) - set(CATEGORIES)}"
+        )
 
 
 def test_english_gets_nothing_from_the_zh_evidence_detectors():

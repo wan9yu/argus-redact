@@ -55,7 +55,15 @@ configuration had no detector for what was in it.
   four English zeroes above — those detectors don't exist at any mode. `mode="auto"`
   reads the `ner` row rather than getting a column of its own, so it never claims a
   Layer-3 coverage improvement a deployment without a served model does not actually
-  have.
+  have. Only zh and en have measured rows; the other six shipped packs (ja, ko, de, uk,
+  in, br) fall back to the same "everything uncovered" answer as a language this table
+  has never heard of — safe in direction, but it does not distinguish "measured and
+  confirmed empty" from "never measured". That is a visible scope boundary of the
+  current table, not a defect; extending it to those packs is future work. A call that
+  activates several packs at once (`lang=["zh", "en"]`) combines their coverage
+  pessimistically across every active pack rather than reading only the first one, so
+  a category missing from one active pack's coverage is never silently hidden by
+  another active pack that happens to detect it.
 - **`RedactReport.layers_used: tuple[int, ...]`** — which detection layers contributed
   a surviving entity to *this* call, derived from the entities' own `.layer` rather
   than from `stats` (which is hardcoded to all-zero on the `_pre_detected` path even

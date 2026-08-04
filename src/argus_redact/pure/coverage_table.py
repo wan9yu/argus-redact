@@ -75,6 +75,8 @@ fast-mode NARROW miss-probe, reused as the ner hit probe).
 
 from __future__ import annotations
 
+from argus_redact._types import CoverageAdvisory
+
 # The 9 standard inference attributes, spelled as the project's own re-id
 # fixtures spell them (tests/benchmark/fixtures/reid_profiles.json). Note the
 # taxonomy word is `sex`; argus's internal type name for it is `gender`.
@@ -186,3 +188,73 @@ def coverage_for(lang: str, mode: str) -> tuple[tuple[str, ...], tuple[str, ...]
     uncovered = tuple(sorted(c for c, v in row.items() if v == _NONE))
     narrow = tuple(sorted(c for c, v in row.items() if v == _NARROW))
     return uncovered, narrow
+
+
+def coverage_for_langs(lang: str | list[str], mode: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Combine per-language coverage across every active language pack.
+
+    ``redact(lang=["zh", "en"], ...)`` runs BOTH packs. A category is `have`
+    in the combined result only if it is `have` in EVERY active pack; if any
+    active pack has it as `none`, the combine reports `none` regardless of
+    what another pack found; otherwise it is `narrow`. This is elementwise
+    and pessimistic on purpose: crediting coverage from one active pack while
+    staying silent about another active pack having no detector at all for
+    the same category is exactly the "silence read as safety" failure
+    `CoverageAdvisory` exists to close, reintroduced at the multi-language
+    seam. Concretely, `occupation` is `have` for zh (cue-anchored to Chinese
+    words) and `none` for en — a `lang=["zh", "en"]` call must report
+    `occupation` as not covered, because the English half of that call has
+    no detector for it, no matter what the Chinese half found.
+
+    Accepts the same ``str | list[str]`` shape ``redact()``'s own ``lang``
+    parameter does, so a caller can pass either directly. ``coverage_for`` is
+    an O(1) dict lookup, so combining N active packs costs nothing that
+    matters.
+    """
+    langs = [lang] if isinstance(lang, str) else list(lang)
+    if not langs:
+        langs = ["zh"]
+    uncovered: set[str] = set()
+    narrow: set[str] = set()
+    for one_lang in langs:
+        pack_uncovered, pack_narrow = coverage_for(one_lang, mode)
+        uncovered.update(pack_uncovered)
+        narrow.update(pack_narrow)
+    narrow -= uncovered  # `none` in one pack outranks `narrow` in another
+    return tuple(sorted(uncovered)), tuple(sorted(narrow))
+
+
+def coverage_advisory(
+    lang: str | list[str], mode: str, *, ran_detection: bool
+) -> CoverageAdvisory | None:
+    """Build the ``RedactReport.coverage`` field for one ``redact()`` call.
+
+    ``ran_detection=False`` returns ``None``. That is the ``_pre_detected``
+    path: the caller supplied its own entities and argus ran no detection at
+    all, so a (lang, mode) capability claim would assert that this
+    configuration looked for — and didn't find — every category the table
+    lists as uncovered/narrow, when in truth argus never looked. Only build
+    the advisory when detection actually ran through this configuration.
+    """
+    if not ran_detection:
+        return None
+    uncovered, narrow = coverage_for_langs(lang, mode)
+    return CoverageAdvisory(uncovered=uncovered, narrow=narrow)
+
+
+def layers_used(entities) -> tuple[int, ...]:
+    """The sorted, deduped set of layers that produced the surviving entities.
+
+    Derived from each entity's own ``.layer``, not from ``layer_stats``: the
+    ``_pre_detected`` branch of ``redact()`` hardcodes ``layer_stats`` to
+    all-zero/skipped even when entities were really detected, while
+    ``.layer`` is correct on every path (see ``glue/redact.py``).
+
+    Layer 0 is KEPT, not filtered out. A caller-supplied entity that never
+    set ``layer`` (the Presidio bridge builds ``PatternMatch`` without it)
+    lands at 0, and dropping those would report ``()`` — indistinguishable
+    from "nothing was found", which is precisely the ambiguity this field
+    exists to remove. ``(0,)`` says "entities came from a source that did not
+    tag its layer"; ``()`` says "there were none".
+    """
+    return tuple(sorted({e.layer for e in entities}))

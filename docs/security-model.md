@@ -428,6 +428,27 @@ than getting a column of its own, because it would otherwise claim a Layer-3
 coverage improvement a deployment without a served model does not actually
 have.
 
+Only two of the eight shipped language packs (`zh, en, ja, ko, de, uk, in,
+br`) have measured rows in `_TABLE`. The other six fall back to the exact
+same branch as a language this table has never heard of at all: every
+category reported `uncovered`, sorted. That fallback is safe in direction —
+it never overstates what the pack can do — but it does not distinguish
+"measured and confirmed empty" from "never measured". Treat a coverage
+advisory for `ja`/`ko`/`de`/`uk`/`in`/`br` as the latter; this is a visible
+scope boundary of the current table, not a defect, and extending `_TABLE` to
+those packs is future work.
+
+A call that activates several language packs at once (`redact(lang=["zh",
+"en"], ...)`) combines their coverage pessimistically rather than reading
+only the first pack: a category is `have` in the combined advisory only if
+every active pack has it as `have`; if any active pack has it as `none`, the
+combined result is `none` no matter what another pack found (e.g.
+`occupation` is `have` for zh and `none` for en, so `lang=["zh", "en"]`
+reports `occupation` as not covered). Crediting one pack's coverage while
+staying silent about another active pack having no detector at all would be
+the same "silence read as safety" gap this feature exists to close,
+reappearing at the multi-language seam.
+
 `report.layers_used: tuple[int, ...]` is the companion signal for *this call*,
 not the configuration — which detection layers actually contributed a
 surviving entity. It is derived from the entities' own `.layer`, never from

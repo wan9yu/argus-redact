@@ -94,7 +94,7 @@ class RedactReport:
     risk: RiskResult | None = None
     residual_personal_data: bool = True
     security_events: tuple[dict, ...] = ()
-    coverage: "CoverageAdvisory | None" = None
+    coverage: CoverageAdvisory | None = None
     layers_used: tuple[int, ...] = ()
 
 
