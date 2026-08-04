@@ -33,6 +33,53 @@
   `redact(..., detailed=True)` / `restore(..., detailed=True)`: a restored value that is
   longer than any known original is the signature of this defect.
 
+### zh `occupation` over-captures its cue word when the value directly follows it
+
+- **What**: In zh (`mode="fast"`, and any mode that runs Layer 1 — also `"ner"` /
+  `"auto"`), the `occupation` detector's cue-anchored pattern can swallow part of its
+  own cue word plus the copula that follows it. `redact('职业是后端工程师。', lang='zh',
+  mode='fast')` returns `'职TITLE-…。'` — the captured entity text is `业是后端工程师`
+  (half of the two-character cue `职业`, the copula `是`, and the job title), leaving a
+  dangling `职` in the output. A non-CJK separator between the cue and the value avoids
+  it: `redact('职业：后端工程师。', lang='zh', mode='fast')` returns `'职业：TITLE-…。'`
+  with entity text `后端工程师` only.
+- **Who is affected**: zh callers whose input states an occupation directly after `职业`
+  with no separator (continuous prose using `是`/`为` rather than punctuation between the
+  cue and the value).
+- **Why we won't fix here**: this release derives its capability table from live
+  `redact()` probes and is scoped to declaring current detector behaviour, not changing
+  it — the capability table's own tests deliberately don't assert the exact captured text
+  for this cell so the defect isn't locked in as intended behaviour by a test. Correcting
+  the pattern is a detector change that would move `pii_bench_zh` numbers and belongs in
+  its own release with its own before/after measurement.
+- **What you should do**: prefer a separator (`：`, `:`, a space, or a line break) between
+  `职业` and the value where you control the input format. Where you don't, treat zh
+  `occupation` matches as approximate at the boundary — check entity spans via
+  `redact(..., detailed=True)` before trusting the exact captured text.
+
+### en `mode="ner"` can redact a sentence-initial verb as an organisation
+
+- **What**: In English `mode="ner"` (and `"auto"`), spaCy's `en_core_web_sm` can tag an
+  ordinary sentence-initial verb as an `ORG` entity. `redact("Holds a master's degree.",
+  lang='en', mode='ner')` returns `"O-… a master's degree."` — the word `Holds` is
+  redacted as an organisation, while the actual education attribute (`master's degree`)
+  is left untouched. The same model tags a genuine institution correctly in the same
+  sentence position: `redact('Graduated from Stanford University.', lang='en',
+  mode='ner')` returns `'Graduated from O-….'` with entity text `Stanford University`.
+- **Who is affected**: English callers on `mode="ner"` / `"auto"` whose text opens with a
+  capitalized verb that spaCy's small model associates with organisation-shaped context.
+  `mode="fast"` never runs spaCy, so it is not affected by this failure mode.
+- **Why we won't fix here**: as above — this release's capability probing surfaced the
+  defect but is scoped to declaring current behaviour, not changing it. A fix sits inside
+  the Layer 2 English NER adapter and would need its own release with its own
+  recall/precision measurement, on top of English `mode="ner"` already being documented
+  as best-effort (see "English is best-effort" under Design Constraints below).
+- **What you should do**: prefer `mode="fast"` for English per the existing
+  "English is best-effort" guidance — Layer 1 doesn't invoke spaCy, so this failure mode
+  cannot occur there. If you rely on `mode="ner"` for English free-text coverage, treat
+  an `ORG` hit on a sentence-initial capitalized word as suspect and review it before
+  trusting the redaction.
+
 ## Deprecation Notices
 
 ### bare `restore()` without `guard=` — flip shipped in v0.8.0
