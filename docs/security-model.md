@@ -277,6 +277,44 @@ Event shape:
 noteworthy occurred). The same list of event dicts is also available in
 `RedactReport.security_events` when using `redact(report=True)`.
 
+### `coverage_restored` security event (v0.8.6)
+
+Detection ends with a priority-aware merge — when two detected spans overlap, one
+wins and the loser is discarded, which is safe only because the winner's bytes
+cover the loser's — followed by filters that drop entities by type: the
+self-reference tier filter, and the `types=`/`types_exclude=` filter. If one of
+those filters then drops a winner that had absorbed something else during the
+merge, argus-redact re-admits what it absorbed so it stays redacted, and records
+that it happened as a `coverage_restored` structured event plus a
+`SecurityWarning`.
+
+Event shape:
+
+```python
+{
+    "type": "security",
+    "reason_code": "coverage_restored",
+    "count": 1,                # number of entities the invariant re-admitted
+    "detail": "types: phone",  # sorted type names; never the raw value
+}
+```
+
+Like `keep_downgraded`, `detail` names entity TYPES only — the values that were
+re-admitted never appear in this channel, and the redaction itself never depended
+on this signal reaching you: the invariant already re-admits the entity before this
+event is built, so `coverage_restored` reports what was fixed, not something still
+unredacted. It is expected on type-filtered calls — `types=`/`types_exclude=`
+legitimately excluding a winner that had absorbed something else during the
+merge — and rare on an unfiltered call, where a firing means an ordinary overlap
+between two detectors happened to be split by a filter that was not aimed at
+either of them.
+
+Unlike `keep_downgraded`, this event is not reproducible from a one-line
+`config=` toggle — it fires only when the merge actually absorbed one span into
+another first, so no short standalone snippet here is guaranteed to trigger it.
+Access it the same way as any other event, via
+`redact(..., detailed=True)["security_events"]` or `RedactReport.security_events`.
+
 ### `RedactReport.residual_personal_data`
 
 `redact(report=True)` returns a `RedactReport` dataclass. The

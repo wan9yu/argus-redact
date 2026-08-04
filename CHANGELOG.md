@@ -6,7 +6,8 @@ All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior relea
 
 A security patch. One structural defect, present in four independent detection
 pipelines (three of them live, reproducible leaks), was found during an internal
-review and closed with a single shared fix. No API changes; upgrading is recommended.
+review and closed with a single shared fix. No breaking API changes — the fix adds
+new, additive surface only, listed under Added below; upgrading is recommended.
 
 ### Security
 
@@ -27,11 +28,29 @@ review and closed with a single shared fix. No API changes; upgrading is recomme
   during review, not a call-through to `redact()`), and the Rust core's two copies of
   the same pipeline (the fast-mode path and the streaming path, both reachable from
   the browser/wasm build). The first three were live, reproducible leaks. The
-  Rust-only paths were not: the hint that decides the self-reference tier is forced to
-  tier 1 whenever any other PII entity is present in the document, and tier 1 is kept
-  in full — so a self-reference span there could never both absorb another entity
-  during merge and be dropped by the tier filter afterward. That is defense in depth,
-  not a leak the browser build ever had.
+  Rust-only paths were not, for two structural reasons — not one incidental one.
+
+  First: in those two paths a `self_reference` match can only ever come from the
+  layer-1 regex pass (`person`/region/job-title/hobby/condition detections are
+  separate result vectors that never carry that type), and the self-reference tier
+  hint is computed from that SAME layer-1 set
+  (`produce_hints_l1(&layer1, ...)`, `crates/argus-redact-core/src/redact_l1.rs:283`).
+  So whenever a `self_reference` is present, a tier hint is always emitted (1, 2, or
+  3) — never absent. The Python leak's actual trigger was the absent case: a
+  `self_reference` that arrives only via Layer 2/3 is invisible to that
+  layer-1-only hint computation, so no tier hint is produced at all, and "no hint"
+  reads as "not tier 1" and gets dropped — exposing whatever it had absorbed. The
+  Rust fast/streaming paths run no Layer 2/3, so that absence can never occur
+  there.
+
+  Second, and independently: `merge_priority` only lets one span fully absorb
+  another through strict containment
+  (`crates/argus-redact-core/src/merger.rs:215-231`) — the absorbing span must cover
+  the one it beats start-to-end, with no remainder. A `self_reference` match is a
+  pronoun or kinship term, at most a few characters, and cannot contain a real PII
+  span long enough to matter. Both properties are structural to the Rust detection
+  pipeline, not an artifact of the inputs that happened to be tried — which is why
+  this shipped as an explanatory note rather than a change to those two paths.
 
   Reachable two ways. In `mode="auto"`, a Layer-3 model returning
   `type="self_reference"` over a span containing real PII wins the priority merge and
@@ -63,6 +82,34 @@ review and closed with a single shared fix. No API changes; upgrading is recomme
   second, independent set of hand-written scenarios — which is why this shipped
   without a benchmark rebaseline. It is not unchanged for type-filtered calls; those
   numbers are the fix working, not a regression.
+
+  **The new `SecurityWarning` can now raise, not just print.** `docs/api-reference.md`
+  recommends `warnings.simplefilter("error", SecurityWarning)` for tests/CI so a
+  security signal cannot be silently swallowed. A caller doing that will see
+  `redact(text, types=["person"])` raise on that same 13.0% of documents, and
+  `redact(text, types_exclude=["address"])` on that same 28.0%, where v0.8.5 returned
+  normally. The raise is the caller's own filter promoting a signal this release
+  newly emits — not a new failure mode invented by this release — but it is a
+  behavior change worth testing for before upgrading a pipeline that runs with
+  warnings promoted to errors.
+
+### Added
+
+The fix above is additive-only — nothing existing changed shape — but it does add
+new public surface a compliance consumer with exhaustive handling (e.g. a `match`
+over every known `reason_code`) needs to know about:
+
+- `argus-redact-core` gains a `coverage` module (`pub mod coverage`) and re-exports
+  `restore_lost_coverage` and `FilterScope` from the crate root — the shared
+  predicate and restorer behind the fix.
+- The Python extension (`_core`) gains a `restore_lost_coverage` binding.
+- Python gains `argus_redact.pure.coverage` (the pure-Python wrapper),
+  `argus_redact.pure.replacer.coverage_restored_event` /
+  `warn_coverage_restored`, and a new `argus_redact.pure.security_events.COVERAGE_RESTORED`
+  reason code.
+- `RedactReport.security_events` (and the `detailed=True` events list) can now
+  carry a `coverage_restored` entry — see `docs/security-model.md`'s "Compliance
+  artifacts" section.
 
 ### Fixed
 

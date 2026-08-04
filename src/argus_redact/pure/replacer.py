@@ -21,6 +21,7 @@ from argus_redact.pure.security_events import (
     COVERAGE_RESTORED,
     KEEP_DOWNGRADED,
     MASK_COLLISION,
+    _auto_stacklevel,
     security_event,
 )
 
@@ -191,6 +192,13 @@ def warn_coverage_restored(restored_types: list[str]) -> None:
     ``types_exclude=`` legitimately excluding a winner that had absorbed
     something else during merge); rare on an unfiltered call. See
     ``coverage_restored_event`` for the sibling structured channel.
+
+    The stacklevel is auto-detected (``_auto_stacklevel``), same as the restore
+    guard's warnings — this function is called directly from every public
+    entry point (``redact()``, ``redact_json``/``redact_csv``,
+    ``StreamingRedactor.feed``/``flush``, ``redact_pseudonym_llm()``), each at
+    a different wrapping depth, and a hardcoded number would attribute the
+    warning to one of THIS package's own call sites instead of the caller's.
     """
     if not restored_types:
         return
@@ -200,7 +208,7 @@ def warn_coverage_restored(restored_types: list[str]) -> None:
         f"when a filter removed a span that had absorbed them during the merge; "
         f"they were re-admitted and remain redacted in the output.",
         SecurityWarning,
-        stacklevel=2,
+        stacklevel=_auto_stacklevel(),
     )
 
 

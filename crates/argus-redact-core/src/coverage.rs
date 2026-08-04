@@ -23,6 +23,11 @@ use crate::merger::merge_entities_with_text;
 use crate::types::PatternMatch;
 
 /// What the post-merge filters legitimately remove.
+///
+/// `#[non_exhaustive]`: crates.io publishes are immutable, so a bare pub struct
+/// can never gain a field without a major version. Construct via [`Self::new`]
+/// (or [`Self::from_hints`]) from outside this crate.
+#[non_exhaustive]
 pub struct FilterScope<'a> {
     /// Type allow-list: when set, only these types survive.
     pub types: Option<&'a HashSet<String>>,
@@ -33,6 +38,21 @@ pub struct FilterScope<'a> {
 }
 
 impl<'a> FilterScope<'a> {
+    /// Build a `FilterScope` directly from its three components.
+    /// `#[non_exhaustive]` blocks other crates from writing the struct literal,
+    /// so this is the stable construction path for callers outside
+    /// `argus-redact-core` — e.g. the Python binding, which resolves
+    /// `types`/`types_exclude` into `HashSet`s and computes
+    /// `drop_self_reference` itself rather than from `Hint`s (see
+    /// [`Self::from_hints`] for the hint-driven constructor used in-crate).
+    pub fn new(
+        types: Option<&'a HashSet<String>>,
+        types_exclude: Option<&'a HashSet<String>>,
+        drop_self_reference: bool,
+    ) -> Self {
+        FilterScope { types, types_exclude, drop_self_reference }
+    }
+
     /// Build the scope the way the pipeline's own filters are configured:
     /// `drop_self_reference` mirrors `filter_self_reference`, which keeps every
     /// entity at tier 1 and drops `self_reference` at any other tier — including

@@ -337,11 +337,10 @@ pub fn restore_lost_coverage(
     let core_filtered: Vec<CorePM> = filtered.iter().map(CorePM::from).collect();
     let keep: Option<HashSet<String>> = types.map(|v| v.into_iter().collect());
     let drop: Option<HashSet<String>> = types_exclude.map(|v| v.into_iter().collect());
-    let scope = FilterScope {
-        types: keep.as_ref(),
-        types_exclude: drop.as_ref(),
-        drop_self_reference,
-    };
+    // `FilterScope` is `#[non_exhaustive]`: build it via the constructor
+    // rather than a struct literal, which a crate outside `argus-redact-core`
+    // (this one) can no longer write.
+    let scope = FilterScope::new(keep.as_ref(), drop.as_ref(), drop_self_reference);
     let (out, restored) =
         core_restore_lost_coverage(&core_pre, &merged_spans, core_filtered, &scope, text);
     Ok((out.into_iter().map(PyPatternMatch::from).collect(), restored))
