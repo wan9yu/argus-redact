@@ -18,6 +18,7 @@ from argus_redact.pure._strategy_kind import (
 from argus_redact.pure.grammar import SELF_REF_PRONOUNS, normalize_grammar_en
 from argus_redact.pure.security_events import (
     ALIAS_COLLISION,
+    COVERAGE_RESTORED,
     KEEP_DOWNGRADED,
     MASK_COLLISION,
     security_event,
@@ -154,6 +155,45 @@ def warn_mask_collisions(mask_collisions: list[str]) -> None:
         f"{len(mask_collisions)} masked value(s) collided; their "
         f"disambiguator (①) is not LLM-durable — restore of an LLM reply "
         f"may misattribute them.",
+        SecurityWarning,
+        stacklevel=2,
+    )
+
+
+def coverage_restored_event(restored_types: list[str]) -> dict | None:
+    """A PII-free COVERAGE_RESTORED security_event, or None if the post-merge
+    coverage invariant did not fire this call.
+
+    ``restored_types`` is the Rust core's authoritative list — one entry per
+    entity whose coverage a post-merge filter destroyed and the invariant
+    re-admitted. count = number of restored entities; detail names the TYPES
+    only (never the raw value), mirroring ``mask_collision_event``.
+    """
+    if not restored_types:
+        return None
+    types = sorted(set(restored_types))
+    return security_event(
+        COVERAGE_RESTORED, count=len(restored_types), detail="types: " + ", ".join(types)
+    )
+
+
+def warn_coverage_restored(restored_types: list[str]) -> None:
+    """Emit the ``coverage_restored`` SecurityWarning — a no-op when the list is
+    empty. THE single source for that warning's text/category.
+
+    This exists because the structured event is assembled only inside
+    ``if report or detailed:``; the warning is what reaches the default 2-tuple
+    caller. A firing means a post-merge filter tried to remove PII coverage,
+    which does not happen on ordinary input — treat it as a real signal, not
+    noise. See ``coverage_restored_event`` for the sibling structured channel.
+    """
+    if not restored_types:
+        return
+    types = ", ".join(sorted(set(restored_types)))
+    warnings.warn(
+        f"{len(restored_types)} entity/entities ({types}) lost redaction coverage "
+        f"to a post-merge filter and were re-admitted; the output is redacted, "
+        f"but the filter configuration produced a result it did not intend.",
         SecurityWarning,
         stacklevel=2,
     )
