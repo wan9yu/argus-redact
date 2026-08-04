@@ -27,6 +27,12 @@ block cannot hide behind a second block's restorer elsewhere in the same
 file. A new dropping filter in an existing pipeline, or a fifth copy of the
 pipeline anywhere else, should make this gate fail loudly rather than pass
 silently.
+
+A separate anti-rot check pins the per-file ANCHOR COUNT in `_PIPELINES`
+(`redact.py` → 2, everything else → 1), not just the set of files present —
+a file-set check alone would stay green if `redact.py`'s two independent
+blocks were collapsed to one entry, silently un-guarding whichever block's
+row was deleted.
 """
 
 from __future__ import annotations
@@ -51,14 +57,20 @@ _PIPELINES: list[tuple[str, str]] = [
     ("crates/argus-redact-core/src/streaming.rs", "filter_self_reference(merged, &hints)"),
 ]
 
-_KNOWN_FILES = frozenset(
-    {
-        "src/argus_redact/glue/redact.py",
-        "src/argus_redact/glue/redact_pseudonym_llm.py",
-        "crates/argus-redact-core/src/redact_l1.rs",
-        "crates/argus-redact-core/src/streaming.rs",
-    }
-)
+# file -> expected number of independent _PIPELINES anchors in that file. A
+# FILE-SET check alone is not enough: `redact.py` legitimately carries TWO
+# independent anchors (its `_detect()` block and its separate `_pre_detected`
+# block), and deleting just one of them leaves the file "covered" — the
+# remaining anchor keeps `covered == {files}` true even though the deleted
+# block's restorer is now completely unguarded. Pinning the per-file COUNT
+# catches that; a file-only set does not (see test_the_gate_is_not_vacuous
+# for a live demonstration in the same style as the rest of this file).
+_KNOWN_ANCHOR_COUNTS = {
+    "src/argus_redact/glue/redact.py": 2,
+    "src/argus_redact/glue/redact_pseudonym_llm.py": 1,
+    "crates/argus-redact-core/src/redact_l1.rs": 1,
+    "crates/argus-redact-core/src/streaming.rs": 1,
+}
 
 _RESTORER = re.compile(r"restore_lost_coverage")
 
@@ -103,14 +115,25 @@ def test_every_post_merge_pipeline_restores_lost_coverage():
 
 
 def test_the_pipeline_list_still_covers_all_four_known_sites():
-    """Anti-rot for the LIST itself, not just its contents: an entry silently
-    deleted from `_PIPELINES` (instead of fixing the underlying code) would
-    let the test above pass while covering fewer files — this pins the set
-    of files the gate is supposed to see."""
-    covered = {rel for rel, _ in _PIPELINES}
-    assert covered == _KNOWN_FILES, (
-        f"_PIPELINES covers {sorted(covered)}, expected {sorted(_KNOWN_FILES)} — "
-        f"the list rotted (an entry was removed) or a new pipeline needs adding."
+    """Anti-rot for the LIST itself, not just its contents: pins how many
+    independent anchors `_PIPELINES` carries PER FILE, not merely which files
+    appear at all. A file-set-only check would stay green if one of
+    `redact.py`'s TWO independent blocks (its `_detect()` path — the one
+    every plain `redact()` call uses — and its separate `_pre_detected`
+    branch) were silently deleted while the other stayed: the file is still
+    "covered", so a set comparison can't tell the difference, even though the
+    deleted block's restorer call would now be completely unguarded — and the
+    per-block windowing in the test above only checks anchors that are
+    actually IN `_PIPELINES`, so a deleted anchor is invisible to it too.
+    Pinning the per-file anchor COUNT closes that gap."""
+    by_file: dict[str, int] = {}
+    for rel, _anchor in _PIPELINES:
+        by_file[rel] = by_file.get(rel, 0) + 1
+    assert by_file == _KNOWN_ANCHOR_COUNTS, (
+        f"_PIPELINES carries {by_file} anchor(s) per file, expected "
+        f"{_KNOWN_ANCHOR_COUNTS} — an entry was silently deleted (fix: restore "
+        f"it), or a new pipeline was added (fix: add it to _KNOWN_ANCHOR_COUNTS "
+        f"too, deliberately, not as a side effect)."
     )
 
 
