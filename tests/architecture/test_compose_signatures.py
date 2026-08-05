@@ -138,5 +138,7 @@ def test_redact_report_fields_snapshot():
         f"RedactReport field set changed.\n"
         f"  expected: {sorted(REDACTREPORT_FIELDS)}\n"
         f"  actual:   {sorted(actual)}\n"
-        f"If intentional: update REDACTREPORT_FIELDS + CHANGELOG."
+        f"If intentional: update REDACTREPORT_FIELDS + CHANGELOG. Then see "
+        f"tests/architecture/test_face_contract.py: a new field also needs a "
+        f"decision on every wire face."
     )

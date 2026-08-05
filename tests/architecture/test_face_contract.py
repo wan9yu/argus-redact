@@ -23,6 +23,7 @@ accidental omissions look deliberate.
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import importlib.util
 import warnings
@@ -33,8 +34,20 @@ from argus_redact._types import RedactReport
 from argus_redact.exceptions import SecurityWarning
 
 EMIT = "emit"
-PARTIAL = "partial"
 WITHHELD = "withheld"
+
+
+@contextlib.contextmanager
+def _quiet_security_warnings():
+    """Suppress the `SecurityWarning` every envelope-driving test below triggers.
+
+    Each test drives a real face with the default `guard=True`/`report=True`
+    path, which warns on its own security events — noise for a test asserting
+    about the envelope's key set, not its warnings.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SecurityWarning)
+        yield
 
 
 @dataclasses.dataclass(frozen=True)
@@ -138,8 +151,10 @@ def declared_wire_keys(face: str) -> set[str]:
 
 
 def test_every_face_decides_every_report_field():
-    """THE gate. A tenth `RedactReport` field fails all three faces at once, and
-    the only way to pass is to record what each face does about it."""
+    """THE gate. A tenth `RedactReport` field leaves every face missing a decision
+    for it, but the assertion is inside a `for` loop: pytest halts at the first
+    face reported, not all three at once. The only way to pass is to record what
+    each face does about the field."""
     for face, decisions in _FACE_CONTRACT.items():
         assert set(decisions) == set(_REPORT_FIELDS), (
             f"{face} has no decision for "
@@ -154,7 +169,7 @@ def test_every_face_decides_every_report_field():
 def test_anything_less_than_emitted_carries_a_reason():
     for face, decisions in _FACE_CONTRACT.items():
         for name, d in decisions.items():
-            if d.state in (WITHHELD, PARTIAL):
+            if d.state == WITHHELD:
                 assert d.reason.strip(), (
                     f"{face}.{name} is {d.state} with no reason. A reason derived "
                     f"from the code is mandatory; if none can be found, emit the "
@@ -165,18 +180,16 @@ def test_anything_less_than_emitted_carries_a_reason():
 def test_emitted_fields_name_a_wire_key_and_withheld_ones_do_not():
     for face, decisions in _FACE_CONTRACT.items():
         for name, d in decisions.items():
-            if d.state in (EMIT, PARTIAL):
+            if d.state == EMIT:
                 assert d.wire, f"{face}.{name} is {d.state} but names no wire key"
             else:
                 assert not d.wire, f"{face}.{name} is withheld but names wire keys {d.wire}"
 
 
-def test_every_state_is_one_of_the_three():
+def test_every_state_is_emit_or_withheld():
     for face, decisions in _FACE_CONTRACT.items():
         for name, d in decisions.items():
-            assert d.state in (EMIT, PARTIAL, WITHHELD), (
-                f"{face}.{name} has unknown state {d.state!r}"
-            )
+            assert d.state in (EMIT, WITHHELD), f"{face}.{name} has unknown state {d.state!r}"
 
 
 def test_the_gate_is_not_vacuous():
@@ -201,9 +214,22 @@ def test_the_gate_is_not_vacuous():
 
 
 def test_a_reasonless_withholding_is_rejected():
-    """Positive control for the reason requirement."""
-    bad = Decision(WITHHELD)
-    assert not bad.reason.strip()
+    """Positive control for the reason requirement.
+
+    The previous version of this test built a bare `Decision(WITHHELD)` and
+    asserted its own `reason` field was empty — that only re-observes the
+    dataclass's default and would keep passing even if the enforcement in
+    `test_anything_less_than_emitted_carries_a_reason` were deleted outright.
+    This instead runs that same check against a mutated copy of a real face's
+    table and proves it rejects the injected entry.
+    """
+    mutated = dict(_FACE_CONTRACT[HTTP_REDACT_REPORT])
+    mutated["residual_personal_data"] = Decision(WITHHELD)
+
+    with pytest.raises(AssertionError):
+        for name, d in mutated.items():
+            if d.state == WITHHELD:
+                assert d.reason.strip()
 
 
 @pytest.mark.skipif(importlib.util.find_spec("starlette") is None, reason="starlette not installed")
@@ -218,8 +244,7 @@ def test_http_redact_report_envelope_matches_the_contract():
 
     from argus_redact.server import create_app
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", SecurityWarning)
+    with _quiet_security_warnings():
         client = TestClient(create_app(allow_no_auth=True))
         resp = client.post(
             "/redact",
@@ -242,10 +267,8 @@ def test_cli_assess_envelope_matches_the_contract(tmp_path):
 
     buf = io.StringIO()
     args = argparse.Namespace(input=str(source), lang="zh", mode="fast", output=None)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", SecurityWarning)
-        with redirect_stdout(buf):
-            cmd_assess(args)
+    with _quiet_security_warnings(), redirect_stdout(buf):
+        cmd_assess(args)
     assert set(json.loads(buf.getvalue())) == declared_wire_keys(CLI_ASSESS)
 
 
@@ -267,8 +290,7 @@ def test_mcp_assess_envelope_matches_the_contract():
             "assess", {"text": "请联系张伟，电话 13812345678。", "lang": "zh", "mode": "fast"}
         )
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", SecurityWarning)
+    with _quiet_security_warnings():
         result = asyncio.run(_run())
     payload = json.loads(result.content[0].text)
     assert set(payload) == declared_wire_keys(MCP_ASSESS)
