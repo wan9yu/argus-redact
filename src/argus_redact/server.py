@@ -126,10 +126,12 @@ async def handle_redact(request: Request) -> JSONResponse:
                 "stats": result.stats,
                 "risk": risk_payload(result.risk),
                 "residual_personal_data": result.residual_personal_data,
-                # `detailed=True` has always carried these; `report=True` dropping
-                # them meant two shapes on one endpoint disagreed about the same
-                # data. Every `detail` string is PII-free.
+                # `detailed=True` has always carried `security_events`; `report=True`
+                # dropping it meant two shapes on one endpoint disagreed about the
+                # same data. Every `detail` string is PII-free.
                 "security_events": list(result.security_events),
+                # `coverage` and `layers_used` shipped in v0.8.7 with zero wire
+                # consumers on any face — this is the first one either reaches.
                 "coverage": coverage_payload(result.coverage),
                 "layers_used": list(result.layers_used),
             }

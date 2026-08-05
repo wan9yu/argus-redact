@@ -146,10 +146,23 @@ class TestServerRedact:
         assert resp.status_code == 400
 
     def test_report_and_detailed_agree_on_security_events(self, client):
-        """`report=True` used to drop the events `detailed=True` carried."""
-        body = {"text": "请联系张伟，电话 13812345678。", "lang": "zh"}
+        """`report=True` used to drop the events `detailed=True` carried.
+
+        The fixture must actually produce an event. An earlier version of this
+        test used a plain phone-number fixture that produces none, so it compared
+        two empty lists and passed even when the endpoint hardcoded `[]`.
+        """
+        body = {
+            "text": "卡号4111111111111111",
+            "lang": "zh",
+            "config": {"bank_card": {"strategy": "keep"}},
+        }
         report = client.post("/redact", json={**body, "report": True}).json()
         detailed = client.post("/redact", json={**body, "detailed": True}).json()
+        assert report["security_events"], (
+            "fixture must produce at least one security event, or this test "
+            "compares two empty lists and cannot fail"
+        )
         assert report["security_events"] == detailed["details"].get("security_events", [])
 
     def test_report_carries_the_compliance_risk_fields(self, client):
