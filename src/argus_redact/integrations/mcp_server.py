@@ -26,6 +26,7 @@ from mcp.server import MCPServer
 from argus_redact import RedactReport, __version__, redact
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.glue.guarded_restore import guarded_restore
+from argus_redact.pure.wire import coverage_payload, risk_payload
 
 mcp = MCPServer("argus-redact")
 
@@ -239,15 +240,16 @@ async def assess_text(
 
     return json.dumps(
         {
-            "risk": {
-                "score": report.risk.score,
-                "level": report.risk.level,
-                "reasons": list(report.risk.reasons),
-                "pipl_articles": list(report.risk.pipl_articles),
-            },
-            # redact() always sets stats["total"] — contract pinned by test_mcp.py
+            "risk": risk_payload(report.risk),
+            # redact() always sets stats["total"] — contract pinned by test_mcp.py.
+            # Kept alongside the full `stats` so the pinned key does not move.
             "entities_found": report.stats["total"],
+            "stats": report.stats,
             "redacted": report.redacted_text,
+            "residual_personal_data": report.residual_personal_data,
+            "security_events": list(report.security_events),
+            "coverage": coverage_payload(report.coverage),
+            "layers_used": list(report.layers_used),
         },
         ensure_ascii=False,
         indent=2,

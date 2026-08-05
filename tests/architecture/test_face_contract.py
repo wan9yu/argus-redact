@@ -247,3 +247,28 @@ def test_cli_assess_envelope_matches_the_contract(tmp_path):
         with redirect_stdout(buf):
             cmd_assess(args)
     assert set(json.loads(buf.getvalue())) == declared_wire_keys(CLI_ASSESS)
+
+
+@pytest.mark.skipif(importlib.util.find_spec("mcp") is None, reason="mcp not installed")
+def test_mcp_assess_envelope_matches_the_contract():
+    """Driven through the tool dispatch, not the coroutine directly.
+
+    `call_tool` exercises the mcp 2.0 argument parsing and result wrapping that a
+    direct `await assess_text(...)` skips — which is exactly the path that broke
+    when this integration was migrated off the private `_tool_manager` API.
+    """
+    import asyncio
+    import json
+
+    from argus_redact.integrations.mcp_server import mcp
+
+    async def _run():
+        return await mcp.call_tool(
+            "assess", {"text": "请联系张伟，电话 13812345678。", "lang": "zh", "mode": "fast"}
+        )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SecurityWarning)
+        result = asyncio.run(_run())
+    payload = json.loads(result.content[0].text)
+    assert set(payload) == declared_wire_keys(MCP_ASSESS)

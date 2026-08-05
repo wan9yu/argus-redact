@@ -185,3 +185,19 @@ class TestMCPToolExecution:
         content = result.content[0].text
         data = json.loads(content)
         assert data["entities_found"] > 0
+
+    @pytest.mark.asyncio
+    async def test_assess_envelope_carries_no_plaintext_anywhere(self, mcp_app):
+        """Envelope-scoped, not field-scoped.
+
+        Every other plaintext-absence assertion in this suite indexes one key
+        (`data["redacted"]`), so an original leaking through `entities`, a risk
+        `reason`, or a security event's `detail` would pass all of them.
+        """
+        result = await mcp_app.call_tool(
+            "assess",
+            {"text": "请联系张伟，电话 13812345678。", "lang": "zh", "mode": "fast"},
+        )
+        envelope = result.content[0].text
+        assert "13812345678" not in envelope
+        assert "张伟" not in envelope
