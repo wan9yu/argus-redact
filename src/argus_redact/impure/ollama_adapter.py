@@ -97,6 +97,37 @@ SYSTEM_PROMPT = """你是隐私分析专家。分析文本中所有隐含的敏�
 没有发现则返回 []。只返回JSON，不要其他文字。"""
 
 
+# The ten types SYSTEM_PROMPT tells the model to return. A model that follows
+# the prompt only ever emits one of these; anything else is a drifting model or
+# a prompt-injected one choosing an attacker-controlled string.
+#
+# Mirrors the closed `_TYPE_MAP` allowlist every Layer-2 NER adapter applies to
+# its model's labels (see `lang/zh/ner_adapter.py`) — L3 was the only detector
+# ingesting a model-chosen type name unchecked. Unlike those adapters, an
+# unrecognised type here is RELABELLED rather than dropped: the model still
+# found a span worth protecting, and losing a detection is worse than losing a
+# label. `_UNRECOGNISED_TYPE` is deliberately absent from the registry, so an
+# entity carrying it keeps exactly the sensitivity (2) and `remove` strategy an
+# unregistered type already had — the label stops being attacker-controlled
+# without changing how the span is treated.
+_ALLOWED_SEMANTIC_TYPES = frozenset(
+    {
+        "medical",
+        "financial",
+        "religion",
+        "political",
+        "sexual_orientation",
+        "criminal",
+        "biometric",
+        "gender",
+        "person",
+        "location",
+    }
+)
+
+_UNRECOGNISED_TYPE = "semantic_other"
+
+
 class OllamaAdapter(SemanticAdapter):
     """Semantic PII detection via Ollama local LLM.
 
@@ -186,6 +217,9 @@ class OllamaAdapter(SemanticAdapter):
 
             if not entity_text or not entity_type:
                 continue
+
+            if entity_type not in _ALLOWED_SEMANTIC_TYPES:
+                entity_type = _UNRECOGNISED_TYPE
 
             # Trust the LLM's offsets only when they are in-bounds AND actually
             # point at entity_text. Otherwise fall back to string search — and
