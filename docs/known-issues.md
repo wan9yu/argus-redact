@@ -82,15 +82,22 @@
   an `ORG` hit on a sentence-initial capitalized word as suspect and review it before
   trusting the redaction.
 
-### `detail`'s entity type names are not a closed, validated vocabulary
+### Entity type names are not a closed, validated vocabulary
 
-- **What**: several `security_events` (`coverage_restored`, `mask_collision`,
-  `keep_downgraded`) put entity TYPE NAMES into `detail`, via the shared
-  `_types_event` formatter (`pure/replacer.py`) — by design, never a raw or
-  masked value. But the type name itself is not validated against the
-  registry: a layer-3 semantic adapter (e.g. the Ollama adapter,
-  `impure/ollama_adapter.py`) reads `entity_type = item.get("type", "")`
-  straight out of the model's JSON reply, with no registry check.
+- **What**: two report fields carry entity TYPE NAMES, and the type name itself
+  is not validated against the registry. A layer-3 semantic adapter (e.g. the
+  Ollama adapter, `impure/ollama_adapter.py`) reads
+  `entity_type = item.get("type", "")` straight out of the model's JSON reply,
+  with no registry check, so a prompt-injected model can choose that string.
+  The two channels:
+  - `security_events[].detail` — several events (`coverage_restored`,
+    `mask_collision`, `keep_downgraded`) name types via the shared
+    `_types_event` formatter (`pure/replacer.py`); by design never a raw or
+    masked value, but the type name passes through.
+  - `risk.reasons` — each entry is built as `"<type> (<level>)"` in the core
+    (`crates/argus-redact-core/src/risk.rs`), so the same string appears there.
+    This is the wider channel of the two: `risk.reasons` reaches all three
+    report faces.
 - **Who is affected**: callers running `mode="auto"` or `mode="semantic"` with
   a layer-3 model they do not fully control or trust — e.g. a self-hosted
   model reachable by a prompt-injected input. Callers on `mode="fast"` /
@@ -102,12 +109,13 @@
   legitimate non-registry types: `location` is a real NER output type and is
   not one of the registry's 61 types. There is no cheap way yet to tell a
   legitimate free-form type from an adversarial one.
-- **What you should do**: this only reaches the HTTP and MCP `security_events`
-  payloads — the audit ledger is already unaffected, since `AuditLedger`'s
-  `_sanitize_event` (`compose/audit.py`) drops `detail` entirely on both the
-  write and the reload path. If you run a layer-3 semantic adapter you do not
-  fully control, treat its `security_events` `detail` field like any other
-  model output: don't feed it back into a prompt uninspected.
+- **What you should do**: the audit ledger is already unaffected, since
+  `AuditLedger`'s `_sanitize_event` (`compose/audit.py`) drops `detail` entirely
+  on both the write and the reload path — but note that sanitiser does not cover
+  `risk.reasons`, which is not part of an audit entry. If you run a layer-3
+  semantic adapter you do not fully control, treat both `security_events[].detail`
+  and `risk.reasons` like any other model output: don't feed them back into a
+  prompt uninspected.
 
 ## Deprecation Notices
 

@@ -67,6 +67,22 @@ def fake_repo(tmp_path: Path) -> Path:
         'pyo3 = { version = "0.28" }\n',
         encoding="utf-8",
     )
+    # The py-crate manifest pins argus-redact-core by literal version. It is the
+    # only brace-bearing target, rewritten by a regex whose `\g<1>` swallows the
+    # opening brace so the replacement stays brace-free (`_sync` runs
+    # `.format(v=...)` over it, and a literal `{` there would raise). The
+    # `=`-aligned neighbours are the guard that the pattern's own `\s*` is not
+    # over-greedy, and `pyo3.workspace` must NOT be rewritten.
+    (tmp_path / "crates" / "argus-redact-py").mkdir(parents=True)
+    (tmp_path / "crates" / "argus-redact-py" / "Cargo.toml").write_text(
+        "[package]\n"
+        'name                   = "argus-redact-py"\n'
+        "version.workspace      = true\n\n"
+        "[dependencies]\n"
+        "pyo3.workspace         = true\n"
+        'argus-redact-core = { path = "../argus-redact-core", version = "0.0.0" }\n',
+        encoding="utf-8",
+    )
     # Copy the script into the fake repo's scripts/ dir
     (tmp_path / "scripts").mkdir()
     shutil.copy(_SCRIPT, tmp_path / "scripts" / "sync_docs_version.py")
@@ -91,6 +107,40 @@ def test_sync_writes_pyproject_version_to_all_targets(fake_repo: Path):
     assert 'version      = "9.9.9"' in cargo, "workspace version not synced (alignment preserved)"
     assert 'rust-version = "1.85"' in cargo, "rust-version must not be rewritten"
     assert 'pyo3 = { version = "0.28" }' in cargo, "dependency version must not be rewritten"
+    py_crate = (fake_repo / "crates/argus-redact-py/Cargo.toml").read_text(encoding="utf-8")
+    assert 'version = "9.9.9" }' in py_crate, "py-crate core pin not synced"
+    assert "pyo3.workspace         = true" in py_crate, "workspace dep must not be rewritten"
+
+
+def test_sync_rewrites_the_py_crate_pin_when_the_manifest_is_realigned(fake_repo: Path):
+    """The pin survives TOML realignment.
+
+    This manifest is `=`-aligned, so adding a dependency with a longer name
+    shifts the pin's spacing. A pattern hardcoding single spaces would silently
+    stop matching and `--check` would report clean while the pin stayed stale —
+    the exact failure this target was added to prevent.
+    """
+    manifest = fake_repo / "crates/argus-redact-py/Cargo.toml"
+    manifest.write_text(
+        "[dependencies]\n"
+        "a-much-longer-dependency-name = true\n"
+        'argus-redact-core             = { path = "../argus-redact-core", version = "0.0.0" }\n',
+        encoding="utf-8",
+    )
+    result = _run_script(cwd=fake_repo)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert 'version = "9.9.9" }' in manifest.read_text(encoding="utf-8")
+
+
+def test_check_reports_drift_on_the_py_crate_pin(fake_repo: Path):
+    """A stale pin must be named by --check, not silently skipped.
+
+    `_sync` skips any target whose path does not exist, so a mis-specified path
+    would make this target vanish without a word.
+    """
+    result = _run_script("--check", cwd=fake_repo)
+    assert result.returncode == 1
+    assert "crates/argus-redact-py/Cargo.toml" in result.stderr
 
 
 def test_sync_writes_catalog_pii_type_count_to_every_surface(fake_repo: Path):

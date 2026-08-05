@@ -1,9 +1,10 @@
 """The shared wire projections must not silently drop a field.
 
-`risk` was hand-built in two faces and both dropped `gdpr_special_category`,
-`hipaa_categories` and `reasons` — a compliance field invisible to every caller
-for three minor versions. One projection with a field-set gate is what stops the
-next `RiskResult` field going the same way.
+`risk` was hand-built three times. The HTTP and MCP copies both dropped
+`gdpr_special_category` and `hipaa_categories`, which shipped in v0.5.9 and
+reached no caller until v0.8.8; the CLI copy dropped `reasons` on top of those.
+One projection with a field-set gate is what stops the next `RiskResult` field
+going the same way.
 """
 
 from __future__ import annotations
@@ -56,6 +57,49 @@ def test_coverage_payload_covers_every_advisory_field():
 
 def test_coverage_payload_passes_none_through():
     assert coverage_payload(None) is None
+
+
+def test_common_report_fields_shares_no_mutable_state_with_the_report():
+    """Every face spreads this helper into its envelope. If the projection kept
+    the report's own event dicts, a face editing one would reach back into a
+    frozen `RedactReport` — and `list()` alone is a shallow copy."""
+    report = RedactReport(
+        redacted_text="",
+        key={},
+        security_events=(
+            {
+                "type": "security",
+                "reason_code": "keep_downgraded",
+                "count": 1,
+                "detail": "types: phone",
+            },
+        ),
+    )
+    first = common_report_fields(report)
+    second = common_report_fields(report)
+    assert first["security_events"] is not second["security_events"]
+    for projected, original in zip(first["security_events"], report.security_events):
+        assert projected is not original
+        projected["detail"] = "TAMPERED"
+        assert original["detail"] != "TAMPERED"
+
+
+def test_common_report_fields_cannot_collide_with_a_face_specific_key():
+    """Every face spreads this helper LAST, so a shared key that collided with
+    one a face sets explicitly would silently win and the face-contract gate —
+    a key-NAME comparison — would not notice the value changed."""
+    report = RedactReport(redacted_text="", key={})
+    face_specific = {
+        "redacted",  # HTTP, MCP
+        "key",  # HTTP
+        "entities",  # HTTP, CLI
+        "stats",  # HTTP, CLI, MCP
+        "risk",  # all three
+        "summary",  # CLI
+        "compliance",  # CLI
+        "entities_found",  # MCP
+    }
+    assert not (set(common_report_fields(report)) & face_specific)
 
 
 def test_common_report_fields_covers_exactly_the_four_shared_keys():

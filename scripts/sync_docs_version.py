@@ -68,10 +68,13 @@ def _targets() -> list[tuple[Path, str, str]]:
         # The py-crate pins argus-redact-core by literal version (a path dep
         # alone is not publishable). `\g<1>` swallows the opening brace so the
         # replacement template stays brace-free — `_sync` runs `.format(v=...)`
-        # over it, and a literal `{` there would raise.
+        # over it, and a literal `{` there would raise. Spacing is `\s*`, not a
+        # hardcoded single space: this manifest is `=`-aligned, so a dependency
+        # with a longer name would realign the pin and a stricter pattern would
+        # silently stop matching while `--check` still reported clean.
         (
             _REPO / "crates/argus-redact-py/Cargo.toml",
-            r'(argus-redact-core = \{[^}]*version = )"([0-9.]+)"',
+            r'(argus-redact-core\s*=\s*\{[^}]*version\s*=\s*)"([0-9.]+)"',
             r'\g<1>"{v}"',
         ),
         (

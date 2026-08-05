@@ -47,10 +47,15 @@ def test_pyproject_cargo_and_package_version_agree():
 
 def test_py_crate_pins_the_current_core_version():
     """`crates/argus-redact-py/Cargo.toml` pins argus-redact-core by literal
-    version. Nothing syncs it and nothing else checks it: a forgotten bump passes
-    sync-docs-version-check, changelog-version-check and every test leg, then fails
-    at `cargo publish` — or publishes a py-crate pinning a core version that does
-    not exist yet.
+    version, because a path dependency alone is not publishable. A stale pin
+    fails at `cargo publish` — or publishes a py-crate pinning a core version
+    that does not exist yet.
+
+    `make sync-docs-version` rewrites this pin, so this test is a backstop
+    against a broken generator rather than against a forgotten hand-edit. Both
+    are worth having: the generator is a regex over a brace-bearing TOML table,
+    and a regex that silently stops matching would otherwise leave the pin stale
+    with `sync-docs-version-check` still reporting clean.
 
     The wasm crate needs no equivalent check: its dependency is a bare
     `{ path = "../argus-redact-core" }` with no version literal.
@@ -60,6 +65,7 @@ def test_py_crate_pins_the_current_core_version():
     assert match, "argus-redact-core dependency pin not found in argus-redact-py/Cargo.toml"
     assert match.group(1) == _pyproject_version(), (
         f"argus-redact-py pins argus-redact-core {match.group(1)} but pyproject "
-        f"declares {_pyproject_version()}. This file is hand-edited — "
-        f"`make sync-docs-version` does not touch it."
+        f"declares {_pyproject_version()}. Run `make sync-docs-version` — it "
+        f"rewrites this pin along with every other version literal. Do not edit "
+        f"it by hand: that would leave the other targets stale."
     )

@@ -4,7 +4,11 @@
 envelope — deliberately, since their shapes differ and unifying them would be a
 breaking change — but the projection of a single report FIELD must not differ
 between them. Before this module the `risk` dict was hand-built in two of the
-three, and both copies dropped the same three `RiskResult` fields.
+three faces, and both copies dropped `gdpr_special_category` and
+`hipaa_categories` — shipped in v0.5.9, reaching no caller until v0.8.8. The
+third face (the CLI) built a different subset again, dropping `reasons` as well.
+Three independent hand-built projections of one dataclass is the shape that
+produced that; there is now one.
 """
 
 from __future__ import annotations
@@ -55,10 +59,15 @@ def common_report_fields(report: RedactReport) -> dict:
     variation, so they live here rather than being copy-pasted three times: the
     face-contract gate compares key NAMES, and would not notice a copy that got
     the value transform wrong.
+
+    The result shares no mutable state with ``report``. ``list()`` alone would
+    be a shallow copy — the event dicts would still be the report's own, so a
+    caller editing one would reach through into a frozen dataclass — hence the
+    per-event ``dict()``.
     """
     return {
         "residual_personal_data": report.residual_personal_data,
-        "security_events": list(report.security_events),
+        "security_events": [dict(event) for event in report.security_events],
         "coverage": coverage_payload(report.coverage),
         "layers_used": list(report.layers_used),
     }
