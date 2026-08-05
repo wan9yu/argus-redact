@@ -137,10 +137,14 @@ def test_check_reports_drift_on_the_py_crate_pin(fake_repo: Path):
 
     `_sync` skips any target whose path does not exist, so a mis-specified path
     would make this target vanish without a word.
+
+    Separators are normalised before the comparison: `_sync` reports
+    `path.relative_to(_REPO)`, which renders with backslashes on Windows, and
+    the CI matrix runs this on windows-latest.
     """
     result = _run_script("--check", cwd=fake_repo)
     assert result.returncode == 1
-    assert "crates/argus-redact-py/Cargo.toml" in result.stderr
+    assert "crates/argus-redact-py/Cargo.toml" in result.stderr.replace("\\", "/")
 
 
 def test_sync_writes_catalog_pii_type_count_to_every_surface(fake_repo: Path):
