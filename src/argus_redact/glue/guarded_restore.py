@@ -74,8 +74,22 @@ def guarded_restore(
     if redacted is not None and key_dict:
         hints = check_restore_safety(redacted, text, key_dict)
         if hints:
+            # Count only. Each hint carries BOTH a pseudonym code — a mask surrogate
+            # under the default strategy, so partial original — and, for the
+            # proximity check, up to ~200 characters of model-controlled text lifted
+            # verbatim out of the reply (the regex runs against a ±100-char window).
+            # Both are unsafe for an event the MCP face serialises into a model's
+            # context window, and fixing only one of them would be half a fix.
+            # `danger_pattern()` is a flat alternation with no per-branch label, so
+            # there is no category to report in the match's place. Callers that need
+            # specifics call `check_restore_safety` directly; they already hold the key.
             h_events.append(
-                security_event(INJECTION_SUSPECTED, count=len(hints), detail="; ".join(hints))
+                security_event(
+                    INJECTION_SUSPECTED,
+                    count=len(hints),
+                    detail=f"{len(hints)} suspicious pattern(s); "
+                    "call check_restore_safety for specifics",
+                )
             )
 
     # Fail closed BEFORE restoring, so on a suspected injection no original is ever

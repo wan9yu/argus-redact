@@ -128,6 +128,22 @@ Each entry follows three lines:
   [Compliance artifacts (v0.7.18)](security-model.md#compliance-artifacts-v0718)
   for the full integrity-boundary discussion.
 
+### `injection_suspected` reports a count, not what tripped it
+
+- **What**: the `injection_suspected` security event's `detail` says how many
+  suspicious patterns fired, not which pseudonym or which danger pattern. Before
+  v0.8.8 it carried the full hint strings.
+- **Why we won't fix**: those strings embed a pseudonym code — which under the default `mask`
+  strategy carries part of the original — and, for the proximity check, the raw
+  regex match from the model's reply, up to roughly 200 characters of
+  attacker-influenced text. The event is serialised onto the MCP face, so anything
+  in `detail` can be read back into a model's context. The danger pattern is one
+  flat alternation with no per-branch label, so there is no category available to
+  report in the match's place without restructuring the core regex.
+- **What you should do**: call `check_restore_safety(redacted, llm_output, key)`
+  directly. It still returns the full hint strings, and a caller invoking it already
+  holds the key and every original, so it discloses nothing new to them.
+
 ### Out of scope — NLP coref, full-fidelity round-trip, multimodal, tool_use, token streaming
 
 - **What**: argus-redact does **not** address these LLM-pipeline UX concerns:

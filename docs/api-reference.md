@@ -681,7 +681,7 @@ The correct-by-construction entry point for restoring an LLM reply. It runs the 
 
 `str` by default. `tuple[str, dict]` when `detailed=True` — the dict is `{"security_events": [...]}`, the union of the H event (if any) and whatever the P/S guard produced. An empty list means nothing fired.
 
-Each event is a dict: `{"type": "security", "reason_code": str, "count": int, "detail": str | None}`. Reason codes are `guard_no_anchor` / `provenance_failed` (P — nothing was substituted), `out_of_scope_pseudonym` (S — those pseudonyms were withheld, the rest were restored), and `injection_suspected` (H — advisory; the restore **proceeded** and originals *were* substituted). `detail` may contain pseudonyms or excerpts, so keep it out of logs you would not treat as sensitive; the `SecurityWarning` deliberately carries only reason codes and counts.
+Each event is a dict: `{"type": "security", "reason_code": str, "count": int, "detail": str | None}`. Reason codes are `guard_no_anchor` / `provenance_failed` (P — nothing was substituted), `out_of_scope_pseudonym` (S — those pseudonyms were withheld, the rest were restored), and `injection_suspected` (H — advisory; the restore **proceeded** and originals *were* substituted). `detail` is PII-free — it carries counts and type names only, never a pseudonym, an original, or an excerpt of the model's reply — so it is safe for the same log stream as the `SecurityWarning`, which carries reason codes and counts. The trade-off is that `injection_suspected` no longer names *what* tripped the heuristic; call `check_restore_safety(redacted, llm_output, key)` for the specific hints when you are investigating one.
 
 ### Why it exists
 
