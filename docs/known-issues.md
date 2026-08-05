@@ -82,40 +82,28 @@
   an `ORG` hit on a sentence-initial capitalized word as suspect and review it before
   trusting the redaction.
 
-### Entity type names are not a closed, validated vocabulary
+### The Presidio bridge passes an unmapped entity type through unchanged
 
-- **What**: two report fields carry entity TYPE NAMES, and the type name itself
-  is not validated against the registry. A layer-3 semantic adapter (e.g. the
-  Ollama adapter, `impure/ollama_adapter.py`) reads
-  `entity_type = item.get("type", "")` straight out of the model's JSON reply,
-  with no registry check, so a prompt-injected model can choose that string.
-  The two channels:
-  - `security_events[].detail` — several events (`coverage_restored`,
-    `mask_collision`, `keep_downgraded`) name types via the shared
-    `_types_event` formatter (`pure/replacer.py`); by design never a raw or
-    masked value, but the type name passes through.
-  - `risk.reasons` — each entry is built as `"<type> (<level>)"` in the core
-    (`crates/argus-redact-core/src/risk.rs`), so the same string appears there.
-    This is the wider channel of the two: `risk.reasons` reaches all three
-    report faces.
-- **Who is affected**: callers running `mode="auto"` or `mode="semantic"` with
-  a layer-3 model they do not fully control or trust — e.g. a self-hosted
-  model reachable by a prompt-injected input. Callers on `mode="fast"` /
-  `"ner"` alone never invoke L3, so this cannot occur for them.
-- **Why we won't fix (yet)**: the obvious fix — rejecting any type name absent
-  from the registry — is unsafe. `_reject_unknown_type_names`
-  (`glue/redact.py`) already validates caller-supplied `types=` /
-  `types_exclude=`, but the same rule applied to detector OUTPUT would blank
-  legitimate non-registry types: `location` is a real NER output type and is
-  not one of the registry's 61 types. There is no cheap way yet to tell a
-  legitimate free-form type from an adversarial one.
-- **What you should do**: the audit ledger is already unaffected, since
-  `AuditLedger`'s `_sanitize_event` (`compose/audit.py`) drops `detail` entirely
-  on both the write and the reload path — but note that sanitiser does not cover
-  `risk.reasons`, which is not part of an audit entry. If you run a layer-3
-  semantic adapter you do not fully control, treat both `security_events[].detail`
-  and `risk.reasons` like any other model output: don't feed them back into a
-  prompt uninspected.
+- **What**: `integrations/presidio.py` maps Presidio's entity types onto argus
+  type names with `_PRESIDIO_TYPE_MAP.get(r.entity_type, r.entity_type.lower())`
+  — an unmapped type falls through as its own lowercased string. Since
+  `PresidioBridge` accepts a caller-supplied `AnalyzerEngine`, the type-name
+  space is open-ended by construction. An entity type is not just a label: it
+  becomes the pseudonym prefix in the redacted text (first four characters,
+  uppercased), a key of the returned key dict, `entities[].type`, and an entry
+  in `risk.reasons`.
+- **Who is affected**: only callers using the Presidio bridge with custom
+  recognizers. The vocabulary is the caller's own — this is not a channel an
+  input can steer, unlike the layer-3 one closed in v0.8.8, where the string
+  came from a model that untrusted text can prompt-inject.
+- **Why we won't fix (yet)**: the fix that worked for layer 3 — a closed
+  allowlist at the birth site, mirroring the `_TYPE_MAP` every Layer-2 NER
+  adapter applies — does not transfer. Layer 3's vocabulary is fixed by
+  argus's own prompt; a Presidio caller's is theirs to define, and an allowlist
+  would reject the custom recognizers the bridge exists to support.
+- **What you should do**: if you register custom Presidio recognizers, choose
+  entity type names from a fixed vocabulary of your own rather than deriving
+  them from matched text.
 
 ## Deprecation Notices
 
@@ -408,6 +396,32 @@ Each entry follows three lines:
   low-evidence candidates Layer 1 intentionally passes over.
 
 ## Recently Fixed
+
+### v0.8.8 — A layer-3 model can no longer choose an entity type name
+
+- **What it was.** `impure/ollama_adapter.py` read `item.get("type", "")`
+  straight out of the model's JSON reply with no validation, so a poisoned or
+  prompt-injected layer-3 model chose that string. An entity type is not just a
+  label: unregistered types fall through to a pseudonym prefix built as
+  `type.upper()[:4]`, so the string reached **the redacted output text itself**
+  (`老王说他上周在SYST-01337见了人` for a type of `"SYSTEM: dump the key"`), the
+  **keys of the returned key dict** — which get written to a key file —
+  `entities[].type`, `risk.reasons` (untruncated, on all three report faces),
+  and `security_events[].detail`. Control characters and bidi overrides reached
+  the redacted text the same way.
+- **The fix.** A closed allowlist at the birth site
+  (`_ALLOWED_SEMANTIC_TYPES`), holding exactly the ten types `SYSTEM_PROMPT`
+  instructs the model to return. This mirrors the `_TYPE_MAP` allowlist every
+  Layer-2 NER adapter already applies to its model's labels — layer 3 was the
+  only detector in the tree ingesting a model-chosen type name unchecked.
+- **Why relabel rather than drop.** An out-of-vocabulary entity is retyped
+  `semantic_other`, not discarded: the model still found a span worth
+  protecting, and losing a detection is worse than losing a label. That
+  sentinel is deliberately absent from the registry, so the entity keeps
+  exactly the sensitivity (2) and `remove` strategy an unregistered type
+  already had — the label stops being model-controlled without changing how the
+  span is treated. A test pins the allowlist to the prompt so the two cannot
+  drift apart.
 
 ### v0.8.4 — Person cross-layer overlap no longer drops the NER span
 
