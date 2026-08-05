@@ -145,6 +145,24 @@ class TestServerRedact:
 
         assert resp.status_code == 400
 
+    def test_report_and_detailed_agree_on_security_events(self, client):
+        """`report=True` used to drop the events `detailed=True` carried."""
+        body = {"text": "请联系张伟，电话 13812345678。", "lang": "zh"}
+        report = client.post("/redact", json={**body, "report": True}).json()
+        detailed = client.post("/redact", json={**body, "detailed": True}).json()
+        assert report["security_events"] == detailed["details"].get("security_events", [])
+
+    def test_report_carries_the_compliance_risk_fields(self, client):
+        """`gdpr_special_category` and `hipaa_categories` shipped in v0.5.9 and
+        reached no wire face until v0.8.8."""
+        resp = client.post(
+            "/redact",
+            json={"text": "请联系张伟，电话 13812345678。", "lang": "zh", "report": True},
+        )
+        risk = resp.json()["risk"]
+        assert "gdpr_special_category" in risk
+        assert "hipaa_categories" in risk
+
 
 class TestServerRestore:
     def test_should_restore_text(self, client):

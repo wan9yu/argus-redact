@@ -24,8 +24,13 @@ accidental omissions look deliberate.
 from __future__ import annotations
 
 import dataclasses
+import importlib.util
+import warnings
+
+import pytest
 
 from argus_redact._types import RedactReport
+from argus_redact.exceptions import SecurityWarning
 
 EMIT = "emit"
 PARTIAL = "partial"
@@ -199,3 +204,26 @@ def test_a_reasonless_withholding_is_rejected():
     """Positive control for the reason requirement."""
     bad = Decision(WITHHELD)
     assert not bad.reason.strip()
+
+
+@pytest.mark.skipif(importlib.util.find_spec("starlette") is None, reason="starlette not installed")
+def test_http_redact_report_envelope_matches_the_contract():
+    """The serialised envelope, not field-by-field.
+
+    Every plaintext-absence assertion in the server and MCP suites indexes ONE key
+    (`data["redacted"]`), so none of them would notice a field leaking through a
+    different key. A key-set comparison over the whole payload is what closes that.
+    """
+    from starlette.testclient import TestClient
+
+    from argus_redact.server import create_app
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SecurityWarning)
+        client = TestClient(create_app(allow_no_auth=True))
+        resp = client.post(
+            "/redact",
+            json={"text": "请联系张伟，电话 13812345678。", "lang": "zh", "report": True},
+        )
+    assert resp.status_code == 200
+    assert set(resp.json()) == declared_wire_keys(HTTP_REDACT_REPORT)
