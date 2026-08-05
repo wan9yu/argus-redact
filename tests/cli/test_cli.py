@@ -409,6 +409,17 @@ class TestAssessCommand:
         assert data["summary"]["risk_score"] == 0.0
         assert data["summary"]["risk_level"] == "none"
 
+    def test_assess_reports_coverage_and_layers(self):
+        """`coverage` and `layers_used` shipped in v0.8.7 and reached no face."""
+        code, stdout, _ = run_cli(
+            "assess", "-m", "fast", "-l", "zh", stdin="请联系张伟，电话 13812345678。"
+        )
+        assert code == 0
+        data = json.loads(stdout)
+        assert set(data["coverage"]) == {"uncovered", "narrow", "exhaustive"}
+        assert data["layers_used"] == [1]
+        assert data["residual_personal_data"] is True
+
 
 class TestCliErrors:
     def test_should_show_help_when_no_subcommand(self):

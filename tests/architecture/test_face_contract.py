@@ -227,3 +227,23 @@ def test_http_redact_report_envelope_matches_the_contract():
         )
     assert resp.status_code == 200
     assert set(resp.json()) == declared_wire_keys(HTTP_REDACT_REPORT)
+
+
+def test_cli_assess_envelope_matches_the_contract(tmp_path):
+    import argparse
+    import io
+    import json
+    from contextlib import redirect_stdout
+
+    from argus_redact.cli.main import cmd_assess
+
+    source = tmp_path / "input.txt"
+    source.write_text("请联系张伟，电话 13812345678。", encoding="utf-8")
+
+    buf = io.StringIO()
+    args = argparse.Namespace(input=str(source), lang="zh", mode="fast", output=None)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", SecurityWarning)
+        with redirect_stdout(buf):
+            cmd_assess(args)
+    assert set(json.loads(buf.getvalue())) == declared_wire_keys(CLI_ASSESS)
