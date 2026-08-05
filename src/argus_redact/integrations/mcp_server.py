@@ -26,7 +26,7 @@ from mcp.server import MCPServer
 from argus_redact import RedactReport, __version__, redact
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.glue.guarded_restore import guarded_restore
-from argus_redact.pure.wire import coverage_payload, risk_payload
+from argus_redact.pure.wire import common_report_fields, risk_payload
 
 mcp = MCPServer("argus-redact")
 
@@ -246,10 +246,7 @@ async def assess_text(
             "entities_found": report.stats["total"],
             "stats": report.stats,
             "redacted": report.redacted_text,
-            "residual_personal_data": report.residual_personal_data,
-            "security_events": list(report.security_events),
-            "coverage": coverage_payload(report.coverage),
-            "layers_used": list(report.layers_used),
+            **common_report_fields(report),
         },
         ensure_ascii=False,
         indent=2,

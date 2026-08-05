@@ -11,9 +11,9 @@ from __future__ import annotations
 import dataclasses
 import json
 
-from argus_redact._types import CoverageAdvisory
+from argus_redact._types import CoverageAdvisory, RedactReport
 from argus_redact.pure.risk import RiskResult
-from argus_redact.pure.wire import coverage_payload, risk_payload
+from argus_redact.pure.wire import common_report_fields, coverage_payload, risk_payload
 
 
 def _a_risk() -> RiskResult:
@@ -56,3 +56,13 @@ def test_coverage_payload_covers_every_advisory_field():
 
 def test_coverage_payload_passes_none_through():
     assert coverage_payload(None) is None
+
+
+def test_common_report_fields_covers_exactly_the_four_shared_keys():
+    report = RedactReport(redacted_text="", key={})
+    assert set(common_report_fields(report)) == {
+        "residual_personal_data",
+        "security_events",
+        "coverage",
+        "layers_used",
+    }

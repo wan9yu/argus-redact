@@ -220,7 +220,7 @@ def cmd_info(args):
 
 def cmd_assess(args):
     from argus_redact import redact
-    from argus_redact.pure.wire import coverage_payload, risk_payload
+    from argus_redact.pure.wire import common_report_fields, risk_payload
 
     text = _read_input(args.input)
     lang = [code for code in args.lang.split(",") if code] if "," in args.lang else args.lang
@@ -247,10 +247,7 @@ def cmd_assess(args):
         "risk": risk_payload(report.risk),
         "entities": list(report.entities),
         "stats": report.stats,
-        "residual_personal_data": report.residual_personal_data,
-        "security_events": list(report.security_events),
-        "coverage": coverage_payload(report.coverage),
-        "layers_used": list(report.layers_used),
+        **common_report_fields(report),
     }
     output = json.dumps(data, ensure_ascii=False, indent=2)
     if args.output:

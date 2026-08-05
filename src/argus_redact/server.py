@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 from argus_redact import __version__, redact, restore
 from argus_redact.exceptions import SecurityWarning
 from argus_redact.pure.restore import RestoreGuardError
-from argus_redact.pure.wire import coverage_payload, risk_payload
+from argus_redact.pure.wire import common_report_fields, risk_payload
 
 try:
     from starlette.requests import Request
@@ -125,15 +125,7 @@ async def handle_redact(request: Request) -> JSONResponse:
                 "entities": list(result.entities),
                 "stats": result.stats,
                 "risk": risk_payload(result.risk),
-                "residual_personal_data": result.residual_personal_data,
-                # `detailed=True` has always carried `security_events`; `report=True`
-                # dropping it meant two shapes on one endpoint disagreed about the
-                # same data. Every `detail` string is PII-free.
-                "security_events": list(result.security_events),
-                # `coverage` and `layers_used` shipped in v0.8.7 with zero wire
-                # consumers on any face — this is the first one either reaches.
-                "coverage": coverage_payload(result.coverage),
-                "layers_used": list(result.layers_used),
+                **common_report_fields(result),
             }
         )
 

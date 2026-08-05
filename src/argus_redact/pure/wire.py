@@ -13,7 +13,7 @@ import dataclasses
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from argus_redact._types import CoverageAdvisory
+    from argus_redact._types import CoverageAdvisory, RedactReport
     from argus_redact.pure.risk import RiskResult
 
 
@@ -46,3 +46,19 @@ def coverage_payload(coverage: CoverageAdvisory | None) -> dict | None:
     if coverage is None:
         return None
     return dataclasses.asdict(coverage)
+
+
+def common_report_fields(report: RedactReport) -> dict:
+    """The report fields every wire face projects identically.
+
+    All three faces emit these four under the same wire key with no per-face
+    variation, so they live here rather than being copy-pasted three times: the
+    face-contract gate compares key NAMES, and would not notice a copy that got
+    the value transform wrong.
+    """
+    return {
+        "residual_personal_data": report.residual_personal_data,
+        "security_events": list(report.security_events),
+        "coverage": coverage_payload(report.coverage),
+        "layers_used": list(report.layers_used),
+    }
