@@ -220,7 +220,11 @@ async def assess_text(
     lang: str = "zh",
     mode: str = "fast",
 ) -> str:
-    """Assess privacy risk of text. Returns risk score, level, reasons, and PIPL articles.
+    """Assess privacy risk of text. Returns redacted text, a full risk assessment
+    (score, level, reasons, PIPL/GDPR/HIPAA fields), detection stats, a
+    residual-risk flag, security events, a coverage advisory, and which detection
+    layers ran. Deliberately withheld: entity spans (`entities[].original` is raw
+    plaintext) and a restore key (this tool mints none).
 
     Args:
         text: Input text to assess for privacy risk.

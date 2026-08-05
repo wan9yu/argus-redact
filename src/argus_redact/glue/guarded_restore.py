@@ -74,21 +74,12 @@ def guarded_restore(
     if redacted is not None and key_dict:
         hints = check_restore_safety(redacted, text, key_dict)
         if hints:
-            # Count only. `len(hints)` is (pseudonym x finding) pairs across all
-            # three check_restore_safety checks — frequency amplification and
-            # reserved-range amplification are not pattern matches at all, so
-            # "pattern(s)" would mislabel two of the three. Each hint carries BOTH a
-            # pseudonym code — a mask surrogate under the default strategy, so
-            # partial original — and, for the proximity check specifically, up to
-            # ~200 characters of model-controlled text lifted verbatim out of the
-            # reply (the regex runs against a ±100-char window). Both are unsafe for
-            # an event the MCP face serialises into a model's context window, and
-            # fixing only one of them would be half a fix. `danger_pattern()` is a
-            # flat alternation with no per-branch label, so there is no category to
-            # report in the match's place. The detail is phrased as a statement, not
-            # an instruction: this string round-trips into a model's own context via
-            # the MCP face, and `check_restore_safety` is not one of its tools —
-            # callers that need specifics call it directly; they already hold the key.
+            # Count only, never the specifics — see "injection_suspected and
+            # out_of_scope_pseudonym report counts, not specifics" in
+            # docs/known-issues.md for why the pseudonym code and proximity-check
+            # match are both unsafe to carry here. `len(hints)` is (pseudonym x
+            # finding) pairs across all three check_restore_safety checks, so
+            # "pattern(s)" would mislabel two of the three.
             h_events.append(
                 security_event(
                     INJECTION_SUSPECTED,

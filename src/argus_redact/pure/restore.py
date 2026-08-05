@@ -91,11 +91,10 @@ def _event_from_core(event: dict) -> dict:
         )
     if kind == OUT_OF_SCOPE_PSEUDONYM:
         # Mirrors the ALIAS_COLLISION branch below: names how many were withheld,
-        # never the tokens themselves. Under the registry's default `mask` strategy
-        # a token is a literal substring of the original — `138****5678` keeps the
-        # prefix and last four, an email keeps its full domain — and this event
-        # reaches the HTTP and MCP faces. A caller that needs the specific codes
-        # already holds everything needed to derive them: `set(key) - set(anchor.scope)`.
+        # never the tokens themselves — see "injection_suspected and
+        # out_of_scope_pseudonym report counts, not specifics" in
+        # docs/known-issues.md. A caller that needs the specific codes already
+        # holds everything needed to derive them: `set(key) - set(anchor.scope)`.
         return security_event(
             OUT_OF_SCOPE_PSEUDONYM,
             count=count,

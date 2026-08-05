@@ -1,12 +1,9 @@
 """No security event's `detail` may carry a value derived from the input.
 
-Both producers fixed here are restore-side. `out_of_scope_pseudonym` interpolated
-the withheld tokens, which under the registry's default `mask` strategy are literal
-substrings of the original (`138****5678` keeps the prefix and last four; an email
-keeps its full domain). `injection_suspected` joined hint strings built in the Rust
-core, each carrying both a pseudonym code and, for the proximity check, up to ~200
-characters of a regex match lifted out of the LLM reply (the danger-pattern regex
-runs against a bounded ±100-character window, not an unbounded one).
+Both producers fixed here are restore-side: `out_of_scope_pseudonym` and
+`injection_suspected`. See "injection_suspected and out_of_scope_pseudonym
+report counts, not specifics" in docs/known-issues.md for what each used to
+leak and why.
 
 `check_restore_safety` deliberately still returns the full strings — a caller who
 invokes it directly already holds the key and every original, so it discloses nothing
