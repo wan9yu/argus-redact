@@ -86,15 +86,26 @@ class TestHanLPRealNER:
 class TestHanLPRealRedactIntegration:
     """End-to-end: redact() with real HanLP NER."""
 
-    def test_should_redact_person_name_with_ner_mode(self, adapter):
+    def test_should_redact_person_and_phone_without_ner(self, adapter):
+        """`mode="fast"` catches the name too, so NER is not what protects it.
+
+        This test previously asserted `"张三" in redacted` — that fast mode left
+        the name alone and only the phone was redacted. That stopped being true
+        when the evidence-gated Layer-1 person detector shipped, and the
+        assertion went stale unnoticed because the whole module is `ner`-marked
+        and every CI leg deselects it. Pinning the real behaviour keeps the
+        contrast this file is about honest: HanLP adds recall on top of a fast
+        mode that already covers this sentence, rather than being the only thing
+        standing between the name and the output.
+        """
         from argus_redact import redact
 
         text = "张三的手机号是13812345678"
         redacted, key = redact(text, salt=42, mode="fast")
 
-        # fast mode: only phone is redacted, 张三 remains
-        assert "张三" in redacted
+        assert "张三" not in redacted
         assert "13812345678" not in redacted
+        assert set(key.values()) == {"张三", "13812345678"}
 
     def test_should_roundtrip_with_real_ner(self, adapter):
         """Full roundtrip: NER detects names, regex detects phone, restore recovers all."""
