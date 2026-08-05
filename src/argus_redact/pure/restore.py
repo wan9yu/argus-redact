@@ -72,9 +72,9 @@ def _event_from_core(event: dict) -> dict:
     core decides WHICH check fired and how big/which tokens it carries, but
     carries zero prose (see ``GuardEvent`` in the Rust ``restore.rs``). This is
     the one place that turns ``kind`` back into the Python reason_code
-    constant and renders the exact detail string every caller (the
-    SecurityWarning, ``detailed=True``, the docs) has always seen, so the two
-    can never drift apart.
+    constant and builds the (PII-free) ``detail`` string that
+    ``detailed=True`` and the docs describe, so callers can never see it
+    rendered two different ways.
 
     ``guard_no_anchor`` never reaches here: core only ever runs from
     ``restore()`` once a real anchor exists, so that event is built directly
@@ -95,7 +95,7 @@ def _event_from_core(event: dict) -> dict:
         # a token is a literal substring of the original — `138****5678` keeps the
         # prefix and last four, an email keeps its full domain — and this event
         # reaches the HTTP and MCP faces. A caller that needs the specific codes
-        # reads them from `_core.restore_guarded`'s structured records.
+        # already holds everything needed to derive them: `set(key) - set(anchor.scope)`.
         return security_event(
             OUT_OF_SCOPE_PSEUDONYM,
             count=count,

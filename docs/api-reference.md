@@ -540,7 +540,7 @@ The guard has two deterministic parts. Both run inside `restore()` when `guard=T
 
 The **H injection heuristic is not part of `restore()`.** It lives in [`check_restore_safety()`](#check_restore_safety) and is run for you by [`guarded_restore()`](#guarded_restore-v0720). H is **advisory by default** — it warns, it does not block — because it is a heuristic, and a heuristic is not promoted to the deterministic guarantee. `strict=True` is the opt-in that makes a security event fail closed.
 
-A fail-closed or partial restore is **not silent**: it emits a `SecurityWarning` carrying reason codes and counts (never `detail`, which may hold raw text). Prior to v0.7.19 a fail-closed restore returned un-restored text with no warning at all — a bug; it now always signals.
+A fail-closed or partial restore is **not silent**: it emits a `SecurityWarning` carrying reason codes and counts only, never the event's `detail` field. Prior to v0.7.19 a fail-closed restore returned un-restored text with no warning at all — a bug; it now always signals.
 
 Guard checks are not a guarantee against a determined adversary — they raise the cost of replaying, forging or widening an LLM reply, and they surface what they catch. See `docs/security-model.md` for the threat model and its limits.
 
@@ -681,7 +681,7 @@ The correct-by-construction entry point for restoring an LLM reply. It runs the 
 
 `str` by default. `tuple[str, dict]` when `detailed=True` — the dict is `{"security_events": [...]}`, the union of the H event (if any) and whatever the P/S guard produced. An empty list means nothing fired.
 
-Each event is a dict: `{"type": "security", "reason_code": str, "count": int, "detail": str | None}`. Reason codes are `guard_no_anchor` / `provenance_failed` (P — nothing was substituted), `out_of_scope_pseudonym` (S — those pseudonyms were withheld, the rest were restored), and `injection_suspected` (H — advisory; the restore **proceeded** and originals *were* substituted). `detail` is PII-free — it carries counts and type names only, never a pseudonym, an original, or an excerpt of the model's reply — so it is safe for the same log stream as the `SecurityWarning`, which carries reason codes and counts. The trade-off is that `injection_suspected` no longer names *what* tripped the heuristic; call `check_restore_safety(redacted, llm_output, key)` for the specific hints when you are investigating one.
+Each event is a dict: `{"type": "security", "reason_code": str, "count": int, "detail": str | None}`. Reason codes are `guard_no_anchor` / `provenance_failed` (P — nothing was substituted), `out_of_scope_pseudonym` (S — those pseudonyms were withheld, the rest were restored), and `injection_suspected` (H — advisory; the restore **proceeded** and originals *were* substituted). `detail` is designed to carry only counts and entity type names — never a pseudonym, an original value, or an excerpt of the model's reply — so it is safe for the same log stream as the `SecurityWarning`, which carries reason codes and counts. One caveat: entity type names are not a closed, validated vocabulary — a layer-3 semantic model supplies its own type string per entity, and nothing rejects an unrecognised one, so a compromised or prompt-injected L3 model could in principle embed arbitrary text in a type name (see `docs/known-issues.md`, Unresolved). Separately, `injection_suspected` no longer names *what* tripped the heuristic; call `check_restore_safety(redacted, llm_output, key)` for the specific hints when you are investigating one.
 
 ### Why it exists
 
@@ -782,7 +782,7 @@ from argus_redact import SecurityWarning
 
 A `UserWarning` subclass, emitted when something would silently weaken redaction or when a restore did not go cleanly. It is the human-facing backstop for callers who are not reading `security_events`; the restore paths raise it for a fail-closed guard, a partial (out-of-scope) restore, an advisory H hit, and — since v0.8.0 (R4) — an unguarded (`guard=None`) restore that actually reinserted an original with no injection check.
 
-The message carries **reason codes and counts only** — never the event `detail`, which may hold raw text or pseudonyms — so it is safe to route into an ordinary log stream. The warning is attributed to your call site, not to argus-redact's internals.
+The message carries **reason codes and counts only** — never the event `detail` — so it is safe to route into an ordinary log stream. The warning is attributed to your call site, not to argus-redact's internals.
 
 ```python
 import warnings

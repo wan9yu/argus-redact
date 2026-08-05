@@ -82,6 +82,33 @@
   an `ORG` hit on a sentence-initial capitalized word as suspect and review it before
   trusting the redaction.
 
+### `detail`'s entity type names are not a closed, validated vocabulary
+
+- **What**: several `security_events` (`coverage_restored`, `mask_collision`,
+  `keep_downgraded`) put entity TYPE NAMES into `detail`, via the shared
+  `_types_event` formatter (`pure/replacer.py`) — by design, never a raw or
+  masked value. But the type name itself is not validated against the
+  registry: a layer-3 semantic adapter (e.g. the Ollama adapter,
+  `impure/ollama_adapter.py`) reads `entity_type = item.get("type", "")`
+  straight out of the model's JSON reply, with no registry check.
+- **Who is affected**: callers running `mode="auto"` or `mode="semantic"` with
+  a layer-3 model they do not fully control or trust — e.g. a self-hosted
+  model reachable by a prompt-injected input. Callers on `mode="fast"` /
+  `"ner"` alone never invoke L3, so this cannot occur for them.
+- **Why we won't fix (yet)**: the obvious fix — rejecting any type name absent
+  from the registry — is unsafe. `_reject_unknown_type_names`
+  (`glue/redact.py`) already validates caller-supplied `types=` /
+  `types_exclude=`, but the same rule applied to detector OUTPUT would blank
+  legitimate non-registry types: `location` is a real NER output type and is
+  not one of the registry's 61 types. There is no cheap way yet to tell a
+  legitimate free-form type from an adversarial one.
+- **What you should do**: this only reaches the HTTP and MCP `security_events`
+  payloads — the audit ledger is already unaffected, since `AuditLedger`'s
+  `_sanitize_event` (`compose/audit.py`) drops `detail` entirely on both the
+  write and the reload path. If you run a layer-3 semantic adapter you do not
+  fully control, treat its `security_events` `detail` field like any other
+  model output: don't feed it back into a prompt uninspected.
+
 ## Deprecation Notices
 
 ### bare `restore()` without `guard=` — flip shipped in v0.8.0
@@ -128,21 +155,31 @@ Each entry follows three lines:
   [Compliance artifacts (v0.7.18)](security-model.md#compliance-artifacts-v0718)
   for the full integrity-boundary discussion.
 
-### `injection_suspected` reports a count, not what tripped it
+### `injection_suspected` and `out_of_scope_pseudonym` report counts, not specifics
 
-- **What**: the `injection_suspected` security event's `detail` says how many
-  suspicious patterns fired, not which pseudonym or which danger pattern. Before
-  v0.8.8 it carried the full hint strings.
-- **Why we won't fix**: those strings embed a pseudonym code — which under the default `mask`
-  strategy carries part of the original — and, for the proximity check, the raw
-  regex match from the model's reply, up to roughly 200 characters of
-  attacker-influenced text. The event is serialised onto the MCP face, so anything
-  in `detail` can be read back into a model's context. The danger pattern is one
-  flat alternation with no per-branch label, so there is no category available to
-  report in the match's place without restructuring the core regex.
-- **What you should do**: call `check_restore_safety(redacted, llm_output, key)`
-  directly. It still returns the full hint strings, and a caller invoking it already
-  holds the key and every original, so it discloses nothing new to them.
+- **What**: neither event's `detail` names what it caught, only how many.
+  `injection_suspected` says how many suspicious findings fired, not which
+  pseudonym or which danger pattern. `out_of_scope_pseudonym` says how many
+  pseudonyms were withheld, not which pseudonym codes. Before v0.8.8 both
+  carried the full specifics.
+- **Why we won't fix**: `injection_suspected`'s hint strings embed a pseudonym
+  code — which under the default `mask` strategy carries part of the original
+  — and, for the proximity check, the raw regex match from the model's reply,
+  up to roughly 200 characters of attacker-influenced text; the event is
+  serialised onto the MCP face, so anything in `detail` can be read back into a
+  model's context, and the danger pattern is one flat alternation with no
+  per-branch label, so there is no category available to report in the match's
+  place without restructuring the core regex. `out_of_scope_pseudonym`'s
+  withheld codes are themselves literal substrings of the original under the
+  default `mask` strategy (`138****5678` keeps the prefix and last four, an
+  email keeps its full domain), and this event reaches both the HTTP and MCP
+  faces.
+- **What you should do**: for `injection_suspected`, call
+  `check_restore_safety(redacted, llm_output, key)` directly — it still returns
+  the full hint strings, and a caller invoking it already holds the key and
+  every original, so it discloses nothing new to them. For
+  `out_of_scope_pseudonym`, derive the withheld set from what you already
+  hold, with no private API: `set(key) - set(anchor.scope)`.
 
 ### Out of scope — NLP coref, full-fidelity round-trip, multimodal, tool_use, token streaming
 

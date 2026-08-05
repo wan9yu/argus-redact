@@ -4,13 +4,15 @@ Both producers fixed here are restore-side. `out_of_scope_pseudonym` interpolate
 the withheld tokens, which under the registry's default `mask` strategy are literal
 substrings of the original (`138****5678` keeps the prefix and last four; an email
 keeps its full domain). `injection_suspected` joined hint strings built in the Rust
-core, each carrying both a pseudonym code and an unbounded regex match lifted out of
-the LLM reply.
+core, each carrying both a pseudonym code and, for the proximity check, up to ~200
+characters of a regex match lifted out of the LLM reply (the danger-pattern regex
+runs against a bounded ±100-character window, not an unbounded one).
 
 `check_restore_safety` deliberately still returns the full strings — a caller who
 invokes it directly already holds the key and every original, so it discloses nothing
-to them. The leak was routing those strings into `security_events`, which the HTTP and
-MCP faces serialise onto the wire.
+to them. The leak was routing those strings into `security_events`: `out_of_scope_pseudonym`
+onto both the HTTP and MCP faces, `injection_suspected` onto the MCP face and the
+library integrations (the HTTP face never calls `guarded_restore`, so H never runs there).
 """
 
 from __future__ import annotations

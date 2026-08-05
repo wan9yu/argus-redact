@@ -139,8 +139,7 @@ def warn_security_events(events: list[dict], outcome: str) -> None:
     Structured ``security_events`` stay the channel for programs; this is the
     backstop for humans, so a caller on the default (non-detailed) path is never
     left with no signal at all. Carries reason_code + count ONLY — never
-    ``detail``, which may hold raw text or pseudonyms — so it is safe for a log
-    stream.
+    ``detail`` — so it is safe for a log stream.
 
     ``outcome`` — one of ``BLOCKED``/``PARTIAL``/``COMPLETE`` — is supplied by the
     call site that WITNESSED what actually happened to the caller's data

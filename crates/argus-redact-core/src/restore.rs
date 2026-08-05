@@ -79,9 +79,9 @@ pub enum GuardEventKind {
 /// One guard check's outcome. `count` is how many instances the check found;
 /// `detail`, when present, is the SORTED list of the specific tokens involved
 /// (e.g. out-of-scope pseudonym codes) — a bare data carrier, not a
-/// human-readable message. Callers own rendering (Python builds its
-/// `"withheld: {join}"` string, wasm exposes `tokens[]`) so no reason-code
-/// prose lives in this crate.
+/// human-readable message. Callers own rendering (as of v0.8.8, Python's
+/// `security_events` `detail` reports only `count`, never these tokens; wasm
+/// still exposes `tokens[]` as-is) so no reason-code prose lives in this crate.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct GuardEvent {
