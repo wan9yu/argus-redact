@@ -16,6 +16,40 @@ use unicode_normalization::is_nfkc;
 
 const MIN_DIGIT_SEQ: usize = 7; // shortest PII (phone fragments)
 
+/// Unicode `Default_Ignorable_Code_Point` — 17 merged ranges / 4174 code points.
+///
+/// Sorted and non-overlapping; [`is_invisible`] binary-searches it. This is the
+/// full derived property, not a curated list: the previously hand-enumerated
+/// carriers (zero-width, bidi controls, word joiner, variation selectors, the Tag
+/// block) are all members of it, so this is a strict WIDENING — nothing that was
+/// stripped before stops being stripped.
+///
+/// Widening matters because a hand-list is a denylist, and a denylist is exactly
+/// the wrong shape for text smuggling: every code point the list forgets is a free
+/// splitter. `U+206A`..`U+206F` (deprecated format controls), `U+2065`,
+/// `U+FFF0`..`U+FFF8`, `U+1D173`..`U+1D17A` (musical formatting) and the whole
+/// `U+E0080`..`U+E0FFF` unassigned tail all render invisibly in mainstream text
+/// stacks and all used to survive normalization.
+const DEFAULT_IGNORABLE: &[(char, char)] = &[
+    ('\u{00ad}', '\u{00ad}'),   // SOFT HYPHEN
+    ('\u{034f}', '\u{034f}'),   // COMBINING GRAPHEME JOINER
+    ('\u{061c}', '\u{061c}'),   // ARABIC LETTER MARK
+    ('\u{115f}', '\u{1160}'),   // HANGUL CHOSEONG/JUNGSEONG FILLER
+    ('\u{17b4}', '\u{17b5}'),   // KHMER VOWEL INHERENT AQ/AA
+    ('\u{180b}', '\u{180f}'),   // MONGOLIAN FVS1-4 + VOWEL SEPARATOR
+    ('\u{200b}', '\u{200f}'),   // ZERO WIDTH SPACE .. RIGHT-TO-LEFT MARK
+    ('\u{202a}', '\u{202e}'),   // bidi embedding/override controls
+    ('\u{2060}', '\u{206f}'),   // WORD JOINER .. NOMINAL DIGIT SHAPES (incl. isolates)
+    ('\u{3164}', '\u{3164}'),   // HANGUL FILLER
+    ('\u{fe00}', '\u{fe0f}'),   // VARIATION SELECTOR-1..16
+    ('\u{feff}', '\u{feff}'),   // ZERO WIDTH NO-BREAK SPACE (BOM)
+    ('\u{ffa0}', '\u{ffa0}'),   // HALFWIDTH HANGUL FILLER
+    ('\u{fff0}', '\u{fff8}'),   // reserved, treated as ignorable
+    ('\u{1bca0}', '\u{1bca3}'), // SHORTHAND FORMAT CONTROLS
+    ('\u{1d173}', '\u{1d17a}'), // MUSICAL SYMBOL BEGIN BEAM .. END PHRASE
+    ('\u{e0000}', '\u{e0fff}'), // Tag block + VS17..256 + the unassigned tail
+];
+
 fn is_invisible(c: char) -> bool {
     // Invisible / zero-width / direction-control characters stripped BEFORE
     // detection so text-smuggling can't split a token and fail-open a regex
@@ -24,27 +58,21 @@ fn is_invisible(c: char) -> bool {
     // never corrupts legitimate output — a variation selector that is genuinely
     // part of the surrounding (non-PII) text survives in the output untouched.
     //
-    // The original 16 zero-width / bidi controls:
-    if matches!(c,
-        '\u{200b}'|'\u{200c}'|'\u{200d}'|'\u{00ad}'|'\u{feff}'|'\u{200e}'|'\u{200f}'|
-        '\u{202a}'|'\u{202b}'|'\u{202c}'|'\u{202d}'|'\u{202e}'|'\u{2066}'|'\u{2067}'|'\u{2068}'|'\u{2069}')
-    {
-        return true;
+    // Membership = Unicode Default_Ignorable_Code_Point (see DEFAULT_IGNORABLE).
+    if c < '\u{00ad}' {
+        return false; // ASCII fast-path: no ignorable below U+00AD
     }
-    // Mainstream 2024-26 text-smuggling carriers (roadmap #67):
-    matches!(c,
-        // WORD JOINER + invisible math operators (FUNCTION APPLICATION /
-        // INVISIBLE TIMES / INVISIBLE SEPARATOR / INVISIBLE PLUS).
-        '\u{2060}'..='\u{2064}'
-        // Variation selectors VS1–VS16 (Mn, ccc=0) — used to hide payload interior
-        // to a token; VS17–VS256 (ideographic) live in the E0100 block below.
-        | '\u{fe00}'..='\u{fe0f}'
-        // Unicode Tag block: LANGUAGE TAG + tag ASCII glyphs + CANCEL TAG. The
-        // modern "ASCII smuggling" carrier — an entire hidden message can ride here.
-        | '\u{e0000}'..='\u{e007f}'
-        // Ideographic variation selectors VS17–VS256.
-        | '\u{e0100}'..='\u{e01ef}'
-    )
+    DEFAULT_IGNORABLE
+        .binary_search_by(|&(lo, hi)| {
+            if c < lo {
+                std::cmp::Ordering::Greater
+            } else if c > hi {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .is_ok()
 }
 
 fn is_droppable_mark(c: char) -> bool {
@@ -84,7 +112,7 @@ fn confusable(c: char) -> char {
         .unwrap_or(c)
 }
 
-fn cn_digit(c: char) -> Option<char> {
+pub(crate) fn cn_digit(c: char) -> Option<char> {
     // _CN_DIGIT_MAP (normalize.py:98-118): 19 entries -> ASCII digit char
     Some(match c {
         '一'=>'1','二'=>'2','三'=>'3','四'=>'4','五'=>'5','六'=>'6','七'=>'7','八'=>'8','九'=>'9','零'=>'0',
@@ -93,7 +121,113 @@ fn cn_digit(c: char) -> Option<char> {
     })
 }
 
-fn is_digit_sep(c: char) -> bool {
+/// Non-decimal (`No`/`So`) characters whose NFKC fold CONTAINS an ASCII digit.
+///
+/// 222 code points / 19 merged ranges: superscripts (¹²³), subscripts (₀-₉),
+/// vulgar fractions (½ → "1⁄2"), circled/parenthesised/full-stop digits (①⑴⒈),
+/// CJK compat month/hour/day symbols (㋀ → "1月"), squared units (㎟ → "mm2"),
+/// and the SMP digit-full-stop block (🄀).
+///
+/// These are NOT decimal digits (`Nd`), but folding them manufactures ASCII digits
+/// that fuse with a neighbouring PII number and break the `(?<!\d)` / `(?!\d)`
+/// boundary anchors — the same fail-open shape the CJK-homograph guard in
+/// `normalize_digit_sequences` defends against.
+const NFKC_DIGIT_YIELDING_NON_DECIMAL: &[(char, char)] = &[
+    ('\u{b2}', '\u{b3}'),       // ²..³   SUPERSCRIPT TWO/THREE
+    ('\u{b9}', '\u{b9}'),       // ¹      SUPERSCRIPT ONE
+    ('\u{bc}', '\u{be}'),       // ¼..¾   VULGAR FRACTIONS
+    ('\u{2070}', '\u{2070}'),   // ⁰      SUPERSCRIPT ZERO
+    ('\u{2074}', '\u{2079}'),   // ⁴..⁹   SUPERSCRIPT FOUR..NINE
+    ('\u{2080}', '\u{2089}'),   // ₀..₉   SUBSCRIPT ZERO..NINE
+    ('\u{2150}', '\u{215f}'),   // ⅐..⅟   VULGAR FRACTIONS
+    ('\u{2189}', '\u{2189}'),   // ↉      VULGAR FRACTION ZERO THIRDS
+    ('\u{2460}', '\u{249b}'),   // ①..⒛   CIRCLED / PARENTHESISED / FULL-STOP DIGITS
+    ('\u{24ea}', '\u{24ea}'),   // ⓪      CIRCLED DIGIT ZERO
+    ('\u{3251}', '\u{325f}'),   // ㉑..㉟  CIRCLED NUMBER 21..35
+    ('\u{32b1}', '\u{32cb}'),   // ㊱..㋋  CIRCLED NUMBER 36.. / MONTH SYMBOLS
+    ('\u{3358}', '\u{3370}'),   // ㍘..㍰  TELEGRAPH HOUR SYMBOLS
+    ('\u{3378}', '\u{3379}'),   // ㍸..㍹  SQUARE DM SQUARED/CUBED
+    ('\u{339f}', '\u{33a6}'),   // ㎟..㎦  SQUARE MM SQUARED..KM CUBED
+    ('\u{33a8}', '\u{33a8}'),   // ㎨      SQUARE M OVER S SQUARED
+    ('\u{33af}', '\u{33af}'),   // ㎯      SQUARE RAD OVER S SQUARED
+    ('\u{33e0}', '\u{33fe}'),   // ㏠..㏾  TELEGRAPH DAY SYMBOLS
+    ('\u{1f100}', '\u{1f10a}'), // 🄀..🄊   DIGIT ZERO FULL STOP (SMP)
+];
+
+pub(crate) fn is_nfkc_digit_yielding_non_decimal(c: char) -> bool {
+    if c < '\u{b2}' {
+        return false; // ASCII + Latin-1 head fast-path
+    }
+    NFKC_DIGIT_YIELDING_NON_DECIMAL
+        .binary_search_by(|&(lo, hi)| {
+            if c < lo {
+                std::cmp::Ordering::Greater
+            } else if c > hi {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .is_ok()
+}
+
+/// A char the regex layer already sees as `\d` (ASCII or any other `Nd`), i.e.
+/// one that needs no manufacturing. `Nl` (Roman numerals) folds to LETTERS, so it
+/// is not a digit either way; counting it here only widens a run's denominator.
+pub(crate) fn is_plain_digit_char(c: char) -> bool {
+    c.is_ascii_digit() || (c.is_numeric() && !is_nfkc_digit_yielding_non_decimal(c))
+}
+
+/// Decide, per source char, whether the step-3 NFKC fold of a `No`/`So`
+/// digit-yielder must be SUPPRESSED.
+///
+/// Same majority rule as the CJK-digit-homograph guard in
+/// [`normalize_digit_sequences`], applied one step earlier: scan maximal
+/// digit-ish runs (digits + `_DIGIT_SEPS` interior separators) and fold the
+/// non-decimal members only when they are a strict MAJORITY of the run.
+///
+/// * `¹` after an 11-digit phone → 1 of 12 → minority → NOT folded, so the phone
+///   keeps its `(?!\d)` boundary and is still detected (`13800138000¹`).
+/// * `①③⑧⓪⓪①③⑧⓪⓪⓪` → 11 of 11 → majority → folded, so a number written
+///   entirely in circled digits is still recovered.
+/// * `x²³` → 2 of 2 → majority → folded to `x23`, unchanged from before.
+fn suppressed_nfkc_folds(chars: &[char]) -> Option<Vec<bool>> {
+    let n = chars.len();
+    let mut mask: Option<Vec<bool>> = None;
+    let mut i = 0;
+    while i < n {
+        let exotic = is_nfkc_digit_yielding_non_decimal(chars[i]);
+        if !exotic && !is_plain_digit_char(chars[i]) {
+            i += 1;
+            continue;
+        }
+        let mut exotic_idx: Vec<usize> = Vec::new();
+        let mut total = 0usize;
+        while i < n {
+            if is_nfkc_digit_yielding_non_decimal(chars[i]) {
+                exotic_idx.push(i);
+                total += 1;
+            } else if is_plain_digit_char(chars[i]) {
+                total += 1;
+            } else if !is_digit_sep(chars[i]) {
+                break;
+            }
+            i += 1;
+        }
+        // Strict majority to fold — a minority of non-decimals in a run of real
+        // digits is a neighbour (footnote marker, fraction, unit), not part of
+        // the number, and folding it fuses the two and fails the regex open.
+        if !exotic_idx.is_empty() && exotic_idx.len() * 2 <= total {
+            let m = mask.get_or_insert_with(|| vec![false; n]);
+            for idx in exotic_idx {
+                m[idx] = true;
+            }
+        }
+    }
+    mask
+}
+
+pub(crate) fn is_digit_sep(c: char) -> bool {
     // _DIGIT_SEPS (normalize.py:120): " \t.-/，、·;；:："
     matches!(c, ' '|'\t'|'.'|'-'|'/'|'，'|'、'|'·'|';'|'；'|':'|'：')
 }
@@ -252,9 +386,16 @@ pub(crate) fn normalize_core(text: &str) -> Option<(Vec<char>, Vec<usize>)> {
     // Step 3: per-char NFKC (only if the joined string isn't already NFKC)
     let joined: String = chars.iter().collect();
     if !is_nfkc(&joined) {
+        // Which No/So digit-yielders must stay unfolded (minority-of-run rule).
+        let suppressed = suppressed_nfkc_folds(&chars);
         let mut new_chars: Vec<char> = Vec::new();
         let mut new_map: Vec<usize> = Vec::new();
         for (si, ch) in joined.chars().enumerate() {
+            if suppressed.as_ref().is_some_and(|m| m[si]) {
+                new_chars.push(ch); // keep verbatim: folding it would fuse a neighbour's digits
+                new_map.push(offset_map[si]);
+                continue;
+            }
             for c in ch.nfkc() {
                 // per-char: no cross-char composition
                 new_chars.push(c);
@@ -513,6 +654,152 @@ mod tests {
         assert_eq!(m.len(), out.chars().count());
     }
 
+    // ── Default_Ignorable_Code_Point completeness ────────────────────────────
+    // The strip list is the FULL Unicode Default_Ignorable_Code_Point set, not a
+    // hand-picked subset. Anything in that set renders as nothing, so a model or
+    // a user can splice one into a PII token and (pre-fix) split it away from the
+    // detector. Each newly-covered class gets a case here.
+
+    /// Every code point Unicode marks Default_Ignorable_Code_Point, as ranges.
+    /// Kept in the TEST so the production predicate and the table are two
+    /// independent statements of the same fact.
+    const DEFAULT_IGNORABLE_RANGES: &[(u32, u32)] = &[
+        (0x00AD, 0x00AD),
+        (0x034F, 0x034F),
+        (0x061C, 0x061C),
+        (0x115F, 0x1160),
+        (0x17B4, 0x17B5),
+        (0x180B, 0x180F),
+        (0x200B, 0x200F),
+        (0x202A, 0x202E),
+        (0x2060, 0x206F),
+        (0x3164, 0x3164),
+        (0xFE00, 0xFE0F),
+        (0xFEFF, 0xFEFF),
+        (0xFFA0, 0xFFA0),
+        (0xFFF0, 0xFFF8),
+        (0x1BCA0, 0x1BCA3),
+        (0x1D173, 0x1D17A),
+        (0xE0000, 0xE0FFF),
+    ];
+
+    #[test]
+    fn every_default_ignorable_code_point_is_stripped() {
+        for &(lo, hi) in DEFAULT_IGNORABLE_RANGES {
+            for cp in lo..=hi {
+                let Some(ch) = char::from_u32(cp) else { continue };
+                assert!(
+                    is_invisible(ch),
+                    "U+{cp:04X} is Default_Ignorable but is_invisible() says otherwise"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn strip_newly_covered_smuggling_carriers() {
+        // One representative per class the original 4-group table missed.
+        for carrier in [
+            '\u{034F}',  // COMBINING GRAPHEME JOINER (Mn but ccc=0, so the mark fold misses it)
+            '\u{061C}',  // ARABIC LETTER MARK
+            '\u{115F}',  // HANGUL CHOSEONG FILLER
+            '\u{17B4}',  // KHMER VOWEL INHERENT AQ
+            '\u{180E}',  // MONGOLIAN VOWEL SEPARATOR
+            '\u{2065}',  // unassigned, but Default_Ignorable
+            '\u{206F}',  // NOMINAL DIGIT SHAPES (deprecated format control)
+            '\u{3164}',  // HANGUL FILLER
+            '\u{FFA0}',  // HALFWIDTH HANGUL FILLER
+            '\u{FFF8}',  // unassigned, but Default_Ignorable
+            '\u{1BCA0}', // SHORTHAND FORMAT LETTER OVERLAP
+            '\u{1D173}', // MUSICAL SYMBOL BEGIN BEAM
+            '\u{E0080}', // Tag-block tail (unassigned, Default_Ignorable)
+        ] {
+            let original = format!("john{carrier}doe@example.com");
+            let (out, map) = normalize_text(&original);
+            assert_eq!(out, "johndoe@example.com", "carrier U+{:04X}", carrier as u32);
+            assert!(map.is_some(), "carrier U+{:04X} produced no offset map", carrier as u32);
+        }
+    }
+
+    #[test]
+    fn smuggled_carrier_span_covers_the_whole_original_token() {
+        // SPAN-AWARE on purpose. With the carrier NOT stripped, the email regex
+        // still "detects" something — it just detects the tail (`doe@x.io`) and
+        // the span misses the `john` in front, so the redaction leaks the local
+        // part. Asserting only "an email was found" is green on the bug; the
+        // span is what actually distinguishes fixed from broken.
+        let original = "john\u{034F}doe@x.io";
+        let (out, map) = normalize_text(original);
+        assert_eq!(out, "johndoe@x.io");
+        let m = map.expect("offset map");
+        let mapped =
+            map_spans_to_original(&[(0, out.chars().count())], Some(&m), original.chars().count());
+        assert_eq!(orig_slice(original, mapped[0]), original);
+    }
+
+    #[test]
+    fn detection_recovers_numbers_a_stripped_invisible_would_fuse() {
+        // Stripping the full Default_Ignorable set closes the text-smuggling that
+        // SPLITS a token (`john<inv>doe` → `johndoe`, detected). Its cost is the
+        // opposite shape: an invisible BETWEEN two complete numbers fuses them into
+        // one long run the digit regex cannot bound — a LEAK the pure-strip reading
+        // cannot see. The detection fan-out closes that hole: it additionally
+        // reads each stripped-invisible-between-digits as the boundary it renders as,
+        // so both numbers are recovered.
+        //
+        // Detection over the split text is therefore a SUPERSET of detection over the
+        // pre-fused run — and, the property the earlier form of this test guarded, it
+        // is IDENTICAL across every carrier class (the answer no longer depends on
+        // which invisible was used). Superseding the old strict-equality assertion is
+        // the intended, security-improving behaviour change: the equality once held
+        // only because BOTH readings leaked; now the split reading detects while the
+        // bare fused run (no boundary anywhere) still cannot.
+        let fused = "1380013800013900139000"; // 22 contiguous digits: no bounded phone
+        let a = crate::redact_l1::detect_l1(fused, &["zh".to_string()], &[]).unwrap();
+        assert_eq!(a.layer1.len(), 0, "a bare 22-digit run bounds no phone");
+
+        let mut split_counts = std::collections::HashSet::new();
+        for carrier in ['\u{2060}', '\u{00ad}', '\u{3164}', '\u{034f}', '\u{115f}', '\u{e0080}'] {
+            let split = format!("13800138000{carrier}13900139000");
+            let b = crate::redact_l1::detect_l1(&split, &["zh".to_string()], &[]).unwrap();
+            // Superset over the fused reading — the fan-out never detects fewer.
+            assert!(
+                b.layer1.len() >= a.layer1.len(),
+                "U+{:04X}: fan-out must never detect less than the fused reading",
+                carrier as u32
+            );
+            // Both real phones are recovered via the keep-boundary reading.
+            let phones = b.layer1.iter().filter(|e| e.type_ == "phone").count();
+            assert_eq!(
+                phones, 2,
+                "U+{:04X}: both phones must be recovered once the invisible reads as a boundary",
+                carrier as u32
+            );
+            split_counts.insert(b.layer1.len());
+        }
+        // Consistency across carrier classes — the answer does not depend on which
+        // invisible was used to split the number.
+        assert_eq!(
+            split_counts.len(),
+            1,
+            "detection must not depend on which invisible carrier was used"
+        );
+    }
+
+    #[test]
+    fn smuggled_carrier_detects_the_whole_email_end_to_end() {
+        // The same property through the real detector: the entity span must
+        // cover the carrier AND the local part in front of it.
+        let original = "contact john\u{034F}doe@x.io now";
+        let r = crate::redact_l1::detect_l1(original, &["en".to_string()], &[]).unwrap();
+        let email = r
+            .layer1
+            .iter()
+            .find(|e| e.type_ == "email")
+            .expect("email entity");
+        assert_eq!(orig_slice(original, (email.start, email.end)), "john\u{034F}doe@x.io");
+    }
+
     #[test]
     fn non_ascii_digit_in_cn_run_matches_python() {
         // 6 CN digits + Arabic-Indic ٤ (U+0664, is_numeric, NFKC-stable) = 7-char run.
@@ -769,6 +1056,165 @@ mod tests {
         assert_eq!(
             map_spans_to_original(&[(5, 9)], Some(&map), orig_len),
             vec![(6, 6)]
+        );
+    }
+
+    // ---- Default_Ignorable strip table ----------------------------------
+
+    #[test]
+    fn default_ignorable_table_is_sorted_and_disjoint() {
+        // binary_search_by over the table is only correct if it is sorted and
+        // the ranges do not touch or overlap (touching ranges should be merged).
+        let mut prev: Option<char> = None;
+        for &(lo, hi) in DEFAULT_IGNORABLE {
+            assert!(lo <= hi, "inverted range {lo:?}..{hi:?}");
+            if let Some(p) = prev {
+                assert!(p < lo, "unsorted or unmerged at {lo:?} (prev end {p:?})");
+                assert!(
+                    (p as u32) + 1 < (lo as u32),
+                    "adjacent ranges must be merged: {p:?} then {lo:?}"
+                );
+            }
+            prev = Some(hi);
+        }
+        let total: u32 = DEFAULT_IGNORABLE
+            .iter()
+            .map(|&(lo, hi)| hi as u32 - lo as u32 + 1)
+            .sum();
+        assert_eq!(DEFAULT_IGNORABLE.len(), 17);
+        assert_eq!(total, 4174, "Unicode Default_Ignorable_Code_Point cardinality");
+    }
+
+    #[test]
+    fn default_ignorable_is_a_superset_of_the_old_hand_list() {
+        // Strict widening: every carrier the pre-table implementation stripped
+        // must still be stripped. Nothing may silently stop being invisible.
+        let old: Vec<char> = "\u{200b}\u{200c}\u{200d}\u{00ad}\u{feff}\u{200e}\u{200f}\
+             \u{202a}\u{202b}\u{202c}\u{202d}\u{202e}\u{2066}\u{2067}\u{2068}\u{2069}\
+             \u{2060}\u{2061}\u{2062}\u{2063}\u{2064}\u{fe00}\u{fe0f}\
+             \u{e0000}\u{e0001}\u{e007f}\u{e0100}\u{e01ef}"
+            .chars()
+            .collect();
+        for c in old {
+            assert!(is_invisible(c), "regression: U+{:04X} no longer stripped", c as u32);
+        }
+    }
+
+    #[test]
+    fn default_ignorable_covers_the_carriers_the_hand_list_missed() {
+        // The widening's payload: these render invisibly and used to survive
+        // normalization, so each one was a free token-splitter.
+        for c in [
+            '\u{034f}', '\u{061c}', '\u{115f}', '\u{1160}', '\u{17b4}', '\u{180b}',
+            '\u{180e}', '\u{180f}', '\u{2065}', '\u{206a}', '\u{206f}', '\u{3164}',
+            '\u{ffa0}', '\u{fff0}', '\u{fff8}', '\u{1bca0}', '\u{1d173}', '\u{1d17a}',
+            '\u{e0080}', '\u{e0fff}',
+        ] {
+            assert!(is_invisible(c), "U+{:04X} should be ignorable", c as u32);
+        }
+        // Neighbours just outside the ranges must NOT be stripped.
+        for c in ['\u{034e}', '\u{2070}', '\u{3163}', '\u{3165}', '\u{e1000}', 'a', '中'] {
+            assert!(!is_invisible(c), "U+{:04X} must survive", c as u32);
+        }
+    }
+
+    #[test]
+    fn ignorable_interior_to_a_digit_run_is_stripped_so_the_number_refuses() {
+        // The point of the strip: a carrier hidden INSIDE a number must not split
+        // it. U+206A is one of the newly covered ones.
+        assert_eq!(normalize_text("1380013800\u{206a}0").0, "13800138000");
+        assert_eq!(normalize_text("138001\u{e0200}38000").0, "13800138000");
+    }
+
+    // ---- No/So digit-yielding NFKC folds (boundary integrity) ------------
+
+    #[test]
+    fn digit_yielding_table_is_sorted_and_disjoint() {
+        let mut prev: Option<char> = None;
+        for &(lo, hi) in NFKC_DIGIT_YIELDING_NON_DECIMAL {
+            assert!(lo <= hi);
+            if let Some(p) = prev {
+                assert!((p as u32) + 1 < (lo as u32), "unsorted/unmerged at {lo:?}");
+            }
+            prev = Some(hi);
+        }
+        let total: u32 = NFKC_DIGIT_YIELDING_NON_DECIMAL
+            .iter()
+            .map(|&(lo, hi)| hi as u32 - lo as u32 + 1)
+            .sum();
+        assert_eq!(total, 222);
+    }
+
+    #[test]
+    fn minority_non_decimal_beside_a_number_is_not_folded() {
+        // SECURITY: NFKC folds ¹ -> '1'. Folding it beside an 11-digit phone
+        // manufactures a 12th digit, the phone regex's `(?!\d)` anchor fails and
+        // the number leaks verbatim. Same shape as the CJK-homograph guard.
+        assert_eq!(normalize_text("13800138000\u{b9}").0, "13800138000\u{b9}");
+        assert_eq!(normalize_text("\u{b9}13800138000").0, "\u{b9}13800138000");
+        // Multi-char folds are carriers too: ½ -> "1⁄2" puts a '1' against the run.
+        assert_eq!(normalize_text("13800138000\u{bd}").0, "13800138000\u{bd}");
+        assert_eq!(normalize_text("\u{bd}13800138000").0, "\u{bd}13800138000");
+        // Circled, subscript, CJK compat month, squared unit.
+        assert_eq!(normalize_text("13800138000\u{2460}").0, "13800138000\u{2460}");
+        assert_eq!(normalize_text("13800138000\u{2085}").0, "13800138000\u{2085}");
+        assert_eq!(normalize_text("13800138000\u{32c0}").0, "13800138000\u{32c0}");
+        assert_eq!(normalize_text("13800138000\u{339f}").0, "13800138000\u{339f}");
+    }
+
+    #[test]
+    fn majority_non_decimal_run_still_folds() {
+        // A number written ENTIRELY in circled digits is obfuscated PII, not a
+        // neighbour — the majority rule keeps folding it, so it is still detected.
+        assert_eq!(
+            normalize_text("\u{2460}\u{2462}\u{2467}\u{24ea}\u{24ea}\u{2460}\u{2462}\u{2467}\u{24ea}\u{24ea}\u{24ea}").0,
+            "13800138000"
+        );
+        // And an isolated superscript/fraction/unit — no digit run to fuse with —
+        // folds exactly as before (the frozen normalize parity corpus depends on it).
+        assert_eq!(normalize_text("x\u{b2}\u{b3} super").0, "x23 super");
+        assert_eq!(normalize_text("\u{bd}").0, "1\u{2044}2");
+        assert_eq!(normalize_text("\u{339f}").0, "mm2");
+    }
+
+    #[test]
+    fn suppressed_fold_keeps_the_offset_map_aligned() {
+        // Suppressing the fold makes the normalized view IDENTICAL to the source,
+        // so the map degrades to the identity (None) — the cheapest possible
+        // outcome. Not folding never grows the map.
+        assert_eq!(
+            normalize_text("13800138000\u{bd}"),
+            ("13800138000\u{bd}".to_string(), None)
+        );
+        // With something else in the text to normalize, the map is still 1:1 with
+        // the emitted chars and the suppressed char occupies exactly one slot.
+        let (out, map) = normalize_text("\u{ff21}13800138000\u{bd}"); // Ａ + phone + ½
+        let map = map.expect("text changed => map present");
+        assert_eq!(out, "A13800138000\u{bd}");
+        assert_eq!(out.chars().count(), map.len());
+        assert_eq!(map, (0..13).collect::<Vec<_>>());
+        // A ½ with no digit run beside it DOES fold, still expanding 1 source -> 3.
+        let (out2, map2) = normalize_text("\u{bd}\u{4e2d}");
+        assert_eq!(out2, "1\u{2044}2\u{4e2d}");
+        assert_eq!(map2.unwrap(), vec![0, 0, 0, 1]);
+    }
+
+    #[test]
+    fn cjk_homograph_guard_is_undisturbed() {
+        // The precedent this rule was modelled on must behave exactly as before.
+        assert_eq!(normalize_text("张三13800138000").0, "张三13800138000");
+        assert_eq!(normalize_text("一三八零零一三八零零零").0, "13800138000");
+        assert_eq!(normalize_text("一二三四五六7").0, "1234567");
+        assert_eq!(normalize_text("三月三日"), ("三月三日".into(), None));
+    }
+
+    #[test]
+    fn ignorable_strip_and_fold_suppression_compose() {
+        // The strip pass removes the carrier, then the fold pass sees the true neighbourhood: ¹ is a
+        // minority of the fused run and still must not fold.
+        assert_eq!(
+            normalize_text("13800138000\u{206a}\u{b9}").0,
+            "13800138000\u{b9}"
         );
     }
 }

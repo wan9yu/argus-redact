@@ -51,6 +51,7 @@ use std::collections::HashSet;
 
 use crate::coverage::{restore_lost_coverage, FilterScope};
 use crate::data::{all_langs, builtin_patterns};
+use crate::fanout;
 use crate::grammar::normalize_grammar_en;
 use crate::hints::{filter_self_reference, get_person_threshold, produce_hints_l1, Hint};
 use crate::merger::merge_entities_with_text;
@@ -61,7 +62,7 @@ use crate::occupation::detect_occupation_zh;
 use crate::patterns::{match_patterns, PatternConfig, PatternError};
 use crate::regions::detect_regions_zh;
 use crate::replace::{replace, FakerFactory, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
-use crate::reserved_range::{byte_to_char_offset, char_slice};
+use crate::reserved_range::{CharOffsetCursor, char_slice};
 use crate::types::PatternMatch;
 use crate::{person_en, person_zh};
 
@@ -249,7 +250,8 @@ pub fn detect_l1(
     //    → near-miss at 0.3; else → result). Both sub-lists keep the core's
     //    start-sorted order, matching Python (results are re-sorted by start —
     //    already start-sorted here; near_misses keep append order = start order).
-    let all_matches = match_patterns(detect_text, &load_patterns(lang))?;
+    let patterns = load_patterns(lang);
+    let all_matches = match_patterns(detect_text, &patterns)?;
     let mut layer1_raw: Vec<PatternMatch> = Vec::new();
     let mut near_misses: Vec<PatternMatch> = Vec::new();
     for m in all_matches {
@@ -275,6 +277,145 @@ pub fn detect_l1(
     let orig_len = text.chars().count();
     let mut layer1 =
         map_matches_to_original(&layer1_raw, text, offset_map.as_deref(), orig_len);
+
+    // 3b. Detection fan-out. The base `detect_text` is ONE reading of the
+    //     text's ambiguous digit glyphs — exotic/CJK homographs folded per the
+    //     `normalize` majority guards, and stripped invisibles read as noise
+    //     (fused). Detection recall must be a SUPERSET over admissible readings, so
+    //     — only when the text actually normalized (`core` is `Some`) and carries
+    //     ambiguity — run the SAME `match_patterns` over a bounded set of alternate
+    //     candidate views derived from the SAME `normalize_core` intermediate, map
+    //     every hit back to ORIGINAL offsets, and UNION any span the base view did
+    //     not already claim. Layer1-regex recall no longer DEPENDS on the `normalize`
+    //     majority guards picking the "right" reading: the fold-all candidate
+    //     recovers an interior exotic (`13⑧00138000`) or a CJK homograph fused into
+    //     a run (`13八00138000`), the per-position keep-variants recover an edge
+    //     exotic held as a boundary (`13800138000¹`), and the fusion candidate
+    //     recovers a number a stripped invisible would otherwise hide
+    //     (`13800138000͏2024`). The guards themselves are NOT deleted, though — they
+    //     remain the only fold logic for `person_detect_text` (below) and the public
+    //     `normalize_text`, so do not remove them on the assumption this fan-out
+    //     makes them redundant everywhere. Detection-only: `normalize_text`'s
+    //     canonical output, the offset map, and `restore` are untouched (verified by
+    //     the byte-identical normalize goldens). Candidates run one-at-a-time and
+    //     drop before the next, so no more than one alternate view is alive.
+    if let Some((chars, omap)) = &core {
+        // Discover the ambiguity ONCE (O(n), capped at MAX_FANOUT_POSITIONS) and the
+        // fusion candidate ONCE (O(n), None with no allocation when there is no
+        // stripped-invisible-between-digits gap). The overwhelmingly common path —
+        // text that normalized but carries no digit ambiguity, e.g. fullwidth
+        // punctuation only — then does zero extra detection work.
+        let (positions, truncated) = fanout::ambiguous_positions(chars);
+        let fusion = fanout::fusion_boundary_variant(chars, omap);
+        if !positions.is_empty() || fusion.is_some() {
+            // Everything below is bounded to LINEAR total cost:
+            //   * candidate count ≤ MAX_FANOUT_POSITIONS + 2 (fold-all, keep-variants,
+            //     all-keep fail-safe) + 1 fusion — a constant;
+            //   * `ambiguous_positions` is computed ONCE and passed into each
+            //     candidate builder (no O(n) re-scan per candidate);
+            //   * dedup is O(1) per match via `seen` (a HashSet), never an O(layer1)
+            //     linear scan per match;
+            //   * an original-text char index (`orig_chars`) makes rebuilding a NEW
+            //     match's text an O(len) slice, not `char_slice`'s O(start) skip — so
+            //     even a candidate that re-finds every base match costs O(matches),
+            //     not O(matches × n). A pathological invisible/exotic-laced input is
+            //     therefore linear, not the O(n²) DoS the fan-out could otherwise be.
+            //     `orig_chars` itself is built LAZILY, on the first actual new-match
+            //     push, so a candidate pass that adds nothing new (the common case)
+            //     never pays the O(len) collect at all.
+            let mut orig_chars: Option<Vec<char>> = None;
+            let mut seen: HashSet<(String, usize, usize)> = layer1
+                .iter()
+                .map(|e| (e.type_.clone(), e.start, e.end))
+                .collect();
+            let before = seen.len();
+
+            // Union a candidate view's confidence-1.0 matches into `layer1`, in
+            // ORIGINAL coords, skipping any (type, span) the base or an earlier
+            // candidate already claimed. Candidate near-misses are dropped so
+            // `near_misses` (and the hint layer) stays sourced from the base view.
+            // `layer1`/`seen`/`orig_chars` are passed in (not captured) so no
+            // standing borrow.
+            let union_candidate = |layer1: &mut Vec<PatternMatch>,
+                                   seen: &mut HashSet<(String, usize, usize)>,
+                                   orig_chars: &mut Option<Vec<char>>,
+                                   cand_text: &str,
+                                   cand_omap: &[usize]|
+             -> Result<(), PatternError> {
+                let results: Vec<PatternMatch> = match_patterns(cand_text, &patterns)?
+                    .into_iter()
+                    .filter(|m| m.confidence >= 1.0)
+                    .collect();
+                let spans: Vec<(usize, usize)> =
+                    results.iter().map(|m| (m.start, m.end)).collect();
+                let mapped = map_spans_to_original(&spans, Some(cand_omap), orig_len);
+                for (m, (s, e)) in results.iter().zip(mapped) {
+                    let key = (m.type_.clone(), s, e);
+                    if seen.contains(&key) {
+                        continue;
+                    }
+                    seen.insert(key);
+                    let orig = orig_chars.get_or_insert_with(|| text.chars().collect());
+                    layer1.push(PatternMatch {
+                        text: orig[s..e.min(orig.len())].iter().collect(),
+                        type_: m.type_.clone(),
+                        start: s,
+                        end: e,
+                        confidence: m.confidence,
+                        layer: m.layer,
+                    });
+                }
+                Ok(())
+            };
+
+            if !positions.is_empty() {
+                // (a) fold-all: every homograph read as part of the number. Kept as a
+                //     mutable buffer so the keep-variant loop below can reuse it as
+                //     scratch instead of re-cloning `chars` and re-folding per call.
+                let mut fold_all_chars = fanout::fold_all_variant(chars, &positions);
+                let fold_all_text: String = fold_all_chars.iter().collect();
+                union_candidate(
+                    &mut layer1,
+                    &mut seen,
+                    &mut orig_chars,
+                    &fold_all_text,
+                    omap,
+                )?;
+                // (b) one keep-variant per ambiguous position: that position held as a
+                //     boundary while the rest fold (edge exotic, mixed interior+edge run).
+                for &pos in &positions {
+                    let keep_text = fanout::keep_variant_text(chars, &mut fold_all_chars, pos);
+                    union_candidate(&mut layer1, &mut seen, &mut orig_chars, &keep_text, omap)?;
+                }
+                // (c) cap fail-safe: if the ambiguity was truncated to the cap, also try
+                //     the all-keep extreme (nothing folded) so a run bounded by exotics
+                //     on both ends past the cap is still reachable.
+                if truncated {
+                    let all_keep_text: String = chars.iter().collect();
+                    union_candidate(
+                        &mut layer1,
+                        &mut seen,
+                        &mut orig_chars,
+                        &all_keep_text,
+                        omap,
+                    )?;
+                }
+            }
+            // (d) fusion: a stripped invisible between two digit-ish chars, re-read as
+            //     a boundary (length-changing candidate with a rebuilt offset map).
+            if let Some((fchars, fmap)) = fusion {
+                let fusion_text: String = fchars.iter().collect();
+                union_candidate(&mut layer1, &mut seen, &mut orig_chars, &fusion_text, &fmap)?;
+            }
+
+            // Count-only over-detection signal (no PII in the message), opt-in via env
+            // so a library build never writes to stderr unbidden.
+            let added = seen.len() - before;
+            if added > 0 && std::env::var("ARGUS_FANOUT_TRACE").is_ok() {
+                eprintln!("argus-redact: fan-out added {added} detection(s) from candidate views");
+            }
+        }
+    }
 
     // 4. Tag layer1 with LAYER_REGEX.
     tag_layer(&mut layer1, LAYER_REGEX);
@@ -377,8 +518,9 @@ pub fn detect_l1(
             // `start + name.chars().count()` (the match equals `name`), saving the
             // second `byte_to_char_offset` O(n) scan.
             let name_chars = name.chars().count();
+            let mut cursor = CharOffsetCursor::new(person_detect_text);
             for (byte_pos, _) in person_detect_text.match_indices(name.as_str()) {
-                let start = byte_to_char_offset(person_detect_text, byte_pos);
+                let start = cursor.char_offset(byte_pos);
                 person.push(PatternMatch {
                     text: name.clone(),
                     type_: "person".to_string(),
@@ -1067,6 +1209,103 @@ mod tests {
         // does not by itself distinguish the `==`/`>=` mutants — see above).
         let text = "a".repeat(crate::MAX_INPUT_SIZE + 1);
         assert!(detect_l1(&text, &s(&["en"]), &[]).is_err());
+    }
+
+    // ── Detection fan-out — union over candidate readings ───────────
+    //
+    // Each case is a zh phone (`1[3-9]\d{9}`) obfuscated so the BASE `detect_text`
+    // (the single normalize reading) misses it; the fan-out must recover it and
+    // union a `phone` span. The Python obfuscation-recall gate
+    // (`tests/security/test_obfuscation_recall.py`) is the end-to-end oracle; these
+    // pin each candidate route at the core boundary.
+
+    fn phone_spans(r: &DetectL1Result) -> Vec<(usize, usize)> {
+        r.layer1
+            .iter()
+            .filter(|m| m.type_ == "phone")
+            .map(|m| (m.start, m.end))
+            .collect()
+    }
+
+    #[test]
+    fn detect_l1_unions_fanout_candidates() {
+        // From the plan: trailing ¹ must yield a phone. (The base already keeps ¹
+        // unfolded, so this is green via the base view; the fan-out never removes it.)
+        let r = detect_l1("13800138000\u{b9}", &s(&["zh"]), &[]).unwrap();
+        assert!(
+            r.layer1.iter().any(|m| m.type_ == "phone"),
+            "phone must be detected for a trailing superscript"
+        );
+    }
+
+    #[test]
+    fn detect_l1_recovers_interior_exotic_via_fold_all() {
+        // 13⑧00138000 — the interior circled ⑧ is a minority of the run, so the base
+        // leaves it unfolded and the run breaks; the fold-all candidate folds ⑧→8.
+        let r = detect_l1("请拨打 13\u{2467}00138000 咨询", &s(&["zh"]), &[]).unwrap();
+        assert_eq!(phone_spans(&r).len(), 1, "interior exotic must fold-and-detect");
+    }
+
+    #[test]
+    fn detect_l1_recovers_cjk_homograph_via_fold_all() {
+        // 13八00138000 — 八 is a lone CJK-digit homograph in an ASCII run; the base
+        // majority guard keeps it, the fold-all candidate folds 八→8.
+        let r = detect_l1("请拨打 13八00138000 咨询", &s(&["zh"]), &[]).unwrap();
+        assert_eq!(phone_spans(&r).len(), 1, "CJK homograph must fold-and-detect");
+    }
+
+    #[test]
+    fn detect_l1_recovers_fused_number_via_boundary_reinsertion() {
+        // 13800138000<U+034F>2024 — the invisible is stripped, fusing the phone with
+        // 2024 into a 15-digit run the base cannot bound. The fusion candidate
+        // re-inserts the boundary; the recovered span covers exactly the phone.
+        let r = detect_l1("请拨打 13800138000\u{34f}2024", &s(&["zh"]), &[]).unwrap();
+        let spans = phone_spans(&r);
+        assert_eq!(spans.len(), 1, "fused number must be recovered via a boundary reading");
+        // The span is the 11 phone digits (original idx 4..15), NOT the trailing 2024.
+        assert_eq!(spans[0], (4, 15));
+    }
+
+    #[test]
+    fn detect_l1_keep_variant_recovers_mixed_interior_fold_and_edge_keep() {
+        // 13⑧00138000¹ — TWO ambiguous positions: the interior ⑧ must FOLD (part of
+        // the number) while the trailing ¹ must be KEPT as a boundary. Neither the
+        // base (both unfolded → run breaks at ⑧) nor the fold-all (both folded → a
+        // 12-digit run) detects it; only the keep-variant that holds ¹ and folds ⑧.
+        let r = detect_l1("13\u{2467}00138000\u{b9}", &s(&["zh"]), &[]).unwrap();
+        assert_eq!(phone_spans(&r).len(), 1, "mixed run needs the ¹-keep / ⑧-fold variant");
+    }
+
+    #[test]
+    fn detect_l1_plain_phone_unchanged_by_fanout() {
+        // No ambiguity, no stripped invisible → the fan-out runs no extra pass and
+        // the single base detection stands (exactly one span, not duplicated).
+        let r = detect_l1("请拨打 13800138000 咨询", &s(&["zh"]), &[]).unwrap();
+        assert_eq!(phone_spans(&r).len(), 1);
+    }
+
+    #[test]
+    fn detect_l1_fanout_is_linear_on_adversarial_fusion_input() {
+        // DoS guard for the class the fan-out must not create. A large run of phones each
+        // separated by an invisible (all stripped) fuses, in the base view, into one
+        // unbounded digit run → 0 phones; the fusion candidate re-inserts every
+        // boundary and recovers all N. The union must stay LINEAR: dedup is O(1) per
+        // match (HashSet, not an O(layer1) scan) and each recovered span's text is an
+        // O(len) slice of a pre-collected char index (not char_slice's O(start) skip).
+        // Under the pre-fix union this input was O(N²); it now completes promptly.
+        const N: usize = 4000;
+        let text = "13800138000\u{200b}".repeat(N); // U+200B ZERO WIDTH SPACE between phones
+        let t0 = std::time::Instant::now();
+        let r = detect_l1(&text, &s(&["zh"]), &[]).unwrap();
+        let elapsed = t0.elapsed();
+        // Every phone recovered via the keep-boundary reading.
+        assert_eq!(phone_spans(&r).len(), N, "all fused phones must be recovered");
+        // Loose ceiling: an O(N²) union blows far past this; a linear one is well under.
+        // (Guards the complexity class, not a precise budget.)
+        assert!(
+            elapsed.as_secs() < 20,
+            "fan-out union must be linear; took {elapsed:?} for N={N}"
+        );
     }
 }
 

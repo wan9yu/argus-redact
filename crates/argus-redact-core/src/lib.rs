@@ -31,6 +31,7 @@ pub mod hints;
 pub mod person_zh;
 pub mod person_en;
 pub mod reserved_range;
+pub(crate) mod sharded;
 pub mod replace;
 pub mod typeinfo;
 pub mod redact_l1;
@@ -40,6 +41,7 @@ pub mod occupation;
 pub mod evidence_detector;
 pub mod conditions;
 pub mod hobbies;
+pub(crate) mod fanout;
 
 pub use types::PatternMatch;
 pub use merger::{merge_entities, merge_entities_with_text};
