@@ -48,7 +48,7 @@ PIPL articles are shown by number (see the legend). A type marked **sensitive** 
 | zh | passport | 3 | 13, 28, 51, 29, 55, 56 | — | certificate_number (K) | yes |
 | zh | license_plate | 2 | 13, 51 | — | vehicle_identifier (L) | no |
 | zh | address | 2 | 13, 51 | — | geographic (B) | no |
-| zh | credit_code | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | credit_code | 3 | 13, 51 | — | — | no |
 | zh | qq | 2 | 13, 51 | — | — | no |
 | zh | wechat | 2 | 13, 51 | — | — | no |
 | zh | date_of_birth | 2 | 13, 51 | — | dates (C) | no |
@@ -113,11 +113,11 @@ PIPL articles are shown by number (see the legend). A type marked **sensitive** 
 
 PIPL Art.28 enumerates sensitive categories and adds a general clause; the list below groups the sensitive-PI types by the basis under which they qualify. National-ID and identity-credential numbers are included because their leakage enables impersonation and endangers personal safety.
 
-### Identity credentials — “specific identity” (PIPL Art.28)
+### Identity credentials — national-ID / credential numbers (PIPL Art.28 ¶1 harm clause)
 
-> PIPL Art.28 — sensitive personal information includes information on "specific identity" (特定身份): a state-issued identity or credential number whose leakage enables impersonation and endangers personal safety.
+> PIPL Art.28 ¶1 (general harm clause) — a national-ID / identity-credential number, once leaked, enables impersonation and may endanger personal or property safety, so it is treated as sensitive personal information (conservative over-flag; cf. GB/T 35273-2020 Annex B, which listed resident-ID, passport, military-ID and social-security numbers as sensitive). GB/T 45574-2025 reads 特定身份 as status rather than ID numbers, so the basis is the harm clause, not the specific-identity category.
 
-Types: `aadhaar`, `cpf`, `credit_code`, `eep`, `hk_id`, `hrp`, `id_number`, `itin`, `macau_id`, `military_id`, `my_number`, `nino`, `pan`, `passport`, `rrn`, `social_security`, `ssn`, `taiwan_arc`, `tax_id`, `tw_id`, `us_passport`.
+Types: `aadhaar`, `cpf`, `eep`, `hk_id`, `hrp`, `id_number`, `itin`, `macau_id`, `military_id`, `my_number`, `nino`, `pan`, `passport`, `rrn`, `social_security`, `ssn`, `taiwan_arc`, `tax_id`, `tw_id`, `us_passport`.
 
 ### Financial accounts (PIPL Art.28)
 
@@ -155,15 +155,16 @@ These types carry a high sensitivity score but are deliberately **not** classifi
 
 - **`phone`** — PIPL Art.28 (by exclusion) — a telephone number is ordinary personal information, not enumerated as sensitive; its processing still requires a lawful basis under PIPL Art.13. High sensitivity here reflects re-identification leverage in combination, not sensitive-PI status.
 - **`phone_landline`** — PIPL Art.28 (by exclusion) — a landline number is ordinary personal information, not enumerated as sensitive; processing requires a lawful basis under PIPL Art.13.
+- **`credit_code`** — PIPL Art.28 (by exclusion) — the Unified Social Credit Code identifies a legal entity/organization, not a natural person (Art.4), so it is not sensitive personal information; the universal Art.13/Art.51 processing floor still applies as for any processing record.
 - **`ethnicity`** — PIPL Art.28 (by exclusion) — unlike GDPR Art.9 (racial or ethnic origin), PIPL's enumerated sensitive categories do not include ethnicity; it stays ordinary PI under PIPL while remaining a GDPR special category.
 - **`person`** — PIPL Art.28 (by exclusion) — a personal name is the paradigmatic ordinary identifier and is not classified as sensitive personal information under PIPL (contrast: it is HIPAA Safe Harbor identifier (A)).
 - **`date_of_birth`** — PIPL Art.28 (by exclusion) — a date of birth is ordinary PI / a quasi-identifier, not enumerated as sensitive (contrast: it is HIPAA Safe Harbor identifier (C)).
-- **`openai_api_key`** — PIPL Art.4 (scope) — a machine access credential is not information relating to an identified or identifiable natural person, so it falls outside PIPL's sensitive-PI regime; handled as a security secret at the highest redaction priority.
-- **`anthropic_api_key`** — PIPL Art.4 (scope) — a machine access credential is not personal information of a natural person; handled as a security secret outside the sensitive-PI regime, at the highest redaction priority.
-- **`aws_access_key`** — PIPL Art.4 (scope) — a cloud access-key identifier is a machine credential, not personal information of a natural person; handled as a security secret.
-- **`github_token`** — PIPL Art.4 (scope) — an access token is a machine credential, not personal information of a natural person; handled as a security secret.
-- **`jwt`** — PIPL Art.4 (scope) — a bearer token is a machine credential, not personal information of a natural person; handled as a security secret. (A JWT MAY carry PI in its payload; that PI is redacted by its own type, not by classifying the token as sensitive PI.)
-- **`ssh_private_key`** — PIPL Art.4 (scope) — a private key is a machine credential, not personal information of a natural person; handled as a security secret at the highest redaction priority.
+- **`openai_api_key`** — PIPL Art.28 (by exclusion) — an API/machine credential falls under none of the Art.28 sensitive categories; as a machine credential it is not, as such, information about an identified natural person (Art.4 rationale), and is handled as a security secret at the highest redaction priority. The universal Art.13/Art.51 processing floor still applies.
+- **`anthropic_api_key`** — PIPL Art.28 (by exclusion) — a machine API credential is not enumerated as sensitive PI; not, as such, information about a natural person (Art.4 rationale); handled as a security secret. The universal Art.13/Art.51 floor still applies.
+- **`aws_access_key`** — PIPL Art.28 (by exclusion) — a cloud access-key identifier is not enumerated as sensitive PI; a machine credential (Art.4 rationale); handled as a security secret. The universal Art.13/Art.51 floor still applies.
+- **`github_token`** — PIPL Art.28 (by exclusion) — an access token is not enumerated as sensitive PI; a machine credential (Art.4 rationale); handled as a security secret. The universal Art.13/Art.51 floor still applies.
+- **`jwt`** — PIPL Art.28 (by exclusion) — a bearer token is not enumerated as sensitive PI; a machine credential (Art.4 rationale); handled as a security secret. (A JWT MAY carry PI in its payload; that PI is redacted by its own type, not by classifying the token as sensitive PI.) The universal Art.13/Art.51 floor still applies.
+- **`ssh_private_key`** — PIPL Art.28 (by exclusion) — a private key is not enumerated as sensitive PI; a machine credential (Art.4 rationale); handled as a security secret at the highest redaction priority. The universal Art.13/Art.51 floor still applies.
 
 ## GDPR criminal-conviction data
 

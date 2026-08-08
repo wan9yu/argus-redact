@@ -81,10 +81,10 @@ def pipl_new_for(name: str) -> tuple[str, ...]:
 # live rule book keys ``PIPL_SENSITIVE_PI`` and ``pipl_articles_for(name, ...)``).
 # ─────────────────────────────────────────────────────────────────────────────
 
-# National-ID / identity-credential types. Under PIPL Art.28, "specific identity"
-# (特定身份) numbers, once leaked, enable impersonation and endanger personal
-# safety. Name pairs are reconciled by listing BOTH registry names
-# (ssn≡social_security, passport≡us_passport) so neither variant is missed.
+# National-ID / identity-credential types. Basis: PIPL Art.28 ¶1 general harm
+# clause — such numbers, once leaked, enable impersonation and endanger personal
+# safety (conservative over-flag). Name pairs are reconciled by listing BOTH
+# registry names (ssn≡social_security, passport≡us_passport) so neither variant is missed.
 _IDENTITY_CREDENTIALS: frozenset[str] = frozenset(
     {
         "id_number",  # PRC resident identity card
@@ -100,7 +100,6 @@ _IDENTITY_CREDENTIALS: frozenset[str] = frozenset(
         "social_security",  # zh 社保号
         "ssn",  # en Social Security Number
         "itin",
-        "credit_code",  # NOTE: legal-entity identifier — see reviewer flag
         "tax_id",  # de Steuer-ID
         "my_number",  # ja
         "rrn",  # ko
@@ -167,9 +166,13 @@ HIPAA_NEW: dict[str, str] = {
 # The PIPL basis under which a type is a sensitive-PI member, keyed by a basis tag.
 PIPL_ART28_BASIS: dict[str, str] = {
     "specific_identity": (
-        "PIPL Art.28 — sensitive personal information includes information on "
-        '"specific identity" (特定身份): a state-issued identity or credential '
-        "number whose leakage enables impersonation and endangers personal safety."
+        "PIPL Art.28 ¶1 (general harm clause) — a national-ID / identity-credential "
+        "number, once leaked, enables impersonation and may endanger personal or "
+        "property safety, so it is treated as sensitive personal information "
+        "(conservative over-flag; cf. GB/T 35273-2020 Annex B, which listed resident-ID, "
+        "passport, military-ID and social-security numbers as sensitive). GB/T 45574-2025 "
+        "reads 特定身份 as status rather than ID numbers, so the basis is the harm clause, "
+        "not the specific-identity category."
     ),
     "financial_account": (
         'PIPL Art.28 — "financial accounts" (金融账户) are expressly enumerated as '
@@ -223,7 +226,6 @@ _MEMBER_BASIS: dict[str, str] = {
     "social_security": "specific_identity",
     "ssn": "specific_identity",
     "itin": "specific_identity",
-    "credit_code": "specific_identity",
     "tax_id": "specific_identity",
     "my_number": "specific_identity",
     "rrn": "specific_identity",
@@ -266,34 +268,43 @@ _DOWNGRADE_CITE: dict[str, str] = {
         "identifier (C))."
     ),
     "openai_api_key": (
-        "PIPL Art.4 (scope) — a machine access credential is not information "
-        "relating to an identified or identifiable natural person, so it falls "
-        "outside PIPL's sensitive-PI regime; handled as a security secret at the "
-        "highest redaction priority."
+        "PIPL Art.28 (by exclusion) — an API/machine credential falls under none of "
+        "the Art.28 sensitive categories; as a machine credential it is not, as such, "
+        "information about an identified natural person (Art.4 rationale), and is handled "
+        "as a security secret at the highest redaction priority. The universal "
+        "Art.13/Art.51 processing floor still applies."
     ),
     "anthropic_api_key": (
-        "PIPL Art.4 (scope) — a machine access credential is not personal "
-        "information of a natural person; handled as a security secret outside the "
-        "sensitive-PI regime, at the highest redaction priority."
+        "PIPL Art.28 (by exclusion) — a machine API credential is not enumerated as "
+        "sensitive PI; not, as such, information about a natural person (Art.4 rationale); "
+        "handled as a security secret. The universal Art.13/Art.51 floor still applies."
     ),
     "aws_access_key": (
-        "PIPL Art.4 (scope) — a cloud access-key identifier is a machine credential, "
-        "not personal information of a natural person; handled as a security secret."
+        "PIPL Art.28 (by exclusion) — a cloud access-key identifier is not enumerated as "
+        "sensitive PI; a machine credential (Art.4 rationale); handled as a security "
+        "secret. The universal Art.13/Art.51 floor still applies."
     ),
     "github_token": (
-        "PIPL Art.4 (scope) — an access token is a machine credential, not personal "
-        "information of a natural person; handled as a security secret."
+        "PIPL Art.28 (by exclusion) — an access token is not enumerated as sensitive PI; "
+        "a machine credential (Art.4 rationale); handled as a security secret. The "
+        "universal Art.13/Art.51 floor still applies."
     ),
     "jwt": (
-        "PIPL Art.4 (scope) — a bearer token is a machine credential, not personal "
-        "information of a natural person; handled as a security secret. (A JWT MAY "
-        "carry PI in its payload; that PI is redacted by its own type, not by "
-        "classifying the token as sensitive PI.)"
+        "PIPL Art.28 (by exclusion) — a bearer token is not enumerated as sensitive PI; a "
+        "machine credential (Art.4 rationale); handled as a security secret. (A JWT MAY "
+        "carry PI in its payload; that PI is redacted by its own type, not by classifying "
+        "the token as sensitive PI.) The universal Art.13/Art.51 floor still applies."
     ),
     "ssh_private_key": (
-        "PIPL Art.4 (scope) — a private key is a machine credential, not personal "
-        "information of a natural person; handled as a security secret at the "
-        "highest redaction priority."
+        "PIPL Art.28 (by exclusion) — a private key is not enumerated as sensitive PI; a "
+        "machine credential (Art.4 rationale); handled as a security secret at the highest "
+        "redaction priority. The universal Art.13/Art.51 floor still applies."
+    ),
+    "credit_code": (
+        "PIPL Art.28 (by exclusion) — the Unified Social Credit Code identifies a legal "
+        "entity/organization, not a natural person (Art.4), so it is not sensitive "
+        "personal information; the universal Art.13/Art.51 processing floor still applies "
+        "as for any processing record."
     ),
 }
 
@@ -504,7 +515,9 @@ _PIPL_LEGEND: tuple[tuple[str, str], ...] = (
 )
 
 _BASIS_HEADING: dict[str, str] = {
-    "specific_identity": "Identity credentials — “specific identity” (PIPL Art.28)",
+    "specific_identity": (
+        "Identity credentials — national-ID / credential numbers (PIPL Art.28 ¶1 harm clause)"
+    ),
     "financial_account": "Financial accounts (PIPL Art.28)",
     "medical_health": "Health data (PIPL Art.28)",
     "biometric": "Biometric data (PIPL Art.28)",
