@@ -25,8 +25,9 @@ pub fn reserved_range_patterns() -> Vec<(String, String)> {
 #[pyfunction]
 #[pyo3(signature = (text, overrides=None))]
 pub fn scan_for_pollution(
+    py: Python<'_>,
     text: &str,
     overrides: Option<HashMap<String, Vec<String>>>,
 ) -> Vec<(usize, usize, String)> {
-    core_scan(text, overrides.as_ref())
+    py.detach(|| core_scan(text, overrides.as_ref()))
 }

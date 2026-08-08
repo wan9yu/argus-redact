@@ -224,8 +224,44 @@ fn default_combined() -> &'static Regex {
 /// `fancy_regex` (like the Rust `regex` crate) returns byte offsets; Python
 /// returns char offsets. For ASCII-only text they're identical. For text with
 /// multi-byte chars (e.g. `张三`) we must convert.
-pub(crate) fn byte_to_char_offset(text: &str, byte_pos: usize) -> usize {
-    text[..byte_pos].chars().count()
+/// Amortized byte→char offset conversion for a SEQUENCE of positions.
+///
+/// The obvious `text[..byte_pos].chars().count()` rescans from byte 0 every
+/// time, so converting both ends of every match in a document costs O(n) per
+/// conversion — quadratic in the document length once the match count grows
+/// with it (the English tokenizer converts two offsets per WORD, so this was
+/// the dominant cost on any long English text, not just on match-dense edge
+/// cases). The cursor remembers where it last stopped and walks the delta
+/// instead, forward or backward, which makes a monotone sweep linear overall and
+/// leaves an out-of-order access costing only the distance it actually moved.
+///
+/// Pure ASCII short-circuits: byte offset == char offset, so nothing is scanned.
+pub(crate) struct CharOffsetCursor<'a> {
+    text: &'a str,
+    ascii: bool,
+    byte: usize,
+    chars: usize,
+}
+
+impl<'a> CharOffsetCursor<'a> {
+    pub(crate) fn new(text: &'a str) -> Self {
+        CharOffsetCursor { text, ascii: text.is_ascii(), byte: 0, chars: 0 }
+    }
+
+    /// The char offset of `byte_pos`, which must be a char boundary of the
+    /// `text` this cursor was built from.
+    pub(crate) fn char_offset(&mut self, byte_pos: usize) -> usize {
+        if self.ascii {
+            return byte_pos;
+        }
+        if byte_pos >= self.byte {
+            self.chars += self.text[self.byte..byte_pos].chars().count();
+        } else {
+            self.chars -= self.text[byte_pos..self.byte].chars().count();
+        }
+        self.byte = byte_pos;
+        self.chars
+    }
 }
 
 /// Slice `text` by CHAR offsets `[start, end)` (Python `text[start:end]`).
@@ -291,6 +327,7 @@ fn scan_with_overrides(
 /// alternative (all others are empty).
 fn collect_matches(re: &Regex, text: &str) -> Vec<(usize, usize, String)> {
     let mut results = Vec::new();
+    let mut cursor = CharOffsetCursor::new(text);
     let mut search_start = 0;
     while search_start <= text.len() {
         let caps = match re.captures_from_pos(text, search_start) {
@@ -302,8 +339,8 @@ fn collect_matches(re: &Regex, text: &str) -> Vec<(usize, usize, String)> {
             Some(m) => m,
             None => break,
         };
-        let start_char = byte_to_char_offset(text, m0.start());
-        let end_char = byte_to_char_offset(text, m0.end());
+        let start_char = cursor.char_offset(m0.start());
+        let end_char = cursor.char_offset(m0.end());
 
         // Find the matched named group (lastgroup equivalent).
         let type_name = re
@@ -330,6 +367,57 @@ fn collect_matches(re: &Regex, text: &str) -> Vec<(usize, usize, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The naive implementation the cursor replaced, kept as an ORACLE.
+    fn naive_char_offset(text: &str, byte_pos: usize) -> usize {
+        text[..byte_pos].chars().count()
+    }
+
+    #[test]
+    fn cursor_matches_the_naive_conversion_on_a_monotone_sweep() {
+        let text = "张三 says hi to 李四 at 北京市朝阳区, then emails a@b.io — 完毕";
+        let mut cursor = CharOffsetCursor::new(text);
+        for (byte_pos, _) in text.char_indices() {
+            assert_eq!(cursor.char_offset(byte_pos), naive_char_offset(text, byte_pos));
+        }
+        assert_eq!(cursor.char_offset(text.len()), text.chars().count());
+    }
+
+    #[test]
+    fn cursor_walks_backward_correctly() {
+        // Call sites reset to byte 0 between patterns/names, and `patterns.rs`
+        // shares ONE cursor across every pattern. A forward-only cursor is
+        // silently wrong there, not merely slow.
+        let text = "李四 a 王五 b 赵六";
+        let boundaries: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
+        let mut cursor = CharOffsetCursor::new(text);
+        for &b in boundaries.iter().rev() {
+            assert_eq!(cursor.char_offset(b), naive_char_offset(text, b));
+        }
+        // …and interleaved, jumping in both directions.
+        for &b in [boundaries[5], boundaries[1], boundaries[7], boundaries[0], boundaries[3]].iter()
+        {
+            assert_eq!(cursor.char_offset(b), naive_char_offset(text, b));
+        }
+    }
+
+    #[test]
+    fn cursor_ascii_fast_path_is_identity() {
+        let text = "plain ascii only, 12345";
+        let mut cursor = CharOffsetCursor::new(text);
+        for (byte_pos, _) in text.char_indices() {
+            assert_eq!(cursor.char_offset(byte_pos), byte_pos);
+        }
+    }
+
+    #[test]
+    fn cursor_repeated_query_of_the_same_position_is_stable() {
+        let text = "北京市朝阳区";
+        let mut cursor = CharOffsetCursor::new(text);
+        assert_eq!(cursor.char_offset(9), 3);
+        assert_eq!(cursor.char_offset(9), 3);
+        assert_eq!(cursor.char_offset(9), 3);
+    }
 
     #[test]
     fn phone_zh_matches() {

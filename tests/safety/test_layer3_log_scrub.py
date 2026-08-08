@@ -21,7 +21,7 @@ def _force_l3_failure(monkeypatch):
     """Wire mode='auto' so L2 is unavailable (warn, not raise) and L3 raises."""
     import argus_redact.glue.redact as r
 
-    monkeypatch.setattr(r, "_get_ner_adapters", lambda lang: [])
+    monkeypatch.setattr(r, "_get_ner_adapters", lambda lang, **_kw: [])
     monkeypatch.setattr(r, "_get_semantic_adapter", lambda: object())
 
     def _boom(text, adapter):  # noqa: ARG001 - signature match

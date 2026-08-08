@@ -652,11 +652,14 @@ shipped integrations call internally.
   patterns). It is **advisory by default: it warns, it does not block.** A hit emits an
   `injection_suspected` event and the restore still proceeds — originals *are*
   substituted. H runs only when `redacted=` is supplied.
-- **P (provenance)** — the nonce must appear verbatim in the reply. If absent, the reply
-  cannot be traced to this redaction session: restore fail-closes, returning pseudonyms
-  unchanged, and emits a `provenance_failed` event. Once the check passes the token has
-  done its job and is **stripped from the returned text** — it is not part of the model's
-  answer and never reaches the caller.
+- **P (provenance)** — the nonce must appear verbatim in the reply, as the trailing token
+  or on a line of its own. Ordinary model formatting around it — a code span, bold,
+  quotes, brackets, a trailing full stop — is tolerated; the nonce must still be the whole
+  token, so `id=<nonce>xyz` does not qualify. If absent, the reply cannot be traced to this
+  redaction session: restore fail-closes, returning pseudonyms unchanged, and emits a
+  `provenance_failed` event. Once the check passes the token has done its job and
+  **every** echoed copy of it is **stripped from the returned text** — it is not part of
+  the model's answer and never reaches the caller.
 - **S (scope-binding)** — only pseudonyms in `anchor.scope` (the set produced by *this*
   redaction call) are substituted. Out-of-scope codes appearing in the reply trigger an
   `out_of_scope_pseudonym` event and are left unreplaced.

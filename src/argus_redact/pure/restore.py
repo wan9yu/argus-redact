@@ -123,7 +123,11 @@ def wipe_key(key: dict) -> None:
     key.clear()
 
 
-def make_structured_restorer(key: dict[str, str]):
+def make_structured_restorer(
+    key: dict[str, str],
+    *,
+    aliases: dict[str, tuple[str, ...]] | None = None,
+):
     """Build a stateful `_core.StructuredRestorer` session for restoring many
     cells (structured CSV/JSON, streaming) against the same key.
 
@@ -131,13 +135,20 @@ def make_structured_restorer(key: dict[str, str]):
     construction, then reuses them across every `restore_cell` call — mirrors
     `pure.replacer.make_structured_session` on the redact side.
 
-    `dict(key)` is deliberate: the session gets its OWN copy, so a later
+    `aliases` mirrors the batch `restore(text, key, aliases=...)` parameter —
+    alternate transliterations that map back to the same original. The core
+    session has always accepted them; threading them here is what lets the
+    streaming face reach the same restore coverage as the batch face.
+
+    `dict(...)` is deliberate: the session gets its OWN copy, so a later
     `wipe_key(key)` on the caller's dict cannot reach the session's copy.
     Wipe the session itself via its `wipe()` / `close()` methods.
     """
     from argus_redact import _core
 
-    return _core.StructuredRestorer(dict(key))
+    if aliases is None:
+        return _core.StructuredRestorer(dict(key))
+    return _core.StructuredRestorer(dict(key), {k: list(v) for k, v in aliases.items()})
 
 
 def restore(
@@ -194,6 +205,12 @@ def restore(
     suppresses the ``guard=None`` DeprecationWarning — that one is about the CALLER's
     code and no wrapper re-emits it.
     """
+    if not isinstance(text, str):
+        # The Rust boundary rejects a non-str, but only on paths that reach it:
+        # the guard's fail-closed no-anchor branch returns before any core call,
+        # so a dict/list/int came straight back out as the "restored" value.
+        # Check up front so every branch and every face fails the same way.
+        raise TypeError(f"text must be a string, got {type(text).__name__}")
     if not isinstance(key, Mapping):
         raise TypeError(f"key must be a Mapping, got {type(key).__name__}")
 

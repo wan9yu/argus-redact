@@ -17,7 +17,17 @@ def _read_input(input_path: str | None) -> str:
         if not path.exists():
             print(f"Error: input file not found: {input_path}", file=sys.stderr)
             sys.exit(1)
-        return _safe_read_text(path)
+        try:
+            return _safe_read_text(path)
+        except OSError as e:
+            # A directory, a symlink (O_NOFOLLOW), a permission error — all
+            # OSError subclasses, none of them a FileNotFoundError, all of them
+            # a raw traceback before this.
+            print(f"Error: cannot read input file {input_path}: {e}", file=sys.stderr)
+            sys.exit(1)
+        except UnicodeDecodeError:
+            print(f"Error: input file is not valid UTF-8: {input_path}", file=sys.stderr)
+            sys.exit(1)
     # Bypass platform-default encoding (cp1252 on Windows) — read raw bytes
     # and decode as UTF-8. Without this, Chinese stdin produces surrogate
     # characters that downstream Rust regex / json.dumps reject.
@@ -59,6 +69,36 @@ def _parse_strategy_override(s: str | None) -> dict[str, str] | None:
             raise ValueError(f"Empty type or strategy in pair {pair!r}")
         out[ent_type] = strategy
     return out or None
+
+
+def _load_key_file(key_path: Path, arg: str) -> dict:
+    """Load and validate a key file, or exit with a clean message.
+
+    A key file holding a JSON array/string/number parses fine, so the
+    JSONDecodeError guard never fired: ``redact`` silently ignored it, exited
+    0, and then OVERWROTE the operator's file — destroying it with no error.
+    ``restore`` instead raised a raw ``TypeError: key must be a Mapping``
+    traceback. The HTTP face already answers 400 'key must be a JSON object';
+    this brings the CLI to the same contract.
+    """
+    try:
+        loaded = json.loads(_safe_read_text(key_path))
+    except json.JSONDecodeError:
+        print(f"Error: invalid key file: {arg}", file=sys.stderr)
+        sys.exit(5)
+    except OSError as e:
+        print(f"Error: cannot read key file {arg}: {e}", file=sys.stderr)
+        sys.exit(5)
+    except UnicodeDecodeError:
+        print(f"Error: key file is not valid UTF-8: {arg}", file=sys.stderr)
+        sys.exit(5)
+    if not isinstance(loaded, dict):
+        print(
+            f"Error: key file must contain a JSON object, got {type(loaded).__name__}: {arg}",
+            file=sys.stderr,
+        )
+        sys.exit(5)
+    return loaded
 
 
 def cmd_redact(args):
@@ -126,11 +166,7 @@ def cmd_redact(args):
     # Standard path (default / pipl / gdpr / hipaa / config-only)
     existing_key = None
     if key_path.exists():
-        try:
-            existing_key = json.loads(_safe_read_text(key_path))
-        except json.JSONDecodeError:
-            print(f"Error: invalid key file: {args.key}", file=sys.stderr)
-            sys.exit(5)
+        existing_key = _load_key_file(key_path, args.key)
 
     try:
         redacted, key = redact(
@@ -159,16 +195,16 @@ def cmd_restore(args):
         print(f"Error: key file not found: {args.key}", file=sys.stderr)
         sys.exit(4)
 
-    try:
-        key = json.loads(_safe_read_text(key_path))
-    except json.JSONDecodeError:
-        print(f"Error: invalid key file: {args.key}", file=sys.stderr)
-        sys.exit(5)
+    key = _load_key_file(key_path, args.key)
 
     text = _read_input(args.input)
     # guard=False: the CLI restores an operator-held key file locally, with no
     # per-call anchor — the explicit unguarded opt-out, not the fail-closed default.
-    restored = restore(text, key, guard=False)
+    try:
+        restored = restore(text, key, guard=False)
+    except (ValueError, TypeError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(3)
 
     # Restored output is deanonymized PII — at least as sensitive as the key
     # file, so it gets the same 0o600 mode rather than the world-readable

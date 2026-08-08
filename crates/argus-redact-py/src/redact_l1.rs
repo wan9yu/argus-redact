@@ -170,7 +170,11 @@ pub fn detect_l1<'py>(
     known_names: Option<Vec<String>>,
 ) -> PyResult<DetectL1Out<'py>> {
     let names = known_names.unwrap_or_default();
-    let result = core_detect_l1(text, &lang, &names)
+    // Detection is pure Rust (normalize + regex + person scoring) with no
+    // Python callback anywhere in it, so the lock is released for the whole
+    // scan — this is the expensive half of a redact.
+    let result = py
+        .detach(|| core_detect_l1(text, &lang, &names))
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     let layer1: Vec<PyPatternMatch> =
         result.layer1.into_iter().map(PyPatternMatch::from).collect();

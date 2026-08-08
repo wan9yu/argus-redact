@@ -59,13 +59,35 @@ def _find_faker_reserved(name: str, langs: list[str] | None) -> Callable | None:
     (e.g., `phone`, `address`, `person`); without preference order, the first
     registered lang silently wins regardless of the entity's actual language.
 
-    Cached on (name, lang_tuple) — registry is built at import and frozen.
+    Cached on (name, lang_tuple, registry generation) — see
+    ``_registry_generation`` for why the generation is part of the key.
     """
-    return _faker_reserved_cached(name, tuple(langs or ()))
+    return _faker_reserved_cached(name, tuple(langs or ()), _registry_generation())
+
+
+def _registry_generation() -> int:
+    """Read the registry's current generation counter.
+
+    Part of every faker-cache key. ``register()``/``unregister()`` bump it
+    BEFORE clearing the caches, so a resolve that was already in flight —
+    having computed its result against the pre-mutation registry — inserts
+    under the OLD generation. That entry is then dead: no later call ever
+    reads it, because every later call keys on the new generation.
+
+    Clear-after-write alone cannot give that guarantee: ``lru_cache`` has no
+    lock the writer can take, so the in-flight resolve's insert lands AFTER
+    ``cache_clear()`` and the stale value survives for the life of the
+    process (a custom ``faker_reserved`` permanently shadowed by a ``None``
+    computed microseconds too early). Read lazily to avoid the
+    registry -> replacer import cycle.
+    """
+    from argus_redact.specs import registry
+
+    return registry.generation()
 
 
 @functools.lru_cache(maxsize=256)
-def _faker_reserved_cached(name: str, langs: tuple[str, ...]) -> Callable | None:
+def _faker_reserved_cached(name: str, langs: tuple[str, ...], _generation: int) -> Callable | None:
     from argus_redact.specs.registry import lookup
 
     by_lang = {td.lang: td for td in lookup(name)}
@@ -166,7 +188,12 @@ def warn_mask_collisions(mask_collisions: list[str]) -> None:
         f"disambiguator (①) is not LLM-durable — restore of an LLM reply "
         f"may misattribute them.",
         SecurityWarning,
-        stacklevel=2,
+        # Auto-detected, like warn_coverage_restored and the restore guard. A
+        # hardcoded 2 lands on `replace()`'s own frame — an argus-internal
+        # line — which gives the warning ONE __warningregistry__ dedup slot for
+        # the whole process under Python's default filters, so every later
+        # session/thread/call site silently loses it.
+        stacklevel=_auto_stacklevel(),
     )
 
 
@@ -249,7 +276,7 @@ def warn_alias_collisions(alias_collisions: list[str]) -> None:
         f"{count} alias(es) map to more than one original; the "
         "restored value for a collided alias may be the wrong identity.",
         SecurityWarning,
-        stacklevel=2,
+        stacklevel=_auto_stacklevel(),  # see warn_mask_collisions
     )
 
 
@@ -406,12 +433,12 @@ def _resolve_realistic_faker(
     callable wins — so a built-in for the detected lang is never shadowed by a
     custom faker registered for a different lang (the #1 wrong-language risk).
     """
-    return _resolve_realistic_faker_cached(name, tuple(langs or ()))
+    return _resolve_realistic_faker_cached(name, tuple(langs or ()), _registry_generation())
 
 
 @functools.lru_cache(maxsize=256)
 def _resolve_realistic_faker_cached(
-    name: str, langs: tuple[str, ...]
+    name: str, langs: tuple[str, ...], _generation: int
 ) -> tuple[str, str | Callable] | None:
     from argus_redact.specs.registry import lookup
 
@@ -640,7 +667,7 @@ def replace(
                 f"pronouns and kinship phrases; downgrading to default for "
                 f"type={entity.type!r}.",
                 SecurityWarning,
-                stacklevel=2,
+                stacklevel=_auto_stacklevel(),  # see warn_mask_collisions
             )
 
     # `mask_collisions`: the Rust core disambiguated a mask-family
@@ -740,7 +767,7 @@ def replace_into_session(
             f"pronouns and kinship phrases; downgrading to default for "
             f"type={entity.type!r}.",
             SecurityWarning,
-            stacklevel=2,
+            stacklevel=_auto_stacklevel(),  # see warn_mask_collisions
         )
 
     # English article/grammar fix-up, exactly as `_replace_and_emit`. Normalize

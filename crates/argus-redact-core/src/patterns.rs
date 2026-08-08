@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, LazyLock};
 
 use fancy_regex::{Regex, RegexBuilder};
 
-use crate::reserved_range::byte_to_char_offset;
+use crate::reserved_range::CharOffsetCursor;
 use crate::types::PatternMatch;
 use crate::validators::resolve_validator;
 
@@ -135,6 +135,10 @@ pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<Patt
     }
 
     let mut results: Vec<PatternMatch> = Vec::new();
+    // ONE cursor for the whole scan. Matches within a pattern arrive in
+    // increasing byte order, and the reset to 0 at the next pattern costs the
+    // cursor only the walk back — never a fresh O(n) rescan per match.
+    let mut cursor = CharOffsetCursor::new(text);
 
     for pat in patterns {
         let re = get_regex(&pat.pattern)?;
@@ -197,8 +201,8 @@ pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<Patt
             }
 
             // Convert byte offsets to char offsets (Python uses char positions)
-            let char_start = byte_to_char_offset(text, start);
-            let char_end = byte_to_char_offset(text, end);
+            let char_start = cursor.char_offset(start);
+            let char_end = cursor.char_offset(end);
 
             results.push(PatternMatch {
                 text: matched,

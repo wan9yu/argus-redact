@@ -4,9 +4,8 @@
 
 use std::sync::LazyLock;
 
-use fancy_regex::Regex;
 
-use crate::reserved_range::escaped_alternation;
+use crate::sharded::{Bound, ShardedMatcher};
 
 /// Default display marker (U+24D5 CIRCLED LATIN SMALL LETTER F).
 pub const DEFAULT_DISPLAY_MARKER: &str = "ⓕ";
@@ -58,28 +57,25 @@ pub fn mark_for_display(text: &str, key_fakes: &[String], marker: Option<&str>) 
         return text.to_string();
     }
 
-    // Sort longest-first to avoid prefix collisions (e.g. "张" matching inside "张明").
-    let mut sorted_fakes: Vec<&str> = key_fakes.iter().map(|s| s.as_str()).collect();
-    sorted_fakes.sort_by(|a, b| b.len().cmp(&a.len()));
-
-    let pattern_str = escaped_alternation(&sorted_fakes);
-
-    let re = Regex::new(&pattern_str).expect("display_marker: invalid regex");
+    // The matcher sorts longest-first itself, which is what avoids prefix
+    // collisions (e.g. "张" matching inside "张明") — and, because BOTH halves of
+    // the mark/strip pair get their ordering from the same constructor, the two
+    // can no longer drift apart.
+    let matcher = ShardedMatcher::new(key_fakes, Bound::None).expect("display_marker: invalid regex");
     let m_clone = m.clone();
 
     let mut result = String::with_capacity(text.len() + text.len() / 4);
     let mut last_end = 0;
 
-    for mat in re.find_iter(text) {
-        let mat = mat.expect("display_marker: regex error");
-        result.push_str(&text[last_end..mat.start()]);
-        result.push_str(mat.as_str());
+    for (start, end) in matcher.find_iter(text) {
+        result.push_str(&text[last_end..start]);
+        result.push_str(&text[start..end]);
         // Idempotency check: if already followed by the marker, don't add it.
-        let after = &text[mat.end()..];
+        let after = &text[end..];
         if !after.starts_with(&m_clone) {
             result.push_str(&m_clone);
         }
-        last_end = mat.end();
+        last_end = end;
     }
     result.push_str(&text[last_end..]);
     result
@@ -115,24 +111,19 @@ pub fn strip_display_markers_scoped(text: &str, key_fakes: &[String], marker: Op
         return text.to_string();
     }
 
-    // Sort longest-first — identical ordering to mark_for_display, so the two
-    // functions agree on which token matches at any given position.
-    let mut sorted_fakes: Vec<&str> = key_fakes.iter().map(|s| s.as_str()).collect();
-    sorted_fakes.sort_by(|a, b| b.len().cmp(&a.len()));
-
-    let pattern_str = escaped_alternation(&sorted_fakes);
-    let re = Regex::new(&pattern_str).expect("display_marker: invalid regex");
+    // Same constructor as mark_for_display, therefore the same longest-first
+    // ordering, therefore the same token match at any given position.
+    let matcher = ShardedMatcher::new(key_fakes, Bound::None).expect("display_marker: invalid regex");
 
     let mut result = String::with_capacity(text.len());
     let mut last_end = 0;
 
-    for mat in re.find_iter(text) {
-        let mat = mat.expect("display_marker: regex error");
+    for (_start, end) in matcher.find_iter(text) {
         // Copy everything up to and including the matched fake verbatim — this
         // preserves any marker characters that are part of the fake itself
         // (e.g. a masked value like "138****5678").
-        result.push_str(&text[last_end..mat.end()]);
-        last_end = mat.end();
+        result.push_str(&text[last_end..end]);
+        last_end = end;
         // Strip the marker only if it immediately follows this fake match —
         // the one spot mark_for_display would have inserted it.
         let after = &text[last_end..];

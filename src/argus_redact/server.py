@@ -14,6 +14,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import functools
 import importlib
 import importlib.util
 import json
@@ -28,10 +29,12 @@ from argus_redact.pure.restore import RestoreGuardError
 from argus_redact.pure.wire import common_report_fields, risk_payload
 
 try:
+    from starlette.concurrency import run_in_threadpool
     from starlette.requests import Request
     from starlette.responses import JSONResponse
 except ImportError:
     if TYPE_CHECKING:
+        from starlette.concurrency import run_in_threadpool
         from starlette.requests import Request
         from starlette.responses import JSONResponse
 
@@ -39,9 +42,48 @@ except ImportError:
 # from unbounded request bodies buffered before any size check.
 MAX_HTTP_BODY_BYTES = 10 * 1024 * 1024
 
+# Server-side cap on the number of entries in a `key` — gates both `/restore`
+# `key` and `/redact` `key` (the pre-seeded existing-key map).
+#
+# The body cap alone does not bound this: a 10 MiB body of minimal
+# `{"a1":"b",...}` pairs carries on the order of half a million entries, and
+# every one of them is compiled into the restore matcher before a single byte
+# of `text` is scanned. The sharded matcher made that scan LINEAR in the key
+# rather than quadratic — linear is not the same as free, and an unauthenticated
+# caller choosing the key size is still choosing the server's work. The cap is
+# what turns "expensive" into "bounded"; the matcher only sets the constant.
+#
+# 10_000 is far above any realistic single-document key (a dense page of PII
+# yields tens of entries) while keeping worst-case setup in the millisecond
+# range.
+MAX_RESTORE_KEY_ENTRIES = 10_000
+
 
 class _BodyTooLarge(Exception):
     """Request body exceeded MAX_HTTP_BODY_BYTES (mapped to 413)."""
+
+
+class _BadBody(Exception):
+    """Request body was unparseable or not a JSON object (mapped to 400)."""
+
+
+def _parse_json_object(raw: bytes) -> dict[str, Any]:
+    """Parse a request body and require it to be a JSON **object**.
+
+    A body like ``[1,2,3]`` / ``"hello"`` / ``42`` / ``null`` parses fine, so
+    the JSONDecodeError guard never fires — but every field read after it is
+    ``body.get(...)``, and ``AttributeError`` is outside the
+    ``except (ValueError, TypeError)`` net the handlers rely on. That surfaced
+    as a 500 while every other malformed shape returned a clean 400. Both
+    body-parsing endpoints route through here so they cannot drift apart.
+    """
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        raise _BadBody("request body must be valid JSON") from None
+    if not isinstance(body, dict):
+        raise _BadBody(f"request body must be a JSON object, got {type(body).__name__}") from None
+    return body
 
 
 async def _read_capped_body(request: Request) -> bytes:
@@ -69,12 +111,12 @@ async def handle_redact(request: Request) -> JSONResponse:
     except _BodyTooLarge:
         return JSONResponse({"error": "request body too large"}, status_code=413)
 
-    # C4: a malformed/empty body raises JSONDecodeError (a ValueError). Parsing
-    # inside the try turns that into a 400, not an unhandled 500.
+    # C4: a malformed/empty body raises JSONDecodeError (a ValueError), and a
+    # valid non-object body would break on the first `.get`. Both map to 400.
     try:
-        body = json.loads(raw)
-    except ValueError:
-        return JSONResponse({"error": "request body must be valid JSON"}, status_code=400)
+        body = _parse_json_object(raw)
+    except _BadBody as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
 
     text = body.get("text", "")
     lang = body.get("lang", "zh")
@@ -94,25 +136,39 @@ async def handle_redact(request: Request) -> JSONResponse:
             {"error": "key must be a JSON object"},
             status_code=400,
         )
+    if key is not None and len(key) > MAX_RESTORE_KEY_ENTRIES:
+        return JSONResponse(
+            {"error": f"key too large: {len(key)} entries exceeds {MAX_RESTORE_KEY_ENTRIES}"},
+            status_code=413,
+        )
     detailed = body.get("detailed", False)
     report = body.get("report", False)
     profile = body.get("profile")
     types = body.get("types")
     types_exclude = body.get("types_exclude")
 
+    # Offloaded to a threadpool thread: the Rust core releases the GIL while it
+    # scans (py.detach in the bindings), but that only helps if something else
+    # can run on the event-loop thread while the scan is in flight. Called
+    # inline, the `async def` handler still blocked the single event-loop
+    # thread for the full scan, stalling every OTHER concurrent request —
+    # including a plain GET /health — behind one expensive /redact call.
     try:
-        result = redact(
-            text,
-            lang=lang,
-            mode=mode,
-            salt=salt,
-            config=config,
-            key=key,
-            detailed=detailed,
-            report=report,
-            profile=profile,
-            types=types,
-            types_exclude=types_exclude,
+        result = await run_in_threadpool(
+            functools.partial(
+                redact,
+                text,
+                lang=lang,
+                mode=mode,
+                salt=salt,
+                config=config,
+                key=key,
+                detailed=detailed,
+                report=report,
+                profile=profile,
+                types=types,
+                types_exclude=types_exclude,
+            )
         )
     except (ValueError, TypeError) as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -149,12 +205,12 @@ async def handle_restore(request: Request) -> JSONResponse:
     except _BodyTooLarge:
         return JSONResponse({"error": "request body too large"}, status_code=413)
 
-    # C4: a malformed body raises JSONDecodeError (a ValueError). Parsing inside
-    # the try turns that into a 400, not an unhandled 500.
+    # C4: a malformed body raises JSONDecodeError (a ValueError), and a valid
+    # non-object body would break on the first `.get`. Both map to 400.
     try:
-        body = json.loads(raw)
-    except ValueError:
-        return JSONResponse({"error": "request body must be valid JSON"}, status_code=400)
+        body = _parse_json_object(raw)
+    except _BadBody as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
 
     text = body.get("text", "")
     key = body.get("key", {})
@@ -163,6 +219,14 @@ async def handle_restore(request: Request) -> JSONResponse:
         return JSONResponse(
             {"error": "key must be a JSON object"},
             status_code=400,
+        )
+    # Size cap on the key itself — see MAX_RESTORE_KEY_ENTRIES. 413 (not 400)
+    # because this is the same class of refusal as the body cap: the request is
+    # well-formed, it is too big.
+    if key is not None and len(key) > MAX_RESTORE_KEY_ENTRIES:
+        return JSONResponse(
+            {"error": f"key too large: {len(key)} entries exceeds {MAX_RESTORE_KEY_ENTRIES}"},
+            status_code=413,
         )
 
     # v0.8.0: guard defaults to True — a restore with no anchor fails closed. A
@@ -203,8 +267,13 @@ async def handle_restore(request: Request) -> JSONResponse:
             from argus_redact.compose.anchor import Anchor
 
             anchor = Anchor(nonce=nonce, scope=frozenset(scope))
-        restored, details = restore(
-            text, key, guard=guard, anchor=anchor, strict=strict, detailed=True
+        # Offloaded to a threadpool thread — see the matching comment in
+        # handle_redact: the inline call blocked the event loop for every
+        # concurrent request while this one scanned.
+        restored, details = await run_in_threadpool(
+            functools.partial(
+                restore, text, key, guard=guard, anchor=anchor, strict=strict, detailed=True
+            )
         )
     except RestoreGuardError as e:
         return JSONResponse({"error": str(e), "security_events": e.events}, status_code=400)

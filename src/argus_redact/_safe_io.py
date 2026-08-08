@@ -48,6 +48,28 @@ def _open_nofollow(path: str, mode: int) -> Iterator[int]:
         os.close(fd)
 
 
+def _write_all(fd: int, payload: bytes) -> None:
+    """Write ``payload`` to ``fd`` in full, or raise.
+
+    ``os.write`` is a thin wrapper over the ``write(2)`` syscall, which is
+    permitted to write FEWER bytes than requested (ENOSPC, a disk quota, an
+    ``RLIMIT_FSIZE`` ceiling). Discarding the return value therefore truncates
+    the file silently — and for a key file that is a permanent, unreported
+    loss of restorability. Loop until the buffer is drained, and treat "no
+    progress" as an error rather than spinning on it.
+    """
+    view = memoryview(payload)
+    total = 0
+    while total < len(view):
+        written = os.write(fd, view[total:])
+        if written <= 0:
+            raise OSError(
+                f"short write: {total} of {len(view)} bytes written before the "
+                f"write stopped making progress"
+            )
+        total += written
+
+
 def safe_write_text(path: str, content: str, *, mode: int = 0o644) -> None:
     """Write text to ``path`` refusing to follow symlinks.
 
@@ -62,7 +84,7 @@ def safe_write_text(path: str, content: str, *, mode: int = 0o644) -> None:
         Path(path).write_text(content, encoding="utf-8")
         return
     with _open_nofollow(path, mode) as fd:
-        os.write(fd, content.encode("utf-8"))
+        _write_all(fd, content.encode("utf-8"))
 
 
 def safe_write_key(path: str, key: dict) -> None:

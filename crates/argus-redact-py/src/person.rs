@@ -12,6 +12,7 @@ use argus_redact_core::{PatternMatch as CorePM, SCORE_THRESHOLD};
 #[pyfunction]
 #[pyo3(signature = (text, pii_entities=None, known_names=None, threshold=None))]
 pub fn detect_person_names_zh(
+    py: Python<'_>,
     text: &str,
     pii_entities: Option<Vec<PyPatternMatch>>,
     known_names: Option<Vec<String>>,
@@ -24,7 +25,7 @@ pub fn detect_person_names_zh(
         .collect();
     let known = known_names.unwrap_or_default();
     let threshold = threshold.unwrap_or(SCORE_THRESHOLD);
-    argus_redact_core::person_zh::detect_person_names(text, &pii, &known, threshold)
+    py.detach(|| argus_redact_core::person_zh::detect_person_names(text, &pii, &known, threshold))
         .into_iter()
         .map(PyPatternMatch::from)
         .collect()
@@ -39,6 +40,7 @@ pub fn detect_person_names_zh(
 #[pyfunction]
 #[pyo3(signature = (text, pii_entities=None, known_names=None, threshold=None))]
 pub fn detect_person_names_en(
+    py: Python<'_>,
     text: &str,
     pii_entities: Option<Vec<PyPatternMatch>>,
     known_names: Option<Vec<String>>,
@@ -51,7 +53,7 @@ pub fn detect_person_names_en(
         .collect();
     let known = known_names.unwrap_or_default();
     let threshold = threshold.unwrap_or(SCORE_THRESHOLD);
-    argus_redact_core::person_en::detect_person_names(text, &pii, &known, threshold)
+    py.detach(|| argus_redact_core::person_en::detect_person_names(text, &pii, &known, threshold))
         .into_iter()
         .map(PyPatternMatch::from)
         .collect()
@@ -72,6 +74,7 @@ pub fn detect_person_names_en(
 #[pyfunction]
 #[pyo3(signature = (text, candidates, pii_entities=None, threshold=None))]
 pub fn score_person_candidates_en(
+    py: Python<'_>,
     text: &str,
     candidates: Vec<(usize, usize)>,
     pii_entities: Option<Vec<PyPatternMatch>>,
@@ -83,11 +86,13 @@ pub fn score_person_candidates_en(
         .map(CorePM::from)
         .collect();
     let threshold = threshold.unwrap_or(SCORE_THRESHOLD);
-    candidates
-        .into_iter()
-        .map(|(start, end)| {
-            argus_redact_core::person_en::score_person_candidate(text, start, end, &pii)
-                >= threshold
-        })
-        .collect()
+    py.detach(|| {
+        candidates
+            .into_iter()
+            .map(|(start, end)| {
+                argus_redact_core::person_en::score_person_candidate(text, start, end, &pii)
+                    >= threshold
+            })
+            .collect()
+    })
 }

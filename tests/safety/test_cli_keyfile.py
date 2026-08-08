@@ -8,13 +8,38 @@ import pytest
 from argus_redact.cli import main as cli
 
 
-def test_read_input_refuses_symlink(tmp_path):
+def test_safe_read_text_refuses_symlink(tmp_path):
+    """The refusal itself, at its birth site — O_NOFOLLOW raises OSError."""
+    from argus_redact._safe_io import safe_read_text
+
     target = tmp_path / "secret.txt"
     target.write_text("13800138000", encoding="utf-8")
     link = tmp_path / "link.txt"
     link.symlink_to(target)
     with pytest.raises(OSError):
+        safe_read_text(str(link))
+
+
+def test_read_input_refuses_symlink(tmp_path, capsys):
+    """The CLI still refuses, but reports it rather than emitting a traceback.
+
+    Previously ``_read_input`` let the ``OSError`` escape, so an operator who
+    pointed the CLI at a symlink got a raw traceback — the same shape as the
+    directory-as-input case. It now exits nonzero with a clear message; the
+    file contents are still never read.
+    """
+    target = tmp_path / "secret.txt"
+    target.write_text("13800138000", encoding="utf-8")
+    link = tmp_path / "link.txt"
+    link.symlink_to(target)
+
+    with pytest.raises(SystemExit) as exc:
         cli._read_input(str(link))
+
+    assert exc.value.code != 0
+    err = capsys.readouterr().err
+    assert "Error:" in err
+    assert "13800138000" not in err
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits")

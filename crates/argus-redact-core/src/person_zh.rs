@@ -24,7 +24,7 @@ use fancy_regex::Regex;
 use crate::person_data::{
     common_words_zh_set, compound_surnames_zh, not_names_zh_set, surnames_zh,
 };
-use crate::reserved_range::byte_to_char_offset;
+use crate::reserved_range::CharOffsetCursor;
 use crate::types::PatternMatch;
 
 /// CJK unified ideographs range — the character class body used by both
@@ -399,12 +399,15 @@ pub(crate) fn generate_candidates(text: &str, chars: &[char]) -> Vec<NameCandida
 
     // Compound surnames first (longer match wins).
     //   for m in _COMPOUND_PAT.finditer(text): _emit(m, is_compound=True)
+    // One cursor across BOTH surname sweeps: each is monotone, and the reset
+    // between them costs only the walk back to the start.
+    let mut cursor = CharOffsetCursor::new(text);
     for m in COMPOUND_PAT.find_iter(text) {
         // fancy_regex yields Err on backtrack-limit / stack overflow for
         // pathological input; Python's `re` never errors here. Stop gracefully
         // rather than panicking, mirroring patterns.rs.
         let Ok(m) = m else { break };
-        let m_start = byte_to_char_offset(text, m.start());
+        let m_start = cursor.char_offset(m.start());
         emit(m.as_str(), m_start, true, &mut candidates, &mut seen_starts);
     }
 
@@ -417,8 +420,8 @@ pub(crate) fn generate_candidates(text: &str, chars: &[char]) -> Vec<NameCandida
         // Stop gracefully on backtrack-limit / overflow Err (see COMPOUND_PAT
         // above); bit-identical on all non-pathological input.
         let Ok(m) = m else { break };
-        let m_start = byte_to_char_offset(text, m.start());
-        let m_end = byte_to_char_offset(text, m.end());
+        let m_start = cursor.char_offset(m.start());
+        let m_end = cursor.char_offset(m.end());
         if seen_starts.contains(&m_start) {
             continue;
         }
@@ -922,12 +925,13 @@ pub fn detect_person_names(
                 Ok(re) => re,
                 Err(_) => continue,
             };
+            let mut name_cursor = CharOffsetCursor::new(text);
             for m in re.find_iter(text) {
                 // Stop gracefully on backtrack-limit / overflow Err rather than
                 // panicking; bit-identical on all non-pathological input.
                 let Ok(m) = m else { break };
-                let start = byte_to_char_offset(text, m.start());
-                let end = byte_to_char_offset(text, m.end());
+                let start = name_cursor.char_offset(m.start());
+                let end = name_cursor.char_offset(m.end());
                 results.push(PatternMatch {
                     text: name.clone(),
                     type_: "person".to_string(),

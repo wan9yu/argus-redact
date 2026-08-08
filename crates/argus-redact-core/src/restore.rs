@@ -4,9 +4,8 @@ use fancy_regex::Regex;
 use crate::display_marker::strip_display_markers_scoped;
 use crate::grammar::{is_self_ref, restore_grammar_en};
 use crate::hints::{py_rstrip, py_strip};
-use crate::reserved_range::{
-    byte_to_char_offset, escaped_alternation, escaped_alternation_digit_bounded, scan_for_pollution,
-};
+use crate::reserved_range::{CharOffsetCursor, scan_for_pollution};
+use crate::sharded::{Bound, ShardedMatcher};
 
 #[derive(Debug)]
 pub struct RestoreError(pub String);
@@ -101,9 +100,27 @@ pub struct GuardEvent {
 /// Minimum nonce length the guard will accept.
 const MIN_NONCE_LEN: usize = 16;
 
+/// Formatting a chat model routinely adds around a token it was asked to echo:
+/// markdown emphasis/code spans, quotes, brackets, sentence punctuation.
+///
+/// All are non-alphanumeric, so trimming them can never turn some OTHER token
+/// into the nonce — only reveal the nonce that is actually there. Without this,
+/// ```` `<nonce>` ```` — an entirely ordinary way for a model to render a token
+/// — fails the provenance check and SILENTLY BLOCKS a legitimate restore, which
+/// is indistinguishable to the caller from a detected injection.
+const NONCE_WRAPPERS: &[char] = &[
+    '`', '*', '_', '~', '"', '\'', '\u{201c}', '\u{201d}', '\u{2018}', '\u{2019}', '(', ')', '[',
+    ']', '{', '}', '<', '>', '.', ',', ';', ':', '!', '?',
+];
+
+/// Strip surrounding whitespace and [`NONCE_WRAPPERS`] from one candidate line.
+fn unwrap_nonce_candidate(line: &str) -> &str {
+    py_strip(py_strip(line).trim_matches(|c| NONCE_WRAPPERS.contains(&c)))
+}
+
 /// True only if the model echoed `nonce` as instructed — as a whole token, on
 /// its own line or as the trailing token (the shape `prompt_anchor` asks for
-/// and `strip_nonce` removes).
+/// and `strip_nonce` removes), allowing for ordinary wrapper formatting.
 ///
 /// `nonce.chars().count()` (NOT `.len()`) mirrors Python `len()`, which counts
 /// codepoints rather than bytes, so the floor check lands on the same value
@@ -112,16 +129,21 @@ fn nonce_echoed(text: &str, nonce: &str) -> bool {
     if nonce.chars().count() < MIN_NONCE_LEN {
         return false;
     }
-    if py_rstrip(text).ends_with(nonce) {
-        return true; // documented trailing echo
+    // Documented trailing echo. `trim_end_matches` only peels wrapper chars, so
+    // `id=<nonce>xyz` still does not qualify — the nonce must be the last
+    // TOKEN, not merely present.
+    if py_rstrip(text).trim_end_matches(|c| NONCE_WRAPPERS.contains(&c)).ends_with(nonce) {
+        return true;
     }
-    text.split('\n').any(|line| py_strip(line) == nonce) // own-line echo
+    text.split('\n').any(|line| unwrap_nonce_candidate(line) == nonce) // own-line echo
 }
 
 /// Remove the echoed verification token from the model's reply.
 ///
-/// The documented shape (token last) is handled in one pass; the fallbacks
-/// cover a model that puts it on its own line mid-reply or echoes it inline.
+/// EVERY echoed copy is removed, not just the last one: the own-line filter and
+/// the inline pass both always run. A trailing fast-path that returned early
+/// left an earlier duplicate echo in place, and that copy then travelled all
+/// the way into the restored plaintext handed back to the caller.
 fn strip_nonce(text: &str, nonce: &str) -> String {
     if nonce.chars().count() < MIN_NONCE_LEN {
         // Defense in depth: a degenerate nonce has no valid echo to strip, and
@@ -131,15 +153,16 @@ fn strip_nonce(text: &str, nonce: &str) -> String {
         // plaintext" must refuse degenerate input regardless of caller.
         return text.to_string();
     }
-    let trimmed = py_rstrip(text);
-    if trimmed.ends_with(nonce) {
-        // the documented case — no full-text rebuild needed
-        return py_rstrip(&trimmed[..trimmed.len() - nonce.len()]).to_string();
-    }
-    let kept: Vec<&str> = text.split('\n').filter(|line| py_strip(line) != nonce).collect();
+    // Drop whole lines that are a bare (possibly wrapped) echo — this also
+    // takes the wrapper characters with them. No trailing fast path: with a
+    // duplicate echo earlier in the reply an early return left the surviving
+    // copy in the returned PLAINTEXT — the guard leaking its own secret into
+    // the answer it hands back.
+    let kept: Vec<&str> =
+        text.split('\n').filter(|line| unwrap_nonce_candidate(line) != nonce).collect();
     let mut out = kept.join("\n");
     if out.contains(nonce) {
-        // defensive: echoed inline rather than on its own line
+        // Echoed inline rather than on its own line (e.g. "…body. <nonce>").
         out = out.replace(nonce, "");
     }
     py_rstrip(&out).to_string()
@@ -164,7 +187,7 @@ fn reject_empty_key_entry(key: &HashMap<String, String>) -> Result<(), RestoreEr
 /// Keys sorted by length descending to prevent partial matches.
 /// Single-pass replacement prevents re-scanning of replaced content.
 pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, RestoreError> {
-    restore_tracking_self_ref(text, key).map(|(result, _spans)| result)
+    restore_tracking_self_ref(text, key, &[]).map(|(result, _spans)| result)
 }
 
 /// Same single-pass substitution as `restore()`, but additionally records the
@@ -177,11 +200,17 @@ pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, Rest
 /// The recorded offsets are exactly the start/end of the pushed replacement
 /// text, so they always land on a valid UTF-8 char boundary: no separate
 /// byte→char conversion is needed to slice `result` at them later.
+/// `shield` holds tokens that must be MATCHED but never substituted. They join
+/// the longest-first alternation, so a shorter lookup key can no longer match
+/// INSIDE one; `substitute_with` finds no lookup entry for them and emits them
+/// verbatim, consuming the whole token atomically. That is what lets the guard
+/// WITHHOLD an identity without SPLICING one — see `restore_full_guarded`.
 fn restore_tracking_self_ref(
     text: &str,
     key: &HashMap<String, String>,
+    shield: &[String],
 ) -> Result<(String, Vec<(usize, usize)>), RestoreError> {
-    if key.is_empty() || text.is_empty() {
+    if (key.is_empty() && shield.is_empty()) || text.is_empty() {
         return Ok((text.to_string(), Vec::new()));
     }
 
@@ -192,54 +221,48 @@ fn restore_tracking_self_ref(
     // execute the explosion.
     reject_empty_key_entry(key)?;
 
-    // Sort keys by length descending (longest first)
-    let mut keys: Vec<&String> = key.keys().collect();
-    keys.sort_by(|a, b| b.len().cmp(&a.len()));
-
-    // Build alternation pattern from escaped keys (digit-bounded so a numeric
-    // key cannot match inside a longer number).
-    let pattern_str = escaped_alternation_digit_bounded(&keys);
-
-    let re = Regex::new(&pattern_str)
+    // Build the matcher from the escaped keys (digit-bounded so a numeric key
+    // cannot match inside a longer number). `ShardedMatcher::new` does the
+    // longest-first ordering itself, across keys and shield alike — the shield
+    // only works because the ordering is global, not per-source.
+    let keys: Vec<&String> = key.keys().chain(shield.iter()).collect();
+    let matcher = ShardedMatcher::new(&keys, Bound::Digit)
         .map_err(|e| RestoreError(format!("Invalid restore pattern: {e}")))?;
 
-    Ok(substitute_with(&re, key, text))
+    Ok(substitute_with(&matcher, key, text))
 }
 
-/// Single-pass, longest-first substitution of every match of `re` in `text`
+/// Single-pass, longest-first substitution of every match of `matcher` in `text`
 /// using `flat` as the lookup, tracking the byte-offset span (in the OUTPUT
 /// string) of every self-referential pronoun value it splices in — the exact
 /// substitution body `restore_tracking_self_ref` used to run inline.
 ///
-/// Shared by `restore_tracking_self_ref` (which compiles `re` fresh from
+/// Shared by `restore_tracking_self_ref` (which compiles `matcher` fresh from
 /// `key` on every call) and `RestoreSession::restore_cell` (which reuses one
-/// `re` precompiled once in `RestoreSession::new` across many calls over the
-/// same `flat` map) — factored out so the two call sites can never drift.
-fn substitute_with(re: &Regex, flat: &HashMap<String, String>, text: &str) -> (String, Vec<(usize, usize)>) {
+/// `matcher` precompiled once in `RestoreSession::new` across many calls over
+/// the same `flat` map) — factored out so the two call sites can never drift.
+fn substitute_with(
+    matcher: &ShardedMatcher,
+    flat: &HashMap<String, String>,
+    text: &str,
+) -> (String, Vec<(usize, usize)>) {
     let mut result = String::with_capacity(text.len());
     let mut last_end = 0;
     let mut self_ref_spans: Vec<(usize, usize)> = Vec::new();
 
-    let mut search_start = 0;
-    while search_start <= text.len() {
-        let m = match re.find_from_pos(text, search_start) {
-            Ok(Some(m)) => m,
-            Ok(None) => break,
-            Err(_) => break,
-        };
-
-        result.push_str(&text[last_end..m.start()]);
-        if let Some(replacement) = flat.get(m.as_str()) {
+    for (start, end) in matcher.find_iter(text) {
+        result.push_str(&text[last_end..start]);
+        let matched = &text[start..end];
+        if let Some(replacement) = flat.get(matched) {
             let span_start = result.len();
             result.push_str(replacement);
             if is_self_ref(replacement) {
                 self_ref_spans.push((span_start, result.len()));
             }
         } else {
-            result.push_str(m.as_str());
+            result.push_str(matched);
         }
-        last_end = m.end();
-        search_start = if m.end() > m.start() { m.end() } else { m.start() + 1 };
+        last_end = end;
     }
     result.push_str(&text[last_end..]);
 
@@ -331,13 +354,21 @@ fn advance_chars(s: &str, from: usize, n_chars: usize) -> usize {
 /// and the collision is recorded in the returned `Vec` so the caller can be
 /// warned the loser's identity may come back wrong on restore.
 ///
-/// Returns `(flat_map, alias_collisions)`. With `aliases = None`, `flat_map`
-/// is a plain clone of `key` and `alias_collisions` is empty.
+/// Returns `(flat_map, alias_collisions, alias_owner)`. With `aliases = None`,
+/// `flat_map` is a plain clone of `key` and the other two are empty.
+///
+/// `alias_owner` maps each alias string that actually entered `flat_map` to the
+/// FAKE whose original it resolved to. Pseudonyms themselves are never listed —
+/// they own themselves. The guarded path needs this: scope is defined over
+/// pseudonyms, and an alias inherits the scope of the fake that owns it, so
+/// without an owner the guard cannot tell an authorised alias from one that
+/// smuggles a withheld identity back into the reply.
 fn merge_aliases(
     key: &HashMap<String, String>,
     aliases: Option<&HashMap<String, Vec<String>>>,
-) -> (HashMap<String, String>, Vec<String>) {
+) -> (HashMap<String, String>, Vec<String>, HashMap<String, String>) {
     let mut alias_collisions: Vec<String> = Vec::new();
+    let mut alias_owner: HashMap<String, String> = HashMap::new();
     let flat: HashMap<String, String> = if let Some(alias_map) = aliases {
         let mut m: HashMap<String, String> = key.clone();
         let mut fakes: Vec<&String> = alias_map.keys().collect();
@@ -355,6 +386,7 @@ fn merge_aliases(
                         }
                         None => {
                             m.insert(alias.clone(), original.clone());
+                            alias_owner.insert(alias.clone(), fake.clone());
                         }
                         _ => {}
                     }
@@ -365,7 +397,7 @@ fn merge_aliases(
     } else {
         key.clone()
     };
-    (flat, alias_collisions)
+    (flat, alias_collisions, alias_owner)
 }
 
 /// Display-marker strip + alias merge + core substitution + grammar, over
@@ -398,36 +430,79 @@ fn restore_body(
     aliases: Option<&HashMap<String, Vec<String>>>,
     display_marker: Option<&str>,
 ) -> Result<(String, Vec<String>), RestoreError> {
-    // Step 1: strip explicit display marker — scoped to this key's fakes
-    // only. A global strip would remove the marker character everywhere in
-    // `text`, destroying unrelated content that happens to contain it (e.g.
-    // markdown `**bold**`, or a masked value's internal `*`). Scoping to the
-    // same longest-first fake alternation `mark_for_display` uses makes the
-    // strip land exactly where the mark was added, nowhere else.
-    let text_owned: String;
-    let text = if let Some(dm) = display_marker {
-        let key_fakes: Vec<String> = key.keys().cloned().collect();
-        text_owned = strip_display_markers_scoped(text, &key_fakes, Some(dm));
-        text_owned.as_str()
-    } else {
-        text
-    };
-
-    // Step 2: empty key fast-path.
-    if key.is_empty() {
-        return Ok((text.to_string(), Vec::new()));
-    }
-
-    // `restore_tracking_self_ref` (called below at Step 4) rejects an
+    // `restore_tracking_self_ref` (called from `restore_flat` below) rejects an
     // empty-string key entry too; this is defense in depth so this function
     // fails closed on its own before doing any alias-merge work, independent
     // of whether the lower-level fn is reached unchanged.
     reject_empty_key_entry(key)?;
 
-    // Step 3: alias merge — build flat lookup.
-    let (flat, alias_collisions) = merge_aliases(key, aliases);
+    // Alias merge — build flat lookup.
+    let (flat, alias_collisions, _alias_owner) = merge_aliases(key, aliases);
 
-    // Step 4: core substitution over the flat lookup.
+    // The display-marker strip is scoped to this key's own FAKES (not the
+    // merged map): markers are written by `mark_for_display` against the
+    // pseudonyms, so that is exactly where they can be.
+    let marker_fakes: Vec<String> = key.keys().cloned().collect();
+
+    // No shield on the unguarded path: nothing is withheld, so every token in
+    // the merged map is substitutable.
+    Ok((restore_flat(text, &flat, &marker_fakes, display_marker, &[])?, alias_collisions))
+}
+
+/// Marker strip + core substitution + grammar over an ALREADY-merged `flat`
+/// lookup — the half of `restore_body` below the alias merge.
+///
+/// Split out because the guarded path must merge aliases over the FULL key
+/// (so the collision domain, and therefore which original an alias resolves
+/// to, is a property of the key rather than of one reply's scope) and only
+/// THEN apply the scope filter to the merged map. It cannot reach that by
+/// calling `restore_body` with a pre-scoped key: `merge_aliases` seeds its
+/// lookup from the map it is handed, so under a pre-scoped key an
+/// out-of-scope pseudonym is simply ABSENT — and an alias whose literal text
+/// equals that pseudonym then wins the vacant slot instead of colliding with
+/// it, handing the caller a withheld code restored to the WRONG identity.
+///
+/// `marker_fakes` scopes the display-marker strip. A global strip would remove
+/// the marker character everywhere in `text`, destroying unrelated content that
+/// happens to contain it (e.g. markdown `**bold**`, or a masked value's internal
+/// `*`). Scoping to the same longest-first fake alternation `mark_for_display`
+/// uses makes the strip land exactly where the mark was added, nowhere else.
+///
+/// `shield` — tokens matched but never substituted. See
+/// `restore_tracking_self_ref`. Empty on the unguarded path.
+fn restore_flat(
+    text: &str,
+    flat: &HashMap<String, String>,
+    marker_fakes: &[String],
+    display_marker: Option<&str>,
+    shield: &[String],
+) -> Result<String, RestoreError> {
+    // Step 1: strip explicit display marker — scoped to `marker_fakes` only.
+    let text_owned: String;
+    let text = if let Some(dm) = display_marker {
+        text_owned = strip_display_markers_scoped(text, marker_fakes, Some(dm));
+        text_owned.as_str()
+    } else {
+        text
+    };
+
+    // Step 2: empty lookup fast-path. A shield with nothing to substitute
+    // still has nothing to do — every shielded token would be emitted verbatim,
+    // which is what returning `text` unchanged already does.
+    if flat.is_empty() {
+        return Ok(text.to_string());
+    }
+    reject_empty_key_entry(flat)?;
+
+    // A shield entry that is ALSO a lookup key would be SUBSTITUTED, not
+    // shielded — the lookup wins in `substitute_with`. The guarded caller
+    // derives the two sets by complementary filters on one map so they cannot
+    // intersect; this filter makes the property local rather than a contract
+    // the caller has to remember.
+    let shield_only: Vec<String> =
+        shield.iter().filter(|s| !flat.contains_key(*s)).cloned().collect();
+
+    // Step 3: core substitution over the flat lookup.
     //
     // No separate decoration-marker pass runs here. `restore` is a single
     // left-to-right longest-key-match pass that replaces each source span
@@ -439,15 +514,13 @@ fn restore_body(
     // itself another key) the value got replaced a SECOND time — a cross-entity
     // disclosure. Folding the marker handling into the single no-rescan pass
     // closes that double-replace by construction.
-    let (result, self_ref_spans) = restore_tracking_self_ref(text, &flat)?;
+    let (result, self_ref_spans) = restore_tracking_self_ref(text, flat, &shield_only)?;
 
-    // Step 5: grammar restore, scoped to the neighbourhood of each restored
+    // Step 4: grammar restore, scoped to the neighbourhood of each restored
     // self-ref pronoun. `apply_grammar_scoped` is a no-op (returns `result`
     // unchanged) when `self_ref_spans` is empty, i.e. when no key value was a
     // self-ref pronoun OR none of them actually got substituted into `text`.
-    let result = apply_grammar_scoped(&result, &self_ref_spans);
-
-    Ok((result, alias_collisions))
+    Ok(apply_grammar_scoped(&result, &self_ref_spans))
 }
 
 /// Full restore path: [`restore_body`], optionally preceded by a provenance +
@@ -521,12 +594,55 @@ pub fn restore_full_guarded(
     // substitution pass below would otherwise carry it straight through).
     let text = strip_nonce(text, &anchor.nonce);
 
-    // (S) Scope: restrict substitution to pseudonyms this reply is scoped to.
-    let scoped: HashMap<String, String> = key
+    // Corrupted-key check on the FULL key, BEFORE the scope split. Running it
+    // only on the scoped slice (as calling `restore_body(scoped, ..)` would)
+    // lets an empty-string entry that scope happens to exclude slip past the
+    // check entirely — the guarded path would then be the one path in the
+    // library that does NOT fail closed on a corrupted key.
+    reject_empty_key_entry(key)?;
+
+    // Alias merge over the FULL key. The winner of a contested alias, and
+    // whether an alias collides at all, must be a property of the KEY — the
+    // same answer the unguarded path gives. Merging over a pre-scoped key
+    // would let scope decide WHICH identity an alias resolves to, which is
+    // how an alias could stand in for an out-of-scope pseudonym. See
+    // `restore_flat`.
+    let (flat_full, alias_collisions_full, alias_owner) = merge_aliases(key, aliases);
+    reject_empty_key_entry(&flat_full)?;
+
+    // (S) Scope: a PSEUDONYM is substitutable iff the anchor scopes it; an
+    // ALIAS iff the fake that OWNS it is scoped — an alias is exactly as
+    // authorised as the identity behind it.
+    let scoped_flat: HashMap<String, String> = flat_full
         .iter()
-        .filter(|(k, _)| anchor.scope.contains(*k))
+        .filter(|(k, _)| match alias_owner.get(*k) {
+            Some(owner) => anchor.scope.contains(owner),
+            None => anchor.scope.contains(*k),
+        })
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
+
+    // The in-scope PSEUDONYMS (no aliases) — the advisory below counts these,
+    // and they alone scope the display-marker strip.
+    let scoped_fakes: Vec<String> =
+        key.keys().filter(|k| anchor.scope.contains(*k)).cloned().collect();
+
+    // Everything in the merged map that scope does NOT reach. These join the
+    // substitution alternation as SHIELD entries — matched (so nothing shorter
+    // can match inside one) but absent from the lookup, so each is emitted
+    // verbatim and consumed atomically.
+    //
+    // Without the shield, filtering out-of-scope entries out of the map leaves
+    // a withheld pseudonym with no alternative of its own, and a SHORTER
+    // in-scope one matches INSIDE it: `{"P-1": "Alice", "P-10": "Ten"}` scoped
+    // to `P-1` turned `P-10` into `Alice0`. The guard reported that token as
+    // withheld while having spliced a real identity into it — strictly worse
+    // than leaving the guard off. The scope guard may WITHHOLD an identity; it
+    // may never SPLICE one.
+    let mut shield: Vec<String> =
+        flat_full.keys().filter(|t| !scoped_flat.contains_key(*t)).cloned().collect();
+    // Sorted so the alternation this feeds is byte-stable across process runs.
+    shield.sort();
 
     let mut events: Vec<GuardEvent> = Vec::new();
 
@@ -536,16 +652,16 @@ pub fn restore_full_guarded(
     // substituted. Distinct from the corruption empty-string-key case (that
     // fails closed in `restore_body`); this is a legitimate, non-overlapping
     // scope and key, so it only advises, never blocks.
-    if !key.is_empty() && scoped.is_empty() && !anchor.scope.is_empty() {
+    if !key.is_empty() && scoped_fakes.is_empty() && !anchor.scope.is_empty() {
         events.push(GuardEvent { kind: GuardEventKind::EmptyKeyWithScope, count: key.len(), detail: None });
     }
 
     // Detect out-of-scope pseudonyms that appear in text — see
     // `tokens_present`. Cosmetic only: it sizes the event's `count`/`detail`,
-    // never which pseudonyms get withheld (that is `scoped` above).
-    let out_of_scope_codes: Vec<String> =
-        key.keys().filter(|k| !anchor.scope.contains(*k)).cloned().collect();
-    let out_of_scope = tokens_present(&out_of_scope_codes, &text);
+    // never which pseudonyms get withheld (that is `shield` above). It scans
+    // the SHIELD, not `key`, so an ALIAS of an out-of-scope fake is reported as
+    // withheld too and `strict=True` fails closed on it identically.
+    let out_of_scope = tokens_present(&shield, &text);
     if !out_of_scope.is_empty() {
         events.push(GuardEvent {
             kind: GuardEventKind::OutOfScopePseudonym,
@@ -554,8 +670,10 @@ pub fn restore_full_guarded(
         });
     }
 
-    // Restore only in-scope pseudonyms.
-    let (result, alias_collisions) = restore_body(&text, &scoped, aliases, display_marker)?;
+    // Restore only in-scope pseudonyms (and their aliases), with every
+    // out-of-scope token shielded.
+    let result = restore_flat(&text, &scoped_flat, &scoped_fakes, display_marker, &shield)?;
+    let alias_collisions = alias_collisions_full;
     if !alias_collisions.is_empty() {
         // Dedupe + sort for the EVENT only — `merge_aliases` pushes one entry
         // per LOSING claim, so a 3-way collision on one alias string appears
@@ -608,16 +726,11 @@ fn tokens_present(pseudonyms: &[String], text: &str) -> Vec<String> {
         return Vec::new();
     }
 
-    // Sort a COPY by length descending — mirrors Python's
+    // `ShardedMatcher::new` sorts longest-first itself — mirrors Python's
     // `sorted(pseudonyms, key=len, reverse=True)`, which never mutates its
     // input either.
-    let mut sorted: Vec<String> = pseudonyms.to_vec();
-    sorted.sort_by(|a, b| b.len().cmp(&a.len()));
-    let alternation = escaped_alternation(&sorted);
-    let pattern_str = format!(r"(?<![A-Za-z0-9_-])(?:{alternation})(?![A-Za-z0-9_-])");
-
-    let re = match Regex::new(&pattern_str) {
-        Ok(re) => re,
+    let matcher = match ShardedMatcher::new(pseudonyms, Bound::PseudonymToken) {
+        Ok(m) => m,
         // An escaped alternation of literal strings should always compile;
         // if it somehow doesn't, Python's `re.compile` on the equivalent
         // pattern would not raise here either, so fail open to "no hits"
@@ -626,19 +739,8 @@ fn tokens_present(pseudonyms: &[String], text: &str) -> Vec<String> {
     };
 
     let mut hits: BTreeSet<String> = BTreeSet::new();
-    let mut search_start = 0;
-    while search_start <= text.len() {
-        match re.find_from_pos(text, search_start) {
-            Ok(Some(m)) => {
-                hits.insert(m.as_str().to_string());
-                search_start = if m.end() > m.start() { m.end() } else { m.start() + 1 };
-            }
-            Ok(None) => break,
-            // A match-time error (e.g. a backtrack/overflow limit) stops the
-            // scan rather than panicking — mirrors `check_restore_safety`'s
-            // `_ => break` on this same `find_from_pos` idiom in this file.
-            Err(_) => break,
-        }
+    for (start, end) in matcher.find_iter(text) {
+        hits.insert(text[start..end].to_string());
     }
     // `BTreeSet` iterates in sorted order, so this is exactly Python's
     // `sorted(set(pattern.findall(text)))`.
@@ -672,7 +774,7 @@ pub fn restore_full(
 #[derive(Debug)]
 pub struct RestoreSession {
     flat: HashMap<String, String>,
-    re: Option<Regex>,
+    matcher: Option<ShardedMatcher>,
     alias_collisions: Vec<String>,
 }
 
@@ -692,22 +794,29 @@ impl RestoreSession {
         aliases: Option<&HashMap<String, Vec<String>>>,
     ) -> Result<RestoreSession, RestoreError> {
         reject_empty_key_entry(key)?;
-        let (flat, alias_collisions) = merge_aliases(key, aliases);
+        let (flat, alias_collisions, _alias_owner) = merge_aliases(key, aliases);
         reject_empty_key_entry(&flat)?;
 
-        let re = if flat.is_empty() {
+        let matcher = if flat.is_empty() {
             None
         } else {
-            let mut keys: Vec<&String> = flat.keys().collect();
-            keys.sort_by(|a, b| b.len().cmp(&a.len()));
-            let pattern_str = escaped_alternation_digit_bounded(&keys);
+            let keys: Vec<&String> = flat.keys().collect();
             Some(
-                Regex::new(&pattern_str)
+                ShardedMatcher::new(&keys, Bound::Digit)
                     .map_err(|e| RestoreError(format!("Invalid restore pattern: {e}")))?,
             )
         };
 
-        Ok(RestoreSession { flat, re, alias_collisions })
+        Ok(RestoreSession { flat, matcher, alias_collisions })
+    }
+
+    /// Aliases claimed by more than one original — one entry per LOSING claim,
+    /// resolved once in `new`. A property of the KEY, not of any cell, so a
+    /// session-based face reads it once at construction to emit the same
+    /// wrong-identity warning the one-shot path emits from
+    /// `RestoreResult.alias_collisions`.
+    pub fn alias_collisions(&self) -> &[String] {
+        &self.alias_collisions
     }
 
     /// Restore one cell of text against the precomputed key. Unguarded and
@@ -715,7 +824,7 @@ impl RestoreSession {
     /// against `restore_full(..., None, None)`), so `events` is always empty
     /// and `outcome` is always `Complete`.
     pub fn restore_cell(&self, text: &str) -> Result<RestoreResult, RestoreError> {
-        let Some(re) = &self.re else {
+        let Some(matcher) = &self.matcher else {
             return Ok(RestoreResult {
                 restored: text.to_string(),
                 alias_collisions: self.alias_collisions.clone(),
@@ -723,7 +832,7 @@ impl RestoreSession {
                 outcome: RestoreOutcome::Complete,
             });
         };
-        let (result, spans) = substitute_with(re, &self.flat, text);
+        let (result, spans) = substitute_with(matcher, &self.flat, text);
         let result = apply_grammar_scoped(&result, &spans);
         Ok(RestoreResult {
             restored: result,
@@ -737,7 +846,7 @@ impl RestoreSession {
     /// unchanged — the same behavior as a session built from an empty key.
     pub fn wipe(&mut self) {
         self.flat.clear();
-        self.re = None;
+        self.matcher = None;
         self.alias_collisions.clear();
     }
 
@@ -784,6 +893,16 @@ pub fn check_restore_safety(
     key: &HashMap<String, String>,
 ) -> Vec<String> {
     let mut warnings: Vec<String> = Vec::new();
+    // Size cap. This function's contract is "empty list == nothing suspicious",
+    // so returning empty for text that was never examined would CERTIFY exactly
+    // the input nobody looked at. Report instead, and scan nothing.
+    if llm_output.len() > crate::MAX_INPUT_SIZE || redacted.len() > crate::MAX_INPUT_SIZE {
+        return vec![format!(
+            "input too large to scan ({} bytes; limit {}) — restore safety was NOT checked",
+            llm_output.len().max(redacted.len()),
+            crate::MAX_INPUT_SIZE
+        )];
+    }
     // Python's `_DANGER_WINDOW` is a CHAR window (re indices on str are char-based);
     // window the context in char space so CJK-dense output matches Python exactly.
     let llm_chars: Vec<char> = llm_output.chars().collect();
@@ -810,6 +929,9 @@ but only {count_original}x in redacted input — possible injection"
         if count_llm > 0 {
             let escaped = fancy_regex::escape(code);
             if let Ok(code_re) = Regex::new(&escaped) {
+                // Monotone sweep per code — the cursor keeps the ±window
+                // conversion from rescanning the whole reply per occurrence.
+                let mut cursor = CharOffsetCursor::new(llm_output);
                 let mut search_start = 0;
                 let mut warned = false;
                 while search_start <= llm_output.len() && !warned {
@@ -817,8 +939,8 @@ but only {count_original}x in redacted input — possible injection"
                         Ok(Some(m)) => {
                             // ±DANGER_WINDOW in CHAR space (matches Python
                             // `llm_output[max(0,start-100):min(len,end+100)]`).
-                            let char_start = byte_to_char_offset(llm_output, m.start());
-                            let char_end = byte_to_char_offset(llm_output, m.end());
+                            let char_start = cursor.char_offset(m.start());
+                            let char_end = cursor.char_offset(m.end());
                             let cs = char_start.saturating_sub(DANGER_WINDOW);
                             let ce = (char_end + DANGER_WINDOW).min(llm_chars.len());
                             let context: String = llm_chars[cs..ce].iter().collect();
@@ -869,6 +991,38 @@ fn count_occurrences(haystack: &str, needle: &str) -> usize {
         start += pos + needle.len();
     }
     count
+}
+
+#[cfg(test)]
+mod integration_probe {
+    //! DRY-RUN ONLY. Two hunks from the streaming/restore workstream, written
+    //! here to prove they land on top of the sharded-matcher + guard-shield
+    //! composition rather than colliding with it.
+    use super::*;
+
+    const N: &str = "0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn duplicate_nonce_echo_never_survives_into_plaintext() {
+        // The trailing fast-path returns BEFORE the own-line filter runs, so a
+        // second copy of the nonce anywhere earlier in the reply travels into
+        // the returned plaintext — the guard leaking its own secret.
+        let text = format!("{N}\nthe reply body\n{N}");
+        let out = strip_nonce(&text, N);
+        assert!(!out.contains(N), "nonce survived the strip: {out:?}");
+        assert_eq!(out, "the reply body");
+    }
+
+    #[test]
+    fn oversized_llm_output_is_not_certified_safe_without_being_scanned() {
+        // check_restore_safety returns "empty == safe". Over the crate input
+        // cap it must not return empty for text nobody looked at.
+        let mut key = HashMap::new();
+        key.insert("P-1".to_string(), "Alice".to_string());
+        let huge = "x".repeat(crate::MAX_INPUT_SIZE + 1);
+        let out = check_restore_safety("P-1", &huge, &key);
+        assert!(!out.is_empty(), "oversized reply certified safe without a scan");
+    }
 }
 
 #[cfg(test)]
@@ -1283,6 +1437,165 @@ mod tests {
         assert_eq!(result.events[1].detail, Some(result.alias_collisions.clone()));
     }
 
+    // ── (S) scope shield: an alias may never stand in for a pseudonym ───────
+    // The scope filter is applied to `key` BEFORE the alias merge runs. The
+    // merge seeds its lookup from the map it is handed, so under the SCOPED
+    // map an out-of-scope pseudonym is simply absent — and an alias whose
+    // literal text happens to equal that pseudonym then wins the empty slot
+    // instead of colliding with it. Result: the guard hands back the WRONG
+    // identity for a code it was supposed to withhold. Unguarded restore is
+    // immune (its merge seeds from the FULL key, so the same alias collides).
+
+    #[test]
+    fn guarded_alias_never_substitutes_for_an_out_of_scope_pseudonym() {
+        // "P-2" is a real pseudonym for Bob AND an alias claimed by P-1
+        // (Alice). Scope covers only P-1. "P-2" must come back VERBATIM
+        // (withheld, out-of-scope) — never as "Alice".
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        k.insert("P-2".to_string(), "Bob".to_string());
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        aliases.insert("P-1".to_string(), vec!["P-2".to_string()]);
+        let mut scope = std::collections::HashSet::new();
+        scope.insert("P-1".to_string());
+        let anchor = Anchor { nonce: NONCE.to_string(), scope };
+
+        let text = format!("P-1 wrote, P-2 replied.\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, Some(&aliases), None, Some(&anchor)).unwrap();
+
+        assert_eq!(
+            result.restored, "Alice wrote, P-2 replied.",
+            "an alias must not splice a withheld pseudonym into the wrong identity"
+        );
+        assert_eq!(result.outcome, RestoreOutcome::Partial);
+        // The same collision the UNGUARDED path reports must be reported here.
+        assert_eq!(result.alias_collisions, vec!["P-2".to_string()]);
+    }
+
+    #[test]
+    fn guarded_alias_owner_out_of_scope_is_withheld_too() {
+        // An alias is only as in-scope as the fake that owns it. "Ali" belongs
+        // to P-1; scope covers only P-2, so "Ali" must be withheld — restoring
+        // it would leak Alice through a code the anchor never authorised.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        k.insert("P-2".to_string(), "Bob".to_string());
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        aliases.insert("P-1".to_string(), vec!["Ali".to_string()]);
+        let mut scope = std::collections::HashSet::new();
+        scope.insert("P-2".to_string());
+        let anchor = Anchor { nonce: NONCE.to_string(), scope };
+
+        let text = format!("Ali and P-2 met.\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, Some(&aliases), None, Some(&anchor)).unwrap();
+
+        assert_eq!(result.restored, "Ali and Bob met.");
+    }
+
+    #[test]
+    fn guarded_in_scope_alias_still_restores() {
+        // The shield must not over-withhold: an alias whose OWNER is in scope
+        // restores exactly as before.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        k.insert("P-2".to_string(), "Bob".to_string());
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        aliases.insert("P-1".to_string(), vec!["Ali".to_string()]);
+        let mut scope = std::collections::HashSet::new();
+        scope.insert("P-1".to_string());
+        let anchor = Anchor { nonce: NONCE.to_string(), scope };
+
+        let text = format!("Ali arrived.\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, Some(&aliases), None, Some(&anchor)).unwrap();
+
+        assert_eq!(result.restored, "Alice arrived.");
+        assert_eq!(result.outcome, RestoreOutcome::Complete);
+    }
+
+    #[test]
+    fn guarded_alias_collision_domain_is_the_full_key_not_the_scoped_slice() {
+        // Two fakes claim the same alias; only ONE is in scope. The collision
+        // is a property of the KEY, so it must be reported either way — and
+        // the winner must be the same sorted-first fake the unguarded path
+        // picks, so a scope filter can never change WHICH identity an alias
+        // resolves to (only whether it resolves at all).
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        k.insert("P-2".to_string(), "Bob".to_string());
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        aliases.insert("P-1".to_string(), vec!["Shared".to_string()]);
+        aliases.insert("P-2".to_string(), vec!["Shared".to_string()]);
+        let mut scope = std::collections::HashSet::new();
+        scope.insert("P-2".to_string()); // the LOSER of the alias race
+        let anchor = Anchor { nonce: NONCE.to_string(), scope };
+
+        let text = format!("Shared showed up.\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, Some(&aliases), None, Some(&anchor)).unwrap();
+
+        // P-1 won "Shared" (sorted first) but P-1 is out of scope → withheld.
+        // It must NOT silently fall through to P-2's "Bob".
+        assert_eq!(result.restored, "Shared showed up.");
+        assert_eq!(result.alias_collisions, vec!["Shared".to_string()]);
+        assert_eq!(result.events.iter().filter(|e| e.kind == GuardEventKind::AliasCollision).count(), 1);
+    }
+
+    #[test]
+    fn guarded_empty_string_key_entry_fails_closed_even_when_out_of_scope() {
+        // The corrupted-key check lives in `restore_body`, which the guarded
+        // path only ever calls with the SCOPED map — so an empty-string entry
+        // excluded by scope used to slip past it entirely. The check has to
+        // run on the FULL key, before the scope split.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        k.insert(String::new(), "Bob".to_string());
+        let mut scope = std::collections::HashSet::new();
+        scope.insert("P-1".to_string());
+        let anchor = Anchor { nonce: NONCE.to_string(), scope };
+
+        let text = format!("P-1 here.\n{NONCE}");
+        let err = restore_full_guarded(&text, &k, None, None, Some(&anchor));
+        assert!(err.is_err(), "an empty-string key entry must fail closed regardless of scope");
+    }
+
+    #[test]
+    fn guarded_empty_string_alias_fails_closed() {
+        // Same corruption, arriving through the alias map instead. `RestoreSession`
+        // already re-checks the merged map for this; the guarded path must too.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        aliases.insert("P-1".to_string(), vec![String::new()]);
+        let mut scope = std::collections::HashSet::new();
+        scope.insert("P-1".to_string());
+        let anchor = Anchor { nonce: NONCE.to_string(), scope };
+
+        let text = format!("P-1 here.\n{NONCE}");
+        assert!(restore_full_guarded(&text, &k, Some(&aliases), None, Some(&anchor)).is_err());
+    }
+
+    #[test]
+    fn merge_aliases_reports_the_owning_fake_of_every_alias() {
+        // `alias_owner` is what lets the guard decide scope for an alias: it
+        // names the fake whose original the alias resolved to.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        k.insert("P-2".to_string(), "Bob".to_string());
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        aliases.insert("P-1".to_string(), vec!["Ali".to_string(), "Shared".to_string()]);
+        aliases.insert("P-2".to_string(), vec!["Bobby".to_string(), "Shared".to_string()]);
+
+        let (flat, collisions, owner) = merge_aliases(&k, Some(&aliases));
+
+        assert_eq!(flat.get("Ali"), Some(&"Alice".to_string()));
+        assert_eq!(owner.get("Ali"), Some(&"P-1".to_string()));
+        assert_eq!(owner.get("Bobby"), Some(&"P-2".to_string()));
+        // The sorted-first fake owns a contested alias; the loser is recorded.
+        assert_eq!(owner.get("Shared"), Some(&"P-1".to_string()));
+        assert_eq!(collisions, vec!["Shared".to_string()]);
+        // A pseudonym is owned by itself — never listed as somebody's alias.
+        assert!(!owner.contains_key("P-1"));
+    }
+
     #[test]
     fn guarded_alias_collision_event_dedupes_and_sorts_but_field_stays_raw() {
         // A MULTI-way collision: "Beta" is claimed by three distinct fakes
@@ -1543,6 +1856,112 @@ possible hallucination or fabrication"
         assert_eq!(strip_nonce(&text, short_nonce), text);
     }
 
+    #[test]
+    fn nonce_echoed_through_ordinary_model_formatting() {
+        // The instruction says "echo this token"; a chat model routinely
+        // wraps it. Rejecting these silently BLOCKS a legitimate restore —
+        // the guard's false-negative direction, which looks to the caller
+        // exactly like an injected reply.
+        for wrapped in [
+            format!("`{NONCE}`"),
+            format!("**{NONCE}**"),
+            format!("\"{NONCE}\""),
+            format!("'{NONCE}'"),
+            format!("{NONCE}."),
+            format!("{NONCE},"),
+            format!("**`{NONCE}`**"),
+        ] {
+            let text = format!("Reply body.\n{wrapped}");
+            assert!(nonce_echoed(&text, NONCE), "not accepted: {wrapped}");
+            assert_eq!(strip_nonce(&text, NONCE), "Reply body.", "not stripped: {wrapped}");
+        }
+    }
+
+    #[test]
+    fn nonce_wrapper_stripping_does_not_accept_a_foreign_token() {
+        // The wrapper tolerance must not degrade into a substring match: a
+        // DIFFERENT 32-char token wrapped the same way is still not an echo.
+        let other = "ffffffffffffffffffffffffffffffff";
+        let text = format!("Reply body.\n`{other}`");
+        assert!(!nonce_echoed(&text, NONCE));
+        // Nor may a nonce merely CONTAINED in a longer line count as an echo.
+        let glued = format!("Reply.\nid={NONCE}xyz");
+        assert!(!nonce_echoed(&glued, NONCE));
+    }
+
+    #[test]
+    fn every_echoed_nonce_copy_is_stripped() {
+        // A model that echoes the token more than once must not leave a copy
+        // in the returned plaintext: the trailing fast-path returned before the
+        // own-line filter ran, so the earlier copy survived the strip.
+        let text = format!("Body one.\n{NONCE}\nBody two.\n{NONCE}");
+        assert!(nonce_echoed(&text, NONCE));
+        let stripped = strip_nonce(&text, NONCE);
+        assert!(!stripped.contains(NONCE), "nonce survived the strip: {stripped:?}");
+        assert_eq!(stripped, "Body one.\nBody two.");
+    }
+
+    #[test]
+    fn duplicate_trailing_nonce_lines_are_all_stripped() {
+        let text = format!("Body.\n{NONCE}\n{NONCE}");
+        let stripped = strip_nonce(&text, NONCE);
+        assert!(!stripped.contains(NONCE), "nonce survived the strip: {stripped:?}");
+        assert_eq!(stripped, "Body.");
+    }
+
+    // ── check_restore_safety: cost + input cap ─────────────────────────────
+
+    #[test]
+    fn check_restore_safety_scales_linearly_in_output_length() {
+        // Per pseudonym occurrence the danger-window check converted a byte
+        // offset to a char offset by rescanning the prefix — O(pos) each, so
+        // O(n^2) over the whole output. This is the ONE public API whose stated
+        // job is inspecting hostile LLM output, so its cost must be linear.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        let time_for = |n: usize| {
+            let llm = "P-1 xxxx ".repeat(n);
+            let t = std::time::Instant::now();
+            let _ = check_restore_safety("P-1 orig", &llm, &k);
+            t.elapsed().as_secs_f64()
+        };
+        time_for(2_000); // warm up
+        let small = time_for(10_000);
+        let large = time_for(40_000);
+        // 4x the input. Linear => ~4x; quadratic => ~16x. 8x is a wide margin
+        // that still fails the quadratic shape decisively.
+        assert!(
+            large < small * 8.0 + 0.05,
+            "check_restore_safety is super-linear: 10k={small:.4}s 40k={large:.4}s"
+        );
+    }
+
+    #[test]
+    fn check_restore_safety_reports_oversized_input_instead_of_scanning_it() {
+        // The only guard API with no MAX_INPUT_SIZE equivalent. It returns
+        // advisory strings rather than a Result, so the cap is reported in
+        // band — a caller that ignores warnings is unaffected, and one that
+        // reads them learns the scan did not run.
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        let big = "P-1 ".repeat(crate::MAX_INPUT_SIZE / 4 + 1);
+        assert!(big.len() > crate::MAX_INPUT_SIZE);
+        let warns = check_restore_safety("P-1", &big, &k);
+        assert!(
+            warns.iter().any(|w| w.contains("too large")),
+            "no oversized-input warning: {warns:?}"
+        );
+
+        // Exactly at the cap must still be scanned normally.
+        let at_cap = "P-1 xxxxxxxxxxxx".repeat(crate::MAX_INPUT_SIZE / 16);
+        assert_eq!(at_cap.len(), crate::MAX_INPUT_SIZE);
+        let warns = check_restore_safety("P-1", &at_cap, &k);
+        assert!(
+            !warns.iter().any(|w| w.contains("too large")),
+            "exactly-MAX_INPUT_SIZE input must not be refused: {warns:?}"
+        );
+    }
+
     // ── out-of-scope pseudonym detector (S guard): tokens_present ───────────
     // Port of `pure/restore.py::_tokens_present`.
 
@@ -1710,5 +2129,149 @@ possible hallucination or fabrication"
         k.insert(String::new(), "SECRET".to_string());
         let err = RestoreSession::new(&k, None).unwrap_err();
         assert!(err.0.contains("empty"), "unexpected error message: {}", err.0);
+    }
+
+    // ── Guard scope: an out-of-scope pseudonym must be withheld ATOMICALLY ──
+    //
+    // The S guard withholds an out-of-scope entry by dropping it from the
+    // lookup map. If it is also dropped from the longest-first ALTERNATION,
+    // a shorter IN-scope pseudonym can match INSIDE it and splice one
+    // identity's original into another identity's token — the guard then
+    // reports the token as "withheld" while having corrupted it. Every
+    // fixture below asserts the out-of-scope token survives byte-for-byte.
+
+    fn scope_of(codes: &[&str]) -> std::collections::HashSet<String> {
+        codes.iter().map(|c| c.to_string()).collect()
+    }
+
+    fn key_of(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    }
+
+    #[test]
+    fn guarded_out_of_scope_zh_name_not_spliced_by_shorter_in_scope_name() {
+        // 李明 (in scope) is a strict PREFIX of 李明华 (out of scope). With
+        // 李明华 absent from the alternation, "李明华" matches as 李明 + "华"
+        // and restores to "张伟华" — 王芳's statement attributed to 张伟.
+        let k = key_of(&[("李明", "张伟"), ("李明华", "王芳")]);
+        let anchor = Anchor { nonce: NONCE.to_string(), scope: scope_of(&["李明"]) };
+
+        let text = format!("李明华 reported that 李明 left.\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, None, None, Some(&anchor)).unwrap();
+
+        assert_eq!(result.restored, "李明华 reported that 张伟 left.");
+        assert!(
+            !result.restored.contains("张伟华"),
+            "spliced identity in guarded output: {:?}", result.restored
+        );
+        assert_eq!(result.outcome, RestoreOutcome::Partial);
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(result.events[0].kind, GuardEventKind::OutOfScopePseudonym);
+        assert_eq!(result.events[0].detail, Some(vec!["李明华".to_string()]));
+    }
+
+    #[test]
+    fn guarded_out_of_scope_code_not_spliced_by_shorter_in_scope_code() {
+        // P-1 (in scope) is a prefix of P-10 (out of scope): "P-10" must not
+        // become "Alice0".
+        let k = key_of(&[("P-1", "Alice"), ("P-10", "Ten")]);
+        let anchor = Anchor { nonce: NONCE.to_string(), scope: scope_of(&["P-1"]) };
+
+        let text = format!("P-10 and P-1\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, None, None, Some(&anchor)).unwrap();
+
+        assert_eq!(result.restored, "P-10 and Alice");
+        assert_eq!(result.outcome, RestoreOutcome::Partial);
+    }
+
+    #[test]
+    fn guarded_alias_of_in_scope_fake_cannot_claim_an_out_of_scope_fake() {
+        // THE DEDUPE TRAP. An alias of the IN-scope P-1 is literally the
+        // out-of-scope fake P-2. Merging aliases over the SCOPED key makes
+        // P-2 → "Alice" (no collision is seen, because P-2's own entry was
+        // already filtered out), so the withheld pseudonym is substituted
+        // anyway — with the WRONG identity. Merging over the FULL key sees
+        // the collision and never inserts.
+        let k = key_of(&[("P-1", "Alice"), ("P-2", "Bob")]);
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        aliases.insert("P-1".to_string(), vec!["P-2".to_string()]);
+        let anchor = Anchor { nonce: NONCE.to_string(), scope: scope_of(&["P-1"]) };
+
+        let text = format!("P-1 and P-2\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, Some(&aliases), None, Some(&anchor)).unwrap();
+
+        assert_eq!(result.restored, "Alice and P-2");
+        assert!(
+            !result.restored.contains("Alice and Alice"),
+            "out-of-scope fake received an in-scope identity: {:?}", result.restored
+        );
+        assert_eq!(result.outcome, RestoreOutcome::Partial);
+    }
+
+    #[test]
+    fn guarded_alias_of_out_of_scope_fake_is_withheld_and_reported() {
+        // The mirror of the trap: an alias whose OWNING fake is out of scope
+        // must not be substituted either, and must be reported as withheld —
+        // so `strict=True` fails closed at every scope width.
+        let k = key_of(&[("P-1", "Alice"), ("P-2", "Bob")]);
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        aliases.insert("P-2".to_string(), vec!["Bobby".to_string()]);
+        let anchor = Anchor { nonce: NONCE.to_string(), scope: scope_of(&["P-1"]) };
+
+        let text = format!("P-1 met Bobby\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, Some(&aliases), None, Some(&anchor)).unwrap();
+
+        assert_eq!(result.restored, "Alice met Bobby");
+        assert_eq!(result.outcome, RestoreOutcome::Partial);
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(result.events[0].kind, GuardEventKind::OutOfScopePseudonym);
+        assert_eq!(result.events[0].detail, Some(vec!["Bobby".to_string()]));
+    }
+
+    #[test]
+    fn guarded_three_way_prefix_chain_withheld_atomically() {
+        // P-1 ⊂ P-10 ⊂ P-100, only the shortest in scope.
+        let k = key_of(&[("P-1", "Alice"), ("P-10", "Ten"), ("P-100", "Hundred")]);
+        let anchor = Anchor { nonce: NONCE.to_string(), scope: scope_of(&["P-1"]) };
+
+        let text = format!("P-100 P-10 P-1\n{NONCE}");
+        let result = restore_full_guarded(&text, &k, None, None, Some(&anchor)).unwrap();
+
+        assert_eq!(result.restored, "P-100 P-10 Alice");
+        assert_eq!(result.outcome, RestoreOutcome::Partial);
+        assert_eq!(
+            result.events[0].detail,
+            Some(vec!["P-10".to_string(), "P-100".to_string()]),
+        );
+    }
+
+    #[test]
+    fn guarded_in_scope_substitutions_match_the_unguarded_pass() {
+        // The guard may only ever WITHHOLD. Every in-scope substitution must
+        // land exactly where the unguarded pass put it.
+        let k = key_of(&[("P-1", "Alice"), ("P-10", "Ten"), ("P-100", "Hundred")]);
+        let anchor = Anchor {
+            nonce: NONCE.to_string(),
+            scope: scope_of(&["P-1", "P-10", "P-100"]),
+        };
+        let text = format!("P-100 P-10 P-1\n{NONCE}");
+        let guarded = restore_full_guarded(&text, &k, None, None, Some(&anchor)).unwrap();
+        let unguarded = restore_full("P-100 P-10 P-1", &k, None, None).unwrap();
+        assert_eq!(guarded.restored, unguarded.0);
+        assert_eq!(guarded.outcome, RestoreOutcome::Complete);
+    }
+
+    #[test]
+    fn equal_length_key_ordering_is_deterministic_not_hash_seeded() {
+        // Equal-length keys previously tie-broke on HashMap iteration order,
+        // which is per-process hash-seed dependent. The sort must be TOTAL so
+        // the compiled alternation is byte-stable across runs.
+        let keys = vec!["bb".to_string(), "aa".to_string(), "cc".to_string(), "a".to_string()];
+        let mut sorted: Vec<&String> = keys.iter().collect();
+        sorted.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        assert_eq!(
+            sorted.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            vec!["aa", "bb", "cc", "a"],
+        );
     }
 }

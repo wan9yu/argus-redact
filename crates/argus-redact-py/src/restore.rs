@@ -32,13 +32,11 @@ pub fn restore<'py>(
     display_marker: Option<String>,
 ) -> PyResult<(String, Py<PyDict>)> {
     // Route through restore_full when extras are provided (or always, for consistency).
-    let (restored, alias_collisions) = core_restore_full(
-        text,
-        &key,
-        aliases.as_ref(),
-        display_marker.as_deref(),
-    )
-    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    // The core call is pure Rust over borrowed/owned data — it never touches a
+    // Python object — so the interpreter lock is released for its duration.
+    let (restored, alias_collisions) = py
+        .detach(|| core_restore_full(text, &key, aliases.as_ref(), display_marker.as_deref()))
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
     let signals = PyDict::new(py);
     signals.set_item("alias_collisions", alias_collisions)?;
@@ -103,14 +101,18 @@ pub fn restore_guarded<'py>(
 ) -> PyResult<(String, Vec<String>, Vec<Py<PyDict>>, &'static str)> {
     let anchor = nonce.map(|nonce| Anchor::new(nonce, scope.unwrap_or_default().into_iter().collect()));
 
-    let result = core_restore_full_guarded(
-        text,
-        &key,
-        aliases.as_ref(),
-        display_marker.as_deref(),
-        anchor.as_ref(),
-    )
-    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    // Pure-Rust guard + substitution; no Python object is touched inside.
+    let result = py
+        .detach(|| {
+            core_restore_full_guarded(
+                text,
+                &key,
+                aliases.as_ref(),
+                display_marker.as_deref(),
+                anchor.as_ref(),
+            )
+        })
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
 
     let events: Vec<Py<PyDict>> = result
         .events
@@ -136,11 +138,12 @@ pub fn restore_guarded<'py>(
 #[pyfunction]
 #[pyo3(signature = (redacted, llm_output, key))]
 pub fn check_restore_safety(
+    py: Python<'_>,
     redacted: &str,
     llm_output: &str,
     key: HashMap<String, String>,
 ) -> Vec<String> {
-    core_check_safety(redacted, llm_output, &key)
+    py.detach(|| core_check_safety(redacted, llm_output, &key))
 }
 
 /// Stateful, unguarded restore session.
@@ -171,10 +174,22 @@ impl StructuredRestorer {
             .map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
+    /// Aliases claimed by more than one original, resolved once when the
+    /// session was built — one entry per LOSING claim, matching
+    /// `RestoreResult.alias_collisions` on the one-shot path.
+    ///
+    /// Exposed so a session-based face can emit the same wrong-identity
+    /// `SecurityWarning` the batch path emits. It is a property of the KEY, not
+    /// of any cell, so a caller warns once at construction rather than per
+    /// `restore_cell`.
+    #[getter]
+    fn alias_collisions(&self) -> Vec<String> {
+        self.session.alias_collisions().to_vec()
+    }
+
     /// Restore one cell of text against the session's precomputed key.
-    fn restore_cell(&self, text: &str) -> PyResult<String> {
-        self.session
-            .restore_cell(text)
+    fn restore_cell(&self, py: Python<'_>, text: &str) -> PyResult<String> {
+        py.detach(|| self.session.restore_cell(text))
             .map(|r| r.restored)
             .map_err(|e| PyValueError::new_err(e.to_string()))
     }

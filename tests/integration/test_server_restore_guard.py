@@ -98,3 +98,29 @@ def test_restore_non_dict_anchor_returns_400(client):
         json={"text": "hi", "key": {"P-1": "Alice"}, "anchor": "not-a-dict"},
     )
     assert resp.status_code == 400
+
+
+def test_restore_narrow_scope_withholds_without_splicing(client):
+    """An out-of-scope pseudonym must come back verbatim, never half-restored.
+
+    The in-scope 李明 is a strict prefix of the out-of-scope 李明华. If the
+    withheld pseudonym is absent from the substitution alternation, 李明华
+    matches as 李明 + 华 and 王芳's statement is attributed to 张伟 — a
+    corrupted identity the response simultaneously reports as "withheld".
+    """
+    nonce = "abc123deadbeef00"
+    resp = client.post(
+        "/restore",
+        json={
+            "text": f"李明华 reported that 李明 left.\n{nonce}",
+            "key": {"李明": "张伟", "李明华": "王芳"},
+            "anchor": {"nonce": nonce, "scope": ["李明"]},
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["restored"] == "李明华 reported that 张伟 left."
+    assert "张伟华" not in data["restored"]
+    assert "王芳" not in data["restored"]
+    codes = [e["reason_code"] for e in data["security_events"]]
+    assert "out_of_scope_pseudonym" in codes

@@ -14,6 +14,7 @@ and is roadmapped for a later release.
 
 from __future__ import annotations
 
+import bisect
 import dataclasses
 import warnings
 
@@ -29,7 +30,7 @@ from argus_redact.glue.redact_pseudonym_llm import (
     _check_input_pollution,
     redact_pseudonym_llm,
 )
-from argus_redact.pure.replacer import warn_coverage_restored
+from argus_redact.pure.replacer import warn_alias_collisions, warn_coverage_restored
 from argus_redact.pure.restore import make_structured_restorer
 
 
@@ -77,11 +78,28 @@ class StreamingRestorer:
 
     Strategies:
         "sentence" (default) — flush at sentence boundaries (。.！!？?；;\\n)
-        "none" — restore every chunk immediately (no buffering)
+        "none" — flush on every chunk, with no sentence buffering
+
+    Neither strategy ever cuts through a pseudonym: both route their flush
+    through ``_force_flush_split``, which holds back the tail that could still
+    be (or could still grow into) a key fake or alias. "none" therefore emits
+    per chunk minus that bounded tail — it does NOT restore each chunk in
+    isolation, which would leave every boundary-straddling pseudonym
+    unrestored. Held-back text is drained by ``flush()``.
 
     ``max_buffer`` (default ``DEFAULT_MAX_BUFFER``, mirrors ``StreamingRedactor``)
     bounds the "sentence" strategy's buffer: a reply that never emits a
-    terminator is force-flushed instead of accumulating without limit.
+    terminator is force-flushed instead of accumulating without limit. The
+    held-back tail adds a fixed headroom of at most the longest fake/alias on
+    top — plus, only when the key or aliases contain an all-digit fake, a
+    further digit-run hold-back (capped at ``max_buffer // 2``) so a numeric
+    splice can't land across a force-flush boundary (see
+    ``_force_flush_split``).
+
+    ``aliases`` (optional) mirrors batch ``restore(text, key, aliases=...)`` —
+    the alternate transliterations ``redact_pseudonym_llm`` returns in its
+    ``aliases`` field. Without it an LLM that rewrites 张伟 as "Cai Yun" leaves
+    the mention unrestored on the streaming path but restored on the batch one.
 
     Every restore here runs through an unguarded session (no per-call anchor is
     possible mid-stream); the first time a ``feed()``/``flush()`` call actually
@@ -101,14 +119,60 @@ class StreamingRestorer:
 
     BOUNDARIES = ("\n", "。", ".", "！", "!", "？", "?", "；", ";")
 
-    def __init__(self, key: dict, strategy: str = "sentence", max_buffer: int = DEFAULT_MAX_BUFFER):
-        self._key = key
-        # Precompiles the key merge + regex once, up front, instead of
+    def __init__(
+        self,
+        key: dict,
+        strategy: str = "sentence",
+        max_buffer: int = DEFAULT_MAX_BUFFER,
+        *,
+        aliases: dict[str, tuple[str, ...]] | None = None,
+    ):
+        # dict(key): the session copies the key anyway, so aliasing the
+        # caller's dict here would let a post-construction mutation change
+        # _force_flush_split's hold decisions while the restorable set stayed
+        # frozen — the two halves of the class disagreeing about the key.
+        self._key = dict(key)
+        self._aliases = {k: tuple(v) for k, v in (aliases or {}).items()}
+        # Precompiles the key/alias merge + regex once, up front, instead of
         # re-merging/re-compiling on every feed()/flush() call — mirrors
         # StreamingRedactor's one-time setup cost. self._key is kept
-        # alongside (not replaced) because _force_flush_split's prefix scan
+        # alongside (not replaced) because _force_flush_split's straddle scan
         # over key fakes still needs the plain dict.
-        self._session = make_structured_restorer(self._key)
+        self._session = make_structured_restorer(self._key, aliases=self._aliases or None)
+        # An alias claimed by two originals means the restored value for that
+        # alias may be the WRONG IDENTITY — the same condition batch `restore`
+        # warns about, single-sourced through `warn_alias_collisions`. The
+        # collisions are resolved once when the session merges the key, so this
+        # fires at construction rather than once per feed().
+        warn_alias_collisions(list(self._session.alias_collisions))
+        # Every string the session can substitute — fakes AND aliases. The
+        # straddle scan must cover both: an alias cut in half is just as
+        # unrestorable as a fake cut in half.
+        restorable = tuple(
+            s for s in (*self._key, *(a for v in self._aliases.values() for a in v)) if s
+        )
+        # Fixed headroom the hold-back may consume on top of max_buffer (see
+        # _force_flush_split). 0 for an empty key.
+        self._longest = max((len(s) for s in restorable), default=0)
+        # True iff at least one restorable string (a key fake or an alias) is
+        # all-digits. The digit-run hold-back in `_force_flush_split` guards a
+        # hazard that only exists when a numeric fake could be sitting at the
+        # cut boundary — the core's restore matcher only digit-bounds ALL-DIGIT
+        # keys (see `escaped_alternation_digit_bounded` in reserved_range.rs),
+        # so with no numeric restorable there is nothing for the hold-back to
+        # protect, and holding back anyway is a pure latency regression (up to
+        # `max_buffer // 2`) on every other key.
+        self._has_numeric_restorable = any(s.isdigit() for s in restorable)
+        # Sorted once so `_force_flush_split` can answer its single question —
+        # "is this buffer suffix a PREFIX of something restorable?" — with a
+        # bisect instead of a scan over every fake. Lexicographic order puts all
+        # strings sharing a prefix in one contiguous block that starts exactly
+        # at `bisect_left(prefix)`, so one probe decides it. That makes the hold
+        # scan O(longest x log(key)) per call instead of O(key x longest^2) —
+        # on the "none" strategy it runs on EVERY chunk, so the per-chunk cost
+        # must not track the key size. Memory is the same order as the key
+        # itself (a prefix SET would be the key size times the fake length).
+        self._sorted_restorable = sorted(restorable)
         self._buffer = ""
         if strategy not in ("sentence", "none"):
             raise ValueError(f"Unknown strategy '{strategy}'. Use 'sentence' or 'none'.")
@@ -145,40 +209,84 @@ class StreamingRestorer:
         self._warned = True
 
     def _force_flush_split(self) -> tuple[str, str]:
-        """H7 bounded-drain: called when no sentence boundary exists AND the
-        buffer has grown past ``max_buffer``.
+        """Bounded-drain split: flush the buffer up to the last position that is
+        safe to cut, holding back the tail that a later chunk could still change
+        the meaning of.
 
-        Flushes the whole buffer except a held-back tail that is a strict,
-        non-empty prefix of some key ``fake`` — a subsequent chunk could still
-        complete it into a real substitution target, and ``restore``'s
-        exact-substring match would otherwise fail on BOTH halves of a token
-        split mid-flush (silently corrupting the round-trip rather than
-        raising). Mirrors ``StreamingRedactor``'s straddle-snap safety (see
+        The held-back tail is the longest buffer suffix that is a prefix of some
+        restorable string (a key ``fake`` or one of its ``aliases``), INCLUDING
+        the whole string. Two distinct hazards, one scan:
+
+        - a STRICT prefix (``n < len(s)``) — a subsequent chunk could complete it
+          into a real substitution target, and ``restore``'s exact-substring
+          match would otherwise fail on BOTH halves of a token split mid-flush,
+          silently corrupting the round-trip rather than raising;
+        - a COMPLETE match (``n == len(s)``) — the next char can turn a valid
+          match into a NON-token. The core deliberately refuses to restore a
+          numeric fake embedded in a longer digit run (see
+          ``restore_numeric_key_respects_digit_boundary`` in ``restore.rs``:
+          "otherwise restore splices a real original into an unrelated number").
+          Cutting immediately after a whole fake makes each half digit-bounded
+          on its own and performs exactly the splice the core refuses. So a
+          trailing complete fake is held too, until the following char is known.
+
+        Mirrors ``StreamingRedactor``'s straddle-snap safety (see
         ``bounded_drain_cut`` in ``crates/argus-redact-core/src/streaming.rs``),
-        adapted to restore's exact-string keys instead of detected entity
-        spans. The held-back length is bounded by the longest fake in the key,
-        so buffer growth stays bounded to that fixed headroom instead of
-        growing without limit.
+        adapted to restore's exact-string keys instead of detected entity spans.
+
+        Forward progress and the memory bound both follow from ``hold <=
+        self._longest``: once the buffer exceeds that fixed headroom the cut is
+        necessarily >= 1, so the buffer is bounded by ``max(max_buffer,
+        longest)`` and no token is ever split to satisfy the bound.
         """
         buffer = self._buffer
         hold = 0
-        for fake in self._key:
-            if not fake:
-                continue
-            limit = min(len(fake) - 1, len(buffer))
-            for n in range(limit, hold, -1):
-                if buffer.endswith(fake[:n]):
-                    hold = n
-                    break
-        # Guarantee forward progress: never hold back more than max_buffer. A
-        # fake at least as long as max_buffer could otherwise make the whole
-        # buffer a held-back prefix (cut == 0) and the buffer would grow without
-        # bound — defeating H7. Since this runs only when len(buffer) > max_buffer,
-        # capping hold at max_buffer keeps cut >= 1 and bounds the buffer to
-        # max_buffer after the flush. This splits an over-long token (a fake
-        # longer than the entire buffer budget can't be preserved intact anyway),
-        # trading token integrity for the memory bound in that degenerate config.
-        hold = min(hold, self._max_buffer)
+        # `self._longest` (not `- 1`): a trailing COMPLETE match is held too.
+        # Longest first, so the first hit is the answer.
+        for n in range(min(self._longest, len(buffer)), 0, -1):
+            suffix = buffer[-n:]
+            i = bisect.bisect_left(self._sorted_restorable, suffix)
+            if i < len(self._sorted_restorable) and self._sorted_restorable[i].startswith(suffix):
+                hold = n
+                break
+        # The cut ENDS a string, so it manufactures a token boundary that the
+        # full text did not have. `restore`'s matcher is digit-bounded — a
+        # numeric fake may not match inside a longer run of digits — so a cut
+        # landing at the head of a digit run drops the blocking digit into the
+        # emitted half and leaves the fake at position 0 of the residual, where
+        # it now matches. The original it stands for is then spliced into the
+        # middle of an unrelated number, a splice one-shot restore refuses.
+        # Holding the whole trailing digit run keeps the run intact across the
+        # cut so both halves see the same neighbours the full text had.
+        #
+        # The scan above does NOT subsume this: it holds a trailing complete
+        # fake, which puts the cut exactly at the fake's head — precisely where
+        # a preceding digit gets stranded on the wrong side.
+        #
+        # Capped at half the buffer budget so a pathological all-digit blob
+        # (longer than the budget, no boundary anywhere) still drains at least
+        # max_buffer // 2 characters per force-flush instead of stalling — the
+        # same token-integrity-for-a-memory-bound trade the `hold` cap below
+        # already makes for an over-long fake.
+        #
+        # Only when the key/aliases actually contain an all-digit fake: with
+        # none, no cut can produce the digit-boundary splice this guards
+        # against (see `_has_numeric_restorable`), so holding back a trailing
+        # digit run unconditionally was a latency regression with no matching
+        # hazard.
+        digit_run = 0
+        if self._has_numeric_restorable:
+            digit_cap = min(len(buffer), max(1, self._max_buffer // 2))
+            while digit_run < digit_cap and buffer[-1 - digit_run].isdigit():
+                digit_run += 1
+        hold = max(hold, digit_run)
+        # Bound the hold by the fixed headroom rather than by max_buffer. The
+        # scan already guarantees hold <= self._longest; the explicit cap keeps
+        # the invariant local and readable. Capping at max_buffer instead (the
+        # pre-fix behaviour) split any fake longer than max_buffer mid-token,
+        # leaving the pseudonym unrestored in the user-visible output — a bound
+        # far stricter than forward progress requires.
+        hold = min(hold, max(self._max_buffer, self._longest))
         cut = len(buffer) - hold
         return buffer[:cut], buffer[cut:]
 
@@ -202,12 +310,21 @@ class StreamingRestorer:
         # stream, so per-chunk guarding is structurally impossible. self._session
         # is the explicit unguarded opt-out (a stored key, no per-call anchor),
         # not the fail-closed default.
-        if self._strategy == "none":
-            result = self._session.restore_cell(chunk)
-            self._warn_if_substituted(chunk, result)
-            return result
-
         self._buffer += chunk
+
+        if self._strategy == "none":
+            # No sentence buffering — emit as much as the straddle scan allows,
+            # every chunk. Restoring the bare `chunk` instead (the pre-fix
+            # behaviour) restored each chunk in isolation, so ANY pseudonym
+            # straddling a chunk boundary was never restored at all: fed one
+            # char at a time, nothing was restored. The held-back tail is
+            # bounded by the longest fake/alias, so per-chunk latency is kept.
+            complete, self._buffer = self._force_flush_split()
+            if not complete:
+                return ""
+            result = self._session.restore_cell(complete)
+            self._warn_if_substituted(complete, result)
+            return result
 
         complete, residual = _core.streaming_restorer_split(self._buffer)
         if not complete:

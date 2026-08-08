@@ -12,7 +12,11 @@ use argus_redact_core::builtin_patterns as core_builtin;
 /// Note: validate callbacks are NOT run here — caller must filter.
 #[pyfunction]
 #[pyo3(signature = (text, patterns))]
-pub fn match_patterns(text: &str, patterns: Vec<Bound<'_, PyDict>>) -> PyResult<Vec<PyPatternMatch>> {
+pub fn match_patterns(
+    py: Python<'_>,
+    text: &str,
+    patterns: Vec<Bound<'_, PyDict>>,
+) -> PyResult<Vec<PyPatternMatch>> {
     let mut configs = Vec::with_capacity(patterns.len());
     for pat in &patterns {
         let pattern: String = pat
@@ -42,7 +46,9 @@ pub fn match_patterns(text: &str, patterns: Vec<Bound<'_, PyDict>>) -> PyResult<
         configs.push(PatternConfig { type_, pattern, check_context, group, validator });
     }
 
-    let out = core_match(text, &configs)
+    // The dict extraction above needs the lock; the scan itself does not.
+    let out = py
+        .detach(|| core_match(text, &configs))
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
     Ok(out.into_iter().map(PyPatternMatch::from).collect())
 }

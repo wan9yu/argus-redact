@@ -35,7 +35,7 @@ use std::sync::LazyLock;
 use fancy_regex::Regex;
 
 use crate::person_data::{common_words_en_set, given_names_en_set, surnames_en_set};
-use crate::reserved_range::byte_to_char_offset;
+use crate::reserved_range::CharOffsetCursor;
 use crate::types::PatternMatch;
 
 /// `_TOKEN_PAT` — tokenize into "Capitalized" words or a single-letter initial
@@ -320,14 +320,17 @@ pub fn detect_person_names(
             let emit = |re: &Regex,
                         results: &mut Vec<PatternMatch>,
                         seen_spans: &mut HashSet<(usize, usize)>| {
+                // Per-call cursor: each `re` sweeps `text` left to right, so the
+                // conversions inside one call are monotone.
+                let mut cursor = CharOffsetCursor::new(text);
                 for m in re.find_iter(text) {
                     // fancy_regex yields Err on backtrack-limit / stack overflow
                     // for pathological input (e.g. a ~1MB single token). Python's
                     // `re` never errors here; stop gracefully on the first Err
                     // rather than panicking, mirroring patterns.rs.
                     let Ok(m) = m else { break };
-                    let start = byte_to_char_offset(text, m.start());
-                    let end = byte_to_char_offset(text, m.end());
+                    let start = cursor.char_offset(m.start());
+                    let end = cursor.char_offset(m.end());
                     let span = (start, end);
                     if !seen_spans.contains(&span) {
                         results.push(PatternMatch {
@@ -406,13 +409,18 @@ pub fn detect_person_names(
     // token), where Python's `re` never errors — so stop tokenizing rather than
     // panic. On all non-pathological input every match is Ok, so this is
     // bit-identical to the previous `.unwrap()`.
+    // One cursor across the whole tokenization. This loop was the worst
+    // offender in the crate: two full O(byte_pos) rescans per WORD of the
+    // document, i.e. quadratic on ordinary long English text — not on some
+    // match-dense edge case.
+    let mut token_cursor = CharOffsetCursor::new(text);
     let tokens: Vec<Token> = TOKEN_PAT
         .find_iter(text)
         .map_while(Result::ok)
         .map(|m| Token {
             word: m.as_str().to_string(),
-            start: byte_to_char_offset(text, m.start()),
-            end: byte_to_char_offset(text, m.end()),
+            start: token_cursor.char_offset(m.start()),
+            end: token_cursor.char_offset(m.end()),
         })
         .collect();
 

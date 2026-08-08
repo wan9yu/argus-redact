@@ -342,8 +342,27 @@ def _load_patterns(lang: str | list[str]) -> list[dict]:
     return all_patterns
 
 
-def _get_ner_adapters(lang: str | list[str]) -> list:
-    """Load ALL available NER adapters for the given languages."""
+def _get_ner_adapters(lang: str | list[str], *, unavailable: list[str] | None = None) -> list:
+    """Load ALL available NER adapters for the given languages.
+
+    ``unavailable``, if given, is MUTATED in place with the requested lang codes
+    that HAVE a registered adapter but could not be loaded. Same out-param idiom
+    as ``timing`` in ``_detect`` — it keeps the return value a plain list, which
+    is what every caller (and every test that stubs this function) expects.
+    Callers use it to tell a FULL load from a PARTIAL one: a non-empty adapter
+    list alone cannot, and reporting ``layer_2_status="ok"`` while one requested
+    language's model is missing is how English PII went silently undetected on a
+    ``lang=["zh", "en"]`` call with only the zh extra installed.
+
+    ``OSError`` is caught alongside the import errors on purpose: it is what the
+    DOCUMENTED install path actually raises. ``pip install argus-redact[en]``
+    installs spaCy but not the model, and ``spacy.load("en_core_web_sm")`` then
+    raises ``OSError`` ("[E050] Can't find model"), which is not an
+    ``ImportError`` subclass — so it used to escape this loader entirely and
+    reach the caller as a hard crash (a 500 over HTTP), bypassing both the
+    ``mode="ner"`` LayerUnavailableError with its install hint and the
+    ``mode="auto"`` degradation contract.
+    """
     langs = [lang] if isinstance(lang, str) else list(lang)
     adapters = []
 
@@ -355,8 +374,9 @@ def _get_ner_adapters(lang: str | list[str]) -> list:
             adapter = mod.create_adapter()
             adapter.load()
             adapters.append(adapter)
-        except (ModuleNotFoundError, ImportError):
-            pass
+        except (ModuleNotFoundError, ImportError, OSError):
+            if unavailable is not None:
+                unavailable.append(code)
 
     return adapters
 
@@ -483,7 +503,11 @@ def _detect(
     layer2_count = 0
     layer2_status = "skipped"
     if mode in ("auto", "ner"):
-        adapters = _get_ner_adapters(lang)
+        # `unavailable_langs` receives the requested langs whose adapter is
+        # registered but could not be loaded — the difference between a full
+        # load and a partial one, which the adapter list alone cannot express.
+        unavailable_langs: list[str] = []
+        adapters = _get_ner_adapters(lang, unavailable=unavailable_langs)
         if not adapters:
             # Availability check runs UNCONDITIONALLY when the layer is requested
             # (NOT gated by should_skip_ner): the caller named the layer and it is
@@ -503,27 +527,58 @@ def _detect(
             layer2_status = "no_model"
             if strict:
                 raise LayerUnavailableError("mode='auto' + strict=True: no NER model available.")
-        elif not should_skip_ner(hints):
-            # Model present AND not hint-skipped → run L2 detection.
-            from argus_redact.impure.ner import detect_ner
+        else:
+            if unavailable_langs:
+                # PARTIAL load. Some requested languages loaded, at least one did
+                # not — so this call has NO Layer-2 coverage for those languages
+                # while still returning entities from the ones that loaded. Like
+                # the all-failed check above, this fires UNCONDITIONALLY (not
+                # gated by should_skip_ner): availability is a property of the
+                # install, not of this text. Unlike the all-failed check it does
+                # not raise at mode='ner' — the layer did run, just narrower than
+                # asked — so a zh-only install keeps working; strict=True is the
+                # escalation for callers who need every requested language or an
+                # error.
+                missing = ", ".join(unavailable_langs)
+                warnings.warn(
+                    f"mode={mode!r}: no NER model available for language(s): {missing}; "
+                    f"Layer-2 coverage is partial for this call "
+                    f"(set strict=True to raise instead).",
+                    SecurityWarning,
+                    stacklevel=2,
+                )
+                if strict:
+                    raise LayerUnavailableError(
+                        f"mode={mode!r} + strict=True: no NER model available for "
+                        f"language(s): {missing}."
+                    )
+            if not should_skip_ner(hints):
+                # Model present AND not hint-skipped → run L2 detection.
+                from argus_redact.impure.ner import detect_ner
 
-            ner_confidence = get_ner_min_confidence(hints)
-            t0 = time.perf_counter()
-            for adapter in adapters:
-                ner_entities = detect_ner(text, adapter=adapter, min_confidence=ner_confidence)
-                layer2_matches = [e.to_pattern_match(layer=LAYER_NER) for e in ner_entities]
-                # English spaCy `person` candidates are evidence-gated through the
-                # SAME L1 Rust scorer (proximity signal = the L1a regex matches),
-                # so noisy bare-prose spans are dropped instead of entering raw.
-                # Other languages / non-person types are unaffected.
-                if getattr(adapter, "lang", None) == "en":
-                    layer2_matches = _gate_en_ner_person(text, layer2_matches, layer1)
-                entities.extend(layer2_matches)
-                layer2_count += len(layer2_matches)
-            layer2_status = "ok"
-            timing["layer_2_ms"] = (time.perf_counter() - t0) * 1000
-        # else: model present but hint-skipped → layer2_status stays "skipped"
-        #       (the should_skip_ner optimization is preserved for the RUN).
+                ner_confidence = get_ner_min_confidence(hints)
+                t0 = time.perf_counter()
+                for adapter in adapters:
+                    ner_entities = detect_ner(text, adapter=adapter, min_confidence=ner_confidence)
+                    layer2_matches = [e.to_pattern_match(layer=LAYER_NER) for e in ner_entities]
+                    # English spaCy `person` candidates are evidence-gated through the
+                    # SAME L1 Rust scorer (proximity signal = the L1a regex matches),
+                    # so noisy bare-prose spans are dropped instead of entering raw.
+                    # Other languages / non-person types are unaffected.
+                    if getattr(adapter, "lang", None) == "en":
+                        layer2_matches = _gate_en_ner_person(text, layer2_matches, layer1)
+                    entities.extend(layer2_matches)
+                    layer2_count += len(layer2_matches)
+                # `partial` names what a caller can act on: the layer ran, and it
+                # ran without one of the languages that was asked for. `ok` now
+                # means what it always claimed to mean — every requested language
+                # that has an adapter contributed.
+                layer2_status = "partial" if unavailable_langs else "ok"
+                timing["layer_2_ms"] = (time.perf_counter() - t0) * 1000
+            # else: model present but hint-skipped → layer2_status stays "skipped"
+            #       (the should_skip_ner optimization is preserved for the RUN).
+            #       "skipped" describes the RUN; a partial install still warned
+            #       above, because that fact is independent of this text.
 
     # Layer 3: Semantic LLM (auto mode only)
     layer3_count = 0

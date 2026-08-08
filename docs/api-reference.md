@@ -772,6 +772,8 @@ It flags a pseudonym code appearing more times in the LLM output than in the red
 
 Being a heuristic, it is advisory: expect both false positives (a model that legitimately repeats a code) and false negatives (an injection that never amplifies). The deterministic guarantee is the P + S guard, not this check — do not gate your pipeline on H alone.
 
+Input is capped at the same 1 MiB `MAX_INPUT_SIZE` as the detection entry points. Over the cap the function does not scan; it returns a single `"input too large to scan ({} bytes; limit {}) — restore safety was NOT checked"` warning. That is a non-empty result, so `guarded_restore()` treats oversized model output as suspicious rather than silently unchecked — chunk the reply if you need it inspected.
+
 ---
 
 ## SecurityWarning
@@ -1369,13 +1371,29 @@ if final:
     print(final, end="")
 ```
 
-`StreamingRestorer` works with **any** replacement strategy (placeholder, pseudonym, mask, realistic). For `pseudonym-llm` profile output it correctly handles all three text forms — pass `audit_text`, `downstream_text`, or `display_text` as input. Pseudonym values that span chunk boundaries are buffered until a sentence boundary, then restored atomically.
+`StreamingRestorer` works with **any** replacement strategy (placeholder, pseudonym, mask, realistic). For `pseudonym-llm` profile output it correctly handles all three text forms — pass `audit_text`, `downstream_text`, or `display_text` as input. Pseudonym values that span chunk boundaries are held back until the following text disambiguates them, then restored atomically — on **both** strategies, so streaming output matches what a batch `restore()` of the whole reply would produce no matter where the chunk boundaries fall.
+
+Two strategies:
+
+| `strategy` | Flushes | Holds back |
+|---|---|---|
+| `"sentence"` (default) | at sentence boundaries (`。.！!？?；;\n`), or at `max_buffer` if none arrives | the straddle tail |
+| `"none"` | on every chunk — no sentence buffering | the straddle tail |
+
+The held-back tail is bounded by the longest fake (or alias) in the key. It covers a partial token *and* a token that is complete but not yet followed by anything: a following character can turn a valid match into a non-token — for a numeric fake, into a longer digit run that batch restore deliberately refuses to touch. `flush()` drains whatever is still held.
+
+Pass `aliases=` to restore the alternate transliterations `redact_pseudonym_llm()` returns in its `aliases` field, exactly as batch `restore(text, key, aliases=...)` does — without it, a model that rewrites 张伟 as "Cai Yun" leaves that mention unrestored:
+
+```python
+result = redact_pseudonym_llm(text, salt=salt, lang="zh")
+restorer = StreamingRestorer(dict(result.key), aliases=dict(result.aliases))
+```
 
 > ℹ️ For `display_text` containing visible markers (`ⓕ`), the markers stay in the streamed output (the underlying `key` doesn't include them). To strip markers, call `strip_display_markers(text, marker="ⓕ")` from `argus_redact.pure.display_marker` on the streamed output, or feed `downstream_text` instead.
 
 **Unguarded by design.** Every `feed()` / `flush()` substitution runs `restore(..., guard=False)` — there is no per-call anchor to check mid-stream, so `StreamingRestorer` cannot fail closed the way `guarded_restore()` does. The first time an instance actually reinserts a pseudonym, it emits a one-time `SecurityWarning`; it does not warn again for the rest of that instance's lifetime. If you need the provenance/scope guard, buffer the full reply and call `guarded_restore()` once instead of streaming the restore.
 
-`StreamingRestorer(key, max_buffer=4096)` bounds the "sentence" strategy's buffer the same way `StreamingRedactor` does: a reply that never emits a sentence terminator is force-flushed once the buffer exceeds `max_buffer`, instead of accumulating without limit.
+`StreamingRestorer(key, max_buffer=4096)` bounds the "sentence" strategy's buffer the same way `StreamingRedactor` does: a reply that never emits a sentence terminator is force-flushed once the buffer exceeds `max_buffer`, instead of accumulating without limit. The straddle tail sits on top of that as fixed headroom, so the real bound is `max(max_buffer, longest fake)` — a token is never split just to satisfy the buffer bound.
 
 ---
 

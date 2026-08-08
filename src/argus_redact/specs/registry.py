@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import itertools
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -122,6 +123,29 @@ class PIITypeDef:
 
 _REGISTRY: dict[tuple[str, str], PIITypeDef] = {}
 
+# Monotonic counter bumped on every mutation of `_REGISTRY`. It is part of the
+# key of the faker-resolution lru_caches in `pure/replacer.py`, which is what
+# makes those caches safe against a concurrent `register()`: a resolve already
+# in flight computed its result against the pre-mutation registry, so its
+# insert lands under the OLD generation and is never read again. `cache_clear()`
+# alone cannot do that — lru_cache exposes no lock the writer can hold, so the
+# in-flight insert simply lands after the clear and the stale value survives for
+# the life of the process. `itertools.count` is used for its C-level atomic
+# `next()` (no GIL-release point between read and increment).
+_GENERATION = itertools.count(1)
+_CURRENT_GENERATION = next(_GENERATION)
+
+
+def generation() -> int:
+    """Current registry generation — see `_GENERATION`. Read by
+    `pure.replacer._registry_generation` on every faker resolution."""
+    return _CURRENT_GENERATION
+
+
+def _bump_generation() -> None:
+    global _CURRENT_GENERATION
+    _CURRENT_GENERATION = next(_GENERATION)
+
 
 def register(typedef: PIITypeDef) -> PIITypeDef:
     """Register a PII type definition.
@@ -147,6 +171,10 @@ def register(typedef: PIITypeDef) -> PIITypeDef:
         )
     key = (typedef.lang, typedef.name)
     _REGISTRY[key] = typedef
+    # Bump BEFORE clearing: the bump is what actually invalidates (any resolve
+    # still in flight inserts under the dead old generation). The clear is the
+    # memory hygiene that stops dead entries accumulating in the lru_cache.
+    _bump_generation()
     # Lazy import avoids the registry → replacer cycle. Invalidate the faker
     # resolution caches so a type registered after the first redact() is seen.
     from argus_redact.pure.replacer import _clear_faker_caches
@@ -158,6 +186,7 @@ def register(typedef: PIITypeDef) -> PIITypeDef:
 def unregister(lang: str, name: str) -> None:
     """Remove a registration. Primarily for tests that inject temporary types."""
     _REGISTRY.pop((lang, name), None)
+    _bump_generation()  # see register()
     # Lazy import avoids the registry → replacer cycle (see register()).
     from argus_redact.pure.replacer import _clear_faker_caches
 
@@ -173,12 +202,23 @@ def get(lang: str, name: str) -> PIITypeDef:
 
 
 def lookup(name: str) -> list[PIITypeDef]:
-    """Find all definitions for a PII type across languages."""
-    return [v for (_, n), v in _REGISTRY.items() if n == name]
+    """Find all definitions for a PII type across languages.
+
+    Iterates a SNAPSHOT, not `_REGISTRY` itself. `register()`/`unregister()`
+    are public API and callable from any thread, so a concurrent mutation
+    during this comprehension raises `RuntimeError: dictionary changed size
+    during iteration` — out of the faker-resolution path, i.e. in the middle of
+    a redaction, for a caller that did nothing wrong. `list(...)` is a C-level
+    copy with no bytecode boundary inside it.
+    """
+    return [v for (_, n), v in list(_REGISTRY.items()) if n == name]
 
 
 def list_types(lang: str | None = None) -> list[PIITypeDef]:
-    """List all registered PII types, optionally filtered by language."""
+    """List all registered PII types, optionally filtered by language.
+
+    Snapshots before iterating — see `lookup()`.
+    """
     if lang:
-        return [v for (lng, _), v in _REGISTRY.items() if lng == lang]
+        return [v for (lng, _), v in list(_REGISTRY.items()) if lng == lang]
     return list(_REGISTRY.values())

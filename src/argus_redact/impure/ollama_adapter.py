@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 import requests
 
 from argus_redact._types import NEREntity
-from argus_redact.exceptions import SecurityWarning
+from argus_redact.exceptions import LayerUnavailableError, SecurityWarning
 from argus_redact.impure.model_profiles import get_model_profile
 from argus_redact.impure.semantic import SemanticAdapter
 
@@ -148,7 +148,13 @@ class OllamaAdapter(SemanticAdapter):
         self._profile = get_model_profile(self._model)
 
     def _call_ollama(self, text: str) -> requests.Response | None:
-        """Call Ollama with retry. Timeout and prompt prefix from model profile."""
+        """Call Ollama with retry. Timeout and prompt prefix from model profile.
+
+        Returns ``None`` when no attempt produced a 200 — a connection failure
+        or a non-200 status. ``detect`` turns that into a raised
+        LayerUnavailableError; it stays ``None`` here so the two logging-hygiene
+        branches (exception / status code) remain directly testable.
+        """
         payload = {
             "model": self._model,
             "prompt": f"{self._profile.prompt_prefix}文本：{text}",
@@ -193,7 +199,19 @@ class OllamaAdapter(SemanticAdapter):
 
         response = self._call_ollama(text)
         if response is None:
-            return []
+            # "The model was never reached" is not "the model found nothing".
+            # Returning [] made the two indistinguishable one frame up: the
+            # redact glue reported layer_3_status="ok" for an unreachable
+            # Ollama, emitted no warning, and honoured no strict=True — the
+            # exact silent-failure mode Layer-3 status reporting exists to
+            # prevent. Raising routes it into the glue's existing failure
+            # handler (log the type, set "error", warn, raise under strict).
+            # The message carries the model name and no URL: OLLAMA_HOST may
+            # embed credentials, and this string reaches the caller.
+            raise LayerUnavailableError(
+                f"Layer-3 semantic model {self._model!r} could not be reached "
+                f"(no successful response after 2 attempts)."
+            )
 
         try:
             llm_output = response.json().get("response", "")

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import secrets
+import threading
 import time
 from collections import OrderedDict
 
@@ -46,6 +47,17 @@ _TOKEN_STORE_MAX = 100
 # bound.
 _TOKEN_STORE: "OrderedDict[str, tuple[dict, object, str, float]]" = OrderedDict()
 
+# Both store mutators are check-then-act sequences over a module-level dict that
+# every concurrent MCP tool call reaches. Unlocked, `_resolve_key_token`'s
+# expiry branch lets two callers on the same expired token both pass the TTL
+# check and both `del` it — the loser gets a raw KeyError out of an internal
+# helper instead of the intended None -> clean ValueError, and that KeyError
+# escapes to the MCP protocol caller. `_create_key_token`'s LRU drain has the
+# same shape (`popitem` on a store another thread just emptied). One lock over
+# both keeps the TTL check, the eviction and the timestamp bump atomic. It is
+# held only across dict operations — never across a redact/restore call.
+_TOKEN_LOCK = threading.Lock()
+
 
 def _now() -> float:
     """Wrapped for monkeypatch in tests; ``time.monotonic`` is robust to
@@ -60,12 +72,17 @@ def _create_key_token(key: dict, anchor: object, redacted: str) -> str:
     Evicts the oldest entry when the store exceeds ``_TOKEN_STORE_MAX``
     (LRU). Tokens themselves expire ``_TOKEN_TTL_SECONDS`` after their
     last access — see ``_resolve_key_token``.
+
+    The bound is process-GLOBAL: a busy session can evict a quieter one's
+    still-valid token. Surfaced in the ``restore`` tool docstring so a client
+    knows the failure mode.
     """
     token = secrets.token_urlsafe(16)
-    # Fresh token — OrderedDict insertion places at end automatically.
-    _TOKEN_STORE[token] = (key, anchor, redacted, _now())
-    while len(_TOKEN_STORE) > _TOKEN_STORE_MAX:
-        _TOKEN_STORE.popitem(last=False)
+    with _TOKEN_LOCK:  # see _TOKEN_LOCK: insert + drain must be atomic together
+        # Fresh token — OrderedDict insertion places at end automatically.
+        _TOKEN_STORE[token] = (key, anchor, redacted, _now())
+        while len(_TOKEN_STORE) > _TOKEN_STORE_MAX:
+            _TOKEN_STORE.popitem(last=False)
     return token
 
 
@@ -74,17 +91,24 @@ def _resolve_key_token(token: str) -> tuple[dict, object, str] | None:
     if absent or expired.
 
     Successful lookup bumps the entry's timestamp (sliding-window TTL).
+
+    Absent/expired is reported as ``None`` — never as an exception out of this
+    helper. Two concurrent calls on the same expired token must BOTH get
+    ``None`` and the caller's clean ``ValueError``; see ``_TOKEN_LOCK``.
     """
-    entry = _TOKEN_STORE.get(token)
-    if entry is None:
-        return None
-    key, anchor, redacted, ts = entry
-    if _now() - ts > _TOKEN_TTL_SECONDS:
-        del _TOKEN_STORE[token]
-        return None
-    _TOKEN_STORE[token] = (key, anchor, redacted, _now())
-    _TOKEN_STORE.move_to_end(token)
-    return key, anchor, redacted
+    with _TOKEN_LOCK:
+        entry = _TOKEN_STORE.get(token)
+        if entry is None:
+            return None
+        key, anchor, redacted, ts = entry
+        if _now() - ts > _TOKEN_TTL_SECONDS:
+            # pop(..., None), not del: a concurrent expiry of the same token
+            # would otherwise raise KeyError out of this helper.
+            _TOKEN_STORE.pop(token, None)
+            return None
+        _TOKEN_STORE[token] = (key, anchor, redacted, _now())
+        _TOKEN_STORE.move_to_end(token)
+        return key, anchor, redacted
 
 
 @mcp.tool(name="redact")
@@ -167,7 +191,13 @@ async def restore_text(
     Args:
         text: Redacted text (e.g. LLM output containing pseudonyms).
         key_token: Token returned by the redact tool. Tokens are scoped to
-            the MCP server process; restart invalidates them.
+            the MCP server process and invalidated by THREE things, all of
+            which make the original unrecoverable: a process restart, the
+            5-minute idle TTL, and LRU eviction. The eviction bound is 100
+            entries and is process-GLOBAL, not per session — beyond ~100
+            concurrent sessions a busy neighbour evicts this session's key
+            even though it never expired. Redact again to mint a fresh token;
+            do not hold one across a long think.
         strict: When True, raise instead of returning on ANY security event —
             covers BOTH the deterministic guard (P/S) and a suspected
             injection (H). An ordinary tool argument (JSON bool), not a
@@ -180,8 +210,10 @@ async def restore_text(
     resolved = _resolve_key_token(key_token)
     if resolved is None:
         raise ValueError(
-            "Token not found or expired (process restarted?). "
-            "Re-run redact to obtain a fresh key_token."
+            "Token not found or expired — the process restarted, the "
+            f"{_TOKEN_TTL_SECONDS // 60}-minute idle TTL elapsed, or the token "
+            f"was evicted by the {_TOKEN_STORE_MAX}-entry process-global LRU "
+            "bound. Re-run redact to obtain a fresh key_token."
         )
 
     key_dict, anchor, redacted = resolved

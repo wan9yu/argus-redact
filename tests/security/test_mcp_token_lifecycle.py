@@ -112,3 +112,99 @@ def test_store_entry_is_a_four_tuple_with_redacted_prompt():
 
     resolved = m._resolve_key_token(token)
     assert resolved == (key, anchor, "redacted prompt text")
+
+
+class TestTokenStoreConcurrency:
+    """The store is a plain module-level ``OrderedDict`` reachable from every
+    concurrent MCP tool call. Both mutating paths had a check-then-act window:
+
+    - ``_resolve_key_token``: two callers on the same EXPIRED token both pass
+      the TTL check and both ``del`` it; the loser gets a raw ``KeyError`` out
+      of an internal helper instead of the intended ``None`` -> clean
+      ``ValueError("Token not found or expired")``. Wrong failure mode escaping
+      to the MCP protocol caller, exactly what a retry-happy client produces.
+    - ``_create_key_token``: the LRU drain ``while len(...) > MAX:
+      popitem(last=False)`` can raise ``KeyError`` on a store another thread
+      already emptied.
+    """
+
+    @staticmethod
+    def _hammer(target, threads=32):
+        import threading
+
+        barrier = threading.Barrier(threads)
+        errors = []
+
+        def worker():
+            barrier.wait()
+            try:
+                target()
+            except Exception as exc:  # noqa: BLE001 — any escape is the defect
+                errors.append(repr(exc))
+
+        pool = [threading.Thread(target=worker) for _ in range(threads)]
+        for t in pool:
+            t.start()
+        for t in pool:
+            t.join()
+        return errors
+
+    def test_concurrent_resolve_of_an_expired_token_never_raises(self, monkeypatch):
+        import sys
+
+        import argus_redact.integrations.mcp_server as m
+
+        monkeypatch.setattr(sys, "setswitchinterval", sys.setswitchinterval)
+        original = sys.getswitchinterval()
+        sys.setswitchinterval(1e-9)  # widen the check-then-act window
+        try:
+            errors = []
+            for _ in range(200):
+                m._TOKEN_STORE.clear()
+                token = m._create_key_token({"P-1": "Alice"}, None, "P-1")
+                key, anchor, redacted, _ts = m._TOKEN_STORE[token]
+                m._TOKEN_STORE[token] = (
+                    key,
+                    anchor,
+                    redacted,
+                    m._now() - 10 * m._TOKEN_TTL_SECONDS,  # pre-expired
+                )
+                errors += self._hammer(lambda: m._resolve_key_token(token))
+        finally:
+            sys.setswitchinterval(original)
+        assert errors == [], f"raw exceptions escaped _resolve_key_token: {errors[:3]}"
+
+    def test_concurrent_mint_never_raises_and_respects_the_bound(self):
+        import sys
+
+        import argus_redact.integrations.mcp_server as m
+
+        original = sys.getswitchinterval()
+        sys.setswitchinterval(1e-9)
+        try:
+            m._TOKEN_STORE.clear()
+            errors = []
+            for _ in range(20):
+                errors += self._hammer(lambda: m._create_key_token({"P-1": "Alice"}, None, "P-1"))
+        finally:
+            sys.setswitchinterval(original)
+        assert errors == [], f"raw exceptions escaped _create_key_token: {errors[:3]}"
+        assert len(m._TOKEN_STORE) <= m._TOKEN_STORE_MAX
+
+
+def test_restore_tool_docstring_names_lru_eviction_as_an_invalidation_cause():
+    """The bound is process-GLOBAL, so a busy neighbour session can evict this
+    session's key — an MCP client sees a token that was valid a moment ago stop
+    resolving. The docstring named only process restart, so the one failure mode
+    a client can actually mitigate (by re-running redact, or by not exceeding
+    the bound) was undocumented."""
+    import argus_redact.integrations.mcp_server as m
+
+    doc = m.restore_text.__doc__ or ""
+    combined = doc + (m.restore_text.fn.__doc__ or "") if hasattr(m.restore_text, "fn") else doc
+    assert "evict" in combined.lower(), (
+        "restore tool docstring must name LRU eviction, not just process restart"
+    )
+    assert str(m._TOKEN_STORE_MAX) in combined, (
+        "restore tool docstring must state the concurrent-session bound"
+    )

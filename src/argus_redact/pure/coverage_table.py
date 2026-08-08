@@ -47,9 +47,13 @@ producing two different verdicts. See `_NARROW_FAST` / `_NARROW_NER` in the
 test module for the exact hit/miss probes.
 
 `mode="auto"` deliberately has no column of its own: it is `ner` plus a
-best-effort Ollama pass that contributes nothing when no model is served, while
-still reporting `layer_3_status="ok"`. Giving it a column would claim Layer-3
-coverage a deployment may not have, so it reads the `ner` row.
+best-effort Ollama pass that contributes nothing when no model is served.
+Giving it a column would claim Layer-3 coverage a deployment may not have, so
+it reads the `ner` row. (An unreachable Layer-3 model now reports
+`layer_3_status="error"` rather than the `"ok"` an earlier version of this
+docstring described, but the table still reads the `ner` row: a served model
+that simply finds nothing is indistinguishable from one with no coverage for
+the category, and this table is about capability, not about one call.)
 
 The `ner` rows are measured independently at `mode="ner"`, not copied from the
 `fast` rows with an override — a first draft of this table did exactly that

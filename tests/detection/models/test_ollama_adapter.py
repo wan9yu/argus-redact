@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from argus_redact import LayerUnavailableError
 from argus_redact.impure.ollama_adapter import (
     _ALLOWED_SEMANTIC_TYPES,
     _UNRECOGNISED_TYPE,
@@ -94,13 +95,30 @@ class TestOllamaAdapter:
         assert results == []
 
     @patch("argus_redact.impure.ollama_adapter.requests.post")
-    def test_should_return_empty_when_http_error(self, mock_post):
+    def test_should_raise_when_model_unreachable(self, mock_post):
+        # BEHAVIOUR CHANGE: this used to assert `results == []`, which made an
+        # unreachable model indistinguishable from a model that answered and
+        # found nothing — and that ambiguity is what let the redact glue report
+        # layer_3_status="ok" for a Layer-3 that never ran. The two
+        # "returns empty" tests above (answered-with-[], answered-with-garbage)
+        # are the control: only "never reached" raises.
         mock_post.side_effect = Exception("connection refused")
         adapter = self._make_adapter()
 
-        results = adapter.detect("老王说了话")
+        with pytest.raises(LayerUnavailableError, match="could not be reached"):
+            adapter.detect("老王说了话")
 
-        assert results == []
+    @patch("argus_redact.impure.ollama_adapter.requests.post")
+    def test_should_raise_when_every_attempt_returns_non_200(self, mock_post):
+        # The other never-reached branch: the transport worked, Ollama (or a
+        # proxy) answered with an error status on every attempt.
+        response = MagicMock()
+        response.status_code = 503
+        mock_post.return_value = response
+        adapter = self._make_adapter()
+
+        with pytest.raises(LayerUnavailableError, match="could not be reached"):
+            adapter.detect("老王说了话")
 
     @patch("argus_redact.impure.ollama_adapter.requests.post")
     def test_should_validate_entity_spans_against_text(self, mock_post):

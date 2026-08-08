@@ -80,14 +80,20 @@ class TestStreamingRestorer:
 
         assert result == "hello world。"
 
-    def test_should_restore_immediately_with_none_strategy(self):
+    def test_should_restore_per_chunk_with_none_strategy(self):
+        """ "none" flushes on every chunk with no sentence buffering — but it
+        still holds back the straddle tail, so a chunk that ENDS on a fake
+        emits it on the next feed()/flush(), never half-restored. See
+        ``TestStreamingRestorerStraddleParity``."""
         _, key = redact("电话13812345678", salt=42, mode="fast")
         redacted, _ = redact("电话13812345678", salt=42, mode="fast")
 
         restorer = StreamingRestorer(key, strategy="none")
-        result = restorer.feed(f"结果是{redacted}")
-
-        assert "13812345678" in result  # no buffering, restored immediately
+        # Chunk ends mid-token: nothing of the fake may be emitted yet.
+        assert "13812345678" not in restorer.feed(f"结果是{redacted}")
+        # A following non-token char disambiguates it — no sentence terminator
+        # needed, which is what distinguishes "none" from "sentence".
+        assert "13812345678" in restorer.feed(" 好的")
 
     def test_should_raise_on_unknown_strategy(self):
         import pytest
@@ -155,15 +161,18 @@ class TestStreamingRestorerMaxBuffer:
         """H7 bound must hold even in the degenerate config where a key fake is
         longer than max_buffer — otherwise the whole buffer becomes a held-back
         prefix (cut == 0) and grows without limit. Forward progress is
-        guaranteed by capping the held-back tail at max_buffer (the over-long
-        token is split; the memory bound is kept)."""
+        guaranteed by the held-back tail never exceeding the longest fake, so
+        the bound is ``max(max_buffer, longest_fake)`` — a FIXED headroom. The
+        stricter ``max_buffer`` cap it replaces bought nothing extra and split
+        any over-long token mid-flush, leaving the pseudonym unrestored."""
         # A fake far longer than the tiny buffer; feed a boundary-less stream
         # that is a running prefix of it.
         long_fake = "F" * 40
         restorer = StreamingRestorer({long_fake: "REAL"}, max_buffer=8)
+        bound = max(restorer._max_buffer, len(long_fake))
         for _ in range(30):
             restorer.feed("F")  # no boundary; each char extends the prefix
-            assert len(restorer._buffer) <= restorer._max_buffer
+            assert len(restorer._buffer) <= bound
 
     def test_default_max_buffer_mirrors_streaming_redactor(self):
         from argus_redact.glue._detect_partial import DEFAULT_MAX_BUFFER
@@ -594,3 +603,172 @@ class TestStreamingRedactorRealisticKeyIsolation:
             if _AUDIT_PLACEHOLDER_RE.search(proc.stdout):
                 leaking_seeds.append((seed, proc.stdout))
         assert leaking_seeds == [], f"audit placeholder leaked at seeds: {leaking_seeds}"
+
+
+class TestStreamingRestorerStraddleParity:
+    """The streaming restorer must agree with batch ``restore`` no matter where
+    the chunk boundaries fall — on EVERY strategy.
+
+    Regression scope:
+    - ``strategy="none"`` restored each chunk in isolation, so any fake
+      straddling a chunk boundary was never restored at all.
+    - ``_force_flush_split`` held back only a strict PREFIX of a fake, so a cut
+      landing immediately after a COMPLETE fake made each half digit-bounded on
+      its own and spliced a real original into an unrelated longer number — the
+      exact splice the core refuses (see
+      ``restore_numeric_key_respects_digit_boundary`` in ``restore.rs``).
+    - the hold-back cap was ``max_buffer``, so a fake longer than that bound was
+      split mid-token and survived, unrestored, into the user-visible output.
+    """
+
+    @staticmethod
+    def _reply_and_key():
+        result = redact_pseudonym_llm(
+            "张伟的手机是13800138000，邮箱 zhangwei@qq.com。", salt=b"straddle", lang="zh"
+        )
+        return result.downstream_text, dict(result.key)
+
+    @pytest.mark.parametrize("strategy", ["sentence", "none"])
+    def test_every_two_way_split_matches_batch(self, strategy):
+        reply, key = self._reply_and_key()
+        expected = restore(reply, key, guard=False)
+        mismatches = []
+        for i in range(1, len(reply)):
+            restorer = StreamingRestorer(dict(key), strategy=strategy)
+            out = restorer.feed(reply[:i]) + restorer.feed(reply[i:]) + restorer.flush()
+            if out != expected:
+                mismatches.append(i)
+        assert mismatches == [], f"{strategy}: {len(mismatches)} split points differ from batch"
+
+    @pytest.mark.parametrize("strategy", ["sentence", "none"])
+    def test_one_char_at_a_time_matches_batch(self, strategy):
+        reply, key = self._reply_and_key()
+        restorer = StreamingRestorer(dict(key), strategy=strategy)
+        out = "".join(restorer.feed(c) for c in reply) + restorer.flush()
+        assert out == restore(reply, key, guard=False)
+
+    @pytest.mark.parametrize("strategy", ["sentence", "none"])
+    def test_cut_after_a_complete_numeric_fake_keeps_the_digit_boundary(self, strategy):
+        """A cut immediately after a whole fake must not manufacture a digit
+        boundary the batch path refuses to honour."""
+        key = {"19999123456": "13912345678"}
+        pad = "x" * 5000  # no sentence boundary anywhere -> forces the drain path
+        batch = restore(pad + "199991234560 shipped", key, guard=False)
+        restorer = StreamingRestorer(dict(key), strategy=strategy)
+        out = restorer.feed(pad + "19999123456") + restorer.feed("0 shipped") + restorer.flush()
+        assert out == batch
+        assert "13912345678" not in out
+
+    def test_fake_longer_than_max_buffer_is_not_split(self):
+        key = {"user57711@example.org": "zhangwei@qq.com"}  # 21-char fake
+        head, tail = "xxuser57711@example.o", "rg tail"
+        restorer = StreamingRestorer(dict(key), strategy="sentence", max_buffer=16)
+        out = restorer.feed(head) + restorer.feed(tail) + restorer.flush()
+        assert out == restore(head + tail, key, guard=False)
+
+    def test_buffer_headroom_is_bounded_by_the_longest_fake(self):
+        """Forward progress with a FIXED headroom (the longest fake) — which is
+        what the docstring promises — not unbounded growth."""
+        long_fake = "F" * 40
+        restorer = StreamingRestorer({long_fake: "REAL"}, max_buffer=8)
+        bound = max(8, len(long_fake))
+        for _ in range(200):
+            restorer.feed("F")
+            assert len(restorer._buffer) <= bound
+
+    def test_key_is_snapshotted_at_construction(self):
+        """A post-construction mutation of the caller's dict must not change the
+        hold decisions — the session already snapshotted the key."""
+        key = {"P-100": "Alice"}
+        restorer = StreamingRestorer(key, max_buffer=4)
+        key["P-1001"] = "Bob"  # caller mutates after construction
+        out = restorer.feed("yyyyyP-100") + restorer.flush()
+        assert out == "yyyyyAlice"
+
+
+class TestStreamingRestorerDigitRunHoldBack:
+    """``_force_flush_split`` holds back a trailing digit run so a force-flush
+    cut can't land inside a numeric fake and manufacture a digit boundary the
+    core's restore matcher would otherwise refuse (see
+    ``TestStreamingRestorerStraddleParity``). That hazard only exists when the
+    key/aliases actually contain an all-digit fake — the core only
+    digit-bounds ALL-DIGIT keys. An unconditional hold-back (regardless of
+    whether the key has any numeric restorable at all) was a latency
+    regression of up to ``max_buffer // 2`` with no matching risk to guard.
+    """
+
+    def test_no_numeric_fake_flushes_a_trailing_digit_run_immediately(self):
+        restorer = StreamingRestorer({"P-1": "Alice"}, strategy="none")
+        out = restorer.feed("the total is 4200")
+        assert out == "the total is 4200"
+        assert restorer._buffer == ""
+
+    def test_numeric_fake_still_gets_the_digit_boundary_hold_back(self):
+        """The gate must not disable the digit-boundary guard when the key
+        DOES contain an all-digit fake: a chunk boundary landing inside a
+        digit run must not manufacture a digit boundary that lets the numeric
+        fake match inside an unrelated, longer number."""
+        key = {"12345": "13800138000"}
+        text = "9912345 and then some more words here"
+        batch = restore(text, key, guard=False)
+        restorer = StreamingRestorer(dict(key), strategy="none")
+        # Split mid-digit-run, exactly the shape the hold-back protects.
+        out = restorer.feed(text[:6]) + restorer.feed(text[6:]) + restorer.flush()
+        assert out == batch
+        assert "13800138000" not in out
+
+
+class TestStreamingRestorerAliases:
+    """``redact_pseudonym_llm`` returns an ``aliases`` map (pinyin / cross-script
+    transliterations) that batch ``restore`` honours; the streaming path must
+    accept and honour the same map."""
+
+    @staticmethod
+    def _fixture():
+        result = redact_pseudonym_llm("张伟的电话是13800138000。", salt=b"alias", lang="zh")
+        assert result.aliases, "fixture must produce at least one alias"
+        alias = next(iter(result.aliases.values()))[0]
+        return dict(result.key), dict(result.aliases), f"Sure — {alias} can be reached later."
+
+    def test_aliases_restore_on_the_streaming_path(self):
+        key, aliases, reply = self._fixture()
+        restorer = StreamingRestorer(key, aliases=aliases)
+        out = restorer.feed(reply) + restorer.flush()
+        assert out == restore(reply, key, aliases=aliases, guard=False)
+
+    def test_alias_straddling_a_chunk_boundary_still_restores(self):
+        key, aliases, reply = self._fixture()
+        expected = restore(reply, key, aliases=aliases, guard=False)
+        mismatches = []
+        for i in range(1, len(reply)):
+            restorer = StreamingRestorer(dict(key), aliases=dict(aliases), max_buffer=8)
+            out = restorer.feed(reply[:i]) + restorer.feed(reply[i:]) + restorer.flush()
+            if out != expected:
+                mismatches.append(i)
+        assert mismatches == []
+
+    def test_aliases_default_to_none(self):
+        restorer = StreamingRestorer({"P-1": "Alice"})
+        assert restorer.feed("P-1 ok.\n") == "Alice ok.\n"
+
+    def test_colliding_aliases_warn_like_the_batch_path(self):
+        """An alias claimed by two originals means the restored value for that
+        alias may be the WRONG IDENTITY. Batch ``restore`` warns; enabling
+        aliases on the streaming path without the same warning would make the
+        streaming face the quiet one for the most dangerous alias condition.
+        The collisions are resolved once when the session is built, so the
+        warning belongs at construction — not once per feed()."""
+        colliding = {"A": ("X",), "B": ("X",)}
+        with pytest.warns(SecurityWarning, match="wrong identity"):
+            restorer = StreamingRestorer({"A": "Alice", "B": "Bob"}, aliases=colliding)
+        # And it must not repeat on every chunk.
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            restorer.feed("X ok.\n")
+        assert not any("wrong identity" in str(w.message) for w in caught)
+
+    def test_non_colliding_aliases_do_not_warn(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            StreamingRestorer({"A": "Alice", "B": "Bob"}, aliases={"A": ("X",), "B": ("Y",)})
+        assert not any(issubclass(w.category, SecurityWarning) for w in caught)
