@@ -117,8 +117,13 @@ _FINANCIAL_ACCOUNTS_EXTRA: frozenset[str] = frozenset({"housing_fund"})
 # The proposed sensitive-PI membership set: the current PIPL_SENSITIVE_PI plus the
 # identity-credential and financial-account additions, applying Art.28's harm-based
 # test uniformly. Base members are never dropped (checker enforces the superset).
+# GDPR Art.9 categories PIPL does not enumerate but the general harm clause
+# captures — ethnicity carries discrimination / dignity harm on disclosure,
+# consistent with how political / sexual_orientation are treated. Conservative.
+_GENERAL_CLAUSE_EXTRA: frozenset[str] = frozenset({"ethnicity"})
+
 SENSITIVE_PI_NEW: frozenset[str] = (
-    PIPL_SENSITIVE_PI | _IDENTITY_CREDENTIALS | _FINANCIAL_ACCOUNTS_EXTRA
+    PIPL_SENSITIVE_PI | _IDENTITY_CREDENTIALS | _FINANCIAL_ACCOUNTS_EXTRA | _GENERAL_CLAUSE_EXTRA
 )
 
 # GDPR Art.9 special categories under the new rule: criminal_record LEAVES Art.9
@@ -218,6 +223,7 @@ _MEMBER_BASIS: dict[str, str] = {
     "political": "general_clause",
     "sexual_orientation": "general_clause",
     "criminal_record": "general_clause",
+    "ethnicity": "general_clause",
     # identity credentials → specific identity
     "id_number": "specific_identity",
     "hk_id": "specific_identity",
@@ -257,11 +263,6 @@ _DOWNGRADE_CITE: dict[str, str] = {
         "PIPL Art.28 (by exclusion) — a landline number is ordinary personal "
         "information, not enumerated as sensitive; processing requires a lawful "
         "basis under PIPL Art.13."
-    ),
-    "ethnicity": (
-        "PIPL Art.28 (by exclusion) — unlike GDPR Art.9 (racial or ethnic origin), "
-        "PIPL's enumerated sensitive categories do not include ethnicity; it stays "
-        "ordinary PI under PIPL while remaining a GDPR special category."
     ),
     "person": (
         "PIPL Art.28 (by exclusion) — a personal name is the paradigmatic ordinary "

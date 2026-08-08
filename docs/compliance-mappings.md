@@ -57,7 +57,7 @@ PIPL articles are shown by number (see the legend). A type marked **sensitive** 
 | zh | job_title | 2 | 13, 51 | — | — | no |
 | zh | organization | 2 | 13, 51 | — | — | no |
 | zh | school | 2 | 13, 51 | — | — | no |
-| zh | ethnicity | 3 | 13, 51 | Art.9 | — | no |
+| zh | ethnicity | 3 | 13, 28, 51, 29, 55, 56 | Art.9 | — | yes |
 | zh | workplace | 2 | 13, 51 | — | — | no |
 | zh | hobby | 2 | 13, 51 | — | — | no |
 | zh | criminal_record | 4 | 13, 28, 51, 29, 55, 56 | Art.10 | — | yes |
@@ -147,7 +147,7 @@ Types: `religion`.
 
 > PIPL Art.28 — the enumerated list is non-exhaustive (“including”); the general clause (information whose leakage may infringe personal dignity or endanger personal or property safety) captures this category.
 
-Types: `criminal_record`, `financial`, `political`, `sexual_orientation`.
+Types: `criminal_record`, `ethnicity`, `financial`, `political`, `sexual_orientation`.
 
 ## Explicit downgrades
 
@@ -156,7 +156,6 @@ These types carry a high sensitivity score but are deliberately **not** classifi
 - **`phone`** — PIPL Art.28 (by exclusion) — a telephone number is ordinary personal information, not enumerated as sensitive; its processing still requires a lawful basis under PIPL Art.13. High sensitivity here reflects re-identification leverage in combination, not sensitive-PI status.
 - **`phone_landline`** — PIPL Art.28 (by exclusion) — a landline number is ordinary personal information, not enumerated as sensitive; processing requires a lawful basis under PIPL Art.13.
 - **`credit_code`** — PIPL Art.28 (by exclusion) — the Unified Social Credit Code identifies a legal entity/organization, not a natural person (Art.4), so it is not sensitive personal information; the universal Art.13/Art.51 processing floor still applies as for any processing record.
-- **`ethnicity`** — PIPL Art.28 (by exclusion) — unlike GDPR Art.9 (racial or ethnic origin), PIPL's enumerated sensitive categories do not include ethnicity; it stays ordinary PI under PIPL while remaining a GDPR special category.
 - **`person`** — PIPL Art.28 (by exclusion) — a personal name is the paradigmatic ordinary identifier and is not classified as sensitive personal information under PIPL (contrast: it is HIPAA Safe Harbor identifier (A)).
 - **`date_of_birth`** — PIPL Art.28 (by exclusion) — a date of birth is ordinary PI / a quasi-identifier, not enumerated as sensitive (contrast: it is HIPAA Safe Harbor identifier (C)).
 - **`openai_api_key`** — PIPL Art.28 (by exclusion) — an API/machine credential falls under none of the Art.28 sensitive categories; as a machine credential it is not, as such, information about an identified natural person (Art.4 rationale), and is handled as a security secret at the highest redaction priority. The universal Art.13/Art.51 processing floor still applies.
