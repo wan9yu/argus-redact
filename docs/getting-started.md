@@ -14,7 +14,7 @@ pip install argus-redact[zh]          # + Chinese NER (HanLP)
 pip install argus-redact[en]          # + English NER (spaCy)
 pip install argus-redact[ja]          # + Japanese NER (spaCy)
 pip install argus-redact[ko]          # + Korean NER (spaCy)
-pip install argus-redact[full]        # + all NER + semantic layer
+pip install argus-redact[full]        # + all NER models
 pip install argus-redact[presidio]   # + Presidio bridge
 pip install argus-redact[mcp]        # + MCP server
 pip install argus-redact[serve]      # + HTTP API server
