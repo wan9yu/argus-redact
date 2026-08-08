@@ -2,6 +2,84 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.9 — nothing fails quietly
+
+A security and correctness release. The changes below share one shape: each closes a gap
+that used to fail *silently* — a number hidden behind an unusual glyph and missed, a
+half-loaded model reported as healthy, one identity's text spliced into another's
+placeholder, a server frozen under load with no error, an oversized input reported "safe"
+without being scanned. None of them raised a flag. Now each is either closed or loud.
+
+No public API was removed and the on-disk formats are unchanged. Detection may now flag
+inputs it previously passed through (see Behaviour changes), so golden-file and snapshot
+consumers should re-baseline.
+
+### Behaviour changes
+
+- **Obfuscated-number recall (detection fan-out).** A phone / ID / bank-card / credit-card
+  / SSN / ITIN number written with a circled or superscript digit — interior, leading, or
+  trailing (e.g. `13⑧00138000`) — a CJK digit homograph (`八` = 8), or an invisible
+  character dropped between digits is now detected where earlier versions could miss it.
+  This is detection-only: the canonical `normalize()` output, the offset map, `restore()`,
+  and reversibility are all byte-for-byte unchanged — only the set of spans detection finds
+  grows. Inputs that previously leaked such a number may now redact it, so snapshot
+  consumers may see new detections.
+
+### Security / correctness
+
+- **Scoped restore no longer splices identities.** When a restore is limited to a subset of
+  pseudonyms (a guard scope), a shorter in-scope code that is a prefix of a longer
+  out-of-scope code can no longer cause the other identity's original text to be
+  substituted into the out-of-scope placeholder. Out-of-scope codes are now matched
+  atomically and left verbatim, and a scoped restore raises under `strict=True` on a
+  collision rather than resolving it silently.
+- **Layer availability is reported, not assumed.** A partial multi-language NER load now
+  reports `layer_2_status = "partial"` (previously `"ok"`), warns with the missing
+  language(s), and raises under `strict=True`. An unreachable semantic (Layer-3) model now
+  raises rather than returning an empty result indistinguishable from "found nothing", and
+  a present-but-unloadable model degrades instead of crashing.
+- **The restore-safety scan fails loud on oversized input.** The injection/leak check now
+  refuses input above the same 1 MiB cap detection uses, returning an explicit "not
+  checked" warning instead of silently returning an empty ("clean") result for input it
+  never scanned.
+
+### Server / CLI
+
+- **The HTTP server stays responsive under load.** `/redact` and `/restore` run the
+  (GIL-releasing) core scan on a worker thread, so one expensive request no longer stalls
+  every other request — including `/health` — behind it on the event loop.
+- **Malformed HTTP requests return 400, not 500.** A syntactically valid JSON body that is
+  not an object (`[...]`, `"..."`, `42`) is now rejected cleanly on both endpoints, and
+  `/restore` type-checks `text`. A per-request cap on the number of `key` entries bounds
+  setup cost (413).
+- **The CLI no longer destroys a malformed key file.** A key file that is not a JSON object
+  is rejected before the redact runs, so a run can no longer exit "successfully" while
+  overwriting the operator's file. Directory-as-input and other OS errors produce a clear
+  message instead of a traceback, and all file writes complete short writes rather than
+  truncating.
+
+### Concurrency
+
+- Type-registry lookups take a snapshot, so a concurrent registration can no longer raise
+  "dictionary changed size during iteration" mid-redaction; the faker-resolution caches are
+  keyed to the registry generation; keep-downgrade and alias-collision warnings attribute to
+  the caller's frame (restoring per-call-site de-duplication); and the MCP key-token store is
+  lock-guarded against expiry/eviction races, with its process-global eviction bound
+  documented.
+
+### Streaming
+
+- **Streaming restore matches batch restore at any chunk boundary.** For both the
+  `"sentence"` and `"none"` strategies, a pseudonym or alias that straddles a chunk boundary
+  is now held and restored so the streamed output is byte-for-byte identical to restoring the
+  whole reply at once. `StreamingRestorer` gains an `aliases=` parameter matching batch
+  `restore(...)`, held-back tails are bounded, and the key is snapshotted at construction.
+
+### Performance
+
+- Byte-to-character offset conversion during detection is now linear, rather than quadratic
+  in the number of matches, and the core releases the GIL while it scans.
+
 ## v0.8.8 — every field is a decision
 
 A maintenance release. `RedactReport` has grown nine fields; the three wire faces
