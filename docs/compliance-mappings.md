@@ -1,0 +1,179 @@
+# Compliance mappings
+
+For every personal-information type it detects, argus-redact records the PIPL, GDPR, and HIPAA obligations that type triggers. `assess_risk()` and the type catalog (`docs/pii-types.md`) expose this classification so a downstream data-protection workflow does not have to re-encode the rules.
+
+This is a **conservative default, designed to be overridden.** Where legal standards genuinely diverge, argus-redact over-flags rather than silently downgrading; the classification is expressed as data so a future compliance-profile layer can select or adjust it per jurisdiction or risk posture. It is a transparency aid, **not legal advice**, and does not constitute a determination that any given text is or is not regulated.
+
+## How this table is produced
+
+The mappings are derived mechanically from the type registry (`src/argus_redact/specs/`) and the central rule book (`specs/_compliance.py`), and are kept in lockstep with the oracle in `tests/compliance/decision_table_v0810.py`. Regenerate this document from that oracle; do not edit it by hand.
+
+Types covered: **74**.
+
+## Statute legend
+
+**PIPL** (Personal Information Protection Law of the PRC):
+
+- **PIPL Art.13** — a lawful basis is required to process personal information.
+- **PIPL Art.28** — definition and handling rules for sensitive personal information (information whose leakage may infringe personal dignity or endanger personal or property safety).
+- **PIPL Art.51** — the processor must adopt security measures (encryption, de-identification, access control) to protect personal information.
+- **PIPL Art.29** — separate consent is required to process sensitive personal information.
+- **PIPL Art.55** — a personal-information protection impact assessment is required before processing sensitive personal information.
+- **PIPL Art.56** — the impact assessment and processing records must be retained.
+
+**GDPR** (EU 2016/679):
+
+- **GDPR Art.9** — processing of special categories of personal data (racial or ethnic origin, political opinions, religious or philosophical beliefs, trade-union membership, genetic data, biometric data for unique identification, health, sex life, or sexual orientation) is prohibited absent an Art.9(2) exception.
+- **GDPR Art.10** — personal data relating to criminal convictions and offences may be processed only under the control of official authority or where authorised by Union or Member State law providing appropriate safeguards.
+
+**HIPAA** Safe Harbor de-identification identifiers, 45 CFR 164.514(b)(2)(i)(A)–(R). The identifier letter is shown per type below.
+
+## Per-type classification
+
+PIPL articles are shown by number (see the legend). A type marked **sensitive** carries the sensitive-personal-information articles (28, 29, 55, 56) in addition to the universal floor (13, 51); the sections that follow give the statutory basis for each.
+
+| Lang | Type | Sensitivity | PIPL | GDPR | HIPAA | Sensitive PI |
+| --- | --- | --- | --- | --- | --- | --- |
+| zh | phone | 3 | 13, 51 | — | phone_numbers (D) | no |
+| zh | phone_landline | 3 | 13, 51 | — | phone_numbers (D) | no |
+| zh | id_number | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | hk_id | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | tw_id | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | macau_id | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | taiwan_arc | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | eep | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | hrp | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | housing_fund | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | bank_card | 4 | 13, 28, 51, 29, 55, 56 | — | account_numbers (J) | yes |
+| zh | passport | 3 | 13, 28, 51, 29, 55, 56 | — | certificate_number (K) | yes |
+| zh | license_plate | 2 | 13, 51 | — | vehicle_identifier (L) | no |
+| zh | address | 2 | 13, 51 | — | geographic (B) | no |
+| zh | credit_code | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | qq | 2 | 13, 51 | — | — | no |
+| zh | wechat | 2 | 13, 51 | — | — | no |
+| zh | date_of_birth | 2 | 13, 51 | — | dates (C) | no |
+| zh | military_id | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | social_security | 4 | 13, 28, 51, 29, 55, 56 | — | ssn (G) | yes |
+| zh | job_title | 2 | 13, 51 | — | — | no |
+| zh | organization | 2 | 13, 51 | — | — | no |
+| zh | school | 2 | 13, 51 | — | — | no |
+| zh | ethnicity | 3 | 13, 51 | Art.9 | — | no |
+| zh | workplace | 2 | 13, 51 | — | — | no |
+| zh | hobby | 2 | 13, 51 | — | — | no |
+| zh | criminal_record | 4 | 13, 28, 51, 29, 55, 56 | Art.10 | — | yes |
+| zh | financial | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | biometric | 4 | 13, 28, 51, 29, 55, 56 | Art.9 | biometric (P) | yes |
+| zh | medical | 4 | 13, 28, 51, 29, 55, 56 | Art.9 | medical_record (H) | yes |
+| zh | religion | 4 | 13, 28, 51, 29, 55, 56 | Art.9 | — | yes |
+| zh | political | 4 | 13, 28, 51, 29, 55, 56 | Art.9 | — | yes |
+| zh | sexual_orientation | 4 | 13, 28, 51, 29, 55, 56 | Art.9 | — | yes |
+| zh | self_reference | 2 | 13, 51 | — | — | no |
+| zh | person | 3 | 13, 51 | — | names (A) | no |
+| zh | age | 2 | 13, 51 | — | — | no |
+| en | phone | 2 | 13, 51 | — | phone_numbers (D) | no |
+| en | ssn | 4 | 13, 28, 51, 29, 55, 56 | — | ssn (G) | yes |
+| en | itin | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| en | credit_card | 3 | 13, 28, 51, 29, 55, 56 | — | account_numbers (J) | yes |
+| en | address | 2 | 13, 51 | — | geographic (B) | no |
+| en | person | 2 | 13, 51 | — | names (A) | no |
+| en | date_of_birth | 3 | 13, 51 | — | dates (C) | no |
+| en | us_passport | 4 | 13, 28, 51, 29, 55, 56 | — | certificate_number (K) | yes |
+| en | medical | 4 | 13, 28, 51, 29, 55, 56 | Art.9 | medical_record (H) | yes |
+| en | financial | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| en | criminal_record | 4 | 13, 28, 51, 29, 55, 56 | Art.10 | — | yes |
+| en | biometric | 4 | 13, 28, 51, 29, 55, 56 | Art.9 | biometric (P) | yes |
+| en | religion | 3 | 13, 28, 51, 29, 55, 56 | Art.9 | — | yes |
+| en | political | 3 | 13, 28, 51, 29, 55, 56 | Art.9 | — | yes |
+| en | sexual_orientation | 4 | 13, 28, 51, 29, 55, 56 | Art.9 | — | yes |
+| en | self_reference | 1 | 13, 51 | — | — | no |
+| shared | openai_api_key | 4 | 13, 51 | — | — | no |
+| shared | anthropic_api_key | 4 | 13, 51 | — | — | no |
+| shared | aws_access_key | 4 | 13, 51 | — | — | no |
+| shared | github_token | 4 | 13, 51 | — | — | no |
+| shared | jwt | 4 | 13, 51 | — | — | no |
+| shared | ssh_private_key | 4 | 13, 51 | — | — | no |
+| shared | email | 2 | 13, 51 | — | email_addresses (F) | no |
+| shared | ip_address | 2 | 13, 51 | — | ip_address (O) | no |
+| shared | mac_address | 2 | 13, 51 | — | device_identifier (M) | no |
+| shared | phone_landline | 2 | 13, 51 | — | phone_numbers (D) | no |
+| shared | date | 1 | 13, 51 | — | dates (C) | no |
+| shared | url | 1 | 13, 51 | — | url (N) | no |
+| de | tax_id | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| ja | my_number | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| ko | rrn | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| uk | nhs_number | 4 | 13, 28, 51, 29, 55, 56 | — | medical_record (H) | yes |
+| uk | nino | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| uk | postcode | 2 | 13, 51 | — | — | no |
+| in | aadhaar | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| in | pan | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| br | cpf | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| br | cnpj | 2 | 13, 51 | — | — | no |
+
+## Why each type is treated as sensitive personal information
+
+PIPL Art.28 enumerates sensitive categories and adds a general clause; the list below groups the sensitive-PI types by the basis under which they qualify. National-ID and identity-credential numbers are included because their leakage enables impersonation and endangers personal safety.
+
+### Identity credentials — “specific identity” (PIPL Art.28)
+
+> PIPL Art.28 — sensitive personal information includes information on "specific identity" (特定身份): a state-issued identity or credential number whose leakage enables impersonation and endangers personal safety.
+
+Types: `aadhaar`, `cpf`, `credit_code`, `eep`, `hk_id`, `hrp`, `id_number`, `itin`, `macau_id`, `military_id`, `my_number`, `nino`, `pan`, `passport`, `rrn`, `social_security`, `ssn`, `taiwan_arc`, `tax_id`, `tw_id`, `us_passport`.
+
+### Financial accounts (PIPL Art.28)
+
+> PIPL Art.28 — "financial accounts" (金融账户) are expressly enumerated as sensitive personal information.
+
+Types: `bank_card`, `credit_card`, `financial`, `housing_fund`.
+
+### Health data (PIPL Art.28)
+
+> PIPL Art.28 — "medical health" (医疗健康) is expressly enumerated as sensitive personal information.
+
+Types: `medical`, `nhs_number`.
+
+### Biometric data (PIPL Art.28)
+
+> PIPL Art.28 — "biometric information" (生物识别信息) is expressly enumerated as sensitive personal information.
+
+Types: `biometric`.
+
+### Religious belief (PIPL Art.28)
+
+> PIPL Art.28 — "religious belief" (宗教信仰) is expressly enumerated as sensitive personal information.
+
+Types: `religion`.
+
+### Other categories via the Art.28 general clause
+
+> PIPL Art.28 — the enumerated list is non-exhaustive (“including”); the general clause (information whose leakage may infringe personal dignity or endanger personal or property safety) captures this category.
+
+Types: `criminal_record`, `political`, `sexual_orientation`.
+
+## Explicit downgrades
+
+These types carry a high sensitivity score but are deliberately **not** classified as sensitive personal information under PIPL. Each downgrade is explicit and cited — never silent.
+
+- **`phone`** — PIPL Art.28 (by exclusion) — a telephone number is ordinary personal information, not enumerated as sensitive; its processing still requires a lawful basis under PIPL Art.13. High sensitivity here reflects re-identification leverage in combination, not sensitive-PI status.
+- **`phone_landline`** — PIPL Art.28 (by exclusion) — a landline number is ordinary personal information, not enumerated as sensitive; processing requires a lawful basis under PIPL Art.13.
+- **`ethnicity`** — PIPL Art.28 (by exclusion) — unlike GDPR Art.9 (racial or ethnic origin), PIPL's enumerated sensitive categories do not include ethnicity; it stays ordinary PI under PIPL while remaining a GDPR special category.
+- **`person`** — PIPL Art.28 (by exclusion) — a personal name is the paradigmatic ordinary identifier and is not classified as sensitive personal information under PIPL (contrast: it is HIPAA Safe Harbor identifier (A)).
+- **`date_of_birth`** — PIPL Art.28 (by exclusion) — a date of birth is ordinary PI / a quasi-identifier, not enumerated as sensitive (contrast: it is HIPAA Safe Harbor identifier (C)).
+- **`openai_api_key`** — PIPL Art.4 (scope) — a machine access credential is not information relating to an identified or identifiable natural person, so it falls outside PIPL's sensitive-PI regime; handled as a security secret at the highest redaction priority.
+- **`anthropic_api_key`** — PIPL Art.4 (scope) — a machine access credential is not personal information of a natural person; handled as a security secret outside the sensitive-PI regime, at the highest redaction priority.
+- **`aws_access_key`** — PIPL Art.4 (scope) — a cloud access-key identifier is a machine credential, not personal information of a natural person; handled as a security secret.
+- **`github_token`** — PIPL Art.4 (scope) — an access token is a machine credential, not personal information of a natural person; handled as a security secret.
+- **`jwt`** — PIPL Art.4 (scope) — a bearer token is a machine credential, not personal information of a natural person; handled as a security secret. (A JWT MAY carry PI in its payload; that PI is redacted by its own type, not by classifying the token as sensitive PI.)
+- **`ssh_private_key`** — PIPL Art.4 (scope) — a private key is a machine credential, not personal information of a natural person; handled as a security secret at the highest redaction priority.
+
+## GDPR criminal-conviction data
+
+`criminal_record` is classified under **GDPR Art.10** (criminal convictions and offences), a dimension parallel to — and mutually exclusive with — the Art.9 special categories.
+
+> GDPR Art.10 — personal data relating to criminal convictions and offences may be processed only under the control of official authority or where authorised by Union or Member State law providing appropriate safeguards.
+
+## When not to rely on this
+
+- It is a default classification, not a legal opinion; obtain jurisdiction-specific advice for regulated processing.
+- Coverage is limited to the types argus-redact detects; absence of a type here does not mean data is unregulated.
+- The sensitivity score reflects re-identification and harm risk in combination, and is distinct from a type's statutory sensitive-PI status (a high score does not by itself make a type sensitive PI).
+
