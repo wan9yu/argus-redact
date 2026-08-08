@@ -43,7 +43,7 @@ PIPL articles are shown by number (see the legend). A type marked **sensitive** 
 | zh | taiwan_arc | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
 | zh | eep | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
 | zh | hrp | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
-| zh | housing_fund | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| zh | housing_fund | 3 | 13, 28, 51, 29, 55, 56 | — | account_numbers (J) | yes |
 | zh | bank_card | 4 | 13, 28, 51, 29, 55, 56 | — | account_numbers (J) | yes |
 | zh | passport | 3 | 13, 28, 51, 29, 55, 56 | — | certificate_number (K) | yes |
 | zh | license_plate | 2 | 13, 51 | — | vehicle_identifier (L) | no |
@@ -101,9 +101,9 @@ PIPL articles are shown by number (see the legend). A type marked **sensitive** 
 | de | tax_id | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
 | ja | my_number | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
 | ko | rrn | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
-| uk | nhs_number | 4 | 13, 28, 51, 29, 55, 56 | — | medical_record (H) | yes |
+| uk | nhs_number | 4 | 13, 28, 51, 29, 55, 56 | Art.9 | medical_record (H) | yes |
 | uk | nino | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
-| uk | postcode | 2 | 13, 51 | — | — | no |
+| uk | postcode | 2 | 13, 51 | — | geographic (B) | no |
 | in | aadhaar | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
 | in | pan | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
 | br | cpf | 4 | 13, 28, 51, 29, 55, 56 | — | — | yes |
@@ -123,7 +123,7 @@ Types: `aadhaar`, `cpf`, `eep`, `hk_id`, `hrp`, `id_number`, `itin`, `macau_id`,
 
 > PIPL Art.28 — "financial accounts" (金融账户) are expressly enumerated as sensitive personal information.
 
-Types: `bank_card`, `credit_card`, `financial`, `housing_fund`.
+Types: `bank_card`, `credit_card`, `housing_fund`.
 
 ### Health data (PIPL Art.28)
 
@@ -147,7 +147,7 @@ Types: `religion`.
 
 > PIPL Art.28 — the enumerated list is non-exhaustive (“including”); the general clause (information whose leakage may infringe personal dignity or endanger personal or property safety) captures this category.
 
-Types: `criminal_record`, `political`, `sexual_orientation`.
+Types: `criminal_record`, `financial`, `political`, `sexual_orientation`.
 
 ## Explicit downgrades
 

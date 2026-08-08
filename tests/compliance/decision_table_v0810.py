@@ -33,7 +33,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from argus_redact.specs._compliance import (
-    GDPR_SPECIAL_CATEGORY,
     HIPAA_SAFE_HARBOR_CATEGORIES,
     PIPL_ART_13,
     PIPL_ART_28,
@@ -123,8 +122,13 @@ SENSITIVE_PI_NEW: frozenset[str] = (
 )
 
 # GDPR Art.9 special categories under the new rule: criminal_record LEAVES Art.9
-# and moves to the new Art.10 dimension; everything else is unchanged.
-GDPR_SPECIAL_NEW: frozenset[str] = GDPR_SPECIAL_CATEGORY - {"criminal_record"}
+# and moves to the new Art.10 dimension; everything else is unchanged. Derived from
+# the LIVE registry (union of the category-name set AND per-typedef overrides such as
+# nhs_number — a health identifier that is GDPR Art.9 health data per Recital 35), so
+# an override can never be silently dropped by keying only off the category names.
+GDPR_SPECIAL_NEW: frozenset[str] = frozenset(d.name for d in _TYPES if d.gdpr_special_category) - {
+    "criminal_record"
+}
 
 # GDPR Art.10 — personal data on criminal convictions and offences (parallel to,
 # and mutually exclusive with, Art.9 special categories).
@@ -145,6 +149,7 @@ HIPAA_NEW: dict[str, str] = {
     "medical": "medical_record",
     "date_of_birth": "dates",
     "address": "geographic",
+    "postcode": "geographic",  # ZIP/postcode is a geographic subdivision → HIPAA (B)
     "ip_address": "ip_address",
     "mac_address": "device_identifier",
     "biometric": "biometric",
@@ -153,6 +158,7 @@ HIPAA_NEW: dict[str, str] = {
     "license_plate": "vehicle_identifier",
     "bank_card": "account_numbers",
     "credit_card": "account_numbers",
+    "housing_fund": "account_numbers",  # provident-fund account number → HIPAA (J)
     "url": "url",
     "date": "dates",
     "nhs_number": "medical_record",  # set explicitly on the uk typedef
@@ -205,7 +211,7 @@ _MEMBER_BASIS: dict[str, str] = {
     "religion": "religious_belief",
     "bank_card": "financial_account",
     "credit_card": "financial_account",
-    "financial": "financial_account",
+    "financial": "general_clause",
     "housing_fund": "financial_account",
     # base sensitive-PI, via the general clause (not in Art.28's express list,
     # but GDPR-special and safety-relevant)
