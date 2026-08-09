@@ -75,7 +75,7 @@ For bulk workloads (thousands of documents), throughput matters more than latenc
 | 1,000 docs × 1K chars | ~500ms | ~30s | ~8min |
 | 10,000 docs × 1K chars | ~5s | ~5min | ~80min |
 
-`restore()` is always fast — pure string replacement, < 1ms per document regardless of layers used.
+`restore()` is always fast — a longest-first substitution scan (plus, since v0.8.0, the deterministic provenance/scope guard), < 1ms per document regardless of layers used.
 
 ## Mode Selection Guide
 

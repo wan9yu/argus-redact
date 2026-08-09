@@ -123,7 +123,7 @@ redacted, key, details = redact("张三在星巴克", detailed=True)
 | LLM detection (Layer 3) | No | LLM output may vary | Mock LLM response |
 | `key=dict` | Yes | No I/O, no mutation of input dict | — |
 | `key=str` (file path) | No — file I/O | Reads and writes the file system | Use `key=dict` in tests |
-| `restore()` | **Yes** | Pure string replacement, fully deterministic | — |
+| `restore()` | **Yes** | Deterministic substitution; the v0.8.0+ provenance/scope guard is deterministic too | — |
 
 **Rule for tests:** Use `salt` + `key=dict` + `mode="fast"` and your tests become fully deterministic with zero side effects:
 
@@ -162,10 +162,11 @@ restored = restore("any text", {})
 # restored = "any text"
 
 # Pseudonym appears as substring in a word — still matched
-redacted, key = redact("王五说了话")
-# redacted = "P-037说了话"
-restored = restore("关于P-037的建议", key, guard=False)  # local text, no LLM round-trip
-# "关于王五的建议"  ← P-037 matched even without whitespace boundaries
+redacted, key = redact("王五说了话", names=["王五"])
+# redacted → "<P-code>说了话"; the P-code is random, e.g. "P-22560" (not sequential)
+(code,) = key                        # exactly one entity was detected
+restored = restore(f"关于{code}的建议", key, guard=False)  # local text, no LLM round-trip
+# "关于王五的建议"  ← the pseudonym matched even without whitespace boundaries
 
 # Unknown pseudonyms left unchanged
 restored = restore("P-999 is unknown", {"P-037": "王五"})
@@ -588,7 +589,7 @@ except RestoreGuardError as e:
 
 ### Behavior
 
-- **Exact string replacement.** `P-037` in text → looked up in key → replaced with original.
+- **Exact substring match.** `P-037` in text → looked up in key → replaced with original (this substitution is what runs once the guard, above, lets the restore proceed).
 - **Longer replacements first.** `[某公司总部]` is matched before `[某公司]` to avoid partial replacement.
 - **Unknown pseudonyms are left unchanged.** If the text contains `P-099` but the key has no `P-099`, it stays as `P-099`.
 - **Cross-language aliases** *(v0.6.0+, via `aliases=` kwarg)*: alternates in `aliases` are added to the alternation alongside the canonical fake. If an LLM transliterates `张三` into `Zhang San`, both forms map back to the original. Pass `result.aliases` from `redact_pseudonym_llm()` to enable.

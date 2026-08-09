@@ -1,5 +1,6 @@
-//! Reserved-range realistic fakers, ported 1:1 from `specs/fakers_{zh,en,shared}_reserved.py`
-//! and `specs/fakers_numeric.py`.
+//! Reserved-range realistic fakers. This module is the single source of truth for
+//! the realistic strategy; the `specs/fakers_*` Python sources it was originally
+//! ported from have been removed (the Rust core is now the SSOT).
 //!
 //! ## Bit-identity contract
 //!
@@ -7,17 +8,16 @@
 //! keyed by `HMAC-SHA256(salt, "{type}:{value}")`. A faker that calls `rng` in a
 //! different order — or with different ranges / digit counts — produces a
 //! different byte consumption and therefore a different value AND a different
-//! downstream stream. So each generator below replays the Python generator's
-//! exact RNG-call sequence:
+//! downstream stream. So each generator below fixes its exact RNG-call sequence:
 //!
 //! - `rand_digits(n)` = `n ×` `randint(0, 9)` (each digit one call).
 //! - `choice(seq)` = `seq[choice_index(len)]` (`choice_index` = `randint(0, len-1)`).
-//! - check digits reuse the v0.7.1 [`crate::validators`] helpers — never re-ported.
+//! - check digits reuse the v0.7.1 [`crate::validators`] helpers.
 //!
 //! The per-faker golden tests at the bottom are the gate: each `(fake, aliases)`
-//! is frozen from current Python for a fixed seed, and the Rust faker (seeded
-//! identically) MUST reproduce it byte-for-byte. A divergence means the RNG order
-//! is wrong — fix the Rust, never the golden.
+//! is a frozen golden for a fixed seed, and any change to a faker MUST still
+//! reproduce it byte-for-byte. A divergence means the RNG order is wrong — fix the
+//! faker, never the golden.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;

@@ -17,21 +17,26 @@ your detection pipeline.
 ## Usage
 
 ```python
-from argus_redact import redact, restore
-from argus_redact.compose import prompt_anchor
+from argus_redact import redact
+from argus_redact.compose import prompt_anchor, make_anchor, guarded_restore
 
 text = "张三的电话13812345678"
 redacted, key = redact(text, names=["张三"], lang="zh", salt=42)
 
-anchor = prompt_anchor(key, lang="zh")
-# Multi-line string explaining the 3 rules + the identifier list
+anchor_obj = make_anchor(key)                              # fresh per-exchange nonce + scope
+anchor = prompt_anchor(key, lang="zh", anchor=anchor_obj)
+# Multi-line string: the 3 rules + the identifier list, plus a line asking the
+# model to echo anchor_obj.nonce back verbatim.
 
 # Prepend to your system prompt:
 system_prompt = f"You are a helpful assistant.\n\n{anchor}"
 
-# Send to LLM... receive response... then restore as usual:
+# Send to LLM... receive response... then restore through the guard:
 llm_output = call_llm(system_prompt, user_msg=redacted)
-restored = restore(llm_output, key)
+restored = guarded_restore(llm_output, key, anchor=anchor_obj)
+# guarded_restore fails closed if the model dropped the nonce (provenance) or
+# emitted an out-of-scope pseudonym (scope). Since v0.8.0 a bare restore(text,
+# key) also fails closed without an anchor — see docs/security-model.md.
 ```
 
 ## When to use
@@ -60,13 +65,16 @@ restored = restore(llm_output, key)
 ## Combining with `expand_aliases`
 
 ```python
-from argus_redact.compose import prompt_anchor, expand_aliases
+from argus_redact.compose import (
+    prompt_anchor, expand_aliases, make_anchor, guarded_restore,
+)
 
-anchor = prompt_anchor(key, lang="zh")              # input-side
-key_for_restore = expand_aliases(key, lang="zh")    # output-side
+key_for_restore = expand_aliases(key, lang="zh")             # output-side
+anchor_obj = make_anchor(key_for_restore)                    # scope covers the aliases
+anchor = prompt_anchor(key, lang="zh", anchor=anchor_obj)    # input-side
 
 # ... LLM call with anchor in system prompt ...
-restored = restore(llm_output, key_for_restore)
+restored = guarded_restore(llm_output, key_for_restore, anchor=anchor_obj)
 ```
 
 Input-side reduces variant generation at the source; output-side catches

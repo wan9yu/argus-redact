@@ -37,11 +37,11 @@ from argus_redact.layers import (
 argus-redact is two functions and a processing pipeline between them:
 
 ```
-redact(text) → (redacted_text, key)
-restore(text, key) → plaintext
+redact(text)                   → (redacted_text, key)
+restore(text, key, anchor=...) → original text   (guarded by default since v0.8.0)
 ```
 
-Internally, `redact()` runs a three-layer detection pipeline where each layer passes **hints** to the next, enabling collaborative detection. `restore()` is pure string replacement using the key.
+Internally, `redact()` runs a three-layer detection pipeline where each layer passes **hints** to the next, enabling collaborative detection. `restore()` is a longest-first substitution scan over the key, wrapped since v0.8.0 in a deterministic provenance + scope guard that fails closed without a valid anchor (`guard=False` opts out).
 
 ```
                           redact()
@@ -232,7 +232,7 @@ text = "他的同事在星巴克开会"
 **Input:** raw text (str) + Layer 1+2 results (already-detected entities)
 **Output:** list of `(start, end, type, matched_text, confidence, reason)`
 
-Runs a local small LLM (1-3B parameters, quantized, CPU via llama.cpp) to detect PII that regex and NER miss.
+Runs a local small LLM (3B–32B parameters, quantized) served by Ollama (CPU, no GPU required) to detect PII that regex and NER miss.
 
 ```
 text = "老王说他上周在那个地方见了老李，聊了聊那件事"
@@ -265,11 +265,12 @@ text = "老王说他上周在那个地方见了老李，聊了聊那件事"
 
 | Model | Size | RAM | Quality | Speed |
 |-------|------|-----|---------|-------|
-| **qwen2.5:3b** (default) | ~2GB | 4GB | Good | ~700ms |
+| **qwen3:8b** (default) | ~5GB | 8GB | Better | ~2-3s |
+| qwen2.5:3b | ~2GB | 4GB | Good | ~700ms |
 | qwen2.5:7b | ~4GB | 8GB | Better | ~2s |
 | qwen2.5:32b | ~20GB | 24GB | Best | ~10-20s |
 
-Inference via Ollama (CPU, no GPU required). Configure with `OLLAMA_MODEL` environment variable.
+Inference via Ollama (CPU, no GPU required). The default is `qwen3:8b` (the `OLLAMA_MODEL` fallback in `impure/ollama_adapter.py`); override with the `OLLAMA_MODEL` environment variable.
 
 **This layer is optional.** Requires Ollama running locally. Without it, Layers 1+2 handle most PII.
 
@@ -401,7 +402,7 @@ output:   "P-037的手机号是[手机号已脱敏]"
 
 ## restore()
 
-Pure string replacement. No layers, no models, no complexity.
+A longest-first substitution scan — no layers, no models. Since v0.8.0 it is wrapped in a deterministic provenance + scope guard (default `guard=True`) that fails closed without a valid anchor; `guard=False` runs the bare substitution.
 
 ```
 text:    "P-037 should talk to P-012 about [某公司]"
@@ -475,7 +476,7 @@ Not all parts of argus-redact are equal. The codebase is structured into three l
 │  filter_self_reference(entities, hints) → entities          │
 │  boost_cross_layer(merged, pre_merge) → entities            │
 │  replace(text, entities, strategy, salt) → (redacted, key)  │
-│  restore(text, key) → plaintext                             │
+│  restore(text, key, anchor) → text  (guard=True default)    │
 │  merge_entities(layer_results) → deduplicated_entities      │
 │  normalize_grammar_en / restore_grammar_en                  │
 │  PseudonymGenerator(prefix, range, salt).get(entity) → code │
@@ -541,7 +542,7 @@ The Pure layer handles all hot paths (regex matching, string replacement, key ma
 - **Memory safety:** Key data (sensitive PII mappings) managed by Rust — no GC residue, deterministic destruction
 - **Portable CLI:** Standalone Rust binary, no Python runtime needed
 
-The Impure layer stays in Python because model loading (HanLP, spaCy, llama.cpp bindings) is already Python-native, and Python startup overhead doesn't matter when model inference takes 10-2000ms.
+The Impure layer stays in Python because the model integrations (HanLP, spaCy, the Ollama client) are already Python-native, and Python startup overhead doesn't matter when model inference takes 10-2000ms.
 
 ### salt parameter flow
 

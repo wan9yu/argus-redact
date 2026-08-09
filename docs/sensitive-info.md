@@ -17,7 +17,7 @@ Three promises guide everything we build:
 
 | Promise | Question | Measure |
 |---------|----------|---------|
-| **Protected** | Is your PII detected and encrypted? | PRvL P=100%. PII leak 0% across GPT-4o, Claude, Gemini |
+| **Protected** | Is your PII detected and encrypted? | PRvL P=100%. In the PRvL reference suite, the `default` profile leaked nothing across the tested models — a reference suite, not a guarantee against adversarial input (see [prvl-standard.md](prvl-standard.md)) |
 | **Usable** | Can AI still understand and help you? | PRvL U=100%. Trigger words preserved, only PII content redacted |
 | **Reversible** | Can you get everything back? | PRvL R by task type: reference 100%, extract 50%, creative 0% (by design) |
 

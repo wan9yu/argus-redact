@@ -199,10 +199,10 @@ is simpler and gives you the same pipeline guarantees.
 The three Layer 2 helpers compose:
 
 ```python
-from argus_redact import redact, restore
+from argus_redact import redact
 from argus_redact.compose import (
     register_pii_type, PIITypeDef, PatternMatch,
-    prompt_anchor, expand_aliases,
+    prompt_anchor, expand_aliases, make_anchor, guarded_restore,
 )
 
 # Once at startup
@@ -214,12 +214,13 @@ register_pii_type(PIITypeDef(
 def handle(text, salt, system_prompt):
     matches = your_detector.detect(text)
     redacted, key = redact(text, lang="en", salt=salt, _pre_detected=matches)
-    anchor = prompt_anchor(key, lang="en")
     expanded = expand_aliases(key, lang="en")
+    anchor_obj = make_anchor(expanded)                       # scope covers the aliases
+    anchor = prompt_anchor(key, lang="en", anchor=anchor_obj)
 
     full_system = f"{system_prompt}\n\n{anchor}"
     llm_output = call_llm(full_system, redacted)
-    return restore(llm_output, expanded)
+    return guarded_restore(llm_output, expanded, anchor=anchor_obj)
 ```
 
 The adapter provides detection; `prompt_anchor` anchors placeholders

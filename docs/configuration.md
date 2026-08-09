@@ -79,88 +79,47 @@ find, your review process, and legal review, not on the profile name.
 
 ## Full Configuration Schema
 
-```yaml
-# redact_config.yaml
+The `config` argument is a mapping of `{entity_type: {options}}`. Pass it inline
+(`redact(config={...})`) or as a file path (`redact(config="redact_config.yaml")`,
+also the CLI `-c/--config`; JSON is accepted too). Only the per-type option keys below
+are read — anything else in the file is ignored.
 
-# ──────────────────────────────────────
-# Per-type redaction strategies
-# ──────────────────────────────────────
+```yaml
+# redact_config.yaml — {entity_type: {options}}. Every key below is read by the engine.
 
 person:
-  strategy: pseudonym           # P-037, P-012 (random codes)
-  rotation: per_session         # per_session | fixed
-  prefix: "P"                   # Prefix for pseudonym codes
-  code_range: [1, 999]          # Range for random code numbers
+  strategy: pseudonym    # pseudonym | realistic | mask | remove | category | name_mask | landline_mask | keep
+  prefix: "P"            # pseudonym code prefix (per-type default: "P" person, "O" org, else TYPE[:4])
 
 location:
-  strategy: category            # Replace with category label
-  labels:                       # Custom category labels (optional)
-    cafe: "[cafe]"
-    hospital: "[hospital]"
-    school: "[school]"
-    default: "[location]"       # Fallback if sub-category unknown
-
-organization:
-  strategy: pseudonym
-  prefix: "O"
-  code_range: [1, 999]
+  strategy: category
+  label: "[LOCATION]"    # category: the label to substitute (per-type default: "[LOCATION]")
 
 phone:
-  strategy: mask                # 138****1234 — see security note below
-  mask_char: "*"
-  visible_prefix: 3             # Show first N digits
-  visible_suffix: 4             # Show last N digits
+  strategy: mask         # 138****5678 — see the security note below
+  visible_prefix: 3      # mask: leading chars kept visible
+  visible_suffix: 4      # mask: trailing chars kept visible
   # ⚠️ mask retains prefix+suffix digits. For phone: 3+4 visible = ~10,000 possible
   # numbers. Use strategy: pseudonym or profile="pipl" for strict privacy.
 
 id_number:
-  strategy: remove              # Replace entirely
-  replacement: "[ID number removed]"
-
-email:
-  strategy: mask                # z***@example.com
-  mask_char: "*"
-  preserve_domain: true         # Keep domain visible
-
-bank_card:
-  strategy: mask
-  mask_char: "*"
-  visible_prefix: 4
-  visible_suffix: 4
-
-address:
-  strategy: remove              # default; address is removed, not coarsened
-
-date_of_birth:
   strategy: remove
-  replacement: "[出生日期已脱敏]"
-
-# ──────────────────────────────────────
-# Global settings
-# ──────────────────────────────────────
-
-global:
-  default_strategy: remove      # Fallback for unrecognized entity types
-  default_replacement: "[REDACTED]"
-  min_confidence: 0.5           # Ignore detections below this confidence
-  dedup: true                   # Deduplicate overlapping entity spans
-
-# ──────────────────────────────────────
-# Layer-specific settings
-# ──────────────────────────────────────
-
-layers:
-  layer_1:
-    enabled: true
-  layer_2:
-    enabled: true
-    model: "hanlp"              # NER backend: "hanlp", "spacy", "gliner"
-  layer_3:
-    enabled: false              # Disabled by default (requires model download)
-    model: "qwen2.5-3b-q4"     # Local LLM for semantic detection
-    max_tokens: 512             # Max output tokens for LLM inference
-    temperature: 0.0            # Deterministic output
+  replacement: "[ID number removed]"   # remove: the substitution label
 ```
+
+The engine reads exactly these per-type keys: `strategy`, `prefix` (pseudonym),
+`replacement` (remove), `label` (category), and `visible_prefix` / `visible_suffix`
+(mask). There is **no** `global:` or `layers:` section, and no `rotation`,
+`code_range`, `mask_char`, or `preserve_domain` key — those were never wired. What
+those names implied is controlled elsewhere:
+
+- **Which layers run** → the `mode=` argument (`"fast"` / `"ner"` / `"auto"`).
+- **NER / semantic model** → `mode=` plus the `OLLAMA_MODEL` / `OLLAMA_HOST` env vars.
+- **Confidence floor** → the top-level `min_confidence=` argument to `redact()`.
+- **Unified prefix / language / salt** → the `unified_prefix=`, `lang=`, `salt=` args.
+- **Fixed vs per-session pseudonyms** → persist and reuse `key=`; a reused key gives the
+  same code for the same value. There is no `rotation` key.
+- **Mask character** is always `*`.
 
 ---
 
@@ -168,23 +127,19 @@ layers:
 
 ### pseudonym
 
-Replace with a random code. Consistent within a session, rotated across sessions.
+Replace with a random code. Codes are stable within a call; reuse a persisted `key=` to keep them stable across calls, or start fresh for new codes.
 
 ```
 Input:  "张三和李四在聊天"
-Output: "P-037和P-012在聊天"     (session 1)
-Output: "P-003和P-071在聊天"     (session 2)
+Output: "P-037和P-012在聊天"     (fresh key)
+Output: "P-003和P-071在聊天"     (a different fresh key)
 ```
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `prefix` | `str` | `"P"` (person), `"O"` (org) | Code prefix |
-| `code_range` | `[int, int]` | `[1, 999]` | Random range for code numbers |
-| `rotation` | `str` | `"per_session"` | `"per_session"` — new codes every `redact()` call. `"fixed"` — same code for same entity across sessions (requires persistent key storage). |
+| `prefix` | `str` | `"P"` (person), `"O"` (org), else `TYPE[:4]` | Pseudonym code prefix |
 
-**When to use `fixed` rotation:**
-
-Only for purely local pipelines where data never leaves your device. Fixed pseudonyms are linkable across requests — the cloud can build a profile.
+**Stable codes across calls:** persist and reuse the `key=` dict — there is no `rotation` option. Only do this for purely local pipelines where data never leaves your device: a reused key makes pseudonyms linkable across requests, so the cloud can build a profile.
 
 ### category
 
@@ -192,16 +147,14 @@ Replace with a category label. The original is mapped to its semantic category.
 
 ```
 Input:  "在星巴克中关村店讨论"
-Output: "在[cafe]讨论"
+Output: "在[LOCATION]讨论"
 ```
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `labels` | `dict` | *(built-in)* | Map of sub-category → display label. |
+| `label` | `str` | `"[LOCATION]"` (location) | The single category label substituted for the value. |
 
-Built-in sub-categories for locations: `cafe`, `hospital`, `school`, `park`, `restaurant`, `hotel`, `airport`, `station`, `office`, `residential`.
-
-If the sub-category is unknown, uses `labels.default` or `"[location]"`.
+`category` substitutes one fixed per-type label — there is no sub-category (`cafe` / `hospital`) resolution. Override it per type, e.g. `config={"location": {"label": "[place]"}}`.
 
 ### mask
 
@@ -214,10 +167,10 @@ Output: "138****5678"
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `mask_char` | `str` | `"*"` | Character used for masking. |
-| `visible_prefix` | `int` | `3` | Number of leading characters to keep visible. |
-| `visible_suffix` | `int` | `4` | Number of trailing characters to keep visible. |
-| `preserve_domain` | `bool` | `true` | (email only) Keep domain part visible. |
+| `visible_prefix` | `int` | per-type (phone 3, bank_card 6, id_number 0) | Number of leading characters to keep visible. |
+| `visible_suffix` | `int` | per-type (phone 4, bank_card 4, id_number 4) | Number of trailing characters to keep visible. |
+
+The mask character is always `*`. Email uses a built-in shape (`local[0]` + `***` + `@domain`), so its domain stays visible without a config key.
 
 ### remove
 
@@ -244,9 +197,9 @@ When no config file is provided, these defaults are used:
 
 | Entity Type | Strategy | Details |
 |------------|----------|---------|
-| `person` | `pseudonym` | `per_session`, prefix `P`, range 1-999 |
-| `location` | `category` | Built-in sub-category labels |
-| `organization` | `pseudonym` | `per_session`, prefix `O`, range 1-999 |
+| `person` | `pseudonym` | prefix `P` |
+| `location` | `category` | label `"[LOCATION]"` |
+| `organization` | `pseudonym` | prefix `O` |
 | `phone` | `mask` | Show first 3 + last 4 |
 | `id_number` | `remove` | `"[身份证号已脱敏]"` |
 | `email` | `mask` | Preserve domain |
@@ -270,9 +223,9 @@ redacted, key = redact(text, config={"person": {"strategy": "invalid"}})
 Missing fields fall back to defaults — you only need to specify what you want to override:
 
 ```yaml
-# Only override person strategy, everything else uses defaults
+# Only override person's prefix; everything else uses defaults
 person:
-  rotation: fixed
+  prefix: "USER"
 ```
 
 ---

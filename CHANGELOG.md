@@ -74,6 +74,10 @@ consumers should re-baseline.
   is now held and restored so the streamed output is byte-for-byte identical to restoring the
   whole reply at once. `StreamingRestorer` gains an `aliases=` parameter matching batch
   `restore(...)`, held-back tails are bounded, and the key is snapshotted at construction.
+  Scope note: this byte-for-byte parity is a property of the *restore* face. Streaming
+  *detection* stays sentence-buffered by design — true byte-level partial detection (a state
+  machine across regex/NER boundaries) is out of scope and roadmapped, so "byte-for-byte
+  identical" is not a byte-level *detection* guarantee (see `docs/design-streaming-incremental.md`).
 
 ### Performance
 
@@ -1127,10 +1131,11 @@ if you pin on exact redaction results.
   JSON content.
 - **`redact_body` fails closed** on non-string fields instead of returning them
   un-redacted.
-- **Restore is collision-safe:** purely-numeric restore keys are digit-bounded so a
-  fake can never match inside a longer number; a bare marker character following a
+- **Restore is collision-resistant** (not collision-proof — masked-strategy cross-salt
+  isolation remains a known, tracked gap): purely-numeric restore keys are digit-bounded
+  so a fake is not matched inside a longer number; a bare marker character following a
   key no longer triggers double-replacement; and the realistic faker re-rolls off
-  every entity's original, so one fake can never expose another real value.
+  every entity's original, so one fake does not expose another real value.
 - **A container entity stays whole** when an interior self-reference overruns it —
   no unredacted head fragment leaks.
 - **Streaming carries multi-line SSH/PEM private keys whole** (the key head is never
