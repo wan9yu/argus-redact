@@ -50,7 +50,7 @@ def test_nhs_number_assess_risk_flags_health():
     # PHI category through assess_risk (the report path), keyed on its own lang.
     import argus_redact._core as _core
 
-    _score, _level, _ents, _reasons, pipl, gdpr, hipaa = _core.assess_risk(
+    _score, _level, _ents, _reasons, pipl, gdpr, hipaa, _gdpr_art10 = _core.assess_risk(
         [("nhs_number", 4)], "uk"
     )
     assert gdpr is True
@@ -65,5 +65,7 @@ def test_foreign_tax_id_no_longer_understated():
     # the any-lang name fallback keeps it working under other langs).
     import argus_redact._core as _core
 
-    _score, _level, _ents, _reasons, pipl, _gdpr, _hipaa = _core.assess_risk([("tax_id", 3)], "de")
+    _score, _level, _ents, _reasons, pipl, _gdpr, _hipaa, _gdpr_art10 = _core.assess_risk(
+        [("tax_id", 3)], "de"
+    )
     assert pipl, "de tax_id must carry PIPL articles after registration"

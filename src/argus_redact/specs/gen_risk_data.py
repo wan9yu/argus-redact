@@ -47,6 +47,7 @@ def build_ron() -> str:
             f"name: {_ron_str(td.name)}, "
             f"pipl_articles: [{pipl}], "
             f"gdpr_special_category: {str(td.gdpr_special_category).lower()}, "
+            f"gdpr_art10: {str(td.gdpr_art10).lower()}, "
             f"hipaa_phi_category: {_ron_opt_str(td.hipaa_phi_category)}"
             "),"
         )

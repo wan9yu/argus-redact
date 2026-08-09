@@ -14,6 +14,7 @@ pub struct ComplianceMeta {
     pub name: String,
     pub pipl_articles: Vec<String>,
     pub gdpr_special_category: bool,
+    pub gdpr_art10: bool,
     pub hipaa_phi_category: Option<String>,
 }
 

@@ -2,6 +2,7 @@
 
 from argus_redact import layers
 from argus_redact._metadata import (
+    GDPR_ART10_CATEGORIES,
     GDPR_SPECIAL_CATEGORIES,
     HIPAA_PHI_CATEGORIES,
     PIPL_REFERENCES,
@@ -51,6 +52,7 @@ __all__ = [
     "collect_security_events",
     # ─── Compliance metadata SSOT (re-exported from _metadata) ───
     "GDPR_SPECIAL_CATEGORIES",
+    "GDPR_ART10_CATEGORIES",
     "HIPAA_PHI_CATEGORIES",
     "PIPL_REFERENCES",
     # ─── Type aliases ───

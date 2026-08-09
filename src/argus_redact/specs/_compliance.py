@@ -14,6 +14,7 @@ parallel literal copies of the same sets):
 - ``PIPL_ART_13`` … ``PIPL_ART_56`` — string constants for the six PIPL articles
 - ``PIPL_SENSITIVE_PI`` — Art.28 sensitive PI category set
 - ``GDPR_SPECIAL_CATEGORY`` — GDPR Art.9 set
+- ``GDPR_ART10`` — GDPR Art.10 set (criminal convictions and offences)
 """
 
 from __future__ import annotations
@@ -101,6 +102,13 @@ GDPR_SPECIAL_CATEGORY = frozenset(
     }
 )
 
+# GDPR Art.10 — personal data relating to criminal convictions and offences.
+# Distinct from the Art.9 special categories above (Art.10 has its own legal
+# regime under Art.10 / national law). Empty for now — membership is populated
+# in a follow-up value pass; this constant exists so the field is plumbed
+# through the registry, RON, and wire faces add-only, with no value change.
+GDPR_ART10: frozenset[str] = frozenset()
+
 # HIPAA Safe Harbor 18 mapping. Key is the argus-redact type name (lang-
 # independent — zh.phone and en.phone share `name="phone"` and both map to
 # "phone_numbers"). Types with no HIPAA equivalent map to None implicitly.
@@ -150,6 +158,11 @@ def pipl_articles_for(name: str, sensitivity: int) -> tuple[str, ...]:
 def gdpr_special_for(name: str) -> bool:
     """Whether this type is a GDPR Art.9 special category."""
     return name in GDPR_SPECIAL_CATEGORY
+
+
+def gdpr_art10_for(name: str) -> bool:
+    """Whether this type is GDPR Art.10 data (criminal convictions/offences)."""
+    return name in GDPR_ART10
 
 
 def hipaa_for(name: str) -> str | None:

@@ -14,6 +14,7 @@ type RiskTuple = (
     Vec<String>,     // pipl_articles
     bool,            // gdpr_special_category
     Vec<String>,     // hipaa_categories
+    bool,            // gdpr_art10 (appended at the last index — v0.8.10)
 );
 
 #[pyfunction]
@@ -27,5 +28,6 @@ pub fn assess_risk(entities: Vec<(String, i64)>, lang: &str) -> PyResult<RiskTup
         out.pipl_articles,
         out.gdpr_special_category,
         out.hipaa_categories,
+        out.gdpr_art10,
     ))
 }

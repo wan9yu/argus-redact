@@ -46,6 +46,7 @@ pub struct RiskOut {
     pub reasons: Vec<String>,
     pub pipl_articles: Vec<String>,
     pub gdpr_special_category: bool,
+    pub gdpr_art10: bool,
     pub hipaa_categories: Vec<String>,
 }
 
@@ -58,6 +59,7 @@ pub fn assess_risk(entities: &[(String, i64)], lang: &str) -> RiskOut {
             reasons: vec![],
             pipl_articles: vec![],
             gdpr_special_category: false,
+            gdpr_art10: false,
             hipaa_categories: vec![],
         };
     }
@@ -128,6 +130,7 @@ pub fn assess_risk(entities: &[(String, i64)], lang: &str) -> RiskOut {
     // Compliance aggregation.
     let mut pipl_set: BTreeSet<String> = BTreeSet::new();
     let mut gdpr_special = false;
+    let mut gdpr_art10 = false;
     let mut hipaa_set: BTreeSet<String> = BTreeSet::new();
     for (t, _) in entities {
         if let Some(meta) = compliance_for(lang, t) {
@@ -136,6 +139,9 @@ pub fn assess_risk(entities: &[(String, i64)], lang: &str) -> RiskOut {
             }
             if meta.gdpr_special_category {
                 gdpr_special = true;
+            }
+            if meta.gdpr_art10 {
+                gdpr_art10 = true;
             }
             if let Some(cat) = &meta.hipaa_phi_category {
                 hipaa_set.insert(cat.clone());
@@ -157,6 +163,7 @@ pub fn assess_risk(entities: &[(String, i64)], lang: &str) -> RiskOut {
         reasons,
         pipl_articles,
         gdpr_special_category: gdpr_special,
+        gdpr_art10,
         hipaa_categories: hipaa_set.into_iter().collect(),
     }
 }

@@ -25,6 +25,7 @@ def _a_risk() -> RiskResult:
         reasons=("contains phone",),
         pipl_articles=("Art.28",),
         gdpr_special_category=True,
+        gdpr_art10=True,
         hipaa_categories=("PHI",),
     )
 

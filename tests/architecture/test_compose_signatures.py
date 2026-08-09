@@ -54,6 +54,7 @@ PIITYPEDEF_FIELDS = frozenset(
         "examples",
         "faker_reserved",
         "format",
+        "gdpr_art10",
         "gdpr_special_category",
         "hipaa_phi_category",
         "label",

@@ -20,12 +20,13 @@ def _astuple(r):
         r.pipl_articles,
         r.gdpr_special_category,
         r.hipaa_categories,
+        r.gdpr_art10,
     )
 
 
 def test_empty_entities():
     r = assess_risk([])
-    assert _astuple(r) == (0.0, "none", (), (), (), False, ())
+    assert _astuple(r) == (0.0, "none", (), (), (), False, (), False)
 
 
 def test_single_low():

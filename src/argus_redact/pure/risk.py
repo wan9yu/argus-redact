@@ -20,6 +20,7 @@ class RiskResult:
     reasons: tuple[str, ...] = ()
     pipl_articles: tuple[str, ...] = ()
     gdpr_special_category: bool = False  # v0.5.9+
+    gdpr_art10: bool = False  # v0.8.10+ — GDPR Art.10 (criminal convictions/offences)
     hipaa_categories: tuple[str, ...] = ()  # v0.5.9+
 
 
@@ -33,7 +34,7 @@ def assess_risk(entities: list[dict], lang: str = "zh") -> RiskResult:
     if not entities:
         return RiskResult(score=0.0, level="none")
 
-    score, level, ents, reasons, pipl, gdpr, hipaa = _core.assess_risk(
+    score, level, ents, reasons, pipl, gdpr, hipaa, gdpr_art10 = _core.assess_risk(
         [(e["type"], e["sensitivity"]) for e in entities], lang
     )
     return RiskResult(
@@ -43,5 +44,6 @@ def assess_risk(entities: list[dict], lang: str = "zh") -> RiskResult:
         reasons=tuple(reasons),
         pipl_articles=tuple(pipl),
         gdpr_special_category=gdpr,
+        gdpr_art10=gdpr_art10,
         hipaa_categories=tuple(hipaa),
     )
