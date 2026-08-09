@@ -24,6 +24,17 @@ from argus_redact.pure.replacer import is_strategy_reversible
 from argus_redact.pure.restore import RestoreGuardError, check_restore_safety, wipe_key
 from argus_redact.pure.risk import assess_risk
 
+# Imported LAST in the block on purpose: argus_redact.structured imports `redact`
+# from this package at module top (structured.py), so it can only be pulled in
+# after `redact` is already bound above — an earlier insert is a circular
+# ImportError.
+from argus_redact.structured import (
+    redact_csv,
+    redact_json,
+    restore_csv,
+    restore_json,
+)
+
 __version__ = "0.8.9"
 __all__ = [
     # ─── Layer 1 — primitive (frozen at 1.0) ───
@@ -50,6 +61,12 @@ __all__ = [
     "AuditLedger",
     "AuditEntry",
     "collect_security_events",
+    # ─── Structured redaction (JSON / CSV) — promoted to top-level in v0.8.10;
+    # canonical import path for the gateway wire-face (see docs/stability-contract.md) ───
+    "redact_json",
+    "restore_json",
+    "redact_csv",
+    "restore_csv",
     # ─── Compliance metadata SSOT (re-exported from _metadata) ───
     "GDPR_SPECIAL_CATEGORIES",
     "GDPR_ART10_CATEGORIES",

@@ -19,6 +19,13 @@ from argus_redact.pure.replacer import (
 )
 from argus_redact.pure.restore import make_structured_restorer
 
+__all__ = [
+    "redact_json",
+    "restore_json",
+    "redact_csv",
+    "restore_csv",
+]
+
 
 def _warn_low_entropy_salt(salt: int | bytes | None) -> None:
     """Emit the same low-entropy salt SecurityWarning ``redact()`` does — once per
