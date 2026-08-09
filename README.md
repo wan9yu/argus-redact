@@ -207,7 +207,7 @@ For context: `fast` mode is high-precision / low-recall by design — it only em
 # Assess risk before sending to AI
 report = redact(text, report=True)
 report.risk.level         # "critical"
-report.risk.pipl_articles # ("PIPL Art.28", "PIPL Art.51", ...)
+report.risk.pipl_articles # ("PIPL Art.13", "PIPL Art.28", "PIPL Art.51", ...)
 report.entities           # detected PII details
 report.stats              # per-layer timing
 ```

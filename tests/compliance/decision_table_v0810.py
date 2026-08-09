@@ -36,6 +36,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from argus_redact.specs._compliance import (
+    _FINANCIAL_ACCOUNTS_EXTRA,
+    _GENERAL_CLAUSE_EXTRA,
+    _IDENTITY_CREDENTIALS,
     HIPAA_SAFE_HARBOR_CATEGORIES,
     PIPL_ART_13,
     PIPL_ART_28,
@@ -82,48 +85,13 @@ def pipl_new_for(name: str) -> tuple[str, ...]:
 # live rule book keys ``PIPL_SENSITIVE_PI`` and ``pipl_articles_for(name, ...)``).
 # ─────────────────────────────────────────────────────────────────────────────
 
-# National-ID / identity-credential types. Basis: PIPL Art.28 ¶1 general harm
-# clause — such numbers, once leaked, enable impersonation and endanger personal
-# safety (conservative over-flag). Name pairs are reconciled by listing BOTH
-# registry names (ssn≡social_security, passport≡us_passport) so neither variant is missed.
-_IDENTITY_CREDENTIALS: frozenset[str] = frozenset(
-    {
-        "id_number",  # PRC resident identity card
-        "hk_id",
-        "tw_id",
-        "macau_id",
-        "taiwan_arc",  # Alien Resident Certificate (Taiwan)
-        "eep",  # Exit-Entry Permit for HK/Macao travel
-        "hrp",  # Home Return Permit (HK/Macao residents → mainland)
-        "passport",
-        "us_passport",
-        "military_id",
-        "social_security",  # zh 社保号
-        "ssn",  # en Social Security Number
-        "itin",
-        "tax_id",  # de Steuer-ID
-        "my_number",  # ja
-        "rrn",  # ko
-        "nhs_number",  # uk health identifier
-        "nino",  # uk National Insurance number
-        "aadhaar",  # in
-        "pan",  # in tax identifier
-        "cpf",  # br de-facto national ID
-    }
-)
-
-# Financial-account types beyond the base set. PIPL Art.28 expressly enumerates
-# "financial accounts" (金融账户). housing_fund is a provident-fund ACCOUNT number.
-_FINANCIAL_ACCOUNTS_EXTRA: frozenset[str] = frozenset({"housing_fund"})
-
-# The proposed sensitive-PI membership set: the frozen legacy base
-# (``PIPL_SENSITIVE_PI_LEGACY``) plus the identity-credential and financial-account
-# additions, applying Art.28's harm-based test uniformly. Base members are never
-# dropped (checker enforces the superset).
-# GDPR Art.9 categories PIPL does not enumerate but the general harm clause
-# captures — ethnicity carries discrimination / dignity harm on disclosure,
-# consistent with how political / sexual_orientation are treated. Conservative.
-_GENERAL_CLAUSE_EXTRA: frozenset[str] = frozenset({"ethnicity"})
+# The three sensitive-PI addition constants — ``_IDENTITY_CREDENTIALS`` (national-ID
+# / identity-credential numbers, PIPL Art.28 ¶1 harm clause), ``_FINANCIAL_ACCOUNTS_EXTRA``
+# (provident-fund accounts), and ``_GENERAL_CLAUSE_EXTRA`` (ethnicity, via the Art.28
+# general clause) — now live in the runtime rule book (``specs/_compliance.py``) as the
+# live SSOT for ``PIPL_SENSITIVE_PI``. The oracle IMPORTS them (tests → specs, one
+# direction) so ``SENSITIVE_PI_NEW`` below and the live membership derive from a single
+# source with no 32-name hand-copy to drift.
 
 # Frozen snapshot of the live ``PIPL_SENSITIVE_PI`` base (the 9 members as they are
 # at the v0.8.10 baseline). This is a BARE frozen constant, deliberately NOT a
@@ -296,9 +264,11 @@ _MEMBER_BASIS: dict[str, str] = {
     "nhs_number": "medical_health",
 }
 
-# Explicit downgrade citations for S≥3 types deliberately left NON-members, keyed
-# by name (the rationale is language-independent). Applied only where the concrete
-# (lang, name) registration has sensitivity ≥ 3.
+# Explicit downgrade citations for types deliberately left NON-members, keyed by
+# name (the rationale is language-independent). Applied where the concrete
+# (lang, name) registration has sensitivity ≥ 3 OR the type is a legal-entity /
+# non-natural-person registry (see ``_NON_NATURAL_PERSON``), which downgrades even
+# below the S≥3 gate (e.g. cnpj at sensitivity 2).
 _DOWNGRADE_CITE: dict[str, str] = {
     "phone": (
         "PIPL Art.28 (by exclusion) — a telephone number is ordinary personal "
@@ -1019,3 +989,50 @@ def test_legal_entity_types_are_explicit_downgrades():
             assert not d.sensitive_pi_member, f"{name}: legal-entity type must be a non-member"
             assert d.downgrade, f"{name}: legal-entity type must render as an explicit downgrade"
             assert d.name in _DOWNGRADE_CITE, f"{name}: needs a downgrade citation"
+
+
+def test_matches_decision_table():
+    """The value-flip gate: the LIVE registry classification equals the frozen
+    NEW oracle columns for every registered type, across all four reviewed
+    dimensions.
+
+    A green suite alone does not prove the law is stated correctly; equality with
+    this reviewed table does. Binding only ``new_pipl`` would leave three of the
+    four reviewed dimensions unchecked — so this also binds GDPR Art.9, GDPR
+    Art.10, and HIPAA, plus their mutual exclusion, so that (for example)
+    criminal_record's Art.9→Art.10 move or a lingering double-membership cannot
+    ship silently. No score/level assertion lives here (that shift is locked by
+    the ``assess_risk`` golden vectors in ``tests/compliance/test_risk_golden.py``).
+    """
+    from argus_redact.specs._compliance import gdpr_art10_for, pipl_articles_for
+
+    for td in _TYPES:
+        d = DECISION_TABLE[(td.lang, td.name)]
+        # PIPL — the live SSOT function AND the registered typedef field agree
+        # with the frozen NEW tuple (tuple-equality; risk.rs re-sorts downstream).
+        assert pipl_articles_for(td.name) == d.new_pipl, (
+            f"{td.lang}/{td.name}: live PIPL {pipl_articles_for(td.name)} != oracle {d.new_pipl}"
+        )
+        assert td.pipl_articles == d.new_pipl, (
+            f"{td.lang}/{td.name}: registered PIPL {td.pipl_articles} != oracle {d.new_pipl}"
+        )
+        # GDPR Art.9 special category — the registered field, so per-typedef
+        # overrides (nhs_number) are bound too.
+        assert td.gdpr_special_category == d.new_gdpr_special, (
+            f"{td.lang}/{td.name}: GDPR Art.9 {td.gdpr_special_category} != {d.new_gdpr_special}"
+        )
+        # GDPR Art.10 — the live SSOT function and the registered field.
+        assert gdpr_art10_for(td.name) == d.new_gdpr_art10, (
+            f"{td.lang}/{td.name}: GDPR Art.10 {gdpr_art10_for(td.name)} != {d.new_gdpr_art10}"
+        )
+        assert td.gdpr_art10 == d.new_gdpr_art10, (
+            f"{td.lang}/{td.name}: registered Art.10 {td.gdpr_art10} != {d.new_gdpr_art10}"
+        )
+        # HIPAA Safe Harbor — the registered field (binds per-typedef overrides).
+        assert td.hipaa_phi_category == d.new_hipaa, (
+            f"{td.lang}/{td.name}: HIPAA {td.hipaa_phi_category!r} != {d.new_hipaa!r}"
+        )
+        # Art.9 and Art.10 are mutually exclusive on the LIVE classification.
+        assert not (td.gdpr_special_category and td.gdpr_art10), (
+            f"{td.lang}/{td.name}: both GDPR Art.9 and Art.10 are set"
+        )

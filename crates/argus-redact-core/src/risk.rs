@@ -17,8 +17,6 @@ const QUASI_ID_COMBOS: [[&str; 2]; 3] = [
 /// Self-ref amplifies when combined with PIPL_SENSITIVE_PI ∪ these structural types.
 const SELF_REF_EXTRA: [&str; 3] = ["phone", "id_number", "bank_card"];
 
-const PIPL_ART_55: &str = "PIPL Art.55";
-
 fn level_label(sensitivity: i64) -> &'static str {
     match sensitivity {
         1 => "low",
@@ -147,9 +145,6 @@ pub fn assess_risk(entities: &[(String, i64)], lang: &str) -> RiskOut {
                 hipaa_set.insert(cat.clone());
             }
         }
-    }
-    if entities.len() >= 3 {
-        pipl_set.insert(PIPL_ART_55.to_string());
     }
     // Sort by PIPL rank (BTreeSet gives a deterministic alpha pre-order; all
     // registry articles have unique ranks, so the result matches Python's sorted).

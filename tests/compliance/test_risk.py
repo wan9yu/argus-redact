@@ -61,12 +61,18 @@ class TestAssessRisk:
         assert "PIPL Art.51" in result.pipl_articles
         assert "PIPL Art.29" in result.pipl_articles
 
-    def test_should_include_art28_only_when_low_sensitivity(self):
+    def test_should_include_only_universal_floor_for_non_member(self):
+        # v0.8.10: a non-sensitive-PI type carries only the universal floor —
+        # Art.13 (lawful basis) + Art.51 (security measures). The sensitive-PI
+        # articles (28/29/55/56) are member-only and absent here.
         entities = [{"type": "ip_address", "sensitivity": 1}]
         result = assess_risk(entities)
         assert "PIPL Art.13" in result.pipl_articles
-        assert "PIPL Art.28" in result.pipl_articles
-        assert "PIPL Art.51" not in result.pipl_articles
+        assert "PIPL Art.51" in result.pipl_articles
+        assert "PIPL Art.28" not in result.pipl_articles
+        assert "PIPL Art.29" not in result.pipl_articles
+        assert "PIPL Art.55" not in result.pipl_articles
+        assert "PIPL Art.56" not in result.pipl_articles
 
     def test_should_include_impact_assessment_for_sensitive_types(self):
         entities = [{"type": "medical", "sensitivity": 3}]
@@ -85,8 +91,10 @@ class TestAssessRisk:
         result = assess_risk(entities)
         assert "PIPL Art.55" in result.pipl_articles
 
-    def test_should_include_record_keeping(self):
-        entities = [{"type": "phone", "sensitivity": 3}]
+    def test_should_include_record_keeping_for_members(self):
+        # v0.8.10: Art.56 (record-keeping) is a sensitive-PI-member article, so a
+        # member type carries it (a non-member no longer does).
+        entities = [{"type": "medical", "sensitivity": 3}]
         result = assess_risk(entities)
         assert "PIPL Art.56" in result.pipl_articles
 

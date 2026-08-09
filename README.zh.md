@@ -183,7 +183,7 @@ _ai4privacy en，500 样本，v0.7.16 run（结果 JSON：`tests/benchmark/resul
 # 发送给 AI 前先评估风险
 report = redact(text, report=True)
 report.risk.level         # "critical"
-report.risk.pipl_articles # ("PIPL Art.28", "PIPL Art.51", ...)
+report.risk.pipl_articles # ("PIPL Art.13", "PIPL Art.28", "PIPL Art.51", ...)
 report.entities           # 检测到的 PII 详情
 report.stats              # 各层计时
 ```

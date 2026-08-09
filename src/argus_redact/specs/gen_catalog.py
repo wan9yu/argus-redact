@@ -52,6 +52,8 @@ def _render_type(td) -> list[str]:
         out.append(f"| PIPL articles | {', '.join(td.pipl_articles)} |")
     if td.gdpr_special_category:
         out.append("| GDPR Art.9 special category | ✓ |")
+    elif td.gdpr_art10:
+        out.append("| GDPR Art.10 (criminal convictions) | ✓ |")
     if td.hipaa_phi_category:
         out.append(f"| HIPAA Safe Harbor | `{td.hipaa_phi_category}` |")
     if td.checksum:

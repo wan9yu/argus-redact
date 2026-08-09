@@ -1146,7 +1146,7 @@ from argus_redact import (
 )
 
 PIPL_REFERENCES["phone"]
-# ('PIPL Art.13', 'PIPL Art.28', 'PIPL Art.51', 'PIPL Art.29', 'PIPL Art.56')
+# ('PIPL Art.13', 'PIPL Art.51')
 
 GDPR_SPECIAL_CATEGORIES["medical"]
 # True

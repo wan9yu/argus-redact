@@ -23,9 +23,9 @@ from __future__ import annotations
 # (e.g. "PIPL Art.13 " with trailing space) and keeps `pure/risk.py`,
 # `assess_risk` callers, and tests in sync.
 PIPL_ART_13 = "PIPL Art.13"  # Lawful basis for processing personal information
-PIPL_ART_28 = "PIPL Art.28"  # De-identification requirement (any PII)
+PIPL_ART_28 = "PIPL Art.28"  # Sensitive personal information — handling rules
 PIPL_ART_29 = "PIPL Art.29"  # Separate consent for sensitive PI
-PIPL_ART_51 = "PIPL Art.51"  # Sensitive personal information definition
+PIPL_ART_51 = "PIPL Art.51"  # Security-measures obligation on all PI processing
 PIPL_ART_55 = "PIPL Art.55"  # Personal information protection impact assessment
 PIPL_ART_56 = "PIPL Art.56"  # Record-keeping obligation for PI processors
 
@@ -70,10 +70,12 @@ HIPAA_SAFE_HARBOR_CATEGORIES: frozenset[str] = frozenset(
     }
 )
 
-# PIPL Art.28 sensitive personal information categories. Triggers Art.55
-# (impact assessment) at the typedef level. Cardinality threshold (≥3
-# entities) lives in `assess_risk()` rather than the typedef.
-PIPL_SENSITIVE_PI = frozenset(
+# PIPL Art.28 sensitive personal information — base categories (expressly
+# enumerated in Art.28 or long-standing members). The full sensitive-PI set
+# below unions this base with the identity-credential, financial-account, and
+# general-clause additions. Membership triggers Art.28/29/55/56 on top of the
+# universal Art.13/Art.51 floor (see `pipl_articles_for`).
+_PIPL_SENSITIVE_PI_BASE: frozenset[str] = frozenset(
     {
         "medical",
         "financial",
@@ -87,9 +89,62 @@ PIPL_SENSITIVE_PI = frozenset(
     }
 )
 
+# National-ID / identity-credential types. Basis: PIPL Art.28 ¶1 general harm
+# clause — such numbers, once leaked, enable impersonation and may endanger
+# personal or property safety (conservative over-flag). Name pairs list BOTH
+# registry names (ssn≡social_security, passport≡us_passport) so neither variant
+# is missed.
+_IDENTITY_CREDENTIALS: frozenset[str] = frozenset(
+    {
+        "id_number",  # PRC resident identity card
+        "hk_id",
+        "tw_id",
+        "macau_id",
+        "taiwan_arc",  # Alien Resident Certificate (Taiwan)
+        "eep",  # Exit-Entry Permit for HK/Macao travel
+        "hrp",  # Home Return Permit (HK/Macao residents → mainland)
+        "passport",
+        "us_passport",
+        "military_id",
+        "social_security",  # zh 社保号
+        "ssn",  # en Social Security Number
+        "itin",
+        "tax_id",  # de Steuer-ID
+        "my_number",  # ja
+        "rrn",  # ko
+        "nhs_number",  # uk health identifier
+        "nino",  # uk National Insurance number
+        "aadhaar",  # in
+        "pan",  # in tax identifier
+        "cpf",  # br de-facto national ID
+    }
+)
+
+# Financial-account types beyond the base set. PIPL Art.28 expressly enumerates
+# "financial accounts" (金融账户). housing_fund is a provident-fund ACCOUNT number.
+_FINANCIAL_ACCOUNTS_EXTRA: frozenset[str] = frozenset({"housing_fund"})
+
+# GDPR Art.9 categories PIPL does not enumerate but the Art.28 general harm
+# clause captures — ethnicity carries discrimination / dignity harm on
+# disclosure, consistent with how political / sexual_orientation are treated.
+_GENERAL_CLAUSE_EXTRA: frozenset[str] = frozenset({"ethnicity"})
+
+# The sensitive-PI membership set: the base plus the identity-credential,
+# financial-account, and general-clause additions, applying Art.28's harm-based
+# test uniformly. This is the single source of truth for both the runtime
+# (`pipl_articles_for`, the risk RON) and the compliance oracle, which imports
+# the three addition constants from here rather than hand-copying the names.
+PIPL_SENSITIVE_PI: frozenset[str] = (
+    _PIPL_SENSITIVE_PI_BASE
+    | _IDENTITY_CREDENTIALS
+    | _FINANCIAL_ACCOUNTS_EXTRA
+    | _GENERAL_CLAUSE_EXTRA
+)
+
 # GDPR Art.9 special categories of personal data. Note this differs from
 # PIPL_SENSITIVE_PI — GDPR does not single out financial as a special
-# category, while PIPL does.
+# category, while PIPL does. criminal_record is NOT here: it belongs to the
+# parallel (and mutually exclusive) Art.10 regime below.
 GDPR_SPECIAL_CATEGORY = frozenset(
     {
         "medical",
@@ -98,16 +153,15 @@ GDPR_SPECIAL_CATEGORY = frozenset(
         "religion",
         "political",
         "sexual_orientation",
-        "criminal_record",
     }
 )
 
 # GDPR Art.10 — personal data relating to criminal convictions and offences.
-# Distinct from the Art.9 special categories above (Art.10 has its own legal
-# regime under Art.10 / national law). Empty for now — membership is populated
-# in a follow-up value pass; this constant exists so the field is plumbed
-# through the registry, RON, and wire faces add-only, with no value change.
-GDPR_ART10: frozenset[str] = frozenset()
+# Distinct from, and mutually exclusive with, the Art.9 special categories above
+# (Art.10 has its own legal regime under Art.10 / national law). criminal_record
+# moves here out of Art.9, where it never belonged: Art.9 enumerates the special
+# categories and Art.10 is the dedicated regime for conviction/offence data.
+GDPR_ART10: frozenset[str] = frozenset({"criminal_record"})
 
 # HIPAA Safe Harbor 18 mapping. Key is the argus-redact type name (lang-
 # independent — zh.phone and en.phone share `name="phone"` and both map to
@@ -122,37 +176,39 @@ _HIPAA_MAP: dict[str, str] = {
     "medical": "medical_record",
     "date_of_birth": "dates",
     "address": "geographic",
+    "postcode": "geographic",  # ZIP/postcode is a geographic subdivision → HIPAA (B)
     "ip_address": "ip_address",
     "mac_address": "device_identifier",
     "biometric": "biometric",
     "us_passport": "certificate_number",
     "passport": "certificate_number",
     "license_plate": "vehicle_identifier",
-    "financial": "account_numbers",
     "bank_card": "account_numbers",
     "credit_card": "account_numbers",
+    "housing_fund": "account_numbers",  # provident-fund account number → HIPAA (J)
     "url": "url",
     "date": "dates",
+    "itin": "other_unique_identifier",  # unique personal id but not an SSN → HIPAA (R)
 }
 
 
-def pipl_articles_for(name: str, sensitivity: int) -> tuple[str, ...]:
-    """Compute the PIPL articles a type triggers.
+def pipl_articles_for(name: str, sensitivity: int = 0) -> tuple[str, ...]:
+    """Compute the PIPL articles a type triggers, sorted by ``PIPL_SORT_ORDER``.
 
-    Universal: Art.13 (lawful basis), Art.28 (de-identification), Art.56
-    (record-keeping).
-    Sensitivity ≥ 3: + Art.51 (sensitive PI definition), Art.29 (separate
-    consent).
-    Sensitive PI types: + Art.55 (impact assessment).
+    Universal floor for any personal information: Art.13 (lawful basis) and
+    Art.51 (security-measures obligation on all processing).
+    Sensitive-PI members (``name in PIPL_SENSITIVE_PI``) additionally trigger
+    Art.28 (sensitive-PI handling), Art.29 (separate consent), Art.55 (impact
+    assessment), and Art.56 (record-keeping).
+
+    ``sensitivity`` is accepted for call-site compatibility (the registry passes
+    ``typedef.sensitivity``) but no longer gates any article — classification is
+    membership-driven, not score-driven.
     """
-    arts = [PIPL_ART_13, PIPL_ART_28]
-    if sensitivity >= 3:
-        arts.append(PIPL_ART_51)
-        arts.append(PIPL_ART_29)
+    arts = {PIPL_ART_13, PIPL_ART_51}
     if name in PIPL_SENSITIVE_PI:
-        arts.append(PIPL_ART_55)
-    arts.append(PIPL_ART_56)
-    return tuple(arts)
+        arts |= {PIPL_ART_28, PIPL_ART_29, PIPL_ART_55, PIPL_ART_56}
+    return tuple(sorted(arts, key=lambda a: PIPL_SORT_ORDER[a]))
 
 
 def gdpr_special_for(name: str) -> bool:

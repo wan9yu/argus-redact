@@ -20,7 +20,7 @@ _EXPECTED = {
     "rrn": (4, False, None),
     "nhs_number": (4, True, "medical_record"),  # health identifier
     "nino": (3, False, None),
-    "postcode": (2, False, None),
+    "postcode": (2, False, "geographic"),  # v0.8.10: postcode→geographic HIPAA (B)
     "aadhaar": (4, False, None),
     "pan": (3, False, None),
     "cpf": (4, False, None),

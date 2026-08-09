@@ -29,7 +29,7 @@ def _sha(text: str) -> str:
 # ── Frozen fingerprints (regenerate intentionally: run make gen-risk-data, then
 #    update these two constants from the failure output) ──────────────────────
 EXPECTED_TYPE_COUNT = 74
-EXPECTED_SHA256 = "fad044f61fa28b591862ef8909de6e404ea307408400623479b2cf5ade33433f"
+EXPECTED_SHA256 = "9f5b8ed884fb4a2ae4a3383c1b779a37c44f9a7a8ed93ed5e246bbda49c6a700"
 
 
 def test_ron_type_count_frozen():
