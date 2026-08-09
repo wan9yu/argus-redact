@@ -22,6 +22,8 @@ Usage:
 
 from __future__ import annotations
 
+import threading
+
 from argus_redact import redact
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.exceptions import SessionStateError
@@ -41,20 +43,22 @@ class RedactTransform:
         self._mode = mode
         self._lang = lang
         self._salt = salt
+        self._lock = threading.Lock()
         self.last_key: dict | None = None
         self.last_anchor = None
         self._last_redacted: str | None = None
 
     def __call__(self, text: str, **kwargs) -> str:
-        redacted, self.last_key = redact(
-            text,
-            mode=self._mode,
-            lang=self._lang,
-            salt=self._salt,
-            key=self.last_key,
-        )
-        self.last_anchor = make_anchor(self.last_key)
-        self._last_redacted = redacted
+        with self._lock:
+            redacted, self.last_key = redact(
+                text,
+                mode=self._mode,
+                lang=self._lang,
+                salt=self._salt,
+                key=self.last_key,
+            )
+            self.last_anchor = make_anchor(self.last_key)
+            self._last_redacted = redacted
         return redacted
 
     def make_prompt_addendum(self, lang: str | None = None) -> str:
@@ -64,20 +68,28 @@ class RedactTransform:
         reaches the response and the anchor round-trip can be verified.
         Returns an empty string if no redaction has occurred yet.
         """
-        key = self.last_key
-        anchor = self.last_anchor
+        with self._lock:
+            key = self.last_key
+            anchor = self.last_anchor
         if not key or anchor is None:
             return ""
         effective_lang = (
-            lang if lang is not None else (self._lang if isinstance(self._lang, str) else "zh")
+            lang
+            if lang is not None
+            else (
+                self._lang
+                if isinstance(self._lang, str)
+                else (self._lang[0] if self._lang else "zh")
+            )
         )
         return prompt_anchor(key, effective_lang, anchor=anchor)
 
     def reset(self) -> None:
         """Clear the accumulated key between distinct logical sessions."""
-        self.last_key = None
-        self.last_anchor = None
-        self._last_redacted = None
+        with self._lock:
+            self.last_key = None
+            self.last_anchor = None
+            self._last_redacted = None
 
 
 class RestoreTransform:

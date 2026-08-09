@@ -70,7 +70,9 @@ class PresidioBridge:
         """Detect PII with Presidio, replace with argus-redact.
 
         Routes through public argus_redact.redact() via the _pre_detected
-        private kwarg, inheriting:
+        private kwarg — even when Presidio detects nothing (an empty
+        entities list still runs the full pipeline, so the detected and
+        empty-detection paths return the identical shape) — inheriting:
         - MAX_INPUT_SIZE guard
         - isinstance(text, str) check
         - Profile resolution
@@ -96,9 +98,6 @@ class PresidioBridge:
         analyzer = self._get_analyzer()
         results = analyzer.analyze(text=text, language=language)
 
-        if not results:
-            return text, key if key is not None else {}
-
         entities = []
         for r in results:
             mapped_type = _PRESIDIO_TYPE_MAP.get(r.entity_type, r.entity_type.lower())
@@ -112,7 +111,11 @@ class PresidioBridge:
                 )
             )
 
-        # Route through public redact() — inherits all pipeline guarantees
+        # Route through public redact() — inherits all pipeline guarantees.
+        # `entities` may be empty (Presidio found nothing); _pre_detected=[]
+        # still runs the full pipeline instead of an early return, so
+        # telemetry / key-file / profile handling fire identically to the
+        # detected path.
         import argus_redact
 
         redacted, result_key = argus_redact.redact(

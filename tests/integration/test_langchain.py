@@ -59,6 +59,18 @@ class TestRedactRunnable:
 
         assert runnable.make_prompt_addendum() == ""
 
+    def test_make_prompt_addendum_uses_en_template_for_list_lang(self):
+        """A list lang (e.g. ['en']) must not collapse to the zh anchor
+        template — a mismatched-language nonce-echo can fail-close the
+        guarded restore downstream."""
+        runnable = RedactRunnable(mode="fast", lang=["en"], salt=42)
+        runnable.invoke("Call 555-123-4567, SSN 123-45-6789")
+
+        addendum = runnable.make_prompt_addendum()
+
+        assert "Redaction placeholder list" in addendum
+        assert "脱敏标识符清单" not in addendum
+
 
 class TestRestoreRunnable:
     def test_should_restore_text_when_invoked(self):

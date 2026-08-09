@@ -91,7 +91,13 @@ class RedactRunnable:
         if not key or anchor is None:
             return ""
         effective_lang = (
-            lang if lang is not None else (self._lang if isinstance(self._lang, str) else "zh")
+            lang
+            if lang is not None
+            else (
+                self._lang
+                if isinstance(self._lang, str)
+                else (self._lang[0] if self._lang else "zh")
+            )
         )
         return prompt_anchor(key, effective_lang, anchor=anchor)
 
