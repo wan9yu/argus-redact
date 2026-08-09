@@ -3,8 +3,11 @@
 This module carries **double duty**:
 
 1. **Correctness oracle.** For every registered PII type it records the OLD
-   PIPL/GDPR/HIPAA classification (snapshotted mechanically from the live
-   registry) next to the PROPOSED NEW classification. Later compliance work
+   PIPL/GDPR/HIPAA classification (a frozen literal snapshot of the live
+   registry at the v0.8.10 baseline) next to the PROPOSED NEW classification.
+   Freezing the OLD column keeps the before/after delta a true historical
+   record: once the value-flip lands, ``old`` stays fixed while the live code
+   moves to match ``new``. Later compliance work
    asserts that the live ``assess_risk`` output equals the ``new`` column here —
    a green suite alone does not prove the law is stated correctly; equality with
    this reviewed table does.
@@ -40,7 +43,6 @@ from argus_redact.specs._compliance import (
     PIPL_ART_51,
     PIPL_ART_55,
     PIPL_ART_56,
-    PIPL_SENSITIVE_PI,
     PIPL_SORT_ORDER,
 )
 from argus_redact.specs.registry import list_types
@@ -114,26 +116,62 @@ _IDENTITY_CREDENTIALS: frozenset[str] = frozenset(
 # "financial accounts" (金融账户). housing_fund is a provident-fund ACCOUNT number.
 _FINANCIAL_ACCOUNTS_EXTRA: frozenset[str] = frozenset({"housing_fund"})
 
-# The proposed sensitive-PI membership set: the current PIPL_SENSITIVE_PI plus the
-# identity-credential and financial-account additions, applying Art.28's harm-based
-# test uniformly. Base members are never dropped (checker enforces the superset).
+# The proposed sensitive-PI membership set: the frozen legacy base
+# (``PIPL_SENSITIVE_PI_LEGACY``) plus the identity-credential and financial-account
+# additions, applying Art.28's harm-based test uniformly. Base members are never
+# dropped (checker enforces the superset).
 # GDPR Art.9 categories PIPL does not enumerate but the general harm clause
 # captures — ethnicity carries discrimination / dignity harm on disclosure,
 # consistent with how political / sexual_orientation are treated. Conservative.
 _GENERAL_CLAUSE_EXTRA: frozenset[str] = frozenset({"ethnicity"})
 
+# Frozen snapshot of the live ``PIPL_SENSITIVE_PI`` base (the 9 members as they are
+# at the v0.8.10 baseline). This is a BARE frozen constant, deliberately NOT a
+# ``LEGACY == live PIPL_SENSITIVE_PI`` self-test: the value-flip EXPANDS the live
+# set, so such an assertion would go RED the moment the flip lands — re-creating the
+# exact live-coupling this freeze exists to break. The "newly-member" delta
+# (``SENSITIVE_PI_NEW - PIPL_SENSITIVE_PI_LEGACY``) is therefore computed against
+# this fixed base, not the live set.
+PIPL_SENSITIVE_PI_LEGACY: frozenset[str] = frozenset(
+    {
+        "medical",
+        "financial",
+        "bank_card",
+        "credit_card",
+        "religion",
+        "political",
+        "sexual_orientation",
+        "criminal_record",
+        "biometric",
+    }
+)
+
 SENSITIVE_PI_NEW: frozenset[str] = (
-    PIPL_SENSITIVE_PI | _IDENTITY_CREDENTIALS | _FINANCIAL_ACCOUNTS_EXTRA | _GENERAL_CLAUSE_EXTRA
+    PIPL_SENSITIVE_PI_LEGACY
+    | _IDENTITY_CREDENTIALS
+    | _FINANCIAL_ACCOUNTS_EXTRA
+    | _GENERAL_CLAUSE_EXTRA
 )
 
 # GDPR Art.9 special categories under the new rule: criminal_record LEAVES Art.9
-# and moves to the new Art.10 dimension; everything else is unchanged. Derived from
-# the LIVE registry (union of the category-name set AND per-typedef overrides such as
-# nhs_number — a health identifier that is GDPR Art.9 health data per Recital 35), so
-# an override can never be silently dropped by keying only off the category names.
-GDPR_SPECIAL_NEW: frozenset[str] = frozenset(d.name for d in _TYPES if d.gdpr_special_category) - {
-    "criminal_record"
-}
+# and moves to the new Art.10 dimension; everything else is unchanged. Pinned as an
+# INDEPENDENT frozen literal (not derived live) so the NEW column is a fixed reviewed
+# target — a value-flip that silently added or dropped a GDPR-special type cannot
+# follow it. The literal includes nhs_number, a per-typedef override (a health
+# identifier that is GDPR Art.9 health data per Recital 35) — the same fragile
+# hand-seed pattern the HIPAA guard covers. ``test_gdpr_special_new_pin_matches_derived``
+# proves this pin still equals what today's registry derives.
+GDPR_SPECIAL_NEW: frozenset[str] = frozenset(
+    {
+        "biometric",
+        "ethnicity",
+        "medical",
+        "nhs_number",
+        "political",
+        "religion",
+        "sexual_orientation",
+    }
+)
 
 # GDPR Art.10 — personal data on criminal convictions and offences (parallel to,
 # and mutually exclusive with, Art.9 special categories).
@@ -143,7 +181,9 @@ GDPR_ART10_NEW: frozenset[str] = frozenset({"criminal_record"})
 # free-text ``financial`` type drops its ``account_numbers`` mapping (a salary or
 # credit-score mention is not an account number). Structured account types
 # (bank_card / credit_card) keep it. passport→certificate_number is retained
-# (verified: HIPAA identifier (K)).
+# (verified: HIPAA identifier (K)). itin gains other_unique_identifier (letter R):
+# an ITIN is a unique personal identifier but not an SSN, so declining it would leave
+# it in "de-identified" output (a real Safe-Harbor hole).
 HIPAA_NEW: dict[str, str] = {
     "person": "names",
     "phone": "phone_numbers",
@@ -166,8 +206,15 @@ HIPAA_NEW: dict[str, str] = {
     "housing_fund": "account_numbers",  # provident-fund account number → HIPAA (J)
     "url": "url",
     "date": "dates",
+    "itin": "other_unique_identifier",  # unique personal id but not an SSN → HIPAA (R)
     "nhs_number": "medical_record",  # set explicitly on the uk typedef
 }
+
+# HIPAA categories carried on a per-typedef override (set on the intl typedef, NOT
+# the central ``_HIPAA_MAP``). Pinned so the hand-built ``HIPAA_NEW`` dict above can be
+# checked to still carry them — the same fragile hand-seed pattern as the GDPR pin.
+# ``test_hipaa_typedef_overrides_are_pinned`` is its guard.
+_HIPAA_TYPEDEF_OVERRIDES: dict[str, str] = {"nhs_number": "medical_record"}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Verbatim statute citations (DRAFT — verified next by the statute reviewer).
@@ -313,7 +360,20 @@ _DOWNGRADE_CITE: dict[str, str] = {
         "personal information; the universal Art.13/Art.51 processing floor still applies "
         "as for any processing record."
     ),
+    "cnpj": (
+        "CNPJ = *Cadastro Nacional da Pessoa Jurídica* (legal-entity registry); MEI / "
+        "sole-proprietor CNPJs map 1:1 to a natural person, so the universal {13,51} "
+        "floor is retained"
+    ),
 }
+
+# Legal-entity / non-natural-person registries. These identify an organization rather
+# than a natural person (PIPL Art.4), so they are deliberate non-member downgrades even
+# below the S≥3 gate. cnpj registers at sensitivity 2, so without this it would never
+# render in the cited "Explicit downgrades" section (leaving a drift with the
+# principles doc). credit_code (S3) already trips the sensitivity gate; listing it here
+# makes the shared legal-entity basis explicit for both.
+_NON_NATURAL_PERSON: frozenset[str] = frozenset({"credit_code", "cnpj"})
 
 GDPR_ART9_CITE = (
     "GDPR Art.9(1) — processing of special categories of personal data (racial or "
@@ -384,10 +444,10 @@ def _selfref_note(name: str, sensitivity: int) -> str:
     plus a +0.15 bonus when the type participates in self-ref amplification
     (member OR a structural extra). Only newly-member types are annotated.
     """
-    if name not in (SENSITIVE_PI_NEW - PIPL_SENSITIVE_PI):
+    if name not in (SENSITIVE_PI_NEW - PIPL_SENSITIVE_PI_LEGACY):
         return ""
     base = sensitivity / 4.0
-    old_amp = (name in PIPL_SENSITIVE_PI) or (name in _SELF_REF_EXTRA)
+    old_amp = (name in PIPL_SENSITIVE_PI_LEGACY) or (name in _SELF_REF_EXTRA)
     new_amp = (name in SENSITIVE_PI_NEW) or (name in _SELF_REF_EXTRA)
     old_score = min(1.0, base + (0.15 if old_amp else 0.0))
     new_score = min(1.0, base + (0.15 if new_amp else 0.0))
@@ -421,7 +481,7 @@ class Decision:
     lang: str
     name: str
     sensitivity: int
-    # OLD — snapshotted mechanically from the live registry.
+    # OLD — frozen literal snapshot of the live registry at the v0.8.10 baseline.
     old_pipl: tuple[str, ...]
     old_gdpr_special: bool
     old_gdpr_art10: bool  # always False: the dimension does not exist yet
@@ -439,10 +499,112 @@ class Decision:
     risk_note: str  # self-reference amplification delta (newly-member types)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# FROZEN OLD columns — the historical before-state, keyed by (lang, name).
+#
+# Each value is ``(old_pipl_articles, old_gdpr_special, old_hipaa)``; ``old_gdpr_art10``
+# is uniformly False (the dimension did not exist). Captured mechanically from the
+# live registry at the v0.8.10 baseline and pasted here as literals so ``old`` stays
+# fixed once the value-flip lands — otherwise ``old`` would read live and track
+# ``new``, emptying the before/after delta the gateway notice is generated from.
+# DO NOT hand-edit: regenerate from the pre-flip registry if the type set changes.
+# ─────────────────────────────────────────────────────────────────────────────
+# The three distinct OLD PIPL article shapes (pre-flip): ordinary PII, sensitivity≥3,
+# and sensitive-PI member. Referencing the canonical article constants keeps the frozen
+# record about WHICH articles applied, not their spelling.
+_OLD_PIPL_ORDINARY = (PIPL_ART_13, PIPL_ART_28, PIPL_ART_56)
+_OLD_PIPL_S3 = (PIPL_ART_13, PIPL_ART_28, PIPL_ART_51, PIPL_ART_29, PIPL_ART_56)
+_OLD_PIPL_MEMBER = (
+    PIPL_ART_13,
+    PIPL_ART_28,
+    PIPL_ART_51,
+    PIPL_ART_29,
+    PIPL_ART_55,
+    PIPL_ART_56,
+)
+_OLD_COLUMNS: dict[tuple[str, str], tuple[tuple[str, ...], bool, str | None]] = {
+    ("zh", "phone"): (_OLD_PIPL_S3, False, "phone_numbers"),
+    ("zh", "phone_landline"): (_OLD_PIPL_S3, False, "phone_numbers"),
+    ("zh", "id_number"): (_OLD_PIPL_S3, False, None),
+    ("zh", "hk_id"): (_OLD_PIPL_S3, False, None),
+    ("zh", "tw_id"): (_OLD_PIPL_S3, False, None),
+    ("zh", "macau_id"): (_OLD_PIPL_S3, False, None),
+    ("zh", "taiwan_arc"): (_OLD_PIPL_S3, False, None),
+    ("zh", "eep"): (_OLD_PIPL_S3, False, None),
+    ("zh", "hrp"): (_OLD_PIPL_S3, False, None),
+    ("zh", "housing_fund"): (_OLD_PIPL_S3, False, None),
+    ("zh", "bank_card"): (_OLD_PIPL_MEMBER, False, "account_numbers"),
+    ("zh", "passport"): (_OLD_PIPL_S3, False, "certificate_number"),
+    ("zh", "license_plate"): (_OLD_PIPL_ORDINARY, False, "vehicle_identifier"),
+    ("zh", "address"): (_OLD_PIPL_ORDINARY, False, "geographic"),
+    ("zh", "credit_code"): (_OLD_PIPL_S3, False, None),
+    ("zh", "qq"): (_OLD_PIPL_ORDINARY, False, None),
+    ("zh", "wechat"): (_OLD_PIPL_ORDINARY, False, None),
+    ("zh", "date_of_birth"): (_OLD_PIPL_ORDINARY, False, "dates"),
+    ("zh", "military_id"): (_OLD_PIPL_S3, False, None),
+    ("zh", "social_security"): (_OLD_PIPL_S3, False, "ssn"),
+    ("zh", "job_title"): (_OLD_PIPL_ORDINARY, False, None),
+    ("zh", "organization"): (_OLD_PIPL_ORDINARY, False, None),
+    ("zh", "school"): (_OLD_PIPL_ORDINARY, False, None),
+    ("zh", "ethnicity"): (_OLD_PIPL_S3, True, None),
+    ("zh", "workplace"): (_OLD_PIPL_ORDINARY, False, None),
+    ("zh", "hobby"): (_OLD_PIPL_ORDINARY, False, None),
+    ("zh", "criminal_record"): (_OLD_PIPL_MEMBER, True, None),
+    ("zh", "financial"): (_OLD_PIPL_MEMBER, False, "account_numbers"),
+    ("zh", "biometric"): (_OLD_PIPL_MEMBER, True, "biometric"),
+    ("zh", "medical"): (_OLD_PIPL_MEMBER, True, "medical_record"),
+    ("zh", "religion"): (_OLD_PIPL_MEMBER, True, None),
+    ("zh", "political"): (_OLD_PIPL_MEMBER, True, None),
+    ("zh", "sexual_orientation"): (_OLD_PIPL_MEMBER, True, None),
+    ("zh", "self_reference"): (_OLD_PIPL_ORDINARY, False, None),
+    ("zh", "person"): (_OLD_PIPL_S3, False, "names"),
+    ("zh", "age"): (_OLD_PIPL_ORDINARY, False, None),
+    ("en", "phone"): (_OLD_PIPL_ORDINARY, False, "phone_numbers"),
+    ("en", "ssn"): (_OLD_PIPL_S3, False, "ssn"),
+    ("en", "itin"): (_OLD_PIPL_S3, False, None),
+    ("en", "credit_card"): (_OLD_PIPL_MEMBER, False, "account_numbers"),
+    ("en", "address"): (_OLD_PIPL_ORDINARY, False, "geographic"),
+    ("en", "person"): (_OLD_PIPL_ORDINARY, False, "names"),
+    ("en", "date_of_birth"): (_OLD_PIPL_S3, False, "dates"),
+    ("en", "us_passport"): (_OLD_PIPL_S3, False, "certificate_number"),
+    ("en", "medical"): (_OLD_PIPL_MEMBER, True, "medical_record"),
+    ("en", "financial"): (_OLD_PIPL_MEMBER, False, "account_numbers"),
+    ("en", "criminal_record"): (_OLD_PIPL_MEMBER, True, None),
+    ("en", "biometric"): (_OLD_PIPL_MEMBER, True, "biometric"),
+    ("en", "religion"): (_OLD_PIPL_MEMBER, True, None),
+    ("en", "political"): (_OLD_PIPL_MEMBER, True, None),
+    ("en", "sexual_orientation"): (_OLD_PIPL_MEMBER, True, None),
+    ("en", "self_reference"): (_OLD_PIPL_ORDINARY, False, None),
+    ("shared", "openai_api_key"): (_OLD_PIPL_S3, False, None),
+    ("shared", "anthropic_api_key"): (_OLD_PIPL_S3, False, None),
+    ("shared", "aws_access_key"): (_OLD_PIPL_S3, False, None),
+    ("shared", "github_token"): (_OLD_PIPL_S3, False, None),
+    ("shared", "jwt"): (_OLD_PIPL_S3, False, None),
+    ("shared", "ssh_private_key"): (_OLD_PIPL_S3, False, None),
+    ("shared", "email"): (_OLD_PIPL_ORDINARY, False, "email_addresses"),
+    ("shared", "ip_address"): (_OLD_PIPL_ORDINARY, False, "ip_address"),
+    ("shared", "mac_address"): (_OLD_PIPL_ORDINARY, False, "device_identifier"),
+    ("shared", "phone_landline"): (_OLD_PIPL_ORDINARY, False, "phone_numbers"),
+    ("shared", "date"): (_OLD_PIPL_ORDINARY, False, "dates"),
+    ("shared", "url"): (_OLD_PIPL_ORDINARY, False, "url"),
+    ("de", "tax_id"): (_OLD_PIPL_S3, False, None),
+    ("ja", "my_number"): (_OLD_PIPL_S3, False, None),
+    ("ko", "rrn"): (_OLD_PIPL_S3, False, None),
+    ("uk", "nhs_number"): (_OLD_PIPL_S3, True, "medical_record"),
+    ("uk", "nino"): (_OLD_PIPL_S3, False, None),
+    ("uk", "postcode"): (_OLD_PIPL_ORDINARY, False, None),
+    ("in", "aadhaar"): (_OLD_PIPL_S3, False, None),
+    ("in", "pan"): (_OLD_PIPL_S3, False, None),
+    ("br", "cpf"): (_OLD_PIPL_S3, False, None),
+    ("br", "cnpj"): (_OLD_PIPL_ORDINARY, False, None),
+}
+
+
 def _build_decision(td) -> Decision:
     name, lang, sens = td.name, td.lang, td.sensitivity
     member = name in SENSITIVE_PI_NEW
-    downgrade = (sens >= 3) and not member
+    downgrade = ((sens >= 3) or name in _NON_NATURAL_PERSON) and not member
+    old_pipl, old_gdpr_special, old_hipaa = _OLD_COLUMNS[(lang, name)]
 
     new_gdpr_special = name in GDPR_SPECIAL_NEW
     new_gdpr_art10 = name in GDPR_ART10_NEW
@@ -472,10 +634,10 @@ def _build_decision(td) -> Decision:
         lang=lang,
         name=name,
         sensitivity=sens,
-        old_pipl=tuple(td.pipl_articles),
-        old_gdpr_special=td.gdpr_special_category,
+        old_pipl=old_pipl,
+        old_gdpr_special=old_gdpr_special,
         old_gdpr_art10=False,
-        old_hipaa=td.hipaa_phi_category,
+        old_hipaa=old_hipaa,
         new_pipl=pipl_new_for(name),
         new_gdpr_special=new_gdpr_special,
         new_gdpr_art10=new_gdpr_art10,
@@ -739,8 +901,9 @@ def test_new_pipl_is_sorted_canonically():
 
 
 def test_base_sensitive_pi_is_never_dropped():
-    """The new membership is a superset of the base set (never silent-downgrade a base member)."""
-    assert PIPL_SENSITIVE_PI <= SENSITIVE_PI_NEW
+    """The new membership is a superset of the frozen legacy base (never silent-
+    downgrade a base member)."""
+    assert PIPL_SENSITIVE_PI_LEGACY <= SENSITIVE_PI_NEW
 
 
 def test_every_member_has_a_pipl_art28_citation():
@@ -777,21 +940,29 @@ def test_gdpr_dimensions_are_consistent_and_cited():
 
 
 def test_criminal_record_moves_from_art9_to_art10():
+    """OLD Art.9 (asserted against the FROZEN literal) → NEW Art.10."""
     for key, d in DECISION_TABLE.items():
         if d.name == "criminal_record":
-            assert d.old_gdpr_special is True, f"{key}: expected OLD Art.9 True"
+            _old_pipl, old_gdpr_special, _old_hipaa = _OLD_COLUMNS[key]
+            assert old_gdpr_special is True, f"{key}: frozen OLD Art.9 must be True"
+            assert d.old_gdpr_special is True, f"{key}: Decision OLD Art.9 must be True"
             assert d.new_gdpr_special is False, f"{key}: criminal_record must leave Art.9"
             assert d.new_gdpr_art10 is True, f"{key}: criminal_record must enter Art.10"
 
 
 def test_hipaa_deltas():
-    """financial drops account_numbers; passport keeps certificate_number; values are valid."""
+    """financial drops account_numbers; passport keeps certificate_number; itin gains
+    other_unique_identifier (R); OLD asserted against the FROZEN literal; values valid."""
     for key, d in DECISION_TABLE.items():
+        _old_pipl, _old_gdpr_special, old_hipaa = _OLD_COLUMNS[key]
         if d.name == "financial":
-            assert d.old_hipaa == "account_numbers", key
+            assert old_hipaa == "account_numbers", f"{key}: frozen OLD financial HIPAA"
             assert d.new_hipaa is None, f"{key}: financial must drop its HIPAA mapping"
         if d.name in ("passport", "us_passport"):
             assert d.new_hipaa == "certificate_number", key
+        if d.name == "itin":
+            assert old_hipaa is None, f"{key}: frozen OLD itin had no HIPAA mapping"
+            assert d.new_hipaa == "other_unique_identifier", f"{key}: itin must gain HIPAA (R)"
         if d.new_hipaa is not None:
             assert d.new_hipaa in HIPAA_SAFE_HARBOR_CATEGORIES, f"{key}: bad HIPAA {d.new_hipaa}"
             assert any(c.startswith("HIPAA Safe Harbor") for c in d.citations), key
@@ -805,5 +976,46 @@ def test_reconciled_name_pairs_agree():
 
 def test_newly_member_types_carry_a_risk_note():
     for key, d in DECISION_TABLE.items():
-        newly = d.name in (SENSITIVE_PI_NEW - PIPL_SENSITIVE_PI)
+        newly = d.name in (SENSITIVE_PI_NEW - PIPL_SENSITIVE_PI_LEGACY)
         assert bool(d.risk_note) == newly, f"{key}: risk_note presence != newly-member status"
+
+
+def test_old_columns_cover_exactly_the_registered_types():
+    """The frozen OLD snapshot has one entry per registered (lang, name) — no stale
+    rows, no gaps (a gap already KeyErrors at table build, this catches stale extras)."""
+    assert set(_OLD_COLUMNS) == {(td.lang, td.name) for td in _TYPES}
+
+
+def test_gdpr_special_new_pin_matches_derived():
+    """The pinned GDPR Art.9 literal equals what today's registry derives (union of the
+    category-name set AND per-typedef overrides, minus criminal_record which moves to
+    Art.10). Catches a silent drift in the fragile hand-seeded special-category set.
+    The ``- criminal_record`` keeps this stable across the value-flip."""
+    derived = frozenset(d.name for d in _TYPES if d.gdpr_special_category) - {"criminal_record"}
+    assert GDPR_SPECIAL_NEW == derived, (
+        f"pin != derived; pin-only={sorted(GDPR_SPECIAL_NEW - derived)}, "
+        f"derived-only={sorted(derived - GDPR_SPECIAL_NEW)}"
+    )
+    assert "nhs_number" in GDPR_SPECIAL_NEW, "per-typedef override nhs_number must be pinned"
+
+
+def test_hipaa_typedef_overrides_are_pinned():
+    """Per-typedef HIPAA overrides (nhs_number) are present in the hand-built HIPAA_NEW
+    dict — guards the same fragile hand-seed pattern as the GDPR pin."""
+    for name, cat in _HIPAA_TYPEDEF_OVERRIDES.items():
+        assert HIPAA_NEW.get(name) == cat, (
+            f"{name}: HIPAA_NEW override is {HIPAA_NEW.get(name)!r}, expected {cat!r}"
+        )
+
+
+def test_legal_entity_types_are_explicit_downgrades():
+    """Legal-entity registries (credit_code, cnpj) are cited non-member downgrades even
+    below the S≥3 gate — cnpj (s2) trips the _NON_NATURAL_PERSON path, not the sensitivity
+    one, so it still renders in the cited '## Explicit downgrades' section."""
+    for name in _NON_NATURAL_PERSON:
+        decisions = [d for k, d in DECISION_TABLE.items() if d.name == name]
+        assert decisions, f"{name}: not registered"
+        for d in decisions:
+            assert not d.sensitive_pi_member, f"{name}: legal-entity type must be a non-member"
+            assert d.downgrade, f"{name}: legal-entity type must render as an explicit downgrade"
+            assert d.name in _DOWNGRADE_CITE, f"{name}: needs a downgrade citation"
