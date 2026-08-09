@@ -30,6 +30,20 @@ def test_pseudonym_llm_without_salt_raises():
         redact_pseudonym_llm("王建国的电话13912345678", lang="zh")
 
 
+def test_oversized_int_salt_raises_clean_valueerror():
+    """An int salt >= 2**64 does not fit the 8-byte coercion.
+
+    The naive ``salt.to_bytes(8, ...)`` raises ``OverflowError`` (an
+    ``ArithmeticError``), which the CLI's ``(ValueError, TypeError,
+    FileNotFoundError)`` net does not catch — a raw traceback. It must surface
+    as a clean ``ValueError`` instead.
+    """
+    from argus_redact import redact_pseudonym_llm
+
+    with pytest.raises(ValueError, match="out of range"):
+        redact_pseudonym_llm("电话13912345678", salt=2**64, lang="zh")
+
+
 def test_pseudonym_llm_explicit_salt_works():
     from argus_redact import redact_pseudonym_llm
 

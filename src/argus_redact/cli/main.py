@@ -31,7 +31,14 @@ def _read_input(input_path: str | None) -> str:
     # Bypass platform-default encoding (cp1252 on Windows) — read raw bytes
     # and decode as UTF-8. Without this, Chinese stdin produces surrogate
     # characters that downstream Rust regex / json.dumps reject.
-    return sys.stdin.buffer.read().decode("utf-8")
+    try:
+        return sys.stdin.buffer.read().decode("utf-8")
+    except UnicodeDecodeError:
+        # The file branch above already guards this; stdin was the last raw
+        # traceback. Do NOT decode with errors="replace" — that silently
+        # corrupts PII text rather than refusing the input.
+        print("Error: stdin is not valid UTF-8", file=sys.stderr)
+        sys.exit(1)
 
 
 def _write_output(text: str, output_path: str | None, mode: int = 0o644):

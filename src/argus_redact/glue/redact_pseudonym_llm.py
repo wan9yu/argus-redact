@@ -248,7 +248,16 @@ def _salt_to_bytes(salt: int | bytes | None) -> bytes | None:
         return None
     if isinstance(salt, int):
         signed = salt < 0
-        return salt.to_bytes(8, "big", signed=signed)
+        try:
+            return salt.to_bytes(8, "big", signed=signed)
+        except OverflowError as e:
+            # An out-of-range int (e.g. seed >= 2**64) raises OverflowError, an
+            # ArithmeticError the CLI's (ValueError, TypeError, FileNotFoundError)
+            # net does not catch — surfacing a raw traceback. Re-raise as a
+            # ValueError with a PII-free message so callers get a clean error.
+            raise ValueError(
+                "salt out of range: an integer salt must fit in 8 bytes (64-bit)"
+            ) from e
     if isinstance(salt, (bytes, bytearray)):
         return bytes(salt)
     raise TypeError(f"salt must be int, bytes, or None, got {type(salt).__name__}")

@@ -391,6 +391,13 @@ class TestStreamingRedactor:
         with pytest.raises(TypeError):
             StreamingRedactor()  # type: ignore[call-arg]
 
+    def test_should_reject_oversized_int_salt(self):
+        # An int salt >= 2**64 does not fit in the 8-byte big-endian coercion;
+        # it must raise a clean ValueError, not an uncaught OverflowError (an
+        # ArithmeticError the CLI's error net does not catch).
+        with pytest.raises(ValueError, match="out of range"):
+            StreamingRedactor(salt=2**64, lang="zh")
+
     def test_should_accept_reserved_names_override(self):
         """Caller can disable canonical fake-name detection across all chunks."""
         r = StreamingRedactor(

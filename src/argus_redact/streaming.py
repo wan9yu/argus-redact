@@ -400,7 +400,15 @@ class StreamingRedactor:
             raise TypeError(f"salt must be int or bytes, got {type(salt).__name__}")
         if isinstance(salt, int):
             signed = salt < 0
-            self._salt = salt.to_bytes(8, "big", signed=signed)
+            try:
+                self._salt = salt.to_bytes(8, "big", signed=signed)
+            except OverflowError as e:
+                # An out-of-range int (e.g. seed >= 2**64) raises OverflowError,
+                # an ArithmeticError the CLI's error net does not catch. Re-raise
+                # as a ValueError with a PII-free message for a clean error.
+                raise ValueError(
+                    "salt out of range: an integer salt must fit in 8 bytes (64-bit)"
+                ) from e
         else:
             self._salt = bytes(salt)
         self._display_marker = display_marker
