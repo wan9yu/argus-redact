@@ -40,7 +40,9 @@ use argus_redact_core::streaming::{
     DetectSpans, RedactSegment, StreamingRedactor as CoreStreamingRedactor,
 };
 use argus_redact_core::typeinfo::{build_type_info, Config, EntityConfig};
-use argus_redact_core::{kinship_exact, MtRandomSource, PseudoFactory, SELF_REF_PRONOUNS, TypeInfo};
+use argus_redact_core::{
+    detect_languages, kinship_exact, MtRandomSource, PseudoFactory, SELF_REF_PRONOUNS, TypeInfo,
+};
 
 // ── pseudonym RNG: the core's CPython-exact MT19937 (shared with PyO3) ───────
 
@@ -363,7 +365,12 @@ pub fn redact(text: &str, opts: JsValue) -> Result<JsValue, JsValue> {
         }
     }
 
-    let params = resolve_params(opts);
+    let mut params = resolve_params(opts);
+    // Resolve the `lang="auto"` sentinel against the actual text (Python parity —
+    // `glue/redact.py`'s `if lang == "auto": lang = detect_languages(text)`) so a
+    // `{lang:'auto'}` caller runs the real zh/en detectors instead of the literal
+    // "auto" lang, which matches neither and silently under-redacts.
+    params.langs = resolve_auto_lang(params.langs, text);
     let with_signals = redact_segment(&params, text, None).map_err(|e| JsValue::from_str(&e))?;
 
     let out = RedactResult {
@@ -399,10 +406,66 @@ fn resolve_params(opts: RedactOpts) -> RedactParams {
     }
 }
 
+/// Resolve the `lang="auto"` sentinel to concrete language codes via the core's
+/// script-range [`detect_languages`] — the SAME resolver the Python `redact()`
+/// shim runs (`glue/redact.py`: `if lang == "auto": lang = detect_languages(text)`).
+///
+/// Without this, a `{lang:'auto'}` opts object reaches `detect_l1` as the LITERAL
+/// lang list `["auto"]`, which matches NEITHER `"zh"` NOR `"en"`. The lang-GATED
+/// person detector (zh/en) is then skipped, so a name like 张伟 leaks silently.
+/// (Language-NEUTRAL patterns — the phone / national-id regexes — still load
+/// regardless of the requested lang, so those are unaffected; the leak on the
+/// `"auto"` path is the person detector specifically.) A `"auto"` lang is not the
+/// same code path as an OMITTED lang, which correctly defaults to `["zh"]`. Any
+/// non-`"auto"` lang list passes through unchanged.
+///
+/// Both `{lang:'auto'}` and `{lang:['auto']}` collapse to `["auto"]` before this
+/// point, so both resolve. The Python shim special-cases only the bare string, but
+/// resolving the single-element list too only ever redacts MORE, never less — the
+/// safe direction — so the tiny divergence cannot leak.
+fn resolve_auto_lang(langs: Vec<String>, text: &str) -> Vec<String> {
+    if langs.len() == 1 && langs[0] == "auto" {
+        detect_languages(text)
+    } else {
+        langs
+    }
+}
+
+/// `true` when the requested lang is (solely) the `"auto"` sentinel. The streaming
+/// constructor uses this to REJECT `"auto"` loudly: a stream has no full text at
+/// construction to script-detect from (unlike one-shot [`redact`], which resolves
+/// it via [`resolve_auto_lang`]). This is the pre-collapse form of that check —
+/// both `{lang:'auto'}` and a single-element `{lang:['auto']}` count.
+fn lang_is_auto(lang: &Option<StringOrVec>) -> bool {
+    match lang {
+        Some(StringOrVec::One(s)) => s == "auto",
+        Some(StringOrVec::Many(v)) => v.len() == 1 && v[0] == "auto",
+        None => false,
+    }
+}
+
 /// Restore redacted text using the `key` map (`{fake: original}`) returned by
 /// [`redact`]. The optional `aliases` are NOT taken here (fast-mode realistic
 /// aliases are carried on the redact result); this is the core restore path used
 /// for the common `(text, key)` roundtrip.
+///
+/// # Security: UNGUARDED by default (a stated trade-off)
+///
+/// This entry point is **unguarded** — it applies the `key` map unconditionally,
+/// with NO (P)rovenance or (S)cope check. A caller who restores attacker-chosen
+/// text against a key can therefore surface originals for tokens that were never
+/// part of the intended exchange. This is a DELIBERATE trade-off: `restore` keeps
+/// the minimal `(text, key)` roundtrip the browser demo and simple integrations
+/// depend on, and (unlike the Python `restore()` shim, which fails closed by
+/// default since v0.8.0) this browser binding does NOT guard by default in this
+/// release.
+///
+/// For fail-closed, **Python-parity** behaviour use [`restore_guarded`]: it runs
+/// the core (P)rovenance + (S)cope guard against a caller-supplied anchor and
+/// refuses (`outcome: "blocked"`) when provenance cannot be proven. New
+/// security-sensitive callers SHOULD prefer [`restore_guarded`]. (A
+/// guarded-by-default flip / rename for this binding is deferred to a future
+/// wasm-hardening pass.)
 #[wasm_bindgen]
 pub fn restore(text: &str, key: JsValue) -> Result<String, JsValue> {
     set_panic_hook();
@@ -488,10 +551,13 @@ fn restore_outcome_str(outcome: &RestoreOutcome) -> &'static str {
 }
 
 /// Anchor-taking guarded restore — the browser-facing counterpart to the
-/// PyO3 `restore_guarded` binding. Runs the core (P)rovenance + (S)cope guard
-/// (`restore_full_guarded`) and returns a STRUCTURED-ONLY `{ restored,
-/// outcome, events }` object; no human-readable prose crosses this boundary
-/// (the demo layer owns any zh/en copy over these codes).
+/// PyO3 `restore_guarded` binding, and the **fail-closed, Python-parity**
+/// counterpart to the unguarded [`restore`] (which applies the key with no
+/// provenance/scope check — see its doc for that trade-off). Runs the core
+/// (P)rovenance + (S)cope guard (`restore_full_guarded`) and returns a
+/// STRUCTURED-ONLY `{ restored, outcome, events }` object; no human-readable
+/// prose crosses this boundary (the demo layer owns any zh/en copy over these
+/// codes).
 ///
 /// `anchor` is deserialized as `{ nonce: string, scope: string[] }`
 /// ([`AnchorSpec`]), mirroring `src/argus_redact/server.py`'s reconstruction
@@ -635,6 +701,17 @@ impl StreamingRedactor {
             }
         }
 
+        // lang="auto" needs the FULL text to script-detect (see `resolve_auto_lang`);
+        // a stream has none at construction, so refuse it loudly rather than pass
+        // the literal "auto" lang through and silently under-redact every chunk.
+        if lang_is_auto(&opts.lang) {
+            return Err(JsValue::from_str(
+                "lang='auto' is not supported for the streaming redactor — \
+                 auto-detection needs the full text, which a stream does not have \
+                 at construction; pass a concrete lang (e.g. 'zh' or 'en')",
+            ));
+        }
+
         // Salt is required: there is no host entropy source for the unseeded
         // pseudonym path in wasm, so streaming demands an explicit salt for
         // deterministic, restorable codes.
@@ -760,5 +837,75 @@ impl StreamingRedactor {
         };
         out.serialize(&to_object_serializer())
             .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
+    }
+}
+
+// ── regression: lang="auto" must resolve, not silently under-redact ───────────
+//
+// Pure-Rust tests over `resolve_auto_lang` + the core `detect_l1` seam, runnable
+// via `cargo test -p argus-redact-wasm --lib` WITHOUT a wasm runtime (the JsValue
+// public API in `tests/*.rs` still needs `wasm-pack test --node`). They pin the
+// under-redaction the fix closes: a literal `"auto"` lang is NOT a real language,
+// so the language-gated detectors are skipped unless `"auto"` is resolved first.
+#[cfg(test)]
+mod auto_lang_tests {
+    use super::{lang_is_auto, resolve_auto_lang, StringOrVec};
+    use argus_redact_core::redact_l1::detect_l1;
+
+    const LEAKY: &str = "张伟的电话13800138000";
+
+    /// Sanity: the LITERAL `"auto"` lang matches neither zh nor en, so the zh
+    /// person detector never runs and 张伟 would be left in the clear — the exact
+    /// mechanism the fix must close.
+    #[test]
+    fn literal_auto_lang_skips_the_zh_person_detector() {
+        let d = detect_l1(LEAKY, &["auto".to_string()], &[]).unwrap();
+        assert!(
+            d.person.is_empty(),
+            "the literal \"auto\" lang is expected to skip the zh person detector"
+        );
+    }
+
+    /// The fix: `resolve_auto_lang` maps the `"auto"` sentinel to the
+    /// script-detected langs (`["zh"]` here), so BOTH 张伟 (person) and the phone
+    /// (L1 regex) are detected — neither is left unredacted.
+    #[test]
+    fn resolve_auto_lang_recovers_zh_person_and_phone() {
+        let resolved = resolve_auto_lang(vec!["auto".to_string()], LEAKY);
+        assert_eq!(resolved, vec!["zh".to_string()], "\"auto\" must resolve to zh");
+
+        let d = detect_l1(LEAKY, &resolved, &[]).unwrap();
+        assert!(!d.person.is_empty(), "张伟 must be detected as a person");
+        assert!(!d.layer1.is_empty(), "the phone must be detected by the L1 regex");
+    }
+
+    /// A concrete lang list is untouched by the resolver.
+    #[test]
+    fn non_auto_lang_passes_through_unchanged() {
+        assert_eq!(
+            resolve_auto_lang(vec!["en".to_string()], LEAKY),
+            vec!["en".to_string()]
+        );
+        assert_eq!(
+            resolve_auto_lang(vec!["zh".to_string(), "en".to_string()], LEAKY),
+            vec!["zh".to_string(), "en".to_string()]
+        );
+    }
+
+    /// The streaming constructor REJECTS `lang="auto"` (a stream can't script-detect
+    /// without the full text). `lang_is_auto` is the predicate behind that refusal —
+    /// pin it so a future change can't silently re-open the per-chunk under-redaction.
+    #[test]
+    fn lang_is_auto_flags_only_the_solo_auto_sentinel() {
+        use StringOrVec::{Many, One};
+        assert!(lang_is_auto(&Some(One("auto".to_string()))));
+        assert!(lang_is_auto(&Some(Many(vec!["auto".to_string()]))));
+        assert!(!lang_is_auto(&Some(One("zh".to_string()))));
+        assert!(!lang_is_auto(&None));
+        // "auto" alongside a concrete lang is NOT the solo sentinel → not rejected.
+        assert!(!lang_is_auto(&Some(Many(vec![
+            "auto".to_string(),
+            "zh".to_string()
+        ]))));
     }
 }
