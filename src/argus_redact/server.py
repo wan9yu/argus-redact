@@ -29,11 +29,15 @@ from argus_redact.pure.restore import RestoreGuardError
 from argus_redact.pure.wire import common_report_fields, risk_payload
 
 try:
+    import anyio
+    from anyio import to_thread
     from starlette.concurrency import run_in_threadpool
     from starlette.requests import Request
     from starlette.responses import JSONResponse
 except ImportError:
     if TYPE_CHECKING:
+        import anyio
+        from anyio import to_thread
         from starlette.concurrency import run_in_threadpool
         from starlette.requests import Request
         from starlette.responses import JSONResponse
@@ -58,6 +62,27 @@ MAX_HTTP_BODY_BYTES = 10 * 1024 * 1024
 # range.
 MAX_RESTORE_KEY_ENTRIES = 10_000
 
+# In-flight scan concurrency bound + honest per-request scan deadline.
+#
+# OPERATIONAL ASSUMPTION — the bound below is PER-PROCESS / single-node. Each
+# server process enforces only its OWN in-flight limit; a multi-node deployment
+# behind a load balancer must ALSO bound concurrency at the gateway (this is not
+# a distributed limiter). `uvicorn.run(..., limit_concurrency=...)` is a separate
+# connection-level lever at the launch site and is not a substitute for this.
+#
+# Both are env-overridable so an operator can tune them without a code change.
+_MAX_INFLIGHT_SCANS = int(os.environ.get("ARGUS_MAX_INFLIGHT_SCANS", "8"))
+_SCAN_TIMEOUT_SECONDS = float(os.environ.get("ARGUS_SCAN_TIMEOUT_SECONDS", "30"))
+
+# One shared limiter for the whole process, created at import. anyio ships with
+# starlette (the `serve` extra), so it is present whenever this module is
+# actually used; the guard keeps a partial install (starlette/anyio absent) from
+# failing to import the module at all, matching the starlette guard above.
+try:
+    _scan_limiter = anyio.CapacityLimiter(_MAX_INFLIGHT_SCANS)
+except NameError:  # pragma: no cover - anyio absent (serve extra not installed)
+    _scan_limiter = None  # type: ignore[assignment]
+
 
 class _BodyTooLarge(Exception):
     """Request body exceeded MAX_HTTP_BODY_BYTES (mapped to 413)."""
@@ -65,6 +90,10 @@ class _BodyTooLarge(Exception):
 
 class _BadBody(Exception):
     """Request body was unparseable or not a JSON object (mapped to 400)."""
+
+
+class _ScanTimeout(Exception):
+    """The offloaded scan exceeded _SCAN_TIMEOUT_SECONDS (mapped to 504)."""
 
 
 def _parse_json_object(raw: bytes) -> dict[str, Any]:
@@ -86,11 +115,16 @@ def _parse_json_object(raw: bytes) -> dict[str, Any]:
     return body
 
 
-async def _read_capped_body(request: Request) -> bytes:
+async def _read_capped_body(request: Request) -> list[bytes]:
     """Read the request body, aborting as soon as it exceeds MAX_HTTP_BODY_BYTES.
 
     Streams via request.stream() so memory stays bounded to ~cap even for a
     chunked body with no Content-Length header. Raises _BodyTooLarge.
+
+    Returns the raw chunks UNJOINED: the join and JSON parse are CPU-bound on a
+    body up to MAX_HTTP_BODY_BYTES and are handed to `_join_and_parse` off the
+    event loop by the caller (see `_join_and_parse`). Reassembling here would
+    put that cost back on the loop thread.
     """
     clen = request.headers.get("content-length")
     if clen is not None and clen.isdigit() and int(clen) > MAX_HTTP_BODY_BYTES:
@@ -102,19 +136,67 @@ async def _read_capped_body(request: Request) -> bytes:
         if size > MAX_HTTP_BODY_BYTES:
             raise _BodyTooLarge
         chunks.append(chunk)
-    return b"".join(chunks)
+    return chunks
+
+
+def _join_and_parse(chunks: list[bytes]) -> dict[str, Any]:
+    """Reassemble the streamed body and parse it as a JSON object.
+
+    Runs OFF the event loop (the handlers dispatch it via `run_in_threadpool`):
+    `b"".join` of up to MAX_HTTP_BODY_BYTES followed by `json.loads` on that
+    buffer are synchronous, CPU-bound steps. Left inline on the single
+    event-loop thread they would stall every OTHER concurrent request —
+    including a plain `GET /health` — behind one large body. Raises `_BadBody`
+    for a non-JSON or non-object body (mapped to 400 by the caller).
+    """
+    return _parse_json_object(b"".join(chunks))
+
+
+async def _run_scan(fn):
+    """Offload a blocking core scan off the event loop under an in-flight bound
+    and an honest per-request deadline. `fn` is a zero-arg callable (a
+    `functools.partial` binding redact/restore and its kwargs).
+
+    In-flight bound: `_scan_limiter` caps how many scans run concurrently. The
+    `async with` acquires a token for the duration of the offload; the
+    (N+1)-th request queues for a token instead of piling more work onto the
+    worker pool. This bound is PER-PROCESS / single-node — see the module-level
+    note on `_scan_limiter`; a multi-node deployment must also bound at the
+    gateway.
+
+    Honest timeout (Python threads are NOT preemptible): `anyio.fail_after`
+    bounds the whole request (queue wait + scan), and `abandon_on_cancel=True`
+    lets the awaiting coroutine return the instant the deadline trips — the
+    client gets a PROMPT 504 rather than waiting for the scan. What the timeout
+    does NOT do is stop the scan: the abandoned call keeps running on its worker
+    thread to completion. As the cancellation unwinds the `async with`, anyio
+    releases the limiter token at the deadline (so the 504 frees the client AND
+    the limiter slot), but it does NOT reclaim the CPU the abandoned scan is
+    still burning. A burst of timed-out scans can therefore keep the machine
+    busy even while the limiter reports free slots — size the timeout and the
+    in-flight bound accordingly, and rate-limit upstream. Raises `_ScanTimeout`
+    on the deadline (mapped to 504 by the caller).
+    """
+    try:
+        with anyio.fail_after(_SCAN_TIMEOUT_SECONDS):
+            async with _scan_limiter:
+                return await to_thread.run_sync(fn, abandon_on_cancel=True)
+    except TimeoutError:
+        raise _ScanTimeout from None
 
 
 async def handle_redact(request: Request) -> JSONResponse:
     try:
-        raw = await _read_capped_body(request)
+        chunks = await _read_capped_body(request)
     except _BodyTooLarge:
         return JSONResponse({"error": "request body too large"}, status_code=413)
 
-    # C4: a malformed/empty body raises JSONDecodeError (a ValueError), and a
-    # valid non-object body would break on the first `.get`. Both map to 400.
+    # A malformed/empty body raises JSONDecodeError (a ValueError), and a valid
+    # non-object body would break on the first `.get` — both surface as _BadBody
+    # and map to 400. The join+parse are offloaded so a large body cannot stall
+    # the event loop (see `_join_and_parse`).
     try:
-        body = _parse_json_object(raw)
+        body = await run_in_threadpool(_join_and_parse, chunks)
     except _BadBody as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -147,14 +229,16 @@ async def handle_redact(request: Request) -> JSONResponse:
     types = body.get("types")
     types_exclude = body.get("types_exclude")
 
-    # Offloaded to a threadpool thread: the Rust core releases the GIL while it
-    # scans (py.detach in the bindings), but that only helps if something else
-    # can run on the event-loop thread while the scan is in flight. Called
-    # inline, the `async def` handler still blocked the single event-loop
-    # thread for the full scan, stalling every OTHER concurrent request —
-    # including a plain GET /health — behind one expensive /redact call.
+    # Offloaded to a threadpool thread under `_run_scan`: the Rust core releases
+    # the GIL while it scans (py.detach in the bindings), but that only helps if
+    # something else can run on the event-loop thread while the scan is in
+    # flight. Called inline, the `async def` handler still blocked the single
+    # event-loop thread for the full scan, stalling every OTHER concurrent
+    # request — including a plain GET /health — behind one expensive /redact
+    # call. `_run_scan` also enforces the in-flight bound and the honest 504
+    # deadline (see its docstring).
     try:
-        result = await run_in_threadpool(
+        result = await _run_scan(
             functools.partial(
                 redact,
                 text,
@@ -169,6 +253,11 @@ async def handle_redact(request: Request) -> JSONResponse:
                 types=types,
                 types_exclude=types_exclude,
             )
+        )
+    except _ScanTimeout:
+        return JSONResponse(
+            {"error": "request timed out: the scan exceeded the server time limit"},
+            status_code=504,
         )
     except (ValueError, TypeError) as e:
         return JSONResponse({"error": str(e)}, status_code=400)
@@ -201,14 +290,16 @@ async def handle_redact(request: Request) -> JSONResponse:
 
 async def handle_restore(request: Request) -> JSONResponse:
     try:
-        raw = await _read_capped_body(request)
+        chunks = await _read_capped_body(request)
     except _BodyTooLarge:
         return JSONResponse({"error": "request body too large"}, status_code=413)
 
-    # C4: a malformed body raises JSONDecodeError (a ValueError), and a valid
-    # non-object body would break on the first `.get`. Both map to 400.
+    # A malformed body raises JSONDecodeError (a ValueError), and a valid
+    # non-object body would break on the first `.get` — both surface as _BadBody
+    # and map to 400. The join+parse are offloaded so a large body cannot stall
+    # the event loop (see `_join_and_parse`).
     try:
-        body = _parse_json_object(raw)
+        body = await run_in_threadpool(_join_and_parse, chunks)
     except _BadBody as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -289,10 +380,11 @@ async def handle_restore(request: Request) -> JSONResponse:
             from argus_redact.compose.anchor import Anchor
 
             anchor = Anchor(nonce=nonce, scope=frozenset(scope))
-        # Offloaded to a threadpool thread — see the matching comment in
+        # Offloaded under `_run_scan` — see the matching comment in
         # handle_redact: the inline call blocked the event loop for every
-        # concurrent request while this one scanned.
-        restored, details = await run_in_threadpool(
+        # concurrent request while this one scanned. `_run_scan` also enforces
+        # the in-flight bound and the honest 504 deadline (see its docstring).
+        restored, details = await _run_scan(
             functools.partial(
                 restore,
                 text,
@@ -304,6 +396,11 @@ async def handle_restore(request: Request) -> JSONResponse:
                 strict=strict,
                 detailed=True,
             )
+        )
+    except _ScanTimeout:
+        return JSONResponse(
+            {"error": "request timed out: the scan exceeded the server time limit"},
+            status_code=504,
         )
     except RestoreGuardError as e:
         return JSONResponse({"error": str(e), "security_events": e.events}, status_code=400)
