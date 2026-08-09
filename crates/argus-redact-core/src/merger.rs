@@ -54,16 +54,25 @@ fn person_cross_layer_winner(a: &PatternMatch, b: &PatternMatch) -> Option<bool>
 /// an over-greedy regex candidate.
 ///
 /// When the higher-layer person wins a partial overlap, the loser is not simply
-/// discarded: [`trim_entity`] carves off whatever tail of the loser survives past
-/// the winner's end, so a fused candidate like "李明明王" (winner "李明明" + an
-/// extra character that was really a second name) doesn't silently drop that
-/// trailing character into the clear. Trimming only ever removes a *prefix* — the
-/// remaining span keeps the loser's original end — so this only fires when the
-/// winner starts at or before the loser's start; if the winner instead starts
-/// strictly *inside* the loser, trimming would have to drop the loser's *head*
-/// (which `trim_entity` cannot express), so that case falls through to the
-/// existing length/confidence logic, which keeps the longer span and is therefore
-/// safe against under-redaction even though it isn't layer-aware.
+/// discarded. If the winner starts at or before the loser's start, [`trim_entity`]
+/// carves off whatever *tail* of the loser survives past the winner's end, so a
+/// fused candidate like "李明明王" (winner "李明明" + a trailing character that was
+/// really a second name) keeps that trailing character redacted. If the winner
+/// instead starts strictly *inside* the loser, [`keep_prefix`] re-admits the
+/// loser's exclusive *head* `[loser.start, winner.start)` (and `trim_entity` still
+/// re-admits any exclusive tail past the winner's end), so the staggered partial
+/// overlap no longer drops the loser's head into the clear. Every re-admitted
+/// fragment keeps the loser's `person` type and its own layer, and the pieces stay
+/// pairwise non-overlapping while covering all of `loser ∪ winner` — so the rule is
+/// strictly recall-monotone: it never flips the winner or the type and never
+/// shrinks coverage.
+///
+/// This head re-admission is scoped to `person`-vs-`person` cross-layer ONLY (it
+/// lives in the person-only `Some(false)` arm, not the heterogeneous `_` fallback).
+/// A *generic* head-preserving trim would re-redact benign cross-TYPE false-positive
+/// heads that the merge is meant to absorb — e.g. the `于` head of a `person` FP
+/// absorbed into an `address` (see the `coverage.rs` "never restores what the merge
+/// itself trimmed" invariant) — turning a precision win into an over-redaction.
 fn merge_entities_text(entities: Vec<PatternMatch>, text: &str) -> Vec<PatternMatch> {
     if entities.is_empty() {
         return vec![];
@@ -105,6 +114,40 @@ fn merge_entities_text(entities: Vec<PatternMatch>, text: &str) -> Vec<PatternMa
                         merged.push(rem);
                     }
                 }
+                Some(false) => {
+                    // The higher-layer `entity` wins but starts STRICTLY INTERIOR
+                    // to `last` (the `entity.start <= last.start` case is the arm
+                    // above). A naive `merged[len-1] = entity` would drop `last`'s
+                    // exclusive HEAD `[last.start, entity.start)` into plaintext —
+                    // the staggered partial-overlap leak this fix closes. Re-admit
+                    // that head via `keep_prefix`, install the winner, and re-admit
+                    // any exclusive TAIL of `last` past the winner's end too (only
+                    // reachable when the higher-layer span is SHORTER and fully
+                    // interior; for the confirmed longer-winner leak geometry there
+                    // is no tail). The head is finalized to the left of the winner,
+                    // so only the winner (or its tail remainder) re-enters the
+                    // overlap test next iteration. All emitted fragments keep
+                    // `last`'s `person` type + layer, stay pairwise non-overlapping,
+                    // and together cover `last ∪ entity` — strictly recall-monotone,
+                    // never flipping the winner or the type. Scoped to person-vs-
+                    // person here so it never touches the cross-TYPE FP head that
+                    // the `_` fallback deliberately absorbs.
+                    let loser = last.clone();
+                    let len = merged.len();
+                    let winner_end = entity.end;
+                    match keep_prefix(&loser, entity.start, text) {
+                        Some(head) => {
+                            merged[len - 1] = head;
+                            merged.push(entity);
+                        }
+                        None => {
+                            merged[len - 1] = entity;
+                        }
+                    }
+                    if let Some(tail) = trim_entity(&loser, winner_end, text) {
+                        merged.push(tail);
+                    }
+                }
                 Some(true) => {
                     // `last` (higher-layer person) wins the overlap; keep it. The
                     // greedy sort guarantees `entity.start >= last.start`, so if
@@ -122,12 +165,20 @@ fn merge_entities_text(entities: Vec<PatternMatch>, text: &str) -> Vec<PatternMa
                     }
                 }
                 _ => {
-                    // Either the rule doesn't apply (`None`), or `entity` would
-                    // win but starts INTERIOR to `last` (entity.start > last.start)
-                    // — trimming can only remove a prefix, so honoring that win
-                    // would drop `last`'s head with no way to recover it. Fall
-                    // back to the pre-existing length/confidence resolution,
-                    // which keeps the longer span and cannot under-redact.
+                    // The person-cross-layer rule does not apply (`None`): the two
+                    // spans are a different TYPE from each other, or the same layer.
+                    // Both `Some(_)` cross-layer person cases are handled by the arms
+                    // above, so nothing person-cross-layer reaches here. Fall back to
+                    // the pre-existing length/confidence resolution — the longer span
+                    // wins the overlap. This is NOT under-redaction-free in general:
+                    // when the longer winner starts after the loser, the loser's
+                    // exclusive head is dropped. For the cross-TYPE case that is the
+                    // intended precision behavior — a benign false-positive head
+                    // absorbed into a real entity (e.g. a `person` FP `于` head folded
+                    // into an `address`; see the `coverage.rs` "never restores what
+                    // the merge itself trimmed" invariant) MUST stay uncovered, which
+                    // is exactly why the head-preserving trim is scoped to person-vs-
+                    // person above and deliberately kept out of this heterogeneous arm.
                     if !pick_winner(last, &entity) {
                         let len = merged.len();
                         merged[len - 1] = entity;
@@ -164,6 +215,34 @@ fn trim_entity(e: &PatternMatch, new_start: usize, text: &str) -> Option<Pattern
         type_: e.type_.clone(),
         start: new_start,
         end: e.end,
+        confidence: e.confidence,
+        layer: e.layer,
+    })
+}
+
+/// Keep only the PREFIX of `e` up to `new_end` — the span `[e.start, new_end)`;
+/// `None` if nothing (or only whitespace) remains. The head-preserving mirror of
+/// [`trim_entity`]: where `trim_entity` moves the START forward and keeps the end,
+/// this keeps the start and moves the END back. Needed when a higher-layer person
+/// winner starts strictly INTERIOR to the loser, so the loser's exclusive head
+/// `[loser.start, winner.start)` would otherwise be dropped into the clear. Uses
+/// the same [`py_strip`] empty-test as `trim_entity` for Python `str.strip()`
+/// parity. Callers pass `new_end` in `(e.start, e.end)` (an interior boundary);
+/// the guard below still returns `None` if `new_end` collapses to or before the
+/// start.
+fn keep_prefix(e: &PatternMatch, new_end: usize, text: &str) -> Option<PatternMatch> {
+    if new_end <= e.start {
+        return None;
+    }
+    let new_text = char_slice(text, e.start, new_end);
+    if py_strip(&new_text).is_empty() {
+        return None;
+    }
+    Some(PatternMatch {
+        text: new_text,
+        type_: e.type_.clone(),
+        start: e.start,
+        end: new_end,
         confidence: e.confidence,
         layer: e.layer,
     })
@@ -729,5 +808,111 @@ mod tests {
             "我\u{1c}\u{1c}",
         );
         assert_merged(&out, &[("我", "self_reference", 0, 1, 1.0, 1)]);
+    }
+
+    // ── Person cross-layer STAGGERED partial overlap (interior-start winner) ──
+    //
+    // Regression tests for the staggered-overlap HEAD leak: a higher-layer
+    // `person` winner that starts strictly INTERIOR to a lower-layer `person`
+    // loser used to fall through to the `_` length/confidence arm, which replaced
+    // the loser outright and dropped the loser's exclusive head into plaintext.
+
+    #[test]
+    fn person_cross_layer_interior_start_head_not_dropped() {
+        // The confirmed leak geometry. An over-greedy L1 person "李四"[0,2] (layer
+        // 1) overlaps a higher-layer NER person "四德张"[1,4] (layer 2) that starts
+        // INTERIOR to it (1 > 0) and is longer. The L2 span wins the overlap, but
+        // the loser's exclusive head "李"[0,1] must NOT be dropped into the clear.
+        // Pre-fix, the `_` arm did `merged[len-1] = entity`, leaking "李"; the new
+        // person-scoped `Some(false)` arm re-admits the head via `keep_prefix`.
+        // Winner and both `person` types are preserved; output is non-overlapping.
+        let out = merge_entities_with_text(
+            vec![
+                pmt("李四", "person", 0, 2, 1.0, 1),
+                pmt("四德张", "person", 1, 4, 1.0, 2),
+            ],
+            "李四德张",
+        );
+        assert_merged(
+            &out,
+            &[
+                ("李", "person", 0, 1, 1.0, 1),
+                ("四德张", "person", 1, 4, 1.0, 2),
+            ],
+        );
+    }
+
+    #[test]
+    fn person_cross_layer_interior_contained_winner_readmits_head_and_tail() {
+        // The other sub-case of an interior-start higher-layer winner: it is
+        // SHORTER than the loser and fully CONTAINED in it. An over-greedy L1
+        // person "四德张明"[0,4] (layer 1) around a higher-layer NER person
+        // "德张"[1,3] (layer 2). The winner has both an exclusive HEAD "四"[0,1] and
+        // an exclusive TAIL "明"[3,4] on the loser. An unguarded head-only re-admit
+        // would drop the tail (a NEW leak); this re-admits BOTH via `keep_prefix`
+        // (head) + `trim_entity` (tail). Coverage of [0,4) is preserved with no
+        // plaintext gap and the three fragments are pairwise non-overlapping —
+        // strictly recall-monotone (same total coverage the pre-fix `_` arm kept
+        // as one span, now with the L2 authority for the interior).
+        let out = merge_entities_with_text(
+            vec![
+                pmt("四德张明", "person", 0, 4, 1.0, 1),
+                pmt("德张", "person", 1, 3, 1.0, 2),
+            ],
+            "四德张明",
+        );
+        assert_merged(
+            &out,
+            &[
+                ("四", "person", 0, 1, 1.0, 1),
+                ("德张", "person", 1, 3, 1.0, 2),
+                ("明", "person", 3, 4, 1.0, 1),
+            ],
+        );
+    }
+
+    #[test]
+    fn person_cross_layer_interior_start_head_kept_on_priority_path() {
+        // Same interior-start head-leak geometry, but a co-present self_reference
+        // forces `merge_entities_with_text` down the priority path, which
+        // pre-merges the non-priority subset WITH the real text. The head "李"[2,3]
+        // must still survive that pre-merge (this is where the leak would silently
+        // re-appear if the priority path skipped the text-aware merge).
+        let out = merge_entities_with_text(
+            vec![
+                pmt("我", "self_reference", 0, 1, 1.0, 0),
+                pmt("李四", "person", 2, 4, 1.0, 1),
+                pmt("四德张", "person", 3, 6, 1.0, 2),
+            ],
+            "我x李四德张",
+        );
+        assert_merged(
+            &out,
+            &[
+                ("我", "self_reference", 0, 1, 1.0, 0),
+                ("李", "person", 2, 3, 1.0, 1),
+                ("四德张", "person", 3, 6, 1.0, 2),
+            ],
+        );
+    }
+
+    #[test]
+    fn cross_type_fp_head_absorbed_not_readmitted() {
+        // PRECISION guard: the head re-admission is scoped to person-vs-person, so
+        // it must NOT fire for a cross-TYPE overlap. A benign `person` false
+        // positive "于江苏"[0,3] overlapping a real `address` "江苏省南京"[1,6] must
+        // still be absorbed WHOLE into the address — the "于"[0,1] head stays
+        // UNCOVERED (a generic head-preserving trim would wrongly re-admit it as a
+        // person span). Mirrors the `coverage.rs` "never restores what the merge
+        // itself trimmed" invariant at the merge site. `person_cross_layer_winner`
+        // returns `None` here (types differ), so this resolves in the `_` arm.
+        let out = merge_entities_with_text(
+            vec![
+                pmt("于江苏", "person", 0, 3, 1.0, 1),
+                pmt("江苏省南京", "address", 1, 6, 1.0, 2),
+            ],
+            "于江苏省南京",
+        );
+        assert_merged(&out, &[("江苏省南京", "address", 1, 6, 1.0, 2)]);
     }
 }
