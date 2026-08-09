@@ -43,11 +43,11 @@ def _validate_ollama_host(base_url: str) -> None:
     explicit ARGUS_ALLOW_REMOTE_OLLAMA=1 opt-in and warn (naming the host).
     """
     parsed = urlparse(base_url)
+    host = parsed.hostname or ""
     if parsed.scheme not in ("http", "https"):
         raise ValueError(
-            f"OLLAMA_HOST must use http/https scheme, got '{parsed.scheme}' in {base_url!r}"
+            f"OLLAMA_HOST must use http/https scheme, got {parsed.scheme!r} for host {host!r}"
         )
-    host = parsed.hostname or ""
     is_loopback = host in _LOOPBACK_NAMES
     if not is_loopback and host:
         try:
