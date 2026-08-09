@@ -365,6 +365,14 @@ _OLD_COLUMNS: dict[tuple[str, str], tuple[tuple[str, ...], bool, str | None]] = 
     ("shared", "phone_landline"): (_OLD_PIPL_ORDINARY, False, "phone_numbers"),
     ("shared", "date"): (_OLD_PIPL_ORDINARY, False, "dates"),
     ("shared", "url"): (_OLD_PIPL_ORDINARY, False, "url"),
+    # Newly classified (unregistered before v0.8.10 — compliance_for returned None
+    # and a report showed no statute articles). The honest OLD baseline is empty:
+    # no PIPL articles, not GDPR-special, no HIPAA category. The before/after delta
+    # therefore reads as "newly classified" (empty → floor; +member set for iban).
+    ("shared", "iban"): ((), False, None),
+    ("shared", "url_token"): ((), False, None),
+    ("shared", "imei"): ((), False, None),
+    ("shared", "gender"): ((), False, None),
     ("de", "tax_id"): (_OLD_PIPL_S3, False, None),
     ("ja", "my_number"): (_OLD_PIPL_S3, False, None),
     ("ko", "rrn"): (_OLD_PIPL_S3, False, None),
@@ -447,7 +455,7 @@ def test_covers_all_registered_types():
     """The table has exactly one entry per registered (lang, name)."""
     registered = {(td.lang, td.name) for td in _TYPES}
     assert set(DECISION_TABLE) == registered
-    assert len(DECISION_TABLE) == 74, f"expected 74 registered types, got {len(DECISION_TABLE)}"
+    assert len(DECISION_TABLE) == 78, f"expected 78 registered types, got {len(DECISION_TABLE)}"
 
 
 def test_membership_frozensets_have_no_typos():

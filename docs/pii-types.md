@@ -3,7 +3,7 @@
 Auto-generated from `argus_redact.specs.list_types()`. Do not hand-edit.
 Regenerate via: `make catalog`
 
-Total: 74 types (36 zh / 16 en / 12 shared / 10 international)
+Total: 78 types (36 zh / 16 en / 16 shared / 10 international)
 
 ## Chinese (zh) — 36 types
 
@@ -726,7 +726,7 @@ US Social Security Number — realistic faker uses 999-XX
 
 US passport — keyword-triggered, letter + 8 digits
 
-## Shared (cross-lang) — 12 types
+## Shared (cross-lang) — 16 types
 
 ### `anthropic_api_key`
 
@@ -780,6 +780,18 @@ Date / temporal identifier — detected via NER or Presidio; HIPAA shift-by-N is
 
 Email address — detection in lang/shared/patterns.py; realistic faker uses example.{com,org,net}
 
+### `gender`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 2 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
+| Source | Gender / sex mention (Chinese 性别 + English gender/sex) |
+
+Gender / sex — detection in shared.ron; ordinary personal information (not, by itself, GDPR Art.9 special-category or PIPL sensitive PI)
+
 ### `github_token`
 
 | Field | Value |
@@ -792,6 +804,31 @@ Email address — detection in lang/shared/patterns.py; realistic faker uses exa
 | Source | GitHub personal/OAuth/app token formats |
 
 GitHub tokens: classic PAT (ghp_), OAuth (gho_), user (ghu_), server (ghs_), refresh (ghr_), fine-grained (github_pat_)
+
+### `iban`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 3 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
+| Checksum | MOD97-10 (ISO 7064) |
+| Source | ISO 13616 (IBAN); mod-97 checksum per ISO 7064 |
+
+International Bank Account Number — detection in shared.ron (mod-97 validated); a financial-account identifier
+
+### `imei`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 3 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
+| Source | 3GPP TS 23.003 (IMEI); GSMA-allocated TAC |
+
+IMEI mobile-device identifier — detection in shared.ron (15 digits, keyword-triggered)
 
 ### `ip_address`
 
@@ -884,6 +921,18 @@ SSH private key PEM block (RSA, OPENSSH, DSA, EC variants)
 | HIPAA Safe Harbor | `url` |
 
 URL / web address — detected via NER or Presidio; removed because query parameters may carry PII
+
+### `url_token`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
+| Source | URL query-string credential leakage (OWASP) |
+
+URL carrying a sensitive token/key/secret query parameter — detection in shared.ron; treated as a security secret
 
 ## International — 10 types
 

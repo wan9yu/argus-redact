@@ -91,6 +91,7 @@ _MEMBER_BASIS: dict[str, str] = {
     "credit_card": "financial_account",
     "financial": "general_clause",
     "housing_fund": "financial_account",
+    "iban": "financial_account",
     # base sensitive-PI, via the general clause (not in Art.28's express list,
     # but GDPR-special and safety-relevant)
     "political": "general_clause",
@@ -181,6 +182,19 @@ _DOWNGRADE_CITE: dict[str, str] = {
         "PIPL Art.28 (by exclusion) — a private key is not enumerated as sensitive PI; a "
         "machine credential (Art.4 rationale); handled as a security secret at the highest "
         "redaction priority. The universal Art.13/Art.51 floor still applies."
+    ),
+    "url_token": (
+        "PIPL Art.28 (by exclusion) — a URL bearing a token/key/secret query parameter is "
+        "not enumerated as sensitive PI; the embedded credential is a security secret "
+        "handled at the highest redaction priority, not, as such, information about an "
+        "identified natural person (Art.4 rationale). The universal Art.13/Art.51 floor "
+        "still applies."
+    ),
+    "imei": (
+        "PIPL Art.28 (by exclusion) — an IMEI is a mobile-device equipment identifier, not "
+        "one of the Art.28 sensitive categories; high sensitivity reflects re-identification "
+        "leverage in combination, not sensitive-PI status. The universal Art.13/Art.51 "
+        "processing floor still applies."
     ),
     "credit_code": (
         "PIPL Art.28 (by exclusion) — the Unified Social Credit Code identifies a legal "

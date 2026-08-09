@@ -121,8 +121,9 @@ _IDENTITY_CREDENTIALS: frozenset[str] = frozenset(
 )
 
 # Financial-account types beyond the base set. PIPL Art.28 expressly enumerates
-# "financial accounts" (金融账户). housing_fund is a provident-fund ACCOUNT number.
-_FINANCIAL_ACCOUNTS_EXTRA: frozenset[str] = frozenset({"housing_fund"})
+# "financial accounts" (金融账户). housing_fund is a provident-fund ACCOUNT number;
+# iban is a bank-account identifier.
+_FINANCIAL_ACCOUNTS_EXTRA: frozenset[str] = frozenset({"housing_fund", "iban"})
 
 # GDPR Art.9 categories PIPL does not enumerate but the Art.28 general harm
 # clause captures — ethnicity carries discrimination / dignity harm on
