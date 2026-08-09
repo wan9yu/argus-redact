@@ -813,6 +813,7 @@ GitHub tokens: classic PAT (ghp_), OAuth (gho_), user (ghu_), server (ghs_), ref
 | Sensitivity | 3 |
 | Reversible | ✓ |
 | PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
+| HIPAA Safe Harbor | `account_numbers` |
 | Checksum | MOD97-10 (ISO 7064) |
 | Source | ISO 13616 (IBAN); mod-97 checksum per ISO 7064 |
 

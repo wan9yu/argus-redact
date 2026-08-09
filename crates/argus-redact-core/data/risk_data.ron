@@ -63,7 +63,7 @@
         (lang: "shared", name: "email", pipl_articles: ["PIPL Art.13", "PIPL Art.51"], gdpr_special_category: false, gdpr_art10: false, hipaa_phi_category: Some("email_addresses")),
         (lang: "shared", name: "ip_address", pipl_articles: ["PIPL Art.13", "PIPL Art.51"], gdpr_special_category: false, gdpr_art10: false, hipaa_phi_category: Some("ip_address")),
         (lang: "shared", name: "mac_address", pipl_articles: ["PIPL Art.13", "PIPL Art.51"], gdpr_special_category: false, gdpr_art10: false, hipaa_phi_category: Some("device_identifier")),
-        (lang: "shared", name: "iban", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.51", "PIPL Art.29", "PIPL Art.55", "PIPL Art.56"], gdpr_special_category: false, gdpr_art10: false, hipaa_phi_category: None),
+        (lang: "shared", name: "iban", pipl_articles: ["PIPL Art.13", "PIPL Art.28", "PIPL Art.51", "PIPL Art.29", "PIPL Art.55", "PIPL Art.56"], gdpr_special_category: false, gdpr_art10: false, hipaa_phi_category: Some("account_numbers")),
         (lang: "shared", name: "imei", pipl_articles: ["PIPL Art.13", "PIPL Art.51"], gdpr_special_category: false, gdpr_art10: false, hipaa_phi_category: None),
         (lang: "shared", name: "url_token", pipl_articles: ["PIPL Art.13", "PIPL Art.51"], gdpr_special_category: false, gdpr_art10: false, hipaa_phi_category: None),
         (lang: "shared", name: "gender", pipl_articles: ["PIPL Art.13", "PIPL Art.51"], gdpr_special_category: false, gdpr_art10: false, hipaa_phi_category: None),

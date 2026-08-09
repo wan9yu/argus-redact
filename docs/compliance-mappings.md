@@ -95,7 +95,7 @@ PIPL articles are shown by number (see the legend). A type marked **sensitive** 
 | shared | email | 2 | 13, 51 | — | email_addresses (F) | no |
 | shared | ip_address | 2 | 13, 51 | — | ip_address (O) | no |
 | shared | mac_address | 2 | 13, 51 | — | device_identifier (M) | no |
-| shared | iban | 3 | 13, 28, 51, 29, 55, 56 | — | — | yes |
+| shared | iban | 3 | 13, 28, 51, 29, 55, 56 | — | account_numbers (J) | yes |
 | shared | imei | 3 | 13, 51 | — | — | no |
 | shared | url_token | 4 | 13, 51 | — | — | no |
 | shared | gender | 2 | 13, 51 | — | — | no |

@@ -183,6 +183,7 @@ HIPAA_NEW: dict[str, str] = {
     "bank_card": "account_numbers",
     "credit_card": "account_numbers",
     "housing_fund": "account_numbers",  # provident-fund account number → HIPAA (J)
+    "iban": "account_numbers",  # bank-account number → HIPAA (J)
     "url": "url",
     "date": "dates",
     "itin": "other_unique_identifier",  # unique personal id but not an SSN → HIPAA (R)
