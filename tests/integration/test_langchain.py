@@ -155,3 +155,22 @@ class TestRedactRestoreChain:
         runnable.reset()
         assert runnable.last_key is None
         assert runnable.last_anchor is None
+
+
+class TestRestoreRunnableAliases:
+    """A cross-language alias form the LLM emitted must restore through the
+    guarded RestoreRunnable when aliases are configured on the constructor."""
+
+    def test_restore_runnable_forwards_aliases(self):
+        redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
+        redacted = redact_r.invoke(f"张三的电话是{13912345678}")
+        person_fake = next(p for p, o in redact_r.last_key.items() if o == "张三")
+        alias = "Zhang San"
+
+        restore_r = RestoreRunnable(redact_r, aliases={person_fake: (alias,)})
+        reply = redacted.replace(person_fake, alias) + "\n" + redact_r.last_anchor.nonce
+
+        out = restore_r.invoke(reply)
+
+        assert "张三" in out
+        assert alias not in out

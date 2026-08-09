@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from argus_redact import redact
 from argus_redact.glue.guarded_restore import guarded_restore
+from argus_redact.pure.security_events import COMPLETE
 
 
 def _validate_message(i: int, msg: object) -> None:
@@ -121,6 +122,8 @@ def restore_body(
     redacted: str | None = None,
     strict: bool = False,
     detailed: bool = False,
+    aliases: dict[str, tuple[str, ...]] | None = None,
+    display_marker: str | None = None,
 ) -> "dict | str | tuple[dict | str, dict]":
     """Restore PII in a response body.
 
@@ -136,10 +139,17 @@ def restore_body(
             supplementary heuristic (H) check fires and an INJECTION_SUSPECTED
             event is emitted when suspicious patterns are detected.
         detailed: When True, returns (result, {"security_events": [...]}).
+        aliases: {fake: (alternate, ...)} forwarded to guarded_restore so a
+            cross-language alias form the model emitted still restores.
+        display_marker: decoration marker to strip before key lookup; forwarded
+            to guarded_restore.
     """
     if not key:
+        # An empty key means there was nothing to restore — a vacuous COMPLETE,
+        # carrying the same {"security_events", "outcome"} shape guarded_restore
+        # returns so callers never special-case this branch.
         if detailed:
-            return response, {"security_events": []}
+            return response, {"security_events": [], "outcome": COMPLETE}
         return response
 
     # Bound once: the str and dict branches below differ ONLY in which string they
@@ -147,7 +157,13 @@ def restore_body(
     # new guarded_restore kwarg had to be threaded twice — the copy-paste drift this
     # release exists to remove.
     guard_kwargs = dict(
-        redacted=redacted, anchor=anchor, guard=guard, strict=strict, detailed=detailed
+        redacted=redacted,
+        anchor=anchor,
+        guard=guard,
+        strict=strict,
+        detailed=detailed,
+        aliases=aliases,
+        display_marker=display_marker,
     )
 
     if isinstance(response, str):
@@ -168,6 +184,13 @@ def restore_body(
         # all-clear that hides the fact that nothing was restored.
         raise TypeError(f"restore_body: field {field!r} missing or not a str; nothing was restored")
 
-    if detailed:
-        return response, {"security_events": []}
-    return response
+    # Fail CLOSED for every remaining shape too: a dict with a falsy/omitted
+    # field, or a response that is neither str nor dict, would otherwise fall
+    # through and be handed straight back with an empty security_events list —
+    # the same false all-clear the field-truthy branch above guards against, but
+    # nested inside `and field` so it never fired for the no-field case.
+    raise TypeError(
+        f"restore_body: response is a {type(response).__name__} with no restorable "
+        f"field (field={field!r}); nothing was restored. Pass a str response, or a "
+        f"dict with field= naming a str field."
+    )

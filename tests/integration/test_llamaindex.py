@@ -148,3 +148,22 @@ class TestResetAndPipeline:
         restored = restore_t(llm_output)
 
         assert "13812345678" in restored
+
+
+class TestRestoreTransformAliases:
+    """A cross-language alias form must restore through the guarded
+    RestoreTransform when aliases are configured on the constructor."""
+
+    def test_restore_transform_forwards_aliases(self):
+        redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
+        redacted = redact_t(f"张三的电话是{13912345678}")
+        person_fake = next(p for p, o in redact_t.last_key.items() if o == "张三")
+        alias = "Zhang San"
+
+        restore_t = RestoreTransform(redact_t, aliases={person_fake: (alias,)})
+        reply = redacted.replace(person_fake, alias) + "\n" + redact_t.last_anchor.nonce
+
+        out = restore_t(reply)
+
+        assert "张三" in out
+        assert alias not in out

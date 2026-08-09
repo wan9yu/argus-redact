@@ -200,6 +200,54 @@ class TestRestoreBody:
 
         assert restored == response
 
+    def test_should_fail_closed_when_dict_field_omitted(self):
+        # A dict response with NO field selector was silently returned unchanged
+        # with an empty security_events list — a false all-clear that hides the
+        # fact that nothing was restored. It must fail CLOSED (raise) instead.
+        body = {"text": "电话13812345678"}
+        redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)
+        response = {"result": redacted["text"]}
+
+        with pytest.raises(TypeError):
+            restore_body(response, key, guard=False)
+
+    def test_should_fail_closed_when_response_is_neither_str_nor_dict(self):
+        # A list/other shape can carry no restorable string — fail CLOSED rather
+        # than hand it straight back as an implied all-clear.
+        body = {"text": "电话13812345678"}
+        _, key = redact_body(body, mode="fast", lang="zh", salt=42)
+
+        with pytest.raises(TypeError):
+            restore_body(["not", "a", "string"], key, guard=False)
+
+    def test_empty_key_detailed_returns_outcome_key(self):
+        # Shape parity with guarded_restore: the detailed no-op return must carry
+        # an "outcome" key too, not just "security_events".
+        response = {"result": "no PII here"}
+
+        _restored, details = restore_body(response, {}, field="result", guard=False, detailed=True)
+
+        assert "outcome" in details
+
+    def test_restore_body_forwards_aliases(self):
+        # A cross-language alias form must restore through restore_body when
+        # aliases= is supplied (and not without it).
+        key = {"P-1": "张三"}
+        response = {"result": "P-1 and Zhang San"}
+        aliases = {"P-1": ("Zhang San",)}
+
+        restored = restore_body(response, key, field="result", guard=False, aliases=aliases)
+
+        assert restored["result"] == "张三 and 张三"
+
+    def test_restore_body_forwards_display_marker(self):
+        key = {"P-1": "张三"}
+        response = {"result": "P-1ⓕ来了"}
+
+        restored = restore_body(response, key, field="result", guard=False, display_marker="ⓕ")
+
+        assert restored["result"] == "张三来了"
+
 
 class TestRoundtrip:
     def test_should_roundtrip_full_flow(self):

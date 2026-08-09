@@ -204,3 +204,49 @@ def test_key_file_path_is_accepted(tmp_path):
     kf = tmp_path / "key.json"
     kf.write_text(json.dumps(key), encoding="utf-8")
     assert guarded_restore(reply, str(kf), anchor=anchor) == f"张三的电话是{_PHONE}"
+
+
+class TestGuardedRestoreAliases:
+    """aliases/display_marker thread through guarded_restore into the core restore.
+
+    Without the forwarding, a cross-language alias form the LLM emitted (张三 →
+    "Zhang San") silently fails to restore on the guarded path — the whole point
+    of aliases, unreachable through the RECOMMENDED entry point.
+    """
+
+    def _redact_person(self):
+        redacted, key = redact(f"张三的电话是{_PHONE}", lang="zh", mode="fast")
+        anchor = make_anchor(key)
+        person_fake = next(p for p, original in key.items() if original == "张三")
+        return redacted, key, anchor, person_fake
+
+    def test_alias_form_restores_with_aliases_kwarg(self):
+        redacted, key, anchor, person_fake = self._redact_person()
+        alias = "Zhang San"
+        reply = redacted.replace(person_fake, alias) + "\n" + anchor.nonce
+
+        out = guarded_restore(reply, key, anchor=anchor, aliases={person_fake: (alias,)})
+
+        assert "张三" in out
+        assert alias not in out
+
+    def test_alias_form_not_restored_without_aliases_kwarg(self):
+        redacted, key, anchor, person_fake = self._redact_person()
+        alias = "Zhang San"
+        reply = redacted.replace(person_fake, alias) + "\n" + anchor.nonce
+
+        out = guarded_restore(reply, key, anchor=anchor)
+
+        # Alias unmapped without aliases=: the person is NOT restored.
+        assert "张三" not in out
+        assert alias in out
+
+    def test_display_marker_forwarded(self):
+        # guard=False keeps this deterministic — the marker/alias forwarding is
+        # the same _restore call the guarded path uses.
+        key = {"P-1": "张三"}
+        text = "P-1ⓕ来了"
+
+        assert guarded_restore(text, key, guard=False, display_marker="ⓕ") == "张三来了"
+        # Without display_marker the decoration survives verbatim after restore.
+        assert guarded_restore(text, key, guard=False) == "张三ⓕ来了"

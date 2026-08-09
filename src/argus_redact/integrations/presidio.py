@@ -135,6 +135,8 @@ class PresidioBridge:
         redacted: str | None = None,
         strict: bool = False,
         detailed: bool = False,
+        aliases: dict[str, tuple[str, ...]] | None = None,
+        display_marker: str | None = None,
     ) -> "str | tuple[str, dict]":
         """Restore pseudonyms to originals.
 
@@ -158,6 +160,10 @@ class PresidioBridge:
             detailed: When True, returns (result_text, {"security_events": [...]}).
                 On the default path the events are surfaced as a SecurityWarning
                 rather than discarded.
+            aliases: {fake: (alternate, ...)} forwarded to guarded_restore so a
+                cross-language alias form the model emitted still restores.
+            display_marker: decoration marker to strip before key lookup;
+                forwarded to guarded_restore.
         """
         return guarded_restore(
             text,
@@ -167,6 +173,8 @@ class PresidioBridge:
             guard=guard,
             strict=strict,
             detailed=detailed,
+            aliases=aliases,
+            display_marker=display_marker,
         )
 
 
