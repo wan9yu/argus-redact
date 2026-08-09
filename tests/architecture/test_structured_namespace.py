@@ -30,10 +30,10 @@ STRUCTURED_NAMES = ("redact_json", "restore_json", "redact_csv", "restore_csv")
 # Additive optional keyword-only params are minor-compatible; only
 # removals/renames/required-additions break the contract.
 FROZEN_SIGNATURES = {
-    "redact_json": "(data: 'dict | list', *, mode: 'str' = 'fast', lang: 'str | list[str]' = 'zh', salt: 'int | bytes | None' = None, config: 'dict | None' = None, key: 'dict | None' = None, paths: 'list[str] | None' = None, with_types: 'bool' = False) -> 'tuple[dict | list, dict] | tuple[dict | list, dict, dict]'",  # noqa: E501
-    "restore_json": "(data: 'dict | list', key: 'dict') -> 'dict | list'",
-    "redact_csv": "(csv_text: 'str', *, mode: 'str' = 'fast', lang: 'str | list[str]' = 'zh', salt: 'int | bytes | None' = None, config: 'dict | None' = None, has_header: 'bool' = True) -> 'tuple[str, dict]'",  # noqa: E501
-    "restore_csv": "(csv_text: 'str', key: 'dict') -> 'str'",
+    "redact_json": "(data: 'dict | list', *, mode: 'str' = 'fast', lang: 'str | list[str]' = 'zh', salt: 'int | bytes | None' = None, config: 'dict | None' = None, key: 'dict | None' = None, paths: 'list[str] | None' = None, with_types: 'bool' = False, with_aliases: 'bool' = False) -> 'tuple[dict | list, dict] | tuple[dict | list, dict, dict] | tuple[dict | list, dict, dict, dict]'",  # noqa: E501
+    "restore_json": "(data: 'dict | list', key: 'dict', *, aliases: 'dict[str, tuple[str, ...]] | None' = None) -> 'dict | list'",  # noqa: E501
+    "redact_csv": "(csv_text: 'str', *, mode: 'str' = 'fast', lang: 'str | list[str]' = 'zh', salt: 'int | bytes | None' = None, config: 'dict | None' = None, has_header: 'bool' = True, with_aliases: 'bool' = False) -> 'tuple[str, dict] | tuple[str, dict, dict]'",  # noqa: E501
+    "restore_csv": "(csv_text: 'str', key: 'dict', *, aliases: 'dict[str, tuple[str, ...]] | None' = None) -> 'str'",  # noqa: E501
 }
 
 

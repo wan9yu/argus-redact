@@ -569,4 +569,16 @@ impl StructuredRedactor {
     fn mask_collisions(&self) -> Vec<String> {
         self.session.mask_collisions().to_vec()
     }
+
+    /// The accumulated `{fake: aliases}` map for realistic fakers that emitted
+    /// alternate transliterations so far this session (a snapshot copy). Mirrors
+    /// the one-shot [`replace`] path's fourth return element, so a structured
+    /// (CSV / JSON) redaction can thread the SAME aliases into
+    /// `make_structured_restorer` that the batch and streaming faces already do
+    /// — without it an LLM that rewrote a realistic fake into one of its aliases
+    /// would silently stay unrestored on the structured face.
+    #[getter]
+    fn aliases(&self) -> HashMap<String, Vec<String>> {
+        self.session.aliases().clone()
+    }
 }
