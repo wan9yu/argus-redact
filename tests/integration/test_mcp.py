@@ -175,6 +175,22 @@ class TestMCPToolExecution:
         assert "13812345678" not in data["redacted"]
 
     @pytest.mark.asyncio
+    async def test_redact_all_separator_lang_raises_clean_error(self, mcp_app):
+        """A lang of only separators (e.g. ",") splits down to an empty list.
+        Before the central empty-lang guard, redact()'s report/anchor lang[0]
+        raised IndexError — an internal 500 over the wire. It must now surface
+        as the clean 'No language specified' ValueError (a 400-class error),
+        never a raw index crash."""
+        with pytest.raises(Exception) as exc_info:
+            await mcp_app.call_tool(
+                "redact",
+                {"text": "电话13812345678", "mode": "fast", "lang": ",", "salt": 42},
+            )
+        message = str(exc_info.value)
+        assert "No language specified" in message
+        assert "index out of range" not in message
+
+    @pytest.mark.asyncio
     async def test_assess_trailing_comma_lang_does_not_crash(self, mcp_app):
         """F6 — same empty-segment fix applies to the assess tool's lang split."""
         result = await mcp_app.call_tool(
