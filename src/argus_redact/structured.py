@@ -371,6 +371,21 @@ def restore_json(
     returns, so an LLM that rewrote a realistic fake into one of its aliases still
     round-trips. Without it those alias forms would silently stay unrestored.
 
+    UNGUARDED by design: unlike ``restore()`` / ``restore_guarded()`` (guarded by
+    default since v0.8.0), ``restore_json`` has no per-call anchor to check — it is
+    a stored key file substituted mechanically over a document, with no provenance
+    or scope check. This is a deliberate scope decision, not an oversight: adding a
+    guard here would need a per-anchor scope threaded through every leaf, which is
+    a cross-layer redesign (see ``docs/stability-contract.md``), not a parameter
+    add. If a leaf came from an LLM reply you don't fully trust, buffer it and call
+    ``guarded_restore()`` on the plain text yourself instead.
+
+    Known limitation: a benign string leaf that happens to COINCIDENTALLY equal one
+    of ``key``'s pseudonym codes (or a mask/category label) is indistinguishable
+    from a real placeholder and IS restored to that entity's original — there is no
+    per-leaf marker recording which spans this function itself produced. This is
+    inherent to any placeholder-substitution scheme, not specific to JSON.
+
     Raises:
         ValueError: if the document nests deeper than ``_MAX_STRUCTURED_DEPTH``
             (the SAME symmetric limit ``redact_json`` enforces).
@@ -526,7 +541,32 @@ def restore_csv(
     the ``{fake: alternate-transliterations}`` map ``redact_csv(..., with_aliases=True)``
     returns, so an LLM that rewrote a realistic fake into one of its aliases still
     round-trips (without it those alias forms stay unrestored).
+
+    UNGUARDED by design: unlike ``restore()`` / ``restore_guarded()`` (guarded by
+    default since v0.8.0), ``restore_csv`` has no per-call anchor to check — see
+    ``restore_json``'s docstring for the same scope decision and its rationale.
+
+    Known limitation: a benign cell that happens to COINCIDENTALLY equal one of
+    ``key``'s pseudonym codes (or a mask/category label) is indistinguishable from
+    a real placeholder and IS restored to that entity's original — see
+    ``restore_json``'s docstring; the same inherent hazard applies here.
+
+    Line-terminator note: for a NON-EMPTY ``key`` this reserializes through
+    Python's ``csv`` module, which writes its own line terminator (``\\r\\n``)
+    regardless of what ``csv_text`` used, and the result never carries a
+    trailing terminator (see ``_serialize_csv_rows``) — a restore can therefore
+    change line endings even when no cell changed. An EMPTY ``key`` restores
+    nothing, so that round trip is skipped entirely: the input is returned
+    completely unchanged, byte-for-byte, terminator included.
     """
+    if not key:
+        # Fast path: nothing to restore (an empty key can never substitute
+        # anything — see `merge_aliases`, which also requires a `key` entry
+        # for any `aliases` to attach to), so skip the csv parse/reserialize
+        # round trip entirely rather than pay its terminator-normalizing cost
+        # for a no-op. Mirrors `redact_csv`'s own no-op-input short circuit.
+        return csv_text
+
     # The session restores unguarded — a stored key file, no per-call anchor to
     # verify — the same explicit unguarded opt-out `restore(..., guard=False)`
     # documents (same as restore_json / redact_csv's forward path), but merges

@@ -1416,6 +1416,8 @@ redacted_csv, key = redact_csv(csv_text, mode="fast")
 restored_csv = restore_csv(redacted_csv, key)
 ```
 
+**Unguarded by design.** `restore_json` / `restore_csv` apply `key` (+ optional `aliases=`) mechanically over every leaf/cell, with no per-call anchor — unlike the scalar `restore()` / `restore_guarded()` faces, which guard by default since v0.8.0 (see [`guard=True` is the default](#guardtrue-is-the-default-v080)). Threading that same provenance/scope guard through structured restore is a cross-layer redesign, not a parameter add, so it stays out of scope here; if a document came back from an LLM reply you don't fully trust, restore the plain text through `guarded_restore()` yourself instead. A benign leaf/cell that happens to equal one of `key`'s pseudonym codes is also restored — see each function's docstring for the same collision hazard `restore()` documents.
+
 ---
 
 ## Limitations
@@ -1425,5 +1427,6 @@ restored_csv = restore_csv(redacted_csv, key)
 | YAML config requires `pyyaml` | Pass dict or JSON file path if pyyaml not installed |
 | Streaming restore is sentence-based | Pseudonyms split across chunks are buffered until a sentence boundary |
 | `StreamingRestorer` is unguarded | No per-call anchor mid-stream; a one-time `SecurityWarning` fires on the first real substitution, and the buffer is capped (`max_buffer`, default 4096) |
+| `restore_json` / `restore_csv` are unguarded | Same reasoning as `StreamingRestorer` above — a stored key applied over a whole document with no per-call anchor. A benign leaf/cell that coincidentally equals a pseudonym code is also restored (see [Structured Data](#structured-data)) |
 | `restore()` is global replacement | If LLM output naturally contains a pseudonym pattern, it gets replaced. Use a unique `prefix` in `config` to minimize risk |
 | Pseudonym codes auto-expand | 5-digit codes (99,999 per prefix); automatically expands range on exhaustion |

@@ -445,20 +445,28 @@ fn lang_is_auto(lang: &Option<StringOrVec>) -> bool {
 }
 
 /// Restore redacted text using the `key` map (`{fake: original}`) returned by
-/// [`redact`]. The optional `aliases` are NOT taken here (fast-mode realistic
-/// aliases are carried on the redact result); this is the core restore path used
-/// for the common `(text, key)` roundtrip.
+/// [`redact`]. `aliases` is an optional `{fake: [alternate-transliteration,
+/// ...]}` map — mirrors the Python `restore(text, key, aliases=...)` /
+/// `restore_json` / `restore_csv` faces, so a reply that rewrote a fake into
+/// one of its aliases (e.g. pinyin for a Chinese name) still round-trips.
+/// `undefined` / `null` means "no aliases", identical to omitting the
+/// argument entirely from JS.
+///
+/// `aliases` is APPENDED after `key` rather than inserted before it, so
+/// existing two-argument callers (`restore(text, key)`) are unaffected — a
+/// JS call that does not pass a third argument gets `undefined` for it, the
+/// same as every optional trailing argument on this binding.
 ///
 /// # Security: UNGUARDED by default (a stated trade-off)
 ///
-/// This entry point is **unguarded** — it applies the `key` map unconditionally,
-/// with NO (P)rovenance or (S)cope check. A caller who restores attacker-chosen
-/// text against a key can therefore surface originals for tokens that were never
-/// part of the intended exchange. This is a DELIBERATE trade-off: `restore` keeps
-/// the minimal `(text, key)` roundtrip the browser demo and simple integrations
-/// depend on, and (unlike the Python `restore()` shim, which fails closed by
-/// default since v0.8.0) this browser binding does NOT guard by default in this
-/// release.
+/// This entry point is **unguarded** — it applies the `key` (+ `aliases`) map
+/// unconditionally, with NO (P)rovenance or (S)cope check. A caller who
+/// restores attacker-chosen text against a key can therefore surface
+/// originals for tokens that were never part of the intended exchange. This
+/// is a DELIBERATE trade-off: `restore` keeps the minimal `(text, key)`
+/// roundtrip the browser demo and simple integrations depend on, and (unlike
+/// the Python `restore()` shim, which fails closed by default since v0.8.0)
+/// this browser binding does NOT guard by default in this release.
 ///
 /// For fail-closed, **Python-parity** behaviour use [`restore_guarded`]: it runs
 /// the core (P)rovenance + (S)cope guard against a caller-supplied anchor and
@@ -467,7 +475,7 @@ fn lang_is_auto(lang: &Option<StringOrVec>) -> bool {
 /// guarded-by-default flip / rename for this binding is deferred to a future
 /// wasm-hardening pass.)
 #[wasm_bindgen]
-pub fn restore(text: &str, key: JsValue) -> Result<String, JsValue> {
+pub fn restore(text: &str, key: JsValue, aliases: JsValue) -> Result<String, JsValue> {
     set_panic_hook();
 
     let key: HashMap<String, String> = if key.is_undefined() || key.is_null() {
@@ -477,9 +485,21 @@ pub fn restore(text: &str, key: JsValue) -> Result<String, JsValue> {
             .map_err(|e| JsValue::from_str(&format!("invalid key: {e}")))?
     };
 
-    // No `aliases` are taken here (see the doc comment above), so
-    // `alias_collisions` is always empty — discard it.
-    restore_full(text, &key, None, None)
+    let aliases: Option<HashMap<String, Vec<String>>> =
+        if aliases.is_undefined() || aliases.is_null() {
+            None
+        } else {
+            Some(
+                serde_wasm_bindgen::from_value(aliases)
+                    .map_err(|e| JsValue::from_str(&format!("invalid aliases: {e}")))?,
+            )
+        };
+
+    // `alias_collisions` is discarded here — this entry point's return shape
+    // is a bare `String`; a caller that needs collision detail should use
+    // [`restore_guarded`], whose `events` surface an `alias_collision` guard
+    // event the same way the PyO3 binding does.
+    restore_full(text, &key, aliases.as_ref(), None)
         .map(|(result, _)| result)
         .map_err(|e| JsValue::from_str(&e.0))
 }
@@ -572,8 +592,21 @@ fn restore_outcome_str(outcome: &RestoreOutcome) -> &'static str {
 /// through to an unguarded restore. `restored` in that case is the raw input
 /// `text`, byte-for-byte UNCHANGED — not even nonce-stripped, since no anchor
 /// means nothing was there to prove any nonce is ours.
+///
+/// `aliases` is an optional `{fake: [alternate-transliteration, ...]}` map,
+/// APPENDED after `anchor` (never inserted before it — an existing
+/// three-argument JS call site must keep meaning `(text, key, anchor)`, not
+/// silently reinterpret its third argument as aliases). It mirrors the same
+/// parameter on [`restore`]; if the caller's aliases collide (two fakes
+/// claiming the same alias), that already surfaces as an `alias_collision`
+/// event via `result.events` below — no extra wiring needed here.
 #[wasm_bindgen]
-pub fn restore_guarded(text: &str, key: JsValue, anchor: JsValue) -> Result<JsValue, JsValue> {
+pub fn restore_guarded(
+    text: &str,
+    key: JsValue,
+    anchor: JsValue,
+    aliases: JsValue,
+) -> Result<JsValue, JsValue> {
     set_panic_hook();
 
     let key: HashMap<String, String> = if key.is_undefined() || key.is_null() {
@@ -602,7 +635,17 @@ pub fn restore_guarded(text: &str, key: JsValue, anchor: JsValue) -> Result<JsVa
         .map_err(|e| JsValue::from_str(&format!("invalid anchor: {e}")))?;
     let core_anchor = Anchor::new(spec.nonce, spec.scope.into_iter().collect());
 
-    let result = restore_full_guarded(text, &key, None, None, Some(&core_anchor))
+    let aliases: Option<HashMap<String, Vec<String>>> =
+        if aliases.is_undefined() || aliases.is_null() {
+            None
+        } else {
+            Some(
+                serde_wasm_bindgen::from_value(aliases)
+                    .map_err(|e| JsValue::from_str(&format!("invalid aliases: {e}")))?,
+            )
+        };
+
+    let result = restore_full_guarded(text, &key, aliases.as_ref(), None, Some(&core_anchor))
         .map_err(|e| JsValue::from_str(&e.0))?;
 
     let out = GuardedRestoreJs {

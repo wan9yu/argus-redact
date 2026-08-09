@@ -196,6 +196,42 @@ class TestServerRestore:
         assert r2.status_code == 200
         assert "13812345678" in r2.json()["restored"]
 
+    def test_should_restore_alternate_transliteration_via_aliases_field(self, client):
+        r = client.post(
+            "/restore",
+            json={
+                "text": "Wang Wu phoned",
+                "key": {"王五": "王建国"},
+                "aliases": {"王五": ["Wang Wu"]},
+                "guard": False,
+            },
+        )
+
+        assert r.status_code == 200
+        assert r.json()["restored"] == "王建国 phoned"
+
+    def test_should_reject_non_object_aliases(self, client):
+        r = client.post(
+            "/restore",
+            json={"text": "x", "key": {}, "aliases": ["not", "an", "object"], "guard": False},
+        )
+
+        assert r.status_code == 400
+
+    def test_should_strip_display_marker_field(self, client):
+        r = client.post(
+            "/restore",
+            json={
+                "text": "P-037ⓥ说了话",
+                "key": {"P-037": "王五"},
+                "display_marker": "ⓥ",
+                "guard": False,
+            },
+        )
+
+        assert r.status_code == 200
+        assert r.json()["restored"] == "王五说了话"
+
 
 class TestServerInfo:
     def test_should_return_info(self, client):

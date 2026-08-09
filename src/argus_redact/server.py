@@ -234,6 +234,28 @@ async def handle_restore(request: Request) -> JSONResponse:
     guard = body.get("guard", True)
     strict = body.get("strict", False)
 
+    # Optional `{fake: [alternate-transliteration, ...]}` map — mirrors
+    # `restore(text, key, aliases=...)`, so an LLM reply that rewrote a fake
+    # into one of its aliases still round-trips over HTTP. Values must be
+    # lists: a bare string value would otherwise iterate character-by-character
+    # once handed to `restore()` (the same footgun `anchor.scope` below guards
+    # against), silently building garbage single-character aliases.
+    aliases = body.get("aliases")
+    if aliases is not None:
+        if not isinstance(aliases, dict):
+            return JSONResponse({"error": "aliases must be a JSON object"}, status_code=400)
+        if not all(isinstance(v, list) for v in aliases.values()):
+            return JSONResponse(
+                {"error": "aliases values must be lists of alias strings"},
+                status_code=400,
+            )
+
+    # Optional display marker — mirrors `restore(text, key, display_marker=...)`:
+    # stripped from `text` before key lookup (e.g. a visible "ⓕ" decoration).
+    display_marker = body.get("display_marker")
+    if display_marker is not None and not isinstance(display_marker, str):
+        return JSONResponse({"error": "display_marker must be a string"}, status_code=400)
+
     # Optional provenance/scope anchor: {"nonce": str, "scope": [pseudonym, ...]}.
     # Reconstructed into the same Anchor make_anchor() produces so the (P + S)
     # checks in restore() can verify the model echoed the nonce and stayed in scope.
@@ -272,7 +294,15 @@ async def handle_restore(request: Request) -> JSONResponse:
         # concurrent request while this one scanned.
         restored, details = await run_in_threadpool(
             functools.partial(
-                restore, text, key, guard=guard, anchor=anchor, strict=strict, detailed=True
+                restore,
+                text,
+                key,
+                aliases=aliases,
+                display_marker=display_marker,
+                guard=guard,
+                anchor=anchor,
+                strict=strict,
+                detailed=True,
             )
         )
     except RestoreGuardError as e:

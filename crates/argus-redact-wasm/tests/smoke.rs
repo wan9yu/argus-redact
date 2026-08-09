@@ -8,6 +8,7 @@
 
 use argus_redact_wasm::{redact, restore};
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
 
 /// The opts struct the wasm `redact` deserializes. Serialized here so the test
@@ -61,7 +62,7 @@ fn redact_masks_and_restores() {
 
     // 2. restore(redacted, key) must recover the ORIGINAL input exactly.
     let key_js = serde_wasm_bindgen::to_value(&result.key).unwrap();
-    let restored = restore(&result.text, key_js).expect("restore should succeed");
+    let restored = restore(&result.text, key_js, JsValue::UNDEFINED).expect("restore should succeed");
     assert_eq!(restored, original, "roundtrip must recover the original");
 }
 
