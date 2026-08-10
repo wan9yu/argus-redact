@@ -30,6 +30,7 @@ def restore(
     anchor: object | None = None,
     strict: bool = False,
     detailed: bool = False,
+    cancel_token: object | None = None,
 ) -> "str | tuple[str, dict]":
     """Replace pseudonyms with originals using ``key``.
 
@@ -51,6 +52,11 @@ def restore(
         anchor: Anchor instance produced by make_anchor(); carries nonce + scope.
         strict: when True and guard=True, raises RestoreGuardError on any security event.
         detailed: when True, returns (result_text, {"security_events": [...]}) tuple.
+        cancel_token: ACCEPTED AND DROPPED — a no-op here. Restore reaches no
+            ``detect_l1`` (it is a linear key substitution, not a scan), so there is
+            no poll boundary to cancel and no CPU to reclaim. The parameter exists
+            only so the HTTP server can bind one token into both the redact and
+            restore scan partials uniformly; it never cancels a restore.
     """
     if isinstance(key, str):
         key = _load_key_file(key)

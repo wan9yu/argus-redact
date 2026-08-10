@@ -25,9 +25,28 @@ import warnings
 from typing import TYPE_CHECKING, Any
 
 from argus_redact import __version__, redact, restore
+from argus_redact._core_loader import _core
 from argus_redact.exceptions import SecurityWarning
 from argus_redact.pure.restore import RestoreGuardError
 from argus_redact.pure.wire import common_report_fields, risk_payload
+
+# ScanAborted is the cooperative-cancellation abort raised by the Rust L1 detect
+# path when a CancelToken is tripped mid-scan (see `_run_scan`). It is a PyException
+# subclass — NOT BaseException — so the detached `_worker`'s `except Exception`
+# catches it, forwards it, and the server SURVIVES; a BaseException-derived abort
+# would escape into the app-lifetime task group and kill the server at every
+# cancellation. Mapped to 504 in both handlers (defensive/dead under the current
+# deadline-only trip source — the deadline raises _ScanTimeout first — but correct
+# for a future client-disconnect source). Sourced from the compiled _core; a
+# private never-raised placeholder keeps the except ladders well-formed if the
+# mandatory core is somehow absent.
+if _core is not None:
+    ScanAborted = _core.ScanAborted
+else:  # pragma: no cover - the compiled _core is mandatory for the server
+
+    class ScanAborted(Exception):
+        """Placeholder used only when the compiled _core is unavailable."""
+
 
 try:
     import anyio
@@ -236,8 +255,13 @@ async def _run_scan(request, fn):
     rate-limit upstream. Raises `_ScanTimeout` on the deadline (mapped to 504 by
     the caller).
 
-    Cooperative cancellation that reclaims CPU at the deadline is planned for a
-    future release.
+    Cooperative cancellation (v0.8.11): a FRESH per-scan `_core.CancelToken` is
+    bound into `fn` and tripped when the deadline fires, so the detached worker
+    aborts at its next poll and frees its slot early — reclaiming CPU. This applies
+    ONLY to the `/redact` fast-mode-L1 path (the only path with a cancellable
+    `detect_l1` scan); `/restore` accepts the token but drops it (no `detect_l1`, so
+    nothing to reclaim). The token is per-scan by construction — a shared or
+    module-global token would abort unrelated in-flight scans.
     """
     global _admitted_scans
 
@@ -262,6 +286,16 @@ async def _run_scan(request, fn):
     if _admitted_scans >= _MAX_ADMITTED_SCANS:
         raise _ServerBusy("server busy: too many scans in flight; retry shortly")
     _admitted_scans += 1
+
+    # A FRESH cancellation token for THIS scan — never shared or module-global (a
+    # shared one would abort unrelated in-flight scans). Bound into `fn` so the
+    # redact scan can poll it; `/restore`'s `fn` accepts and drops it (no
+    # detect_l1). Tripped in the deadline branch below to reclaim CPU. Guarded on
+    # `_core` so a partial install (no compiled core) does not crash here — the
+    # server needs the core to redact at all, but restore-only use must not break.
+    token = _core.CancelToken() if _core is not None else None
+    if token is not None:
+        fn = functools.partial(fn, cancel_token=token)
 
     done = anyio.Event()
     holder: dict[str, Any] = {}
@@ -298,8 +332,14 @@ async def _run_scan(request, fn):
     with anyio.move_on_after(_SCAN_TIMEOUT_SECONDS) as scope:
         await done.wait()
     if scope.cancelled_caught:
-        # Deadline hit: the worker keeps running, still holds its slot, and frees
-        # it on completion. The client gets a prompt 504.
+        # Deadline hit: trip the token (fire-and-forget) so the detached worker
+        # aborts at its next detect_l1 poll and frees its slot EARLY, reclaiming
+        # CPU — instead of running the abandoned scan to completion. The client
+        # still gets a prompt 504 now; the worker's ScanAborted is caught by its
+        # own `except Exception` and never surfaces here (see the module note on
+        # ScanAborted). A `/restore` scan drops the token, so it is unaffected.
+        if token is not None:
+            token.cancel()
         raise _ScanTimeout
     if "error" in holder:
         raise holder["error"]
@@ -379,6 +419,15 @@ async def handle_redact(request: Request) -> JSONResponse:
     except _ScanTimeout:
         return JSONResponse(
             {"error": "request timed out: the scan exceeded the server time limit"},
+            status_code=504,
+        )
+    except ScanAborted:
+        # A scan aborted cooperatively (a tripped CancelToken surfaced from the
+        # worker). Defensive under the current deadline-only trip source — the
+        # deadline raises _ScanTimeout first, so this is dead today — but correct
+        # for a future client-disconnect source. 504: the scan did not complete.
+        return JSONResponse(
+            {"error": "request cancelled: the scan was aborted before it completed"},
             status_code=504,
         )
     except (_ServerNotReady, _ServerBusy) as e:
@@ -531,6 +580,15 @@ async def handle_restore(request: Request) -> JSONResponse:
     except _ScanTimeout:
         return JSONResponse(
             {"error": "request timed out: the scan exceeded the server time limit"},
+            status_code=504,
+        )
+    except ScanAborted:
+        # Symmetry with handle_redact and correctness for a future disconnect
+        # source. Unreachable via a deadline trip on THIS path: restore drops the
+        # cancel_token (no detect_l1 to abort), so a tripped token never surfaces a
+        # ScanAborted from a restore worker — restore gets no CPU reclamation.
+        return JSONResponse(
+            {"error": "request cancelled: the scan was aborted before it completed"},
             status_code=504,
         )
     except (_ServerNotReady, _ServerBusy) as e:

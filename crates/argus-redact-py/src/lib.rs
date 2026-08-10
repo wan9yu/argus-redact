@@ -49,6 +49,9 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(replace::replace, m)?)?;
     m.add_function(wrap_pyfunction!(replace::build_type_info, m)?)?;
     m.add_class::<replace::StructuredRedactor>()?;
+    // ── cooperative cancellation (CancelToken handle + ScanAborted) ──
+    m.add_class::<redact_l1::CancelToken>()?;
+    m.add("ScanAborted", m.py().get_type::<redact_l1::ScanAborted>())?;
     // ── L1 engine bindings (detect / redact / hints) ──
     m.add_function(wrap_pyfunction!(redact_l1::detect_l1, m)?)?;
     m.add_function(wrap_pyfunction!(redact_l1::redact_l1, m)?)?;

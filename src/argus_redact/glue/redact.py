@@ -474,6 +474,7 @@ def _detect(
     types_exclude: list[str] | None,
     strict: bool = False,
     restored_types: list[str] | None = None,
+    cancel_token: object | None = None,
 ) -> tuple[list[PatternMatch], list[str], dict, dict]:
     """Run the full detection pipeline (L1 regex + L1b person + L2 NER + L3 LLM + merge).
 
@@ -507,8 +508,12 @@ def _detect(
     # ``hobby`` — also tagged LAYER_REGEX), the internal L1 hints, and validator
     # ``near_misses``. detect_l1 takes the ORIGINAL text (it normalizes internally).
     t0 = time.perf_counter()
+    # ``cancel_token`` (a ``_core.CancelToken`` or None) opts L1 into cooperative
+    # cancellation: a token tripped from another thread makes this scan raise
+    # ``_core.ScanAborted`` at its next poll boundary, reclaiming the CPU. None (the
+    # default and every non-server caller) is byte-identical to the old no-token call.
     layer1, person, regions, job_titles, framework, l1_hints, near_misses = _core.detect_l1(
-        text, langs, names or []
+        text, langs, names or [], cancel_token=cancel_token
     )
     timing["layer_1_ms"] = (time.perf_counter() - t0) * 1000
     entities.extend(layer1)
@@ -769,6 +774,7 @@ def redact(
     types_exclude: list[str] | None = None,
     unified_prefix: str | None = None,
     strict: bool = False,
+    cancel_token: object | None = None,
     _pre_detected: "list[PatternMatch] | None" = None,
 ):
     """Detect and replace PII in text.
@@ -786,6 +792,11 @@ def redact(
         profile: Compliance profile name ("default", "pipl", "gdpr", "hipaa").
         types: Whitelist of PII type names to detect.
         types_exclude: Blacklist of PII type names to skip.
+        cancel_token: Optional ``_core.CancelToken`` for cooperative cancellation
+            of the L1 detect scan. Tripped from another thread (``token.cancel()``),
+            it makes an in-flight fast-mode scan raise ``_core.ScanAborted`` at its
+            next poll boundary — the HTTP server uses this to reclaim CPU when a
+            request hits its deadline. None (the default) never cancels.
 
     Returns:
         (redacted_text, key) by default.
@@ -931,6 +942,7 @@ def redact(
             types_exclude=types_exclude,
             strict=strict,
             restored_types=_restored_types,
+            cancel_token=cancel_token,
         )
 
     warn_coverage_restored(_restored_types)
