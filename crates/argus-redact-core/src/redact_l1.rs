@@ -49,6 +49,7 @@
 
 use std::collections::HashSet;
 
+use crate::cancel::{poll_abort, CancelFlag, DetectError};
 use crate::coverage::{restore_lost_coverage, FilterScope};
 use crate::data::{all_langs, builtin_patterns};
 use crate::fanout;
@@ -59,7 +60,7 @@ use crate::normalize::{
     finalize, map_spans_to_original, normalize_core, normalize_text_for_person,
 };
 use crate::occupation::detect_occupation_zh;
-use crate::patterns::{match_patterns, PatternConfig, PatternError};
+use crate::patterns::{match_patterns_cancellable, PatternConfig, PatternError};
 use crate::regions::detect_regions_zh;
 use crate::replace::{replace, FakerFactory, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
 use crate::reserved_range::{CharOffsetCursor, char_slice};
@@ -220,17 +221,45 @@ fn map_matches_to_original(
 ///
 /// `lang` is the resolved language list (e.g. `["zh"]`, `["zh","en"]`). `names`
 /// is the known-names list. No merge/filter/boost is applied.
+///
+/// This is the never-cancel entry point — a thin 3-arg wrapper over
+/// [`detect_l1_cancellable`] with `cancel = None`, kept at the exact arity + arg
+/// types callers (the wasm crate, the PyO3 binding, `redact_l1`, the goldens) use
+/// today. Its return type widens `PatternError` → [`DetectError`]; the
+/// `.map_err(|e| e.to_string())` call sites keep working through
+/// [`DetectError`]'s `Display`. With `cancel = None` every poll is a no-op, so the
+/// output is byte-identical to the pre-cancellation implementation.
 pub fn detect_l1(
     text: &str,
     lang: &[String],
     names: &[String],
-) -> Result<DetectL1Result, PatternError> {
+) -> Result<DetectL1Result, DetectError> {
+    detect_l1_cancellable(text, lang, names, None)
+}
+
+/// The cancellable form of [`detect_l1`]. Identical detection sequence, but polls
+/// the supplied [`CancelFlag`] at the base-scan loop (via
+/// [`match_patterns_cancellable`], which the fan-out re-invokes so it inherits the
+/// poll through `?`) and BETWEEN the six person-family phases. A tripped flag turns
+/// the next poll into an `Err(DetectError::Aborted)` — never a partial `Ok`
+/// (`poll_abort!` can only `return Err`). `cancel = None` = never cancel.
+///
+/// Coarse granularity is intentional for v0.8.11: a single ≥1 MiB person phase is
+/// the worst-case latency between two polls; an intra-detector poll is a future
+/// contingency, deliberately NOT built here.
+pub fn detect_l1_cancellable(
+    text: &str,
+    lang: &[String],
+    names: &[String],
+    cancel: Option<&CancelFlag>,
+) -> Result<DetectL1Result, DetectError> {
     if text.len() > crate::MAX_INPUT_SIZE {
         return Err(PatternError(format!(
             "input too large: {} bytes exceeds MAX_INPUT_SIZE {}",
             text.len(),
             crate::MAX_INPUT_SIZE
-        )));
+        ))
+        .into());
     }
     // 1. Normalize. The expensive steps 1–3 (invisible strip + accent fold +
     //    confusables + per-char NFKC) run ONCE via `normalize_core`; the full
@@ -251,7 +280,7 @@ pub fn detect_l1(
     //    start-sorted order, matching Python (results are re-sorted by start —
     //    already start-sorted here; near_misses keep append order = start order).
     let patterns = load_patterns(lang);
-    let all_matches = match_patterns(detect_text, &patterns)?;
+    let all_matches = match_patterns_cancellable(detect_text, &patterns, cancel)?;
     let mut layer1_raw: Vec<PatternMatch> = Vec::new();
     let mut near_misses: Vec<PatternMatch> = Vec::new();
     for m in all_matches {
@@ -341,11 +370,14 @@ pub fn detect_l1(
                                    orig_chars: &mut Option<Vec<char>>,
                                    cand_text: &str,
                                    cand_omap: &[usize]|
-             -> Result<(), PatternError> {
-                let results: Vec<PatternMatch> = match_patterns(cand_text, &patterns)?
-                    .into_iter()
-                    .filter(|m| m.confidence >= 1.0)
-                    .collect();
+             -> Result<(), DetectError> {
+                // Re-invokes the cancellable base scan, so a per-candidate scan
+                // inherits the loop-top poll through `?` — no separate poll here.
+                let results: Vec<PatternMatch> =
+                    match_patterns_cancellable(cand_text, &patterns, cancel)?
+                        .into_iter()
+                        .filter(|m| m.confidence >= 1.0)
+                        .collect();
                 let spans: Vec<(usize, usize)> =
                     results.iter().map(|m| (m.start, m.end)).collect();
                 let mapped = map_spans_to_original(&spans, Some(cand_omap), orig_len);
@@ -472,6 +504,11 @@ pub fn detect_l1(
     let has_en = lang.iter().any(|c| c == "en");
 
     let mut person: Vec<PatternMatch> = Vec::new();
+    // Cooperative-cancellation boundary before each of the six person-family
+    // phases: these detectors return a plain `Vec`, so the poll sits BETWEEN them.
+    // `poll_abort!` can only `return Err(DetectError::Aborted)`, so an assembled-
+    // so-far `person`/`regions`/… Vec can never escape as a partial `Ok`.
+    poll_abort!(cancel); // phase 1: person_zh
     if has_zh {
         let mut zh = person_zh::detect_person_names(
             person_detect_text,
@@ -482,6 +519,7 @@ pub fn detect_l1(
         tag_layer(&mut zh, LAYER_REGEX);
         person.extend(zh);
     }
+    poll_abort!(cancel); // phase 2: person_en
     if has_en {
         let mut en = person_en::detect_person_names(
             person_detect_text,
@@ -504,6 +542,7 @@ pub fn detect_l1(
     //    confidence 1.0, with `text = name` (exactly as Python sets `text=name`,
     //    not the matched slice — equal for a literal match). Appended AFTER layer1
     //    in `.layer1_and_person()`, matching Python's `entities.append` order.
+    poll_abort!(cancel); // phase 3: names-only fallback
     if !has_zh && !has_en && !scan_names.is_empty() {
         for name in &scan_names {
             // Python `if not name: continue` — skip empty names.
@@ -554,6 +593,7 @@ pub fn detect_l1(
     //     detector — positions line up with the person-detect-text), tag the
     //     LAYER_REGEX layer like person does, then map the spans back to the
     //     ORIGINAL text exactly like layer1/person. Empty when "zh" is absent.
+    poll_abort!(cancel); // phase 4: regions
     let mut regions: Vec<PatternMatch> = Vec::new();
     if has_zh {
         let mut zh_regions = detect_regions_zh(person_detect_text, &layer1_raw);
@@ -573,6 +613,7 @@ pub fn detect_l1(
     //     detect-coord convention as the zh person/region detectors), tag the
     //     LAYER_REGEX layer, then map the spans back to the ORIGINAL text exactly
     //     like layer1/person/regions. Empty when "zh" is absent.
+    poll_abort!(cancel); // phase 5: occupation
     let mut job_titles: Vec<PatternMatch> = Vec::new();
     if has_zh {
         let mut zh_jobs = detect_occupation_zh(person_detect_text, &layer1_raw);
@@ -588,6 +629,7 @@ pub fn detect_l1(
 
     // 12. Evidence-gated framework detectors (zh only): conditions + hobbies.
     //     Combined into one `framework` vec.
+    poll_abort!(cancel); // phase 6: framework
     let mut framework: Vec<PatternMatch> = Vec::new();
     if has_zh {
         framework.extend(crate::conditions::detect_conditions_zh(person_detect_text, &layer1_raw));
@@ -1344,6 +1386,86 @@ mod tests {
             elapsed.as_secs() < 20,
             "fan-out union must be linear; took {elapsed:?} for N={N}"
         );
+    }
+
+    // ── Cooperative cancellation ─────────────────────────────────────────────
+    //
+    // The no-cancel golden fixtures above (captured from live Python) ARE the
+    // byte-identical proof for the 3-arg `detect_l1` wrapper, since that wrapper is
+    // exactly `detect_l1_cancellable(.., None)`. These add: (a) an untripped flag
+    // changes nothing; (b) a pre-tripped flag aborts the base scan (fail-closed,
+    // Err not Ok(partial)); (c) an empty base scan lands the first poll at the
+    // person-family phase boundary — a tripped flag there proves the between-phase
+    // poll is wired (an empty input would otherwise return Ok with no entities).
+
+    use crate::cancel::{CancelFlag, DetectError};
+
+    /// Compare two results field-by-field on the observable entity tuples.
+    fn same_entities(a: &DetectL1Result, b: &DetectL1Result) {
+        let tup = |e: &PatternMatch| {
+            (e.text.clone(), e.type_.clone(), e.start, e.end, e.confidence, e.layer)
+        };
+        let flat = |r: &DetectL1Result| {
+            let mut v: Vec<_> = r.layer1_and_person().iter().map(tup).collect();
+            v.extend(r.regions.iter().map(tup));
+            v.extend(r.job_titles.iter().map(tup));
+            v.extend(r.framework.iter().map(tup));
+            v.extend(r.near_misses.iter().map(tup));
+            v
+        };
+        assert_eq!(flat(a), flat(b));
+    }
+
+    #[test]
+    fn untripped_flag_is_byte_identical_to_no_cancel() {
+        // A present-but-untripped flag must not change the output vs the 3-arg
+        // (None) wrapper — over a representative zh fixture with phone + person +
+        // near-misses so every phase runs.
+        let text = "我叫张伟，电话13800138000，身份证110101199003078888。";
+        let none = detect_l1(text, &s(&["zh"]), &[]).unwrap();
+        let flag = CancelFlag::new();
+        let with_flag =
+            detect_l1_cancellable(text, &s(&["zh"]), &[], Some(&flag)).unwrap();
+        same_entities(&none, &with_flag);
+    }
+
+    #[test]
+    fn pre_tripped_flag_aborts_the_base_scan_fail_closed() {
+        // Non-empty, matching text: the FIRST poll reached is the base-scan loop
+        // top (before any match is assembled). A pre-tripped flag → Err(Aborted),
+        // never an Ok carrying the phone/person.
+        let flag = CancelFlag::new();
+        flag.cancel();
+        let out = detect_l1_cancellable(
+            "我叫张伟，电话13800138000",
+            &s(&["zh"]),
+            &[],
+            Some(&flag),
+        );
+        assert!(matches!(out, Err(DetectError::Aborted)));
+    }
+
+    #[test]
+    fn pre_tripped_flag_aborts_at_person_phase_on_empty_base() {
+        // Empty text: the base scan early-returns Ok([]) WITHOUT reaching its
+        // loop-top poll (the empty-text short-circuit sits above the loop), so the
+        // first poll reached is the person_zh between-phase boundary. A tripped flag
+        // there proves the between-phase poll fires — were it absent, an empty input
+        // would return Ok with no entities instead of Err.
+        let flag = CancelFlag::new();
+        flag.cancel();
+        let out = detect_l1_cancellable("", &s(&["zh"]), &[], Some(&flag));
+        assert!(matches!(out, Err(DetectError::Aborted)));
+    }
+
+    #[test]
+    fn empty_base_untripped_completes_ok() {
+        // The counterpart to the test above: without a trip, the same empty-base
+        // path completes Ok (so the abort above is caused by the flag, not the
+        // empty input). No entities, no panic.
+        let flag = CancelFlag::new();
+        let r = detect_l1_cancellable("", &s(&["zh"]), &[], Some(&flag)).unwrap();
+        assert!(r.layer1_and_person().is_empty());
     }
 }
 

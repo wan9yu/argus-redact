@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex, LazyLock};
 
 use fancy_regex::{Regex, RegexBuilder};
 
+use crate::cancel::{poll_abort, CancelFlag, DetectError};
 use crate::reserved_range::CharOffsetCursor;
 use crate::types::PatternMatch;
 use crate::validators::resolve_validator;
@@ -227,23 +228,48 @@ fn looks_like_false_positive(text: &str, start: usize, end: usize) -> bool {
 /// still returned but tagged `confidence = 0.3` (a near-miss) for the caller to
 /// route. Unknown validator names are a no-op (handled by the Python path).
 pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<PatternMatch>, PatternError> {
-    match_patterns_impl(text, patterns, true)
+    // Never-cancel wrapper: `cancel = None` makes the loop-top poll a no-op, so the
+    // output is byte-identical to the pre-cancellation scan. The `Aborted` arm is
+    // therefore unreachable — the poll can only fire when a flag is present.
+    match match_patterns_impl(text, patterns, true, None) {
+        Ok(v) => Ok(v),
+        Err(DetectError::Pattern(e)) => Err(e),
+        Err(DetectError::Aborted) => {
+            unreachable!("match_patterns passes cancel=None; the abort poll cannot fire")
+        }
+    }
+}
+
+/// Cancellable base scan. Identical to [`match_patterns`] but polls the supplied
+/// [`CancelFlag`] at the top of each pattern's scan; a tripped flag returns
+/// [`DetectError::Aborted`]. `cancel = None` is exactly [`match_patterns`]'s
+/// behaviour (a no-op poll), and the error carries a `Pattern(_)` for every scan
+/// error. Threaded through `detect_l1_cancellable`'s base scan and fan-out.
+pub fn match_patterns_cancellable(
+    text: &str,
+    patterns: &[PatternConfig],
+    cancel: Option<&CancelFlag>,
+) -> Result<Vec<PatternMatch>, DetectError> {
+    match_patterns_impl(text, patterns, true, cancel)
 }
 
 /// Inner scan. `use_prefilter` gates the structural pre-filter skip; production
 /// always passes `true`. The differential tests pass `false` to obtain the
-/// prefilter-free reference and assert the two are byte-identical.
+/// prefilter-free reference and assert the two are byte-identical. `cancel` is the
+/// cooperative-cancellation signal (`None` = never cancel — the poll is a no-op).
 fn match_patterns_impl(
     text: &str,
     patterns: &[PatternConfig],
     use_prefilter: bool,
-) -> Result<Vec<PatternMatch>, PatternError> {
+    cancel: Option<&CancelFlag>,
+) -> Result<Vec<PatternMatch>, DetectError> {
     if text.len() > crate::MAX_INPUT_SIZE {
         return Err(PatternError(format!(
             "input too large: {} bytes exceeds MAX_INPUT_SIZE {}",
             text.len(),
             crate::MAX_INPUT_SIZE
-        )));
+        ))
+        .into());
     }
     if text.is_empty() || patterns.is_empty() {
         return Ok(vec![]);
@@ -256,6 +282,11 @@ fn match_patterns_impl(
     let mut cursor = CharOffsetCursor::new(text);
 
     for pat in patterns {
+        // Cooperative-cancellation poll, ABOVE the prefilter block so a
+        // prefilter-skipped pattern is still a poll boundary. Err-only: a tripped
+        // flag returns `Err(DetectError::Aborted)`, never a partial `Ok`.
+        poll_abort!(cancel);
+
         // Cheap structural pre-filter (see `prefilter_source`): a lookaround-free
         // necessary condition. A miss proves the original cannot match anywhere in
         // `text`, so skip it; a hit (or no prefilter) falls through to the exact
@@ -280,7 +311,8 @@ fn match_patterns_impl(
                 Err(e) => {
                     return Err(PatternError(format!(
                         "pattern scan aborted (backtrack/overflow): {e}"
-                    )))
+                    ))
+                    .into())
                 }
             };
 
@@ -586,7 +618,7 @@ mod tests {
 
     /// Deterministic reference: run the scan with the prefilter DISABLED.
     fn reference(text: &str, pats: &[PatternConfig]) -> Vec<(String, String, usize, usize, f64)> {
-        match_patterns_impl(text, pats, false)
+        match_patterns_impl(text, pats, false, None)
             .unwrap()
             .into_iter()
             .map(|m| (m.type_, m.text, m.start, m.end, m.confidence))
@@ -595,7 +627,7 @@ mod tests {
 
     /// Same, prefilter ENABLED (production path).
     fn gated(text: &str, pats: &[PatternConfig]) -> Vec<(String, String, usize, usize, f64)> {
-        match_patterns_impl(text, pats, true)
+        match_patterns_impl(text, pats, true, None)
             .unwrap()
             .into_iter()
             .map(|m| (m.type_, m.text, m.start, m.end, m.confidence))
@@ -691,6 +723,62 @@ mod tests {
         let t = format!("version{}1.2.3.4", " ".repeat(25));
         let numstart = t.find("1.2.3.4").unwrap();
         assert!(looks_like_false_positive(&t, numstart, numstart + 7));
+    }
+
+    // ── Cooperative cancellation (base scan) ─────────────────────────────────
+
+    #[test]
+    fn match_patterns_cancellable_none_equals_match_patterns() {
+        // cancel = None must be byte-identical to the never-cancel wrapper.
+        let cfg = || PatternConfig {
+            type_: "num".into(),
+            pattern: r"\d{3}".into(),
+            check_context: false,
+            group: None,
+            validator: None,
+        };
+        let text = "a123 b456 c789";
+        let a = match_patterns(text, &[cfg()]).unwrap();
+        let b = match_patterns_cancellable(text, &[cfg()], None).unwrap();
+        let key = |m: &PatternMatch| (m.text.clone(), m.start, m.end, m.confidence);
+        assert_eq!(
+            a.iter().map(key).collect::<Vec<_>>(),
+            b.iter().map(key).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn match_patterns_cancellable_untripped_flag_is_byte_identical() {
+        // A present-but-untripped flag changes nothing.
+        let cfg = PatternConfig {
+            type_: "num".into(),
+            pattern: r"\d{3}".into(),
+            check_context: false,
+            group: None,
+            validator: None,
+        };
+        let flag = CancelFlag::new();
+        let out = match_patterns_cancellable("a123 b456", &[cfg], Some(&flag)).unwrap();
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].text, "123");
+        assert_eq!(out[1].text, "456");
+    }
+
+    #[test]
+    fn match_patterns_cancellable_pre_tripped_aborts_before_any_match() {
+        // A pre-tripped flag aborts at the top of the first pattern's scan — before
+        // any match is assembled — so the result is Err(Aborted), never Ok(partial).
+        let cfg = PatternConfig {
+            type_: "num".into(),
+            pattern: r"\d{3}".into(),
+            check_context: false,
+            group: None,
+            validator: None,
+        };
+        let flag = CancelFlag::new();
+        flag.cancel();
+        let out = match_patterns_cancellable("a123 b456 c789", &[cfg], Some(&flag));
+        assert!(matches!(out, Err(DetectError::Aborted)));
     }
 }
 
