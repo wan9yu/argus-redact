@@ -2,6 +2,85 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.10 — compliance, spelled out
+
+A compliance, hardening, and accuracy release. The PIPL / GDPR / HIPAA mapping was made precise and
+testable — a frozen decision-table oracle now binds every type's statute classification — and the backlog of
+audit findings from the 0.8.x line was cleared: honest resource bounding on the HTTP server, a closed
+credential-leak class in error messages, and cross-language recall for checksum-validated national IDs.
+
+No public API was removed. The on-disk `risk_data.ron` was regenerated (its pinned hash changed) but the
+redaction / restore wire formats are unchanged. Detection now flags inputs it previously passed through
+(numeric JSON leaves; four national IDs outside their home language), and several types' compliance
+classifications changed — so snapshot consumers should re-baseline and compliance-report consumers should
+re-check (see Behaviour changes).
+
+### Behaviour changes
+
+- **Compliance classification made precise (PIPL / GDPR / HIPAA).** The statute mapping moved from a
+  score-gated heuristic to an explicit, membership-driven model, frozen against a decision-table oracle:
+  - `iban` is now PIPL sensitive personal information (financial account — Art. 28/29/55/56 atop the
+    Art. 13/51 floor) and carries the HIPAA account-number identifier (J), for parity with `bank_card` /
+    `credit_card` / `housing_fund`. (Previously detected and redacted but carrying no compliance metadata.)
+  - `url_token` and `imei` are cited non-member Art. 13/51 floor downgrades; `gender` is ordinary personal
+    information (not a GDPR Art. 9 special category, not PIPL sensitive-PI on its own).
+  - `criminal_record` is GDPR Article 10 data (criminal convictions/offences), mutually exclusive with the
+    Article 9 special categories; `gdpr_art10` is now an explicit report field. `itin` carries a HIPAA
+    identifier; the `cnpj` legal-entity number is a cited downgrade; a universal Art. 13/51 floor applies.
+  - `nhs` is documented as format-only (no MOD11 checksum enforced) — the spec now matches the implementation.
+- **Cross-language recall for checksum-validated national IDs.** `cpf`, `cnpj`, `my_number`, and `pan` are
+  now detected regardless of the document's routed language (e.g. a Brazilian CPF inside an English document).
+  All four are validator-gated (checksum, or tight structure for `pan`), so activation is bounded to
+  well-formed IDs. Format-only IDs (`aadhaar`, the German `tax_id`) are intentionally NOT cross-language.
+- **Numeric JSON leaves are now scanned.** `redact_json` coerces a numeric leaf to text for detection, so a
+  national ID or phone stored as a JSON *number* (not a string) is now detected and redacted. Un-detected
+  numeric leaves round-trip byte-identically (int/float precision preserved); a detected leaf becomes a
+  placeholder string. A legitimate integer that matches an ID/phone pattern will now be redacted (fail-safe) —
+  scope with `paths=` to opt a subtree out; there is no global switch to restore the old string-only scope.
+- **Four always-on shared detectors now report compliance.** `iban` / `url_token` / `gender` / `imei` report
+  a real sensitivity and statute mapping under `report=True` (previously bare sensitivity 2, no mapping).
+  Detection and redaction output are unchanged.
+- **Detection recall (merge boundary).** An overlapping lower-priority match's non-overlapping head/tail is
+  now re-admitted, so a span previously dropped at a merge boundary can be detected. Recall-monotone.
+
+### Security / correctness
+
+- **`OLLAMA_HOST` credential leak closed.** An invalid-scheme error interpolated the full connection URL —
+  including any `user:password@` userinfo — into a message reachable from the HTTP 400 body and CLI stderr; it
+  now names only the scheme and host. Ollama request failures are logged by exception type, never with a full
+  traceback (which could embed input fragments).
+- **HTTP server: honest resource bounding.** The in-flight scan limiter now bounds concurrently *running*
+  scans — a request timeout returns a prompt 504 without freeing the slot while the scan is still using a core,
+  so the advertised bound is not defeated under a timeout storm — and request-body parsing runs off the event
+  loop so a large body cannot stall `GET /health`. Per-process / single-node; bound multi-tenant deployments at
+  the gateway. Tunable via `ARGUS_MAX_INFLIGHT_SCANS` / `ARGUS_SCAN_TIMEOUT_SECONDS`. (A timeout frees the
+  client, not the CPU: the abandoned scan runs to completion on its non-preemptible thread; cooperative
+  cancellation that reclaims CPU at the deadline is planned.)
+- **Integration adapters.** LangChain and LlamaIndex now emit the correct-language anchor prompt for a list
+  `lang` (previously collapsed to `zh`, which could fail-close a guarded restore); LlamaIndex's transform
+  gained the session lock its LangChain sibling already had; the Presidio bridge runs the full pipeline
+  (telemetry / key-file / profile) even when nothing is detected.
+- **Risk-score honesty.** The multiple-high-entity amplification now requires two distinct high/critical
+  *types*, not repeats of a single type.
+- **Guarded-restore parity and fail-closed inputs.** Alias / display-marker forwarding is consistent across
+  the integration wrappers; overflow and non-UTF-8 inputs raise a clean `ValueError` rather than crashing.
+- **`restore_cell` collision documented.** A benign structured cell whose literal equals a real pseudonym
+  code restores to that entity's original text — documented as a known limitation of the placeholder scheme.
+
+### API additions (backward-compatible)
+
+- `redact_json` / `restore_json` / `redact_csv` / `restore_csv` are promoted to the top-level `argus_redact`
+  namespace (one canonical import path). The structured restore faces are documented as unguarded-by-design;
+  the default-on guard remains on the scalar `restore()` / `restore_guarded()`.
+- `with_aliases=` / `aliases=` on the structured redact/restore faces; `--aliases` / `--display-marker` on the
+  CLI restore and `aliases` / `display_marker` in the HTTP restore body; `aliases` on the WASM restore faces.
+- Structured `paths=` accepts a list-of-segments form for keys containing dots or brackets.
+
+### Docs
+
+- `StructuredRestorer` / `StreamingRestorer` are documented as single-thread / single-session: concurrent
+  `restore_cell` / `wipe` / `close` on a shared instance raises `Already borrowed`.
+
 ## v0.8.9 — nothing fails quietly
 
 A security and correctness release. The changes below share one shape: each closes a gap
