@@ -471,7 +471,10 @@ def _parse_csv_rows(csv_text: str) -> list[list[str]]:
     concurrent parse can never observe it unbounded past this call."""
     old_limit = csv.field_size_limit()
     try:
-        csv.field_size_limit(sys.maxsize)
+        # 2**31-1, not sys.maxsize: a C long is 32-bit on Windows (LLP64), so
+        # csv.field_size_limit(sys.maxsize) raises OverflowError there. 2 GB per
+        # field is still far past any real cell, and safe on every platform.
+        csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
         return list(csv.reader(io.StringIO(csv_text)))
     finally:
         csv.field_size_limit(old_limit)

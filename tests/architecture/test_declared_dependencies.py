@@ -8,7 +8,11 @@ import ast
 import sys
 from pathlib import Path
 
-import tomllib
+import pytest
+
+# tomllib is stdlib only on Python 3.11+; skip this dev-only drift gate on 3.10
+# (it runs on 3.11-3.13, covering the version-independent import-declaration invariant).
+tomllib = pytest.importorskip("tomllib")
 
 _REPO = Path(__file__).parents[2]
 _SRC = _REPO / "src" / "argus_redact"
