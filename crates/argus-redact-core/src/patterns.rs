@@ -59,6 +59,110 @@ fn get_regex(pattern: &str) -> Result<Arc<Regex>, PatternError> {
     Ok(arc)
 }
 
+// ── Structural pre-filter ────────────────────────────────────────────────────
+//
+// A pattern that begins or ends with a *negative boundary lookaround* (e.g. the
+// checksum/structured-ID patterns `(?<!\d)…(?!\d)`) forces fancy-regex onto its
+// backtracking VM for the WHOLE scan, which has no literal/class prefilter and so
+// re-tests every byte position — ~15× slower than the (non-fancy) regex fast path
+// on a no-match haystack. Since these patterns cross-load into every language
+// (`language_neutral`), that per-position cost is paid on every scan even when the
+// text has no candidate at all.
+//
+// A negative lookaround is a zero-width assertion; consuming ONE char that
+// satisfies the same class — or the string edge via `^`/`$` — is an EXACT
+// existence-equivalent. So `(?<!\d)BODY(?!\d)` becomes `(?:^|\D)BODY(?:\D|$)`,
+// which contains no lookaround and takes the fast path. The rewrite is used ONLY
+// as a gate: it is a *necessary condition* for the original to match, so
+//   * prefilter finds nothing  ⇒  original matches nothing  ⇒  skip the pattern;
+//   * prefilter finds something ⇒  fall through to the EXACT original scan.
+// The emitted matches therefore never change — this only elides scans that were
+// provably going to find nothing.
+//
+// The tables list only single-class boundary tokens (longest first, so
+// `strip_prefix`/`strip_suffix` picks the most specific). A pattern whose affix
+// isn't listed — or whose body still holds a lookaround after the affix is peeled
+// — gets no prefilter and scans exactly as before.
+const LEADING_LOOKBEHINDS: &[(&str, &str)] = &[
+    (r"(?<![A-Za-z0-9])", r"(?:^|[^A-Za-z0-9])"),
+    (r"(?<![0-9A-Fa-f:.-])", r"(?:^|[^0-9A-Fa-f:.-])"),
+    (r"(?<![A-Z0-9])", r"(?:^|[^A-Z0-9])"),
+    (r"(?<![A-Za-z])", r"(?:^|[^A-Za-z])"),
+    (r"(?<![:\w])", r"(?:^|[^:\w])"),
+    (r"(?<![A-Z])", r"(?:^|[^A-Z])"),
+    (r"(?<!\d)", r"(?:^|\D)"),
+    (r"(?<!\w)", r"(?:^|\W)"),
+];
+const TRAILING_LOOKAHEADS: &[(&str, &str)] = &[
+    (r"(?![A-Za-z0-9])", r"(?:[^A-Za-z0-9]|$)"),
+    (r"(?![0-9A-Fa-f:.-])", r"(?:[^0-9A-Fa-f:.-]|$)"),
+    (r"(?![A-Z0-9])", r"(?:[^A-Z0-9]|$)"),
+    (r"(?![A-Za-z])", r"(?:[^A-Za-z]|$)"),
+    (r"(?!\d)", r"(?:\D|$)"),
+    (r"(?!\w)", r"(?:\W|$)"),
+];
+
+/// Rewrite a boundary-lookaround pattern into an equivalent lookaround-free
+/// existence gate, or `None` if the pattern has no recognized boundary affix, its
+/// body still contains a lookaround (the gate would gain nothing), or peeling the
+/// affix leaves an empty body.
+fn prefilter_source(pattern: &str) -> Option<String> {
+    let mut body = pattern;
+    let mut prefix = "";
+    for (tok, repl) in LEADING_LOOKBEHINDS {
+        if let Some(rest) = body.strip_prefix(tok) {
+            body = rest;
+            prefix = repl;
+            break;
+        }
+    }
+    let mut suffix = "";
+    for (tok, repl) in TRAILING_LOOKAHEADS {
+        if let Some(rest) = body.strip_suffix(tok) {
+            body = rest;
+            suffix = repl;
+            break;
+        }
+    }
+    if (prefix.is_empty() && suffix.is_empty()) || body.is_empty() {
+        return None;
+    }
+    // A lookaround still inside the body would keep the gate on the slow path.
+    // (`(?<name>` named groups and `(?:`/`(?P<` are fine — only the assertions
+    // `(?<!`, `(?<=`, `(?=`, `(?!` disqualify.)
+    if body.contains("(?<!")
+        || body.contains("(?<=")
+        || body.contains("(?=")
+        || body.contains("(?!")
+    {
+        return None;
+    }
+    Some(format!("{prefix}{body}{suffix}"))
+}
+
+// Prefilter regexes, compiled once and reused. `None` = this pattern has no
+// (worthwhile) prefilter; cached too, so the rewrite is attempted only once.
+static PREFILTER_CACHE: LazyLock<Mutex<HashMap<String, Option<Arc<Regex>>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn get_prefilter(pattern: &str) -> Option<Arc<Regex>> {
+    if let Some(entry) = PREFILTER_CACHE.lock().unwrap().get(pattern) {
+        return entry.clone();
+    }
+    let built = prefilter_source(pattern).and_then(|src| {
+        RegexBuilder::new(&src)
+            .backtrack_limit(BACKTRACK_LIMIT)
+            .build()
+            .ok()
+            .map(Arc::new)
+    });
+    PREFILTER_CACHE
+        .lock()
+        .unwrap()
+        .insert(pattern.to_string(), built.clone());
+    built
+}
+
 // Context words before a number that suggest it's NOT PII
 static FALSE_POSITIVE_PREFIX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
@@ -123,6 +227,17 @@ fn looks_like_false_positive(text: &str, start: usize, end: usize) -> bool {
 /// still returned but tagged `confidence = 0.3` (a near-miss) for the caller to
 /// route. Unknown validator names are a no-op (handled by the Python path).
 pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<PatternMatch>, PatternError> {
+    match_patterns_impl(text, patterns, true)
+}
+
+/// Inner scan. `use_prefilter` gates the structural pre-filter skip; production
+/// always passes `true`. The differential tests pass `false` to obtain the
+/// prefilter-free reference and assert the two are byte-identical.
+fn match_patterns_impl(
+    text: &str,
+    patterns: &[PatternConfig],
+    use_prefilter: bool,
+) -> Result<Vec<PatternMatch>, PatternError> {
     if text.len() > crate::MAX_INPUT_SIZE {
         return Err(PatternError(format!(
             "input too large: {} bytes exceeds MAX_INPUT_SIZE {}",
@@ -141,6 +256,19 @@ pub fn match_patterns(text: &str, patterns: &[PatternConfig]) -> Result<Vec<Patt
     let mut cursor = CharOffsetCursor::new(text);
 
     for pat in patterns {
+        // Cheap structural pre-filter (see `prefilter_source`): a lookaround-free
+        // necessary condition. A miss proves the original cannot match anywhere in
+        // `text`, so skip it; a hit (or no prefilter) falls through to the exact
+        // original scan below, so emitted matches are byte-identical. An `Err` from
+        // the prefilter is never used to skip (fail open to the real scan).
+        if use_prefilter {
+            if let Some(pf) = get_prefilter(&pat.pattern) {
+                if matches!(pf.find(text), Ok(None)) {
+                    continue;
+                }
+            }
+        }
+
         let re = get_regex(&pat.pattern)?;
 
         // fancy-regex find_iter returns Result<Match>
@@ -416,6 +544,137 @@ mod tests {
         assert!(looks_like_false_positive(t3, 0, 5));
         //   - a plain number in neutral context is NOT flagged.
         assert!(!looks_like_false_positive("call 4155551234 now", 5, 15));
+    }
+
+    // ── Structural prefilter ─────────────────────────────────────────────────
+
+    #[test]
+    fn prefilter_source_rewrites_known_boundary_affixes() {
+        // The four language-neutral checksum/structured-ID patterns all rewrite to
+        // a lookaround-free equivalent gate.
+        assert_eq!(
+            prefilter_source(r"(?<!\d)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?!\d)").as_deref(),
+            Some(r"(?:^|\D)\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?:\D|$)")
+        );
+        assert_eq!(
+            prefilter_source(r"(?<![A-Za-z])[A-Z]{5}\d{4}[A-Z](?![A-Za-z])").as_deref(),
+            Some(r"(?:^|[^A-Za-z])[A-Z]{5}\d{4}[A-Z](?:[^A-Za-z]|$)")
+        );
+        // Leading-only and trailing-only are both valid.
+        assert_eq!(
+            prefilter_source(r"(?<!\d)\d{11}").as_deref(),
+            Some(r"(?:^|\D)\d{11}")
+        );
+        assert_eq!(
+            prefilter_source(r"\d{4}-\d{4}(?!\d)").as_deref(),
+            Some(r"\d{4}-\d{4}(?:\D|$)")
+        );
+    }
+
+    #[test]
+    fn prefilter_source_declines_when_not_worthwhile() {
+        // No boundary affix at all → no gate.
+        assert_eq!(prefilter_source(r"\d{3}-\d{4}"), None);
+        // A lookaround still in the body would keep the gate on the slow path → decline.
+        assert_eq!(prefilter_source(r"(?<!\d)foo(?=bar)baz(?!\d)"), None);
+        assert_eq!(prefilter_source(r"(?<!\d)(?<=x)\d{4}(?!\d)"), None);
+        // A named group in the body is NOT a lookaround and must not disqualify.
+        assert!(prefilter_source(r"(?<!\d)(?P<g>\d{4})(?!\d)").is_some());
+        // Peeling the affix must leave a non-empty body.
+        assert_eq!(prefilter_source(r"(?<!\d)"), None);
+    }
+
+    /// Deterministic reference: run the scan with the prefilter DISABLED.
+    fn reference(text: &str, pats: &[PatternConfig]) -> Vec<(String, String, usize, usize, f64)> {
+        match_patterns_impl(text, pats, false)
+            .unwrap()
+            .into_iter()
+            .map(|m| (m.type_, m.text, m.start, m.end, m.confidence))
+            .collect()
+    }
+
+    /// Same, prefilter ENABLED (production path).
+    fn gated(text: &str, pats: &[PatternConfig]) -> Vec<(String, String, usize, usize, f64)> {
+        match_patterns_impl(text, pats, true)
+            .unwrap()
+            .into_iter()
+            .map(|m| (m.type_, m.text, m.start, m.end, m.confidence))
+            .collect()
+    }
+
+    fn all_builtin_configs() -> Vec<PatternConfig> {
+        let mut out = Vec::new();
+        for lang in ["shared", "zh", "en", "ja", "ko", "de", "uk", "in", "br"] {
+            for p in crate::data::builtin_patterns(lang) {
+                out.push(PatternConfig {
+                    type_: p.type_.clone(),
+                    pattern: p.pattern.clone(),
+                    check_context: p.check_context,
+                    group: p.group.clone(),
+                    validator: p.validator.clone(),
+                });
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn prefilter_is_byte_identical_on_boundary_edge_cases() {
+        // Cases chosen to stress every way a boundary gate could diverge from the
+        // original: exact-length IDs, over-long runs (gate must still skip), IDs at
+        // string start/end (the ^/$ arm), IDs flanked by digits/letters, separated
+        // forms, and two structured IDs back to back sharing a boundary.
+        let pats = all_builtin_configs();
+        let cases = [
+            "",
+            "no pii here at all",
+            "529.982.247-25",                       // valid CPF, bare
+            "CPF 529.982.247-25 end",               // CPF mid-string
+            "52998224725",                          // valid CPF, no separators
+            "5299822472599999",                     // CPF digits inside a longer run
+            "11.222.333/0001-81",                   // valid CNPJ
+            "1234 5678 9018",                       // valid My Number
+            "123456789012345678",                   // 18-digit run (id-shaped, over-long for cpf/cnpj/my)
+            "4111111111111111",                     // 16-digit card
+            "ABCPD1234E",                           // valid PAN, bare
+            "xABCPD1234Ex",                         // PAN flanked by letters (must NOT match)
+            "529.982.247-2511.222.333/0001-81",     // two IDs adjacent
+            "客户手机13812345678，身份证110101199003074610",
+            "version 1.2.3.4 order 000-12-3456",    // FP-context + failing SSN near-miss
+        ];
+        for text in cases {
+            assert_eq!(
+                gated(text, &pats),
+                reference(text, &pats),
+                "prefilter diverged on {text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn prefilter_is_byte_identical_on_randomized_inputs() {
+        // A deterministic LCG produces strings over an alphabet rich in the bytes the
+        // boundary patterns care about (digits, upper/lower letters, the ID
+        // separators, and a CJK char), so many candidate spans and boundaries arise.
+        // The prefilter-gated scan must equal the prefilter-free reference on every
+        // one — any divergence means the gate changed detection output.
+        let pats = all_builtin_configs();
+        let alphabet: Vec<char> =
+            "0123456789ABCDEFabcdef .-/:XYZ王".chars().collect();
+        let mut state: u64 = 0x9E3779B97F4A7C15;
+        let mut next = || {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (state >> 33) as usize
+        };
+        for _ in 0..1500 {
+            let len = next() % 40;
+            let s: String = (0..len).map(|_| alphabet[next() % alphabet.len()]).collect();
+            assert_eq!(
+                gated(&s, &pats),
+                reference(&s, &pats),
+                "prefilter diverged on random input {s:?}"
+            );
+        }
     }
 
     #[test]
