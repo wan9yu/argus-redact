@@ -247,6 +247,12 @@ def redact_json(
     pii_key_hits: list[int] = []
     matched_targets: set[int] = set()
     leaf_seen: list[bool] = []
+    # `mode`/`lang` are constant for the whole walk, so `_cell_has_pii(k, ...)`
+    # is a pure function of the key string — cache it so a key repeated across
+    # array elements (a common JSON shape) is detected once, not once per
+    # occurrence. Does not change `pii_key_hits`: the same key always maps to
+    # the same bool, so the warning's count is identical either way.
+    _key_pii_cache: dict[str, bool] = {}
 
     def _walk(obj: Any, current_path: list[str] | None = None, depth: int = 0) -> Any:
         if current_path is None:
@@ -308,7 +314,11 @@ def redact_json(
             # would leak verbatim. Detect (detect-only, no redaction) and count
             # for the one document-level warning below.
             for k in obj:
-                if isinstance(k, str) and _cell_has_pii(k, mode=mode, lang=lang):
+                if not isinstance(k, str):
+                    continue
+                if k not in _key_pii_cache:
+                    _key_pii_cache[k] = _cell_has_pii(k, mode=mode, lang=lang)
+                if _key_pii_cache[k]:
                     pii_key_hits.append(1)
             return {k: _walk(v, current_path + [k], depth + 1) for k, v in obj.items()}
         if isinstance(obj, list):
