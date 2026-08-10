@@ -194,7 +194,7 @@ _HIPAA_MAP: dict[str, str] = {
 }
 
 
-def pipl_articles_for(name: str, sensitivity: int = 0) -> tuple[str, ...]:
+def pipl_articles_for(name: str) -> tuple[str, ...]:
     """Compute the PIPL articles a type triggers, sorted by ``PIPL_SORT_ORDER``.
 
     Universal floor for any personal information: Art.13 (lawful basis) and
@@ -203,9 +203,7 @@ def pipl_articles_for(name: str, sensitivity: int = 0) -> tuple[str, ...]:
     Art.28 (sensitive-PI handling), Art.29 (separate consent), Art.55 (impact
     assessment), and Art.56 (record-keeping).
 
-    ``sensitivity`` is accepted for call-site compatibility (the registry passes
-    ``typedef.sensitivity``) but no longer gates any article — classification is
-    membership-driven, not score-driven.
+    Classification is membership-driven, not score-driven.
     """
     arts = {PIPL_ART_13, PIPL_ART_51}
     if name in PIPL_SENSITIVE_PI:

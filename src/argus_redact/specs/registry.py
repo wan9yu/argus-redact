@@ -157,7 +157,7 @@ def register(typedef: PIITypeDef) -> PIITypeDef:
     caller can pre-populate `pipl_articles` while still letting `gdpr_*` /
     `hipaa_*` derive from the central rule book.
     """
-    pipl = typedef.pipl_articles or _pipl_articles_for(typedef.name, typedef.sensitivity)
+    pipl = typedef.pipl_articles or _pipl_articles_for(typedef.name)
     gdpr = typedef.gdpr_special_category or _gdpr_special_for(typedef.name)
     art10 = typedef.gdpr_art10 or _gdpr_art10_for(typedef.name)
     hipaa = typedef.hipaa_phi_category or _hipaa_for(typedef.name)
