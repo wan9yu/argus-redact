@@ -2,6 +2,29 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.11 — server admission & lifecycle hardening
+
+A server-hardening slice for the HTTP `serve` face: an admission ceiling on total in-flight scans
+(backpressure against a memory-amplification flood), a correct 503 for the not-yet-started case, and the scan
+task group moved from a process-global onto `app.state`.
+
+### Behaviour changes
+
+- **HTTP server: a scan against an unstarted app now returns 503, not 500.** A `/redact` or `/restore` request
+  made against a bare `create_app()` whose ASGI lifespan never ran (so the scan task group was never installed)
+  previously surfaced an unhandled `RuntimeError` as a 500; it now returns a 503 (service not ready) with a
+  well-formed error body. The scan task group also moved from a process-global to `app.state`, so two apps in
+  one process no longer share or clobber one another's group.
+
+### Security / correctness
+
+- **HTTP server: bounded scan admission (memory-amplification backpressure).** The in-flight limiter bounds
+  concurrently *running* scans, but a queued worker retains its request body (≤ 10 MiB) and key while it waits
+  for a slot — so an unbounded queue was an unbounded-memory amplification under a request flood. Total
+  in-flight scans (running + queued) are now capped: a request over the ceiling is shed with a prompt 503
+  ("server busy") before its worker is spawned, so it never retains its body. Per-process / single-node like
+  the in-flight bound; tunable via `ARGUS_MAX_QUEUED_SCANS` (default 2× `ARGUS_MAX_INFLIGHT_SCANS`).
+
 ## v0.8.10 — compliance, spelled out
 
 A compliance, hardening, and accuracy release. The PIPL / GDPR / HIPAA mapping was made precise and

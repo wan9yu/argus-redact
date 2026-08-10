@@ -22,12 +22,12 @@ scan task group the handlers need and exercises the real graceful-shutdown drain
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import importlib.util
 import threading
-import warnings
 
 import pytest
+
+from tests.integration.conftest import _lifespan_running, _make_app, _yield_until
 
 HAS_STARLETTE = importlib.util.find_spec("starlette") is not None
 HAS_HTTPX = importlib.util.find_spec("httpx") is not None
@@ -36,65 +36,6 @@ pytestmark = [
     pytest.mark.skipif(not HAS_STARLETTE, reason="starlette not installed"),
     pytest.mark.skipif(not HAS_HTTPX, reason="httpx not installed"),
 ]
-
-
-async def _yield_until(predicate, *, max_cycles: int = 1_000_000) -> None:
-    """Advance the event loop until ``predicate()`` is true.
-
-    Deterministic gate: ``asyncio.sleep(0)`` only yields control (it does not
-    wait a fixed duration), letting the offloaded worker thread reach the state
-    the predicate checks. Bounded so a genuine deadlock fails loudly instead of
-    hanging.
-    """
-    for _ in range(max_cycles):
-        if predicate():
-            return
-        await asyncio.sleep(0)
-    raise AssertionError("predicate never became true — offloaded work never reached the state")
-
-
-@contextlib.asynccontextmanager
-async def _lifespan_running(app):
-    """Drive the app's ASGI lifespan (startup..shutdown) around a request block.
-
-    ``create_app`` installs the app-lifetime scan task group in a Starlette
-    lifespan, but httpx's ``ASGITransport`` never runs the lifespan protocol. So
-    we run the real lifespan here exactly as an ASGI server would: this sets
-    ``server._APP_TASK_GROUP`` for the requests inside the block AND exercises the
-    graceful-shutdown drain (the ``async with`` exit waits for in-flight scans)
-    on the way out.
-    """
-    to_app: asyncio.Queue = asyncio.Queue()
-    from_app: asyncio.Queue = asyncio.Queue()
-
-    async def receive():
-        return await to_app.get()
-
-    async def send(message):
-        await from_app.put(message)
-
-    scope = {"type": "lifespan", "asgi": {"version": "3.0", "spec_version": "2.0"}}
-    task = asyncio.create_task(app(scope, receive, send))
-    await to_app.put({"type": "lifespan.startup"})
-    msg = await from_app.get()
-    assert msg["type"] == "lifespan.startup.complete", msg
-    try:
-        yield
-    finally:
-        await to_app.put({"type": "lifespan.shutdown"})
-        msg = await from_app.get()
-        assert msg["type"] == "lifespan.shutdown.complete", msg
-        await task
-
-
-def _make_app():
-    from argus_redact.server import create_app
-
-    with warnings.catch_warnings():
-        from argus_redact import SecurityWarning
-
-        warnings.simplefilter("ignore", SecurityWarning)
-        return create_app(allow_no_auth=True)
 
 
 class TestBodyParseOffLoop:
@@ -466,15 +407,112 @@ class TestLifespanWiring:
 
     @pytest.mark.asyncio
     async def test_lifespan_creates_and_tears_down_the_scan_task_group(self, monkeypatch):
-        from argus_redact import server as server_module
-
+        # No ARGUS_API_KEY so create_app returns the bare Starlette app (not the
+        # auth-middleware wrapper), whose `.state` the lifespan writes to.
         monkeypatch.delenv("ARGUS_API_KEY", raising=False)
 
         app = _make_app()
         async with _lifespan_running(app):
-            assert server_module._APP_TASK_GROUP is not None, (
+            assert app.state.task_group is not None, (
                 "the lifespan must create the app-lifetime scan task group on startup"
             )
-        assert server_module._APP_TASK_GROUP is None, (
-            "the lifespan must clear the task group on shutdown"
+        assert app.state.task_group is None, (
+            "the lifespan must clear the task group on shutdown (to None, not delattr)"
         )
+
+
+class TestQueueBackpressure:
+    """(5) Admission ceiling on TOTAL in-flight scans (running + queued).
+
+    ``_scan_limiter`` bounds concurrent EXECUTION, but a detached worker retains
+    its request body + key the whole time it sits queued for a slot, so an
+    unbounded queue is an unbounded-memory amplification. ``_MAX_QUEUED_SCANS``
+    caps the total admitted: with the limiter at 1 and the ceiling at N, N scans
+    are admitted (1 running, N-1 queued) and the (N+1)-th is shed with a prompt
+    503 WITHOUT being queued — its worker is never spawned, so it never retains
+    its body. After the running scans drain, capacity recovers."""
+
+    @pytest.mark.asyncio
+    async def test_over_the_ceiling_sheds_503_without_queuing_then_recovers(self, monkeypatch):
+        import anyio
+        import httpx
+        from httpx import ASGITransport
+
+        from argus_redact import server as server_module
+
+        monkeypatch.delenv("ARGUS_API_KEY", raising=False)
+
+        lock = threading.Lock()
+        entered: list[int] = []
+        release = threading.Event()
+
+        def _gated(*args, **kwargs):
+            with lock:
+                entered.append(1)
+            assert release.wait(timeout=10), "scan gate was never released"
+            return "redacted", {}
+
+        monkeypatch.setattr(server_module, "redact", _gated)
+        # Large deadline: this test is about admission, not the 504 timeout.
+        monkeypatch.setattr(server_module, "_SCAN_TIMEOUT_SECONDS", 30.0)
+        # One running scan at a time; ceiling of N total so N-1 queue.
+        limiter = anyio.CapacityLimiter(1)
+        monkeypatch.setattr(server_module, "_scan_limiter", limiter)
+        ceiling = 3
+        monkeypatch.setattr(server_module, "_MAX_QUEUED_SCANS", ceiling)
+        # Clean counter start (process-global); monkeypatch restores it after.
+        monkeypatch.setattr(server_module, "_inflight_scans", 0)
+
+        app = _make_app()
+        transport = ASGITransport(app=app)
+        async with _lifespan_running(app):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+                # Admit exactly `ceiling` scans: 1 runs, ceiling-1 wait for a slot.
+                admitted = [
+                    asyncio.create_task(ac.post("/redact", json={"text": str(i), "mode": "fast"}))
+                    for i in range(ceiling)
+                ]
+                try:
+                    # Saturated: one worker running in the core (appended to
+                    # `entered`) holding the one token, the rest queued on the
+                    # limiter, and the module counter at the ceiling — all read
+                    # deterministically, no wall-clock sleep. Gating on
+                    # len(entered) == 1 avoids racing worker-thread startup (the
+                    # token is taken slightly before the scan begins).
+                    await _yield_until(
+                        lambda: (
+                            len(entered) == 1
+                            and server_module._inflight_scans == ceiling
+                            and limiter.statistics().borrowed_tokens == 1
+                            and limiter.statistics().tasks_waiting == ceiling - 1
+                        )
+                    )
+                    # The (N+1)-th request is shed with a prompt 503 — its worker
+                    # is never spawned, so it never joins the queue.
+                    shed = await ac.post("/redact", json={"text": "over", "mode": "fast"})
+                    assert shed.status_code == 503
+                    assert isinstance(shed.json().get("error"), str) and shed.json()["error"]
+                    with lock:
+                        assert entered == [1], (
+                            "the shed request entered a core scan — the admission "
+                            "ceiling did not hold (a worker was spawned anyway)"
+                        )
+                    # No extra worker queued or counted for the shed request.
+                    assert limiter.statistics().borrowed_tokens == 1
+                    assert limiter.statistics().tasks_waiting == ceiling - 1
+                    assert server_module._inflight_scans == ceiling
+                finally:
+                    release.set()
+                # Drain: every admitted scan completes and frees its admission slot.
+                await _yield_until(lambda: server_module._inflight_scans == 0)
+                admitted_resps = await asyncio.gather(*admitted)
+
+                # Capacity recovered: a fresh request is admitted and runs again.
+                recovered = await ac.post("/redact", json={"text": "after", "mode": "fast"})
+
+        assert all(r.status_code == 200 for r in admitted_resps)
+        assert recovered.status_code == 200
+        # The `ceiling` admitted scans plus the recovered one all ran once; the
+        # shed request never did.
+        with lock:
+            assert entered == [1] * (ceiling + 1)

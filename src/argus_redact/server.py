@@ -83,6 +83,18 @@ MAX_RESTORE_KEY_ENTRIES = 10_000
 _MAX_INFLIGHT_SCANS = int(os.environ.get("ARGUS_MAX_INFLIGHT_SCANS", "8"))
 _SCAN_TIMEOUT_SECONDS = float(os.environ.get("ARGUS_SCAN_TIMEOUT_SECONDS", "30"))
 
+# Admission ceiling on TOTAL in-flight scans (running + queued) — a
+# memory-amplification backpressure bound. `_scan_limiter` above caps concurrent
+# EXECUTION, but a detached worker retains its request body (≤ MAX_HTTP_BODY_BYTES,
+# 10 MiB) and its key (≤ MAX_RESTORE_KEY_ENTRIES) from the moment it is spawned
+# until it finishes — INCLUDING the whole time it sits queued for a limiter slot.
+# Without a ceiling on the queue, a request flood retains unbounded memory even
+# though only `_MAX_INFLIGHT_SCANS` scans run at once. A request that would push
+# the total over this ceiling is shed with a prompt 503 BEFORE its worker is
+# spawned, so it never retains its body past the request. Per-process /
+# single-node like the limiter; env-tunable; defaults to 2× the in-flight bound.
+_MAX_QUEUED_SCANS = int(os.environ.get("ARGUS_MAX_QUEUED_SCANS", str(2 * _MAX_INFLIGHT_SCANS)))
+
 # One shared limiter for the whole process, created at import. anyio ships with
 # starlette (the `serve` extra), so it is present whenever this module is
 # actually used; the guard keeps a partial install (starlette/anyio absent) from
@@ -92,12 +104,14 @@ try:
 except NameError:  # pragma: no cover - anyio absent (serve extra not installed)
     _scan_limiter = None  # type: ignore[assignment]
 
-# The app-lifetime task group that owns detached scan workers. Created and held
-# open by the Starlette lifespan (see `create_app`) and torn down on shutdown, so
-# a worker OUTLIVES the request that spawned it: a timed-out request returns 504
-# while its worker keeps running on a thread and releases its slot only on
-# completion. None until the lifespan starts (and again after shutdown).
-_APP_TASK_GROUP = None
+# Count of scans admitted but not yet finished (running + queued) — the live
+# value the `_MAX_QUEUED_SCANS` ceiling is checked against. Incremented at
+# admission and decremented in the worker's `finally`, BOTH on the single
+# event-loop thread. That is what makes the check-then-increment in `_run_scan`
+# race-free without a lock: no `await` sits between reading this and bumping it,
+# so the loop cannot interleave two admissions and let both slip past a full
+# queue. Process-global like `_scan_limiter` (a per-process bound).
+_inflight_scans = 0
 
 
 class _BodyTooLarge(Exception):
@@ -110,6 +124,25 @@ class _BadBody(Exception):
 
 class _ScanTimeout(Exception):
     """The offloaded scan exceeded _SCAN_TIMEOUT_SECONDS (mapped to 504)."""
+
+
+class _ServerNotReady(Exception):
+    """No scan task group — the ASGI lifespan is not active (mapped to 503).
+
+    Raised on the bare-``create_app()`` misuse: nothing ever drove the lifespan
+    that installs ``app.state.task_group``. A bare ``RuntimeError`` here would
+    surface as a 500; 503 (service unavailable) is the honest status for "the
+    server has not finished starting up".
+    """
+
+
+class _ServerBusy(Exception):
+    """Admission ceiling reached: too many scans in flight (mapped to 503).
+
+    ``_MAX_QUEUED_SCANS`` scans are already admitted (running + queued); a
+    further request is shed before its worker is spawned. PII-free by
+    construction — the message is a fixed string, never request content.
+    """
 
 
 def _parse_json_object(raw: bytes) -> dict[str, Any]:
@@ -168,10 +201,18 @@ def _join_and_parse(chunks: list[bytes]) -> dict[str, Any]:
     return _parse_json_object(b"".join(chunks))
 
 
-async def _run_scan(fn):
-    """Offload a blocking core scan off the event loop under an in-flight bound
-    and an honest per-request deadline. `fn` is a zero-arg callable (a
-    `functools.partial` binding redact/restore and its kwargs).
+async def _run_scan(request, fn):
+    """Offload a blocking core scan off the event loop under an admission
+    ceiling, an in-flight bound, and an honest per-request deadline. `fn` is a
+    zero-arg callable (a `functools.partial` binding redact/restore and its
+    kwargs); `request` carries the app-scoped scan task group on
+    `request.app.state`.
+
+    Admission ceiling (memory-amplification backpressure): `_MAX_QUEUED_SCANS`
+    bounds TOTAL in-flight scans (running + queued). A request that would push
+    the total over the ceiling is shed with a prompt 503 (`_ServerBusy`) BEFORE
+    its worker is spawned, so a flood cannot queue an unbounded number of workers
+    each retaining its request body/key while it waits for a slot.
 
     In-flight bound (a REAL resource bound): `_scan_limiter` caps how many scans
     run concurrently. The slot is acquired and released inside the detached
@@ -198,39 +239,62 @@ async def _run_scan(fn):
     Cooperative cancellation that reclaims CPU at the deadline is planned for a
     future release.
     """
-    if _APP_TASK_GROUP is None:  # pragma: no cover - misuse outside the ASGI lifespan
+    global _inflight_scans
+
+    task_group = getattr(request.app.state, "task_group", None)
+    if task_group is None:
         # The scan workers are detached into the app-lifetime task group so they
         # outlive the request; without it there is nowhere to run them. The
-        # lifespan installed by `create_app` sets this on startup.
-        raise RuntimeError(
+        # lifespan installed by `create_app` sets `app.state.task_group` on
+        # startup. A bare `create_app()` that no ASGI server ever drove has no
+        # group — 503 (not ready), never a bare-RuntimeError 500. (getattr with a
+        # default, NOT attribute access: Starlette's State raises AttributeError
+        # for an unset key, which would itself surface as a 500 and defeat this.)
+        raise _ServerNotReady(
             "scan task group is not running — the server lifespan must be active "
             "(create_app installs it on startup)"
         )
+
+    # Admission ceiling BEFORE spawning a worker, so a shed request never retains
+    # its body past this call. Check-then-increment is atomic under the
+    # single-threaded event loop: no `await` sits between the read and the bump,
+    # so two concurrent admissions cannot both observe room and both slip in.
+    if _inflight_scans >= _MAX_QUEUED_SCANS:
+        raise _ServerBusy("server busy: too many scans in flight; retry shortly")
+    _inflight_scans += 1
 
     done = anyio.Event()
     holder: dict[str, Any] = {}
 
     async def _worker() -> None:
-        # Acquire AND release are both bound to this worker task's lifetime. The
-        # slot frees exactly once, as this `async with` unwinds — i.e. on thread
-        # completion — even when the scan raises. Do NOT move the acquire/release
-        # out of the worker or bypass the context manager, or a slot leaks and
-        # capacity is permanently lost.
-        async with _scan_limiter:
-            try:
-                holder["value"] = await to_thread.run_sync(fn)
-            except Exception as exc:  # noqa: BLE001 - forwarded to the request task
-                # NOT BaseException: a real cancellation must propagate so the
-                # task group can tear the worker down. App-level exceptions
-                # (ValueError / RestoreGuardError / …) are forwarded to the
-                # awaiting request, which re-raises them for the handler to map.
-                holder["error"] = exc
-            finally:
-                # Wake the waiter even on error/cancel; the slot is released as
-                # this `async with` unwinds, on real thread completion.
-                done.set()
+        global _inflight_scans
+        try:
+            # Acquire AND release are both bound to this worker task's lifetime.
+            # The slot frees exactly once, as this `async with` unwinds — i.e. on
+            # thread completion — even when the scan raises. Do NOT move the
+            # acquire/release out of the worker or bypass the context manager, or
+            # a slot leaks and capacity is permanently lost.
+            async with _scan_limiter:
+                try:
+                    holder["value"] = await to_thread.run_sync(fn)
+                except Exception as exc:  # noqa: BLE001 - forwarded to the request task
+                    # NOT BaseException: a real cancellation must propagate so the
+                    # task group can tear the worker down. App-level exceptions
+                    # (ValueError / RestoreGuardError / …) are forwarded to the
+                    # awaiting request, which re-raises them for the handler to map.
+                    holder["error"] = exc
+                finally:
+                    # Wake the waiter even on error/cancel; the slot is released
+                    # as this `async with` unwinds, on real thread completion.
+                    done.set()
+        finally:
+            # Release the admission slot on REAL worker completion (ran or
+            # errored), mirroring the increment at admission. This is the only
+            # decrement, so the counter cannot drift below or above the true
+            # in-flight count.
+            _inflight_scans -= 1
 
-    _APP_TASK_GROUP.start_soon(_worker)
+    task_group.start_soon(_worker)
     with anyio.move_on_after(_SCAN_TIMEOUT_SECONDS) as scope:
         await done.wait()
     if scope.cancelled_caught:
@@ -296,6 +360,7 @@ async def handle_redact(request: Request) -> JSONResponse:
     # deadline (see its docstring).
     try:
         result = await _run_scan(
+            request,
             functools.partial(
                 redact,
                 text,
@@ -309,13 +374,15 @@ async def handle_redact(request: Request) -> JSONResponse:
                 profile=profile,
                 types=types,
                 types_exclude=types_exclude,
-            )
+            ),
         )
     except _ScanTimeout:
         return JSONResponse(
             {"error": "request timed out: the scan exceeded the server time limit"},
             status_code=504,
         )
+    except (_ServerNotReady, _ServerBusy) as e:
+        return JSONResponse({"error": str(e)}, status_code=503)
     except (ValueError, TypeError) as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -448,6 +515,7 @@ async def handle_restore(request: Request) -> JSONResponse:
         # concurrent request while this one scanned. `_run_scan` also enforces
         # the in-flight bound and the honest 504 deadline (see its docstring).
         restored, details = await _run_scan(
+            request,
             functools.partial(
                 restore,
                 text,
@@ -458,13 +526,15 @@ async def handle_restore(request: Request) -> JSONResponse:
                 anchor=anchor,
                 strict=strict,
                 detailed=True,
-            )
+            ),
         )
     except _ScanTimeout:
         return JSONResponse(
             {"error": "request timed out: the scan exceeded the server time limit"},
             status_code=504,
         )
+    except (_ServerNotReady, _ServerBusy) as e:
+        return JSONResponse({"error": str(e)}, status_code=503)
     except RestoreGuardError as e:
         return JSONResponse({"error": str(e), "security_events": e.events}, status_code=400)
     except (ValueError, TypeError) as e:
@@ -561,15 +631,18 @@ def create_app(*, allow_no_auth: bool = False):
         # scan finishes). Exiting it on shutdown WAITS for every started worker
         # to complete: the running scans are on non-preemptible threads and are
         # not cancelled, so graceful shutdown drains in-flight (and queued) scans
-        # rather than abandoning them. `_APP_TASK_GROUP` is cleared before the
-        # drain so a late request fails fast instead of racing a closing group.
-        global _APP_TASK_GROUP
+        # rather than abandoning them. It lives on `app.state` (NOT a module
+        # global) so each app owns its own group — two apps in one process (a
+        # test suite, an embedding host) never share or clobber one another's.
+        # Cleared to None (not delattr) before the drain so a late scan fails fast
+        # with 503 instead of racing a closing group; handlers reach it via
+        # `getattr(request.app.state, "task_group", None)`.
         async with anyio.create_task_group() as tg:
-            _APP_TASK_GROUP = tg
+            app.state.task_group = tg
             try:
                 yield
             finally:
-                _APP_TASK_GROUP = None
+                app.state.task_group = None
 
     api_key = os.environ.get("ARGUS_API_KEY")
     if not api_key and not allow_no_auth:
