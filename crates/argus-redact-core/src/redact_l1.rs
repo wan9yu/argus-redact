@@ -865,6 +865,35 @@ mod tests {
         assert_eq!(configs.iter().filter(|c| c.type_ == "bank_card").count(), 1);
     }
 
+    #[test]
+    fn en_load_includes_language_neutral_checksum_ids() {
+        // cpf/cnpj (br), my_number (ja) and pan (in) are all checksum- or
+        // format-validated identifiers whose characters are the same regardless
+        // of surrounding script, so an en-only request must still load them —
+        // not just the CN numeric / card patterns covered above.
+        let configs = load_patterns(&["en".to_string()]);
+        for type_ in ["cpf", "cnpj", "my_number", "pan"] {
+            assert!(
+                configs.iter().any(|c| c.type_ == type_),
+                "en pattern load must include the language-neutral {type_} pattern"
+            );
+        }
+    }
+
+    #[test]
+    fn en_load_excludes_the_format_only_ids_kept_language_scoped() {
+        // aadhaar (bare 12-digit run, no checksum) and the German tax_id
+        // (format-only) are deliberately NOT flagged language_neutral — too
+        // collision-prone to widen. An en-only request must still exclude them.
+        let configs = load_patterns(&["en".to_string()]);
+        for type_ in ["aadhaar", "tax_id"] {
+            assert!(
+                !configs.iter().any(|c| c.type_ == type_),
+                "en pattern load must NOT include the language-scoped {type_} pattern"
+            );
+        }
+    }
+
     // ── Golden fixtures captured from LIVE Python ─────────────────────────────
     //
     // Each fixture is the RAW (pre-merge) `_detect` fast-mode output: the
@@ -967,6 +996,15 @@ mod tests {
         assert_near_misses(
             &r.near_misses,
             &[
+                // cpf is language_neutral (v0.8.10) so the br pattern now also
+                // cross-loads into zh; it shares the phone number's exact span
+                // and fails the CPF check-digit algorithm on these digits, so it
+                // surfaces as an extra near-miss here. The accepted entity list
+                // above is unaffected (`phone` still wins the overlap: same span
+                // length, same 1.0 confidence, phone's config position sorts
+                // first), and the hint layer suppresses a near-miss whose span
+                // an accepted entity of another type already claims.
+                ("13800138000", "cpf", 7, 18),
                 ("110101199003078888", "id_number", 22, 40),
                 ("110101199003078888", "credit_code", 22, 40),
             ],

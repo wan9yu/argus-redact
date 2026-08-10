@@ -19,5 +19,9 @@
         pattern: r"(?<!\d)\d{4}\s?\d{4}\s?\d{4}(?!\d)",
         validator: Some(r"my_number"),
         description: r"Japanese My Number (12 digits, check digit)",
+        // The check-digit algorithm is the same digits regardless of surrounding
+        // script, so a My Number in en/zh/… text must still be caught, not only
+        // when ja is requested.
+        language_neutral: true,
     ),
 ]
