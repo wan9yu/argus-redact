@@ -272,7 +272,7 @@ class Decision:
     new_hipaa: str | None
     # Classification + provenance.
     sensitive_pi_member: bool
-    downgrade: bool  # S≥3 AND deliberately non-member → explicit cited determination
+    downgrade: bool  # in _DOWNGRADE_NAMES AND non-member → explicit cited determination
     citations: tuple[str, ...]  # verbatim one-line statute citation(s)
     rationale: str  # human one-liner
     risk_note: str  # self-reference amplification delta (newly-member types)
@@ -387,10 +387,27 @@ _OLD_COLUMNS: dict[tuple[str, str], tuple[tuple[str, ...], bool, str | None]] = 
 }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Explicit downgrade set (v0.8.10). REPLACES the per-(lang,name) sensitivity≥3
+# gate the oracle used to compute ``downgrade`` from. Language-independent:
+# whether a type downgrades is now a property of its NAME alone — the union of
+# every type with a drafted downgrade citation, plus the legal-entity /
+# non-natural-person registries — not of which language variant's sensitivity
+# happened to cross a numeric threshold. Derived from the LIVE ``_DOWNGRADE_CITE``
+# (imported from the doc generator, the single source of drafted citations), so
+# a future addition there grows this set automatically — no count to hand-sync.
+# ``_NON_NATURAL_PERSON`` is already a subset of ``_DOWNGRADE_CITE``'s keys today
+# (both credit_code and cnpj have drafted citations); the union is kept explicit
+# so the set's two provenances — drafted downgrade citations, and legal-entity /
+# non-natural-person registries — both stay visible at the definition site.
+# ─────────────────────────────────────────────────────────────────────────────
+_DOWNGRADE_NAMES: frozenset[str] = frozenset(_DOWNGRADE_CITE) | _NON_NATURAL_PERSON
+
+
 def _build_decision(td) -> Decision:
     name, lang, sens = td.name, td.lang, td.sensitivity
     member = name in SENSITIVE_PI_NEW
-    downgrade = ((sens >= 3) or name in _NON_NATURAL_PERSON) and not member
+    downgrade = name in _DOWNGRADE_NAMES and not member
     old_pipl, old_gdpr_special, old_hipaa = _OLD_COLUMNS[(lang, name)]
 
     new_gdpr_special = name in GDPR_SPECIAL_NEW
@@ -508,7 +525,7 @@ def test_every_member_has_a_pipl_art28_citation():
 
 
 def test_every_downgrade_has_a_citation_and_rationale():
-    """Every S≥3 non-member carries an explicit, cited downgrade line."""
+    """Every downgrade-set non-member carries an explicit, cited downgrade line."""
     downgrades = {k for k, d in DECISION_TABLE.items() if d.downgrade}
     for key in downgrades:
         d = DECISION_TABLE[key]
@@ -601,9 +618,11 @@ def test_hipaa_typedef_overrides_are_pinned():
 
 
 def test_legal_entity_types_are_explicit_downgrades():
-    """Legal-entity registries (credit_code, cnpj) are cited non-member downgrades even
-    below the S≥3 gate — cnpj (s2) trips the _NON_NATURAL_PERSON path, not the sensitivity
-    one, so it still renders in the cited '## Explicit downgrades' section."""
+    """Legal-entity registries (credit_code, cnpj) are cited non-member downgrades.
+    Both names are members of the language-independent downgrade set
+    (``_DOWNGRADE_NAMES`` = ``_DOWNGRADE_CITE`` ∪ ``_NON_NATURAL_PERSON``), independent
+    of sensitivity — cnpj (sensitivity 2) still renders in the cited '## Explicit
+    downgrades' section even though it never crosses a high-sensitivity threshold."""
     for name in _NON_NATURAL_PERSON:
         decisions = [d for k, d in DECISION_TABLE.items() if d.name == name]
         assert decisions, f"{name}: not registered"
@@ -611,6 +630,28 @@ def test_legal_entity_types_are_explicit_downgrades():
             assert not d.sensitive_pi_member, f"{name}: legal-entity type must be a non-member"
             assert d.downgrade, f"{name}: legal-entity type must render as an explicit downgrade"
             assert d.name in _DOWNGRADE_CITE, f"{name}: needs a downgrade citation"
+
+
+def test_cross_language_split_types_downgrade_in_every_language():
+    """Language-independent gate (v0.8.10): a type in the downgrade set downgrades in
+    EVERY language it is registered under, even where that particular language's
+    sensitivity never crossed the old per-language S≥3 threshold. The previous gate
+    (``(sensitivity >= 3) or non_natural_person) and not member``) silently varied
+    by locale for these four cross-language-split registrations — the actual flip
+    set observed when this gate was replaced, verified against the live registry
+    (``_DOWNGRADE_CITE`` includes ``url_token``/``imei``)."""
+    for lang, name in (
+        ("zh", "date_of_birth"),
+        ("en", "phone"),
+        ("en", "person"),
+        ("shared", "phone_landline"),
+    ):
+        d = DECISION_TABLE[(lang, name)]
+        assert d.downgrade, f"{lang}/{name}: must downgrade under the language-independent gate"
+        assert d.sensitivity < 3, (
+            f"{lang}/{name}: expected a sub-3 sensitivity variant (the old gate's blind spot), "
+            f"got {d.sensitivity}"
+        )
 
 
 def test_matches_decision_table():
@@ -658,3 +699,95 @@ def test_matches_decision_table():
         assert not (td.gdpr_special_category and td.gdpr_art10), (
             f"{td.lang}/{td.name}: both GDPR Art.9 and Art.10 are set"
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rendered-name byte-parity gate (v0.8.10 downgrade-gate refactor). This oracle's
+# `downgrade` boolean moved from the per-(lang,name) sensitivity≥3 test to the
+# language-independent `_DOWNGRADE_NAMES` set above. That is an ORACLE-and-doc-
+# generator-internal recompute — it must NOT change the published transparency
+# artifact. `render_compliance_mappings()` (`specs/gen_compliance_mappings.py`)
+# computes its OWN `_is_downgrade` independently of this oracle and dedups the
+# rendered list by NAME, so flipping a per-(lang,name) `Decision.downgrade`
+# boolean here can never change which NAMES appear in "## Explicit downgrades".
+# This literal was captured from the live renderer BEFORE the gate refactor
+# landed, so an equality failure means the refactor reached further than the
+# oracle — a real behaviour change, not a doc regeneration.
+# ─────────────────────────────────────────────────────────────────────────────
+_EXPECTED_EXPLICIT_DOWNGRADES_SECTION = (
+    "## Explicit downgrades\n"
+    "\n"
+    "These types carry a high sensitivity score but are deliberately **not** classified "
+    "as sensitive personal information under PIPL. Each downgrade is explicit and cited "
+    "— never silent.\n"
+    "\n"
+    "- **`phone`** — PIPL Art.28 (by exclusion) — a telephone number is ordinary "
+    "personal information, not enumerated as sensitive; its processing still requires a "
+    "lawful basis under PIPL Art.13. High sensitivity here reflects re-identification "
+    "leverage in combination, not sensitive-PI status.\n"
+    "- **`phone_landline`** — PIPL Art.28 (by exclusion) — a landline number is ordinary "
+    "personal information, not enumerated as sensitive; processing requires a lawful "
+    "basis under PIPL Art.13.\n"
+    "- **`credit_code`** — PIPL Art.28 (by exclusion) — the Unified Social Credit Code "
+    "identifies a legal entity/organization, not a natural person (Art.4), so it is not "
+    "sensitive personal information; the universal Art.13/Art.51 processing floor still "
+    "applies as for any processing record.\n"
+    "- **`person`** — PIPL Art.28 (by exclusion) — a personal name is the paradigmatic "
+    "ordinary identifier and is not classified as sensitive personal information under "
+    "PIPL (contrast: it is HIPAA Safe Harbor identifier (A)).\n"
+    "- **`date_of_birth`** — PIPL Art.28 (by exclusion) — a date of birth is ordinary PI "
+    "/ a quasi-identifier, not enumerated as sensitive (contrast: it is HIPAA Safe "
+    "Harbor identifier (C)).\n"
+    "- **`openai_api_key`** — PIPL Art.28 (by exclusion) — an API/machine credential "
+    "falls under none of the Art.28 sensitive categories; as a machine credential it is "
+    "not, as such, information about an identified natural person (Art.4 rationale), and "
+    "is handled as a security secret at the highest redaction priority. The universal "
+    "Art.13/Art.51 processing floor still applies.\n"
+    "- **`anthropic_api_key`** — PIPL Art.28 (by exclusion) — a machine API credential "
+    "is not enumerated as sensitive PI; not, as such, information about a natural person "
+    "(Art.4 rationale); handled as a security secret. The universal Art.13/Art.51 floor "
+    "still applies.\n"
+    "- **`aws_access_key`** — PIPL Art.28 (by exclusion) — a cloud access-key identifier "
+    "is not enumerated as sensitive PI; a machine credential (Art.4 rationale); handled "
+    "as a security secret. The universal Art.13/Art.51 floor still applies.\n"
+    "- **`github_token`** — PIPL Art.28 (by exclusion) — an access token is not "
+    "enumerated as sensitive PI; a machine credential (Art.4 rationale); handled as a "
+    "security secret. The universal Art.13/Art.51 floor still applies.\n"
+    "- **`jwt`** — PIPL Art.28 (by exclusion) — a bearer token is not enumerated as "
+    "sensitive PI; a machine credential (Art.4 rationale); handled as a security secret. "
+    "(A JWT MAY carry PI in its payload; that PI is redacted by its own type, not by "
+    "classifying the token as sensitive PI.) The universal Art.13/Art.51 floor still "
+    "applies.\n"
+    "- **`ssh_private_key`** — PIPL Art.28 (by exclusion) — a private key is not "
+    "enumerated as sensitive PI; a machine credential (Art.4 rationale); handled as a "
+    "security secret at the highest redaction priority. The universal Art.13/Art.51 "
+    "floor still applies.\n"
+    "- **`imei`** — PIPL Art.28 (by exclusion) — an IMEI is a mobile-device equipment "
+    "identifier, not one of the Art.28 sensitive categories; high sensitivity reflects "
+    "re-identification leverage in combination, not sensitive-PI status. The universal "
+    "Art.13/Art.51 processing floor still applies.\n"
+    "- **`url_token`** — PIPL Art.28 (by exclusion) — a URL bearing a token/key/secret "
+    "query parameter is not enumerated as sensitive PI; the embedded credential is a "
+    "security secret handled at the highest redaction priority, not, as such, "
+    "information about an identified natural person (Art.4 rationale). The universal "
+    "Art.13/Art.51 floor still applies.\n"
+    "- **`cnpj`** — CNPJ = *Cadastro Nacional da Pessoa Jurídica* (legal-entity "
+    "registry); MEI / sole-proprietor CNPJs map 1:1 to a natural person, so the "
+    "universal {13,51} floor is retained\n"
+    "\n"
+)
+
+
+def test_rendered_explicit_downgrades_section_byte_parity():
+    """The v0.8.10 downgrade-gate refactor must not change the published
+    transparency artifact — the "## Explicit downgrades" section of
+    ``render_compliance_mappings()`` stays byte-identical to the pre-refactor
+    frozen literal above, because the renderer computes its downgrade set
+    independently of this oracle and dedups by NAME (see the module comment)."""
+    from argus_redact.specs.gen_compliance_mappings import render_compliance_mappings
+
+    rendered = render_compliance_mappings()
+    start = rendered.index("## Explicit downgrades")
+    end = rendered.index("## GDPR criminal-conviction data")
+    section = rendered[start:end]
+    assert section == _EXPECTED_EXPLICIT_DOWNGRADES_SECTION
