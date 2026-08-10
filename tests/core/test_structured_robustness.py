@@ -330,6 +330,29 @@ class TestStructuredAliases:
             )
 
 
+class TestStructuredAliasesRejection:
+    """restore_json/restore_csv both build their session via
+    `make_structured_restorer`, which funnels `aliases` through the shared
+    `_normalize_aliases` seam — a malformed shape must raise ValueError
+    before the document/CSV is ever walked, not silently corrupt it."""
+
+    def test_restore_json_rejects_bare_string_alias_value(self):
+        with pytest.raises(ValueError):
+            restore_json({"note": "hello"}, {"P-1": "Alice"}, aliases={"P-1": "abc"})
+
+    def test_restore_json_rejects_non_str_alias_element(self):
+        with pytest.raises(ValueError):
+            restore_json({"note": "hello"}, {"P-1": "Alice"}, aliases={"P-1": [123]})
+
+    def test_restore_csv_rejects_bare_string_alias_value(self):
+        with pytest.raises(ValueError):
+            restore_csv("note\nhello", {"P-1": "Alice"}, aliases={"P-1": "abc"})
+
+    def test_restore_csv_rejects_non_str_alias_element(self):
+        with pytest.raises(ValueError):
+            restore_csv("note\nhello", {"P-1": "Alice"}, aliases={"P-1": [123]})
+
+
 # ══════════════════════════════════════════════════════════════
 # header PII probe — detect-only, no re-warn / no discarded pseudonyms
 # ══════════════════════════════════════════════════════════════

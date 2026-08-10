@@ -221,6 +221,19 @@ class TestServerRestore:
 
         assert r.status_code == 400
 
+    def test_should_reject_non_str_alias_elements(self, client):
+        # A well-formed JSON object with LIST values but a non-str element
+        # (e.g. a number) passed the old list-only check and only surfaced as
+        # a ValueError from restore()'s own seam, offloaded behind
+        # _run_scan's CapacityLimiter/deadline. The pre-check now rejects it
+        # up front too, so this stays a deterministic 400 under load.
+        r = client.post(
+            "/restore",
+            json={"text": "x", "key": {}, "aliases": {"P-1": [123]}, "guard": False},
+        )
+
+        assert r.status_code == 400
+
     def test_should_strip_display_marker_field(self, client):
         r = client.post(
             "/restore",

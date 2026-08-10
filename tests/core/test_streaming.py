@@ -796,3 +796,14 @@ class TestStreamingRestorerAliases:
             warnings.simplefilter("always")
             StreamingRestorer({"A": "Alice", "B": "Bob"}, aliases={"A": ("X",), "B": ("Y",)})
         assert not any(issubclass(w.category, SecurityWarning) for w in caught)
+
+    def test_bare_string_alias_value_rejected_not_split_into_chars(self):
+        # The SHIP-BLOCKER footgun this seam closes: __init__ used to pre-mangle
+        # `{k: tuple(v)}` BEFORE any validation existed, so `{"P-1": "abc"}`
+        # silently became `('a', 'b', 'c')` instead of raising.
+        with pytest.raises(ValueError):
+            StreamingRestorer({"P-1": "Alice"}, aliases={"P-1": "abc"})
+
+    def test_non_str_alias_element_rejected(self):
+        with pytest.raises(ValueError):
+            StreamingRestorer({"P-1": "Alice"}, aliases={"P-1": [123]})

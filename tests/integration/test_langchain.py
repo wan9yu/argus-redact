@@ -186,3 +186,17 @@ class TestRestoreRunnableAliases:
 
         assert "张三" in out
         assert alias not in out
+
+    def test_restore_runnable_rejects_malformed_aliases(self):
+        # RestoreRunnable -> guarded_restore -> pure.restore.restore, the same
+        # seam every other face funnels through — a bare-string alias value
+        # must raise ValueError, not silently split into characters.
+        redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
+        redacted = redact_r.invoke("张三的电话是13912345678")
+        person_fake = next(p for p, o in redact_r.last_key.items() if o == "张三")
+
+        restore_r = RestoreRunnable(redact_r, aliases={person_fake: "Zhang San"})
+        reply = redacted + "\n" + redact_r.last_anchor.nonce
+
+        with pytest.raises(ValueError):
+            restore_r.invoke(reply)

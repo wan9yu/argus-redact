@@ -280,3 +280,16 @@ class TestRestoreTransformAliases:
 
         assert "张三" in out
         assert alias not in out
+
+    def test_restore_transform_rejects_malformed_aliases(self):
+        # RestoreTransform -> guarded_restore -> pure.restore.restore, the
+        # same seam every other face funnels through.
+        redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
+        redacted = redact_t("张三的电话是13912345678")
+        person_fake = next(p for p, o in redact_t.last_key.items() if o == "张三")
+
+        restore_t = RestoreTransform(redact_t, aliases={person_fake: "Zhang San"})
+        reply = redacted + "\n" + redact_t.last_anchor.nonce
+
+        with pytest.raises(ValueError):
+            restore_t(reply)

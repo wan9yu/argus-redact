@@ -385,14 +385,20 @@ async def handle_restore(request: Request) -> JSONResponse:
     # Optional `{fake: [alternate-transliteration, ...]}` map — mirrors
     # `restore(text, key, aliases=...)`, so an LLM reply that rewrote a fake
     # into one of its aliases still round-trips over HTTP. Values must be
-    # lists: a bare string value would otherwise iterate character-by-character
-    # once handed to `restore()` (the same footgun `anchor.scope` below guards
-    # against), silently building garbage single-character aliases.
+    # lists of strings — a bare string would otherwise iterate
+    # character-by-character once handed to `restore()` (the same footgun
+    # `anchor.scope` below guards against). This duplicates part of
+    # `restore()`'s own `_normalize_aliases` seam deliberately: checking here,
+    # ahead of `_run_scan`, keeps a malformed body a deterministic 400 instead
+    # of possibly riding the CapacityLimiter/deadline into a 504 under load.
     aliases = body.get("aliases")
     if aliases is not None:
         if not isinstance(aliases, dict):
             return JSONResponse({"error": "aliases must be a JSON object"}, status_code=400)
-        if not all(isinstance(v, list) for v in aliases.values()):
+        if not all(
+            isinstance(v, list) and all(isinstance(item, str) for item in v)
+            for v in aliases.values()
+        ):
             return JSONResponse(
                 {"error": "aliases values must be lists of alias strings"},
                 status_code=400,

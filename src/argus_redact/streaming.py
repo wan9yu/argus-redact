@@ -32,7 +32,7 @@ from argus_redact.glue.redact_pseudonym_llm import (
     redact_pseudonym_llm,
 )
 from argus_redact.pure.replacer import warn_alias_collisions, warn_coverage_restored
-from argus_redact.pure.restore import make_structured_restorer
+from argus_redact.pure.restore import _normalize_aliases, make_structured_restorer
 
 
 def _empty_result() -> PseudonymLLMResult:
@@ -138,12 +138,16 @@ class StreamingRestorer:
         *,
         aliases: dict[str, tuple[str, ...]] | None = None,
     ):
+        # FIRST statement: `_normalize_aliases` both validates AND coerces —
+        # the historical `{k: tuple(v) for k, v in (aliases or {}).items()}`
+        # here blindly mangled a bare string into a per-character tuple
+        # (`"abc"` -> `('a', 'b', 'c')`) instead of rejecting it.
+        self._aliases = _normalize_aliases(aliases)
         # dict(key): the session copies the key anyway, so aliasing the
         # caller's dict here would let a post-construction mutation change
         # _force_flush_split's hold decisions while the restorable set stayed
         # frozen — the two halves of the class disagreeing about the key.
         self._key = dict(key)
-        self._aliases = {k: tuple(v) for k, v in (aliases or {}).items()}
         # Precompiles the key/alias merge + regex once, up front, instead of
         # re-merging/re-compiling on every feed()/flush() call — mirrors
         # StreamingRedactor's one-time setup cost. self._key is kept

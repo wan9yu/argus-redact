@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 
 import argus_redact._core as _core
+import pytest
 
 from argus_redact.pure.restore import make_structured_restorer, wipe_key
 
@@ -77,3 +78,30 @@ def test_make_structured_restorer_docstring_states_thread_safety():
         "make_structured_restorer docstring must name the concrete failure "
         "mode (Already borrowed) a shared, concurrently-used session raises"
     )
+
+
+class TestMakeStructuredRestorerAliasesValidation:
+    """`make_structured_restorer` funnels `aliases` through the same
+    `_normalize_aliases` seam `restore()` / `StreamingRestorer` use — a
+    malformed shape must raise ValueError here too (restore_json/restore_csv
+    reach this exact construction point)."""
+
+    def test_rejects_bare_string_alias_value(self):
+        with pytest.raises(ValueError):
+            make_structured_restorer({"P-1": "Alice"}, aliases={"P-1": "abc"})
+
+    def test_rejects_non_str_alias_element(self):
+        with pytest.raises(ValueError):
+            make_structured_restorer({"P-1": "Alice"}, aliases={"P-1": [123]})
+
+    def test_accepts_tuple_valued_aliases(self):
+        restorer = make_structured_restorer({"P-1": "Alice"}, aliases={"P-1": ("Al",)})
+        assert restorer.restore_cell("Al ok") == "Alice ok"
+
+    def test_none_and_empty_dict_are_equivalent(self):
+        # Collapsing both onto the same Rust-constructor branch (aliases=None)
+        # must not change observable behavior for either caller shape.
+        none_restorer = make_structured_restorer({"P-1": "Alice"}, aliases=None)
+        empty_restorer = make_structured_restorer({"P-1": "Alice"}, aliases={})
+        text = "P-1 phoned"
+        assert none_restorer.restore_cell(text) == empty_restorer.restore_cell(text)

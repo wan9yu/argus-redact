@@ -123,6 +123,30 @@ def wipe_key(key: dict) -> None:
     key.clear()
 
 
+def _normalize_aliases(
+    aliases: Mapping[str, list[str] | tuple[str, ...]] | None,
+) -> dict[str, tuple[str, ...]]:
+    """Validate + coerce ``aliases`` into ``{fake: tuple[str, ...]}`` — the
+    ONE seam ``restore``, ``make_structured_restorer``, and
+    ``StreamingRestorer.__init__`` all funnel through, so no construction
+    point coerces a malformed shape (bare string/bytes, non-str element,
+    non-Mapping) without validating it first. ``None`` -> ``{}``.
+
+    Raises ``ValueError`` naming the offending key and shape — PII-FREE:
+    never the alias value/text itself.
+    """
+    if aliases is None:
+        return {}
+    if not isinstance(aliases, Mapping):
+        raise ValueError(f"aliases must be a Mapping, got {type(aliases).__name__}")
+    normalized: dict[str, tuple[str, ...]] = {}
+    for fake, values in aliases.items():
+        if not isinstance(values, (list, tuple)) or not all(isinstance(v, str) for v in values):
+            raise ValueError(f"aliases[{fake!r}] must be a list or tuple of strings")
+        normalized[fake] = tuple(values)
+    return normalized
+
+
 def make_structured_restorer(
     key: dict[str, str],
     *,
@@ -139,6 +163,7 @@ def make_structured_restorer(
     alternate transliterations that map back to the same original. The core
     session has always accepted them; threading them here is what lets the
     streaming face reach the same restore coverage as the batch face.
+    Validated via `_normalize_aliases` — a malformed shape raises ValueError.
 
     `dict(...)` is deliberate: the session gets its OWN copy, so a later
     `wipe_key(key)` on the caller's dict cannot reach the session's copy.
@@ -154,9 +179,8 @@ def make_structured_restorer(
     """
     from argus_redact import _core
 
-    if aliases is None:
-        return _core.StructuredRestorer(dict(key))
-    return _core.StructuredRestorer(dict(key), {k: list(v) for k, v in aliases.items()})
+    normalized = _normalize_aliases(aliases)
+    return _core.StructuredRestorer(dict(key), {k: list(v) for k, v in normalized.items()} or None)
 
 
 def restore(
@@ -181,7 +205,8 @@ def restore(
     `aliases` (v0.6.0+): optional dict mapping a fake to alternate
     transliterations. Each alias is also matched and mapped back to the
     fake's original. Useful when the LLM rewrites Chinese names into pinyin
-    or English addresses into 中文.
+    or English addresses into 中文. Malformed shapes raise ValueError — see
+    `_normalize_aliases`.
 
     If `display_marker` is provided, strip THAT marker from `text` before key
     lookup. If omitted, no separate marker pass runs: substitution is a single
@@ -221,6 +246,10 @@ def restore(
         raise TypeError(f"text must be a string, got {type(text).__name__}")
     if not isinstance(key, Mapping):
         raise TypeError(f"key must be a Mapping, got {type(key).__name__}")
+
+    # Validate+coerce before either branch below trusts `aliases`. Raises
+    # ValueError (vs. TypeError above) — harmless, every face catches both.
+    aliases = _normalize_aliases(aliases)
 
     if guard is None:
         # Auto-detect the caller's frame, same as the security warnings. A
@@ -387,6 +416,9 @@ def _do_restore(
     _alias_collisions: list[str] | None = None,
 ) -> str:
     """Perform the actual substitution via Rust core.
+
+    ``aliases`` is pre-normalized by ``restore()`` (this function's only
+    caller), so the ``{k: list(v)}`` reshape below is a trusted Rust-FFI cast.
 
     ``_warn``: False suppresses the ``alias_collision`` SecurityWarning for
     this call — the same suppression contract ``restore()``'s own ``_warn``

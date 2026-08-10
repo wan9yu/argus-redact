@@ -240,6 +240,15 @@ class TestRestoreBody:
 
         assert restored["result"] == "张三 and 张三"
 
+    def test_restore_body_rejects_malformed_aliases(self):
+        # A non-empty key is required: restore_body short-circuits on an
+        # empty key before ever reaching guarded_restore.
+        key = {"P-1": "张三"}
+        response = {"result": "P-1 and Zhang San"}
+
+        with pytest.raises(ValueError):
+            restore_body(response, key, field="result", guard=False, aliases={"P-1": "Zhang San"})
+
     def test_restore_body_forwards_display_marker(self):
         key = {"P-1": "张三"}
         response = {"result": "P-1ⓕ来了"}

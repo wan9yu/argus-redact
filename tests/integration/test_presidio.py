@@ -173,6 +173,15 @@ class TestPresidioRestoreAliases:
 
         assert out == "张三 and 张三"
 
+    def test_restore_rejects_malformed_aliases(self):
+        from argus_redact.integrations.presidio import PresidioBridge
+
+        bridge = PresidioBridge()
+        key = {"P-1": "张三"}
+
+        with pytest.raises(ValueError):
+            bridge.restore("P-1 and Zhang San", key, guard=False, aliases={"P-1": "Zhang San"})
+
     def test_restore_forwards_display_marker(self):
         from argus_redact.integrations.presidio import PresidioBridge
 

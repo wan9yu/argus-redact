@@ -241,6 +241,20 @@ class TestGuardedRestoreAliases:
         assert "张三" not in out
         assert alias in out
 
+    def test_malformed_aliases_rejected_not_silently_corrupted(self):
+        # guarded_restore calls pure.restore.restore DIRECTLY (see its module
+        # docstring) — this is the one choke point all 5 integrations share,
+        # so a malformed shape must raise ValueError here rather than reach
+        # any of them.
+        _redacted, key, anchor, person_fake = self._redact_person()
+        with pytest.raises(ValueError):
+            guarded_restore("x", key, anchor=anchor, aliases={person_fake: "Zhang San"})
+
+    def test_non_str_alias_element_rejected(self):
+        _redacted, key, anchor, person_fake = self._redact_person()
+        with pytest.raises(ValueError):
+            guarded_restore("x", key, anchor=anchor, aliases={person_fake: [123]})
+
     def test_display_marker_forwarded(self):
         # guard=False keeps this deterministic — the marker/alias forwarding is
         # the same _restore call the guarded path uses.
