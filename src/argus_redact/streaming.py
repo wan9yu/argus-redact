@@ -28,6 +28,7 @@ from argus_redact.glue._detect_partial import (
 )
 from argus_redact.glue.redact_pseudonym_llm import (
     _check_input_pollution,
+    _salt_to_bytes,
     redact_pseudonym_llm,
 )
 from argus_redact.pure.replacer import warn_alias_collisions, warn_coverage_restored
@@ -408,19 +409,7 @@ class StreamingRedactor:
     ):
         if not isinstance(salt, (int, bytes, bytearray)):
             raise TypeError(f"salt must be int or bytes, got {type(salt).__name__}")
-        if isinstance(salt, int):
-            signed = salt < 0
-            try:
-                self._salt = salt.to_bytes(8, "big", signed=signed)
-            except OverflowError as e:
-                # An out-of-range int (e.g. seed >= 2**64) raises OverflowError,
-                # an ArithmeticError the CLI's error net does not catch. Re-raise
-                # as a ValueError with a PII-free message for a clean error.
-                raise ValueError(
-                    "salt out of range: an integer salt must fit in 8 bytes (64-bit)"
-                ) from e
-        else:
-            self._salt = bytes(salt)
+        self._salt = _salt_to_bytes(salt)
         self._display_marker = display_marker
         self._lang = lang
         self._mode = mode
