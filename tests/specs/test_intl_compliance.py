@@ -44,6 +44,22 @@ def test_intl_type_registered_with_compliance(name, expected):
     assert td.pipl_articles, f"{name} has no PIPL articles"
 
 
+def test_nhs_number_format_spec_does_not_overclaim_checksum():
+    """nhs_number ships NO MOD11 validator (`checksum` is unset on the typedef) —
+    any 10-digit run in a uk-routed doc is redacted as a health identifier
+    (fail-safe over-redaction, not checksum-gated). The free-text `format` spec
+    must say so, not claim checksum enforcement the implementation lacks."""
+    td = lookup("nhs_number")[0]
+    assert td.checksum is None, "no MOD11 validator is implemented for nhs_number"
+    fmt = td.format.lower()
+    assert "mod11" not in fmt and "mod 11" not in fmt, (
+        f"nhs_number format spec overclaims a checksum that isn't implemented: {td.format!r}"
+    )
+    assert "format-only" in fmt and "no checksum" in fmt, (
+        f"nhs_number format spec should state format-only / no-checksum-enforced: {td.format!r}"
+    )
+
+
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
 def test_nhs_number_assess_risk_flags_health():
     # The one health identifier must surface GDPR Art.9 special category + a HIPAA
