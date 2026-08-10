@@ -107,13 +107,20 @@ def _redact_cell(
     return redacted, entities
 
 
-def _parse_paths(paths: list[str]) -> list[list[str]]:
-    """Parse dot-notation paths into segments.
+def _parse_paths(paths: list[str | list[str]]) -> list[list[str]]:
+    """Parse path selectors into segments.
 
-    Example: ``'messages[*].content'`` → ``['messages', '*', 'content']``.
+    Each entry is either dot-notation (``'messages[*].content'`` →
+    ``['messages', '*', 'content']``) or an already-split list of segments,
+    taken verbatim with no ``.``/``[*]`` parsing — the escape hatch for a key
+    that literally contains a dot or bracket (``[["a.b"]]`` targets the single
+    top-level key ``"a.b"``, which no dot-notation string could reach).
     """
     parsed = []
     for path in paths:
+        if isinstance(path, list):
+            parsed.append(list(path))
+            continue
         segments = []
         for part in path.replace("[*]", ".*").split("."):
             # A leading (or doubled) "[*]" turns into an empty segment once split
@@ -164,11 +171,6 @@ def _matching_targets(current_path: list[str], target_paths: list[list[str]]) ->
     return hits
 
 
-def _path_matches(current_path: list[str], target_paths: list[list[str]]) -> bool:
-    """True if ``current_path`` is at or below any target path (subtree match)."""
-    return bool(_matching_targets(current_path, target_paths))
-
-
 def redact_json(
     data: dict | list,
     *,
@@ -177,31 +179,39 @@ def redact_json(
     salt: int | bytes | None = None,
     config: dict | None = None,
     key: dict | None = None,
-    paths: list[str] | None = None,
+    paths: list[str | list[str]] | None = None,
     with_types: bool = False,
     with_aliases: bool = False,
 ) -> (
     tuple[dict | list, dict] | tuple[dict | list, dict, dict] | tuple[dict | list, dict, dict, dict]
 ):
-    """Redact PII in string VALUES of a JSON-like structure.
+    """Redact PII in string and numeric leaf VALUES of a JSON-like structure.
 
-    Scope: only string leaves are redacted. Dict KEYS are preserved verbatim —
-    they are structural identifiers (like a CSV header), and rewriting them would
-    reshape the document and break the restore mapping. Numeric / bool / None
-    leaves are also passed through unchanged (string-only coercion). Both cases
-    are surfaced, not silently ignored: a dict key or a numeric leaf that carries
-    detectable PII emits a (PII-free, count-only) ``SecurityWarning`` — move the
-    value into a string leaf to have it redacted.
+    Scope: string and numeric (int/float) leaves are redacted; dict KEYS are
+    preserved verbatim — they are structural identifiers (like a CSV header),
+    and rewriting them would reshape the document and break the restore
+    mapping. A numeric leaf (e.g. a national-ID or phone stored as a JSON
+    ``number``, not a string) is coerced to ``str`` for DETECTION only: a leaf
+    with no detectable PII passes through completely unchanged (its original
+    ``int``/``float`` type and exact value, including arbitrary-precision
+    ints, survive byte-for-byte); a leaf that DOES carry PII is redacted into
+    a placeholder string, same as a string leaf — a redacted leaf legitimately
+    changes type, since the placeholder is text. A PII-carrying dict KEY is
+    not similarly redactable (rewriting it would reshape the document) and
+    instead emits a (PII-free, count-only) ``SecurityWarning`` — move the
+    value into a leaf to have it redacted.
 
     Args:
-        paths: If specified, only redact string leaves in these subtrees. A
-            numeric list-index segment (``users.0.ssn``) behaves as a wildcard —
-            it scopes EVERY element of that list (``users[*].ssn``), because the
-            walk does not carry concrete indices; it cannot single out one
-            element. A key that literally contains ``.`` or ``[*]`` cannot be
-            targeted by dot-notation and is unreachable via ``paths``. A selector
-            that matches no leaf in a non-empty document emits a
-            ``SecurityWarning`` (a likely typo silently redacting nothing).
+        paths: If specified, only redact leaves in these subtrees (string or
+            numeric). Each entry is either dot-notation (``'messages[*].content'``)
+            or a pre-split list of segments (``["a.b"]``) for a key that
+            literally contains ``.``/``[*]`` and is unreachable by dot-notation.
+            A numeric list-index segment (``users.0.ssn``) behaves as a
+            wildcard — it scopes EVERY element of that list (``users[*].ssn``),
+            because the walk does not carry concrete indices; it cannot single
+            out one element. A selector that matches no leaf in a non-empty
+            document emits a ``SecurityWarning`` (a likely typo silently
+            redacting nothing).
         with_types: If True, append a ``types`` map (replacement → PII type).
         with_aliases: If True, append an ``aliases`` map (fake →
             alternate-transliteration tuple) so a realistic-strategy round-trip
@@ -235,7 +245,6 @@ def redact_json(
     # the walk to warn a SINGLE time per document — the same shape as
     # mask_collisions. Counts (not values) keep the warnings PII-free.
     pii_key_hits: list[int] = []
-    numeric_pii_hits: list[int] = []
     matched_targets: set[int] = set()
     leaf_seen: list[bool] = []
 
@@ -266,13 +275,34 @@ def redact_json(
         if isinstance(obj, bool):
             return obj
         if isinstance(obj, (int, float)):
-            # String-only scope: numeric leaves are never coerced/redacted. Only
-            # surface a leaf that WOULD be in scope (no paths, or a matching one)
-            # so a scoped-out number does not raise a spurious warning.
-            in_scope = parsed_paths is None or _path_matches(current_path, parsed_paths)
-            if in_scope and _cell_has_pii(str(obj), mode=mode, lang=lang):
-                numeric_pii_hits.append(1)
-            return obj
+            # Coerce-and-scan (v0.8.10): probe/redact the str(obj) form the same
+            # way a string leaf is, so a numeric national-ID/phone leaf is no
+            # longer a silent leak. A leaf outside `paths=` scope is left
+            # completely untouched (same early-return shape as the string
+            # branch) — including the target-hit bookkeeping, so a selector that
+            # DOES match a numeric leaf is never reported as a zero-match typo.
+            leaf_seen.append(True)
+            if parsed_paths is not None:
+                hits = _matching_targets(current_path, parsed_paths)
+                if not hits:
+                    return obj
+                matched_targets.update(hits)
+            redacted_text, entities = _redact_cell(
+                session,
+                str(obj),
+                mode=mode,
+                lang=lang,
+                config=config,
+                restored_types=restored_types,
+            )
+            if not entities:
+                # No detectable PII: return the ORIGINAL object, not the str(obj)
+                # probe — preserves exact type (int vs float) and precision
+                # (arbitrary-size Python ints round-trip byte-for-byte).
+                return obj
+            if with_types:
+                all_entities.extend(entities)
+            return redacted_text
         if isinstance(obj, dict):
             # Keys recurse only over VALUES (keys are preserved), so a PII key
             # would leak verbatim. Detect (detect-only, no redaction) and count
@@ -294,7 +324,6 @@ def redact_json(
     warn_coverage_restored(restored_types)
     _warn_structured_leaks(
         pii_key_hits=len(pii_key_hits),
-        numeric_pii_hits=len(numeric_pii_hits),
         paths=paths,
         parsed_paths=parsed_paths,
         matched_targets=matched_targets,
@@ -315,8 +344,7 @@ def redact_json(
 def _warn_structured_leaks(
     *,
     pii_key_hits: int,
-    numeric_pii_hits: int,
-    paths: list[str] | None,
+    paths: list[str | list[str]] | None,
     parsed_paths: list[list[str]] | None,
     matched_targets: set[int],
     saw_leaf: bool,
@@ -325,21 +353,16 @@ def _warn_structured_leaks(
 
     One warning per class, PII-free (counts, or the caller's own selector
     strings — never a PII value). Kept out of ``redact_json``'s body so the walk
-    reads as one thing and the warning policy as another.
+    reads as one thing and the warning policy as another. Numeric leaves are no
+    longer a separate warning class here — since v0.8.10 they are coerced and
+    scanned like string leaves (see the ``(int, float)`` branch of ``_walk``),
+    so a numeric leaf carrying PII is redacted rather than merely flagged.
     """
     if pii_key_hits:
         warnings.warn(
             f"redact_json: {pii_key_hits} dict key(s) carry detectable PII and were "
             f"NOT redacted — keys are preserved verbatim as structural identifiers. "
             f"Move the value into a string leaf to redact it.",
-            SecurityWarning,
-            stacklevel=3,
-        )
-    if numeric_pii_hits:
-        warnings.warn(
-            f"redact_json: {numeric_pii_hits} numeric leaf(ves) carry detectable PII "
-            f"but numeric leaves are out of scope (string-only). Convert the value to "
-            f"a string to redact it.",
             SecurityWarning,
             stacklevel=3,
         )
