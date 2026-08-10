@@ -183,10 +183,36 @@ fn reject_empty_key_entry(key: &HashMap<String, String>) -> Result<(), RestoreEr
     Ok(())
 }
 
+/// Reject a restore input larger than [`crate::MAX_INPUT_SIZE`] (1 MiB) BEFORE
+/// any substitution scan touches it — the same ceiling the redact path
+/// (`patterns.rs`, `redact_l1.rs`) and `check_restore_safety` already enforce.
+///
+/// The K-way-merge matcher already makes the substitution scan LINEAR, so this
+/// is defense-in-depth rather than the primary DoS cure: it bounds a single
+/// restore call's worst-case time and memory and gives one consistent 1 MiB
+/// ceiling across the whole redact + restore surface. The message names only
+/// the byte count and the limit — never the text — so an oversized hostile
+/// payload cannot smuggle content out through the error string.
+///
+/// Applied at the public entry points (`restore`, `restore_full_guarded`,
+/// `RestoreSession::restore_cell`) so the check sits at the API boundary and is
+/// not re-run by the private helpers they share.
+fn check_input_size(text: &str) -> Result<(), RestoreError> {
+    if text.len() > crate::MAX_INPUT_SIZE {
+        return Err(RestoreError(format!(
+            "input too large: {} bytes exceeds MAX_INPUT_SIZE {}",
+            text.len(),
+            crate::MAX_INPUT_SIZE
+        )));
+    }
+    Ok(())
+}
+
 /// Restore redacted text by replacing pseudonyms with originals.
 /// Keys sorted by length descending to prevent partial matches.
 /// Single-pass replacement prevents re-scanning of replaced content.
 pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, RestoreError> {
+    check_input_size(text)?;
     restore_tracking_self_ref(text, key, &[]).map(|(result, _spans)| result)
 }
 
@@ -566,6 +592,10 @@ pub fn restore_full_guarded(
     display_marker: Option<&str>,
     anchor: Option<&Anchor>,
 ) -> Result<RestoreResult, RestoreError> {
+    // Size cap BEFORE any scan — covers both the unguarded `restore_body`
+    // branch and the guarded `tokens_present` + substitution branch (the latter
+    // otherwise scans `text` in `tokens_present` before restoring it).
+    check_input_size(text)?;
     let Some(anchor) = anchor else {
         let (result, alias_collisions) = restore_body(text, key, aliases, display_marker)?;
         return Ok(RestoreResult {
@@ -824,6 +854,7 @@ impl RestoreSession {
     /// against `restore_full(..., None, None)`), so `events` is always empty
     /// and `outcome` is always `Complete`.
     pub fn restore_cell(&self, text: &str) -> Result<RestoreResult, RestoreError> {
+        check_input_size(text)?;
         let Some(matcher) = &self.matcher else {
             return Ok(RestoreResult {
                 restored: text.to_string(),
@@ -1959,6 +1990,90 @@ possible hallucination or fabrication"
         assert!(
             !warns.iter().any(|w| w.contains("too large")),
             "exactly-MAX_INPUT_SIZE input must not be refused: {warns:?}"
+        );
+    }
+
+    // ── restore input cap (Fix B): oversized input rejected, not scanned ────
+
+    #[test]
+    fn restore_rejects_oversized_input_with_pii_free_error() {
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        // One byte over the cap. The error must name only the size + limit.
+        let over = "x".repeat(crate::MAX_INPUT_SIZE + 1);
+        let err = restore(&over, &k).unwrap_err();
+        assert!(err.0.contains("too large"), "unexpected error: {}", err.0);
+        assert!(err.0.contains(&crate::MAX_INPUT_SIZE.to_string()));
+        // PII-free: neither the payload nor any key value leaks into the message.
+        assert!(!err.0.contains("Alice"));
+    }
+
+    #[test]
+    fn restore_at_exactly_max_input_size_is_not_rejected() {
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        // Exactly the cap must still restore normally (byte-identical).
+        let at_cap = "P-1 ".repeat(crate::MAX_INPUT_SIZE / 4);
+        assert_eq!(at_cap.len(), crate::MAX_INPUT_SIZE);
+        let restored = restore(&at_cap, &k).unwrap();
+        assert!(restored.starts_with("Alice "));
+    }
+
+    #[test]
+    fn restore_full_guarded_rejects_oversized_input_on_both_branches() {
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        let over = "x".repeat(crate::MAX_INPUT_SIZE + 1);
+        // Unguarded branch (anchor = None) — reached via restore_full too.
+        assert!(restore_full(&over, &k, None, None).unwrap_err().0.contains("too large"));
+        // Guarded branch (anchor = Some): the cap must fire BEFORE tokens_present
+        // scans the oversized text.
+        let anchor = Anchor::new(
+            "0123456789abcdef0123456789abcdef".to_string(),
+            std::collections::HashSet::new(),
+        );
+        let err = restore_full_guarded(&over, &k, None, None, Some(&anchor)).unwrap_err();
+        assert!(err.0.contains("too large"), "unexpected error: {}", err.0);
+    }
+
+    #[test]
+    fn restore_session_cell_rejects_oversized_input() {
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        let session = RestoreSession::new(&k, None).unwrap();
+        let over = "x".repeat(crate::MAX_INPUT_SIZE + 1);
+        assert!(session.restore_cell(&over).unwrap_err().0.contains("too large"));
+        // A cell exactly at the cap still restores.
+        let at_cap = "y".repeat(crate::MAX_INPUT_SIZE);
+        assert!(session.restore_cell(&at_cap).is_ok());
+    }
+
+    #[test]
+    fn restore_substitution_scales_linearly_in_input_length() {
+        // Fix A: the substitution scan is the K-way merge, LINEAR in text length
+        // even when the key spans multiple shards and one shard never matches
+        // again — the shape that made the old find_from_pos-per-position loop
+        // re-scan the whole tail at every step (O(shards · matches · text)). A
+        // dense single-key text over a 2-shard key reproduces that shape: only
+        // "P-0" occurs, so the shard that does NOT hold it is exhausted after
+        // one scan instead of being re-scanned per step.
+        let key: HashMap<String, String> = (0..(crate::sharded::MAX_KEYS_PER_SHARD + 100))
+            .map(|i| (format!("P-{i}"), format!("v{i}")))
+            .collect();
+        let time_for = |n: usize| {
+            let text = "P-0 ".repeat(n);
+            let t = std::time::Instant::now();
+            let _ = restore(&text, &key).unwrap();
+            t.elapsed().as_secs_f64()
+        };
+        time_for(5_000); // warm up
+        let small = time_for(20_000);
+        let large = time_for(80_000);
+        // 4x the input. Linear => ~4x; the old quadratic => ~16x. 8x is a wide
+        // margin that still fails the quadratic shape decisively.
+        assert!(
+            large < small * 8.0 + 0.05,
+            "restore substitution is super-linear: 20k={small:.4}s 80k={large:.4}s"
         );
     }
 
