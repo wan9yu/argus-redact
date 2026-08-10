@@ -11,12 +11,16 @@ the message useful).
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import inspect
+import logging
 import warnings
+from unittest.mock import patch
 
 import pytest
 
+import argus_redact.impure.ollama_adapter as ollama_adapter_module
 from argus_redact.impure.ollama_adapter import _validate_ollama_host
 
 _HAS_STARLETTE = importlib.util.find_spec("starlette") is not None
@@ -118,3 +122,70 @@ class TestOllamaHostLeakDoesNotReachHttpBody:
         assert "s3cret" not in body
         assert "user:" not in body
         assert "host" in body
+
+
+class TestOllamaRequestFailureLogsTypeOnlyNeverTraceback:
+    # A userinfo-bearing but otherwise VALID loopback URL (e.g.
+    # http://user:s3cret@localhost:11434) passes _validate_ollama_host — the
+    # scheme is http and the host is loopback, so the credential check above
+    # never fires. A subsequent connection failure logged with
+    # exc_info=True attaches the full traceback, which can embed adapter
+    # call-frame fragments (the request URL, the payload) — exactly the leak
+    # class this module's docstring warns about at the LayerUnavailableError
+    # site, and the same principle glue/redact.py:616-618 states for Layer-3:
+    # "Type only, never exc_info=True: a full traceback can embed input
+    # fragments from the adapter call frames."
+    def test_source_never_sets_exc_info_true(self):
+        # AST-based (not a plain string grep): the module's own comments
+        # legitimately mention "exc_info=True" in prose (mirroring
+        # glue/redact.py's identical comment), so a substring search would
+        # false-positive on the explanatory text. This walks actual call
+        # sites and flags only a real `exc_info=True` keyword argument.
+        source = inspect.getsource(ollama_adapter_module)
+        tree = ast.parse(source)
+        offending_calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            for kw in node.keywords
+            if kw.arg == "exc_info"
+            and isinstance(kw.value, ast.Constant)
+            and kw.value.value is True
+        ]
+        assert not offending_calls, (
+            "ollama_adapter.py must never log a request failure with "
+            "exc_info=True — a full traceback can embed adapter call-frame "
+            "fragments (URL, payload). Log type(exc).__name__ instead, "
+            "mirroring glue/redact.py's Layer-3 failure log."
+        )
+
+    def test_request_failure_log_carries_no_traceback_or_exception_text(self, caplog):
+        # Simulate a transport failure whose own exception message is
+        # secret-bearing (as a real connection error against a
+        # userinfo-bearing URL could be) and confirm the log record neither
+        # attaches a traceback nor renders that text.
+        from argus_redact.impure.ollama_adapter import OllamaAdapter
+
+        secret_bearing_message = "connection refused: socks5://user:s3cret@host:1080"
+
+        with patch(
+            "argus_redact.impure.ollama_adapter.requests.post",
+            side_effect=RuntimeError(secret_bearing_message),
+        ):
+            adapter = OllamaAdapter(base_url="http://localhost:11434")
+            with caplog.at_level(logging.WARNING, logger="argus_redact.impure.ollama_adapter"):
+                result = adapter._call_ollama("some text")
+
+        assert result is None
+
+        failure_records = [
+            rec for rec in caplog.records if "Ollama request failed" in rec.getMessage()
+        ]
+        assert failure_records, "expected an 'Ollama request failed' log record"
+        for rec in failure_records:
+            assert rec.exc_info is None, "must not attach a traceback (exc_info=True)"
+            rendered = rec.getMessage()
+            assert "s3cret" not in rendered
+            assert secret_bearing_message not in rendered
+            # Type-only per the fix: the exception's class name IS allowed.
+            assert "RuntimeError" in rendered

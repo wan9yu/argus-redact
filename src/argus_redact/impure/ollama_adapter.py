@@ -185,11 +185,14 @@ class OllamaAdapter(SemanticAdapter):
                     resp.status_code,
                     attempt + 1,
                 )
-            except Exception:
+            except Exception as exc:
+                # Type only, never exc_info=True: a full traceback can embed
+                # adapter call-frame fragments (the request URL, the payload) —
+                # mirrors the Layer-3 failure log in glue/redact.py.
                 logger.warning(
-                    "Ollama request failed (attempt %d)",
+                    "Ollama request failed (attempt %d): %s",
                     attempt + 1,
-                    exc_info=True,
+                    type(exc).__name__,
                 )
         return None
 
