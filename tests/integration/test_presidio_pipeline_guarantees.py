@@ -71,3 +71,21 @@ def test_presidio_empty_detection_still_routes_through_redact_pipeline():
     assert redacted == "nothing sensitive here"
     assert key == {}
     assert records, "empty-detection path must still run redact()'s telemetry emission"
+
+
+def test_presidio_empty_detection_with_existing_key_preserves_it():
+    """The empty-detection route (above) must also honor a pre-existing key: when
+    nothing new is detected, the returned key is value-equal to the key that was
+    passed in (object identity may differ) — not silently dropped or replaced
+    with a fresh empty dict.
+    """
+    from argus_redact.integrations.presidio import PresidioBridge
+
+    bridge = PresidioBridge(analyzer=_NoOpAnalyzer())
+    existing_key = {"P-1": "张三"}
+
+    _redacted, key = bridge.redact(
+        "nothing sensitive here", language="en", salt=42, key=existing_key
+    )
+
+    assert key == existing_key

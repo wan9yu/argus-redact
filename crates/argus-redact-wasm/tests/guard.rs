@@ -75,7 +75,8 @@ fn provenance_failed_when_nonce_absent_blocks_and_returns_input_unchanged() {
     ]);
     let text = "P-1 says hello, no nonce here.";
 
-    let out = restore_guarded(text, key, anchor, JsValue::UNDEFINED).expect("a blocked outcome is not an error");
+    let out = restore_guarded(text, key, anchor, JsValue::UNDEFINED)
+        .expect("a blocked outcome is not an error");
 
     assert_eq!(get_str(&out, "outcome"), "blocked");
     assert_eq!(get_str(&out, "restored"), text, "raw input must come back unchanged");
@@ -108,7 +109,8 @@ fn full_scope_roundtrip_recovers_original_and_strips_nonce() {
     let anchor = js_obj(&[("nonce", JsValue::from_str(NONCE)), ("scope", scope.into())]);
     let reply = format!("{redacted_text}\n{NONCE}");
 
-    let out = restore_guarded(&reply, key, anchor, JsValue::UNDEFINED).expect("restore_guarded should succeed");
+    let out = restore_guarded(&reply, key, anchor, JsValue::UNDEFINED)
+        .expect("restore_guarded should succeed");
 
     assert_eq!(get_str(&out, "outcome"), "complete");
     assert_eq!(get_str(&out, "restored"), original);
@@ -144,7 +146,8 @@ fn out_of_scope_code_present_in_reply_is_partial_and_withheld() {
     let anchor = js_obj(&[("nonce", JsValue::from_str(NONCE)), ("scope", in_scope.into())]);
     let reply = format!("{redacted_text}\n{NONCE}");
 
-    let out = restore_guarded(&reply, key, anchor, JsValue::UNDEFINED).expect("restore_guarded should succeed");
+    let out = restore_guarded(&reply, key, anchor, JsValue::UNDEFINED)
+        .expect("restore_guarded should succeed");
 
     assert_eq!(get_str(&out, "outcome"), "partial");
 
@@ -179,7 +182,8 @@ fn missing_anchor_fails_closed_with_guard_no_anchor_event() {
 
     for anchor in [JsValue::UNDEFINED, JsValue::NULL] {
         let key = js_obj(&[("P-1", JsValue::from_str("张三"))]);
-        let out = restore_guarded(text, key, anchor, JsValue::UNDEFINED).expect("a blocked outcome is not an error");
+        let out = restore_guarded(text, key, anchor, JsValue::UNDEFINED)
+            .expect("a blocked outcome is not an error");
 
         assert_eq!(get_str(&out, "outcome"), "blocked");
         assert_eq!(get_str(&out, "restored"), text, "raw input must come back unchanged");

@@ -156,6 +156,13 @@ pub fn check_restore_safety(
 /// `'static` lifetime bound. Bulk callers (structured CSV/JSON, streaming)
 /// route through this instead of the stateless [`restore`] to avoid
 /// re-merging and re-compiling the same key on every cell.
+///
+/// Thread safety: construct one session per thread / per logical restore
+/// session and do NOT share a single instance across threads. `restore_cell`
+/// and `wipe()`/`close()` all borrow this session's Rust-side state; a
+/// concurrent call on a SHARED instance from another thread hits the runtime
+/// borrow check and raises `Already borrowed` rather than silently
+/// corrupting output.
 #[pyclass]
 pub struct StructuredRestorer {
     session: RestoreSession,

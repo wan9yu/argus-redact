@@ -261,8 +261,7 @@ register(
         sensitivity=3,
         source="3GPP TS 23.003 (IMEI); GSMA-allocated TAC",
         description=(
-            "IMEI mobile-device identifier — detection in shared.ron "
-            "(15 digits, keyword-triggered)"
+            "IMEI mobile-device identifier — detection in shared.ron (15 digits, keyword-triggered)"
         ),
     )
 )

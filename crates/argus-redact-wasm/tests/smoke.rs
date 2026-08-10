@@ -62,7 +62,8 @@ fn redact_masks_and_restores() {
 
     // 2. restore(redacted, key) must recover the ORIGINAL input exactly.
     let key_js = serde_wasm_bindgen::to_value(&result.key).unwrap();
-    let restored = restore(&result.text, key_js, JsValue::UNDEFINED).expect("restore should succeed");
+    let restored =
+        restore(&result.text, key_js, JsValue::UNDEFINED).expect("restore should succeed");
     assert_eq!(restored, original, "roundtrip must recover the original");
 }
 
