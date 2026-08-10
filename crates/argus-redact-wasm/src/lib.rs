@@ -444,6 +444,19 @@ fn lang_is_auto(lang: &Option<StringOrVec>) -> bool {
     }
 }
 
+/// Deserialize the optional `aliases` JS argument shared by [`restore`] and
+/// [`restore_guarded`]: `undefined`/`null` means "no aliases" (`None`);
+/// otherwise the `{fake: [alternate-transliteration, ...]}` map.
+fn opt_aliases(aliases: JsValue) -> Result<Option<HashMap<String, Vec<String>>>, JsValue> {
+    if aliases.is_undefined() || aliases.is_null() {
+        Ok(None)
+    } else {
+        serde_wasm_bindgen::from_value(aliases)
+            .map(Some)
+            .map_err(|e| JsValue::from_str(&format!("invalid aliases: {e}")))
+    }
+}
+
 /// Restore redacted text using the `key` map (`{fake: original}`) returned by
 /// [`redact`]. `aliases` is an optional `{fake: [alternate-transliteration,
 /// ...]}` map — mirrors the Python `restore(text, key, aliases=...)` /
@@ -485,15 +498,7 @@ pub fn restore(text: &str, key: JsValue, aliases: JsValue) -> Result<String, JsV
             .map_err(|e| JsValue::from_str(&format!("invalid key: {e}")))?
     };
 
-    let aliases: Option<HashMap<String, Vec<String>>> =
-        if aliases.is_undefined() || aliases.is_null() {
-            None
-        } else {
-            Some(
-                serde_wasm_bindgen::from_value(aliases)
-                    .map_err(|e| JsValue::from_str(&format!("invalid aliases: {e}")))?,
-            )
-        };
+    let aliases = opt_aliases(aliases)?;
 
     // `alias_collisions` is discarded here — this entry point's return shape
     // is a bare `String`; a caller that needs collision detail should use
@@ -635,15 +640,7 @@ pub fn restore_guarded(
         .map_err(|e| JsValue::from_str(&format!("invalid anchor: {e}")))?;
     let core_anchor = Anchor::new(spec.nonce, spec.scope.into_iter().collect());
 
-    let aliases: Option<HashMap<String, Vec<String>>> =
-        if aliases.is_undefined() || aliases.is_null() {
-            None
-        } else {
-            Some(
-                serde_wasm_bindgen::from_value(aliases)
-                    .map_err(|e| JsValue::from_str(&format!("invalid aliases: {e}")))?,
-            )
-        };
+    let aliases = opt_aliases(aliases)?;
 
     let result = restore_full_guarded(text, &key, aliases.as_ref(), None, Some(&core_anchor))
         .map_err(|e| JsValue::from_str(&e.0))?;
