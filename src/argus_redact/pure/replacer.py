@@ -102,23 +102,44 @@ def _faker_reserved_cached(name: str, langs: tuple[str, ...], _generation: int) 
     return None
 
 
-def _resolve_default_strategy(entity_type: str) -> str:
+def _resolve_default_strategy(entity_type: str, langs: list[str] | None = None) -> str:
     """Look up the type's declared strategy from the typedef registry.
 
     v0.6.8: single source of truth = specs/{zh,en,shared}.py PIITypeDef.strategy.
+
+    v0.8.10: lang-aware. When the same type NAME is registered under more than
+    one language, prefer the typedef for one of the entity's detected `langs`
+    (in order), then 'shared', then whichever typedef happens to be first (the
+    old lang-blind behaviour) as a last resort — the SAME preference order
+    `_resolve_realistic_faker` already uses for the realistic-faker lookup. No
+    currently-registered type disagrees on `strategy` across languages, so this
+    is a forward-looking correctness fix (dormant today), not an observed bug.
     """
     # Lazy import to avoid circular: registry imports types, types reference replacer
     from argus_redact.specs.registry import lookup
 
     typedef_list = lookup(entity_type)
-    if typedef_list:
-        return typedef_list[0].strategy
-    return "remove"  # fallback for unknown types
+    if not typedef_list:
+        return "remove"  # fallback for unknown types
+    by_lang = {td.lang: td for td in typedef_list}
+    for lang in langs or ():
+        if lang in by_lang:
+            return by_lang[lang].strategy
+    if "shared" in by_lang:
+        return by_lang["shared"].strategy
+    return typedef_list[0].strategy
 
 
 def _resolved_strategy(entity_type: str, config: dict | None) -> str:
     """The strategy that applies to ``entity_type`` — explicit config over the
-    registry default. Single source for keep-downgrade + residual-PII."""
+    registry default. Single source for keep-downgrade + residual-PII.
+
+    Intentionally lang-blind: this only decides whether the effective strategy
+    is ``keep`` (the self_reference/kinship whitelist check), not which
+    replacement fires, and no caller here has a detected-langs list in scope.
+    The lang-aware resolution lives in ``_build_type_info``, the path that
+    actually determines the applied redaction strategy.
+    """
     ec = _get_entity_config(entity_type, config)
     return ec.get("strategy") or _resolve_default_strategy(entity_type)
 
@@ -544,7 +565,7 @@ def _build_type_info(
         if e.type in registry_defaults:
             continue
         registry_defaults[e.type] = {
-            "strategy": _resolve_default_strategy(e.type),
+            "strategy": _resolve_default_strategy(e.type, langs),
             "prefix": DEFAULT_PREFIXES.get(e.type, e.type.upper()[:4]),
             "category_label": DEFAULT_CATEGORY_LABEL.get(e.type, f"[{e.type}]"),
         }
