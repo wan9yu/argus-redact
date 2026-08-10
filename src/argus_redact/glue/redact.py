@@ -38,6 +38,18 @@ from argus_redact._core_loader import HAS_CORE as _RUST_CORE  # noqa: E402
 from argus_redact._core_loader import _core  # noqa: E402
 
 
+def _effective_lang(lang: "str | list[str] | None", default: str = "zh") -> str:
+    """Resolve a single effective language from a ``str | list[str] | None`` param.
+
+    A ``str`` is returned as-is; a list resolves to its first entry (or
+    ``default`` if empty/None). Shared by the langchain/llamaindex integrations
+    and the risk/grammar call sites here that need one representative language.
+    """
+    if isinstance(lang, str):
+        return lang
+    return lang[0] if lang else default
+
+
 @functools.lru_cache(maxsize=1)
 def _warn_ablation_once() -> None:
     """Warn ONCE per process if any research ablation env toggle is active.
@@ -704,7 +716,7 @@ def _replace_and_emit(
         unified_prefix=unified_prefix,
         _mask_collisions=mask_collisions,
     )
-    effective_lang = lang if isinstance(lang, str) else (lang[0] if lang else "zh")
+    effective_lang = _effective_lang(lang)
     if effective_lang == "en":
         redacted = normalize_grammar_en(redacted, list(result_key.values()))
     timing["replace_ms"] = (time.perf_counter() - t0) * 1000
@@ -1006,7 +1018,7 @@ def redact(
             # self_reference), so the report classified ordinary-PII while
             # scoring high/critical (or the inverse). Reuse the redact.py:693
             # effective-lang idiom; the empty case is already rejected upstream.
-            effective_lang = lang if isinstance(lang, str) else (lang[0] if lang else "zh")
+            effective_lang = _effective_lang(lang)
             sens_cache: dict[str, int] = {}
             risk_entities = []
             for e in entity_details:

@@ -28,6 +28,7 @@ from argus_redact import redact
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.exceptions import SessionStateError
 from argus_redact.glue.guarded_restore import guarded_restore
+from argus_redact.glue.redact import _effective_lang
 
 
 class RedactTransform:
@@ -73,15 +74,7 @@ class RedactTransform:
             anchor = self.last_anchor
         if not key or anchor is None:
             return ""
-        effective_lang = (
-            lang
-            if lang is not None
-            else (
-                self._lang
-                if isinstance(self._lang, str)
-                else (self._lang[0] if self._lang else "zh")
-            )
-        )
+        effective_lang = lang if lang is not None else _effective_lang(self._lang)
         return prompt_anchor(key, effective_lang, anchor=anchor)
 
     def reset(self) -> None:
