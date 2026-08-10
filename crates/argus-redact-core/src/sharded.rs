@@ -192,15 +192,33 @@ enum ShardFront {
 /// `next` refreshes only the cursors the last emission consumed past, then
 /// emits the front with the SMALLEST start (ties resolved to the earliest
 /// shard — which, under the longest-first sharding, is the longest key: the
-/// exact rule the pre-cursor `find_from_pos` merge applied). This reproduces
-/// the old `find_from_pos`-driven loop position-for-position, including its
-/// error-early-stop: a shard that errors when scanned from the current `pos`
-/// (backtrack/size limit) ends the whole iteration, mirroring the old
-/// `find_from_pos`'s `Err(_) => return None`. A cached front never needs that
-/// re-check — a shard could only have cached a match/exhaustion by scanning
-/// (without error) from an EARLIER position through the current `pos`, so
-/// scanning it again from the later `pos` does a strict subset of that work and
-/// cannot newly error.
+/// exact rule the pre-cursor `find_from_pos` merge applied).
+///
+/// The emitted `(start, end)` sequence is byte-identical to the old
+/// `find_from_pos`-driven loop, in two legs proven by different means:
+///
+///   * MATCH-PICKING — which spans are emitted and in what order — is exercised
+///     DIRECTLY by the randomized multi-shard differential test
+///     (`linear_iter_matches_find_from_pos_driven_loop_*`).
+///   * ERROR-EARLY-STOP — a shard that errors (backtrack/size limit) when
+///     scanned from the current `pos` ends the whole iteration, mirroring the
+///     old `find_from_pos`'s `Err(_) => return None`. The MECHANISM is exercised
+///     by `linear_iter_error_stop_is_identical_to_find_from_pos_driven_loop`,
+///     which lowers a shard's `backtrack_limit` to force a real `Err`. That it
+///     can never DIVERGE from the old loop — a cached front is not re-checked
+///     for errors — rests on the argument below, NOT on the test.
+///
+/// Why a cached front need not be re-checked: a shard could only have cached a
+/// match/exhaustion by scanning (without error) from an EARLIER position through
+/// at least the current `pos` (its cached match starts at or after `pos`, or it
+/// found nothing in the whole suffix). Re-scanning it from the later `pos` then
+/// repeats a strict SUBSET of that already-error-free work, so it cannot newly
+/// exceed the limit. This monotonicity holds specifically because fancy-regex
+/// (workspace pin `= "0.17"`) counts backtracking with a single cumulative
+/// per-call counter over a left-to-right search — a shorter scan span can only
+/// count fewer steps. A future bump that changed that counting could invalidate
+/// this leg: the targeted error test guards the mechanism; this note guards the
+/// dependency assumption it rests on.
 pub(crate) struct ShardedMatches<'a> {
     matcher: &'a ShardedMatcher,
     text: &'a str,
@@ -525,5 +543,45 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn linear_iter_error_stop_is_identical_to_find_from_pos_driven_loop() {
+        use fancy_regex::RegexBuilder;
+
+        // The literal-alternation shards `ShardedMatcher::new` compiles never
+        // trip fancy-regex's backtrack limit in practice, so the error-early-stop
+        // leg is otherwise argued but never EXECUTED. Force a real
+        // `Err(BacktrackLimitExceeded)` inside a shard by hand-building the
+        // matcher (bypassing `new`, only to inject a tiny `backtrack_limit` on a
+        // catastrophic pattern — the merge/iteration logic under test is
+        // untouched) and assert the linear merge stops at exactly the point, and
+        // with exactly the prefix, the retained `find_from_pos` oracle does.
+        let cheap = Regex::new("M").unwrap(); // literal; never errors
+        // `M | (a+)+z`: matches a bare "M" cheaply, but on an "a"-run with no
+        // trailing 'z' the `(a+)+z` branch backtracks catastrophically and blows
+        // the tiny budget — a real Err, reached fast (the limit stops it long
+        // before the 2^n exploration would).
+        let boom = RegexBuilder::new(r"M|(a+)+z").backtrack_limit(1000).build().unwrap();
+
+        // Case 1 — NON-EMPTY prefix, then error-stop. Both shards match "M" at 0
+        // cheaply, the merge emits (0,1) and advances to pos 1; RE-SCANNING the
+        // boom shard from pos 1 enters the "a"-run and errors. The consumed-then-
+        // rescanned shard is the interesting path: the merge must both emit the
+        // (0,1) prefix AND stop at pos 1, identically to the oracle.
+        let m = ShardedMatcher { shards: vec![cheap.clone(), boom.clone()] };
+        let text = format!("M{}", "a".repeat(40)); // 40 a's, no 'z'
+        assert_eq!(m.find_iter(&text).collect::<Vec<_>>(), vec![(0, 1)]);
+        assert_eq!(find_from_pos_driven(&m, &text), vec![(0, 1)]);
+        assert_eq!(m.find_iter(&text).collect::<Vec<_>>(), find_from_pos_driven(&m, &text));
+
+        // Case 2 — error on the FIRST scan (empty prefix). No "M", so the boom
+        // shard errors at pos 0; both loop forms stop immediately, emitting
+        // nothing.
+        let m = ShardedMatcher { shards: vec![cheap, boom] };
+        let text = "a".repeat(40);
+        let empty: Vec<(usize, usize)> = Vec::new();
+        assert_eq!(m.find_iter(&text).collect::<Vec<_>>(), empty);
+        assert_eq!(find_from_pos_driven(&m, &text), empty);
     }
 }
