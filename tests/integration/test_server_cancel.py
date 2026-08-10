@@ -29,8 +29,10 @@ a synchronization primitive.
 from __future__ import annotations
 
 import asyncio
+import functools
 import importlib.util
 import threading
+from types import SimpleNamespace
 
 import pytest
 
@@ -280,3 +282,309 @@ class TestCpuReclamationOnDeadline:
 
         assert limiter.statistics().borrowed_tokens == 0
         assert limiter.statistics().tasks_waiting == 0
+
+
+@pytest.mark.skipif(
+    not (HAS_STARLETTE and HAS_CORE), reason="starlette or compiled _core not available"
+)
+class TestCpuReclamationOnClientDisconnect:
+    """#4 — a client that disconnects mid-scan trips THIS scan's token, so the
+    detached worker aborts and frees its slot WITHOUT any test-side release, and
+    ``_run_scan`` raises ``_ClientDisconnected`` (the handler maps that to 499).
+
+    Watch approach — the NO-POLL ASGI receive channel (not ``is_disconnected()``
+    polling): the handler fully reads the request body before ``_run_scan``, so
+    ``request.receive`` then only ever yields the disconnect event. The watcher
+    BLOCKS on it with zero CPU cost and detects promptly, with no sleep-driven poll
+    loop. The fake ``receive`` here mirrors that: it parks until the test signals the
+    disconnect, then returns a single ``http.disconnect``.
+
+    Deterministic: the scan is gated on a ``threading.Event``, the disconnect on an
+    ``anyio.Event``, and the freed slot is observed via ``_yield_until`` on the
+    limiter's borrowed count — never a wall-clock ``sleep`` used as synchronization.
+    """
+
+    @pytest.mark.asyncio
+    async def test_disconnect_trips_the_token_and_frees_the_slot(self, monkeypatch):
+        import time
+
+        import anyio
+
+        from argus_redact import server as server_module
+
+        monkeypatch.delenv("ARGUS_API_KEY", raising=False)
+        # Large deadline: this is about disconnect, not the 504 timeout.
+        monkeypatch.setattr(server_module, "_SCAN_TIMEOUT_SECONDS", 30.0)
+        monkeypatch.setattr(server_module, "_admitted_scans", 0)
+        limiter = anyio.CapacityLimiter(1)
+        monkeypatch.setattr(server_module, "_scan_limiter", limiter)
+
+        entered = threading.Event()
+
+        def _cooperative_scan(*args, cancel_token=None, **kwargs):
+            # Poll the token like the real core's detect loop. The ONLY thing that
+            # ends this loop is the disconnect tripping the token — the test never
+            # releases it. The 5 ms is a poll CADENCE (yield the GIL), not a sync
+            # primitive: the assertion gates on the freed slot, reached only on abort.
+            entered.set()
+            while not cancel_token.is_cancelled():
+                time.sleep(0.005)
+            raise server_module.ScanAborted("detection cancelled")
+
+        monkeypatch.setattr(server_module, "redact", _cooperative_scan)
+
+        app = _make_app()
+        async with _lifespan_running(app):
+            disconnect_signal = anyio.Event()
+
+            async def _receive():
+                # In production the body is already consumed, so this only yields the
+                # disconnect; here the channel simply parks until the test signals it.
+                await disconnect_signal.wait()
+                return {"type": "http.disconnect"}
+
+            request = SimpleNamespace(app=app, receive=_receive)
+            scan_task = asyncio.create_task(
+                server_module._run_scan(request, functools.partial(server_module.redact))
+            )
+
+            # The scan is genuinely mid-flight and its token is registered.
+            await _yield_until(entered.is_set)
+            await _yield_until(lambda: len(app.state.live_tokens) == 1)
+            token = next(iter(app.state.live_tokens))
+            assert not token.is_cancelled(), "token tripped before any disconnect"
+            assert limiter.statistics().borrowed_tokens == 1
+
+            # The client goes away.
+            disconnect_signal.set()
+
+            # The disconnect surfaces as `_ClientDisconnected` (mapped to 499 by the
+            # handler) — never a 200 result, never a 504, never a 500.
+            with pytest.raises(server_module._ClientDisconnected):
+                await scan_task
+
+            # The disconnect tripped THIS scan's token...
+            assert token.is_cancelled()
+            # ...the worker aborted on it and freed its slot with NO test-side
+            # release, and `_run_scan`'s finally drained the token from the registry
+            # — both reached deterministically, no wall-clock sleep.
+            await _yield_until(lambda: limiter.statistics().borrowed_tokens == 0)
+            await _yield_until(lambda: len(app.state.live_tokens) == 0)
+
+        assert limiter.statistics().borrowed_tokens == 0
+        assert limiter.statistics().tasks_waiting == 0
+
+
+@pytest.mark.skipif(not (HAS_STARLETTE and HAS_HTTPX), reason="starlette/httpx not installed")
+class TestClientDisconnectMapsTo499:
+    """The ``_ClientDisconnected`` outcome maps to a clean, PII-free 499 in BOTH
+    handler ladders (redact and restore) — never a 500, never the scan result."""
+
+    @pytest.mark.asyncio
+    async def test_both_handlers_map_client_disconnect_to_499(self, monkeypatch):
+        import httpx
+        from httpx import ASGITransport
+
+        from argus_redact import server as server_module
+
+        monkeypatch.delenv("ARGUS_API_KEY", raising=False)
+
+        async def _disconnecting_scan(request, fn):
+            raise server_module._ClientDisconnected("client disconnected before the scan completed")
+
+        monkeypatch.setattr(server_module, "_run_scan", _disconnecting_scan)
+
+        app = _make_app()
+        transport = ASGITransport(app=app)
+        async with _lifespan_running(app):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+                redact_resp = await ac.post("/redact", json={"text": "x", "mode": "fast"})
+                restore_resp = await ac.post(
+                    "/restore", json={"text": "x", "key": {}, "guard": False}
+                )
+
+        for resp in (redact_resp, restore_resp):
+            assert resp.status_code == 499
+            body = resp.json()
+            assert isinstance(body.get("error"), str) and body["error"]
+            # PII-free, and never the scan result.
+            assert "redacted" not in body and "restored" not in body
+
+
+@pytest.mark.skipif(not (HAS_STARLETTE and HAS_HTTPX), reason="starlette/httpx not installed")
+class TestDisconnectWatchIsInvisibleWithoutADisconnect:
+    """The disconnect watch adds ZERO behaviour change when the client stays: a
+    normal scan still returns a byte-identical 200, and a deadline still returns 504.
+    (In httpx's ASGITransport the receive channel parks on ``response_complete`` once
+    the body is read, so the watcher is cancelled the instant the worker completes or
+    the deadline fires — it never fabricates a disconnect.)"""
+
+    @pytest.mark.asyncio
+    async def test_normal_scan_is_byte_identical_200(self, monkeypatch):
+        import httpx
+        from httpx import ASGITransport
+
+        from argus_redact import server as server_module
+
+        monkeypatch.delenv("ARGUS_API_KEY", raising=False)
+
+        # Deterministic stub so the assertion pins the EXACT response body — a real
+        # unsalted redact() varies its pseudonyms run to run.
+        def _fixed_redact(*args, **kwargs):
+            return "REDACTED", {"P-1": "张伯"}
+
+        monkeypatch.setattr(server_module, "redact", _fixed_redact)
+
+        app = _make_app()
+        transport = ASGITransport(app=app)
+        async with _lifespan_running(app):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+                resp = await ac.post("/redact", json={"text": "x", "mode": "fast"})
+
+        assert resp.status_code == 200
+        assert resp.json() == {"redacted": "REDACTED", "key": {"P-1": "张伯"}}
+
+    @pytest.mark.asyncio
+    async def test_deadline_still_returns_504_and_frees_its_slot(self, monkeypatch):
+        import time
+
+        import anyio
+        import httpx
+        from httpx import ASGITransport
+
+        from argus_redact import server as server_module
+
+        monkeypatch.delenv("ARGUS_API_KEY", raising=False)
+        monkeypatch.setattr(server_module, "_SCAN_TIMEOUT_SECONDS", 0.1)
+        monkeypatch.setattr(server_module, "_admitted_scans", 0)
+        limiter = anyio.CapacityLimiter(1)
+        monkeypatch.setattr(server_module, "_scan_limiter", limiter)
+
+        entered = threading.Event()
+
+        def _cooperative_scan(*args, cancel_token=None, **kwargs):
+            entered.set()
+            while not cancel_token.is_cancelled():
+                time.sleep(0.005)
+            raise server_module.ScanAborted("detection cancelled")
+
+        monkeypatch.setattr(server_module, "redact", _cooperative_scan)
+
+        app = _make_app()
+        transport = ASGITransport(app=app)
+        async with _lifespan_running(app):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+                resp = await ac.post("/redact", json={"text": "x", "mode": "fast"})
+                # Prompt 504 at the deadline while the worker is still running.
+                assert resp.status_code == 504
+                await _yield_until(entered.is_set)
+                await _yield_until(lambda: limiter.statistics().borrowed_tokens == 0)
+
+        assert limiter.statistics().borrowed_tokens == 0
+
+
+@pytest.mark.skipif(
+    not (HAS_STARLETTE and HAS_CORE), reason="starlette or compiled _core not available"
+)
+class TestCpuReclamationOnShutdown:
+    """#5 — on shutdown the lifespan trips EVERY in-flight scan's token, so the
+    detached workers abort and the app task group drains PROMPTLY (no hang), and the
+    live-token registry is cleared to None. Deterministic: the scan is gated
+    mid-flight on a ``threading.Event``, shutdown is driven by the shared
+    ``_lifespan_running`` helper, and an ``asyncio.timeout`` fails loudly if the
+    drain ever hangs — which is exactly what an un-tripped token would cause."""
+
+    @pytest.mark.asyncio
+    async def test_shutdown_trips_inflight_tokens_and_drains_promptly(self, monkeypatch):
+        import time
+
+        import anyio
+
+        from argus_redact import server as server_module
+
+        monkeypatch.delenv("ARGUS_API_KEY", raising=False)
+        monkeypatch.setattr(server_module, "_SCAN_TIMEOUT_SECONDS", 30.0)
+        monkeypatch.setattr(server_module, "_admitted_scans", 0)
+        limiter = anyio.CapacityLimiter(1)
+        monkeypatch.setattr(server_module, "_scan_limiter", limiter)
+
+        entered = threading.Event()
+
+        def _cooperative_scan(*args, cancel_token=None, **kwargs):
+            entered.set()
+            while not cancel_token.is_cancelled():
+                time.sleep(0.005)
+            raise server_module.ScanAborted("detection cancelled")
+
+        monkeypatch.setattr(server_module, "redact", _cooperative_scan)
+
+        never_disconnect = anyio.Event()  # never set: the client stays for the test
+
+        async def _receive():
+            await never_disconnect.wait()
+            return {"type": "http.disconnect"}
+
+        app = _make_app()
+        # asyncio.timeout is a HANG-GUARD, not synchronization: a broken shutdown
+        # trip would block the task-group drain forever; this turns that into a loud
+        # failure rather than a silent hang.
+        async with asyncio.timeout(10):
+            async with _lifespan_running(app):
+                assert app.state.live_tokens is not None, (
+                    "the lifespan must create the live-token registry on startup"
+                )
+                request = SimpleNamespace(app=app, receive=_receive)
+                scan_task = asyncio.create_task(
+                    server_module._run_scan(request, functools.partial(server_module.redact))
+                )
+                await _yield_until(entered.is_set)
+                await _yield_until(lambda: len(app.state.live_tokens) == 1)
+                token = next(iter(app.state.live_tokens))
+                assert not token.is_cancelled(), "token tripped before shutdown"
+
+            # Exiting the block drove lifespan shutdown: the finally tripped the
+            # in-flight token BEFORE the task-group drain, so the worker aborted and
+            # the drain completed promptly (proven by reaching here under the guard).
+            assert token.is_cancelled(), "shutdown did not trip the in-flight scan's token"
+            assert app.state.live_tokens is None, "registry not cleared on shutdown (to None)"
+            assert app.state.task_group is None
+            # The worker's ScanAborted surfaced to the still-awaiting handler wrapper
+            # — this is the path that makes the `ScanAborted -> 504` mapping LIVE.
+            with pytest.raises(server_module.ScanAborted):
+                await scan_task
+
+
+@pytest.mark.skipif(
+    not (HAS_STARLETTE and HAS_CORE), reason="starlette or compiled _core not available"
+)
+class TestShutdownRegistryHygiene:
+    """A COMPLETED scan drains its own token from the registry (so the registry is
+    empty once in-flight scans finish), and the drain uses ``set.discard`` — never
+    ``remove`` — so a double-drain (e.g. shutdown clearing the registry while a scan
+    is still unwinding) never raises."""
+
+    @pytest.mark.asyncio
+    async def test_completed_scan_drains_its_token_and_double_discard_is_safe(self, monkeypatch):
+        from argus_redact import server as server_module
+
+        monkeypatch.delenv("ARGUS_API_KEY", raising=False)
+        monkeypatch.setattr(server_module, "_admitted_scans", 0)
+
+        def _fixed_redact(*args, **kwargs):
+            return "REDACTED", {}
+
+        monkeypatch.setattr(server_module, "redact", _fixed_redact)
+
+        app = _make_app()
+        async with _lifespan_running(app):
+            registry = app.state.live_tokens
+            # receive=None: no ASGI channel, so the disconnect watcher no-ops and the
+            # scan completes normally (the code path a non-HTTP caller would take).
+            request = SimpleNamespace(app=app, receive=None)
+            result = await server_module._run_scan(request, functools.partial(server_module.redact))
+            assert result == ("REDACTED", {})
+            # The completed scan discarded its own token: registry empty after drain.
+            assert len(registry) == 0, "a completed scan left its token in the registry"
+            # Double-discard is a no-op, not a KeyError — `_run_scan` used `discard`,
+            # so draining an already-absent token never raises.
+            registry.discard(object())

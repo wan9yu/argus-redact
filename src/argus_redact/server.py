@@ -35,11 +35,14 @@ from argus_redact.pure.wire import common_report_fields, risk_payload
 # subclass — NOT BaseException — so the detached `_worker`'s `except Exception`
 # catches it, forwards it, and the server SURVIVES; a BaseException-derived abort
 # would escape into the app-lifetime task group and kill the server at every
-# cancellation. Mapped to 504 in both handlers (defensive/dead under the current
-# deadline-only trip source — the deadline raises _ScanTimeout first — but correct
-# for a future client-disconnect source). Sourced from the compiled _core; a
-# private never-raised placeholder keeps the except ladders well-formed if the
-# mandatory core is somehow absent.
+# cancellation. Mapped to 504 in both handlers, and now LIVE via the server-shutdown
+# path: `_lifespan` trips every in-flight scan's token on shutdown, so a handler
+# still awaiting `done` wakes on the worker's forwarded ScanAborted → 504. (The
+# deadline path raises _ScanTimeout → 504 before the worker's abort can surface, and
+# the client-disconnect path raises _ClientDisconnected → 499 without ever reading
+# the holder — so neither of those routes a ScanAborted through here.) Sourced from
+# the compiled _core; a private never-raised placeholder keeps the except ladders
+# well-formed if the mandatory core is somehow absent.
 if _core is not None:
     ScanAborted = _core.ScanAborted
 else:  # pragma: no cover - the compiled _core is mandatory for the server
@@ -143,6 +146,19 @@ class _BadBody(Exception):
 
 class _ScanTimeout(Exception):
     """The offloaded scan exceeded _SCAN_TIMEOUT_SECONDS (mapped to 504)."""
+
+
+class _ClientDisconnected(Exception):
+    """The client went away before the offloaded scan finished (mapped to 499).
+
+    While awaiting the worker, the handler also watches the request's ASGI
+    receive channel; on ``http.disconnect`` it trips THIS scan's cancel token so
+    the detached worker aborts at its next poll and frees its slot, then raises
+    this. The caller maps it to 499 (client-closed-request) with a PII-free body.
+    The transport is already gone so the response is usually discarded, but the
+    handler must still return a clean, well-formed non-500 response — NEVER the
+    scan result.
+    """
 
 
 class _ServerNotReady(Exception):
@@ -256,12 +272,17 @@ async def _run_scan(request, fn):
     the caller).
 
     Cooperative cancellation (v0.8.11): a FRESH per-scan `_core.CancelToken` is
-    bound into `fn` and tripped when the deadline fires, so the detached worker
-    aborts at its next poll and frees its slot early — reclaiming CPU. This applies
-    ONLY to the `/redact` fast-mode-L1 path (the only path with a cancellable
-    `detect_l1` scan); `/restore` accepts the token but drops it (no `detect_l1`, so
-    nothing to reclaim). The token is per-scan by construction — a shared or
-    module-global token would abort unrelated in-flight scans.
+    bound into `fn` and tripped from any of THREE external events, so the detached
+    worker aborts at its next poll and frees its slot early — reclaiming CPU:
+    (1) the request deadline fires; (2) the client DISCONNECTS mid-scan (the handler
+    watches the ASGI receive channel and raises `_ClientDisconnected` → 499); or
+    (3) the server SHUTS DOWN (`_lifespan` trips every token in `app.state.live_tokens`
+    so workers abort and the app task group drains promptly). This applies ONLY to
+    the `/redact` fast-mode-L1 path (the only path with a cancellable `detect_l1`
+    scan); `/restore` accepts the token but drops it (no `detect_l1`, so nothing to
+    reclaim — its worker still runs to completion, but a disconnect/shutdown/deadline
+    still ends the request promptly). The token is per-scan by construction — a
+    shared or module-global token would abort unrelated in-flight scans.
     """
     global _admitted_scans
 
@@ -297,6 +318,21 @@ async def _run_scan(request, fn):
     if token is not None:
         fn = functools.partial(fn, cancel_token=token)
 
+    # Shutdown reclamation registry: `_lifespan` trips every live token on shutdown
+    # so detached workers abort at their next poll and the app task group drains
+    # promptly instead of blocking on abandoned scans. Reached via getattr so the
+    # bare-`create_app()` misuse path (no lifespan, no registry) no-ops, matching
+    # the `task_group` getattr above. The set is mutated ONLY on the single-threaded
+    # event loop — added here, discarded in the `finally` below, snapshot-and-
+    # cancelled in `_lifespan` — and no `await` sits between a read of it and a
+    # mutation of it, so two coroutines can never interleave a mutation across a
+    # checkpoint; a plain `set` is therefore race-free without a lock. `discard`
+    # (never `remove`) so a double-drain — shutdown clearing the registry while this
+    # scan is still unwinding — never raises.
+    live_tokens = getattr(request.app.state, "live_tokens", None)
+    if token is not None and live_tokens is not None:
+        live_tokens.add(token)
+
     done = anyio.Event()
     holder: dict[str, Any] = {}
 
@@ -328,22 +364,77 @@ async def _run_scan(request, fn):
             # in-flight count.
             _admitted_scans -= 1
 
-    task_group.start_soon(_worker)
-    with anyio.move_on_after(_SCAN_TIMEOUT_SECONDS) as scope:
-        await done.wait()
-    if scope.cancelled_caught:
-        # Deadline hit: trip the token (fire-and-forget) so the detached worker
-        # aborts at its next detect_l1 poll and frees its slot EARLY, reclaiming
-        # CPU — instead of running the abandoned scan to completion. The client
-        # still gets a prompt 504 now; the worker's ScanAborted is caught by its
-        # own `except Exception` and never surfaces here (see the module note on
-        # ScanAborted). A `/restore` scan drops the token, so it is unaffected.
-        if token is not None:
-            token.cancel()
-        raise _ScanTimeout
-    if "error" in holder:
-        raise holder["error"]
-    return holder["value"]
+    try:
+        task_group.start_soon(_worker)
+
+        # Await the worker AND watch for the client going away, under the deadline.
+        # Two children race inside an inner task group: one wakes on the worker
+        # finishing, one wakes on a client disconnect. Whichever fires first cancels
+        # the inner group; the outer `move_on_after` still owns the deadline. This
+        # is byte-identical to the old bare `await done.wait()` when the client never
+        # disconnects — the disconnect watcher simply parks (see `_watch_disconnect`)
+        # and is cancelled the instant the worker completes or the deadline fires.
+        disconnected = False
+        with anyio.move_on_after(_SCAN_TIMEOUT_SECONDS) as scope:
+            async with anyio.create_task_group() as inner_tg:
+
+                async def _await_completion() -> None:
+                    await done.wait()
+                    inner_tg.cancel_scope.cancel()
+
+                async def _watch_disconnect() -> None:
+                    # No polling: the handler fully read the request body before
+                    # `_run_scan`, so `request.receive` now only yields the disconnect
+                    # event — the await BLOCKS with zero CPU cost until the ASGI
+                    # server delivers `http.disconnect`, and detects it promptly. On
+                    # disconnect, trip THIS scan's token (so the detached worker
+                    # aborts and frees its slot) and cancel the inner group so the
+                    # handler stops waiting. The worker's own `done.set()` then lands
+                    # in a holder nobody reads — correct: the client is gone, so we
+                    # never block on or read `holder` here.
+                    nonlocal disconnected
+                    receive = getattr(request, "receive", None)
+                    if receive is None:  # no ASGI receive channel (non-HTTP caller)
+                        return
+                    while True:
+                        message = await receive()
+                        if message.get("type") == "http.disconnect":
+                            break
+                    disconnected = True
+                    if token is not None:
+                        token.cancel()
+                    inner_tg.cancel_scope.cancel()
+
+                inner_tg.start_soon(_await_completion)
+                inner_tg.start_soon(_watch_disconnect)
+
+        if scope.cancelled_caught:
+            # Deadline hit: trip the token (fire-and-forget) so the detached worker
+            # aborts at its next detect_l1 poll and frees its slot EARLY, reclaiming
+            # CPU — instead of running the abandoned scan to completion. The client
+            # still gets a prompt 504 now; the worker's ScanAborted is caught by its
+            # own `except Exception` and never surfaces here (see the module note on
+            # ScanAborted). A `/restore` scan drops the token, so it is unaffected.
+            if token is not None:
+                token.cancel()
+            raise _ScanTimeout
+        if disconnected:
+            # Client went away mid-scan. The token is already tripped by the watcher;
+            # re-trip idempotently for safety. Do NOT read `holder` — the worker
+            # aborts on its own next poll into a holder nobody reads. Raise a clean,
+            # PII-free 499 — never the scan result, never a 500.
+            if token is not None:
+                token.cancel()
+            raise _ClientDisconnected("client disconnected before the scan completed")
+        if "error" in holder:
+            raise holder["error"]
+        return holder["value"]
+    finally:
+        # Drain THIS scan's token from the shutdown registry on EVERY exit path
+        # (returned, timed out, disconnected, errored). `discard` never raises even
+        # if `_lifespan` already cleared the registry underneath us on shutdown.
+        if token is not None and live_tokens is not None:
+            live_tokens.discard(token)
 
 
 async def handle_redact(request: Request) -> JSONResponse:
@@ -429,6 +520,15 @@ async def handle_redact(request: Request) -> JSONResponse:
         return JSONResponse(
             {"error": "request cancelled: the scan was aborted before it completed"},
             status_code=504,
+        )
+    except _ClientDisconnected:
+        # The client went away mid-scan; the scan's token was tripped so the worker
+        # aborts and frees its slot. 499 (client-closed-request) with a PII-free
+        # body — the transport has usually gone, so this response is discarded, but
+        # the handler returns cleanly rather than surfacing a 500 or the scan result.
+        return JSONResponse(
+            {"error": "client disconnected before the scan completed"},
+            status_code=499,
         )
     except (_ServerNotReady, _ServerBusy) as e:
         return JSONResponse({"error": str(e)}, status_code=503)
@@ -591,6 +691,15 @@ async def handle_restore(request: Request) -> JSONResponse:
             {"error": "request cancelled: the scan was aborted before it completed"},
             status_code=504,
         )
+    except _ClientDisconnected:
+        # Symmetric with handle_redact: the client went away mid-scan, its token was
+        # tripped, and this returns a clean, PII-free 499. (A `/restore` scan drops
+        # the token — no `detect_l1` to abort — so its worker still runs to
+        # completion, but the request itself ends promptly on the disconnect.)
+        return JSONResponse(
+            {"error": "client disconnected before the scan completed"},
+            status_code=499,
+        )
     except (_ServerNotReady, _ServerBusy) as e:
         return JSONResponse({"error": str(e)}, status_code=503)
     except RestoreGuardError as e:
@@ -686,10 +795,12 @@ def create_app(*, allow_no_auth: bool = False):
         # App-lifetime task group that owns detached scan workers. Holding it
         # open across `yield` lets handlers `start_soon` workers that OUTLIVE
         # their request (so a timed-out request's worker keeps its slot until the
-        # scan finishes). Exiting it on shutdown WAITS for every started worker
-        # to complete: the running scans are on non-preemptible threads and are
-        # not cancelled, so graceful shutdown drains in-flight (and queued) scans
-        # rather than abandoning them. It lives on `app.state` (NOT a module
+        # scan finishes). Exiting it on shutdown WAITS for every started worker to
+        # complete; the running scans are on non-preemptible threads, so before the
+        # drain the shutdown branch below trips every in-flight scan's cancel token
+        # (see `live_tokens`) — each worker then aborts at its next poll rather than
+        # running its abandoned scan to completion, so the drain is prompt instead
+        # of blocking on discarded work. It lives on `app.state` (NOT a module
         # global) so each app owns its own group — two apps in one process (a
         # test suite, an embedding host) never share or clobber one another's.
         # Cleared to None (not delattr) before the drain so a late scan fails fast
@@ -697,10 +808,27 @@ def create_app(*, allow_no_auth: bool = False):
         # `getattr(request.app.state, "task_group", None)`.
         async with anyio.create_task_group() as tg:
             app.state.task_group = tg
+            # Registry of the in-flight per-scan cancel tokens `_run_scan` admits.
+            # Mutated only on the single-threaded event loop (add/discard in
+            # `_run_scan`, snapshot-and-cancel here), so a plain `set` is race-free
+            # without a lock. Lives on `app.state` for the same per-app isolation as
+            # the task group.
+            app.state.live_tokens = set()
             try:
                 yield
             finally:
+                # Shutdown reclamation: trip EVERY in-flight scan's token BEFORE the
+                # `async with tg` teardown below waits on the detached workers, so
+                # each aborts at its next poll and the drain stays prompt. Cancel
+                # over a SNAPSHOT (`list(...)`) — cancelling does not touch the set,
+                # so this cannot race a concurrent `discard` from a finishing
+                # `_run_scan`. Cleared to None alongside the task group (not delattr).
+                live = app.state.live_tokens
+                if live:
+                    for scan_token in list(live):
+                        scan_token.cancel()
                 app.state.task_group = None
+                app.state.live_tokens = None
 
     api_key = os.environ.get("ARGUS_API_KEY")
     if not api_key and not allow_no_auth:

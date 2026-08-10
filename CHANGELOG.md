@@ -24,17 +24,22 @@ task group moved from a process-global onto `app.state`.
   in-flight scans (running + queued) are now capped: a request over the ceiling is shed with a prompt 503
   ("server busy") before its worker is spawned, so it never retains its body. Per-process / single-node like
   the in-flight bound; tunable via `ARGUS_MAX_ADMITTED_SCANS` (default 2× `ARGUS_MAX_INFLIGHT_SCANS`).
-- **HTTP server: cooperative cancellation reclaims CPU at the deadline — `/redact` fast-mode-L1 only.** A
-  scan that overran the deadline previously ran to completion on its non-preemptible thread while the client
-  got a prompt 504, so the deadline did not reclaim the CPU. The L1 detect path now polls a per-scan cancel
-  token at coarse boundaries; when the deadline fires the server trips that scan's token, so the abandoned
-  worker returns early at its next poll and frees its slot instead of finishing the discarded work. Scope is
-  deliberately narrow: this reclaims CPU **only on the `/redact` fast-mode-L1 deadline path** — the only path
-  with a cancellable detect scan. It does **not** reclaim on `/restore` (a linear key substitution with no
-  detect scan; the endpoint accepts a cancel token but drops it as a no-op), nor on client disconnect or
-  server shutdown (both tracked as follow-ups). The token is fresh per scan, so tripping one request's scan
-  never affects another's. `argus_redact.redact(...)` gains an optional `cancel_token` keyword for embedders
-  who want the same cooperative abort; the default (`None`) is byte-identical to the previous behaviour.
+- **HTTP server: cooperative cancellation reclaims CPU when the client goes away — `/redact` fast-mode-L1.** A
+  scan that lost its client previously ran to completion on its non-preemptible thread, so the CPU was not
+  reclaimed. The L1 detect path now polls a per-scan cancel token at coarse boundaries, and the server trips
+  that token from **all three** ways a scan's client goes away: the request **deadline** fires (prompt 504),
+  the client **disconnects** mid-scan (the handler watches the ASGI receive channel and returns **499**
+  client-closed-request), or the server **shuts down** (the lifespan trips every in-flight scan's token so
+  workers abort and the app task group drains promptly instead of blocking on abandoned scans). In each case
+  the abandoned worker returns at its next poll and frees its slot instead of finishing discarded work. Scope
+  stays deliberately narrow: this reclaims CPU **only on the `/redact` fast-mode-L1 path** — the only path with
+  a cancellable detect scan — and the granularity is between-phase / between-pattern (a single detect phase
+  over a >1 MiB input is the coarse worst case). It does **not** reclaim on `/restore` (a linear key
+  substitution with no detect scan; the endpoint accepts a cancel token but drops it as a no-op — a
+  disconnect/shutdown still ends the request promptly, but its worker runs to completion). This is not
+  endpoint-wide or symmetric reclamation. The token is fresh per scan, so tripping one request's scan never
+  affects another's. `argus_redact.redact(...)` gains an optional `cancel_token` keyword for embedders who want
+  the same cooperative abort; the default (`None`) is byte-identical to the previous behaviour.
 
 ## v0.8.10 — compliance, spelled out
 
