@@ -27,7 +27,10 @@ def client():
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SecurityWarning)
-        return TestClient(create_app(allow_no_auth=True))
+        app = create_app(allow_no_auth=True)
+
+    with TestClient(app) as client:
+        yield client
 
 
 def test_restore_with_anchor_round_trips(client):

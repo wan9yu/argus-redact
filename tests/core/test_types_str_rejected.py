@@ -98,7 +98,10 @@ class TestServerRedactRejectsBareStrTypes:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", SecurityWarning)
-            return TestClient(create_app(allow_no_auth=True))
+            app = create_app(allow_no_auth=True)
+
+        with TestClient(app) as client:
+            yield client
 
     def test_should_return_400_not_200_leak_for_bare_str_types(self, client):
         resp = client.post(

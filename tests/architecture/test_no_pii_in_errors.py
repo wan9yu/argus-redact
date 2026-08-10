@@ -110,8 +110,9 @@ class TestOllamaHostLeakDoesNotReachHttpBody:
             warnings.simplefilter("ignore")
             from starlette.testclient import TestClient
 
-            client = TestClient(create_app(allow_no_auth=True))
+            app = create_app(allow_no_auth=True)
 
+        with TestClient(app) as client:
             resp = client.post(
                 "/redact",
                 json={"text": "老王住在北京", "lang": "zh", "mode": "auto"},

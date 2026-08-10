@@ -245,7 +245,9 @@ def test_http_redact_report_envelope_matches_the_contract():
     from argus_redact.server import create_app
 
     with _quiet_security_warnings():
-        client = TestClient(create_app(allow_no_auth=True))
+        app = create_app(allow_no_auth=True)
+
+    with TestClient(app) as client:
         resp = client.post(
             "/redact",
             json={"text": "请联系张伟，电话 13812345678。", "lang": "zh", "report": True},

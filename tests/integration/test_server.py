@@ -23,7 +23,10 @@ def client():
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SecurityWarning)
-        return TestClient(create_app(allow_no_auth=True))
+        app = create_app(allow_no_auth=True)
+
+    with TestClient(app) as client:
+        yield client
 
 
 class TestServerRedact:
@@ -271,7 +274,8 @@ def auth_client():
     from argus_redact.server import create_app
 
     app = create_app()
-    yield TestClient(app)
+    with TestClient(app) as client:
+        yield client
     del os.environ["ARGUS_API_KEY"]
 
 
