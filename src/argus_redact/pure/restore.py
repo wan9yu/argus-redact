@@ -143,6 +143,14 @@ def make_structured_restorer(
     `dict(...)` is deliberate: the session gets its OWN copy, so a later
     `wipe_key(key)` on the caller's dict cannot reach the session's copy.
     Wipe the session itself via its `wipe()` / `close()` methods.
+
+    Thread safety: construct one session per thread / per logical restore
+    session and do NOT share a single instance across threads. `restore_cell`
+    and `wipe()`/`close()` all borrow the session's Rust-side state; a
+    concurrent call on a SHARED instance from another thread hits the
+    runtime borrow check and raises `Already borrowed` rather than silently
+    corrupting output. Mirrors the single-session contract `StreamingRedactor`
+    documents (`argus_redact.streaming`) for the redact side.
     """
     from argus_redact import _core
 

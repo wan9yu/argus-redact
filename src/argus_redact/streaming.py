@@ -106,6 +106,16 @@ class StreamingRestorer:
     reinserts a pseudonym, the instance emits a one-time ``SecurityWarning``
     naming that risk.
 
+    Thread safety: construct one ``StreamingRestorer`` per thread / per
+    session; do NOT share a single instance across threads. Internally it
+    holds a `_core.StructuredRestorer` session, and ``feed()``/``flush()``
+    borrow that session's Rust-side state on every call — a concurrent call
+    on a SHARED instance from another thread (or a concurrent
+    ``wipe()``/``close()`` on the underlying session) hits the runtime borrow
+    check and raises ``Already borrowed``. Mirrors the single-session
+    contract ``StreamingRedactor`` documents above (construct one per logical
+    session and discard it when done).
+
     Usage:
         restorer = StreamingRestorer(key)
         for chunk in llm_stream:

@@ -12,6 +12,8 @@ behavior directly.
 
 from __future__ import annotations
 
+import re
+
 import argus_redact._core as _core
 
 from argus_redact.pure.restore import make_structured_restorer, wipe_key
@@ -56,3 +58,22 @@ def test_session_wipe_drops_state():
     restorer.wipe()
 
     assert restorer.restore_cell(text) == text
+
+
+def test_make_structured_restorer_docstring_states_thread_safety():
+    """`make_structured_restorer`'s docstring must warn that the returned
+    `StructuredRestorer` session is single-thread/single-session — a
+    concurrent `restore_cell` alongside `wipe()`/`close()` on a SHARED
+    instance hits the underlying Rust runtime-borrow check and raises
+    `Already borrowed`. Mirrors the single-session contract already
+    documented on `StreamingRedactor` (`argus_redact.streaming`).
+    """
+    doc = make_structured_restorer.__doc__ or ""
+    assert re.search(r"(?i)across threads", doc), (
+        "make_structured_restorer docstring must warn against sharing the "
+        "returned session across threads"
+    )
+    assert "Already borrowed" in doc, (
+        "make_structured_restorer docstring must name the concrete failure "
+        "mode (Already borrowed) a shared, concurrently-used session raises"
+    )

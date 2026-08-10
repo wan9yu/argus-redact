@@ -101,6 +101,23 @@ class TestStreamingRestorer:
         with pytest.raises(ValueError, match="Unknown strategy"):
             StreamingRestorer({}, strategy="invalid")
 
+    def test_docstring_states_thread_safety(self):
+        """Class docstring must warn that one `StreamingRestorer` instance is
+        single-thread/single-session — it wraps a Rust-backed restore session,
+        and a concurrent `feed()`/`flush()` alongside that session's
+        `wipe()`/`close()` on a SHARED instance raises `Already borrowed`.
+        Mirrors the single-session contract already documented on
+        `StreamingRedactor` above it in this module.
+        """
+        doc = StreamingRestorer.__doc__ or ""
+        assert re.search(r"(?i)across threads", doc), (
+            "StreamingRestorer docstring must warn against sharing one instance across threads"
+        )
+        assert "Already borrowed" in doc, (
+            "StreamingRestorer docstring must name the concrete failure mode "
+            "(Already borrowed) a shared, concurrently-used instance raises"
+        )
+
 
 class TestStreamingRestorerSecurityWarning:
     """H6: streaming restore runs unguarded (guard=False, no per-call anchor is

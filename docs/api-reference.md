@@ -1396,6 +1396,8 @@ restorer = StreamingRestorer(dict(result.key), aliases=dict(result.aliases))
 
 `StreamingRestorer(key, max_buffer=4096)` bounds the "sentence" strategy's buffer the same way `StreamingRedactor` does: a reply that never emits a sentence terminator is force-flushed once the buffer exceeds `max_buffer`, instead of accumulating without limit. The straddle tail sits on top of that as fixed headroom, so the real bound is `max(max_buffer, longest fake)` — a token is never split just to satisfy the buffer bound.
 
+**Single-session, not thread-safe.** Construct one `StreamingRestorer` per thread / per session, same as `StreamingRedactor` above; do not share one instance across threads. `feed()`/`flush()` borrow the underlying Rust restore session's state on every call, so a concurrent call on a shared instance from another thread raises `Already borrowed` instead of corrupting output.
+
 ---
 
 ## Structured Data
