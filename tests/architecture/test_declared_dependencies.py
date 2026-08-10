@@ -19,7 +19,7 @@ _ALLOWLIST = {
     "llama_cpp",                 # (removed) full-extra example only
     "presidio_analyzer", "presidio_anonymizer",  # presidio extra (analyzer needs anonymizer)
     "mcp",                       # mcp extra
-    "uvicorn", "starlette", "httpx",  # serve extra
+    "uvicorn", "starlette", "httpx", "anyio",  # serve extra
     "faker",                     # optional realistic substitution
 }
 

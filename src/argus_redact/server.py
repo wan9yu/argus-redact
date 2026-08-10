@@ -14,6 +14,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import importlib
 import importlib.util
@@ -64,6 +65,14 @@ MAX_RESTORE_KEY_ENTRIES = 10_000
 
 # In-flight scan concurrency bound + honest per-request scan deadline.
 #
+# The limiter bounds concurrently RUNNING scans — a real resource bound on the
+# number of scan threads alive at once. The timeout is only a client-response
+# deadline: a scan that overruns it returns a prompt 504 to the client, but
+# because the scan runs on a non-preemptible thread the deadline does NOT reclaim
+# the CPU mid-scan. Its slot stays held until the scan actually finishes, so
+# under overload the server sheds load via 504s while the thread count stays
+# bounded. See `_run_scan` for the full mechanic.
+#
 # OPERATIONAL ASSUMPTION — the bound below is PER-PROCESS / single-node. Each
 # server process enforces only its OWN in-flight limit; a multi-node deployment
 # behind a load balancer must ALSO bound concurrency at the gateway (this is not
@@ -82,6 +91,13 @@ try:
     _scan_limiter = anyio.CapacityLimiter(_MAX_INFLIGHT_SCANS)
 except NameError:  # pragma: no cover - anyio absent (serve extra not installed)
     _scan_limiter = None  # type: ignore[assignment]
+
+# The app-lifetime task group that owns detached scan workers. Created and held
+# open by the Starlette lifespan (see `create_app`) and torn down on shutdown, so
+# a worker OUTLIVES the request that spawned it: a timed-out request returns 504
+# while its worker keeps running on a thread and releases its slot only on
+# completion. None until the lifespan starts (and again after shutdown).
+_APP_TASK_GROUP = None
 
 
 class _BodyTooLarge(Exception):
@@ -157,32 +173,73 @@ async def _run_scan(fn):
     and an honest per-request deadline. `fn` is a zero-arg callable (a
     `functools.partial` binding redact/restore and its kwargs).
 
-    In-flight bound: `_scan_limiter` caps how many scans run concurrently. The
-    `async with` acquires a token for the duration of the offload; the
-    (N+1)-th request queues for a token instead of piling more work onto the
-    worker pool. This bound is PER-PROCESS / single-node — see the module-level
-    note on `_scan_limiter`; a multi-node deployment must also bound at the
-    gateway.
+    In-flight bound (a REAL resource bound): `_scan_limiter` caps how many scans
+    run concurrently. The slot is acquired and released inside the detached
+    `_worker` task — anyio's CapacityLimiter tracks the borrowing task, so the
+    same task that acquires must release. The slot is therefore held for the
+    entire lifetime of the (non-preemptible) scan thread and released EXACTLY
+    ONCE as `_worker`'s `async with` unwinds, on thread COMPLETION — even on
+    error or timeout, never on the client's cancelled await. This bound is
+    PER-PROCESS / single-node — see the module-level note on `_scan_limiter`; a
+    multi-node deployment must also bound at the gateway.
 
-    Honest timeout (Python threads are NOT preemptible): `anyio.fail_after`
-    bounds the whole request (queue wait + scan), and `abandon_on_cancel=True`
-    lets the awaiting coroutine return the instant the deadline trips — the
-    client gets a PROMPT 504 rather than waiting for the scan. What the timeout
-    does NOT do is stop the scan: the abandoned call keeps running on its worker
-    thread to completion. As the cancellation unwinds the `async with`, anyio
-    releases the limiter token at the deadline (so the 504 frees the client AND
-    the limiter slot), but it does NOT reclaim the CPU the abandoned scan is
-    still burning. A burst of timed-out scans can therefore keep the machine
-    busy even while the limiter reports free slots — size the timeout and the
-    in-flight bound accordingly, and rate-limit upstream. Raises `_ScanTimeout`
-    on the deadline (mapped to 504 by the caller).
+    Honest timeout (Python threads are NOT preemptible): the request awaits the
+    worker's completion under `anyio.move_on_after`. When the deadline trips, the
+    request returns a PROMPT 504, but the worker is NOT cancelled — the timeout
+    wraps only the request's `await done.wait()`, not the worker. So the
+    abandoned scan keeps running on its thread to completion and frees its slot
+    only then; the deadline does NOT reclaim the CPU mid-scan. Under overload
+    (all slots held by still-running scans) new requests that cannot get a slot
+    within the deadline get a 504 too — honest load-shedding with a bounded
+    thread count. Size the timeout and the in-flight bound accordingly, and
+    rate-limit upstream. Raises `_ScanTimeout` on the deadline (mapped to 504 by
+    the caller).
+
+    Cooperative cancellation that reclaims CPU at the deadline is planned for a
+    future release.
     """
-    try:
-        with anyio.fail_after(_SCAN_TIMEOUT_SECONDS):
-            async with _scan_limiter:
-                return await to_thread.run_sync(fn, abandon_on_cancel=True)
-    except TimeoutError:
-        raise _ScanTimeout from None
+    if _APP_TASK_GROUP is None:  # pragma: no cover - misuse outside the ASGI lifespan
+        # The scan workers are detached into the app-lifetime task group so they
+        # outlive the request; without it there is nowhere to run them. The
+        # lifespan installed by `create_app` sets this on startup.
+        raise RuntimeError(
+            "scan task group is not running — the server lifespan must be active "
+            "(create_app installs it on startup)"
+        )
+
+    done = anyio.Event()
+    holder: dict[str, Any] = {}
+
+    async def _worker() -> None:
+        # Acquire AND release are both bound to this worker task's lifetime. The
+        # slot frees exactly once, as this `async with` unwinds — i.e. on thread
+        # completion — even when the scan raises. Do NOT move the acquire/release
+        # out of the worker or bypass the context manager, or a slot leaks and
+        # capacity is permanently lost.
+        async with _scan_limiter:
+            try:
+                holder["value"] = await to_thread.run_sync(fn)
+            except Exception as exc:  # noqa: BLE001 - forwarded to the request task
+                # NOT BaseException: a real cancellation must propagate so the
+                # task group can tear the worker down. App-level exceptions
+                # (ValueError / RestoreGuardError / …) are forwarded to the
+                # awaiting request, which re-raises them for the handler to map.
+                holder["error"] = exc
+            finally:
+                # Wake the waiter even on error/cancel; the slot is released as
+                # this `async with` unwinds, on real thread completion.
+                done.set()
+
+    _APP_TASK_GROUP.start_soon(_worker)
+    with anyio.move_on_after(_SCAN_TIMEOUT_SECONDS) as scope:
+        await done.wait()
+    if scope.cancelled_caught:
+        # Deadline hit: the worker keeps running, still holds its slot, and frees
+        # it on completion. The client gets a prompt 504.
+        raise _ScanTimeout
+    if "error" in holder:
+        raise holder["error"]
+    return holder["value"]
 
 
 async def handle_redact(request: Request) -> JSONResponse:
@@ -490,6 +547,24 @@ def create_app(*, allow_no_auth: bool = False):
     from starlette.applications import Starlette
     from starlette.routing import Route
 
+    @contextlib.asynccontextmanager
+    async def _lifespan(app):
+        # App-lifetime task group that owns detached scan workers. Holding it
+        # open across `yield` lets handlers `start_soon` workers that OUTLIVE
+        # their request (so a timed-out request's worker keeps its slot until the
+        # scan finishes). Exiting it on shutdown WAITS for every started worker
+        # to complete: the running scans are on non-preemptible threads and are
+        # not cancelled, so graceful shutdown drains in-flight (and queued) scans
+        # rather than abandoning them. `_APP_TASK_GROUP` is cleared before the
+        # drain so a late request fails fast instead of racing a closing group.
+        global _APP_TASK_GROUP
+        async with anyio.create_task_group() as tg:
+            _APP_TASK_GROUP = tg
+            try:
+                yield
+            finally:
+                _APP_TASK_GROUP = None
+
     api_key = os.environ.get("ARGUS_API_KEY")
     if not api_key and not allow_no_auth:
         raise RuntimeError(
@@ -510,7 +585,7 @@ def create_app(*, allow_no_auth: bool = False):
         Route("/info", handle_info, methods=["GET"]),
         Route("/health", handle_health, methods=["GET"]),
     ]
-    app = Starlette(routes=routes)
+    app = Starlette(routes=routes, lifespan=_lifespan)
     return _auth_middleware(app)
 
 
