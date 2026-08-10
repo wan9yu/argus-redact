@@ -23,7 +23,7 @@ task group moved from a process-global onto `app.state`.
   for a slot — so an unbounded queue was an unbounded-memory amplification under a request flood. Total
   in-flight scans (running + queued) are now capped: a request over the ceiling is shed with a prompt 503
   ("server busy") before its worker is spawned, so it never retains its body. Per-process / single-node like
-  the in-flight bound; tunable via `ARGUS_MAX_QUEUED_SCANS` (default 2× `ARGUS_MAX_INFLIGHT_SCANS`).
+  the in-flight bound; tunable via `ARGUS_MAX_ADMITTED_SCANS` (default 2× `ARGUS_MAX_INFLIGHT_SCANS`).
 
 ## v0.8.10 — compliance, spelled out
 

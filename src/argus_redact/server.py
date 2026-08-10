@@ -93,7 +93,7 @@ _SCAN_TIMEOUT_SECONDS = float(os.environ.get("ARGUS_SCAN_TIMEOUT_SECONDS", "30")
 # the total over this ceiling is shed with a prompt 503 BEFORE its worker is
 # spawned, so it never retains its body past the request. Per-process /
 # single-node like the limiter; env-tunable; defaults to 2× the in-flight bound.
-_MAX_QUEUED_SCANS = int(os.environ.get("ARGUS_MAX_QUEUED_SCANS", str(2 * _MAX_INFLIGHT_SCANS)))
+_MAX_ADMITTED_SCANS = int(os.environ.get("ARGUS_MAX_ADMITTED_SCANS", str(2 * _MAX_INFLIGHT_SCANS)))
 
 # One shared limiter for the whole process, created at import. anyio ships with
 # starlette (the `serve` extra), so it is present whenever this module is
@@ -105,13 +105,13 @@ except NameError:  # pragma: no cover - anyio absent (serve extra not installed)
     _scan_limiter = None  # type: ignore[assignment]
 
 # Count of scans admitted but not yet finished (running + queued) — the live
-# value the `_MAX_QUEUED_SCANS` ceiling is checked against. Incremented at
+# value the `_MAX_ADMITTED_SCANS` ceiling is checked against. Incremented at
 # admission and decremented in the worker's `finally`, BOTH on the single
 # event-loop thread. That is what makes the check-then-increment in `_run_scan`
 # race-free without a lock: no `await` sits between reading this and bumping it,
 # so the loop cannot interleave two admissions and let both slip past a full
 # queue. Process-global like `_scan_limiter` (a per-process bound).
-_inflight_scans = 0
+_admitted_scans = 0
 
 
 class _BodyTooLarge(Exception):
@@ -139,7 +139,7 @@ class _ServerNotReady(Exception):
 class _ServerBusy(Exception):
     """Admission ceiling reached: too many scans in flight (mapped to 503).
 
-    ``_MAX_QUEUED_SCANS`` scans are already admitted (running + queued); a
+    ``_MAX_ADMITTED_SCANS`` scans are already admitted (running + queued); a
     further request is shed before its worker is spawned. PII-free by
     construction — the message is a fixed string, never request content.
     """
@@ -208,7 +208,7 @@ async def _run_scan(request, fn):
     kwargs); `request` carries the app-scoped scan task group on
     `request.app.state`.
 
-    Admission ceiling (memory-amplification backpressure): `_MAX_QUEUED_SCANS`
+    Admission ceiling (memory-amplification backpressure): `_MAX_ADMITTED_SCANS`
     bounds TOTAL in-flight scans (running + queued). A request that would push
     the total over the ceiling is shed with a prompt 503 (`_ServerBusy`) BEFORE
     its worker is spawned, so a flood cannot queue an unbounded number of workers
@@ -239,7 +239,7 @@ async def _run_scan(request, fn):
     Cooperative cancellation that reclaims CPU at the deadline is planned for a
     future release.
     """
-    global _inflight_scans
+    global _admitted_scans
 
     task_group = getattr(request.app.state, "task_group", None)
     if task_group is None:
@@ -259,15 +259,15 @@ async def _run_scan(request, fn):
     # its body past this call. Check-then-increment is atomic under the
     # single-threaded event loop: no `await` sits between the read and the bump,
     # so two concurrent admissions cannot both observe room and both slip in.
-    if _inflight_scans >= _MAX_QUEUED_SCANS:
+    if _admitted_scans >= _MAX_ADMITTED_SCANS:
         raise _ServerBusy("server busy: too many scans in flight; retry shortly")
-    _inflight_scans += 1
+    _admitted_scans += 1
 
     done = anyio.Event()
     holder: dict[str, Any] = {}
 
     async def _worker() -> None:
-        global _inflight_scans
+        global _admitted_scans
         try:
             # Acquire AND release are both bound to this worker task's lifetime.
             # The slot frees exactly once, as this `async with` unwinds — i.e. on
@@ -292,7 +292,7 @@ async def _run_scan(request, fn):
             # errored), mirroring the increment at admission. This is the only
             # decrement, so the counter cannot drift below or above the true
             # in-flight count.
-            _inflight_scans -= 1
+            _admitted_scans -= 1
 
     task_group.start_soon(_worker)
     with anyio.move_on_after(_SCAN_TIMEOUT_SECONDS) as scope:

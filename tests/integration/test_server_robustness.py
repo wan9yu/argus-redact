@@ -426,7 +426,7 @@ class TestQueueBackpressure:
 
     ``_scan_limiter`` bounds concurrent EXECUTION, but a detached worker retains
     its request body + key the whole time it sits queued for a slot, so an
-    unbounded queue is an unbounded-memory amplification. ``_MAX_QUEUED_SCANS``
+    unbounded queue is an unbounded-memory amplification. ``_MAX_ADMITTED_SCANS``
     caps the total admitted: with the limiter at 1 and the ceiling at N, N scans
     are admitted (1 running, N-1 queued) and the (N+1)-th is shed with a prompt
     503 WITHOUT being queued — its worker is never spawned, so it never retains
@@ -459,9 +459,9 @@ class TestQueueBackpressure:
         limiter = anyio.CapacityLimiter(1)
         monkeypatch.setattr(server_module, "_scan_limiter", limiter)
         ceiling = 3
-        monkeypatch.setattr(server_module, "_MAX_QUEUED_SCANS", ceiling)
+        monkeypatch.setattr(server_module, "_MAX_ADMITTED_SCANS", ceiling)
         # Clean counter start (process-global); monkeypatch restores it after.
-        monkeypatch.setattr(server_module, "_inflight_scans", 0)
+        monkeypatch.setattr(server_module, "_admitted_scans", 0)
 
         app = _make_app()
         transport = ASGITransport(app=app)
@@ -482,7 +482,7 @@ class TestQueueBackpressure:
                     await _yield_until(
                         lambda: (
                             len(entered) == 1
-                            and server_module._inflight_scans == ceiling
+                            and server_module._admitted_scans == ceiling
                             and limiter.statistics().borrowed_tokens == 1
                             and limiter.statistics().tasks_waiting == ceiling - 1
                         )
@@ -500,11 +500,11 @@ class TestQueueBackpressure:
                     # No extra worker queued or counted for the shed request.
                     assert limiter.statistics().borrowed_tokens == 1
                     assert limiter.statistics().tasks_waiting == ceiling - 1
-                    assert server_module._inflight_scans == ceiling
+                    assert server_module._admitted_scans == ceiling
                 finally:
                     release.set()
                 # Drain: every admitted scan completes and frees its admission slot.
-                await _yield_until(lambda: server_module._inflight_scans == 0)
+                await _yield_until(lambda: server_module._admitted_scans == 0)
                 admitted_resps = await asyncio.gather(*admitted)
 
                 # Capacity recovered: a fresh request is admitted and runs again.
