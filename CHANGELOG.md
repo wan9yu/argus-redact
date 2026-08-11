@@ -2,11 +2,17 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
-## v0.8.11 — server admission & lifecycle hardening
+## v0.8.11 — server hardening & a restore-path denial-of-service fix
 
-A server-hardening slice for the HTTP `serve` face: an admission ceiling on total in-flight scans
-(backpressure against a memory-amplification flood), a correct 503 for the not-yet-started case, and the scan
-task group moved from a process-global onto `app.state`.
+A hardening slice for the HTTP `serve` face and the restore path. The headline is a remotely-reachable
+denial-of-service on restore — a super-linear matcher with no input cap — now closed with a linear matcher and
+a 1 MiB input cap. Alongside it: cooperative cancellation so a `/redact` scan reclaims its CPU when the client
+goes away (deadline, disconnect, or shutdown), an admission ceiling on total in-flight scans (memory-flood
+backpressure), a correct 503 for the not-yet-started case, the scan task group moved onto `app.state`, and one
+shared validation seam for restore `aliases`.
+
+No public API was removed. Two behaviour changes need attention (see below): malformed `aliases` now raise
+`ValueError` at every restore face, and a restore of input over 1 MiB now errors.
 
 ### Behaviour changes
 
@@ -15,9 +21,26 @@ task group moved from a process-global onto `app.state`.
   previously surfaced an unhandled `RuntimeError` as a 500; it now returns a 503 (service not ready) with a
   well-formed error body. The scan task group also moved from a process-global to `app.state`, so two apps in
   one process no longer share or clobber one another's group.
+- **Malformed `aliases` now raise `ValueError` at every restore face.** `restore()`, `restore_json` /
+  `restore_csv`, the streaming restorer, the HTTP `/restore` endpoint, the CLI, and the five `guarded_restore`
+  integration wrappers now validate the `aliases` mapping through one shared seam. A value that is a bare
+  string (which the streaming path previously split silently into per-character aliases), an element that is
+  not a string, or an `aliases` that is not a mapping now raises a `ValueError` naming the offending key and
+  the expected shape — never the value — where before it either corrupted the restore or surfaced a cryptic
+  boundary `TypeError`. Well-formed list- or tuple-valued aliases are byte-identical to before, so the
+  canonical redact → LLM → restore round-trip is unaffected.
+- **Restore of input larger than 1 MiB now errors.** Every restore entry point caps input at 1 MiB and raises
+  a `ValueError` above it (part of the denial-of-service fix below). Restores of realistic key / text sizes
+  are unaffected.
 
 ### Security / correctness
 
+- **Restore path: closed a remotely-reachable denial-of-service.** The restore matcher was O(shards · N²) in
+  the input length and had no input-size cap, so a single large `/restore` request — or any `restore()` /
+  `RestoreSession` call on large text — could pin a CPU on super-linear work. The matcher is now a linear
+  K-way merge across the shards, and every restore entry point caps input at 1 MiB. This is an availability
+  fix: it did not affect redaction correctness or leak PII — the matcher fails safe — but a restore over the
+  cap now errors where it previously ran (see Behaviour changes).
 - **HTTP server: bounded scan admission (memory-amplification backpressure).** The in-flight limiter bounds
   concurrently *running* scans, but a queued worker retains its request body (≤ 10 MiB) and key while it waits
   for a slot — so an unbounded queue was an unbounded-memory amplification under a request flood. Total

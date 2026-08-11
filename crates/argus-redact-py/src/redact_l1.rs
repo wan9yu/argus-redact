@@ -197,7 +197,7 @@ impl CancelToken {
 
 /// Map a core [`DetectError`] onto the Python exception ladder: an abort becomes
 /// [`ScanAborted`] (mapped to 504 at the server), and any other pattern/input
-/// error stays a `ValueError` (mapped to 500) — byte-identical to the
+/// error stays a `ValueError` (mapped to 400 at the server) — byte-identical to the
 /// pre-cancellation `.map_err(|e| PyValueError::new_err(e.to_string()))`, since a
 /// no-cancel scan can only ever produce `DetectError::Pattern` and its `Display`
 /// delegates to the inner `PatternError`.
