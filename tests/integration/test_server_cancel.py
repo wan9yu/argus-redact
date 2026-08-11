@@ -491,7 +491,7 @@ class TestCpuReclamationOnShutdown:
     detached workers abort and the app task group drains PROMPTLY (no hang), and the
     live-token registry is cleared to None. Deterministic: the scan is gated
     mid-flight on a ``threading.Event``, shutdown is driven by the shared
-    ``_lifespan_running`` helper, and an ``asyncio.timeout`` fails loudly if the
+    ``_lifespan_running`` helper, and an ``anyio.fail_after`` fails loudly if the
     drain ever hangs — which is exactly what an un-tripped token would cause."""
 
     @pytest.mark.asyncio
@@ -525,10 +525,11 @@ class TestCpuReclamationOnShutdown:
             return {"type": "http.disconnect"}
 
         app = _make_app()
-        # asyncio.timeout is a HANG-GUARD, not synchronization: a broken shutdown
+        # anyio.fail_after is a HANG-GUARD, not synchronization: a broken shutdown
         # trip would block the task-group drain forever; this turns that into a loud
-        # failure rather than a silent hang.
-        async with asyncio.timeout(10):
+        # failure rather than a silent hang. (anyio, not asyncio.timeout, which is
+        # 3.11+; the project's supported floor is Python 3.10.)
+        with anyio.fail_after(10):
             async with _lifespan_running(app):
                 assert app.state.live_tokens is not None, (
                     "the lifespan must create the live-token registry on startup"
