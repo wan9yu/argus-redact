@@ -180,6 +180,36 @@ class _ServerBusy(Exception):
     """
 
 
+# One mapper for the control-signal exceptions that ONLY `_run_scan` raises. Both
+# handlers (redact and restore) share this ladder verbatim, so the (status, body)
+# policy lives here once instead of being hand-copied and kept "symmetric" by comment.
+# Keyed by exact type — these are all leaf Exception subclasses, none a subclass of
+# another, so `type(exc)` resolves unambiguously. A `None` message means "use the
+# exception's own text" (the two 503s carry a fixed, PII-free message); the others use
+# a fixed body. App-level exceptions (ValueError / TypeError / RestoreGuardError) are
+# NOT here — each handler maps those itself, after this shared arm.
+_SCAN_CONTROL_RESPONSES: dict[type, tuple[int, str | None]] = {
+    _ScanTimeout: (504, "request timed out: the scan exceeded the server time limit"),
+    ScanAborted: (504, "request cancelled: the scan was aborted before it completed"),
+    _ClientDisconnected: (499, "client disconnected before the scan completed"),
+    _ServerNotReady: (503, None),
+    _ServerBusy: (503, None),
+}
+_SCAN_CONTROL_TYPES = tuple(_SCAN_CONTROL_RESPONSES)
+
+
+def _scan_control_response(exc: BaseException) -> JSONResponse:
+    """Map a `_run_scan` control-signal exception to its JSONResponse.
+
+    `ScanAborted` reaches a handler only via the server-shutdown path (the deadline
+    raises `_ScanTimeout` first, and a client disconnect raises `_ClientDisconnected`
+    without reading the worker's result); it is mapped here so a shutdown-interrupted
+    scan gets a clean 504 rather than a 500.
+    """
+    status, message = _SCAN_CONTROL_RESPONSES[type(exc)]
+    return JSONResponse({"error": message or str(exc)}, status_code=status)
+
+
 def _parse_json_object(raw: bytes) -> dict[str, Any]:
     """Parse a request body and require it to be a JSON **object**.
 
@@ -368,19 +398,15 @@ async def _run_scan(request, fn):
         task_group.start_soon(_worker)
 
         # Await the worker AND watch for the client going away, under the deadline.
-        # Two children race inside an inner task group: one wakes on the worker
-        # finishing, one wakes on a client disconnect. Whichever fires first cancels
-        # the inner group; the outer `move_on_after` still owns the deadline. This
-        # is byte-identical to the old bare `await done.wait()` when the client never
-        # disconnects — the disconnect watcher simply parks (see `_watch_disconnect`)
-        # and is cancelled the instant the worker completes or the deadline fires.
+        # The host body awaits the worker while a single child watches for a client
+        # disconnect; whichever fires first cancels the inner group, and the outer
+        # `move_on_after` still owns the deadline. This is byte-identical to the old
+        # bare `await done.wait()` when the client never disconnects — the disconnect
+        # watcher simply parks (see `_watch_disconnect`) and is cancelled the instant
+        # the worker completes or the deadline fires.
         disconnected = False
         with anyio.move_on_after(_SCAN_TIMEOUT_SECONDS) as scope:
             async with anyio.create_task_group() as inner_tg:
-
-                async def _await_completion() -> None:
-                    await done.wait()
-                    inner_tg.cancel_scope.cancel()
 
                 async def _watch_disconnect() -> None:
                     # No polling: the handler fully read the request body before
@@ -405,8 +431,16 @@ async def _run_scan(request, fn):
                         token.cancel()
                     inner_tg.cancel_scope.cancel()
 
-                inner_tg.start_soon(_await_completion)
+                # The host body is itself a task in the inner group's cancel scope, so
+                # awaiting the worker here and cancelling directly is equivalent to a
+                # second child doing it — minus a coroutine. Worker finishes -> this
+                # await returns -> the cancel tears down the watcher; client
+                # disconnects -> the watcher cancels the scope -> this await is
+                # cancelled and the group exits; deadline -> the outer `move_on_after`
+                # cancels the whole inner group.
                 inner_tg.start_soon(_watch_disconnect)
+                await done.wait()
+                inner_tg.cancel_scope.cancel()
 
         if scope.cancelled_caught:
             # Deadline hit: trip the token (fire-and-forget) so the detached worker
@@ -507,31 +541,8 @@ async def handle_redact(request: Request) -> JSONResponse:
                 types_exclude=types_exclude,
             ),
         )
-    except _ScanTimeout:
-        return JSONResponse(
-            {"error": "request timed out: the scan exceeded the server time limit"},
-            status_code=504,
-        )
-    except ScanAborted:
-        # A scan aborted cooperatively (a tripped CancelToken surfaced from the
-        # worker). Defensive under the current deadline-only trip source — the
-        # deadline raises _ScanTimeout first, so this is dead today — but correct
-        # for a future client-disconnect source. 504: the scan did not complete.
-        return JSONResponse(
-            {"error": "request cancelled: the scan was aborted before it completed"},
-            status_code=504,
-        )
-    except _ClientDisconnected:
-        # The client went away mid-scan; the scan's token was tripped so the worker
-        # aborts and frees its slot. 499 (client-closed-request) with a PII-free
-        # body — the transport has usually gone, so this response is discarded, but
-        # the handler returns cleanly rather than surfacing a 500 or the scan result.
-        return JSONResponse(
-            {"error": "client disconnected before the scan completed"},
-            status_code=499,
-        )
-    except (_ServerNotReady, _ServerBusy) as e:
-        return JSONResponse({"error": str(e)}, status_code=503)
+    except _SCAN_CONTROL_TYPES as e:
+        return _scan_control_response(e)
     except (ValueError, TypeError) as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -677,31 +688,8 @@ async def handle_restore(request: Request) -> JSONResponse:
                 detailed=True,
             ),
         )
-    except _ScanTimeout:
-        return JSONResponse(
-            {"error": "request timed out: the scan exceeded the server time limit"},
-            status_code=504,
-        )
-    except ScanAborted:
-        # Symmetry with handle_redact and correctness for a future disconnect
-        # source. Unreachable via a deadline trip on THIS path: restore drops the
-        # cancel_token (no detect_l1 to abort), so a tripped token never surfaces a
-        # ScanAborted from a restore worker — restore gets no CPU reclamation.
-        return JSONResponse(
-            {"error": "request cancelled: the scan was aborted before it completed"},
-            status_code=504,
-        )
-    except _ClientDisconnected:
-        # Symmetric with handle_redact: the client went away mid-scan, its token was
-        # tripped, and this returns a clean, PII-free 499. (A `/restore` scan drops
-        # the token — no `detect_l1` to abort — so its worker still runs to
-        # completion, but the request itself ends promptly on the disconnect.)
-        return JSONResponse(
-            {"error": "client disconnected before the scan completed"},
-            status_code=499,
-        )
-    except (_ServerNotReady, _ServerBusy) as e:
-        return JSONResponse({"error": str(e)}, status_code=503)
+    except _SCAN_CONTROL_TYPES as e:
+        return _scan_control_response(e)
     except RestoreGuardError as e:
         return JSONResponse({"error": str(e), "security_events": e.events}, status_code=400)
     except (ValueError, TypeError) as e:
