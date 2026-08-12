@@ -14,15 +14,12 @@ CI:  `make gen-risk-data-check`  (exit 1 on drift)
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 from argus_redact.specs._compliance import PIPL_SENSITIVE_PI, PIPL_SORT_ORDER
-from argus_redact.specs._gen_ron import emit_or_check, ron_opt_str, ron_str
+from argus_redact.specs._gen_ron import core_data_path, emit_or_check, ron_opt_str, ron_str
 from argus_redact.specs.registry import list_types
 
-_OUT = (
-    Path(__file__).resolve().parents[3] / "crates" / "argus-redact-core" / "data" / "risk_data.ron"
-)
+_OUT = core_data_path("risk_data.ron")
 
 
 def build_ron() -> str:

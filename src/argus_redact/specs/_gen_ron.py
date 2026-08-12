@@ -23,6 +23,16 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
+def core_data_path(name: str) -> Path:
+    """Absolute path to a generated RON file under the core crate's data dir.
+
+    ``name`` is the bare filename (e.g. ``"risk_data.ron"``). Identical to the
+    inline ``parents[3] / "crates" / "argus-redact-core" / "data" / name`` each
+    generator computed from its own __file__ (all live in specs/).
+    """
+    return _REPO_ROOT / "crates" / "argus-redact-core" / "data" / name
+
+
 def ron_str(s: str) -> str:
     """RON/serde string literal — double-quoted, backslash + quote escaped."""
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'

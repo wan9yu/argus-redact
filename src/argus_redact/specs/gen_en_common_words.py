@@ -49,9 +49,8 @@ from __future__ import annotations
 
 import sys
 import urllib.request
-from pathlib import Path
 
-from argus_redact.specs._gen_ron import emit_or_check, ron_str
+from argus_redact.specs._gen_ron import core_data_path, emit_or_check, ron_str
 
 # Pinned commit of first20hours/google-10000-english (frequency-ordered, MIT).
 GOOGLE_10K_COMMIT = "d0736d492489198e4f9d650c7ab4143bc14c1e9e"
@@ -118,13 +117,7 @@ NAME_EXCLUSIONS: frozenset[str] = frozenset(
     """.split()
 )
 
-_OUT = (
-    Path(__file__).resolve().parents[3]
-    / "crates"
-    / "argus-redact-core"
-    / "data"
-    / "en_common_words.ron"
-)
+_OUT = core_data_path("en_common_words.ron")
 
 
 def fetch_top_words() -> list[str]:

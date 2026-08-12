@@ -45,9 +45,8 @@ from __future__ import annotations
 import sys
 import unicodedata
 import urllib.request
-from pathlib import Path
 
-from argus_redact.specs._gen_ron import emit_or_check, ron_char
+from argus_redact.specs._gen_ron import core_data_path, emit_or_check, ron_char
 
 CONFUSABLES_VERSION = "16.0.0"
 CONFUSABLES_URL = f"https://www.unicode.org/Public/security/{CONFUSABLES_VERSION}/confusables.txt"
@@ -126,13 +125,7 @@ AUDIT_EXAMPLES: dict[int, str] = {
     0x03F3: "j",
 }
 
-_OUT = (
-    Path(__file__).resolve().parents[3]
-    / "crates"
-    / "argus-redact-core"
-    / "data"
-    / "confusables.ron"
-)
+_OUT = core_data_path("confusables.ron")
 
 
 def _is_ascii_letter(cp: int) -> bool:

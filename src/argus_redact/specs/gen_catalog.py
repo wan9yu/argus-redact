@@ -16,10 +16,9 @@ typedefs or compliance rules, run `make catalog` and commit the result.
 
 from __future__ import annotations
 
-# Importing the spec modules registers their typedefs as a side effect.
-from argus_redact.specs import en as _en  # noqa: F401
-from argus_redact.specs import shared as _shared  # noqa: F401
-from argus_redact.specs import zh as _zh  # noqa: F401
+# Spec typedefs register as a side effect of importing the argus_redact.specs
+# package (its __init__ loads zh / en / shared / intl in canonical order) — the
+# registry import below triggers that, so list_types() sees every type.
 from argus_redact.specs.registry import list_types
 
 # Types explicitly out of scope. Cleared in v0.5.10 — all four shipped.

@@ -23,12 +23,10 @@ direction only (tests → specs), so the doc and the oracle cite from one source
 
 from __future__ import annotations
 
-# Importing the spec modules registers their typedefs as a side effect
-# (the package __init__ loads zh / en / shared / intl in canonical order, so
-# list_types() returns every type in stable registration order).
-from argus_redact.specs import en as _en  # noqa: F401
-from argus_redact.specs import shared as _shared  # noqa: F401
-from argus_redact.specs import zh as _zh  # noqa: F401
+# Spec typedefs register as a side effect of importing the argus_redact.specs
+# package (its __init__ loads zh / en / shared / intl in canonical order, so
+# list_types() returns every type in stable registration order) — the
+# _compliance import below triggers that.
 from argus_redact.specs._compliance import (
     HIPAA_SAFE_HARBOR,
     PIPL_ART_13,
