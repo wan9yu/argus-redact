@@ -21,6 +21,7 @@ use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
+use crate::evidence_detector::proximity_evidence;
 use crate::person_data::{
     common_words_zh_set, compound_surnames_zh, not_names_zh_set, surnames_zh,
 };
@@ -583,27 +584,26 @@ pub(crate) fn score_candidate(
         evidence += W_PAREN_PHONE;
     }
 
-    // Proximity to structural PII — first entity within a bucket wins (break).
+    // Proximity to structural PII — first entity within a bucket wins (near
+    // before mid), via the shared `proximity_evidence` helper:
     //   for pii in pii_entities:
     //       distance = min(abs(candidate.start - pii.end), abs(pii.start - candidate.end))
     //       if distance <= 50:    evidence += 0.5; break
     //       elif distance <= 150: evidence += 0.3; break
     //
-    // `abs(...)` over usize char offsets — use abs_diff so subtraction never
-    // underflows; abs_diff(a, b) == |a - b| matches Python's abs() on ints.
-    for pii in pii_entities {
-        let distance = candidate
-            .start
-            .abs_diff(pii.end)
-            .min(pii.start.abs_diff(candidate.end));
-        if distance <= PROXIMITY_NEAR {
-            evidence += W_PROXIMITY_NEAR;
-            break;
-        } else if distance <= PROXIMITY_MID {
-            evidence += W_PROXIMITY_MID;
-            break;
-        }
-    }
+    // The `pii_entities` slice is already filtered upstream (self_reference
+    // dropped in `detect_person_names`), so every entity is eligible — the gate
+    // is `|_| true`. `abs_diff` over usize char offsets == Python `abs()` on
+    // ints. This `+=` runs AFTER the four regex signals, so the accumulation
+    // order the bit-identity goldens lock is preserved (adding the helper's 0.0
+    // when nothing matches is a no-op on the non-negative running total).
+    evidence += proximity_evidence(
+        candidate.start,
+        candidate.end,
+        pii_entities.iter(),
+        &[(PROXIMITY_NEAR, W_PROXIMITY_NEAR), (PROXIMITY_MID, W_PROXIMITY_MID)],
+        |_| true,
+    );
 
     // No evidence signal → don't match at L1b (leave to L2 NER).
     //   if evidence == 0.0: return 0.0
@@ -729,17 +729,20 @@ fn resolve_variants(
 
         // if len(best.text) == 3:
         //
-        // Mutation note: this 3-char swallow arm is a faithful port of the
-        // pre-`{1,3}`-cap Python, retained for parity, but a genuine SWALLOW is
-        // effectively unreachable under the current cap — if the 3rd name char plus
-        // the next text char form a CJK common word, the greedy `[surname][CJK]{1,3}`
-        // already grabbed 4 chars and routes through the `best_len == 4` branch
-        // instead. So the arm's surviving arithmetic / `==`-find mutants (the `after`
-        // window offsets and the 2-char `.find`) cannot be reached by a swallow-firing
-        // input; the NON-swallow path (e.g. `客户何秀珍已登记`) is exercised but is
-        // insensitive to those edits (the `^`-anchored common-word check is unaffected
-        // by a wider `after` window). The 4-char arm's equivalent gate IS killed
-        // (`detect_four_char_real_name_no_common_tail_kept`).
+        // This 3-char swallow arm is a faithful port of the pre-`{1,3}`-cap Python
+        // and is LOAD-BEARING (not dead). A swallow fires on the trailing-particle
+        // TRUNCATION path: the greedy `[surname][CJK]{1,3}` grabs 4 chars, then
+        // `trim_candidate` strips a trailing particle back to 3, so the match
+        // routes through `best_len == 3` — NOT the `best_len == 4` branch. When the
+        // 3rd (last kept) name char plus that stripped particle form a common word,
+        // the greedy match over-grabbed a following word, so we down-shift to the
+        // 2-char root. Example: `客户张三上来了` → greedy `张三上来` → trim strips
+        // `来` → `张三上` (best_len 3); `上` + `来` = `上来` ∈ common → down-shift to
+        // `张三`. Pinned by `detect_best_len3_swallow_truncated_particle`; deleting
+        // this arm silently changes that output. (A 4-char match that SURVIVES
+        // trimming never reaches here: it always outscores its 3-char prefix — base
+        // 0.5 > 0.4, evidence never lower — so it is the longest passing variant and
+        // the `best_len == 4` branch owns the swallow.)
         let best_len = best.text.chars().count();
         if best_len == 3 {
             let last_char = best.text.chars().next_back().unwrap();
@@ -1751,6 +1754,25 @@ mod tests {
         assert_eq!(
             detect("马尔斯顿13800138000", &pii, &[], 0.8),
             vec![("马尔斯顿".to_string(), 0, 4, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_best_len3_swallow_truncated_particle() {
+        // resolve_variants `best_len == 3` swallow arm — LOAD-BEARING (this pins
+        // that the arm is NOT dead code and must not be removed). `客户张三上来了`:
+        // the greedy `[surname][CJK]{1,3}` grabs the 4-char `张三上来`, then
+        // `trim_candidate` strips the trailing particle `来`, leaving `张三上`
+        // (3 chars) — so the match routes through `best_len == 3`, NOT the 4-char
+        // branch. Its last kept char `上` + the stripped `来` = `上来`, a common
+        // word, so the greedy match over-grabbed a following word and the arm
+        // down-shifts to the 2-char root `张三` (context-prefix `客户` → base 0.3 +
+        // 0.6). Candidate generation confirms the routing (only 3-/2-char variants
+        // exist here, no 4-char). Deleting the arm would leave `张三上` at 1.0.
+        assert_candidates("客户张三上来了", &[("张三上", 2, 5), ("张三", 2, 4)]);
+        assert_eq!(
+            detect("客户张三上来了", &[], &[], 0.8),
+            vec![("张三".to_string(), 2, 4, 0.8999999999999999)]
         );
     }
 

@@ -21,13 +21,12 @@
 //! as a `Vec<char>` once and all windowing works in char-space (mirrors
 //! `regions.rs` + `person_zh.rs`).
 
-use std::collections::HashSet;
 use std::sync::{LazyLock, OnceLock};
 
 use fancy_regex::Regex;
 use serde::Deserialize;
 
-use crate::evidence_detector::is_person_identifying;
+use crate::evidence_detector::{is_person_identifying, proximity_evidence, DetectorConfig};
 
 #[derive(Debug, Deserialize)]
 struct ZhOccupationData {
@@ -44,36 +43,22 @@ fn zh_occupation_data() -> &'static ZhOccupationData {
     })
 }
 
-/// All occupation names sorted LONGEST-first (by char count), for greedy
-/// longest-match scans. Built once.
-fn occupation_names_longest_first() -> &'static [&'static str] {
-    static CELL: OnceLock<Vec<&'static str>> = OnceLock::new();
+/// The lexicon as a shared [`DetectorConfig`], built once. `DetectorConfig::new`
+/// indexes the occupation names into the SAME membership set + max char-length
+/// pass 1 of [`occupation_candidates`] used to build by hand (via its
+/// `name_set()` / `max_len()` accessors), so this module no longer re-derives its
+/// own index. The names are collected straight off `zh_occupation_data()` in
+/// lexicon order — `new` builds an order-insensitive index (set / first_chars /
+/// max), so no longest-first sort is needed. The config's cue / weights /
+/// first_chars are unused here: occupation runs its OWN two-pass scan
+/// (lexicon + productive-suffix heuristic) and evidence model in
+/// `detect_occupation_zh`.
+fn occupation_detector() -> &'static DetectorConfig {
+    static CELL: OnceLock<DetectorConfig> = OnceLock::new();
     CELL.get_or_init(|| {
-        let mut names: Vec<&'static str> =
+        let names: Vec<&'static str> =
             zh_occupation_data().occupations.iter().map(|s| s.as_str()).collect();
-        names.sort_by(|a, b| b.chars().count().cmp(&a.chars().count()).then(a.cmp(b)));
-        names
-    })
-    .as_slice()
-}
-
-/// Membership set of every lexicon occupation name, for O(1) longest-match
-/// probing. Built once.
-fn occupation_name_set() -> &'static HashSet<&'static str> {
-    static CELL: OnceLock<HashSet<&'static str>> = OnceLock::new();
-    CELL.get_or_init(|| occupation_names_longest_first().iter().copied().collect())
-}
-
-/// Longest lexicon-name length in **chars**, the upper bound for the
-/// longest-match probe window. Built once.
-fn occupation_max_len() -> usize {
-    static CELL: OnceLock<usize> = OnceLock::new();
-    *CELL.get_or_init(|| {
-        occupation_names_longest_first()
-            .iter()
-            .map(|n| n.chars().count())
-            .max()
-            .unwrap_or(0)
+        DetectorConfig::new(&names, &OCC_CUE, "job_title")
     })
 }
 
@@ -170,8 +155,8 @@ fn is_honorific_title(cand: &str) -> bool {
 /// `is_lexicon` records whether a candidate came from pass 1 (drives the
 /// high-confidence `W_OCC_LEXICON` weight). Returns candidates sorted by start.
 fn occupation_candidates(chars: &[char]) -> Vec<(String, usize, usize, bool)> {
-    let names = occupation_name_set();
-    let lex_max = occupation_max_len();
+    let names = occupation_detector().name_set();
+    let lex_max = occupation_detector().max_len();
     let n = chars.len();
 
     // `consumed[k]` = char k is inside a lexicon span (pass 1 owns it).
@@ -355,22 +340,20 @@ pub fn detect_occupation_zh(
         }
 
         // Proximity to person-identifying PII — first entity within the near
-        // bucket wins (break). Only PII that NAMES or CONTACTS a specific person
-        // (phone/email/id/…) answers "is someone identifiable nearby?" and
-        // corroborates. Technical tokens (ip_address/jwt/url_token/api-key), org
-        // names, and weak/sensitive attributes do not. The allowlist gate
-        // (is_person_identifying) enforces this; new technical types are safe by
-        // default. This subsumes the old self_reference/organization denylist.
-        for pii in pii_entities {
-            if !is_person_identifying(&pii.type_) {
-                continue;
-            }
-            let distance = start.abs_diff(pii.end).min(pii.start.abs_diff(end));
-            if distance <= OCC_PROX_NEAR {
-                evidence += W_OCC_PII_PROX;
-                break;
-            }
-        }
+        // bucket wins, via the shared `proximity_evidence` helper (occupation has
+        // a single near bucket, no mid). Only PII that NAMES or CONTACTS a
+        // specific person (phone/email/id/…) answers "is someone identifiable
+        // nearby?" and corroborates. Technical tokens (ip_address/jwt/url_token/
+        // api-key), org names, and weak/sensitive attributes do not. The allowlist
+        // gate (is_person_identifying) enforces this; new technical types are safe
+        // by default. This subsumes the old self_reference/organization denylist.
+        evidence += proximity_evidence(
+            start,
+            end,
+            pii_entities.iter(),
+            &[(OCC_PROX_NEAR, W_OCC_PII_PROX)],
+            |pii| is_person_identifying(&pii.type_),
+        );
 
         // No evidence → don't match at L1 (leave to L2 NER).
         if evidence == 0.0_f64 {

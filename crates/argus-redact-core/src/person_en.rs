@@ -34,6 +34,7 @@ use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
+use crate::evidence_detector::proximity_evidence;
 use crate::person_data::{common_words_en_set, given_names_en_set, surnames_en_set};
 use crate::reserved_range::CharOffsetCursor;
 use crate::types::PatternMatch;
@@ -177,20 +178,19 @@ fn score_bare_surname(
         evidence += W_NAME_LIKE;
     }
 
-    // Proximity to structural PII — first entity within a bucket wins (break).
-    // `abs_diff` over usize char offsets == Python `abs(...)` on ints.
-    for pii in pii_entities {
-        let distance = start
-            .abs_diff(pii.end)
-            .min(pii.start.abs_diff(end));
-        if distance <= PROXIMITY_NEAR {
-            evidence += W_PROXIMITY_NEAR;
-            break;
-        } else if distance <= PROXIMITY_MID {
-            evidence += W_PROXIMITY_MID;
-            break;
-        }
-    }
+    // Proximity to structural PII — first entity within a bucket wins (near
+    // before mid), via the shared `proximity_evidence` helper. `pii_entities` is
+    // already filtered upstream (self_reference dropped), so every entity is
+    // eligible — the gate is `|_| true`. `abs_diff` over usize char offsets ==
+    // Python `abs(...)` on ints. Adding the helper's 0.0 when nothing matches is
+    // a no-op on the non-negative running total.
+    evidence += proximity_evidence(
+        start,
+        end,
+        pii_entities.iter().copied(),
+        &[(PROXIMITY_NEAR, W_PROXIMITY_NEAR), (PROXIMITY_MID, W_PROXIMITY_MID)],
+        |_| true,
+    );
 
     // No corroboration → don't match at L1 (leave to L2 NER).
     if evidence == 0.0_f64 {
