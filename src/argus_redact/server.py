@@ -16,8 +16,6 @@ from __future__ import annotations
 
 import contextlib
 import functools
-import importlib
-import importlib.util
 import json
 import os
 import secrets
@@ -476,6 +474,25 @@ async def _run_scan(request, fn, *, cancellable):
             live_tokens.discard(token)
 
 
+def _validate_key_field(key: object) -> JSONResponse | None:
+    """Validate the shared ``key`` field for /redact and /restore.
+
+    Rejects a non-dict, non-None key with a 400 (a str path, list, int, etc.) and
+    a key exceeding ``MAX_RESTORE_KEY_ENTRIES`` with a 413 — the latter is the same
+    class of refusal as the body cap: the request is well-formed, it is too big.
+    Returns the error ``JSONResponse``, or ``None`` when the key is acceptable.
+    Both endpoints share the exact statuses and bodies so they cannot drift.
+    """
+    if key is not None and not isinstance(key, dict):
+        return JSONResponse({"error": "key must be a JSON object"}, status_code=400)
+    if key is not None and len(key) > MAX_RESTORE_KEY_ENTRIES:
+        return JSONResponse(
+            {"error": f"key too large: {len(key)} entries exceeds {MAX_RESTORE_KEY_ENTRIES}"},
+            status_code=413,
+        )
+    return None
+
+
 async def handle_redact(request: Request) -> JSONResponse:
     try:
         chunks = await _read_capped_body(request)
@@ -503,17 +520,10 @@ async def handle_redact(request: Request) -> JSONResponse:
             status_code=400,
         )
     key = body.get("key")
-    # Security: reject any non-dict, non-None key (str path, list, int, etc.)
-    if key is not None and not isinstance(key, dict):
-        return JSONResponse(
-            {"error": "key must be a JSON object"},
-            status_code=400,
-        )
-    if key is not None and len(key) > MAX_RESTORE_KEY_ENTRIES:
-        return JSONResponse(
-            {"error": f"key too large: {len(key)} entries exceeds {MAX_RESTORE_KEY_ENTRIES}"},
-            status_code=413,
-        )
+    # Reject a non-dict/oversized key (400/413) — shared with /restore.
+    key_error = _validate_key_field(key)
+    if key_error is not None:
+        return key_error
     detailed = body.get("detailed", False)
     report = body.get("report", False)
     profile = body.get("profile")
@@ -598,20 +608,10 @@ async def handle_restore(request: Request) -> JSONResponse:
 
     text = body.get("text", "")
     key = body.get("key", {})
-    # Security: reject any non-dict, non-None key (str path, list, int, etc.)
-    if key is not None and not isinstance(key, dict):
-        return JSONResponse(
-            {"error": "key must be a JSON object"},
-            status_code=400,
-        )
-    # Size cap on the key itself — see MAX_RESTORE_KEY_ENTRIES. 413 (not 400)
-    # because this is the same class of refusal as the body cap: the request is
-    # well-formed, it is too big.
-    if key is not None and len(key) > MAX_RESTORE_KEY_ENTRIES:
-        return JSONResponse(
-            {"error": f"key too large: {len(key)} entries exceeds {MAX_RESTORE_KEY_ENTRIES}"},
-            status_code=413,
-        )
+    # Reject a non-dict/oversized key (400/413) — shared with /redact.
+    key_error = _validate_key_field(key)
+    if key_error is not None:
+        return key_error
 
     # v0.8.0: guard defaults to True — a restore with no anchor fails closed. A
     # caller wanting the legacy plain substitution passes "guard": false.
@@ -711,34 +711,18 @@ async def handle_restore(request: Request) -> JSONResponse:
 
 
 async def handle_info(request: Request) -> JSONResponse:
-    # Derive the language list from the shipped-pack SSOT (_LANG_PATTERNS) and
-    # display names from the same single source the CLI `cmd_info` uses, so a
-    # newly-added pack appears on both surfaces without a second hand-edit.
-    from argus_redact.glue.redact import _LANG_DISPLAY_NAMES, _LANG_PATTERNS
-    from argus_redact.lang.shared.patterns import PATTERNS as SHARED
-
-    lang_info: dict[str, Any] = {}
-
-    for code in _LANG_PATTERNS:
-        mod_code = "in_" if code == "in" else code
-        try:
-            mod = importlib.import_module(f"argus_redact.lang.{mod_code}.patterns")
-            count = len(mod.PATTERNS) + len(SHARED)
-        except ModuleNotFoundError:
-            count = 0
-
-        has_ner = importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
-
-        lang_info[code] = {
-            "name": _LANG_DISPLAY_NAMES.get(code, code),
-            "patterns": count,
-            "ner": has_ner,
-        }
+    # Version + per-language capabilities from the single shared source
+    # (glue.redact.lang_capabilities), so the HTTP /info, CLI `info`, and MCP
+    # `redact_info` faces report identically. `ner` now reflects TRUE Layer-2
+    # engine availability (ner_engine_available) — not merely that the adapter
+    # module imports — so /info no longer over-claims `ner: true` without the
+    # spaCy/hanlp engine actually installed.
+    from argus_redact.glue.redact import lang_capabilities
 
     return JSONResponse(
         {
             "version": __version__,
-            "languages": lang_info,
+            "languages": lang_capabilities(),
         }
     )
 

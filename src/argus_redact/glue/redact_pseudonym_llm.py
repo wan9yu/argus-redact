@@ -10,9 +10,9 @@ from argus_redact.glue import redact as _redact_module
 from argus_redact.glue.redact import (
     _pre_detected_pipeline,
     _reject_unknown_type_names,
+    _validate_redact_inputs,
 )
 from argus_redact.pure.display_marker import mark_for_display, resolve_marker
-from argus_redact.pure.normalize import MAX_INPUT_SIZE
 from argus_redact.pure.replacer import VALID_STRATEGIES, warn_coverage_restored
 from argus_redact.pure.reserved_range_scanner import scan_for_pollution
 from argus_redact.specs.profiles import get_profile
@@ -101,19 +101,7 @@ def redact_pseudonym_llm(
     type sets. Strategy names must be in
     ``argus_redact.pure.replacer.VALID_STRATEGIES``.
     """
-    if not isinstance(text, str):
-        raise TypeError(f"text must be a string, got {type(text).__name__}")
-    if len(text) > MAX_INPUT_SIZE:
-        raise ValueError(
-            f"Input text ({len(text)} chars) exceeds maximum allowed size "
-            f"({MAX_INPUT_SIZE} chars). Split into smaller chunks."
-        )
-    if mode not in _redact_module.VALID_MODES:
-        raise ValueError(
-            f"Invalid mode '{mode}'. Must be one of: {', '.join(_redact_module.VALID_MODES)}"
-        )
-    if types is not None and types_exclude is not None:
-        raise ValueError("types and types_exclude are mutually exclusive")
+    _validate_redact_inputs(text, mode, types, types_exclude)
 
     if strategy_overrides:
         _reject_unknown_type_names(set(strategy_overrides), "strategy_overrides")

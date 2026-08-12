@@ -144,6 +144,7 @@ def _load_aliases_file(aliases_path: Path, arg: str) -> dict[str, list[str]]:
 
 def cmd_redact(args):
     from argus_redact import redact, redact_pseudonym_llm
+    from argus_redact.glue.redact import _parse_lang_arg
 
     text = _read_input(args.input)
     key_path = Path(args.key)
@@ -164,7 +165,7 @@ def cmd_redact(args):
             file=sys.stderr,
         )
         sys.exit(2)
-    lang = [code for code in args.lang.split(",") if code] if "," in args.lang else args.lang
+    lang = _parse_lang_arg(args.lang)
 
     raw_override = getattr(args, "strategy_override", None)
     try:
@@ -261,37 +262,26 @@ def cmd_restore(args):
 
 
 def cmd_info(args):
-    import importlib
     import importlib.util
 
     from argus_redact import __version__
-    from argus_redact.glue.redact import (
-        _LANG_DISPLAY_NAMES,
-        _LANG_PATTERNS,
-        ner_engine_available,
-    )
-    from argus_redact.lang.shared.patterns import PATTERNS as SHARED
+    from argus_redact.glue.redact import lang_capabilities
+
+    caps = lang_capabilities()
 
     print(f"argus-redact v{__version__}")
     print()
     print("Languages:")
-    for code in _LANG_PATTERNS:
-        mod_code = "in_" if code == "in" else code
-        try:
-            mod = importlib.import_module(f"argus_redact.lang.{mod_code}.patterns")
-            count = len(mod.PATTERNS) + len(SHARED)
-        except ModuleNotFoundError:
-            count = 0
-        ner_label = " + NER" if ner_engine_available(code) else ""
-        name = _LANG_DISPLAY_NAMES.get(code, code)
-        print(f"  {code}  {name:20s} regex ({count} patterns){ner_label}")
+    for code, info in caps.items():
+        ner_label = " + NER" if info["ner"] else ""
+        print(f"  {code}  {info['name']:20s} regex ({info['patterns']} patterns){ner_label}")
 
     print()
     print("Layers:")
     print("  1 Pattern (regex)       ✓")
     # Same signal as the per-language "+ NER" labels above, so the Layer-2
     # line can never claim more than they do.
-    ner_ok = any(ner_engine_available(code) for code in _LANG_PATTERNS)
+    ner_ok = any(info["ner"] for info in caps.values())
     print(f"  2 Entity (NER)          {'✓' if ner_ok else '✗'}")
     ollama_ok = importlib.util.find_spec("requests") is not None
     if ollama_ok:
@@ -304,10 +294,11 @@ def cmd_info(args):
 
 def cmd_assess(args):
     from argus_redact import redact
+    from argus_redact.glue.redact import _parse_lang_arg
     from argus_redact.pure.wire import common_report_fields, risk_payload
 
     text = _read_input(args.input)
-    lang = [code for code in args.lang.split(",") if code] if "," in args.lang else args.lang
+    lang = _parse_lang_arg(args.lang)
 
     report = redact(
         text,
@@ -347,7 +338,13 @@ def cmd_assess(args):
 
 def cmd_setup(args):
     """Pre-download NER models for offline use."""
-    langs = [code for code in args.lang.split(",") if code] if "," in args.lang else [args.lang]
+    from argus_redact.glue.redact import _parse_lang_arg
+
+    # setup takes a single code without a comma (unlike redact/assess, which pass
+    # the bare string straight through as `lang`) — wrap it so the loop below
+    # iterates codes, not characters.
+    parsed = _parse_lang_arg(args.lang)
+    langs = parsed if isinstance(parsed, list) else [parsed]
 
     for code in langs:
         print(f"Setting up {code}...")

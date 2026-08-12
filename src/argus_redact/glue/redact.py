@@ -50,6 +50,22 @@ def _effective_lang(lang: "str | list[str] | None", default: str = "zh") -> str:
     return lang[0] if lang else default
 
 
+def _parse_lang_arg(raw: str, *, strip: bool = False) -> str | list[str]:
+    """Parse a comma-or-single ``lang`` argument from the CLI/MCP faces.
+
+    With a comma, returns the list of non-empty codes; without a comma, returns
+    the bare string unchanged. ``strip=True`` trims surrounding whitespace from
+    each split code (and drops codes that are only whitespace); ``strip=False``
+    keeps the codes verbatim. The MCP faces strip and the CLI faces do not — that
+    difference is intentional and preserved here, so do not unify it.
+    """
+    if "," not in raw:
+        return raw
+    if strip:
+        return [code.strip() for code in raw.split(",") if code.strip()]
+    return [code for code in raw.split(",") if code]
+
+
 @functools.lru_cache(maxsize=1)
 def _warn_ablation_once() -> None:
     """Warn ONCE per process if any research ablation env toggle is active.
@@ -163,6 +179,38 @@ def ner_engine_available(code: str) -> bool:
         return False
     mod_code = "in_" if code == "in" else code
     return importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
+
+
+def lang_capabilities() -> dict[str, dict[str, object]]:
+    """Per-language capability map shared by the three `info` faces — CLI `info`,
+    HTTP `/info`, and MCP `redact_info` — keyed by locale-pack code.
+
+    Each value is ``{"name": <display>, "patterns": <count>, "ner": <bool>}``.
+    ``patterns`` is the language's own pattern count plus the shared pack, and
+    ``ner`` reflects TRUE Layer-2 engine availability via ``ner_engine_available``
+    (the adapter module AND its engine, hanlp/spaCy) — so no face over-claims
+    ``ner: true`` when only the adapter module is importable. Single source so the
+    three faces cannot drift: they carried a byte-identical loop, and HTTP `/info`
+    used the raw adapter-module ``find_spec`` and over-claimed the engine.
+    """
+    import importlib
+
+    from argus_redact.lang.shared.patterns import PATTERNS as SHARED
+
+    caps: dict[str, dict[str, object]] = {}
+    for code in _LANG_PATTERNS:
+        mod_code = "in_" if code == "in" else code
+        try:
+            mod = importlib.import_module(f"argus_redact.lang.{mod_code}.patterns")
+            count = len(mod.PATTERNS) + len(SHARED)
+        except ModuleNotFoundError:
+            count = 0
+        caps[code] = {
+            "name": _LANG_DISPLAY_NAMES.get(code, code),
+            "patterns": count,
+            "ner": ner_engine_available(code),
+        }
+    return caps
 
 
 # Plausible ISO-639-1 codes a caller might reach for instead of an argus
@@ -318,6 +366,34 @@ _LANG_NER_ADAPTERS = {
 }
 
 VALID_MODES = ("auto", "fast", "ner")
+
+
+def _validate_redact_inputs(
+    text: str,
+    mode: str,
+    types: list[str] | None,
+    types_exclude: list[str] | None,
+) -> None:
+    """Shared entry-guard for the two redact paths — ``_redact_impl`` (the frozen
+    ``redact()`` internal) and ``redact_pseudonym_llm``.
+
+    Both carried a byte-identical block; extracting it keeps the two entry
+    contracts from drifting. Raises the SAME exception types, messages, and order
+    as before: a non-str ``text`` → ``TypeError``; ``text`` over ``MAX_INPUT_SIZE``
+    → ``ValueError``; an invalid ``mode`` → ``ValueError``; ``types`` and
+    ``types_exclude`` both set → ``ValueError``.
+    """
+    if not isinstance(text, str):
+        raise TypeError(f"text must be a string, got {type(text).__name__}")
+    if len(text) > MAX_INPUT_SIZE:
+        raise ValueError(
+            f"Input text ({len(text)} chars) exceeds maximum allowed size "
+            f"({MAX_INPUT_SIZE} chars). Split into smaller chunks."
+        )
+    if mode not in VALID_MODES:
+        raise ValueError(f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}")
+    if types is not None and types_exclude is not None:
+        raise ValueError("types and types_exclude are mutually exclusive")
 
 
 _pattern_cache: dict[tuple[str, ...], list[dict]] = {}
@@ -842,8 +918,7 @@ def _redact_impl(
     cooperative cancellation for the HTTP server. Public ``redact()`` wraps this
     with ``cancel_token=None``.
     """
-    if not isinstance(text, str):
-        raise TypeError(f"text must be a string, got {type(text).__name__}")
+    _validate_redact_inputs(text, mode, types, types_exclude)
 
     # Fail closed if the compiled core is missing. _core has been mandatory since
     # v0.7.1; without it the fast path would otherwise call detect_l1 on None and
@@ -857,18 +932,6 @@ def _redact_impl(
             "argus-redact requires the compiled _core extension for redaction "
             "(install the wheel or build with maturin)."
         )
-
-    if len(text) > MAX_INPUT_SIZE:
-        raise ValueError(
-            f"Input text ({len(text)} chars) exceeds maximum allowed size "
-            f"({MAX_INPUT_SIZE} chars). Split into smaller chunks."
-        )
-
-    if mode not in VALID_MODES:
-        raise ValueError(f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}")
-
-    if types is not None and types_exclude is not None:
-        raise ValueError("types and types_exclude are mutually exclusive")
 
     if salt is not None and (
         isinstance(salt, int) or (isinstance(salt, (bytes, bytearray)) and len(salt) < 16)

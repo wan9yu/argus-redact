@@ -1,6 +1,7 @@
 """Tests for HTTP API server — using Starlette TestClient (in-process, coverage tracked)."""
 
 import importlib.util
+import json
 
 import pytest
 
@@ -10,6 +11,24 @@ HAS_STARLETTE = importlib.util.find_spec("starlette") is not None
 HAS_HTTPX = importlib.util.find_spec("httpx") is not None
 
 pytestmark = pytest.mark.skipif(not HAS_STARLETTE, reason="starlette not installed")
+
+_REAL_FIND_SPEC = importlib.util.find_spec
+
+
+def _patch_ner_engines(monkeypatch, *, hanlp: bool, spacy: bool):
+    """Force ``importlib.util.find_spec`` to report hanlp/spaCy availability,
+    delegating every other name (including the adapter-module checks) to the real
+    lookup — mirrors the CLI/MCP info-honesty tests so the /info face is held to
+    the same NER-gating contract."""
+
+    def fake(name, *args, **kwargs):
+        if name == "hanlp":
+            return object() if hanlp else None
+        if name == "spacy":
+            return object() if spacy else None
+        return _REAL_FIND_SPEC(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.util, "find_spec", fake)
 
 
 @pytest.fixture(scope="module")
@@ -268,6 +287,43 @@ class TestServerInfo:
         for code, info in data["languages"].items():
             assert info["patterns"] > 0, f"{code}: expected non-zero patterns"
             assert isinstance(info["ner"], bool), f"{code}: ner field should be a bool"
+
+
+class TestServerInfoHonesty:
+    """The HTTP /info `ner` field must reflect TRUE Layer-2 engine availability
+    (ner_engine_available), not merely that the adapter module imports — the same
+    NER-gating honesty the CLI `info` and MCP `redact_info` faces already enforce.
+
+    Before v0.8.12, /info derived `ner` from a raw adapter-module `find_spec`, so
+    it reported `ner: true` even with hanlp/spaCy absent — an over-claim the other
+    two faces did not make. handle_info now routes through the shared
+    `lang_capabilities`, closing that gap.
+    """
+
+    def test_ner_flag_false_when_engines_absent(self, monkeypatch):
+        import asyncio
+
+        from argus_redact.server import handle_info
+
+        _patch_ner_engines(monkeypatch, hanlp=False, spacy=False)
+
+        resp = asyncio.run(handle_info(None))
+        data = json.loads(resp.body)
+        assert all(not info["ner"] for info in data["languages"].values()), (
+            "/info must not report ner: true when neither hanlp nor spacy is installed"
+        )
+
+    def test_ner_flag_true_when_engines_installed(self, monkeypatch):
+        import asyncio
+
+        from argus_redact.server import handle_info
+
+        _patch_ner_engines(monkeypatch, hanlp=True, spacy=True)
+
+        resp = asyncio.run(handle_info(None))
+        data = json.loads(resp.body)
+        assert data["languages"]["zh"]["ner"] is True
+        assert data["languages"]["en"]["ner"] is True
 
 
 class TestServerHealth:
