@@ -434,16 +434,11 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
                         // redraws the first number, but the up-to-date key forces a
                         // fresh code on collision. (replacer.py:578–583)
                         let prefix = info.map(|i| i.prefix.as_str()).unwrap_or("O");
-                        let live = if self.result_key.is_empty() {
-                            None
-                        } else {
-                            Some(&self.result_key)
-                        };
-                        self.org_gen = Some(PseudonymGenerator::new(
+                        self.org_gen = Some(new_gen(
                             prefix,
-                            PSEUDONYM_CODE_RANGE,
-                            self.factory.make(offset_seed(self.pseudo_seed_int, 1)),
-                            live,
+                            offset_seed(self.pseudo_seed_int, 1),
+                            &self.result_key,
+                            self.factory,
                         ));
                     }
                     let org_prefix = self
@@ -463,16 +458,11 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
                         // Same rebuild semantics for the person generator
                         // (replacer.py:586–591): config prefix + live result_key.
                         let prefix = info.map(|i| i.prefix.as_str()).unwrap_or("P");
-                        let live = if self.result_key.is_empty() {
-                            None
-                        } else {
-                            Some(&self.result_key)
-                        };
-                        self.pseudo_gen = Some(PseudonymGenerator::new(
+                        self.pseudo_gen = Some(new_gen(
                             prefix,
-                            PSEUDONYM_CODE_RANGE,
-                            self.factory.make(self.pseudo_seed_int),
-                            live,
+                            self.pseudo_seed_int,
+                            &self.result_key,
+                            self.factory,
                         ));
                     }
                     let person_prefix = self
@@ -699,10 +689,22 @@ fn lazy_gen<'a, F: PseudoFactory>(
     result_key: &HashMap<String, String>,
     factory: &F,
 ) -> &'a mut PseudonymGenerator<F::Source> {
-    slot.get_or_insert_with(|| {
-        let existing = if result_key.is_empty() { None } else { Some(result_key) };
-        PseudonymGenerator::new(prefix, PSEUDONYM_CODE_RANGE, factory.make(seed), existing)
-    })
+    slot.get_or_insert_with(|| new_gen(prefix, seed, result_key, factory))
+}
+
+/// Construct a fresh pseudonym generator, preloading the codes of `prefix` from
+/// the live `result_key` (empty key → no preload). The single site for the
+/// `PseudonymGenerator::new(prefix, PSEUDONYM_CODE_RANGE, factory.make(seed), <nonempty key>)`
+/// construction shared by the two prefix-override rebuilds, `lazy_gen`, and
+/// `get_type_gen`.
+fn new_gen<F: PseudoFactory>(
+    prefix: &str,
+    seed: Option<u64>,
+    result_key: &HashMap<String, String>,
+    factory: &F,
+) -> PseudonymGenerator<F::Source> {
+    let existing = if result_key.is_empty() { None } else { Some(result_key) };
+    PseudonymGenerator::new(prefix, PSEUDONYM_CODE_RANGE, factory.make(seed), existing)
 }
 
 /// Lazily build (or fetch) the per-type pseudonym generator for the remove /
@@ -725,8 +727,7 @@ fn get_type_gen<'a, F: PseudoFactory>(
         // Python side into TypeInfo.prefix, with the type.upper()[:4] fallback).
         let prefix = unified_prefix.unwrap_or_else(|| info.map(|i| i.prefix.as_str()).unwrap_or(""));
         let seed = offset_seed(pseudo_seed_int, type_seed_offset(entity_type) as u64);
-        let existing = if result_key.is_empty() { None } else { Some(result_key) };
-        PseudonymGenerator::new(prefix, PSEUDONYM_CODE_RANGE, factory.make(seed), existing)
+        new_gen(prefix, seed, result_key, factory)
     })
 }
 

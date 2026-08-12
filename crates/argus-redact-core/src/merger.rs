@@ -1,6 +1,17 @@
+use std::cmp::Ordering;
+
 use crate::hints::py_strip;
 use crate::reserved_range::char_slice;
 use crate::types::PatternMatch;
+
+/// Sort comparator: ascending `start`, then the LONGER span first on a tie. The
+/// single source for the order both `merge_entities_text` and `merge_priority`
+/// sort by, so the two dedup passes cannot drift.
+fn by_start_then_longer(a: &PatternMatch, b: &PatternMatch) -> Ordering {
+    a.start
+        .cmp(&b.start)
+        .then_with(|| (b.end - b.start).cmp(&(a.end - a.start)))
+}
 
 /// Priority entity types for [`merge_entities_with_text`] — port of
 /// `pure/merger._PRIORITY_TYPES`. A `self_reference` entity wins overlaps and
@@ -79,10 +90,7 @@ fn merge_entities_text(entities: Vec<PatternMatch>, text: &str) -> Vec<PatternMa
     }
 
     let mut sorted = entities;
-    sorted.sort_by(|a, b| {
-        a.start.cmp(&b.start)
-            .then_with(|| (b.end - b.start).cmp(&(a.end - a.start)))
-    });
+    sorted.sort_by(by_start_then_longer);
 
     let mut merged: Vec<PatternMatch> = vec![sorted[0].clone()];
 
@@ -258,11 +266,7 @@ fn merge_priority(
     merged_others.extend(priority);
     let mut all_entities = merged_others;
     // sort key: (start, -(end - start)) — longer span first on a tie.
-    all_entities.sort_by(|a, b| {
-        a.start
-            .cmp(&b.start)
-            .then_with(|| (b.end - b.start).cmp(&(a.end - a.start)))
-    });
+    all_entities.sort_by(by_start_then_longer);
     let mut final_: Vec<PatternMatch> = vec![all_entities[0].clone()];
     for current in all_entities.into_iter().skip(1) {
         let last_end = final_.last().unwrap().end;

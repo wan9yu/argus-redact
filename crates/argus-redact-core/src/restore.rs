@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
 use fancy_regex::Regex;
 
@@ -389,13 +390,16 @@ fn advance_chars(s: &str, from: usize, n_chars: usize) -> usize {
 /// pseudonyms, and an alias inherits the scope of the fake that owns it, so
 /// without an owner the guard cannot tell an authorised alias from one that
 /// smuggles a withheld identity back into the reply.
-fn merge_aliases(
-    key: &HashMap<String, String>,
+fn merge_aliases<'k>(
+    key: &'k HashMap<String, String>,
     aliases: Option<&HashMap<String, Vec<String>>>,
-) -> (HashMap<String, String>, Vec<String>, HashMap<String, String>) {
+) -> (Cow<'k, HashMap<String, String>>, Vec<String>, HashMap<String, String>) {
     let mut alias_collisions: Vec<String> = Vec::new();
     let mut alias_owner: HashMap<String, String> = HashMap::new();
-    let flat: HashMap<String, String> = if let Some(alias_map) = aliases {
+    // With aliases → build the merged map (owned). Without → the flat map IS the
+    // key, so BORROW it: the common `restore_body`/`RestoreSession` no-alias path
+    // no longer deep-clones the whole key map just to hand out a `&HashMap`.
+    let flat: Cow<HashMap<String, String>> = if let Some(alias_map) = aliases {
         let mut m: HashMap<String, String> = key.clone();
         let mut fakes: Vec<&String> = alias_map.keys().collect();
         fakes.sort();
@@ -419,9 +423,9 @@ fn merge_aliases(
                 }
             }
         }
-        m
+        Cow::Owned(m)
     } else {
-        key.clone()
+        Cow::Borrowed(key)
     };
     (flat, alias_collisions, alias_owner)
 }
@@ -837,7 +841,7 @@ impl RestoreSession {
             )
         };
 
-        Ok(RestoreSession { flat, matcher, alias_collisions })
+        Ok(RestoreSession { flat: flat.into_owned(), matcher, alias_collisions })
     }
 
     /// Aliases claimed by more than one original — one entry per LOSING claim,
@@ -1012,16 +1016,15 @@ possible hallucination or fabrication"
 
 /// Count non-overlapping occurrences of `needle` in `haystack` (mirrors Python `str.count`).
 fn count_occurrences(haystack: &str, needle: &str) -> usize {
+    // `str::matches` is non-overlapping (it resumes after each match), matching
+    // the hand-rolled `start += pos + needle.len()` advance this replaced. The
+    // empty-needle guard stays: `matches("")` splits at every boundary, whereas
+    // the contract here (and Python `str.count`'s non-empty case) is 0.
     if needle.is_empty() {
-        return 0;
+        0
+    } else {
+        haystack.matches(needle).count()
     }
-    let mut count = 0;
-    let mut start = 0;
-    while let Some(pos) = haystack[start..].find(needle) {
-        count += 1;
-        start += pos + needle.len();
-    }
-    count
 }
 
 #[cfg(test)]

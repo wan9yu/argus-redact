@@ -69,6 +69,20 @@ pub(crate) struct ShardedMatcher {
     shards: Vec<Regex>,
 }
 
+/// The `Bound → alternation pattern` mapping for one shard's `chunk`. The single
+/// source shared by [`ShardedMatcher::new`] and the differential-test oracle so
+/// the oracle cannot drift from the production pattern it pins.
+fn pattern_for(bound: Bound, chunk: &[&str]) -> String {
+    match bound {
+        Bound::None => escaped_alternation(chunk),
+        Bound::Digit => escaped_alternation_digit_bounded(chunk),
+        Bound::PseudonymToken => {
+            let alt = escaped_alternation(chunk);
+            format!(r"(?<![A-Za-z0-9_-])(?:{alt})(?![A-Za-z0-9_-])")
+        }
+    }
+}
+
 impl ShardedMatcher {
     /// Compile `keys` (any order, duplicates tolerated) into shards.
     ///
@@ -84,14 +98,7 @@ impl ShardedMatcher {
 
         let mut shards = Vec::with_capacity(ordered.len().div_ceil(MAX_KEYS_PER_SHARD).max(1));
         for chunk in ordered.chunks(MAX_KEYS_PER_SHARD) {
-            let pattern = match bound {
-                Bound::None => escaped_alternation(chunk),
-                Bound::Digit => escaped_alternation_digit_bounded(chunk),
-                Bound::PseudonymToken => {
-                    let alt = escaped_alternation(chunk);
-                    format!(r"(?<![A-Za-z0-9_-])(?:{alt})(?![A-Za-z0-9_-])")
-                }
-            };
+            let pattern = pattern_for(bound, chunk);
             shards.push(Regex::new(&pattern).map_err(|e| e.to_string())?);
         }
         Ok(ShardedMatcher { shards })
@@ -307,14 +314,7 @@ mod tests {
     fn single_alternation(keys: &[String], bound: Bound) -> Regex {
         let mut ordered: Vec<&str> = keys.iter().map(|k| k.as_str()).collect();
         ordered.sort_by(|a, b| b.len().cmp(&a.len()));
-        let pattern = match bound {
-            Bound::None => escaped_alternation(&ordered),
-            Bound::Digit => escaped_alternation_digit_bounded(&ordered),
-            Bound::PseudonymToken => {
-                let alt = escaped_alternation(&ordered);
-                format!(r"(?<![A-Za-z0-9_-])(?:{alt})(?![A-Za-z0-9_-])")
-            }
-        };
+        let pattern = pattern_for(bound, &ordered);
         Regex::new(&pattern).unwrap()
     }
 
