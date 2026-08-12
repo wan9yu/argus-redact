@@ -290,42 +290,44 @@ struct RedactSegmentWithSignals {
 }
 
 /// The detect-once SSOT tail shared by the one-shot [`redact_segment`] and the
-/// streaming redact closure: `build_info` → `replace` (wasm MT19937 pseudo-factory,
-/// no custom fakers) → the en-only `normalize_grammar_en` tail, over an
-/// already-resolved entity set. [`redact_segment`] calls it on the FINALIZED
-/// entities (after `detect_l1` + `finalize_entities`); the streaming redact closure
-/// calls it on the core-snapped, range-shifted `spans.entities` the carry-window
-/// engine already merged + self-ref-filtered. `existing_key` threads cross-chunk
-/// collision continuity (a repeated original reuses its fake). Returns the segment
-/// PLUS the `keep_downgraded` / `mask_collisions` signals — the one-shot path
-/// surfaces them, the streaming face drops them.
+/// streaming redact closure: `replace` (wasm MT19937 pseudo-factory, no custom
+/// fakers) → the en-only `normalize_grammar_en` tail, over an already-built
+/// `type_info` + `person` / `organization` prefixes and a resolved entity set. This
+/// is the ACTUALLY-duplicated part — the two copies were byte-for-byte identical.
 ///
-/// Byte-identical to the previous per-site copies. `build_info` now runs over the
-/// SAME entities `replace` redacts (the finalized set for the one-shot path, rather
-/// than the raw pre-finalize set the old shape resolved it over): `build_type_info`'s
-/// per-type `TypeInfo` is a pure function of the type name (+ the fixed config /
-/// langs), independent of which entities are present, and `replace` only ever reads
-/// the info for a type it is redacting — every such type survives into the finalized
-/// set — so the resolved `type_info` and the `person` / `organization` prefixes
-/// `replace` actually consumes are unchanged.
+/// `build_info` is DELIBERATELY NOT folded in here: each caller runs it over its OWN
+/// set and threads the result in. The one-shot path resolves it over the RAW
+/// pre-finalize entities (then `replace`s the finalized subset); the streaming
+/// closure resolves it over `spans.entities` (the same set it `replace`s). Those two
+/// sets are NOT interchangeable — `person_prefix` is the SHARED generator prefix for
+/// every non-org `pseudonym`-strategy entity (e.g. `school`), so if `finalize`
+/// dropped a config-prefix-overridden `person` span that a surviving `school` span
+/// is seeded from, building the info over the finalized set would silently lose the
+/// override and change the redacted text + key. Keeping `build_info` at the call
+/// site preserves the exact a414e4a behaviour on both paths.
+///
+/// `existing_key` threads cross-chunk collision continuity (a repeated original
+/// reuses its fake). Returns the segment PLUS the `keep_downgraded` /
+/// `mask_collisions` signals — the one-shot path surfaces them, the streaming face
+/// drops them.
 fn replace_and_grammar(
     params: &RedactParams,
     text: &str,
+    info_map: &HashMap<String, TypeInfo>,
+    person_prefix: &str,
+    org_prefix: &str,
     entities: &[PatternMatch],
     existing_key: Option<&HashMap<String, String>>,
 ) -> Result<RedactSegmentWithSignals, String> {
-    let (info_map, person_prefix, org_prefix) =
-        build_info(entities, params.config.as_ref(), &params.langs);
-
     let result = replace(
         ReplaceArgs {
             text,
             entities,
             salt: params.salt.as_ref(),
             key: existing_key,
-            type_info: &info_map,
-            person_prefix: &person_prefix,
-            org_prefix: &org_prefix,
+            type_info: info_map,
+            person_prefix,
+            org_prefix,
             unified_prefix: params.unified_prefix.as_deref(),
             keep_whitelist: &params.whitelist,
         },
@@ -363,13 +365,15 @@ fn replace_and_grammar(
 /// Detection runs EXACTLY ONCE (`detect_l1`), matching the Python `redact()` glue
 /// (`_detect` → `_build_type_info` → `_replace_and_emit`) rather than the previous
 /// detect-twice shape (an outer `detect_l1` to seed `build_type_info`, then a
-/// `redact_l1` that re-detected internally). The single detection drives
+/// `redact_l1` that re-detected internally). The single detection feeds BOTH
+/// [`build_info`] over the RAW (pre-finalize) entities AND the post-detect pipeline:
 /// `finalize_entities` (merge → self-reference filter → type filter → coverage
-/// restore, `apply_type_filter = true`, no `types` scope), then the shared
-/// [`replace_and_grammar`] tail (`build_info` → `replace` → en-grammar) over that
-/// finalized set. Byte-identical to the old `redact_l1` call: the re-detect it
-/// dropped was deterministic (same raw entities), and the `type_info` / filter
-/// scope / grammar step are the same. Returns the segment PLUS the
+/// restore, `apply_type_filter = true`, no `types` scope) → the shared
+/// [`replace_and_grammar`] tail (`replace` → en-grammar) over that finalized set,
+/// carrying the RAW-derived `type_info` / prefixes. Byte-identical to the old
+/// `redact_l1` call: the re-detect it dropped was deterministic (same raw entities),
+/// and the `type_info` (resolved over the raw set, as the old outer `build_type_info`
+/// did) / filter scope / grammar step are the same. Returns the segment PLUS the
 /// `keep_downgraded` / `mask_collisions` signals (see [`RedactSegmentWithSignals`]).
 fn redact_segment(
     params: &RedactParams,
@@ -380,6 +384,15 @@ fn redact_segment(
     let DetectSpans { entities, hints } =
         flatten_l1(detect_l1(text, &params.langs, &params.names).map_err(|e| e.to_string())?);
 
+    // type_info over the RAW (pre-finalize) entities — the exact set the old outer
+    // `build_type_info` resolved, so the per-type info AND the shared `person` /
+    // `organization` pseudonym prefixes are unchanged even when finalize later drops
+    // a (prefix-overridden) person span that a surviving non-org pseudonym entity
+    // (e.g. school) is seeded from. Resolving over the finalized set would lose that
+    // override — a reachable byte-identity break.
+    let (info_map, person_prefix, org_prefix) =
+        build_info(&entities, params.config.as_ref(), &params.langs);
+
     // Post-detect pipeline, reproducing `redact_l1`'s steps 2-5a over this single
     // detection: merge → self-reference filter → type filter (none) → coverage
     // restore. `apply_type_filter = true` + `FilterScope::from_hints(None, None,…)`
@@ -387,8 +400,17 @@ fn redact_segment(
     let scope = FilterScope::from_hints(None, None, &hints);
     let filtered = finalize_entities(entities, &hints, &scope, text, true);
 
-    // Shared `build_info` → `replace` → en-grammar tail over the finalized set.
-    replace_and_grammar(params, text, &filtered, existing_key)
+    // Shared `replace` → en-grammar tail: replace runs over the FILTERED set with the
+    // RAW-derived type_info / prefixes (a414e4a order).
+    replace_and_grammar(
+        params,
+        text,
+        &info_map,
+        &person_prefix,
+        &org_prefix,
+        &filtered,
+        existing_key,
+    )
 }
 
 // ── public API ──────────────────────────────────────────────────────────────
@@ -830,21 +852,36 @@ impl StreamingRedactor {
         });
 
         // Redact closure: detect-once path — redact the GIVEN pre-detected,
-        // range-shifted entities over `text` via the shared `replace_and_grammar`
-        // tail (`build_info` → `replace` + en-grammar), the SAME tail the one-shot
-        // `redact_segment` runs. No internal re-detect (the core engine already
-        // detected once over the full ±W buffer and shifted the spans into the emit
-        // range). Threads the accumulated key (the `Rc<RefCell>` mirror the core
-        // keeps in sync) as `existing_key` for cross-chunk collision continuity so
-        // the same original reuses its existing fake across segments. The segment's
-        // `keep_downgraded` / `mask_collisions` signals are not part of the streaming
-        // face, so the `RedactSegmentWithSignals` wrapper is unwrapped to its segment.
+        // range-shifted entities over `text`. `build_info` runs over `spans.entities`
+        // (this path's own set — the same set `replace` consumes, unchanged from
+        // a414e4a), then the shared `replace_and_grammar` tail (`replace` + en-grammar)
+        // — the SAME tail the one-shot `redact_segment` runs. No internal re-detect
+        // (the core engine already detected once over the full ±W buffer and shifted
+        // the spans into the emit range). Threads the accumulated key (the
+        // `Rc<RefCell>` mirror the core keeps in sync) as `existing_key` for
+        // cross-chunk collision continuity so the same original reuses its existing
+        // fake across segments. The segment's `keep_downgraded` / `mask_collisions`
+        // signals are not part of the streaming face, so the `RedactSegmentWithSignals`
+        // wrapper is unwrapped to its segment.
         let redact_params = Rc::clone(&params);
         let redact_key = Rc::clone(&accumulated_key);
         let redact: BoxedRedact = Box::new(move |text: &str, spans: &DetectSpans| {
             let existing = redact_key.borrow();
-            replace_and_grammar(&redact_params, text, &spans.entities, Some(&*existing))
-                .map(|with_signals| with_signals.segment)
+            let (info_map, person_prefix, org_prefix) = build_info(
+                &spans.entities,
+                redact_params.config.as_ref(),
+                &redact_params.langs,
+            );
+            replace_and_grammar(
+                &redact_params,
+                text,
+                &info_map,
+                &person_prefix,
+                &org_prefix,
+                &spans.entities,
+                Some(&*existing),
+            )
+            .map(|with_signals| with_signals.segment)
         });
 
         Ok(StreamingRedactor {
@@ -955,5 +992,93 @@ mod auto_lang_tests {
             "auto".to_string(),
             "zh".to_string()
         ]))));
+    }
+}
+
+// ── regression: one-shot build_info must resolve over the RAW pre-finalize set ──
+//
+// `person_prefix` is the SHARED pseudonym-generator prefix for EVERY non-org
+// `pseudonym`-strategy entity (e.g. `school`; see core `replace.rs` — a non-org
+// pseudonym entity with no per-type prefix override draws from `person_prefix`).
+// Resolving the one-shot `type_info` / prefixes over the FINALIZED set instead of the
+// raw pre-finalize set silently drops a config `person`-prefix override whenever a
+// `person` span is merge-absorbed by an overlapping surviving `school` span: the
+// school's pseudonym code flips from the override "X-…" to the fallback "P-…",
+// changing BOTH the redacted text AND the key. This pins `redact_segment` to the
+// raw-set order (parity with the Python reference and parent a414e4a). Runs native
+// via `cargo test -p argus-redact-wasm --lib`; fails against the pre-fix (finalized)
+// shape, which would emit "P-83811是名校。".
+#[cfg(test)]
+mod raw_typeinfo_prefix_tests {
+    use super::*;
+
+    #[test]
+    fn one_shot_person_prefix_override_survives_person_absorbed_into_school() {
+        // 曾宪梓中 (person) overlaps 曾宪梓中学 (school). Detection surfaces BOTH in the
+        // raw set; finalize absorbs the person into the surviving school. Config
+        // overrides the person prefix to "X"; the school (non-org pseudonym) draws
+        // from `person_prefix`, so its code must carry "X" — exactly what the Python
+        // reference `redact(...)` emits for the same (text, salt, config).
+        let text = "曾宪梓中学是名校。";
+
+        let mut config: Config = HashMap::new();
+        config.insert(
+            "person".to_string(),
+            EntityConfig {
+                strategy: None,
+                prefix: Some("X".to_string()),
+                replacement: None,
+                label: None,
+                visible_prefix: None,
+                visible_suffix: None,
+            },
+        );
+        let params = RedactParams {
+            langs: vec!["zh".to_string()],
+            names: Vec::new(),
+            salt: Some(Salt::Int(42)),
+            config: Some(config),
+            unified_prefix: None,
+            whitelist: keep_whitelist(),
+        };
+
+        // Preconditions — fail loudly if detection drifts (never silently vacuous):
+        // the raw set carries BOTH person + school; finalize keeps school, drops person.
+        let DetectSpans { entities, hints } =
+            flatten_l1(detect_l1(text, &params.langs, &params.names).unwrap());
+        assert!(
+            entities.iter().any(|e| e.type_ == "person"),
+            "precondition: a person span must be detected in the raw set: {entities:?}"
+        );
+        assert!(
+            entities.iter().any(|e| e.type_ == "school"),
+            "precondition: a school span must be detected in the raw set: {entities:?}"
+        );
+        let scope = FilterScope::from_hints(None, None, &hints);
+        let filtered = finalize_entities(entities, &hints, &scope, text, true);
+        assert!(
+            filtered.iter().any(|e| e.type_ == "school"),
+            "precondition: school must survive finalize: {filtered:?}"
+        );
+        assert!(
+            !filtered.iter().any(|e| e.type_ == "person"),
+            "precondition: the person span must be merge-absorbed (absent from finalized): {filtered:?}"
+        );
+
+        // The guard: build_info over the RAW set keeps the person entry, so
+        // `person_prefix` = the override "X" and the surviving school's code carries
+        // it. Byte-identical to the Python reference for (text, salt=42, config).
+        let out = redact_segment(&params, text, None).expect("redact_segment");
+        assert_eq!(
+            out.segment.downstream_text, "X-83811是名校。",
+            "school must redact with the config person-prefix override 'X' (build_info over the \
+             RAW set); a 'P-' prefix here means build_info regressed to the finalized set"
+        );
+        let mut expected_key: HashMap<String, String> = HashMap::new();
+        expected_key.insert("X-83811".to_string(), "曾宪梓中学".to_string());
+        assert_eq!(
+            out.segment.key, expected_key,
+            "key must map the X-prefixed school fake to the original school name"
+        );
     }
 }
