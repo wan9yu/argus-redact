@@ -101,14 +101,19 @@ pub(crate) fn parse_salt(salt: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Sal
     }
 }
 
+/// Read an optional string field from a `PyDict`: `None` when the key is absent OR
+/// present-but-`None`, otherwise the extracted `str` (and `None` if the value is
+/// present but not a string). The "None → absent" extraction shared verbatim by
+/// [`parse_type_info`], [`parse_config`], and [`parse_registry_defaults`].
+fn opt_str(d: &Bound<'_, PyDict>, key: &str) -> Option<String> {
+    d.get_item(key)
+        .ok()
+        .flatten()
+        .and_then(|v| if v.is_none() { None } else { v.extract::<String>().ok() })
+}
+
 /// Parse one per-type info dict into a [`TypeInfo`].
 fn parse_type_info(d: &Bound<'_, PyDict>) -> PyResult<TypeInfo> {
-    let get_str = |k: &str| -> Option<String> {
-        d.get_item(k)
-            .ok()
-            .flatten()
-            .and_then(|v| if v.is_none() { None } else { v.extract::<String>().ok() })
-    };
     let get_bool = |k: &str| -> bool {
         d.get_item(k)
             .ok()
@@ -126,7 +131,7 @@ fn parse_type_info(d: &Bound<'_, PyDict>) -> PyResult<TypeInfo> {
     // Fold the existing dict fields into FakerResolution, preserving the old
     // dispatch precedence: faker_name (built-in) wins, then custom_faker, then
     // none. The Python dict shape is unchanged (still `faker_name`/`custom_faker`).
-    let faker_resolution = if let Some(name) = get_str("faker_name") {
+    let faker_resolution = if let Some(name) = opt_str(d, "faker_name") {
         FakerResolution::Builtin(name)
     } else if get_bool("custom_faker") {
         FakerResolution::Custom
@@ -134,14 +139,14 @@ fn parse_type_info(d: &Bound<'_, PyDict>) -> PyResult<TypeInfo> {
         FakerResolution::None
     };
     Ok(TypeInfo {
-        strategy: get_str("strategy").unwrap_or_else(|| "remove".to_string()),
-        default_strategy: get_str("default_strategy").unwrap_or_else(|| "remove".to_string()),
-        prefix: get_str("prefix").unwrap_or_default(),
+        strategy: opt_str(d, "strategy").unwrap_or_else(|| "remove".to_string()),
+        default_strategy: opt_str(d, "default_strategy").unwrap_or_else(|| "remove".to_string()),
+        prefix: opt_str(d, "prefix").unwrap_or_default(),
         prefix_overridden: get_bool("prefix_overridden"),
         faker_resolution,
-        replacement: get_str("replacement"),
-        label: get_str("label"),
-        default_category_label: get_str("default_category_label").unwrap_or_default(),
+        replacement: opt_str(d, "replacement"),
+        label: opt_str(d, "label"),
+        default_category_label: opt_str(d, "default_category_label").unwrap_or_default(),
         visible_prefix: get_usize("visible_prefix"),
         visible_suffix: get_usize("visible_suffix"),
     })
@@ -281,15 +286,6 @@ fn parse_config(config: Option<&Bound<'_, PyDict>>) -> PyResult<Option<CoreConfi
             Err(_) => continue,
         };
         let Ok(ec) = v.cast::<PyDict>() else { continue };
-        let get_str = |key: &str| -> Option<String> {
-            ec.get_item(key).ok().flatten().and_then(|x| {
-                if x.is_none() {
-                    None
-                } else {
-                    x.extract::<String>().ok()
-                }
-            })
-        };
         // visible_prefix/suffix: reproduce Python `int(ec.get(key, 0) or 0)`
         // followed by the downstream non-positive → per-type-default behavior.
         //
@@ -338,16 +334,16 @@ fn parse_config(config: Option<&Bound<'_, PyDict>>) -> PyResult<Option<CoreConfi
         out.insert(
             type_name,
             EntityConfig {
-                strategy: get_str("strategy"),
+                strategy: opt_str(ec, "strategy"),
                 // `prefix` present (even if None) sets prefix_overridden in
                 // Python (`"prefix" in ec`). Match that: Some iff the key exists.
                 prefix: if ec.contains("prefix").unwrap_or(false) {
-                    Some(get_str("prefix").unwrap_or_default())
+                    Some(opt_str(ec, "prefix").unwrap_or_default())
                 } else {
                     None
                 },
-                replacement: get_str("replacement"),
-                label: get_str("label"),
+                replacement: opt_str(ec, "replacement"),
+                label: opt_str(ec, "label"),
                 visible_prefix: get_usize("visible_prefix"),
                 visible_suffix: get_usize("visible_suffix"),
             },
@@ -377,21 +373,12 @@ fn parse_registry_defaults(
             Err(_) => continue,
         };
         let Ok(rd) = v.cast::<PyDict>() else { continue };
-        let get_str = |key: &str| -> Option<String> {
-            rd.get_item(key).ok().flatten().and_then(|x| {
-                if x.is_none() {
-                    None
-                } else {
-                    x.extract::<String>().ok()
-                }
-            })
-        };
         out.insert(
             type_name,
             RegistryDefault {
-                strategy: get_str("strategy"),
-                prefix: get_str("prefix"),
-                category_label: get_str("category_label"),
+                strategy: opt_str(rd, "strategy"),
+                prefix: opt_str(rd, "prefix"),
+                category_label: opt_str(rd, "category_label"),
             },
         );
     }

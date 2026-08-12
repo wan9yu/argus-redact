@@ -62,6 +62,27 @@ pub enum RestoreOutcome {
     Complete,
 }
 
+impl RestoreOutcome {
+    /// The stable snake_case name of this outcome — the SECURITY vocabulary the
+    /// Python (`crates/argus-redact-py/src/restore.rs`) and wasm
+    /// (`crates/argus-redact-wasm/src/lib.rs`) faces both surface verbatim. This
+    /// is the single source of that wire string; both bindings call it, so the
+    /// emitted names are byte-identical across runtimes.
+    ///
+    /// The match is exhaustive over every variant (no wildcard arm): although the
+    /// enum is `#[non_exhaustive]` for downstream crates, this crate OWNS the
+    /// enum, so adding a variant is a compile error here until its name is added
+    /// — the "grow in lockstep" invariant, now enforced at the source instead of
+    /// silently degrading to a fallback string in each binding.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RestoreOutcome::Blocked => "blocked",
+            RestoreOutcome::Partial => "partial",
+            RestoreOutcome::Complete => "complete",
+        }
+    }
+}
+
 /// The kind of guard check a [`GuardEvent`] reports on.
 ///
 /// `#[non_exhaustive]` for the same forward-compatibility reason as
@@ -74,6 +95,23 @@ pub enum GuardEventKind {
     EmptyKeyWithScope,
     OutOfScopePseudonym,
     AliasCollision,
+}
+
+impl GuardEventKind {
+    /// The stable snake_case name of this guard-event kind — the SECURITY
+    /// vocabulary the Python and wasm faces both surface verbatim (see
+    /// [`RestoreOutcome::as_str`] for the SSOT / byte-identical reasoning). The
+    /// match is exhaustive over every variant for the same reason: a new variant
+    /// must gain its name here, in the crate that owns the enum.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            GuardEventKind::GuardNoAnchor => "guard_no_anchor",
+            GuardEventKind::ProvenanceFailed => "provenance_failed",
+            GuardEventKind::EmptyKeyWithScope => "empty_key_with_scope",
+            GuardEventKind::OutOfScopePseudonym => "out_of_scope_pseudonym",
+            GuardEventKind::AliasCollision => "alias_collision",
+        }
+    }
 }
 
 /// One guard check's outcome. `count` is how many instances the check found;
@@ -1062,6 +1100,26 @@ mod integration_probe {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Pin the SECURITY wire vocabulary the Python + wasm bindings surface. These
+    /// strings are a cross-runtime contract: changing one silently breaks the
+    /// `security_events` / guard-outcome names the two faces expose, so pin every
+    /// variant's exact bytes here at the SSOT.
+    #[test]
+    fn restore_outcome_as_str_is_the_stable_vocabulary() {
+        assert_eq!(RestoreOutcome::Blocked.as_str(), "blocked");
+        assert_eq!(RestoreOutcome::Partial.as_str(), "partial");
+        assert_eq!(RestoreOutcome::Complete.as_str(), "complete");
+    }
+
+    #[test]
+    fn guard_event_kind_as_str_is_the_stable_vocabulary() {
+        assert_eq!(GuardEventKind::GuardNoAnchor.as_str(), "guard_no_anchor");
+        assert_eq!(GuardEventKind::ProvenanceFailed.as_str(), "provenance_failed");
+        assert_eq!(GuardEventKind::EmptyKeyWithScope.as_str(), "empty_key_with_scope");
+        assert_eq!(GuardEventKind::OutOfScopePseudonym.as_str(), "out_of_scope_pseudonym");
+        assert_eq!(GuardEventKind::AliasCollision.as_str(), "alias_collision");
+    }
 
     #[test]
     fn longest_key_first() {

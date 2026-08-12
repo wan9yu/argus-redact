@@ -7,7 +7,7 @@ use pyo3::types::PyDict;
 use argus_redact_core::check_restore_safety as core_check_safety;
 use argus_redact_core::restore_full as core_restore_full;
 use argus_redact_core::restore_full_guarded as core_restore_full_guarded;
-use argus_redact_core::{Anchor, GuardEventKind, RestoreOutcome, RestoreSession};
+use argus_redact_core::{Anchor, RestoreSession};
 
 /// Restore redacted text by replacing pseudonyms with originals (simple 2-arg form).
 /// Kept for back-compat; new callers should prefer `restore` with keyword args.
@@ -42,32 +42,6 @@ pub fn restore<'py>(
     signals.set_item("alias_collisions", alias_collisions)?;
 
     Ok((restored, signals.unbind()))
-}
-
-/// Map a [`GuardEventKind`] to its stable snake_case name. `#[non_exhaustive]`
-/// on the core enum means a future variant compiles here as "unknown" rather
-/// than breaking the build — the Python layer (a later addition) is expected
-/// to grow its own mapping in lockstep, this is just the fallback until it does.
-fn guard_event_kind_str(kind: &GuardEventKind) -> &'static str {
-    match kind {
-        GuardEventKind::GuardNoAnchor => "guard_no_anchor",
-        GuardEventKind::ProvenanceFailed => "provenance_failed",
-        GuardEventKind::EmptyKeyWithScope => "empty_key_with_scope",
-        GuardEventKind::OutOfScopePseudonym => "out_of_scope_pseudonym",
-        GuardEventKind::AliasCollision => "alias_collision",
-        _ => "unknown",
-    }
-}
-
-/// Map a [`RestoreOutcome`] to its stable snake_case name. Same
-/// `#[non_exhaustive]` fallback reasoning as [`guard_event_kind_str`].
-fn restore_outcome_str(outcome: &RestoreOutcome) -> &'static str {
-    match outcome {
-        RestoreOutcome::Blocked => "blocked",
-        RestoreOutcome::Partial => "partial",
-        RestoreOutcome::Complete => "complete",
-        _ => "unknown",
-    }
 }
 
 /// Guarded restore: the (P)rovenance + (S)cope checks live in
@@ -119,14 +93,14 @@ pub fn restore_guarded<'py>(
         .iter()
         .map(|event| {
             let d = PyDict::new(py);
-            d.set_item("kind", guard_event_kind_str(&event.kind))?;
+            d.set_item("kind", event.kind.as_str())?;
             d.set_item("count", event.count)?;
             d.set_item("tokens", event.detail.clone())?;
             Ok(d.unbind())
         })
         .collect::<PyResult<Vec<_>>>()?;
 
-    let outcome = restore_outcome_str(&result.outcome);
+    let outcome = result.outcome.as_str();
 
     Ok((result.restored, result.alias_collisions, events, outcome))
 }

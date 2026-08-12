@@ -30,8 +30,9 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
+use argus_redact_core::coverage::{finalize_entities, FilterScope};
 use argus_redact_core::grammar::normalize_grammar_en;
-use argus_redact_core::redact_l1::{detect_l1, redact_l1, RedactL1Args};
+use argus_redact_core::redact_l1::detect_l1;
 use argus_redact_core::replace::{replace, ReplaceArgs};
 use argus_redact_core::restore::restore_full;
 use argus_redact_core::seed::Salt;
@@ -41,7 +42,8 @@ use argus_redact_core::streaming::{
 };
 use argus_redact_core::typeinfo::{build_type_info, Config, EntityConfig};
 use argus_redact_core::{
-    detect_languages, kinship_exact, MtRandomSource, PseudoFactory, SELF_REF_PRONOUNS, TypeInfo,
+    detect_languages, kinship_exact, MtRandomSource, PatternMatch, PseudoFactory, SELF_REF_PRONOUNS,
+    TypeInfo,
 };
 
 // ── pseudonym RNG: the core's CPython-exact MT19937 (shared with PyO3) ───────
@@ -225,10 +227,47 @@ fn lookup_prefix(info: &[(String, argus_redact_core::TypeInfo)], type_: &str, fa
         .unwrap_or_else(|| fallback.to_string())
 }
 
+/// Resolve the per-type info map plus the `person` / `organization` prefixes from
+/// a set of entities — the `build_type_info` → `lookup_prefix` → `info_map`
+/// assembly shared by the one-shot [`redact_segment`] and the streaming redact
+/// closure (`registry_defaults = None` on both — built-in tables are the SSOT).
+/// A `config` prefix override threads through `build_type_info`, so it is picked
+/// up by the `lookup_prefix` reads.
+fn build_info(
+    entities: &[PatternMatch],
+    config: Option<&Config>,
+    langs: &[String],
+) -> (HashMap<String, TypeInfo>, String, String) {
+    let info_pairs = build_type_info(entities, config, langs, None);
+    let person_prefix = lookup_prefix(&info_pairs, "person", "P");
+    let org_prefix = lookup_prefix(&info_pairs, "organization", "O");
+    let info_map: HashMap<String, TypeInfo> = info_pairs.into_iter().collect();
+    (info_map, person_prefix, org_prefix)
+}
+
+/// Flatten a raw [`DetectL1Result`](argus_redact_core::redact_l1::DetectL1Result)
+/// into the fast-mode `{ entities, hints }` bundle both detect paths consume:
+/// `layer1 ++ person ++ regions ++ job_titles ++ framework` (Python's fast
+/// `_detect` extend order), carried together with the L1 `hints` as a
+/// [`DetectSpans`]. Shared by [`redact_segment`] (which then finalizes + redacts)
+/// and the streaming detect closure (which returns the bundle to the carry-window
+/// engine). Consumes the result by value so no entity vec is cloned.
+fn flatten_l1(d: argus_redact_core::redact_l1::DetectL1Result) -> DetectSpans {
+    let mut entities = d.layer1;
+    entities.extend(d.person);
+    entities.extend(d.regions);
+    entities.extend(d.job_titles);
+    entities.extend(d.framework);
+    DetectSpans {
+        entities,
+        hints: d.hints,
+    }
+}
+
 /// The resolved redaction params shared by the one-shot `redact` and the streaming
-/// `feed`/`flush` closures: the SAME detect → `build_type_info` → `redact_l1` path
-/// with one set of langs/names/config/salt/whitelist. Holding them once keeps the
-/// streaming closures byte-parity with the one-shot path (and with Python).
+/// `feed`/`flush` closures: the SAME detect → `build_info` → `finalize` → `replace`
+/// path with one set of langs/names/config/salt/whitelist. Holding them once keeps
+/// the streaming closures byte-parity with the one-shot path (and with Python).
 struct RedactParams {
     langs: Vec<String>,
     names: Vec<String>,
@@ -253,53 +292,73 @@ struct RedactSegmentWithSignals {
 /// Run the one-shot fast-mode redact path over `text`, optionally threading an
 /// `existing_key` for cross-chunk collision continuity (same original reuses the
 /// same fake — mirrors the Python `existing_key=` / `setdefault` merge). This is
-/// the SSOT for the one-shot [`redact`] entry point: `detect_l1` →
-/// `build_type_info` (`registry_defaults = None`) → `redact_l1` with the wasm
-/// MT19937 pseudo-factory. Returns the segment PLUS the `keep_downgraded` /
-/// `mask_collisions` signals (see [`RedactSegmentWithSignals`]).
-/// The streaming path uses a separate replace-based redact closure (no re-detect).
+/// the SSOT for the one-shot [`redact`] entry point.
+///
+/// Detection runs EXACTLY ONCE (`detect_l1`), matching the Python `redact()` glue
+/// (`_detect` → `_build_type_info` → `_replace_and_emit`) rather than the previous
+/// detect-twice shape (an outer `detect_l1` to seed `build_type_info`, then a
+/// `redact_l1` that re-detected internally). The single detection feeds BOTH
+/// [`build_info`] (`registry_defaults = None` — built-in tables) AND the
+/// post-detect pipeline, which reproduces `redact_l1`'s own steps over that one
+/// detection: `finalize_entities` (merge → self-reference filter → type filter →
+/// coverage restore, `apply_type_filter = true`, no `types` scope) → `replace`
+/// (wasm MT19937 pseudo-factory, no custom fakers) → the en-only
+/// `normalize_grammar_en` tail. Byte-identical to the old `redact_l1` call: the
+/// re-detect it dropped was deterministic (same raw entities), and the
+/// `type_info` / filter scope / grammar step are the same. Returns the segment
+/// PLUS the `keep_downgraded` / `mask_collisions` signals (see
+/// [`RedactSegmentWithSignals`]).
 fn redact_segment(
     params: &RedactParams,
     text: &str,
     existing_key: Option<&HashMap<String, String>>,
 ) -> Result<RedactSegmentWithSignals, String> {
-    // Detect first so build_type_info only resolves the types that actually
-    // appear — redact_l1 re-detects internally; this re-detect feeds type_info,
-    // matching the Python shim's build-type-info-over-detected-entities order.
-    let detected = detect_l1(text, &params.langs, &params.names).map_err(|e| e.to_string())?;
-    let mut entities = detected.layer1;
-    entities.extend(detected.person);
-    entities.extend(detected.regions);
-    entities.extend(detected.job_titles);
-    entities.extend(detected.framework);
+    // ONE detection, flattened into the fast-mode { entities, hints } bundle.
+    let DetectSpans { entities, hints } =
+        flatten_l1(detect_l1(text, &params.langs, &params.names).map_err(|e| e.to_string())?);
 
-    let info_pairs = build_type_info(&entities, params.config.as_ref(), &params.langs, None);
-    let person_prefix = lookup_prefix(&info_pairs, "person", "P");
-    let org_prefix = lookup_prefix(&info_pairs, "organization", "O");
-    let info_map: HashMap<String, TypeInfo> = info_pairs.into_iter().collect();
+    // type_info over the RAW (pre-finalize) entities — the exact set the old outer
+    // `build_type_info` resolved, so the per-type info is unchanged.
+    let (info_map, person_prefix, org_prefix) =
+        build_info(&entities, params.config.as_ref(), &params.langs);
 
-    let result = redact_l1(
-        RedactL1Args {
+    // Post-detect pipeline, reproducing `redact_l1`'s steps 2-5a over this single
+    // detection: merge → self-reference filter → type filter (none) → coverage
+    // restore. `apply_type_filter = true` + `FilterScope::from_hints(None, None,…)`
+    // are exactly the arguments `redact_l1` passed for the wasm (no-`types`) call.
+    let scope = FilterScope::from_hints(None, None, &hints);
+    let filtered = finalize_entities(entities, &hints, &scope, text, true);
+
+    let result = replace(
+        ReplaceArgs {
             text,
-            lang: &params.langs,
-            names: &params.names,
-            type_info: &info_map,
+            entities: &filtered,
             salt: params.salt.as_ref(),
             key: existing_key,
+            type_info: &info_map,
             person_prefix: &person_prefix,
             org_prefix: &org_prefix,
             unified_prefix: params.unified_prefix.as_deref(),
             keep_whitelist: &params.whitelist,
-            types: None,
-            types_exclude: None,
         },
         &WasmPseudoFactory,
         None, // no custom Python fakers in wasm
     )?;
 
+    // en-only grammar tail — a SEPARATE step exactly as `redact_l1` step 7 applies
+    // it (`replace` never calls grammar internally). `effective_lang` = lang[0]
+    // else "zh", mirroring the streaming redact closure and Python.
+    let effective_lang = params.langs.first().map(String::as_str).unwrap_or("zh");
+    let downstream = if effective_lang == "en" {
+        let originals: Vec<String> = result.key.values().cloned().collect();
+        normalize_grammar_en(&result.redacted, &originals)
+    } else {
+        result.redacted
+    };
+
     Ok(RedactSegmentWithSignals {
         segment: RedactSegment {
-            downstream_text: result.redacted,
+            downstream_text: downstream,
             key: result.key,
             aliases: result.aliases,
         },
@@ -325,6 +384,36 @@ pub fn init() {
     set_panic_hook();
 }
 
+/// Deserialize + validate a `redact` opts object once for BOTH the one-shot
+/// [`redact`] and the [`StreamingRedactor`] constructor. `undefined`/`null` yields
+/// [`RedactOpts::default`] ("use defaults"); otherwise unknown keys are rejected
+/// (via [`reject_unknown_opts`] — serde's `deny_unknown_fields` is a no-op under
+/// `serde-wasm-bindgen`), then the object is deserialized, then the mode is gated
+/// (wasm ships fast mode only — no NER / semantic adapters). Sharing this keeps the
+/// `invalid opts` message AND the multi-line mode-gate error string byte-identical
+/// across the two entry points.
+fn parse_opts(opts: JsValue) -> Result<RedactOpts, JsValue> {
+    let opts: RedactOpts = if opts.is_undefined() || opts.is_null() {
+        RedactOpts::default()
+    } else {
+        reject_unknown_opts(&opts)?;
+        serde_wasm_bindgen::from_value(opts)
+            .map_err(|e| JsValue::from_str(&format!("invalid opts: {e}")))?
+    };
+
+    // Mode gate: wasm ships fast mode only (no NER / semantic adapters).
+    match opts.mode.as_deref() {
+        None | Some("fast") => {}
+        Some(other) => {
+            return Err(JsValue::from_str(&format!(
+                "mode='{other}' is not supported in wasm — only mode='fast' (regex \
+                 + known-names) is available; NER/semantic layers need the Python build"
+            )));
+        }
+    }
+    Ok(opts)
+}
+
 /// Fast-mode redact. `text` is the source; `opts` is a JS object deserialized
 /// into [`RedactOpts`]. Returns `{ text, key, aliases, keep_downgraded,
 /// mask_collisions }` — the last two are additive compliance signals (a JS
@@ -344,26 +433,7 @@ pub fn init() {
 pub fn redact(text: &str, opts: JsValue) -> Result<JsValue, JsValue> {
     set_panic_hook();
 
-    let opts: RedactOpts = if opts.is_undefined() || opts.is_null() {
-        RedactOpts::default()
-    } else {
-        // Reject typo'd / unknown keys BEFORE deserializing (serde's
-        // deny_unknown_fields is a no-op under serde-wasm-bindgen).
-        reject_unknown_opts(&opts)?;
-        serde_wasm_bindgen::from_value(opts)
-            .map_err(|e| JsValue::from_str(&format!("invalid opts: {e}")))?
-    };
-
-    // Mode gate: wasm ships fast mode only (no NER / semantic adapters).
-    match opts.mode.as_deref() {
-        None | Some("fast") => {}
-        Some(other) => {
-            return Err(JsValue::from_str(&format!(
-                "mode='{other}' is not supported in wasm — only mode='fast' (regex \
-                 + known-names) is available; NER/semantic layers need the Python build"
-            )));
-        }
-    }
+    let opts = parse_opts(opts)?;
 
     let mut params = resolve_params(opts);
     // Resolve the `lang="auto"` sentinel against the actual text (Python parity —
@@ -548,33 +618,6 @@ struct GuardedRestoreJs {
     events: Vec<GuardEventJs>,
 }
 
-/// Map a core [`GuardEventKind`] to its stable snake_case name — identical to
-/// the PyO3 binding's `guard_event_kind_str`. `#[non_exhaustive]` on the core
-/// enum means a future variant compiles here as `"unknown"` rather than
-/// breaking the build; this mapping is expected to grow in lockstep.
-fn guard_event_kind_str(kind: &GuardEventKind) -> &'static str {
-    match kind {
-        GuardEventKind::GuardNoAnchor => "guard_no_anchor",
-        GuardEventKind::ProvenanceFailed => "provenance_failed",
-        GuardEventKind::EmptyKeyWithScope => "empty_key_with_scope",
-        GuardEventKind::OutOfScopePseudonym => "out_of_scope_pseudonym",
-        GuardEventKind::AliasCollision => "alias_collision",
-        _ => "unknown",
-    }
-}
-
-/// Map a core [`RestoreOutcome`] to its stable snake_case name — identical to
-/// the PyO3 binding's `restore_outcome_str`. Same `#[non_exhaustive]`
-/// fallback reasoning as [`guard_event_kind_str`].
-fn restore_outcome_str(outcome: &RestoreOutcome) -> &'static str {
-    match outcome {
-        RestoreOutcome::Blocked => "blocked",
-        RestoreOutcome::Partial => "partial",
-        RestoreOutcome::Complete => "complete",
-        _ => "unknown",
-    }
-}
-
 /// Anchor-taking guarded restore — the browser-facing counterpart to the
 /// PyO3 `restore_guarded` binding, and the **fail-closed, Python-parity**
 /// counterpart to the unguarded [`restore`] (which applies the key with no
@@ -624,9 +667,9 @@ pub fn restore_guarded(
     if anchor.is_undefined() || anchor.is_null() {
         let out = GuardedRestoreJs {
             restored: text.to_string(),
-            outcome: restore_outcome_str(&RestoreOutcome::Blocked).to_string(),
+            outcome: RestoreOutcome::Blocked.as_str().to_string(),
             events: vec![GuardEventJs {
-                kind: guard_event_kind_str(&GuardEventKind::GuardNoAnchor).to_string(),
+                kind: GuardEventKind::GuardNoAnchor.as_str().to_string(),
                 count: key.len(),
                 tokens: None,
             }],
@@ -647,12 +690,12 @@ pub fn restore_guarded(
 
     let out = GuardedRestoreJs {
         restored: result.restored,
-        outcome: restore_outcome_str(&result.outcome).to_string(),
+        outcome: result.outcome.as_str().to_string(),
         events: result
             .events
             .iter()
             .map(|ev| GuardEventJs {
-                kind: guard_event_kind_str(&ev.kind).to_string(),
+                kind: ev.kind.as_str().to_string(),
                 count: ev.count,
                 tokens: ev.detail.clone(),
             })
@@ -720,26 +763,7 @@ impl StreamingRedactor {
     pub fn new(opts: JsValue) -> Result<StreamingRedactor, JsValue> {
         set_panic_hook();
 
-        let opts: RedactOpts = if opts.is_undefined() || opts.is_null() {
-            RedactOpts::default()
-        } else {
-            // Reject typo'd / unknown keys BEFORE deserializing (serde's
-            // deny_unknown_fields is a no-op under serde-wasm-bindgen).
-            reject_unknown_opts(&opts)?;
-            serde_wasm_bindgen::from_value(opts)
-                .map_err(|e| JsValue::from_str(&format!("invalid opts: {e}")))?
-        };
-
-        // Mode gate: wasm streaming ships fast mode only.
-        match opts.mode.as_deref() {
-            None | Some("fast") => {}
-            Some(other) => {
-                return Err(JsValue::from_str(&format!(
-                    "mode='{other}' is not supported in wasm — only mode='fast' (regex \
-                     + known-names) is available; NER/semantic layers need the Python build"
-                )));
-            }
-        }
+        let opts = parse_opts(opts)?;
 
         // lang="auto" needs the FULL text to script-detect (see `resolve_auto_lang`);
         // a stream has none at construction, so refuse it loudly rather than pass
@@ -773,17 +797,7 @@ impl StreamingRedactor {
         let detect_params = Rc::clone(&params);
         let detect: BoxedDetect = Box::new(move |text: &str| {
             match detect_l1(text, &detect_params.langs, &detect_params.names) {
-                Ok(r) => {
-                    let mut entities = r.layer1;
-                    entities.extend(r.person);
-                    entities.extend(r.regions);
-                    entities.extend(r.job_titles);
-                    entities.extend(r.framework);
-                    DetectSpans {
-                        entities,
-                        hints: r.hints,
-                    }
-                }
+                Ok(r) => flatten_l1(r),
                 // A detect failure (e.g. oversize buffer) yields no spans → the
                 // carry-window falls back to its non-entity-aware cut; the redact
                 // closure surfaces the real error on emit.
@@ -801,15 +815,11 @@ impl StreamingRedactor {
         let redact_key = Rc::clone(&accumulated_key);
         let redact: BoxedRedact = Box::new(move |text: &str, spans: &DetectSpans| {
             let existing = redact_key.borrow();
-            let info_pairs = build_type_info(
+            let (info_map, person_prefix, org_prefix) = build_info(
                 &spans.entities,
                 redact_params.config.as_ref(),
                 &redact_params.langs,
-                None,
             );
-            let person_prefix = lookup_prefix(&info_pairs, "person", "P");
-            let org_prefix = lookup_prefix(&info_pairs, "organization", "O");
-            let info_map: HashMap<String, TypeInfo> = info_pairs.into_iter().collect();
             let result = replace(
                 ReplaceArgs {
                     text,
