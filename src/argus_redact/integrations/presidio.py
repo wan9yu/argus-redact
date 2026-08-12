@@ -40,6 +40,24 @@ _PRESIDIO_TYPE_MAP = {
 }
 
 
+def _map_presidio(text, results, factory):
+    """Map Presidio analyzer results to entities via `factory` (PatternMatch or NEREntity).
+
+    Both share the text/type/start/end/confidence kwarg signature; the type-map
+    fallback lower-cases an unmapped Presidio entity_type.
+    """
+    return [
+        factory(
+            text=text[r.start : r.end],
+            type=_PRESIDIO_TYPE_MAP.get(r.entity_type, r.entity_type.lower()),
+            start=r.start,
+            end=r.end,
+            confidence=r.score,
+        )
+        for r in results
+    ]
+
+
 class PresidioBridge:
     """Bridge between Presidio detection and argus-redact reversible replacement.
 
@@ -98,18 +116,7 @@ class PresidioBridge:
         analyzer = self._get_analyzer()
         results = analyzer.analyze(text=text, language=language)
 
-        entities = []
-        for r in results:
-            mapped_type = _PRESIDIO_TYPE_MAP.get(r.entity_type, r.entity_type.lower())
-            entities.append(
-                PatternMatch(
-                    text=text[r.start : r.end],
-                    type=mapped_type,
-                    start=r.start,
-                    end=r.end,
-                    confidence=r.score,
-                )
-            )
+        entities = _map_presidio(text, results, PatternMatch)
 
         # Route through public redact() — inherits all pipeline guarantees.
         # `entities` may be empty (Presidio found nothing); _pre_detected=[]
@@ -210,16 +217,4 @@ class PresidioNERAdapter(NERAdapter):
             self.load()
 
         results = self._analyzer.analyze(text=text, language=self._language)
-        entities = []
-        for r in results:
-            mapped_type = _PRESIDIO_TYPE_MAP.get(r.entity_type, r.entity_type.lower())
-            entities.append(
-                NEREntity(
-                    text=text[r.start : r.end],
-                    type=mapped_type,
-                    start=r.start,
-                    end=r.end,
-                    confidence=r.score,
-                )
-            )
-        return entities
+        return _map_presidio(text, results, NEREntity)
