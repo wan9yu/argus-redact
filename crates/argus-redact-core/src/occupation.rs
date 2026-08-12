@@ -172,9 +172,7 @@ fn occupation_candidates(chars: &[char]) -> Vec<(String, usize, usize, bool)> {
     // occupation name_set / first_chars / max_len straight off the config, so the
     // loop is no longer hand-rolled here. `is_lexicon = true` for every span.
     for (cand, start, end) in candidates_cjk(chars, occupation_detector()) {
-        for c in consumed.iter_mut().take(end).skip(start) {
-            *c = true;
-        }
+        consumed[start..end].fill(true);
         out.push((cand, start, end, true));
     }
 
@@ -204,9 +202,7 @@ fn occupation_candidates(chars: &[char]) -> Vec<(String, usize, usize, bool)> {
             if end - start >= 2 && (start..end).all(|k| !consumed[k]) {
                 let cand: String = chars[start..end].iter().collect();
                 out.push((cand, start, end, false));
-                for c in consumed.iter_mut().take(end).skip(start) {
-                    *c = true;
-                }
+                consumed[start..end].fill(true);
             }
         }
         j += 1;
