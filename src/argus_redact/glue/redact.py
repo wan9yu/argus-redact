@@ -193,8 +193,6 @@ def lang_capabilities() -> dict[str, dict[str, object]]:
     three faces cannot drift: they carried a byte-identical loop, and HTTP `/info`
     used the raw adapter-module ``find_spec`` and over-claimed the engine.
     """
-    import importlib
-
     from argus_redact.lang.shared.patterns import PATTERNS as SHARED
 
     caps: dict[str, dict[str, object]] = {}

@@ -155,7 +155,7 @@ def expand_aliases(key: dict, lang: str | None = None) -> dict:
     # name picks its own script, so a MIXED-language key (e.g. one zh name + one Latin
     # name) doesn't force every name through the same extractor/titles. Extraction is
     # pure (same original → same surname), so the surname is extracted ONCE here and
-    # the emit pass below reuses it — one extract() per Person.
+    # stored in `person_config` for the emit pass to reuse — one extract() per Person.
     #
     # surname_originals records which surnames are shared by ≥2 DISTINCT Person
     # originals: a bare {surname}{title} alias for a shared surname is ambiguous — it
@@ -163,26 +163,23 @@ def expand_aliases(key: dict, lang: str | None = None) -> dict:
     # Emitting it would silently bind the alias to the first-iterated Person = a
     # confident wrong-identity restore. Surnames are extracted with each Person's OWN
     # extractor, so a zh surname and an en surname never spuriously collide.
-    person_config: dict[str, tuple[str, tuple[str, ...], object]] = {}
+    person_config: dict[str, tuple[str, tuple[str, ...], str]] = {}
     surname_originals: dict[str, set[str]] = {}
-    person_surname: dict[str, str] = {}
     for pseudonym, original in key.items():
         if not pseudonym.startswith("P-"):
             continue
         lang_code = lang if lang is not None else _detect_name_lang(original)
         titles, extract = _titles_and_extract(lang_code)
-        person_config[pseudonym] = (lang_code, titles, extract)
         surname = extract(original)
+        person_config[pseudonym] = (lang_code, titles, surname)
         if surname:
             surname_originals.setdefault(surname, set()).add(original)
-            person_surname[pseudonym] = surname
 
     for pseudonym, original in key.items():
         config = person_config.get(pseudonym)
         if config is None:
             continue
-        lang_code, titles, _ = config
-        surname = person_surname.get(pseudonym)
+        lang_code, titles, surname = config
         if not surname:
             continue
         if len(surname_originals.get(surname, ())) > 1:
