@@ -24,9 +24,10 @@ import secrets
 import warnings
 from typing import TYPE_CHECKING, Any
 
-from argus_redact import __version__, redact, restore
+from argus_redact import __version__, restore
 from argus_redact._core_loader import _core
 from argus_redact.exceptions import SecurityWarning
+from argus_redact.glue.redact import _redact_impl
 from argus_redact.pure.restore import RestoreGuardError
 from argus_redact.pure.wire import common_report_fields, risk_payload
 
@@ -266,7 +267,7 @@ def _join_and_parse(chunks: list[bytes]) -> dict[str, Any]:
     return _parse_json_object(b"".join(chunks))
 
 
-async def _run_scan(request, fn):
+async def _run_scan(request, fn, *, cancellable):
     """Offload a blocking core scan off the event loop under an admission
     ceiling, an in-flight bound, and an honest per-request deadline. `fn` is a
     zero-arg callable (a `functools.partial` binding redact/restore and its
@@ -301,17 +302,19 @@ async def _run_scan(request, fn):
     rate-limit upstream. Raises `_ScanTimeout` on the deadline (mapped to 504 by
     the caller).
 
-    Cooperative cancellation (v0.8.11): a FRESH per-scan `_core.CancelToken` is
-    bound into `fn` and tripped from any of THREE external events, so the detached
-    worker aborts at its next poll and frees its slot early — reclaiming CPU:
-    (1) the request deadline fires; (2) the client DISCONNECTS mid-scan (the handler
-    watches the ASGI receive channel and raises `_ClientDisconnected` → 499); or
-    (3) the server SHUTS DOWN (`_lifespan` trips every token in `app.state.live_tokens`
-    so workers abort and the app task group drains promptly). This applies ONLY to
-    the `/redact` fast-mode-L1 path (the only path with a cancellable `detect_l1`
-    scan); `/restore` accepts the token but drops it (no `detect_l1`, so nothing to
-    reclaim — its worker still runs to completion, but a disconnect/shutdown/deadline
-    still ends the request promptly). The token is per-scan by construction — a
+    Cooperative cancellation (v0.8.11): only `cancellable=True` scans get a FRESH
+    per-scan `_core.CancelToken` bound into `fn`; it is tripped from any of THREE
+    external events, so the detached worker aborts at its next poll and frees its
+    slot early — reclaiming CPU: (1) the request deadline fires; (2) the client
+    DISCONNECTS mid-scan (the handler watches the ASGI receive channel and raises
+    `_ClientDisconnected` → 499); or (3) the server SHUTS DOWN (`_lifespan` trips
+    every token in `app.state.live_tokens` so workers abort and the app task group
+    drains promptly). Only the `/redact` fast-mode-L1 path passes `cancellable=True`
+    (the only path with a cancellable `detect_l1` scan). `/restore` passes
+    `cancellable=False`: no token is created, so its worker always runs to
+    completion (no `detect_l1` to abort), while a disconnect/shutdown/deadline still
+    ends the request promptly. This is an INTERNAL server-serving seam, not part of
+    the public `redact()`/`restore()` API. The token is per-scan by construction — a
     shared or module-global token would abort unrelated in-flight scans.
     """
     global _admitted_scans
@@ -339,12 +342,14 @@ async def _run_scan(request, fn):
     _admitted_scans += 1
 
     # A FRESH cancellation token for THIS scan — never shared or module-global (a
-    # shared one would abort unrelated in-flight scans). Bound into `fn` so the
-    # redact scan can poll it; `/restore`'s `fn` accepts and drops it (no
-    # detect_l1). Tripped in the deadline branch below to reclaim CPU. Guarded on
-    # `_core` so a partial install (no compiled core) does not crash here — the
-    # server needs the core to redact at all, but restore-only use must not break.
-    token = _core.CancelToken() if _core is not None else None
+    # shared one would abort unrelated in-flight scans). Only a `cancellable` scan
+    # (the `/redact` fast-mode-L1 path) gets one, bound into `fn` so the redact scan
+    # can poll it; a non-cancellable scan (`/restore`) gets token=None and skips
+    # every token branch below with no other edits. Tripped in the deadline branch
+    # below to reclaim CPU. Guarded on `_core` so a partial install (no compiled
+    # core) does not crash here — the server needs the core to redact at all, but
+    # restore-only use must not break.
+    token = _core.CancelToken() if (cancellable and _core is not None) else None
     if token is not None:
         fn = functools.partial(fn, cancel_token=token)
 
@@ -524,10 +529,13 @@ async def handle_redact(request: Request) -> JSONResponse:
     # call. `_run_scan` also enforces the in-flight bound and the honest 504
     # deadline (see its docstring).
     try:
+        # The cancellable path uses the internal `_redact_impl` (NOT the public
+        # `redact`, whose frozen Layer-1 signature has no `cancel_token`): `_run_scan`
+        # binds a fresh per-scan token into this partial when `cancellable=True`.
         result = await _run_scan(
             request,
             functools.partial(
-                redact,
+                _redact_impl,
                 text,
                 lang=lang,
                 mode=mode,
@@ -540,6 +548,7 @@ async def handle_redact(request: Request) -> JSONResponse:
                 types=types,
                 types_exclude=types_exclude,
             ),
+            cancellable=True,
         )
     except _SCAN_CONTROL_TYPES as e:
         return _scan_control_response(e)
@@ -687,6 +696,7 @@ async def handle_restore(request: Request) -> JSONResponse:
                 strict=strict,
                 detailed=True,
             ),
+            cancellable=False,
         )
     except _SCAN_CONTROL_TYPES as e:
         return _scan_control_response(e)

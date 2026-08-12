@@ -144,7 +144,7 @@ class TestScanTimeout:
             assert release.wait(timeout=10), "scan gate was never released"
             return "redacted", {}
 
-        monkeypatch.setattr(server_module, "redact", _never_returns)
+        monkeypatch.setattr(server_module, "_redact_impl", _never_returns)
         monkeypatch.setattr(server_module, "_SCAN_TIMEOUT_SECONDS", 0.1)
 
         app = _make_app()
@@ -219,7 +219,7 @@ class TestCapacityLimiterBinds:
             assert gate.wait(timeout=10), "scan gate was never released"
             return "redacted", {}
 
-        monkeypatch.setattr(server_module, "redact", _gated)
+        monkeypatch.setattr(server_module, "_redact_impl", _gated)
         # A large deadline so the timeout never interferes with this test.
         monkeypatch.setattr(server_module, "_SCAN_TIMEOUT_SECONDS", 30.0)
         # Bound of exactly one in-flight scan.
@@ -296,7 +296,7 @@ class TestNoLeakedSlotAfterTimeout:
             assert release.wait(timeout=10), "scan gate was never released"
             return "redacted", {}
 
-        monkeypatch.setattr(server_module, "redact", _slow_scan)
+        monkeypatch.setattr(server_module, "_redact_impl", _slow_scan)
         monkeypatch.setattr(server_module, "_SCAN_TIMEOUT_SECONDS", 0.05)
         limiter = anyio.CapacityLimiter(1)
         monkeypatch.setattr(server_module, "_scan_limiter", limiter)
@@ -359,7 +359,7 @@ class TestOverloadShedsHonestly:
             assert release.wait(timeout=10), "scan gate was never released"
             return "redacted", {}
 
-        monkeypatch.setattr(server_module, "redact", _gated)
+        monkeypatch.setattr(server_module, "_redact_impl", _gated)
         monkeypatch.setattr(server_module, "_SCAN_TIMEOUT_SECONDS", 0.1)
         limiter = anyio.CapacityLimiter(1)  # exactly one running scan allowed
         monkeypatch.setattr(server_module, "_scan_limiter", limiter)
@@ -452,7 +452,7 @@ class TestQueueBackpressure:
             assert release.wait(timeout=10), "scan gate was never released"
             return "redacted", {}
 
-        monkeypatch.setattr(server_module, "redact", _gated)
+        monkeypatch.setattr(server_module, "_redact_impl", _gated)
         # Large deadline: this test is about admission, not the 504 timeout.
         monkeypatch.setattr(server_module, "_SCAN_TIMEOUT_SECONDS", 30.0)
         # One running scan at a time; ceiling of N total so N-1 queue.

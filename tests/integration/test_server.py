@@ -434,8 +434,9 @@ class TestServerConcurrency:
             return "redacted", {}
 
         # String target (not a `server as server_module` handle) so the local
-        # import stays unused-free; the handler resolves `redact` at call time.
-        monkeypatch.setattr("argus_redact.server.redact", _slow_redact)
+        # import stays unused-free; the handler resolves `_redact_impl` (the
+        # internal scan seam the /redact path calls) at call time.
+        monkeypatch.setattr("argus_redact.server._redact_impl", _slow_redact)
         # Independent of whatever ARGUS_API_KEY state another test in this
         # module left behind (TestServerAuth's module-scoped fixture sets it
         # for the whole file) — this test wants the unauthenticated app.

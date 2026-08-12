@@ -126,7 +126,7 @@ class TestServerSurvivesAbort:
         from argus_redact import server as server_module
 
         monkeypatch.delenv("ARGUS_API_KEY", raising=False)
-        original_redact = server_module.redact
+        original_redact = server_module._redact_impl
 
         def _aborting_scan(*args, **kwargs):
             # Simulate the core surfacing a cooperative abort from inside the worker
@@ -134,7 +134,7 @@ class TestServerSurvivesAbort:
             # handler's `except ScanAborted` via `raise holder["error"]`).
             raise server_module.ScanAborted("detection cancelled")
 
-        monkeypatch.setattr(server_module, "redact", _aborting_scan)
+        monkeypatch.setattr(server_module, "_redact_impl", _aborting_scan)
 
         app = _make_app()
         transport = ASGITransport(app=app)
@@ -150,7 +150,7 @@ class TestServerSurvivesAbort:
                 assert health.status_code == 200
                 assert health.json() == {"status": "ok"}
 
-                monkeypatch.setattr(server_module, "redact", original_redact)
+                monkeypatch.setattr(server_module, "_redact_impl", original_redact)
                 healthy_redact = await ac.post("/redact", json={"text": _PII_TEXT, "mode": "fast"})
                 assert healthy_redact.status_code == 200
                 assert "redacted" in healthy_redact.json()
@@ -189,7 +189,7 @@ class TestPerScanTokenIsolation:
                 raise server_module.ScanAborted("detection cancelled")
             return f"redacted-{text}", {}
 
-        monkeypatch.setattr(server_module, "redact", _scan)
+        monkeypatch.setattr(server_module, "_redact_impl", _scan)
 
         app = _make_app()
         transport = ASGITransport(app=app)
@@ -264,7 +264,7 @@ class TestCpuReclamationOnDeadline:
                 time.sleep(0.005)
             raise server_module.ScanAborted("detection cancelled")
 
-        monkeypatch.setattr(server_module, "redact", _cooperative_scan)
+        monkeypatch.setattr(server_module, "_redact_impl", _cooperative_scan)
 
         app = _make_app()
         transport = ASGITransport(app=app)
@@ -331,7 +331,7 @@ class TestCpuReclamationOnClientDisconnect:
                 time.sleep(0.005)
             raise server_module.ScanAborted("detection cancelled")
 
-        monkeypatch.setattr(server_module, "redact", _cooperative_scan)
+        monkeypatch.setattr(server_module, "_redact_impl", _cooperative_scan)
 
         app = _make_app()
         async with _lifespan_running(app):
@@ -345,7 +345,9 @@ class TestCpuReclamationOnClientDisconnect:
 
             request = SimpleNamespace(app=app, receive=_receive)
             scan_task = asyncio.create_task(
-                server_module._run_scan(request, functools.partial(server_module.redact))
+                server_module._run_scan(
+                    request, functools.partial(server_module._redact_impl), cancellable=True
+                )
             )
 
             # The scan is genuinely mid-flight and its token is registered.
@@ -389,7 +391,7 @@ class TestClientDisconnectMapsTo499:
 
         monkeypatch.delenv("ARGUS_API_KEY", raising=False)
 
-        async def _disconnecting_scan(request, fn):
+        async def _disconnecting_scan(request, fn, *, cancellable):
             raise server_module._ClientDisconnected("client disconnected before the scan completed")
 
         monkeypatch.setattr(server_module, "_run_scan", _disconnecting_scan)
@@ -433,7 +435,7 @@ class TestDisconnectWatchIsInvisibleWithoutADisconnect:
         def _fixed_redact(*args, **kwargs):
             return "REDACTED", {"P-1": "张伯"}
 
-        monkeypatch.setattr(server_module, "redact", _fixed_redact)
+        monkeypatch.setattr(server_module, "_redact_impl", _fixed_redact)
 
         app = _make_app()
         transport = ASGITransport(app=app)
@@ -468,7 +470,7 @@ class TestDisconnectWatchIsInvisibleWithoutADisconnect:
                 time.sleep(0.005)
             raise server_module.ScanAborted("detection cancelled")
 
-        monkeypatch.setattr(server_module, "redact", _cooperative_scan)
+        monkeypatch.setattr(server_module, "_redact_impl", _cooperative_scan)
 
         app = _make_app()
         transport = ASGITransport(app=app)
@@ -516,7 +518,7 @@ class TestCpuReclamationOnShutdown:
                 time.sleep(0.005)
             raise server_module.ScanAborted("detection cancelled")
 
-        monkeypatch.setattr(server_module, "redact", _cooperative_scan)
+        monkeypatch.setattr(server_module, "_redact_impl", _cooperative_scan)
 
         never_disconnect = anyio.Event()  # never set: the client stays for the test
 
@@ -536,7 +538,9 @@ class TestCpuReclamationOnShutdown:
                 )
                 request = SimpleNamespace(app=app, receive=_receive)
                 scan_task = asyncio.create_task(
-                    server_module._run_scan(request, functools.partial(server_module.redact))
+                    server_module._run_scan(
+                        request, functools.partial(server_module._redact_impl), cancellable=True
+                    )
                 )
                 await _yield_until(entered.is_set)
                 await _yield_until(lambda: len(app.state.live_tokens) == 1)
@@ -574,7 +578,7 @@ class TestShutdownRegistryHygiene:
         def _fixed_redact(*args, **kwargs):
             return "REDACTED", {}
 
-        monkeypatch.setattr(server_module, "redact", _fixed_redact)
+        monkeypatch.setattr(server_module, "_redact_impl", _fixed_redact)
 
         app = _make_app()
         async with _lifespan_running(app):
@@ -582,7 +586,9 @@ class TestShutdownRegistryHygiene:
             # receive=None: no ASGI channel, so the disconnect watcher no-ops and the
             # scan completes normally (the code path a non-HTTP caller would take).
             request = SimpleNamespace(app=app, receive=None)
-            result = await server_module._run_scan(request, functools.partial(server_module.redact))
+            result = await server_module._run_scan(
+                request, functools.partial(server_module._redact_impl), cancellable=True
+            )
             assert result == ("REDACTED", {})
             # The completed scan discarded its own token: registry empty after drain.
             assert len(registry) == 0, "a completed scan left its token in the registry"

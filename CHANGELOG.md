@@ -58,11 +58,12 @@ No public API was removed. Two behaviour changes need attention (see below): mal
   stays deliberately narrow: this reclaims CPU **only on the `/redact` fast-mode-L1 path** — the only path with
   a cancellable detect scan — and the granularity is between-phase / between-pattern (a single detect phase
   over a >1 MiB input is the coarse worst case). It does **not** reclaim on `/restore` (a linear key
-  substitution with no detect scan; the endpoint accepts a cancel token but drops it as a no-op — a
+  substitution with no detect scan; that path is not cancellable and no token is created for it — a
   disconnect/shutdown still ends the request promptly, but its worker runs to completion). This is not
   endpoint-wide or symmetric reclamation. The token is fresh per scan, so tripping one request's scan never
-  affects another's. `argus_redact.redact(...)` gains an optional `cancel_token` keyword for embedders who want
-  the same cooperative abort; the default (`None`) is byte-identical to the previous behaviour.
+  affects another's. Cancellation is an internal HTTP-server mechanism only: the public `redact()` and
+  `restore()` signatures are unchanged (Layer 1 stays frozen), and no cancellation keyword is exposed on the
+  library API.
 
 ## v0.8.10 — compliance, spelled out
 

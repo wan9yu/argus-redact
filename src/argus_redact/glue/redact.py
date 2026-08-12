@@ -774,7 +774,6 @@ def redact(
     types_exclude: list[str] | None = None,
     unified_prefix: str | None = None,
     strict: bool = False,
-    cancel_token: object | None = None,
     _pre_detected: "list[PatternMatch] | None" = None,
 ):
     """Detect and replace PII in text.
@@ -792,16 +791,56 @@ def redact(
         profile: Compliance profile name ("default", "pipl", "gdpr", "hipaa").
         types: Whitelist of PII type names to detect.
         types_exclude: Blacklist of PII type names to skip.
-        cancel_token: Optional ``_core.CancelToken`` for cooperative cancellation
-            of the L1 detect scan. Tripped from another thread (``token.cancel()``),
-            it makes an in-flight fast-mode scan raise ``_core.ScanAborted`` at its
-            next poll boundary — the HTTP server uses this to reclaim CPU when a
-            request hits its deadline. None (the default) never cancels.
 
     Returns:
         (redacted_text, key) by default.
         (redacted_text, key, details) when detailed=True.
         RedactReport when report=True.
+    """
+    return _redact_impl(
+        text,
+        key=key,
+        lang=lang,
+        mode=mode,
+        salt=salt,
+        config=config,
+        names=names,
+        detailed=detailed,
+        report=report,
+        with_types=with_types,
+        profile=profile,
+        types=types,
+        types_exclude=types_exclude,
+        unified_prefix=unified_prefix,
+        strict=strict,
+        cancel_token=None,
+        _pre_detected=_pre_detected,
+    )
+
+
+def _redact_impl(
+    text: str,
+    *,
+    key: dict | str | None = None,
+    lang: str | list[str] = "zh",
+    mode: str = "fast",
+    salt: int | bytes | None = None,
+    config: dict | str | None = None,
+    names: list[str] | None = None,
+    detailed: bool = False,
+    report: bool = False,
+    with_types: bool = False,
+    profile: str | None = None,
+    types: list[str] | None = None,
+    types_exclude: list[str] | None = None,
+    unified_prefix: str | None = None,
+    strict: bool = False,
+    cancel_token: object | None = None,
+    _pre_detected: "list[PatternMatch] | None" = None,
+):
+    """Internal full redact pipeline; ``cancel_token`` opts the L1 scan into
+    cooperative cancellation for the HTTP server. Public ``redact()`` wraps this
+    with ``cancel_token=None``.
     """
     if not isinstance(text, str):
         raise TypeError(f"text must be a string, got {type(text).__name__}")
