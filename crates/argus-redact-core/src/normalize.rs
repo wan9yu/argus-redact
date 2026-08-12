@@ -178,6 +178,43 @@ pub(crate) fn is_plain_digit_char(c: char) -> bool {
     c.is_ascii_digit() || (c.is_numeric() && !is_nfkc_digit_yielding_non_decimal(c))
 }
 
+/// Walk `chars` and collect each maximal digit run. A run begins at a char that
+/// `classify` maps to `Some`, extends over further `Some` chars and interior
+/// [`is_digit_sep`] separators, and ends at the first char that is neither;
+/// separators are consumed but excluded from the run. Each run entry is
+/// `(char_index, payload)`, where `payload` is whatever `classify` returned for
+/// that char — so a caller reads its per-char classification straight off the
+/// run instead of re-deriving it.
+///
+/// This is the one boundary rule the two digit-normalization callers share
+/// ([`suppressed_nfkc_folds`] and [`normalize_digit_sequences`]); they differ
+/// only in their per-char `classify` and their fold threshold.
+fn digit_runs<T>(chars: &[char], classify: impl Fn(char) -> Option<T>) -> Vec<Vec<(usize, T)>> {
+    let n = chars.len();
+    let mut runs: Vec<Vec<(usize, T)>> = Vec::new();
+    let mut i = 0;
+    while i < n {
+        let Some(first) = classify(chars[i]) else {
+            i += 1;
+            continue;
+        };
+        let mut run: Vec<(usize, T)> = vec![(i, first)];
+        i += 1;
+        while i < n {
+            if let Some(payload) = classify(chars[i]) {
+                run.push((i, payload));
+                i += 1;
+            } else if is_digit_sep(chars[i]) {
+                i += 1; // interior separator bridges the run
+            } else {
+                break; // run terminator
+            }
+        }
+        runs.push(run);
+    }
+    runs
+}
+
 /// Decide, per source char, whether the step-3 NFKC fold of a `No`/`So`
 /// digit-yielder must be SUPPRESSED.
 ///
@@ -193,33 +230,28 @@ pub(crate) fn is_plain_digit_char(c: char) -> bool {
 /// * `x²³` → 2 of 2 → majority → folded to `x23`, unchanged from before.
 fn suppressed_nfkc_folds(chars: &[char]) -> Option<Vec<bool>> {
     let n = chars.len();
+    // payload: is this run member an NFKC digit-yielding non-decimal (an `exotic`
+    // that would manufacture an ASCII digit) rather than a plain digit?
+    let runs = digit_runs(chars, |c| {
+        if is_nfkc_digit_yielding_non_decimal(c) {
+            Some(true)
+        } else if is_plain_digit_char(c) {
+            Some(false)
+        } else {
+            None
+        }
+    });
     let mut mask: Option<Vec<bool>> = None;
-    let mut i = 0;
-    while i < n {
-        let exotic = is_nfkc_digit_yielding_non_decimal(chars[i]);
-        if !exotic && !is_plain_digit_char(chars[i]) {
-            i += 1;
-            continue;
-        }
-        let mut exotic_idx: Vec<usize> = Vec::new();
-        let mut total = 0usize;
-        while i < n {
-            if is_nfkc_digit_yielding_non_decimal(chars[i]) {
-                exotic_idx.push(i);
-                total += 1;
-            } else if is_plain_digit_char(chars[i]) {
-                total += 1;
-            } else if !is_digit_sep(chars[i]) {
-                break;
-            }
-            i += 1;
-        }
+    for run in &runs {
         // Strict majority to fold — a minority of non-decimals in a run of real
         // digits is a neighbour (footnote marker, fraction, unit), not part of
         // the number, and folding it fuses the two and fails the regex open.
-        if !exotic_idx.is_empty() && exotic_idx.len() * 2 <= total {
+        // `run.len()` is the run's total digit count (separators are excluded).
+        let exotic: Vec<usize> =
+            run.iter().filter(|&&(_, ex)| ex).map(|&(idx, _)| idx).collect();
+        if !exotic.is_empty() && exotic.len() * 2 <= run.len() {
             let m = mask.get_or_insert_with(|| vec![false; n]);
-            for idx in exotic_idx {
+            for idx in exotic {
                 m[idx] = true;
             }
         }
@@ -232,43 +264,27 @@ pub(crate) fn is_digit_sep(c: char) -> bool {
     matches!(c, ' '|'\t'|'.'|'-'|'/'|'，'|'、'|'·'|';'|'；'|':'|'：')
 }
 
-fn digit_value(c: char) -> Option<char> {
-    // Python: _CN_DIGIT_MAP.get(c) or (c if c.isdigit() else None)
-    // `is_numeric()` (Nd|Nl|No) == Python str.isdigit() (Numeric_Type Decimal/Digit)
-    // for every char that reaches this step: it runs AFTER NFKC, which folds the
-    // categories where the two differ (Roman numerals Nl → letters, vulgar
-    // fractions No-Numeric → "1⁄2"). The surviving digits are Nd (incl. Arabic-Indic,
-    // Devanagari, …), where both agree. Matches Python's `ch if ch.isdigit()` —
-    // the non-ASCII digit char is kept as-is (not folded to ASCII), same as Python.
-    cn_digit(c).or(if c.is_numeric() { Some(c) } else { None })
-}
-
 fn normalize_digit_sequences(chars: &mut [char]) {
-    let n = chars.len();
-    let mut i = 0;
-    while i < n {
-        if digit_value(chars[i]).is_none() {
-            i += 1;
-            continue;
+    // payload: (ASCII fold value, is this a CJK digit?). This inlines the old
+    // `digit_value`: `_CN_DIGIT_MAP.get(c)` first, else `c` itself when numeric —
+    // computing `cn_digit`/`is_numeric` ONCE per char and carrying both the fold
+    // value and the CJK flag, so neither is recomputed while counting or folding.
+    //
+    // `is_numeric()` (Nd|Nl|No) == Python str.isdigit() for every char that reaches
+    // this step: it runs AFTER NFKC, which folds the categories where the two differ
+    // (Roman numerals Nl → letters, vulgar fractions No → "1⁄2"). A surviving
+    // non-ASCII digit (Arabic-Indic, Devanagari, …) is kept as-is, not folded to
+    // ASCII — same as Python's `ch if ch.isdigit()`.
+    let runs = digit_runs(chars, |c| {
+        if let Some(ascii) = cn_digit(c) {
+            Some((ascii, true))
+        } else if c.is_numeric() {
+            Some((c, false))
+        } else {
+            None
         }
-        let mut run: Vec<usize> = vec![i]; // indices of digit chars
-        let first = digit_value(chars[i]).unwrap();
-        let mut ascii: Vec<char> = vec![first];
-        i += 1;
-        while i < n {
-            if is_digit_sep(chars[i]) {
-                i += 1;
-                continue;
-            }
-            match digit_value(chars[i]) {
-                Some(d) => {
-                    run.push(i);
-                    ascii.push(d);
-                    i += 1;
-                }
-                None => break,
-            }
-        }
+    });
+    for run in &runs {
         // Count CJK digits in the run. Fold only when they are a strict MAJORITY:
         // a genuine Chinese-digit number (一三八零零…) is all/mostly CJK, whereas a
         // name/word char that is also a digit homograph (三 in 张三, 四 in 李四)
@@ -276,10 +292,10 @@ fn normalize_digit_sequences(chars: &mut [char]) {
         // homograph would merge it into the digit run and break the PII regex's
         // `(?<!\d)` anchor — leaking e.g. "张三13800138000". The majority test keeps
         // the homograph intact so the adjacent phone/id/card still matches.
-        let cn_count = run.iter().filter(|&&idx| cn_digit(chars[idx]).is_some()).count();
+        let cn_count = run.iter().filter(|&&(_, (_, is_cn))| is_cn).count();
         if run.len() >= MIN_DIGIT_SEQ && cn_count * 2 > run.len() {
-            for (k, &idx) in run.iter().enumerate() {
-                chars[idx] = ascii[k];
+            for &(idx, (ascii, _)) in run {
+                chars[idx] = ascii;
             }
         }
     }
@@ -390,7 +406,10 @@ pub(crate) fn normalize_core(text: &str) -> Option<(Vec<char>, Vec<usize>)> {
         let suppressed = suppressed_nfkc_folds(&chars);
         let mut new_chars: Vec<char> = Vec::new();
         let mut new_map: Vec<usize> = Vec::new();
-        for (si, ch) in joined.chars().enumerate() {
+        // Iterate `chars` directly — `joined` (built above, kept only for the
+        // `is_nfkc` test) holds this exact char sequence, so re-decoding it would
+        // just reproduce these chars.
+        for (si, &ch) in chars.iter().enumerate() {
             if suppressed.as_ref().is_some_and(|m| m[si]) {
                 new_chars.push(ch); // keep verbatim: folding it would fuse a neighbour's digits
                 new_map.push(offset_map[si]);

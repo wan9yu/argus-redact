@@ -185,15 +185,12 @@ pub(crate) fn escaped_alternation_digit_bounded<S: AsRef<str>>(ordered_keys: &[S
 
 /// Build `滨海市(district1|district2|...)` from reserved_cities.
 fn build_address_zh_alternation(cities: &[(String, String, Vec<String>)]) -> String {
-    // Collect unique districts (sorted), mirror Python `sorted({district ...})`.
+    // Unique districts in sorted order — mirror Python `sorted({district ...})` —
+    // then reuse the shared escape-each-and-join-with-`|` builder.
     use std::collections::BTreeSet;
     let districts: BTreeSet<&str> = cities.iter().map(|(_, d, _)| d.as_str()).collect();
-    let alt = districts
-        .iter()
-        .map(|d| fancy_regex::escape(d).into_owned())
-        .collect::<Vec<_>>()
-        .join("|");
-    format!(r"滨海市(?:{alt})")
+    let districts: Vec<&str> = districts.into_iter().collect();
+    format!(r"滨海市(?:{})", escaped_alternation(&districts))
 }
 
 /// Build the combined named-group regex string from a pattern list.
@@ -294,15 +291,12 @@ pub fn scan_for_pollution(
     text: &str,
     overrides: Option<&HashMap<String, Vec<String>>>,
 ) -> Vec<(usize, usize, String)> {
-    let re: &Regex = if overrides.is_none() {
-        default_combined()
-    } else {
-        // Build a fresh regex for the overridden set (no caching needed for correctness;
+    match overrides {
+        None => collect_matches(default_combined(), text),
+        // A fresh regex for the overridden set (no caching needed for correctness;
         // callers with hot loops should cache at a higher level).
-        return scan_with_overrides(text, overrides.unwrap());
-    };
-
-    collect_matches(re, text)
+        Some(ov) => scan_with_overrides(text, ov),
+    }
 }
 
 fn scan_with_overrides(
