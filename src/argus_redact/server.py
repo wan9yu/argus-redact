@@ -265,6 +265,17 @@ def _join_and_parse(chunks: list[bytes]) -> dict[str, Any]:
     return _parse_json_object(b"".join(chunks))
 
 
+async def _read_json_body(request: Request) -> dict[str, Any]:
+    """Read the capped request body and parse it as a JSON object off the loop.
+
+    Raises _BodyTooLarge (→413) / _BadBody (→400); both handlers map them.
+    The join+parse are offloaded via run_in_threadpool so a large body cannot
+    stall the event loop (see _join_and_parse).
+    """
+    chunks = await _read_capped_body(request)
+    return await run_in_threadpool(_join_and_parse, chunks)
+
+
 async def _run_scan(request, fn, *, cancellable):
     """Offload a blocking core scan off the event loop under an admission
     ceiling, an in-flight bound, and an honest per-request deadline. `fn` is a
@@ -495,16 +506,9 @@ def _validate_key_field(key: object) -> JSONResponse | None:
 
 async def handle_redact(request: Request) -> JSONResponse:
     try:
-        chunks = await _read_capped_body(request)
+        body = await _read_json_body(request)
     except _BodyTooLarge:
         return JSONResponse({"error": "request body too large"}, status_code=413)
-
-    # A malformed/empty body raises JSONDecodeError (a ValueError), and a valid
-    # non-object body would break on the first `.get` — both surface as _BadBody
-    # and map to 400. The join+parse are offloaded so a large body cannot stall
-    # the event loop (see `_join_and_parse`).
-    try:
-        body = await run_in_threadpool(_join_and_parse, chunks)
     except _BadBody as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
@@ -593,16 +597,9 @@ async def handle_redact(request: Request) -> JSONResponse:
 
 async def handle_restore(request: Request) -> JSONResponse:
     try:
-        chunks = await _read_capped_body(request)
+        body = await _read_json_body(request)
     except _BodyTooLarge:
         return JSONResponse({"error": "request body too large"}, status_code=413)
-
-    # A malformed body raises JSONDecodeError (a ValueError), and a valid
-    # non-object body would break on the first `.get` — both surface as _BadBody
-    # and map to 400. The join+parse are offloaded so a large body cannot stall
-    # the event loop (see `_join_and_parse`).
-    try:
-        body = await run_in_threadpool(_join_and_parse, chunks)
     except _BadBody as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 

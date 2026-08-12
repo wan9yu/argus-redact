@@ -22,70 +22,18 @@ Usage:
 
 from __future__ import annotations
 
-import threading
-
 from argus_redact import redact
-from argus_redact.compose import make_anchor, prompt_anchor
-from argus_redact.exceptions import SessionStateError
-from argus_redact.glue.guarded_restore import guarded_restore
-from argus_redact.glue.redact import _effective_lang
+from argus_redact.integrations._session import _RedactSession, _RestoreSession
 
 
-class RedactTransform:
+class RedactTransform(_RedactSession):
     """Callable that redacts PII. Single-session: one instance per logical conversation."""
 
-    def __init__(
-        self,
-        *,
-        mode: str = "fast",
-        lang: str | list[str] = "zh",
-        salt: int | bytes | None = None,
-    ):
-        self._mode = mode
-        self._lang = lang
-        self._salt = salt
-        self._lock = threading.Lock()
-        self.last_key: dict | None = None
-        self.last_anchor = None
-        self._last_redacted: str | None = None
-
     def __call__(self, text: str, **kwargs) -> str:
-        with self._lock:
-            redacted, self.last_key = redact(
-                text,
-                mode=self._mode,
-                lang=self._lang,
-                salt=self._salt,
-                key=self.last_key,
-            )
-            self.last_anchor = make_anchor(self.last_key)
-            self._last_redacted = redacted
-        return redacted
-
-    def make_prompt_addendum(self, lang: str | None = None) -> str:
-        """Return a system-prompt addendum embedding the nonce-echo instruction.
-
-        Callers must inject this into the LLM system message so the nonce
-        reaches the response and the anchor round-trip can be verified.
-        Returns an empty string if no redaction has occurred yet.
-        """
-        with self._lock:
-            key = self.last_key
-            anchor = self.last_anchor
-        if not key or anchor is None:
-            return ""
-        effective_lang = lang if lang is not None else _effective_lang(self._lang)
-        return prompt_anchor(key, effective_lang, anchor=anchor)
-
-    def reset(self) -> None:
-        """Clear the accumulated key between distinct logical sessions."""
-        with self._lock:
-            self.last_key = None
-            self.last_anchor = None
-            self._last_redacted = None
+        return self._redact_once(text, redact_fn=redact)
 
 
-class RestoreTransform:
+class RestoreTransform(_RestoreSession):
     """Callable that restores redacted text using key from RedactTransform.
 
     Raises SessionStateError if the paired RedactTransform has not produced
@@ -112,27 +60,19 @@ class RestoreTransform:
         aliases: dict[str, tuple[str, ...]] | None = None,
         display_marker: str | None = None,
     ):
-        self._redact = redact_transform
-        self._strict = strict
-        self._aliases = aliases
-        self._display_marker = display_marker
+        super().__init__(
+            redact_transform,
+            strict=strict,
+            aliases=aliases,
+            display_marker=display_marker,
+        )
 
     def __call__(self, text: str, **kwargs) -> str:
-        key = self._redact.last_key
-        if key is None:
-            raise SessionStateError(
+        return self._restore_once(
+            text,
+            missing_key_msg=(
                 "RestoreTransform called before paired RedactTransform produced "
                 "a key. Call redact_t(...) first, or check .reset() was not "
                 "called between them."
-            )
-
-        return guarded_restore(
-            text,
-            key,
-            redacted=self._redact._last_redacted,
-            anchor=self._redact.last_anchor,
-            guard=True,
-            strict=self._strict,
-            aliases=self._aliases,
-            display_marker=self._display_marker,
+            ),
         )
