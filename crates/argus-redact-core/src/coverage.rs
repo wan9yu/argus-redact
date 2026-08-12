@@ -180,16 +180,14 @@ pub fn finalize_entities(
 
     // Type filter (redact.py:337-343): types wins over types_exclude. Only the
     // batch path applies it; the streaming face leaves type selection to its
-    // caller's redact closure. Reads `scope.types`/`scope.types_exclude`, the
-    // same lists `restore_lost_coverage` consults through `scope.admits`.
+    // caller's redact closure. Routed through `scope.admits` — the SAME single
+    // predicate `restore_lost_coverage` consults — so the two can never drift on
+    // the keep-over-deny precedence. `admits` also drops `self_reference` when
+    // `scope.drop_self_reference`, but `filter_self_reference` above already
+    // removed every `self_reference` span in exactly that case (both key off the
+    // same `get_self_reference_tier(hints)`), so that arm is a no-op here.
     let filtered: Vec<PatternMatch> = if apply_type_filter {
-        if let Some(keep) = scope.types {
-            filtered.into_iter().filter(|e| keep.contains(&e.type_)).collect()
-        } else if let Some(drop) = scope.types_exclude {
-            filtered.into_iter().filter(|e| !drop.contains(&e.type_)).collect()
-        } else {
-            filtered
-        }
+        filtered.into_iter().filter(|e| scope.admits(e)).collect()
     } else {
         filtered
     };

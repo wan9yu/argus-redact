@@ -564,12 +564,16 @@ where
     pub fn feed(&mut self, chunk: &str) -> Result<EmitResult, String> {
         self.buffer.push_str(chunk);
         let chars: Vec<char> = self.buffer.chars().collect();
+        // `buffer` is not mutated until after the cut below, so the PEM ceiling is
+        // stable across this `feed` — scan for the opener once and pass the bound to
+        // both the emit gate and `context_cut` (they MUST see the same `max_buffer`).
+        let max_buffer = self.pem_max_buffer();
         // Cheap emit gate: if no spans-independent trigger of `context_cut` can fire
         // for this buffer, the cut provably holds (≤ ctx_len), so skip the expensive
         // full-buffer detect + cut. CONSERVATIVE — `emit_possible` is a strict
         // superset of `context_cut`'s emit set (same max_buffer + W), so a buffer
         // that would emit is never skipped.
-        if !emit_possible(&chars, self.ctx_len, self.pem_max_buffer(), EVIDENCE_CONTEXT_WINDOW, false) {
+        if !emit_possible(&chars, self.ctx_len, max_buffer, EVIDENCE_CONTEXT_WINDOW, false) {
             return Ok(self.empty_result());
         }
         let final_entities = self.detect_final(&self.buffer);
@@ -577,7 +581,7 @@ where
             &self.snap_spans(&final_entities, chars.len()),
             &chars,
             self.ctx_len,
-            self.pem_max_buffer(),
+            max_buffer,
             EVIDENCE_CONTEXT_WINDOW,
             false,
         );
