@@ -245,6 +245,23 @@ where
     map_matches_to_original(&v, text, person_offset_map, orig_len)
 }
 
+/// Derive a normalized detect view from a [`normalize_core`] intermediate: apply
+/// [`finalize`] with the requested step-4 digit fold when the core produced an
+/// intermediate, else pass the text through unchanged (identity, no offset map).
+/// The full detect view (`digit_fold = true`) and the person-detect view
+/// (`digit_fold = false`) both go through here — the only thing that differs
+/// between them is that bool.
+fn normalize_view(
+    core: &Option<(Vec<char>, Vec<usize>)>,
+    text: &str,
+    digit_fold: bool,
+) -> (String, Option<Vec<usize>>) {
+    match core {
+        Some((chars, omap)) => finalize(chars, omap, text, digit_fold),
+        None => (text.to_string(), None),
+    }
+}
+
 /// Run the fast-mode L1 detection sequence, returning the RAW (unmerged) result.
 ///
 /// `lang` is the resolved language list (e.g. `["zh"]`, `["zh","en"]`). `names`
@@ -295,10 +312,7 @@ pub fn detect_l1_cancellable(
     //    same intermediate, so they STRUCTURALLY share char positions + offset
     //    map (see step 7). `use_normalized` iff an offset map was produced.
     let core = normalize_core(text);
-    let (normalized, offset_map) = match &core {
-        Some((chars, omap)) => finalize(chars, omap, text, true),
-        None => (text.to_string(), None),
-    };
+    let (normalized, offset_map) = normalize_view(&core, text, true);
     let use_normalized = offset_map.is_some();
     let detect_text: &str = if use_normalized { &normalized } else { text };
 
@@ -512,9 +526,24 @@ pub fn detect_l1_cancellable(
     //    SAME person normalization (a plain name folds to itself). Spans map back
     //    to the original below, so an accented/fullwidth known-name still restores
     //    correctly.
-    let (person_normalized, person_offset_map) = match &core {
-        Some((chars, omap)) => finalize(chars, omap, text, false),
-        None => (text.to_string(), None),
+    let has_zh = lang.iter().any(|c| c == "zh");
+    let has_en = lang.iter().any(|c| c == "en");
+
+    // Deriving the person-detect view (finalize's char-vec clone + String rebuild
+    // + offset-map clone) is worthwhile only when a person-family phase will read
+    // it. When NEITHER "zh" NOR "en" is in lang AND no known names are supplied,
+    // none of the six phases produce anything: phases 1-2 are gated on
+    // `has_zh`/`has_en`; phase 3 (names-only) has an empty `scan_names`; phases
+    // 4-6 short-circuit inside `run_zh_detector` on `has_zh == false`. The step-9
+    // map-back then runs over an EMPTY `person`, which `map_matches_to_original`
+    // returns as `[]` regardless of the offset map. So the placeholder below is
+    // provably unread and the whole detect result stays byte-identical — the gate
+    // only skips the wasted work (which otherwise fires per call for ja/ko/
+    // fullwidth-only locales).
+    let (person_normalized, person_offset_map) = if has_zh || has_en || !names.is_empty() {
+        normalize_view(&core, text, false)
+    } else {
+        (text.to_string(), None)
     };
     let person_use_normalized = person_offset_map.is_some();
     let person_detect_text: &str =
@@ -524,9 +553,6 @@ pub fn detect_l1_cancellable(
     } else {
         names.to_vec()
     };
-
-    let has_zh = lang.iter().any(|c| c == "zh");
-    let has_en = lang.iter().any(|c| c == "en");
 
     let mut person: Vec<PatternMatch> = Vec::new();
     // Cooperative-cancellation boundary before each of the six person-family
