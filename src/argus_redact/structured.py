@@ -254,6 +254,31 @@ def redact_json(
     # the same bool, so the warning's count is identical either way.
     _key_pii_cache: dict[str, bool] = {}
 
+    def _redact_leaf(obj: Any, probe: str, current_path: list[str]) -> Any:
+        """Redact one string or numeric leaf. ``probe`` is the text detection runs
+        over: the string itself for a string leaf, ``str(obj)`` for a numeric one.
+
+        Returns the redacted placeholder text, or the ORIGINAL ``obj`` when the
+        leaf is outside ``paths=`` scope or carries no detectable PII. Returning
+        ``obj`` (not the ``probe``) keeps a no-PII numeric leaf byte-for-byte —
+        exact type (int vs float) and arbitrary-precision int value — and is a
+        no-op for a string leaf (a no-PII redact leaves the text unchanged).
+        """
+        leaf_seen.append(True)
+        if parsed_paths is not None:
+            hits = _matching_targets(current_path, parsed_paths)
+            if not hits:
+                return obj
+            matched_targets.update(hits)
+        redacted_text, entities = _redact_cell(
+            session, probe, mode=mode, lang=lang, config=config, restored_types=restored_types
+        )
+        if not entities:
+            return obj
+        if with_types:
+            all_entities.extend(entities)
+        return redacted_text
+
     def _walk(obj: Any, current_path: list[str] | None = None, depth: int = 0) -> Any:
         if current_path is None:
             current_path = []
@@ -264,51 +289,20 @@ def redact_json(
             )
 
         if isinstance(obj, str):
-            leaf_seen.append(True)
-            if parsed_paths is not None:
-                hits = _matching_targets(current_path, parsed_paths)
-                if not hits:
-                    return obj
-                matched_targets.update(hits)
-            redacted_text, entities = _redact_cell(
-                session, obj, mode=mode, lang=lang, config=config, restored_types=restored_types
-            )
-            if with_types:
-                all_entities.extend(entities)
-            return redacted_text
+            return _redact_leaf(obj, obj, current_path)
         # bool is a subclass of int — check it FIRST so True/False are never
         # scanned as a numeric PII leaf.
         if isinstance(obj, bool):
             return obj
         if isinstance(obj, (int, float)):
             # Coerce-and-scan (v0.8.10): probe/redact the str(obj) form the same
-            # way a string leaf is, so a numeric national-ID/phone leaf is no
-            # longer a silent leak. A leaf outside `paths=` scope is left
-            # completely untouched (same early-return shape as the string
-            # branch) — including the target-hit bookkeeping, so a selector that
-            # DOES match a numeric leaf is never reported as a zero-match typo.
-            leaf_seen.append(True)
-            if parsed_paths is not None:
-                hits = _matching_targets(current_path, parsed_paths)
-                if not hits:
-                    return obj
-                matched_targets.update(hits)
-            redacted_text, entities = _redact_cell(
-                session,
-                str(obj),
-                mode=mode,
-                lang=lang,
-                config=config,
-                restored_types=restored_types,
-            )
-            if not entities:
-                # No detectable PII: return the ORIGINAL object, not the str(obj)
-                # probe — preserves exact type (int vs float) and precision
-                # (arbitrary-size Python ints round-trip byte-for-byte).
-                return obj
-            if with_types:
-                all_entities.extend(entities)
-            return redacted_text
+            # way a string leaf is (shared `_redact_leaf`), so a numeric
+            # national-ID/phone leaf is no longer a silent leak. A leaf outside
+            # `paths=` scope or with no detectable PII is left completely
+            # untouched — `_redact_leaf` returns the ORIGINAL object, preserving
+            # exact type (int vs float) and precision (arbitrary-size Python ints
+            # round-trip byte-for-byte).
+            return _redact_leaf(obj, str(obj), current_path)
         if isinstance(obj, dict):
             # Keys recurse only over VALUES (keys are preserved), so a PII key
             # would leak verbatim. Detect (detect-only, no redaction) and count

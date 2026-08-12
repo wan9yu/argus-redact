@@ -435,6 +435,34 @@ class StreamingRedactor:
         self._accumulated_realistic_key: dict[str, str] = {}
         self._accumulated_types: dict[str, str] = {}
 
+    def _cut(self, force_flush: bool) -> tuple[int, bool, list[PatternMatch]]:
+        """Run one ``_context_cut`` detection over the retained buffer and emit
+        the coverage-restored warning. ``force_flush`` is the ONLY thing that
+        differs between the mid-stream ``feed()`` cut (hold back ≥ W chars of
+        forward context) and the end-of-stream ``flush()`` drain (drain to len
+        with batch's view of the tail). Returns the raw ``_context_cut`` result
+        ``(cut, redetect, entities)``; ``flush()`` ignores ``redetect`` since
+        force_flush never sets it.
+        """
+        _restored_types: list[str] = []
+        cut, redetect, entities = _context_cut(
+            self._inc_buffer,
+            self._ctx_len,
+            lang=self._lang,
+            mode=self._mode,
+            names=self._names,
+            types=self._types,
+            types_exclude=self._types_exclude,
+            max_buffer=DEFAULT_MAX_BUFFER,
+            force_flush=force_flush,
+            restored_types=_restored_types,
+        )
+        # Warn regardless of the emit-or-hold branch in the caller: the
+        # restoration already happened inside this round's _detect call (over the
+        # full buffer), even on a round that ends up holding everything back.
+        warn_coverage_restored(_restored_types)
+        return cut, redetect, entities
+
     def feed(self, chunk: str) -> PseudonymLLMResult:
         """Accumulate ``chunk`` and emit up to the context-cut boundary, redacted.
 
@@ -451,23 +479,7 @@ class StreamingRedactor:
             _check_input_pollution(chunk, reserved_names=self._reserved_names)
 
         self._inc_buffer += chunk
-        _restored_types: list[str] = []
-        cut, redetect, entities = _context_cut(
-            self._inc_buffer,
-            self._ctx_len,
-            lang=self._lang,
-            mode=self._mode,
-            names=self._names,
-            types=self._types,
-            types_exclude=self._types_exclude,
-            max_buffer=DEFAULT_MAX_BUFFER,
-            force_flush=False,
-            restored_types=_restored_types,
-        )
-        # Warn regardless of the emit-or-hold branch below: the restoration
-        # already happened inside this round's _detect call (over the full
-        # buffer), even on a round that ends up holding everything back.
-        warn_coverage_restored(_restored_types)
+        cut, redetect, entities = self._cut(force_flush=False)
         if cut <= self._ctx_len:
             return _empty_result()
 
@@ -499,20 +511,7 @@ class StreamingRedactor:
             self._inc_buffer = ""
             self._ctx_len = 0
             return _empty_result()
-        _restored_types: list[str] = []
-        cut, _redetect, entities = _context_cut(
-            self._inc_buffer,
-            self._ctx_len,
-            lang=self._lang,
-            mode=self._mode,
-            names=self._names,
-            types=self._types,
-            types_exclude=self._types_exclude,
-            max_buffer=DEFAULT_MAX_BUFFER,
-            force_flush=True,
-            restored_types=_restored_types,
-        )
-        warn_coverage_restored(_restored_types)
+        cut, _redetect, entities = self._cut(force_flush=True)
         # force_flush never sets redetect (it drains to len with full-buffer
         # context ≡ batch's view of the tail), so always range-shift.
         ctx = self._ctx_len  # snapshot before reset

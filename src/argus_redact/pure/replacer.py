@@ -184,6 +184,32 @@ def keep_downgraded_event(entities, config: dict | None) -> dict | None:
     return _types_event(KEEP_DOWNGRADED, len(ents), (e.type for e in ents))
 
 
+def warn_keep_downgraded(entities, config: dict | None) -> None:
+    """Emit the ``keep_downgraded`` SecurityWarning once per downgraded entity —
+    a no-op when nothing downgraded. THE single source for that warning's
+    text/category/stacklevel, shared by the one-shot ``replace()`` path and the
+    structured (``redact_csv``/``redact_json``) ``replace_into_session`` path, so
+    the two can never drift apart. Entity SELECTION is single-sourced through
+    ``_keep_downgraded_entities`` (the SAME predicate the structured
+    ``keep_downgraded_event`` uses).
+
+    The offending text is, by construction, an un-redacted identifier — the whole
+    reason this warning fires. Naming the TYPE only keeps the warning stream
+    PII-free, matching its sibling ``keep_downgraded_event`` (which emits
+    detail="types: ...") and the log-scrub discipline in
+    tests/safety/test_layer3_log_scrub.py. Use redact(detailed=True) ->
+    security_events for the structured signal.
+    """
+    for entity in _keep_downgraded_entities(entities, config):
+        warnings.warn(
+            f"strategy='keep' is only supported for self_reference "
+            f"pronouns and kinship phrases; downgrading to default for "
+            f"type={entity.type!r}.",
+            SecurityWarning,
+            stacklevel=_auto_stacklevel(),  # see warn_mask_collisions
+        )
+
+
 def mask_collision_event(mask_collisions: list[str]) -> dict | None:
     """A PII-free MASK_COLLISION security_event, or None if no mask-family
     collision was disambiguated this call. ``mask_collisions`` is the Rust
@@ -512,6 +538,8 @@ def _build_type_info(
     entities: list[PatternMatch],
     config: dict | None,
     langs: list[str] | None,
+    *,
+    rust_entities: list | None = None,
 ) -> tuple[dict[str, dict], dict[str, Callable]]:
     """Resolve the per-type replacement info the Rust ``replace`` needs, plus any
     custom Python ``faker_reserved`` callables to pass as the Rust callback map.
@@ -550,11 +578,16 @@ def _build_type_info(
     flip the core's ``faker_name``/``custom_faker`` fields and collect the callable.
     """
     # Built-in assembly in Rust (single SSOT). `custom_faker` is always False here.
-    # The core reads only `entity.type`; convert the dataclass entities into the
-    # Rust PatternMatch the binding expects (same idiom as `replace()` / merger).
-    rust_entities = [
-        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
-    ]
+    # The core reads only `entity.type` off the Rust PatternMatch the binding
+    # expects. `replace()` / `replace_into_session()` already marshal that list for
+    # their own `_core.replace` / `session.redact_cell` call, so they thread it in
+    # here (`rust_entities=`) to avoid building the identical list twice per call —
+    # paid per cell on redact_csv / redact_json. A standalone caller omits it and
+    # one is built here (same idiom as `replace()` / merger).
+    if rust_entities is None:
+        rust_entities = [
+            _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
+        ]
     # Per-type defaults from the live registry (SSOT; includes runtime adapter
     # types). Resolve once per distinct detected type — the same lookups the
     # pre-port `_build_type_info` did inline (strategy from the registry, prefix /
@@ -638,21 +671,25 @@ def replace(
             "redact_pseudonym_llm() instead."
         )
 
+    # Convert the dataclass entities into the Rust PatternMatch the binding
+    # expects (same idiom as pure/merger.py). `_RustPM` is resolved at import.
+    # Built ONCE here and threaded into `_build_type_info` so the identical list
+    # is not rebuilt inside it as well.
+    rust_entities = [
+        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
+    ]
+
     # Build the per-type info once; the custom_fakers dict is passed to _core.replace
     # so Rust can invoke Python callables via PyFakerFactory. The Rust core is
     # required (lang/_loader raises ImportError without it); replace() always runs
     # in Rust and the historical pure-Python orchestrator has been removed.
-    type_info, custom_fakers = _build_type_info(entities, config, langs)
+    type_info, custom_fakers = _build_type_info(
+        entities, config, langs, rust_entities=rust_entities
+    )
 
     # Person / organization pseudonym prefixes (config can override) — via the
     # SSOT so this one-shot path and the structured session builder never drift.
     person_prefix, org_prefix = _resolve_person_org_prefixes(config)
-
-    # Convert the dataclass entities into the Rust PatternMatch the binding
-    # expects (same idiom as pure/merger.py). `_RustPM` is resolved at import.
-    rust_entities = [
-        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
-    ]
 
     redacted, result_key, aliases, signals = _core.replace(
         text,
@@ -676,20 +713,7 @@ def replace(
     # `keep_downgraded_event` cannot drift from each other. If the Rust whitelist
     # logic (`keep_whitelist=`) ever changes, update `_keep_downgraded_entities` too.
     if keep_downgraded:
-        for entity in _keep_downgraded_entities(entities, config):
-            # The offending text is, by construction, an un-redacted identifier — the
-            # whole reason this warning fires. Naming the TYPE only keeps the warning
-            # stream PII-free, matching its sibling `keep_downgraded_event` (which
-            # emits detail="types: ...") and the log-scrub discipline in
-            # tests/safety/test_layer3_log_scrub.py. Use redact(detailed=True) ->
-            # security_events for the structured signal.
-            warnings.warn(
-                f"strategy='keep' is only supported for self_reference "
-                f"pronouns and kinship phrases; downgrading to default for "
-                f"type={entity.type!r}.",
-                SecurityWarning,
-                stacklevel=_auto_stacklevel(),  # see warn_mask_collisions
-            )
+        warn_keep_downgraded(entities, config)
 
     # `mask_collisions`: the Rust core disambiguated a mask-family
     # collision (two different originals wanting the same visible label) with a
@@ -771,25 +795,22 @@ def replace_into_session(
     replace engine, emits the SAME per-cell ``keep``-downgrade warnings, and applies
     the SAME English grammar normalization — only the key stays in Rust across cells.
     """
-    type_info, custom_fakers = _build_type_info(entities, config, langs)
+    # Marshal the dataclass entities once and thread the same list into
+    # `_build_type_info` so it is not rebuilt there as well (paid per cell).
     rust_entities = [
         _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
     ]
+    type_info, custom_fakers = _build_type_info(
+        entities, config, langs, rust_entities=rust_entities
+    )
     redacted = session.redact_cell(
         text, rust_entities, type_info, custom_fakers if custom_fakers else None
     )
 
     # Same per-cell keep-downgrade warning selection as `replace` (single-sourced
-    # through `_keep_downgraded_entities`); the session's cumulative flag is a
-    # cross-check, not the per-cell signal.
-    for entity in _keep_downgraded_entities(entities, config):
-        warnings.warn(
-            f"strategy='keep' is only supported for self_reference "
-            f"pronouns and kinship phrases; downgrading to default for "
-            f"type={entity.type!r}.",
-            SecurityWarning,
-            stacklevel=_auto_stacklevel(),  # see warn_mask_collisions
-        )
+    # through `warn_keep_downgraded` -> `_keep_downgraded_entities`); the session's
+    # cumulative flag is a cross-check, not the per-cell signal.
+    warn_keep_downgraded(entities, config)
 
     # English article/grammar fix-up, exactly as `_replace_and_emit`. Normalize
     # against THIS cell's own originals only — the cumulative key's extras are not

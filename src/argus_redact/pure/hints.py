@@ -100,14 +100,12 @@ def produce_hints(
     Do not call this from any production code path.
     """
     hints: list[Hint] = []
-    # This oracle emits the full hint set unconditionally. Ablation
-    # (ARGUS_ABLATION_HINTS) is applied downstream in the glue layer via
-    # _apply_ablation, keeping the env read out of pure/.
-    enabled: set[str] | None = None
 
     def _emit(htype: str, **fields: object) -> None:
-        if enabled is None or htype in enabled:
-            hints.append(Hint(type=htype, **fields))  # type: ignore[arg-type]
+        # This oracle emits the full hint set unconditionally. Ablation
+        # (ARGUS_ABLATION_HINTS) is applied downstream in the glue layer via
+        # _apply_ablation, keeping the env read out of pure/.
+        hints.append(Hint(type=htype, **fields))  # type: ignore[arg-type]
 
     self_refs: list[PatternMatch] = []
     others: list[PatternMatch] = []
