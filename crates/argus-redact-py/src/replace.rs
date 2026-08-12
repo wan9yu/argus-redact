@@ -75,6 +75,17 @@ impl FakerFactory for PyFakerFactory {
     }
 }
 
+impl PyFakerFactory {
+    /// The `Option<&dyn FakerFactory>` the core `replace` / `redact_l1` / session
+    /// take: `Some(self)` iff a custom faker is registered, else `None` (the common
+    /// path — core then skips the custom-faker overlay entirely). One SSOT for the
+    /// "empty map → None" selection, shared by the one-shot [`replace`], the
+    /// [`StructuredRedactor`] session, and `redact_l1`.
+    pub(crate) fn as_arg(&self) -> Option<&dyn FakerFactory> {
+        (!self.fakers.is_empty()).then_some(self as &dyn FakerFactory)
+    }
+}
+
 /// Parse the Python salt object (`int | bytes | None`) into a core [`Salt`].
 pub(crate) fn parse_salt(salt: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Salt>> {
     match salt {
@@ -237,11 +248,7 @@ pub fn replace(
     // Build the custom-faker map: {type_name: callable}. Empty when no custom
     // fakers are registered (the common path), so we pass `None` to core.
     let py_faker_factory = build_faker_factory(custom_fakers)?;
-    let faker_arg: Option<&dyn FakerFactory> = if py_faker_factory.fakers.is_empty() {
-        None
-    } else {
-        Some(&py_faker_factory)
-    };
+    let faker_arg = py_faker_factory.as_arg();
 
     let factory = PyPseudoFactory;
     let result = core_replace(
@@ -520,11 +527,7 @@ impl StructuredRedactor {
         let core_entities: Vec<CorePM> = entities.iter().map(CorePM::from).collect();
         let info_map = build_info_map(type_info)?;
         let py_faker_factory = build_faker_factory(custom_fakers)?;
-        let faker_arg: Option<&dyn FakerFactory> = if py_faker_factory.fakers.is_empty() {
-            None
-        } else {
-            Some(&py_faker_factory)
-        };
+        let faker_arg = py_faker_factory.as_arg();
         self.session
             .process(
                 text,

@@ -289,50 +289,38 @@ struct RedactSegmentWithSignals {
     mask_collisions: Vec<String>,
 }
 
-/// Run the one-shot fast-mode redact path over `text`, optionally threading an
-/// `existing_key` for cross-chunk collision continuity (same original reuses the
-/// same fake — mirrors the Python `existing_key=` / `setdefault` merge). This is
-/// the SSOT for the one-shot [`redact`] entry point.
+/// The detect-once SSOT tail shared by the one-shot [`redact_segment`] and the
+/// streaming redact closure: `build_info` → `replace` (wasm MT19937 pseudo-factory,
+/// no custom fakers) → the en-only `normalize_grammar_en` tail, over an
+/// already-resolved entity set. [`redact_segment`] calls it on the FINALIZED
+/// entities (after `detect_l1` + `finalize_entities`); the streaming redact closure
+/// calls it on the core-snapped, range-shifted `spans.entities` the carry-window
+/// engine already merged + self-ref-filtered. `existing_key` threads cross-chunk
+/// collision continuity (a repeated original reuses its fake). Returns the segment
+/// PLUS the `keep_downgraded` / `mask_collisions` signals — the one-shot path
+/// surfaces them, the streaming face drops them.
 ///
-/// Detection runs EXACTLY ONCE (`detect_l1`), matching the Python `redact()` glue
-/// (`_detect` → `_build_type_info` → `_replace_and_emit`) rather than the previous
-/// detect-twice shape (an outer `detect_l1` to seed `build_type_info`, then a
-/// `redact_l1` that re-detected internally). The single detection feeds BOTH
-/// [`build_info`] (`registry_defaults = None` — built-in tables) AND the
-/// post-detect pipeline, which reproduces `redact_l1`'s own steps over that one
-/// detection: `finalize_entities` (merge → self-reference filter → type filter →
-/// coverage restore, `apply_type_filter = true`, no `types` scope) → `replace`
-/// (wasm MT19937 pseudo-factory, no custom fakers) → the en-only
-/// `normalize_grammar_en` tail. Byte-identical to the old `redact_l1` call: the
-/// re-detect it dropped was deterministic (same raw entities), and the
-/// `type_info` / filter scope / grammar step are the same. Returns the segment
-/// PLUS the `keep_downgraded` / `mask_collisions` signals (see
-/// [`RedactSegmentWithSignals`]).
-fn redact_segment(
+/// Byte-identical to the previous per-site copies. `build_info` now runs over the
+/// SAME entities `replace` redacts (the finalized set for the one-shot path, rather
+/// than the raw pre-finalize set the old shape resolved it over): `build_type_info`'s
+/// per-type `TypeInfo` is a pure function of the type name (+ the fixed config /
+/// langs), independent of which entities are present, and `replace` only ever reads
+/// the info for a type it is redacting — every such type survives into the finalized
+/// set — so the resolved `type_info` and the `person` / `organization` prefixes
+/// `replace` actually consumes are unchanged.
+fn replace_and_grammar(
     params: &RedactParams,
     text: &str,
+    entities: &[PatternMatch],
     existing_key: Option<&HashMap<String, String>>,
 ) -> Result<RedactSegmentWithSignals, String> {
-    // ONE detection, flattened into the fast-mode { entities, hints } bundle.
-    let DetectSpans { entities, hints } =
-        flatten_l1(detect_l1(text, &params.langs, &params.names).map_err(|e| e.to_string())?);
-
-    // type_info over the RAW (pre-finalize) entities — the exact set the old outer
-    // `build_type_info` resolved, so the per-type info is unchanged.
     let (info_map, person_prefix, org_prefix) =
-        build_info(&entities, params.config.as_ref(), &params.langs);
-
-    // Post-detect pipeline, reproducing `redact_l1`'s steps 2-5a over this single
-    // detection: merge → self-reference filter → type filter (none) → coverage
-    // restore. `apply_type_filter = true` + `FilterScope::from_hints(None, None,…)`
-    // are exactly the arguments `redact_l1` passed for the wasm (no-`types`) call.
-    let scope = FilterScope::from_hints(None, None, &hints);
-    let filtered = finalize_entities(entities, &hints, &scope, text, true);
+        build_info(entities, params.config.as_ref(), &params.langs);
 
     let result = replace(
         ReplaceArgs {
             text,
-            entities: &filtered,
+            entities,
             salt: params.salt.as_ref(),
             key: existing_key,
             type_info: &info_map,
@@ -346,8 +334,8 @@ fn redact_segment(
     )?;
 
     // en-only grammar tail — a SEPARATE step exactly as `redact_l1` step 7 applies
-    // it (`replace` never calls grammar internally). `effective_lang` = lang[0]
-    // else "zh", mirroring the streaming redact closure and Python.
+    // it (`replace` never calls grammar internally). `effective_lang` = lang[0] else
+    // "zh", mirroring Python.
     let effective_lang = params.langs.first().map(String::as_str).unwrap_or("zh");
     let downstream = if effective_lang == "en" {
         let originals: Vec<String> = result.key.values().cloned().collect();
@@ -365,6 +353,42 @@ fn redact_segment(
         keep_downgraded: result.keep_downgraded,
         mask_collisions: result.mask_collisions,
     })
+}
+
+/// Run the one-shot fast-mode redact path over `text`, optionally threading an
+/// `existing_key` for cross-chunk collision continuity (same original reuses the
+/// same fake — mirrors the Python `existing_key=` / `setdefault` merge). This is
+/// the SSOT for the one-shot [`redact`] entry point.
+///
+/// Detection runs EXACTLY ONCE (`detect_l1`), matching the Python `redact()` glue
+/// (`_detect` → `_build_type_info` → `_replace_and_emit`) rather than the previous
+/// detect-twice shape (an outer `detect_l1` to seed `build_type_info`, then a
+/// `redact_l1` that re-detected internally). The single detection drives
+/// `finalize_entities` (merge → self-reference filter → type filter → coverage
+/// restore, `apply_type_filter = true`, no `types` scope), then the shared
+/// [`replace_and_grammar`] tail (`build_info` → `replace` → en-grammar) over that
+/// finalized set. Byte-identical to the old `redact_l1` call: the re-detect it
+/// dropped was deterministic (same raw entities), and the `type_info` / filter
+/// scope / grammar step are the same. Returns the segment PLUS the
+/// `keep_downgraded` / `mask_collisions` signals (see [`RedactSegmentWithSignals`]).
+fn redact_segment(
+    params: &RedactParams,
+    text: &str,
+    existing_key: Option<&HashMap<String, String>>,
+) -> Result<RedactSegmentWithSignals, String> {
+    // ONE detection, flattened into the fast-mode { entities, hints } bundle.
+    let DetectSpans { entities, hints } =
+        flatten_l1(detect_l1(text, &params.langs, &params.names).map_err(|e| e.to_string())?);
+
+    // Post-detect pipeline, reproducing `redact_l1`'s steps 2-5a over this single
+    // detection: merge → self-reference filter → type filter (none) → coverage
+    // restore. `apply_type_filter = true` + `FilterScope::from_hints(None, None,…)`
+    // are exactly the arguments `redact_l1` passed for the wasm (no-`types`) call.
+    let scope = FilterScope::from_hints(None, None, &hints);
+    let filtered = finalize_entities(entities, &hints, &scope, text, true);
+
+    // Shared `build_info` → `replace` → en-grammar tail over the finalized set.
+    replace_and_grammar(params, text, &filtered, existing_key)
 }
 
 // ── public API ──────────────────────────────────────────────────────────────
@@ -806,47 +830,21 @@ impl StreamingRedactor {
         });
 
         // Redact closure: detect-once path — redact the GIVEN pre-detected,
-        // range-shifted entities over `text` via `build_type_info` → `replace` +
-        // en-grammar tail. No internal re-detect (the core engine already detected
-        // once over the full ±W buffer and shifted the spans into the emit range).
-        // Threads the accumulated key for cross-chunk collision continuity so the
-        // same original reuses its existing fake across segments.
+        // range-shifted entities over `text` via the shared `replace_and_grammar`
+        // tail (`build_info` → `replace` + en-grammar), the SAME tail the one-shot
+        // `redact_segment` runs. No internal re-detect (the core engine already
+        // detected once over the full ±W buffer and shifted the spans into the emit
+        // range). Threads the accumulated key (the `Rc<RefCell>` mirror the core
+        // keeps in sync) as `existing_key` for cross-chunk collision continuity so
+        // the same original reuses its existing fake across segments. The segment's
+        // `keep_downgraded` / `mask_collisions` signals are not part of the streaming
+        // face, so the `RedactSegmentWithSignals` wrapper is unwrapped to its segment.
         let redact_params = Rc::clone(&params);
         let redact_key = Rc::clone(&accumulated_key);
         let redact: BoxedRedact = Box::new(move |text: &str, spans: &DetectSpans| {
             let existing = redact_key.borrow();
-            let (info_map, person_prefix, org_prefix) = build_info(
-                &spans.entities,
-                redact_params.config.as_ref(),
-                &redact_params.langs,
-            );
-            let result = replace(
-                ReplaceArgs {
-                    text,
-                    entities: &spans.entities,
-                    salt: redact_params.salt.as_ref(),
-                    key: Some(&*existing),
-                    type_info: &info_map,
-                    person_prefix: &person_prefix,
-                    org_prefix: &org_prefix,
-                    unified_prefix: redact_params.unified_prefix.as_deref(),
-                    keep_whitelist: &redact_params.whitelist,
-                },
-                &WasmPseudoFactory,
-                None,
-            )?;
-            let effective_lang = redact_params.langs.first().map(String::as_str).unwrap_or("zh");
-            let downstream = if effective_lang == "en" {
-                let originals: Vec<String> = result.key.values().cloned().collect();
-                normalize_grammar_en(&result.redacted, &originals)
-            } else {
-                result.redacted
-            };
-            Ok(RedactSegment {
-                downstream_text: downstream,
-                key: result.key,
-                aliases: result.aliases,
-            })
+            replace_and_grammar(&redact_params, text, &spans.entities, Some(&*existing))
+                .map(|with_signals| with_signals.segment)
         });
 
         Ok(StreamingRedactor {

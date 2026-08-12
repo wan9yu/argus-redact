@@ -39,7 +39,6 @@ use argus_redact_core::redact_l1::{
     detect_l1_cancellable as core_detect_l1_cancellable, redact_l1 as core_redact_l1,
 };
 use argus_redact_core::redact_l1::RedactL1Args;
-use argus_redact_core::FakerFactory;
 use argus_redact_core::PatternMatch as CorePM;
 
 use crate::replace::{build_faker_factory, build_info_map, parse_salt, PyPseudoFactory};
@@ -324,11 +323,7 @@ pub fn redact_l1(
     // SAME type_info / faker adaptation as `_core.replace` (shared helpers).
     let info_map = build_info_map(type_info)?;
     let py_faker_factory = build_faker_factory(custom_fakers)?;
-    let faker_arg: Option<&dyn FakerFactory> = if py_faker_factory.fakers.is_empty() {
-        None
-    } else {
-        Some(&py_faker_factory)
-    };
+    let faker_arg = py_faker_factory.as_arg();
 
     let factory = PyPseudoFactory;
     let result = core_redact_l1(
@@ -382,7 +377,7 @@ pub fn produce_hints_l1<'py>(
         .map(CorePM::from)
         .collect();
     let hints = core_produce_hints_l1(&ents, text, &nms);
-    hints.iter().map(|h| hint_to_py(py, h)).collect()
+    hints_to_py(py, &hints)
 }
 
 /// Person-name threshold from the hints (1.2 instruction / 0.8 otherwise).
