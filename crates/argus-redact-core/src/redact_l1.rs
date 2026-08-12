@@ -217,6 +217,35 @@ fn map_matches_to_original(
     }
 }
 
+/// Run one zh-only, evidence-gated detector phase and map its spans back to the
+/// ORIGINAL text — the shared body of the region / occupation / framework phases
+/// (steps 10/11/12). When `has_zh` is false the detector never runs and the
+/// mapped result is empty, exactly like the inlined form. `detect` receives the
+/// person-detect-text and `layer1_raw` (the untagged raw regex matches used as
+/// the structural PII proximity context) and returns detect-coord matches; they
+/// are tagged `LAYER_REGEX`, then mapped to ORIGINAL coords via the person offset
+/// map — the identical sequence each phase ran inline. The framework phase passes
+/// a closure that composes two detectors (conditions ++ hobbies) as its `detect`.
+fn run_zh_detector<F>(
+    has_zh: bool,
+    person_detect_text: &str,
+    layer1_raw: &[PatternMatch],
+    text: &str,
+    person_offset_map: Option<&[usize]>,
+    orig_len: usize,
+    detect: F,
+) -> Vec<PatternMatch>
+where
+    F: FnOnce(&str, &[PatternMatch]) -> Vec<PatternMatch>,
+{
+    let mut v: Vec<PatternMatch> = Vec::new();
+    if has_zh {
+        v = detect(person_detect_text, layer1_raw);
+        tag_layer(&mut v, LAYER_REGEX);
+    }
+    map_matches_to_original(&v, text, person_offset_map, orig_len)
+}
+
 /// Run the fast-mode L1 detection sequence, returning the RAW (unmerged) result.
 ///
 /// `lang` is the resolved language list (e.g. `["zh"]`, `["zh","en"]`). `names`
@@ -284,15 +313,12 @@ pub fn detect_l1_cancellable(
     let mut layer1_raw: Vec<PatternMatch> = Vec::new();
     let mut near_misses: Vec<PatternMatch> = Vec::new();
     for m in all_matches {
+        // `match_patterns` already stamps every sub-1.0 match at EXACTLY 0.3 (its
+        // confidence is `0.3` on a failed validator and `1.0` otherwise — no other
+        // value is reachable), so a near-miss moves straight into the list with no
+        // field-by-field rebuild to re-assert the 0.3.
         if m.confidence < 1.0 {
-            near_misses.push(PatternMatch {
-                text: m.text,
-                type_: m.type_,
-                start: m.start,
-                end: m.end,
-                confidence: 0.3,
-                layer: m.layer,
-            });
+            near_misses.push(m);
         } else {
             layer1_raw.push(m);
         }
@@ -586,57 +612,53 @@ pub fn detect_l1_cancellable(
     );
 
     // 10. Evidence-gated Chinese admin-region detection (only when "zh" is in
-    //     lang). Mirrors the person block: run on the SAME person-detect-text
-    //     (digit-step-skipped normalization, so a region name that shares a CJK
-    //     digit homograph isn't folded away), pass `layer1_raw` as the structural
-    //     PII proximity context (same detect-coord convention as the zh person
-    //     detector — positions line up with the person-detect-text), tag the
-    //     LAYER_REGEX layer like person does, then map the spans back to the
-    //     ORIGINAL text exactly like layer1/person. Empty when "zh" is absent.
+    //     lang). Runs on the SAME person-detect-text (digit-step-skipped
+    //     normalization, so a region name that shares a CJK digit homograph isn't
+    //     folded away), with `layer1_raw` as the structural PII proximity context
+    //     (same detect-coord convention as the zh person detector — positions line
+    //     up with the person-detect-text), tagged LAYER_REGEX and mapped back to
+    //     the ORIGINAL text — all of that is `run_zh_detector`. Empty when "zh" is
+    //     absent.
     poll_abort!(cancel); // phase 4: regions
-    let mut regions: Vec<PatternMatch> = Vec::new();
-    if has_zh {
-        let mut zh_regions = detect_regions_zh(person_detect_text, &layer1_raw);
-        tag_layer(&mut zh_regions, LAYER_REGEX);
-        regions = zh_regions;
-    }
-    let regions = map_matches_to_original(
-        &regions,
+    let regions = run_zh_detector(
+        has_zh,
+        person_detect_text,
+        &layer1_raw,
         text,
         person_offset_map.as_deref(),
         orig_len,
+        detect_regions_zh,
     );
 
-    // 11. Evidence-gated Chinese occupation detection (only when "zh" is in
-    //     lang). Mirrors the region block: run on the SAME person-detect-text,
-    //     pass `layer1_raw` as the structural PII proximity context (same
-    //     detect-coord convention as the zh person/region detectors), tag the
-    //     LAYER_REGEX layer, then map the spans back to the ORIGINAL text exactly
-    //     like layer1/person/regions. Empty when "zh" is absent.
+    // 11. Evidence-gated Chinese occupation detection (only when "zh" is in lang) —
+    //     same shape as the region phase.
     poll_abort!(cancel); // phase 5: occupation
-    let mut job_titles: Vec<PatternMatch> = Vec::new();
-    if has_zh {
-        let mut zh_jobs = detect_occupation_zh(person_detect_text, &layer1_raw);
-        tag_layer(&mut zh_jobs, LAYER_REGEX);
-        job_titles = zh_jobs;
-    }
-    let job_titles = map_matches_to_original(
-        &job_titles,
+    let job_titles = run_zh_detector(
+        has_zh,
+        person_detect_text,
+        &layer1_raw,
         text,
         person_offset_map.as_deref(),
         orig_len,
+        detect_occupation_zh,
     );
 
-    // 12. Evidence-gated framework detectors (zh only): conditions + hobbies.
-    //     Combined into one `framework` vec.
+    // 12. Evidence-gated framework detectors (zh only): conditions ++ hobbies,
+    //     combined into one `framework` vec by the composing closure.
     poll_abort!(cancel); // phase 6: framework
-    let mut framework: Vec<PatternMatch> = Vec::new();
-    if has_zh {
-        framework.extend(crate::conditions::detect_conditions_zh(person_detect_text, &layer1_raw));
-        framework.extend(crate::hobbies::detect_hobbies_zh(person_detect_text, &layer1_raw));
-        tag_layer(&mut framework, LAYER_REGEX);
-    }
-    let framework = map_matches_to_original(&framework, text, person_offset_map.as_deref(), orig_len);
+    let framework = run_zh_detector(
+        has_zh,
+        person_detect_text,
+        &layer1_raw,
+        text,
+        person_offset_map.as_deref(),
+        orig_len,
+        |t, l1| {
+            let mut v = crate::conditions::detect_conditions_zh(t, l1);
+            v.extend(crate::hobbies::detect_hobbies_zh(t, l1));
+            v
+        },
+    );
 
     Ok(DetectL1Result {
         layer1,

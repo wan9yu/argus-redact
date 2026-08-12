@@ -302,11 +302,17 @@ fn match_patterns_impl(
 
         let re = get_regex(&pat.pattern)?;
 
-        // fancy-regex find_iter returns Result<Match>
+        // ONE `captures_from_pos` yields BOTH the whole-match span (group 0) and
+        // any named group, in ABSOLUTE offsets — so a grouped pattern needs no
+        // second `captures` run over a match-relative slice and no `m.start() +`
+        // rebasing (mirrors `reserved_range::collect_matches`). Using group 0's
+        // span keeps the whole-match search advance byte-identical to the old
+        // `find_from_pos`; the leftmost match at/after `search_start` is the same
+        // either way, capture groups only add the group offsets.
         let mut search_start = 0;
         while search_start <= text.len() {
-            let m = match re.find_from_pos(text, search_start) {
-                Ok(Some(m)) => m,
+            let caps = match re.captures_from_pos(text, search_start) {
+                Ok(Some(c)) => c,
                 Ok(None) => break,
                 Err(e) => {
                     return Err(PatternError(format!(
@@ -315,32 +321,35 @@ fn match_patterns_impl(
                     .into())
                 }
             };
+            // Group 0 is the whole match — always present on a successful capture.
+            let m0 = caps.get(0).expect("capture group 0 present on every match");
 
-            let mut matched = m.as_str().to_string();
-            let mut start = m.start();
-            let mut end = m.end();
-            // Mutation note: the search-advance comparison/arithmetic here and the
-            // group-offset `m.start() + grp.{start,end}()` below have cargo-mutants
-            // survivors (cargo-mutants runs only the Rust unit tests). The Rust unit
-            // tests `multiple_non_overlapping_matches_advance_correctly` /
-            // `named_group_offsets_are_match_relative` cover the common cases, and the
-            // remainder (e.g. `end > start` → `end == start`, which re-scans on every
-            // multi-match input) is covered end-to-end by the Python detection golden
-            // suite — VERIFIED: applying that mutation fails
+            let mut matched = m0.as_str().to_string();
+            let mut start = m0.start();
+            let mut end = m0.end();
+            // Advance from the FULL-match span (group 0), BEFORE the named-group
+            // narrowing below overwrites start/end — same order as the old code.
+            //
+            // Mutation note: this search-advance comparison/arithmetic has
+            // cargo-mutants survivors (cargo-mutants runs only the Rust unit tests).
+            // `multiple_non_overlapping_matches_advance_correctly` covers the common
+            // case; the remainder (e.g. `end > start` → `end == start`, which
+            // re-scans on every multi-match input) is covered end-to-end by the
+            // Python detection golden suite — VERIFIED: applying that mutation fails
             // `tests/detection/test_patterns.py::…test_should_sort_by_position_when_multiple_matches`
             // (and 16 others). The `> → >=` / `+ → -` variants that only diverge on
             // ZERO-WIDTH matches are unreachable from the built-in patterns (none can
             // match empty), so they are equivalent for the production pattern set.
             search_start = if end > start { end } else { start + 1 };
 
-            // Extract named group if specified (the validator must see the group text).
+            // Narrow to the named group if specified (the validator must see the
+            // group text). Its offsets are ABSOLUTE, so no rebasing —
+            // `named_group_offsets_are_match_relative` pins the resulting span.
             if let Some(ref group_name) = pat.group {
-                if let Ok(Some(caps)) = re.captures(&text[m.start()..]) {
-                    if let Some(grp) = caps.name(group_name) {
-                        matched = grp.as_str().to_string();
-                        start = m.start() + grp.start();
-                        end = m.start() + grp.end();
-                    }
+                if let Some(grp) = caps.name(group_name) {
+                    matched = grp.as_str().to_string();
+                    start = grp.start();
+                    end = grp.end();
                 }
             }
 
