@@ -69,9 +69,8 @@ use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
-use crate::coverage::{restore_lost_coverage, FilterScope};
-use crate::hints::{filter_self_reference, Hint};
-use crate::merger::merge_entities_with_text;
+use crate::coverage::{finalize_entities, FilterScope};
+use crate::hints::Hint;
 use crate::restore::{RestoreError, RestoreSession};
 use crate::types::PatternMatch;
 
@@ -631,24 +630,15 @@ where
     /// set that drives both the cut and the redaction.
     fn detect_final(&self, buffer: &str) -> Vec<PatternMatch> {
         let DetectSpans { entities, hints } = (self.detect)(buffer);
-        // The streaming face applies no type filter — the caller-supplied
-        // redact closure owns that — so the only dropping filter here is the
-        // self-reference tier filter. The coverage invariant still applies:
-        // a dropped self_reference span may have absorbed a real entity.
+        // The streaming face applies NO type filter — the caller-supplied redact
+        // closure owns that — so `apply_type_filter` is false and the scope
+        // carries no type lists; the only dropping filter is the self-reference
+        // tier filter. The post-merge coverage invariant still applies (a dropped
+        // self_reference span may have absorbed a real entity), and it is the
+        // SAME `finalize_entities` the batch `redact_l1` drives — the two faces
+        // cannot diverge on it.
         let scope = FilterScope::from_hints(None, None, &hints);
-        let pre_merge: Option<Vec<PatternMatch>> =
-            if scope.admits_all(&entities) { None } else { Some(entities.clone()) };
-        let merged = merge_entities_with_text(entities, buffer);
-        // One Option carrying both halves — `merged` is moved into the filter
-        // below, so its spans must be taken first, and the snapshot is only
-        // ever useful paired with them. See the twin in `redact_l1`.
-        let snapshot: Option<(Vec<PatternMatch>, Vec<(usize, usize)>)> =
-            pre_merge.map(|pre| (pre, merged.iter().map(|e| (e.start, e.end)).collect()));
-        let filtered = filter_self_reference(merged, &hints);
-        match snapshot {
-            Some((pre, spans)) => restore_lost_coverage(&pre, &spans, filtered, &scope, buffer).0,
-            None => filtered,
-        }
+        finalize_entities(entities, &hints, &scope, buffer, false)
     }
 
     /// The snap input for [`context_cut`]: the final spans as `(start, end, type)`

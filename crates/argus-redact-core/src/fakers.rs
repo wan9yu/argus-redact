@@ -20,7 +20,7 @@
 //! faker, never the golden.
 
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{LazyLock, OnceLock};
 
 use fancy_regex::Regex;
 use serde::Deserialize;
@@ -119,21 +119,27 @@ pub fn twarc_reserved_prefix() -> &'static str {
     &zh_data().twarc_reserved_prefix
 }
 
+/// Pair each name (in `names` order) with its aliases from `map`, defaulting to
+/// an empty list when absent. The shared body behind the three ordered-alias
+/// accessors below (zh/en person names, en addresses).
+fn ordered_aliases(
+    names: &[String],
+    map: &HashMap<String, Vec<String>>,
+) -> Vec<(String, Vec<String>)> {
+    names
+        .iter()
+        .map(|name| {
+            let aliases = map.get(name).cloned().unwrap_or_default();
+            (name.clone(), aliases)
+        })
+        .collect()
+}
+
 /// Zh person-name aliases as an ordered `Vec<(name, aliases)>`.
 /// Order matches `reserved_person_names` (guaranteed by construction in RON).
 pub fn reserved_person_names_aliases_zh_ordered() -> Vec<(String, Vec<String>)> {
     let data = zh_data();
-    data.reserved_person_names
-        .iter()
-        .map(|name| {
-            let aliases = data
-                .reserved_person_names_aliases
-                .get(name)
-                .cloned()
-                .unwrap_or_default();
-            (name.clone(), aliases)
-        })
-        .collect()
+    ordered_aliases(&data.reserved_person_names, &data.reserved_person_names_aliases)
 }
 
 /// Zh address aliases as an ordered `Vec<((city, district, street), aliases)>`.
@@ -156,34 +162,14 @@ pub fn plate_special_prefixes_zh() -> &'static [String] {
 /// Order matches `reserved_person_names_en`.
 pub fn reserved_person_names_aliases_en_ordered() -> Vec<(String, Vec<String>)> {
     let data = en_data();
-    data.reserved_person_names_en
-        .iter()
-        .map(|name| {
-            let aliases = data
-                .reserved_person_names_en_aliases
-                .get(name)
-                .cloned()
-                .unwrap_or_default();
-            (name.clone(), aliases)
-        })
-        .collect()
+    ordered_aliases(&data.reserved_person_names_en, &data.reserved_person_names_en_aliases)
 }
 
 /// En address aliases as an ordered `Vec<(address, aliases)>`.
 /// Order matches `reserved_addresses_en`.
 pub fn reserved_addresses_en_aliases() -> Vec<(String, Vec<String>)> {
     let data = en_data();
-    data.reserved_addresses_en
-        .iter()
-        .map(|addr| {
-            let aliases = data
-                .reserved_addresses_en_aliases
-                .get(addr)
-                .cloned()
-                .unwrap_or_default();
-            (addr.clone(), aliases)
-        })
-        .collect()
+    ordered_aliases(&data.reserved_addresses_en, &data.reserved_addresses_en_aliases)
 }
 
 /// RFC 2606 reserved email domains pool.
@@ -330,11 +316,12 @@ pub fn fake_ssn_en_reserved(_v: &str, rng: &mut ShakeRng) -> (String, Vec<String
     (format!("999-{group:02}-{serial:04}"), vec![])
 }
 
-/// `fake_credit_card_en_reserved` — `"999999"` + `rand_digits(9)` + Luhn check digit.
-pub fn fake_credit_card_en_reserved(_v: &str, rng: &mut ShakeRng) -> (String, Vec<String>) {
-    let body = format!("999999{}", rng.rand_digits(9));
-    let check = luhn_check_digit(&body);
-    (format!("{body}{check}"), vec![])
+/// `fake_credit_card_en_reserved` — `"999999"` + `rand_digits(9)` + Luhn check
+/// digit. Byte-for-byte identical to [`fake_bank_card_reserved`] (same RNG-call
+/// sequence), so it delegates rather than duplicate the body. The registry still
+/// exposes both names via [`resolve_faker`] / [`builtin_faker_name`].
+pub fn fake_credit_card_en_reserved(v: &str, rng: &mut ShakeRng) -> (String, Vec<String>) {
+    fake_bank_card_reserved(v, rng)
 }
 
 /// `fake_person_en_reserved` — `choice(RESERVED_PERSON_NAMES_EN)` + zh aliases.
@@ -551,6 +538,44 @@ fn ordinal_to_ymd(mut ordinal: i64) -> (i64, u32, u32) {
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────
 
+/// The built-in faker registry: ONE row per built-in `(type, lang)`, pairing the
+/// globally-unique registry function NAME with its [`FakerFn`]. Transcribed
+/// verbatim from the `register(PIITypeDef(name=…, lang=…, faker_reserved=…))`
+/// calls in `specs/{zh,en,shared}.py`, in registration order.
+///
+/// The three public lookups all DERIVE from this single table so they can never
+/// drift: [`resolve_faker`] (name → fn), [`builtin_faker_name`] ((type,lang) →
+/// name), and [`builtin_faker_names`] (the name set, in table order). Both the
+/// `name` column and the `(type, lang)` pair are unique across rows, so a linear
+/// `find` returns the same row a `match` arm would.
+static BUILTINS: &[(&str, &str, &str, FakerFn)] = &[
+    // zh (specs/zh.py)
+    ("phone", "zh", "fake_phone_reserved", fake_phone_reserved),
+    ("phone_landline", "zh", "fake_phone_landline_reserved", fake_phone_landline_reserved),
+    ("id_number", "zh", "fake_id_number_reserved", fake_id_number_reserved),
+    ("hk_id", "zh", "fake_hkid_reserved", fake_hkid_reserved),
+    ("tw_id", "zh", "fake_twid_reserved", fake_twid_reserved),
+    ("macau_id", "zh", "fake_macau_id_reserved", fake_macau_id_reserved),
+    ("taiwan_arc", "zh", "fake_taiwan_arc_reserved", fake_taiwan_arc_reserved),
+    ("bank_card", "zh", "fake_bank_card_reserved", fake_bank_card_reserved),
+    ("passport", "zh", "fake_passport_reserved", fake_passport_reserved),
+    ("license_plate", "zh", "fake_license_plate_reserved", fake_license_plate_reserved),
+    ("address", "zh", "fake_address_reserved", fake_address_reserved),
+    ("date_of_birth", "zh", "fake_date_of_birth_noise", fake_date_of_birth_noise),
+    ("person", "zh", "fake_person_reserved", fake_person_reserved),
+    ("age", "zh", "fake_age_noise", fake_age_noise),
+    // en (specs/en.py)
+    ("phone", "en", "fake_phone_en_reserved", fake_phone_en_reserved),
+    ("ssn", "en", "fake_ssn_en_reserved", fake_ssn_en_reserved),
+    ("credit_card", "en", "fake_credit_card_en_reserved", fake_credit_card_en_reserved),
+    ("address", "en", "fake_address_en_reserved", fake_address_en_reserved),
+    ("person", "en", "fake_person_en_reserved", fake_person_en_reserved),
+    // shared (specs/shared.py)
+    ("email", "shared", "fake_email_reserved", fake_email_reserved),
+    ("ip_address", "shared", "fake_ip_reserved", fake_ip_reserved),
+    ("mac_address", "shared", "fake_mac_reserved", fake_mac_reserved),
+];
+
 /// Resolve a faker by its registry function name (e.g. `"fake_phone_reserved"`).
 ///
 /// The function name is globally unique, so it disambiguates the zh/en same-named
@@ -558,107 +583,28 @@ fn ordinal_to_ymd(mut ordinal: i64) -> (i64, u32, u32) {
 /// `(name, lang)` lookup in `_find_faker_reserved`. The T9 orchestrator does that
 /// `(type, lang)` resolution and passes the resolved function name into Rust.
 pub fn resolve_faker(name: &str) -> Option<FakerFn> {
-    Some(match name {
-        // zh
-        "fake_phone_reserved" => fake_phone_reserved,
-        "fake_phone_landline_reserved" => fake_phone_landline_reserved,
-        "fake_id_number_reserved" => fake_id_number_reserved,
-        "fake_bank_card_reserved" => fake_bank_card_reserved,
-        "fake_passport_reserved" => fake_passport_reserved,
-        "fake_license_plate_reserved" => fake_license_plate_reserved,
-        "fake_address_reserved" => fake_address_reserved,
-        "fake_person_reserved" => fake_person_reserved,
-        "fake_hkid_reserved" => fake_hkid_reserved,
-        "fake_twid_reserved" => fake_twid_reserved,
-        "fake_macau_id_reserved" => fake_macau_id_reserved,
-        "fake_taiwan_arc_reserved" => fake_taiwan_arc_reserved,
-        // en
-        "fake_phone_en_reserved" => fake_phone_en_reserved,
-        "fake_ssn_en_reserved" => fake_ssn_en_reserved,
-        "fake_credit_card_en_reserved" => fake_credit_card_en_reserved,
-        "fake_address_en_reserved" => fake_address_en_reserved,
-        "fake_person_en_reserved" => fake_person_en_reserved,
-        // shared
-        "fake_email_reserved" => fake_email_reserved,
-        "fake_ip_reserved" => fake_ip_reserved,
-        "fake_mac_reserved" => fake_mac_reserved,
-        // numeric
-        "fake_age_noise" => fake_age_noise,
-        "fake_date_of_birth_noise" => fake_date_of_birth_noise,
-        _ => return None,
-    })
+    BUILTINS.iter().find(|&&(_, _, n, _)| n == name).map(|&(_, _, _, f)| f)
 }
 
 /// `(type, lang)` → built-in faker function name. SSOT for built-in faker
-/// resolution: transcribed verbatim from the `register(PIITypeDef(name=…,
-/// lang=…, faker_reserved=…))` calls in `specs/{zh,en,shared}.py`. The returned
-/// name is a key into [`resolve_faker`].
+/// resolution: derived from [`BUILTINS`], itself transcribed verbatim from the
+/// `register(PIITypeDef(name=…, lang=…, faker_reserved=…))` calls in
+/// `specs/{zh,en,shared}.py`. The returned name is a key into [`resolve_faker`].
 ///
 /// Custom (`register_pii_type(faker_reserved=…)`) fakers are NOT here — their
 /// callable lives outside the four built-in modules and is invoked via the
 /// `PyFakerFactory` callback. A `(type, lang)` with no built-in faker → `None`.
 pub fn builtin_faker_name(type_: &str, lang: &str) -> Option<&'static str> {
-    Some(match (type_, lang) {
-        // zh (specs/zh.py)
-        ("phone", "zh") => "fake_phone_reserved",
-        ("phone_landline", "zh") => "fake_phone_landline_reserved",
-        ("id_number", "zh") => "fake_id_number_reserved",
-        ("hk_id", "zh") => "fake_hkid_reserved",
-        ("tw_id", "zh") => "fake_twid_reserved",
-        ("macau_id", "zh") => "fake_macau_id_reserved",
-        ("taiwan_arc", "zh") => "fake_taiwan_arc_reserved",
-        ("bank_card", "zh") => "fake_bank_card_reserved",
-        ("passport", "zh") => "fake_passport_reserved",
-        ("license_plate", "zh") => "fake_license_plate_reserved",
-        ("address", "zh") => "fake_address_reserved",
-        ("date_of_birth", "zh") => "fake_date_of_birth_noise",
-        ("person", "zh") => "fake_person_reserved",
-        ("age", "zh") => "fake_age_noise",
-        // en (specs/en.py)
-        ("phone", "en") => "fake_phone_en_reserved",
-        ("ssn", "en") => "fake_ssn_en_reserved",
-        ("credit_card", "en") => "fake_credit_card_en_reserved",
-        ("address", "en") => "fake_address_en_reserved",
-        ("person", "en") => "fake_person_en_reserved",
-        // shared (specs/shared.py)
-        ("email", "shared") => "fake_email_reserved",
-        ("ip_address", "shared") => "fake_ip_reserved",
-        ("mac_address", "shared") => "fake_mac_reserved",
-        _ => return None,
-    })
+    BUILTINS.iter().find(|&&(t, l, _, _)| t == type_ && l == lang).map(|&(_, _, n, _)| n)
 }
 
-/// The set of built-in faker function names (the 22 unique values produced by
-/// [`builtin_faker_name`]). Phase C uses this to flag a registered
-/// `faker_reserved` as built-in (resolvable in Rust) vs custom (Python callback).
+/// The set of built-in faker function names (the 22 unique values in [`BUILTINS`],
+/// in table order). Phase C uses this to flag a registered `faker_reserved` as
+/// built-in (resolvable in Rust) vs custom (Python callback).
 pub fn builtin_faker_names() -> &'static [&'static str] {
-    &[
-        // zh
-        "fake_phone_reserved",
-        "fake_phone_landline_reserved",
-        "fake_id_number_reserved",
-        "fake_hkid_reserved",
-        "fake_twid_reserved",
-        "fake_macau_id_reserved",
-        "fake_taiwan_arc_reserved",
-        "fake_bank_card_reserved",
-        "fake_passport_reserved",
-        "fake_license_plate_reserved",
-        "fake_address_reserved",
-        "fake_date_of_birth_noise",
-        "fake_person_reserved",
-        "fake_age_noise",
-        // en
-        "fake_phone_en_reserved",
-        "fake_ssn_en_reserved",
-        "fake_credit_card_en_reserved",
-        "fake_address_en_reserved",
-        "fake_person_en_reserved",
-        // shared
-        "fake_email_reserved",
-        "fake_ip_reserved",
-        "fake_mac_reserved",
-    ]
+    static NAMES: LazyLock<Vec<&'static str>> =
+        LazyLock::new(|| BUILTINS.iter().map(|&(_, _, name, _)| name).collect());
+    NAMES.as_slice()
 }
 
 /// Re-roll a built-in faker until it is unique within `used ∪ {value}`.

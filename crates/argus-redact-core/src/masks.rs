@@ -17,6 +17,22 @@ const CIRCLED_DIGITS: &[char] = &[
 /// Mirrors `_MAX_NUMERIC_COLLISION_SUFFIX = 10_000`.
 const MAX_NUMERIC_COLLISION_SUFFIX: u32 = 10_000;
 
+/// Keep the first `p` and last `s` chars of `chars`, star the middle.
+///
+/// The shared prefix/star/suffix block for [`mask_value`] and
+/// [`mask_phone_regional`]: when `len <= p + s` the whole value is masked
+/// (`"*".repeat(len)`), otherwise it is `prefix ++ stars ++ suffix`. Char-based
+/// throughout — the caller passes a Unicode-scalar `Vec<char>`.
+fn mask_prefix_suffix(chars: &[char], p: usize, s: usize) -> String {
+    let len = chars.len();
+    if len <= p + s {
+        return "*".repeat(len);
+    }
+    let prefix: String = chars[..p].iter().collect();
+    let suffix: String = chars[len - s..].iter().collect();
+    format!("{}{}{}", prefix, "*".repeat(len - p - s), suffix)
+}
+
 /// Apply mask strategy: show `visible_prefix` + `visible_suffix` chars, mask middle.
 ///
 /// Mirrors `_mask_value` (replacer.py:346–380).
@@ -76,16 +92,7 @@ pub fn mask_value(
     };
 
     let chars: Vec<char> = value.chars().collect();
-    let len = chars.len();
-
-    if len <= p + s {
-        return "*".repeat(len);
-    }
-
-    let prefix_str: String = chars[..p].iter().collect();
-    let suffix_str: String = chars[len - s..].iter().collect();
-    let masked = "*".repeat(len - p - s);
-    format!("{}{}{}", prefix_str, masked, suffix_str)
+    mask_prefix_suffix(&chars, p, s)
 }
 
 /// Chinese name mask: 张* / 李** / 欧阳**.
@@ -182,13 +189,7 @@ pub fn mask_phone_regional(value: &str, region: &str) -> String {
     };
 
     let chars: Vec<char> = digits.chars().collect();
-    let len = chars.len();
-    if len <= p + s {
-        return "*".repeat(len);
-    }
-    let prefix: String = chars[..p].iter().collect();
-    let suffix: String = chars[len - s..].iter().collect();
-    format!("{}{}{}", prefix, "*".repeat(len - p - s), suffix)
+    mask_prefix_suffix(&chars, p, s)
 }
 
 /// Append a circled-digit (or numeric) suffix to avoid label collisions.

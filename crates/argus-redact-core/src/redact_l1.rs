@@ -50,12 +50,11 @@
 use std::collections::HashSet;
 
 use crate::cancel::{poll_abort, CancelFlag, DetectError};
-use crate::coverage::{restore_lost_coverage, FilterScope};
+use crate::coverage::{finalize_entities, FilterScope};
 use crate::data::{all_langs, builtin_patterns};
 use crate::fanout;
 use crate::grammar::normalize_grammar_en;
-use crate::hints::{filter_self_reference, get_person_threshold, produce_hints_l1, Hint};
-use crate::merger::merge_entities_with_text;
+use crate::hints::{get_person_threshold, produce_hints_l1, Hint};
 use crate::normalize::{
     finalize, map_spans_to_original, normalize_core, normalize_text_for_person,
 };
@@ -680,7 +679,7 @@ pub fn detect_l1_cancellable(
 ///
 /// 1. `detect_l1(text, lang, names)` → the RAW L1 entities (`layer1 ++ person`).
 /// 2. `merge_entities(entities, text)` — priority-aware (see
-///    [`merge_entities_with_text`]).
+///    [`crate::merger::merge_entities_with_text`]).
 /// 3. **`boost_cross_layer` is a NO-OP in fast mode** and is SKIPPED. Python
 ///    runs it (`hints.boost_cross_layer(merged, pre_merge)`), but it returns
 ///    `merged` unchanged whenever fewer than 2 distinct layers are present in
@@ -777,48 +776,17 @@ pub fn redact_l1<F: PseudoFactory>(
     entities.extend(job_titles);
     entities.extend(framework);
 
-    // 2. Priority-aware merge over the ORIGINAL text.
-    //
-    //    Snapshot the pre-merge set ONLY when a post-merge filter can actually
-    //    drop something — step 5a needs it to restore lost coverage. A merged
-    //    entity's type is always some pre-merge entity's type, so when every
-    //    pre-merge entity is admitted no filter drops anything and no coverage
-    //    can be lost. On the common path (no type filter, tier 1 or no
-    //    self_reference at all) this costs one pass and zero allocations.
+    // 2-5a. Priority-aware merge → self-reference filter → type filter →
+    //       post-merge coverage restore, all in the shared `finalize_entities`
+    //       (`crate::coverage`). That function IS the post-merge PII-leak
+    //       coverage invariant (v0.8.6); the streaming face
+    //       (`streaming::detect_final`) drives the SAME code so the two can
+    //       never disagree about it. Step 3 (`boost_cross_layer`) is a NO-OP in
+    //       fast mode (single layer) and is skipped. The batch face applies the
+    //       type filter (`apply_type_filter = true`), reading the `types` /
+    //       `types_exclude` lists off `scope`.
     let scope = FilterScope::from_hints(types, types_exclude, &hints);
-    let pre_merge: Option<Vec<PatternMatch>> =
-        if scope.admits_all(&entities) { None } else { Some(entities.clone()) };
-    let merged = merge_entities_with_text(entities, text);
-    //     Pair the pre-merge snapshot with the merged spans NOW, in ONE Option:
-    //     `merged` is moved into the filter below so its spans must be taken
-    //     before that, and the two values are only ever needed together. Two
-    //     separate Options would leave "always both or neither" to convention;
-    //     one tuple lets the compiler hold it.
-    let snapshot: Option<(Vec<PatternMatch>, Vec<(usize, usize)>)> =
-        pre_merge.map(|pre| (pre, merged.iter().map(|e| (e.start, e.end)).collect()));
-
-    // 3. boost_cross_layer: NO-OP in fast mode (single layer) — skipped.
-
-    // 4. Self-reference tier filter.
-    let filtered = filter_self_reference(merged, &hints);
-
-    // 5. Type filter (redact.py:337-343): types wins over types_exclude.
-    let filtered: Vec<PatternMatch> = if let Some(keep) = types {
-        filtered.into_iter().filter(|e| keep.contains(&e.type_)).collect()
-    } else if let Some(drop) = types_exclude {
-        filtered.into_iter().filter(|e| !drop.contains(&e.type_)).collect()
-    } else {
-        filtered
-    };
-
-    // 5a. Post-merge coverage invariant: steps 4 and 5 drop entities by type,
-    //     and a dropped entity may have absorbed a DIFFERENT real entity during
-    //     the merge. Re-admit anything whose coverage they destroyed. See
-    //     `crate::coverage`.
-    let filtered = match snapshot {
-        Some((pre, spans)) => restore_lost_coverage(&pre, &spans, filtered, &scope, text).0,
-        None => filtered,
-    };
+    let filtered = finalize_entities(entities, &hints, &scope, text, true);
 
     // 6. Replace. Both detect (above) and replace surface their error as a
     //    `String`, so the binding (T7) re-wraps a single error type into a
