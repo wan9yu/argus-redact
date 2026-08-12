@@ -509,8 +509,11 @@ fn restore_body(
 
     // The display-marker strip is scoped to this key's own FAKES (not the
     // merged map): markers are written by `mark_for_display` against the
-    // pseudonyms, so that is exactly where they can be.
-    let marker_fakes: Vec<String> = key.keys().cloned().collect();
+    // pseudonyms, so that is exactly where they can be. `restore_flat` only
+    // reads `marker_fakes` when `display_marker` is Some, so building the list
+    // otherwise is wasted work whose empty result is never observed.
+    let marker_fakes: Vec<String> =
+        if display_marker.is_some() { key.keys().cloned().collect() } else { Vec::new() };
 
     // No shield on the unguarded path: nothing is withheld, so every token in
     // the merged map is substitutable.
@@ -565,10 +568,16 @@ fn restore_flat(
     // A shield entry that is ALSO a lookup key would be SUBSTITUTED, not
     // shielded — the lookup wins in `substitute_with`. The guarded caller
     // derives the two sets by complementary filters on one map so they cannot
-    // intersect; this filter makes the property local rather than a contract
-    // the caller has to remember.
-    let shield_only: Vec<String> =
-        shield.iter().filter(|s| !flat.contains_key(*s)).cloned().collect();
+    // intersect (and the unguarded path passes an empty shield); this filter
+    // makes the property local rather than a contract the caller has to
+    // remember. Since a collision never happens on either real path, borrow
+    // `shield` as-is and only allocate the filtered copy if one ever does —
+    // byte-identical either way.
+    let shield_only: Cow<[String]> = if shield.iter().any(|s| flat.contains_key(s)) {
+        Cow::Owned(shield.iter().filter(|s| !flat.contains_key(*s)).cloned().collect())
+    } else {
+        Cow::Borrowed(shield)
+    };
 
     // Step 3: core substitution over the flat lookup.
     //

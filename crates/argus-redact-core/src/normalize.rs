@@ -50,6 +50,24 @@ const DEFAULT_IGNORABLE: &[(char, char)] = &[
     ('\u{e0000}', '\u{e0fff}'), // Tag block + VS17..256 + the unassigned tail
 ];
 
+/// Membership test over a sorted, non-overlapping inclusive-range table via
+/// binary search. Shared by the two predicates below ([`is_invisible`] and
+/// [`is_nfkc_digit_yielding_non_decimal`]), which differ only in their table
+/// and the fast-path guard constant they gate this call behind.
+fn in_sorted_char_ranges(c: char, ranges: &[(char, char)]) -> bool {
+    ranges
+        .binary_search_by(|&(lo, hi)| {
+            if c < lo {
+                std::cmp::Ordering::Greater
+            } else if c > hi {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .is_ok()
+}
+
 fn is_invisible(c: char) -> bool {
     // Invisible / zero-width / direction-control characters stripped BEFORE
     // detection so text-smuggling can't split a token and fail-open a regex
@@ -62,17 +80,7 @@ fn is_invisible(c: char) -> bool {
     if c < '\u{00ad}' {
         return false; // ASCII fast-path: no ignorable below U+00AD
     }
-    DEFAULT_IGNORABLE
-        .binary_search_by(|&(lo, hi)| {
-            if c < lo {
-                std::cmp::Ordering::Greater
-            } else if c > hi {
-                std::cmp::Ordering::Less
-            } else {
-                std::cmp::Ordering::Equal
-            }
-        })
-        .is_ok()
+    in_sorted_char_ranges(c, DEFAULT_IGNORABLE)
 }
 
 fn is_droppable_mark(c: char) -> bool {
@@ -158,17 +166,7 @@ pub(crate) fn is_nfkc_digit_yielding_non_decimal(c: char) -> bool {
     if c < '\u{b2}' {
         return false; // ASCII + Latin-1 head fast-path
     }
-    NFKC_DIGIT_YIELDING_NON_DECIMAL
-        .binary_search_by(|&(lo, hi)| {
-            if c < lo {
-                std::cmp::Ordering::Greater
-            } else if c > hi {
-                std::cmp::Ordering::Less
-            } else {
-                std::cmp::Ordering::Equal
-            }
-        })
-        .is_ok()
+    in_sorted_char_ranges(c, NFKC_DIGIT_YIELDING_NON_DECIMAL)
 }
 
 /// A char the regex layer already sees as `\d` (ASCII or any other `Nd`), i.e.
