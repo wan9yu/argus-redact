@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "benchmark": "perf_profile",
+  "package_version": "0.8.11",
+  "platform": "Apple M-series (arm64, macOS)",
+  "machine": "arm64",
+  "python": "3.11.3",
+  "commit": "b6fcce2",
+  "iterations": 300,
+  "workloads": {
+    "en_short": {
+      "lang": "en",
+      "bytes": 141,
+      "redact_fast": {
+        "min_ms": 0.15342,
+        "p50_ms": 0.16175,
+        "p90_ms": 0.17338,
+        "p95_ms": 0.18546,
+        "p99_ms": 0.29721,
+        "max_ms": 0.32175,
+        "mean_ms": 0.16647,
+        "stdev_ms": 0.02081,
+        "docs_per_s": 6182.4
+      },
+      "detect_l1": {
+        "min_ms": 0.07654,
+        "p50_ms": 0.07708,
+        "p90_ms": 0.07988,
+        "p95_ms": 0.08271,
+        "p99_ms": 0.09575,
+        "max_ms": 0.15858,
+        "mean_ms": 0.0784,
+        "stdev_ms": 0.00605,
+        "docs_per_s": 12973.0
+      }
+    },
+    "en_1kb": {
+      "lang": "en",
+      "bytes": 846,
+      "redact_fast": {
+        "min_ms": 0.51537,
+        "p50_ms": 0.51973,
+        "p90_ms": 0.53533,
+        "p95_ms": 0.5465,
+        "p99_ms": 0.64458,
+        "max_ms": 0.73104,
+        "mean_ms": 0.52453,
+        "stdev_ms": 0.02087,
+        "docs_per_s": 1924.1
+      },
+      "detect_l1": {
+        "min_ms": 0.38108,
+        "p50_ms": 0.38229,
+        "p90_ms": 0.39117,
+        "p95_ms": 0.39463,
+        "p99_ms": 0.40825,
+        "max_ms": 0.41921,
+        "mean_ms": 0.38502,
+        "stdev_ms": 0.00551,
+        "docs_per_s": 2615.8
+      }
+    },
+    "en_long": {
+      "lang": "en",
+      "bytes": 8460,
+      "redact_fast": {
+        "min_ms": 4.55746,
+        "p50_ms": 4.61677,
+        "p90_ms": 4.76221,
+        "p95_ms": 4.83329,
+        "p99_ms": 4.96296,
+        "max_ms": 5.14433,
+        "mean_ms": 4.65146,
+        "stdev_ms": 0.08502,
+        "docs_per_s": 216.6
+      },
+      "detect_l1": {
+        "min_ms": 3.66738,
+        "p50_ms": 3.68606,
+        "p90_ms": 3.80929,
+        "p95_ms": 3.83971,
+        "p99_ms": 3.96754,
+        "max_ms": 3.998,
+        "mean_ms": 3.71513,
+        "stdev_ms": 0.0626,
+        "docs_per_s": 271.3
+      }
+    },
+    "zh_short": {
+      "lang": "zh",
+      "bytes": 175,
+      "redact_fast": {
+        "min_ms": 0.28829,
+        "p50_ms": 0.28981,
+        "p90_ms": 0.29708,
+        "p95_ms": 0.30146,
+        "p99_ms": 0.30558,
+        "max_ms": 0.31929,
+        "mean_ms": 0.29151,
+        "stdev_ms": 0.00412,
+        "docs_per_s": 3450.5
+      },
+      "detect_l1": {
+        "min_ms": 0.18258,
+        "p50_ms": 0.18325,
+        "p90_ms": 0.18867,
+        "p95_ms": 0.19267,
+        "p99_ms": 0.20063,
+        "max_ms": 0.20746,
+        "mean_ms": 0.18478,
+        "stdev_ms": 0.0038,
+        "docs_per_s": 5457.0
+      }
+    },
+    "zh_1kb": {
+      "lang": "zh",
+      "bytes": 1400,
+      "redact_fast": {
+        "min_ms": 1.53696,
+        "p50_ms": 1.72271,
+        "p90_ms": 2.01487,
+        "p95_ms": 2.28504,
+        "p99_ms": 5.67388,
+        "max_ms": 11.9185,
+        "mean_ms": 1.869,
+        "stdev_ms": 0.82439,
+        "docs_per_s": 580.5
+      },
+      "detect_l1": {
+        "min_ms": 1.28263,
+        "p50_ms": 1.31731,
+        "p90_ms": 1.41779,
+        "p95_ms": 1.45454,
+        "p99_ms": 1.55071,
+        "max_ms": 1.63875,
+        "mean_ms": 1.3385,
+        "stdev_ms": 0.05848,
+        "docs_per_s": 759.1
+      }
+    },
+    "zh_long": {
+      "lang": "zh",
+      "bytes": 14000,
+      "redact_fast": {
+        "min_ms": 15.22379,
+        "p50_ms": 17.54454,
+        "p90_ms": 18.10692,
+        "p95_ms": 18.21479,
+        "p99_ms": 18.42392,
+        "max_ms": 18.64079,
+        "mean_ms": 17.16344,
+        "stdev_ms": 0.96837,
+        "docs_per_s": 57.0
+      },
+      "detect_l1": {
+        "min_ms": 13.31442,
+        "p50_ms": 15.34431,
+        "p90_ms": 15.79275,
+        "p95_ms": 15.9235,
+        "p99_ms": 19.15958,
+        "max_ms": 21.12038,
+        "mean_ms": 15.00026,
+        "stdev_ms": 1.10605,
+        "docs_per_s": 65.2
+      }
+    }
+  }
+}
