@@ -17,20 +17,12 @@ import sys
 from pathlib import Path
 
 from argus_redact.specs._compliance import PIPL_SENSITIVE_PI, PIPL_SORT_ORDER
+from argus_redact.specs._gen_ron import emit_or_check, ron_opt_str, ron_str
 from argus_redact.specs.registry import list_types
 
 _OUT = (
     Path(__file__).resolve().parents[3] / "crates" / "argus-redact-core" / "data" / "risk_data.ron"
 )
-
-
-def _ron_str(s: str) -> str:
-    """RON/serde string literal — double-quoted, backslash + quote escaped."""
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
-def _ron_opt_str(s: str | None) -> str:
-    return "None" if s is None else f"Some({_ron_str(s)})"
 
 
 def build_ron() -> str:
@@ -40,44 +32,36 @@ def build_ron() -> str:
     lines.append("(")
     lines.append("    types: [")
     for td in list_types():  # registration order (preserves lookup()[0] fallback)
-        pipl = ", ".join(_ron_str(a) for a in td.pipl_articles)
+        pipl = ", ".join(ron_str(a) for a in td.pipl_articles)
         lines.append(
             "        ("
-            f"lang: {_ron_str(td.lang)}, "
-            f"name: {_ron_str(td.name)}, "
+            f"lang: {ron_str(td.lang)}, "
+            f"name: {ron_str(td.name)}, "
             f"pipl_articles: [{pipl}], "
             f"gdpr_special_category: {str(td.gdpr_special_category).lower()}, "
             f"gdpr_art10: {str(td.gdpr_art10).lower()}, "
-            f"hipaa_phi_category: {_ron_opt_str(td.hipaa_phi_category)}"
+            f"hipaa_phi_category: {ron_opt_str(td.hipaa_phi_category)}"
             "),"
         )
     lines.append("    ],")
-    sensitive = ", ".join(_ron_str(x) for x in sorted(PIPL_SENSITIVE_PI))
+    sensitive = ", ".join(ron_str(x) for x in sorted(PIPL_SENSITIVE_PI))
     lines.append(f"    pipl_sensitive_pi: [{sensitive}],")
     lines.append("    pipl_sort_order: [")
     for art, rank in sorted(PIPL_SORT_ORDER.items(), key=lambda kv: kv[1]):
-        lines.append(f"        ({_ron_str(art)}, {rank}),")
+        lines.append(f"        ({ron_str(art)}, {rank}),")
     lines.append("    ],")
     lines.append(")")
     return "\n".join(lines) + "\n"
 
 
 def main() -> int:
-    ron = build_ron()
-    if "--check" in sys.argv:
-        current = _OUT.read_text(encoding="utf-8") if _OUT.exists() else ""
-        if current != ron:
-            print(
-                "risk_data.ron is out of sync with the registry. Run: make gen-risk-data",
-                file=sys.stderr,
-            )
-            return 1
-        print("risk_data.ron is in sync")
-        return 0
-    _OUT.parent.mkdir(parents=True, exist_ok=True)
-    _OUT.write_text(ron, encoding="utf-8")
-    print(f"Wrote {_OUT.relative_to(Path(__file__).resolve().parents[3])}")
-    return 0
+    return emit_or_check(
+        _OUT,
+        build_ron(),
+        sys.argv,
+        human_name="risk_data.ron",
+        out_of_sync_msg="risk_data.ron is out of sync with the registry. Run: make gen-risk-data",
+    )
 
 
 if __name__ == "__main__":

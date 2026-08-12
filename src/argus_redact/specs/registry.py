@@ -227,3 +227,25 @@ def list_types(lang: str | None = None) -> list[PIITypeDef]:
     if lang:
         return [v for (lng, _), v in list(_REGISTRY.items()) if lng == lang]
     return list(_REGISTRY.values())
+
+
+def build_patterns(lang: str) -> list[dict]:
+    """Collect every core-sourced pattern for ``lang`` into one list.
+
+    Test / generator helper (no runtime caller) — mirrors the runtime pattern set
+    by concatenating each registered typedef's core patterns in registration
+    order. It fetches ``core_patterns(lang)`` ONCE and groups by pattern ``type``,
+    so the cost is O(patterns), not the O(types × patterns) a per-typedef
+    ``PIITypeDef.to_patterns()`` loop incurs (each of those re-fetches and
+    re-scans the whole core list). The output is identical to
+    ``[p for td in list_types(lang) for p in td.to_patterns()]``.
+    """
+    from argus_redact.lang._loader import core_patterns
+
+    by_type: dict[str, list[dict]] = {}
+    for pattern in core_patterns(lang):
+        by_type.setdefault(pattern.get("type"), []).append(pattern)
+    patterns: list[dict] = []
+    for typedef in list_types(lang):
+        patterns.extend(dict(p) for p in by_type.get(typedef.name, ()))
+    return patterns

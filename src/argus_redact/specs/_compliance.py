@@ -40,35 +40,40 @@ PIPL_SORT_ORDER: dict[str, int] = {
     PIPL_ART_56: 5,
 }
 
-# HIPAA Safe Harbor 18 PHI identifiers per 45 CFR 164.514(b)(2)(i)(A)–(R).
-# This set is the official standard reference. `_HIPAA_MAP` maps argus
-# detector types to categories; not every category needs a detector (e.g.
+# HIPAA Safe Harbor 18 PHI identifiers per 45 CFR 164.514(b)(2)(i)(A)–(R). This
+# mapping is the single source: each category → its (identifier letter, verbatim
+# description) pair. Both HIPAA_SAFE_HARBOR_CATEGORIES (below) and the published
+# citation strings in `gen_compliance_mappings` derive from it, so there is no
+# parallel hand-maintained list to drift. `_HIPAA_MAP` maps argus detector types
+# to these categories; not every category needs a detector (e.g.
 # health_plan_beneficiary — argus ships no detector for it, but the category
 # belongs in the standard's list). Test suites validate that typedef
-# hipaa_phi_category values are IN this set; they do not require every
-# category to have a mapping.
-HIPAA_SAFE_HARBOR_CATEGORIES: frozenset[str] = frozenset(
-    {
-        "names",  # (A) Names
-        "geographic",  # (B) Geographic data smaller than state
-        "dates",  # (C) Dates (except year) related to individual
-        "phone_numbers",  # (D) Telephone numbers
-        "fax_numbers",  # (E) Fax numbers
-        "email_addresses",  # (F) Email addresses
-        "ssn",  # (G) Social security numbers
-        "medical_record",  # (H) Medical record numbers
-        "health_plan_beneficiary",  # (I) Health plan beneficiary numbers
-        "account_numbers",  # (J) Account numbers
-        "certificate_number",  # (K) Certificate/license numbers
-        "vehicle_identifier",  # (L) Vehicle identifiers and serial numbers
-        "device_identifier",  # (M) Device identifiers and serial numbers
-        "url",  # (N) Web universal resource locators
-        "ip_address",  # (O) Internet protocol address numbers
-        "biometric",  # (P) Biometric identifiers
-        "full_face_photo",  # (Q) Full-face photographs and comparable images
-        "other_unique_identifier",  # (R) Any other unique identifying number/code
-    }
-)
+# hipaa_phi_category values are IN this set; they do not require every category
+# to have a mapping.
+HIPAA_SAFE_HARBOR: dict[str, tuple[str, str]] = {
+    "names": ("A", "Names"),
+    "geographic": ("B", "Geographic subdivisions smaller than a state"),
+    "dates": ("C", "Dates (except year) directly related to an individual"),
+    "phone_numbers": ("D", "Telephone numbers"),
+    "fax_numbers": ("E", "Fax numbers"),
+    "email_addresses": ("F", "Email addresses"),
+    "ssn": ("G", "Social security numbers"),
+    "medical_record": ("H", "Medical record numbers"),
+    "health_plan_beneficiary": ("I", "Health plan beneficiary numbers"),
+    "account_numbers": ("J", "Account numbers"),
+    "certificate_number": ("K", "Certificate/license numbers"),
+    "vehicle_identifier": ("L", "Vehicle identifiers and serial numbers"),
+    "device_identifier": ("M", "Device identifiers and serial numbers"),
+    "url": ("N", "Web URLs"),
+    "ip_address": ("O", "Internet protocol addresses"),
+    "biometric": ("P", "Biometric identifiers"),
+    "full_face_photo": ("Q", "Full-face photographs and comparable images"),
+    "other_unique_identifier": ("R", "Any other unique identifying number or code"),
+}
+
+# Category-name set (order-independent), derived from the mapping above so the
+# two cannot drift.
+HIPAA_SAFE_HARBOR_CATEGORIES: frozenset[str] = frozenset(HIPAA_SAFE_HARBOR)
 
 # PIPL Art.28 sensitive personal information — base categories (expressly
 # enumerated in Art.28 or long-standing members). The full sensitive-PI set

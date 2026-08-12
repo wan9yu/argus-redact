@@ -12,7 +12,7 @@ when `mode="ner"` or higher.
 
 from __future__ import annotations
 
-from .registry import PIITypeDef, list_types, register
+from .registry import PIITypeDef, register
 
 # ── Direct identifiers ──
 
@@ -288,17 +288,3 @@ register(
         description="First-person pronouns and kinship phrases — feeds self_reference_tier hint",
     )
 )
-
-
-# ── build_patterns() ──
-
-
-def build_patterns() -> list[dict]:
-    """Build the complete pattern list for English from registered specs.
-
-    Drop-in replacement for what `lang/en/patterns.py` previously exposed.
-    """
-    patterns: list[dict] = []
-    for typedef in list_types("en"):
-        patterns.extend(typedef.to_patterns())
-    return patterns

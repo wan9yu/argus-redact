@@ -47,6 +47,8 @@ import unicodedata
 import urllib.request
 from pathlib import Path
 
+from argus_redact.specs._gen_ron import emit_or_check, ron_char
+
 CONFUSABLES_VERSION = "16.0.0"
 CONFUSABLES_URL = f"https://www.unicode.org/Public/security/{CONFUSABLES_VERSION}/confusables.txt"
 
@@ -194,16 +196,6 @@ def build_map(text: str) -> dict[int, str]:
     return final
 
 
-def _ron_char(cp_or_str) -> str:
-    """RON char literal. Sources are alphabetic non-ASCII (\\u escape); targets
-    are bare ASCII letters. Neither can be a quote or backslash, so no escaping
-    of those is needed."""
-    if isinstance(cp_or_str, int):
-        return f"'\\u{{{cp_or_str:04X}}}'"
-    # single ASCII letter target
-    return f"'{cp_or_str}'"
-
-
 def build_ron(text: str) -> tuple[str, dict[int, str]]:
     final = build_map(text)
     lines: list[str] = []
@@ -215,7 +207,7 @@ def build_ron(text: str) -> tuple[str, dict[int, str]]:
     lines.append("(")
     lines.append("    mappings: [")
     for src in sorted(final):
-        lines.append(f"        ({_ron_char(src)}, {_ron_char(final[src])}),")
+        lines.append(f"        ({ron_char(src)}, {ron_char(final[src])}),")
     lines.append("    ],")
     lines.append(")")
     return "\n".join(lines) + "\n", final
@@ -224,25 +216,19 @@ def build_ron(text: str) -> tuple[str, dict[int, str]]:
 def main() -> int:
     text = fetch_confusables()
     ron, final = build_ron(text)
-    if "--check" in sys.argv:
-        current = _OUT.read_text(encoding="utf-8") if _OUT.exists() else ""
-        if current != ron:
-            print(
-                "confusables.ron is out of sync. Run: make gen-confusables",
-                file=sys.stderr,
-            )
-            return 1
-        print("confusables.ron is in sync")
-        return 0
-    _OUT.parent.mkdir(parents=True, exist_ok=True)
-    _OUT.write_text(ron, encoding="utf-8")
-    rel = _OUT.relative_to(Path(__file__).resolve().parents[3])
-    print(f"Wrote {rel}")
-    print(f"  total entries:   {len(final)}")
-    print(f"  curated:         {len(CURATED)} (all present, curated-overriding)")
-    print(f"  audit examples:  {len(AUDIT_EXAMPLES)} (all present)")
-    print("  invariants:      PASS")
-    return 0
+    return emit_or_check(
+        _OUT,
+        ron,
+        sys.argv,
+        human_name="confusables.ron",
+        out_of_sync_msg="confusables.ron is out of sync. Run: make gen-confusables",
+        extra_write_lines=(
+            f"  total entries:   {len(final)}",
+            f"  curated:         {len(CURATED)} (all present, curated-overriding)",
+            f"  audit examples:  {len(AUDIT_EXAMPLES)} (all present)",
+            "  invariants:      PASS",
+        ),
+    )
 
 
 if __name__ == "__main__":

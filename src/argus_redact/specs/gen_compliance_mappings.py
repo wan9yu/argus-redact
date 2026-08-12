@@ -30,6 +30,7 @@ from argus_redact.specs import en as _en  # noqa: F401
 from argus_redact.specs import shared as _shared  # noqa: F401
 from argus_redact.specs import zh as _zh  # noqa: F401
 from argus_redact.specs._compliance import (
+    HIPAA_SAFE_HARBOR,
     PIPL_ART_13,
     PIPL_ART_28,
     PIPL_ART_29,
@@ -232,31 +233,13 @@ GDPR_ART10_CITE = (
 )
 
 # HIPAA Safe Harbor category → verbatim citation (45 CFR 164.514(b)(2)(i)(A)–(R)).
-_HIPAA_LETTER: dict[str, tuple[str, str]] = {
-    "names": ("A", "Names"),
-    "geographic": ("B", "Geographic subdivisions smaller than a state"),
-    "dates": ("C", "Dates (except year) directly related to an individual"),
-    "phone_numbers": ("D", "Telephone numbers"),
-    "fax_numbers": ("E", "Fax numbers"),
-    "email_addresses": ("F", "Email addresses"),
-    "ssn": ("G", "Social security numbers"),
-    "medical_record": ("H", "Medical record numbers"),
-    "health_plan_beneficiary": ("I", "Health plan beneficiary numbers"),
-    "account_numbers": ("J", "Account numbers"),
-    "certificate_number": ("K", "Certificate/license numbers"),
-    "vehicle_identifier": ("L", "Vehicle identifiers and serial numbers"),
-    "device_identifier": ("M", "Device identifiers and serial numbers"),
-    "url": ("N", "Web URLs"),
-    "ip_address": ("O", "Internet protocol addresses"),
-    "biometric": ("P", "Biometric identifiers"),
-    "full_face_photo": ("Q", "Full-face photographs and comparable images"),
-    "other_unique_identifier": ("R", "Any other unique identifying number or code"),
-}
+# The category → (letter, description) mapping is the SSOT in `specs/_compliance`
+# (``HIPAA_SAFE_HARBOR``), imported above; this module only renders it.
 
 
 def hipaa_cite(category: str) -> str:
     """Verbatim HIPAA Safe Harbor citation for a category."""
-    letter, desc = _HIPAA_LETTER[category]
+    letter, desc = HIPAA_SAFE_HARBOR[category]
     return f"HIPAA Safe Harbor 45 CFR 164.514(b)(2)(i)({letter}) — {desc}."
 
 
@@ -392,7 +375,7 @@ def render_compliance_mappings() -> str:
     for td in types:
         gdpr = "Art.9" if td.gdpr_special_category else ("Art.10" if td.gdpr_art10 else "—")
         if td.hipaa_phi_category is not None:
-            letter, _ = _HIPAA_LETTER[td.hipaa_phi_category]
+            letter, _ = HIPAA_SAFE_HARBOR[td.hipaa_phi_category]
             hipaa = f"{td.hipaa_phi_category} ({letter})"
         else:
             hipaa = "—"
