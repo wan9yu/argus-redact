@@ -29,6 +29,16 @@ _EN_GENERATIONAL_ROMAN = frozenset({"II", "III", "IV"})
 # Compound Chinese surnames (2-char). When original starts with one of these,
 # use 2 chars as surname; otherwise use 1 char. Coverage: top compound surnames
 # from《百家姓》— not exhaustive, conservative.
+#
+# Intentional divergence (do NOT auto-sync): the Rust ``person_zh`` DETECTOR owns
+# its own compound-surname RON pool (reachable as ``_core.person_compound_surnames_zh()``)
+# used for name-CANDIDATE generation. This alias-EXPANSION pool serves a different
+# purpose (deciding how many leading chars of an already-known name are the
+# surname) and the two have drifted in content — this pool carries 夏侯 the core
+# pool lacks, and omits several the core pool carries. They are NOT equal, so this
+# is not a drop-in duplicate: unifying to one SSOT would change ``expand_aliases``
+# output and must be a deliberate, separately-reviewed change, not a refactor.
+# Until then, hand-sync consciously if this list changes.
 _ZH_COMPOUND_SURNAMES = frozenset(
     {
         "欧阳",
@@ -157,8 +167,11 @@ def expand_aliases(key: dict, lang: str | None = None) -> dict:
     # one identity — so it must not be emitted at all. Emitting it would silently bind
     # the alias to the first-iterated Person = a confident wrong-identity restore.
     # Surnames are extracted with each Person's OWN extractor, so a zh surname and
-    # an en surname never spuriously collide.
+    # an en surname never spuriously collide. Each Person's surname is stored here
+    # (extraction is pure) so the emit loop below reuses it instead of extracting a
+    # second time — same result, one extract() per Person.
     surname_originals: dict[str, set[str]] = {}
+    person_surname: dict[str, str] = {}
     for pseudonym, original in key.items():
         config = person_config.get(pseudonym)
         if config is None:
@@ -167,13 +180,14 @@ def expand_aliases(key: dict, lang: str | None = None) -> dict:
         surname = extract(original)
         if surname:
             surname_originals.setdefault(surname, set()).add(original)
+            person_surname[pseudonym] = surname
 
     for pseudonym, original in key.items():
         config = person_config.get(pseudonym)
         if config is None:
             continue
-        lang_code, titles, extract = config
-        surname = extract(original)
+        lang_code, titles, _ = config
+        surname = person_surname.get(pseudonym)
         if not surname:
             continue
         if len(surname_originals.get(surname, ())) > 1:

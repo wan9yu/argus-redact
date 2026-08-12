@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from argus_redact._core_loader import _core
 from argus_redact._types import PatternMatch
+from argus_redact.lang.shared.person import detect_person
 
-_RustPM = _core.PatternMatch
 _detect_zh = _core.detect_person_names_zh
 
 # Confirmation threshold (mirrors the Rust core's SCORE_THRESHOLD). Kept as a
@@ -45,19 +45,10 @@ def detect_person_names(
     Returns:
         List of PatternMatch with type="person" for confirmed names.
     """
-    rust_pii = (
-        [_RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in pii_entities]
-        if pii_entities
-        else None
+    return detect_person(
+        _detect_zh,
+        text,
+        pii_entities=pii_entities,
+        known_names=known_names,
+        threshold=threshold,
     )
-    return [
-        PatternMatch(
-            text=r.text,
-            type=r.type,
-            start=r.start,
-            end=r.end,
-            confidence=r.confidence,
-            layer=r.layer,
-        )
-        for r in _detect_zh(text, rust_pii, known_names, threshold)
-    ]

@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from typing import Callable
 
 from argus_redact._core_loader import _core
-from argus_redact._types import PatternMatch
+from argus_redact._types import PatternMatch, to_rust_pm
 from argus_redact.exceptions import SecurityWarning  # noqa: F401
 from argus_redact.lang.zh.hints import KINSHIP as _ZH_KINSHIP
 from argus_redact.pure._strategy_kind import (
@@ -24,9 +24,6 @@ from argus_redact.pure.security_events import (
     _auto_stacklevel,
     security_event,
 )
-
-# Rust PatternMatch class, resolved once at import (same idiom as pure/merger.py).
-_RustPM = _core.PatternMatch
 
 # Strategy-classification SSOT lives in the dependency-free `_strategy_kind`
 # leaf and is re-exported here for back-compat (public `argus_redact.
@@ -585,9 +582,7 @@ def _build_type_info(
     # paid per cell on redact_csv / redact_json. A standalone caller omits it and
     # one is built here (same idiom as `replace()` / merger).
     if rust_entities is None:
-        rust_entities = [
-            _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
-        ]
+        rust_entities = [to_rust_pm(e) for e in entities]
     # Per-type defaults from the live registry (SSOT; includes runtime adapter
     # types). Resolve once per distinct detected type — the same lookups the
     # pre-port `_build_type_info` did inline (strategy from the registry, prefix /
@@ -672,12 +667,10 @@ def replace(
         )
 
     # Convert the dataclass entities into the Rust PatternMatch the binding
-    # expects (same idiom as pure/merger.py). `_RustPM` is resolved at import.
-    # Built ONCE here and threaded into `_build_type_info` so the identical list
-    # is not rebuilt inside it as well.
-    rust_entities = [
-        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
-    ]
+    # expects (via the shared `to_rust_pm` seam, same as pure/merger.py). Built
+    # ONCE here and threaded into `_build_type_info` so the identical list is not
+    # rebuilt inside it as well.
+    rust_entities = [to_rust_pm(e) for e in entities]
 
     # Build the per-type info once; the custom_fakers dict is passed to _core.replace
     # so Rust can invoke Python callables via PyFakerFactory. The Rust core is
@@ -797,9 +790,7 @@ def replace_into_session(
     """
     # Marshal the dataclass entities once and thread the same list into
     # `_build_type_info` so it is not rebuilt there as well (paid per cell).
-    rust_entities = [
-        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
-    ]
+    rust_entities = [to_rust_pm(e) for e in entities]
     type_info, custom_fakers = _build_type_info(
         entities, config, langs, rust_entities=rust_entities
     )

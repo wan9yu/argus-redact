@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from argus_redact._types import NEREntity
-from argus_redact.impure.ner import NERAdapter
+from argus_redact.lang.shared.spacy_adapter import _SpaCyNERAdapter
 
 _TYPE_MAP = {
     "PER": "person",
@@ -16,37 +15,12 @@ _TYPE_MAP = {
 _DEFAULT_CONFIDENCE = 0.75
 
 
-class IndianNERAdapter(NERAdapter):
+class IndianNERAdapter(_SpaCyNERAdapter):
     """Indian English NER using spaCy multilingual (xx_ent_wiki_sm)."""
 
-    def __init__(self):
-        self._nlp = None
-
-    def load(self) -> None:
-        if self._nlp is not None:
-            return
-        import spacy
-
-        self._nlp = spacy.load("xx_ent_wiki_sm")
-
-    def detect(self, text: str) -> list[NEREntity]:
-        if not text:
-            return []
-        if self._nlp is None:
-            self.load()
-
-        doc = self._nlp(text)
-        return [
-            NEREntity(
-                text=ent.text,
-                type=_TYPE_MAP[ent.label_],
-                start=ent.start_char,
-                end=ent.end_char,
-                confidence=_DEFAULT_CONFIDENCE,
-            )
-            for ent in doc.ents
-            if ent.label_ in _TYPE_MAP
-        ]
+    _MODEL = "xx_ent_wiki_sm"
+    _TYPE_MAP = _TYPE_MAP
+    _DEFAULT_CONFIDENCE = _DEFAULT_CONFIDENCE
 
 
 def create_adapter() -> IndianNERAdapter:

@@ -12,10 +12,8 @@ filters and the restorer cannot drift apart; this module only marshals.
 from __future__ import annotations
 
 from argus_redact._core_loader import _core
-from argus_redact._types import Hint, PatternMatch
+from argus_redact._types import Hint, PatternMatch, from_rust_pm, to_rust_pm
 from argus_redact.pure.hints import _get_self_reference_tier
-
-_RustPM = _core.PatternMatch
 
 
 def restore_lost_coverage(
@@ -64,9 +62,9 @@ def restore_lost_coverage(
         return filtered, []
     drop_self_reference = hints is not None and _get_self_reference_tier(hints) != 1
     out, restored = _core.restore_lost_coverage(
-        [_RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in pre_merge],
+        [to_rust_pm(e) for e in pre_merge],
         [(e.start, e.end) for e in merged],
-        [_RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in filtered],
+        [to_rust_pm(e) for e in filtered],
         types,
         types_exclude,
         drop_self_reference,
@@ -75,16 +73,6 @@ def restore_lost_coverage(
     if not restored:
         return filtered, []
     return (
-        [
-            PatternMatch(
-                text=e.text,
-                type=e.type,
-                start=e.start,
-                end=e.end,
-                confidence=e.confidence,
-                layer=e.layer,
-            )
-            for e in out
-        ],
+        [from_rust_pm(e) for e in out],
         list(restored),
     )

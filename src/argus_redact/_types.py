@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from argus_redact._core_loader import _core
+
 if TYPE_CHECKING:
     from argus_redact.pure.risk import RiskResult
 
@@ -19,6 +21,34 @@ class PatternMatch:
     end: int
     confidence: float = 1.0
     layer: int = 0  # 1=regex, 2=NER, 3=semantic
+
+
+# The Rust ``_core.PatternMatch`` the PyO3 boundary exchanges (resolved once at
+# import, the same idiom the pure marshalling modules used). ``to_rust_pm`` /
+# ``from_rust_pm`` are THE single conversion between the frozen dataclass above
+# and that Rust type — every FFI hop (person shims, merger, coverage restorer,
+# replacer) marshals through them so the field order and value mapping cannot
+# drift from one call site to the next.
+_RustPM = _core.PatternMatch
+
+
+def to_rust_pm(pm: PatternMatch) -> "_RustPM":
+    """Marshal a Python ``PatternMatch`` into the Rust ``_core.PatternMatch`` the
+    FFI expects. Positional field order matches the Rust constructor."""
+    return _RustPM(pm.text, pm.type, pm.start, pm.end, pm.confidence, pm.layer)
+
+
+def from_rust_pm(e: "_RustPM") -> PatternMatch:
+    """Rebuild a Python ``PatternMatch`` from a Rust ``_core.PatternMatch`` handed
+    back across the FFI boundary — the inverse of :func:`to_rust_pm`."""
+    return PatternMatch(
+        text=e.text,
+        type=e.type,
+        start=e.start,
+        end=e.end,
+        confidence=e.confidence,
+        layer=e.layer,
+    )
 
 
 @dataclass(frozen=True)

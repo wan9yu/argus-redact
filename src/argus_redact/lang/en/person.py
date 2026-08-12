@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from argus_redact._core_loader import _core
 from argus_redact._types import PatternMatch
+from argus_redact.lang.shared.person import detect_person
 
-_RustPM = _core.PatternMatch
 _detect_en = _core.detect_person_names_en
 
 # Confirmation threshold for a bare-surname candidate (mirrors the Rust core's
@@ -54,19 +54,10 @@ def detect_person_names(
           score (``base + evidence``, <= 1.0)
         - bare surname with no corroboration: suppressed (left to L2 NER)
     """
-    rust_pii = (
-        [_RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in pii_entities]
-        if pii_entities
-        else None
+    return detect_person(
+        _detect_en,
+        text,
+        pii_entities=pii_entities,
+        known_names=known_names,
+        threshold=threshold,
     )
-    return [
-        PatternMatch(
-            text=r.text,
-            type=r.type,
-            start=r.start,
-            end=r.end,
-            confidence=r.confidence,
-            layer=r.layer,
-        )
-        for r in _detect_en(text, rust_pii, known_names, threshold)
-    ]
