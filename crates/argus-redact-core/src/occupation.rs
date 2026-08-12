@@ -27,7 +27,7 @@ use fancy_regex::Regex;
 use serde::Deserialize;
 
 use crate::evidence_detector::{
-    context_windows, is_person_identifying, proximity_evidence, DetectorConfig,
+    candidates_cjk, context_windows, is_person_identifying, proximity_evidence, DetectorConfig,
 };
 
 #[derive(Debug, Deserialize)]
@@ -45,16 +45,20 @@ fn zh_occupation_data() -> &'static ZhOccupationData {
     })
 }
 
-/// The lexicon as a shared [`DetectorConfig`], built once. `DetectorConfig::new`
-/// indexes the occupation names into the SAME membership set + max char-length
-/// pass 1 of [`occupation_candidates`] used to build by hand (via its
-/// `name_set()` / `max_len()` accessors), so this module no longer re-derives its
-/// own index. The names are collected straight off `zh_occupation_data()` in
-/// lexicon order — `new` builds an order-insensitive index (set / first_chars /
-/// max), so no longest-first sort is needed. The config's cue / weights /
-/// first_chars are unused here: occupation runs its OWN two-pass scan
-/// (lexicon + productive-suffix heuristic) and evidence model in
-/// `detect_occupation_zh`.
+/// The lexicon as a shared [`DetectorConfig`], built once, and scanned by
+/// [`candidates_cjk`] in pass 1 of [`occupation_candidates`] — the same shared
+/// gazetteer scan `regions.rs` uses — so this module no longer hand-rolls its own
+/// longest-match loop or re-derives its own index. `DetectorConfig::new` indexes
+/// the occupation names into the membership set + first-char prefilter + max
+/// char-length that `candidates_cjk` reads straight off the config. The names are
+/// collected off `zh_occupation_data()` in lexicon order — `new` builds an
+/// order-insensitive index (set / first_chars / max), so no longest-first sort is
+/// needed. `candidates_cjk` uses `first_chars` as a top-of-loop prefilter; for
+/// this lexicon it is a proven no-op — every lexicon term's first char is in the
+/// set, so it never skips a position where a longest-match would emit — leaving
+/// pass 1 byte-identical to the old hand-rolled scan. The config's cue / weights
+/// are unused here: occupation runs its OWN evidence model and pass-2
+/// productive-suffix heuristic in `detect_occupation_zh` / `occupation_candidates`.
 fn occupation_detector() -> &'static DetectorConfig {
     static CELL: OnceLock<DetectorConfig> = OnceLock::new();
     CELL.get_or_init(|| {
@@ -157,8 +161,6 @@ fn is_honorific_title(cand: &str) -> bool {
 /// `is_lexicon` records whether a candidate came from pass 1 (drives the
 /// high-confidence `W_OCC_LEXICON` weight). Returns candidates sorted by start.
 fn occupation_candidates(chars: &[char]) -> Vec<(String, usize, usize, bool)> {
-    let names = occupation_detector().name_set();
-    let lex_max = occupation_detector().max_len();
     let n = chars.len();
 
     // `consumed[k]` = char k is inside a lexicon span (pass 1 owns it).
@@ -166,22 +168,14 @@ fn occupation_candidates(chars: &[char]) -> Vec<(String, usize, usize, bool)> {
     let mut out: Vec<(String, usize, usize, bool)> = Vec::new();
 
     // ── Pass 1: greedy longest-match lexicon scan ──
-    let mut i = 0;
-    while i < n {
-        let hi = lex_max.min(n - i);
-        let mut matched_len = 0usize;
-        for len in (1..=hi).rev() {
-            let cand: String = chars[i..i + len].iter().collect();
-            if names.contains(cand.as_str()) {
-                out.push((cand, i, i + len, true));
-                for c in consumed.iter_mut().take(i + len).skip(i) {
-                    *c = true;
-                }
-                matched_len = len;
-                break;
-            }
+    // The shared gazetteer scan `regions.rs` uses; `candidates_cjk` reads the
+    // occupation name_set / first_chars / max_len straight off the config, so the
+    // loop is no longer hand-rolled here. `is_lexicon = true` for every span.
+    for (cand, start, end) in candidates_cjk(chars, occupation_detector()) {
+        for c in consumed.iter_mut().take(end).skip(start) {
+            *c = true;
         }
-        i += matched_len.max(1);
+        out.push((cand, start, end, true));
     }
 
     // ── Pass 2: suffix-run heuristic over unconsumed chars ──
