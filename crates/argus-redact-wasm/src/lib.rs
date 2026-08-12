@@ -163,6 +163,16 @@ fn to_object_serializer() -> serde_wasm_bindgen::Serializer {
     serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true)
 }
 
+/// Serialize a result value to a plain-JS-object [`JsValue`] via
+/// [`to_object_serializer`], mapping any serialization failure to the SAME
+/// `failed to serialize result` JS `Error`. The single return-marshalling idiom
+/// shared by every JS-object entry point (`redact`, both `restore_guarded`
+/// branches, and the streaming `emit_to_js`).
+fn serialize_result<T: Serialize>(out: &T) -> Result<JsValue, JsValue> {
+    out.serialize(&to_object_serializer())
+        .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
+}
+
 /// The `redact` return shape `{ text, key, aliases, keep_downgraded,
 /// mask_collisions }`. `key` is `{fake: original}` (for `restore`); `aliases` is
 /// `{fake: [alias, ...]}` from realistic fakers. `keep_downgraded` /
@@ -496,8 +506,7 @@ pub fn redact(text: &str, opts: JsValue) -> Result<JsValue, JsValue> {
         keep_downgraded: with_signals.keep_downgraded,
         mask_collisions: with_signals.mask_collisions,
     };
-    out.serialize(&to_object_serializer())
-        .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
+    serialize_result(&out)
 }
 
 /// Resolve a deserialized [`RedactOpts`] into the shared [`RedactParams`] (langs
@@ -573,6 +582,20 @@ fn opt_aliases(aliases: JsValue) -> Result<Option<HashMap<String, Vec<String>>>,
     }
 }
 
+/// Deserialize the `key` JS argument shared by [`restore`] and
+/// [`restore_guarded`] — the `{fake: original}` restore map returned by
+/// [`redact`]. `undefined`/`null` means "no key" (an empty map); otherwise the
+/// map is deserialized, mapping any failure to the SAME `invalid key` JS
+/// `Error`. Mirrors [`opt_aliases`] (by-value `JsValue`, `Result<_, JsValue>`).
+fn opt_key(key: JsValue) -> Result<HashMap<String, String>, JsValue> {
+    if key.is_undefined() || key.is_null() {
+        Ok(HashMap::new())
+    } else {
+        serde_wasm_bindgen::from_value(key)
+            .map_err(|e| JsValue::from_str(&format!("invalid key: {e}")))
+    }
+}
+
 /// Restore redacted text using the `key` map (`{fake: original}`) returned by
 /// [`redact`]. `aliases` is an optional `{fake: [alternate-transliteration,
 /// ...]}` map — mirrors the Python `restore(text, key, aliases=...)` /
@@ -607,12 +630,7 @@ fn opt_aliases(aliases: JsValue) -> Result<Option<HashMap<String, Vec<String>>>,
 pub fn restore(text: &str, key: JsValue, aliases: JsValue) -> Result<String, JsValue> {
     set_panic_hook();
 
-    let key: HashMap<String, String> = if key.is_undefined() || key.is_null() {
-        HashMap::new()
-    } else {
-        serde_wasm_bindgen::from_value(key)
-            .map_err(|e| JsValue::from_str(&format!("invalid key: {e}")))?
-    };
+    let key = opt_key(key)?;
 
     let aliases = opt_aliases(aliases)?;
 
@@ -703,12 +721,7 @@ pub fn restore_guarded(
 ) -> Result<JsValue, JsValue> {
     set_panic_hook();
 
-    let key: HashMap<String, String> = if key.is_undefined() || key.is_null() {
-        HashMap::new()
-    } else {
-        serde_wasm_bindgen::from_value(key)
-            .map_err(|e| JsValue::from_str(&format!("invalid key: {e}")))?
-    };
+    let key = opt_key(key)?;
 
     if anchor.is_undefined() || anchor.is_null() {
         let out = GuardedRestoreJs {
@@ -720,9 +733,7 @@ pub fn restore_guarded(
                 tokens: None,
             }],
         };
-        return out
-            .serialize(&to_object_serializer())
-            .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")));
+        return serialize_result(&out);
     }
 
     let spec: AnchorSpec = serde_wasm_bindgen::from_value(anchor)
@@ -747,8 +758,7 @@ pub fn restore_guarded(
             })
             .collect(),
     };
-    out.serialize(&to_object_serializer())
-        .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
+    serialize_result(&out)
 }
 
 // ── streaming: feed / flush over the core carry-window engine ─────────────────
@@ -920,8 +930,7 @@ impl StreamingRedactor {
             key: emit.accumulated_key,
             aliases: emit.segment.aliases,
         };
-        out.serialize(&to_object_serializer())
-            .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
+        serialize_result(&out)
     }
 }
 
