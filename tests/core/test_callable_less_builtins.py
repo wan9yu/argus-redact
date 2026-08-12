@@ -3,7 +3,7 @@
 v0.7.5 Phase C / Task 11. Built-in `PIITypeDef`s no longer carry a
 `faker_reserved=` callable; `_build_type_info` resolves the built-in
 `faker_name` through `_core.builtin_faker_name(type, lang)`, driven by the
-SAME Python lang-preference order the old `_faker_reserved_cached` used
+SAME Python lang-preference order `_resolve_realistic_faker` uses
 (detected langs → "shared" → any registered). Custom adapters (a real
 `faker_reserved` callable not in `_core.builtin_faker_names()`) are unchanged:
 they still route through the Rust `PyFakerFactory` callback.
@@ -21,7 +21,7 @@ import argus_redact._core as _core
 
 from argus_redact.pure.replacer import (
     _build_type_info,
-    _faker_reserved_cached,
+    _clear_faker_caches,
     replace,
 )
 from argus_redact.specs import en as _en  # noqa: F401  ensure registration
@@ -68,7 +68,7 @@ class TestBuiltinCallableLess:
 
 class TestLangPreferenceOrder:
     """`phone` is registered for both zh and en; the resolved built-in faker
-    must follow detected-lang preference EXACTLY (the old `_faker_reserved_cached`
+    must follow detected-lang preference EXACTLY (the `_resolve_realistic_faker`
     order: detected langs → 'shared' → any registered)."""
 
     def test_faker_name_resolves_zh_for_zh_langs(self):
@@ -135,11 +135,11 @@ class TestCustomFakerStillRoutesViaCallback:
                 faker_reserved=_account_faker,
             )
         )
-        _faker_reserved_cached.cache_clear()
+        _clear_faker_caches()
 
     def teardown_method(self):
         unregister("shared", "callable_less_test_account")
-        _faker_reserved_cached.cache_clear()
+        _clear_faker_caches()
 
     def test_custom_type_flagged_custom_and_in_custom_fakers(self):
         entities = [make_match("ACC-9876543210", "callable_less_test_account", 0)]

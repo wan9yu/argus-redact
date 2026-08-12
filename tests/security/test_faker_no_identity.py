@@ -13,7 +13,7 @@ from __future__ import annotations
 import argus_redact._core as _core
 import pytest
 
-from argus_redact.pure.replacer import _faker_reserved_cached, replace
+from argus_redact.pure.replacer import _clear_faker_caches, replace
 from argus_redact.specs import en as _en  # noqa: F401  registry side-effect import
 from argus_redact.specs.registry import PIITypeDef, register, unregister
 from tests.conftest import make_match
@@ -56,7 +56,7 @@ def test_generate_unique_fake_rejects_value_equal_fake():
         assert call_count["n"] >= 3, "should have re-rolled past identity outputs"
     finally:
         unregister("shared", "stubborn_faker_type")
-        _faker_reserved_cached.cache_clear()
+        _clear_faker_caches()
 
 
 def test_identity_only_faker_falls_back_to_pseudonym_no_leak():
@@ -93,7 +93,7 @@ def test_identity_only_faker_falls_back_to_pseudonym_no_leak():
         assert key[fakes[0]] == "John Doe"
     finally:
         unregister("shared", "identity_faker_type")
-        _faker_reserved_cached.cache_clear()
+        _clear_faker_caches()
 
 
 @pytest.mark.parametrize("name", _core.reserved_person_names_en())

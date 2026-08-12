@@ -49,19 +49,6 @@ _ZH_PRONOUNS = frozenset({"我", "我的", "我们", "我们的"})
 _KEEP_WHITELIST = SELF_REF_PRONOUNS | _ZH_PRONOUNS | _ZH_KINSHIP
 
 
-def _find_faker_reserved(name: str, langs: list[str] | None) -> Callable | None:
-    """Find faker_reserved for a type, preferring detected langs, then 'shared', then any.
-
-    Lang-aware lookup is required when zh and en both register same-named types
-    (e.g., `phone`, `address`, `person`); without preference order, the first
-    registered lang silently wins regardless of the entity's actual language.
-
-    Cached on (name, lang_tuple, registry generation) — see
-    ``_registry_generation`` for why the generation is part of the key.
-    """
-    return _faker_reserved_cached(name, tuple(langs or ()), _registry_generation())
-
-
 def _registry_generation() -> int:
     """Read the registry's current generation counter.
 
@@ -81,22 +68,6 @@ def _registry_generation() -> int:
     from argus_redact.specs import registry
 
     return registry.generation()
-
-
-@functools.lru_cache(maxsize=256)
-def _faker_reserved_cached(name: str, langs: tuple[str, ...], _generation: int) -> Callable | None:
-    from argus_redact.specs.registry import lookup
-
-    by_lang = {td.lang: td for td in lookup(name)}
-    for lang in langs:
-        if lang in by_lang and by_lang[lang].faker_reserved:
-            return by_lang[lang].faker_reserved
-    if "shared" in by_lang and by_lang["shared"].faker_reserved:
-        return by_lang["shared"].faker_reserved
-    for td in by_lang.values():
-        if td.faker_reserved:
-            return td.faker_reserved
-    return None
 
 
 def _resolve_default_strategy(entity_type: str, langs: list[str] | None = None) -> str:
@@ -470,9 +441,9 @@ def _resolve_realistic_faker(
     Returns ``("builtin", faker_name)`` / ``("custom", callable)`` / ``None``.
 
     Bit-identity critical: built-ins (callable-less, resolved via the Rust
-    ``_core`` association) and custom ``faker_reserved`` callables compete in the
-    SAME single lang-preference pass the old ``_faker_reserved_cached`` used
-    (detected langs → 'shared' → any registered, each in registry order). The
+    ``_core`` association) and custom ``faker_reserved`` callables compete in a
+    single lang-preference pass (detected langs → 'shared' → any registered,
+    each in registry order). The
     first candidate lang that has EITHER a built-in association OR a custom
     callable wins — so a built-in for the detected lang is never shadowed by a
     custom faker registered for a different lang (the #1 wrong-language risk).
@@ -490,9 +461,8 @@ def _resolve_realistic_faker_cached(
 
     def _for_lang(lang: str) -> tuple[str, str | Callable] | None:
         # A registered custom callable for this lang wins (it OVERRODE the
-        # typedef, the same way it did in the old `_faker_reserved_cached`); the
-        # built-in `_core` association is the callable-less fallback when the
-        # typedef carries no custom faker.
+        # typedef); the built-in `_core` association is the callable-less
+        # fallback when the typedef carries no custom faker.
         td = by_lang.get(lang)
         if td is not None and td.faker_reserved is not None:
             return ("custom", td.faker_reserved)
@@ -518,17 +488,10 @@ def _resolve_realistic_faker_cached(
     return None
 
 
-# These caches all key off the (frozen-at-import) registry's `faker_reserved`
-# state, so they must invalidate together. Tests that inject/remove a temporary
-# custom type call ``_faker_reserved_cached.cache_clear()``; chain the realistic
-# resolver caches onto that single entry point so they never go stale.
+# The single cache-invalidation entry point for the realistic faker resolver;
+# register()/unregister() call it.
 def _clear_faker_caches() -> None:
-    _faker_reserved_cached_clear()
     _resolve_realistic_faker_cached.cache_clear()
-
-
-_faker_reserved_cached_clear = _faker_reserved_cached.cache_clear
-_faker_reserved_cached.cache_clear = _clear_faker_caches  # type: ignore[attr-defined]
 
 
 def _build_type_info(
