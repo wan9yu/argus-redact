@@ -26,7 +26,9 @@ use std::sync::{LazyLock, OnceLock};
 use fancy_regex::Regex;
 use serde::Deserialize;
 
-use crate::evidence_detector::{is_person_identifying, proximity_evidence, DetectorConfig};
+use crate::evidence_detector::{
+    context_windows, is_person_identifying, proximity_evidence, DetectorConfig,
+};
 
 #[derive(Debug, Deserialize)]
 struct ZhOccupationData {
@@ -281,28 +283,13 @@ pub fn detect_occupation_zh(
 
     // Materialize the whole text as a char slice ONCE, then work in char-space.
     let chars: Vec<char> = text.chars().collect();
-    let n = chars.len();
 
     let mut out: Vec<crate::types::PatternMatch> = Vec::new();
 
     for (name, start, end, is_lexicon) in occupation_candidates(&chars) {
         // before = chars[max(0, start - OCC_WINDOW) : start]
         // after  = chars[end : end + OCC_WINDOW]   (char slices)
-        let before_start = start.saturating_sub(OCC_WINDOW);
-        let before_end = start.min(n);
-        let before: String = if before_start <= before_end {
-            chars[before_start..before_end].iter().collect()
-        } else {
-            String::new()
-        };
-
-        let after_start = end.min(n);
-        let after_end = (end + OCC_WINDOW).min(n);
-        let after: String = if after_start <= after_end {
-            chars[after_start..after_end].iter().collect()
-        } else {
-            String::new()
-        };
+        let (before, after) = context_windows(&chars, start, end, OCC_WINDOW);
 
         // Occupation-context cue anywhere in the ±window (before OR after).
         let cue_hit = OCC_CUE.is_match(&before).unwrap_or(false)
@@ -354,11 +341,6 @@ pub fn detect_occupation_zh(
             &[(OCC_PROX_NEAR, W_OCC_PII_PROX)],
             |pii| is_person_identifying(&pii.type_),
         );
-
-        // No evidence → don't match at L1 (leave to L2 NER).
-        if evidence == 0.0_f64 {
-            continue;
-        }
 
         if evidence >= OCC_THRESHOLD {
             out.push(crate::types::PatternMatch {

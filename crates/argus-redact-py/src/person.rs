@@ -87,11 +87,18 @@ pub fn score_person_candidates_en(
         .collect();
     let threshold = threshold.unwrap_or(SCORE_THRESHOLD);
     py.detach(|| {
+        // Collect the whole-text char slice ONCE and score every candidate span
+        // against it, instead of re-materializing `text.chars()` per candidate.
+        let text_chars: Vec<char> = text.chars().collect();
         candidates
             .into_iter()
             .map(|(start, end)| {
-                argus_redact_core::person_en::score_person_candidate(text, start, end, &pii)
-                    >= threshold
+                argus_redact_core::person_en::score_person_candidate_chars(
+                    &text_chars,
+                    start,
+                    end,
+                    &pii,
+                ) >= threshold
             })
             .collect()
     })

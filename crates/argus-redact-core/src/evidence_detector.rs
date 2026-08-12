@@ -237,6 +237,45 @@ where
     0.0
 }
 
+/// Slice the ±`window` before/after context of a `[start, end)` char span out of
+/// the whole-text `chars` slice, in CHAR-space (a multi-byte CJK window is never
+/// byte-sliced). Returns `(before, after)` where
+/// `before = chars[max(0, start - window) .. start]` and
+/// `after  = chars[end .. min(end + window, n)]`.
+///
+/// Single source for the before/after windowing copy-pasted across the person /
+/// region / occupation / framework detectors. The `before_start <= before_end`
+/// (and `after_start <= after_end`) guard is kept so the helper is safe for any
+/// caller; at the current sites `start`/`end` are `candidates_cjk` offsets bounded
+/// by `n`, so the guard never fires and the output is byte-identical to each
+/// site's former inline slicing.
+pub(crate) fn context_windows(
+    chars: &[char],
+    start: usize,
+    end: usize,
+    window: usize,
+) -> (String, String) {
+    let n = chars.len();
+
+    let before_start = start.saturating_sub(window);
+    let before_end = start.min(n);
+    let before: String = if before_start <= before_end {
+        chars[before_start..before_end].iter().collect()
+    } else {
+        String::new()
+    };
+
+    let after_start = end.min(n);
+    let after_end = (end + window).min(n);
+    let after: String = if after_start <= after_end {
+        chars[after_start..after_end].iter().collect()
+    } else {
+        String::new()
+    };
+
+    (before, after)
+}
+
 pub fn detect_with(
     text: &str,
     pii_entities: &[PatternMatch],
@@ -246,14 +285,10 @@ pub fn detect_with(
         return Vec::new();
     }
     let chars: Vec<char> = text.chars().collect();
-    let n = chars.len();
     let mut out = Vec::new();
 
     for (name, start, end) in candidates_cjk(&chars, cfg) {
-        let before_start = start.saturating_sub(cfg.window);
-        let before: String = chars[before_start..start.min(n)].iter().collect();
-        let after_end = (end + cfg.window).min(n);
-        let after: String = chars[end.min(n)..after_end].iter().collect();
+        let (before, after) = context_windows(&chars, start, end, cfg.window);
 
         let cue_hit = cfg.cue.is_match(&before).unwrap_or(false)
             || cfg.cue.is_match(&after).unwrap_or(false);
@@ -282,9 +317,6 @@ pub fn detect_with(
             |pii| is_person_identifying(&pii.type_),
         );
 
-        if evidence == 0.0_f64 {
-            continue;
-        }
         if evidence >= cfg.threshold {
             out.push(PatternMatch {
                 text: name,

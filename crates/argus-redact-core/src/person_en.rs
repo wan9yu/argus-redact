@@ -529,6 +529,21 @@ pub fn score_person_candidate(
     pii_entities: &[PatternMatch],
 ) -> f64 {
     let text_chars: Vec<char> = text.chars().collect();
+    score_person_candidate_chars(&text_chars, start, end, pii_entities)
+}
+
+/// `&[char]` core of [`score_person_candidate`], threaded the whole-text char
+/// slice instead of re-collecting `text.chars()` per call. A caller that scores
+/// MANY candidate spans against the same text (e.g. the L2-NER gate) collects
+/// `chars` ONCE and calls this per span, mirroring `person_zh::score_candidate`;
+/// the `&str` [`score_person_candidate`] wrapper is the single-shot convenience
+/// (collect once + delegate) and keeps its frozen signature. Output is identical.
+pub fn score_person_candidate_chars(
+    text_chars: &[char],
+    start: usize,
+    end: usize,
+    pii_entities: &[PatternMatch],
+) -> f64 {
     if start >= end || end > text_chars.len() {
         return 0.0;
     }

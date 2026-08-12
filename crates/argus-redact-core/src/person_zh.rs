@@ -21,7 +21,7 @@ use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
-use crate::evidence_detector::proximity_evidence;
+use crate::evidence_detector::{context_windows, proximity_evidence};
 use crate::person_data::{
     common_words_zh_set, compound_surnames_zh, not_names_zh_set, surnames_zh,
 };
@@ -537,32 +537,13 @@ pub(crate) fn score_candidate(
 ) -> f64 {
     // before = text[max(0, candidate.start - _CONTEXT_WINDOW) : candidate.start]
     // after  = text[candidate.end : candidate.end + _CONTEXT_WINDOW]
-    // These are CHAR slices in Python; compute them in char-space so a
-    // multi-byte CJK window is never byte-sliced. `chars` is the shared
-    // whole-text slice (no per-call re-collect).
-    let text_chars = chars;
-    let n = text_chars.len();
-
-    let before_start = candidate.start.saturating_sub(CONTEXT_WINDOW);
-    let before_end = candidate.start.min(n);
-    let before: String = if before_start <= before_end {
-        text_chars[before_start..before_end].iter().collect()
-    } else {
-        String::new()
-    };
-
-    let after_start = candidate.end.min(n);
-    // Mutation note: the `candidate.end + CONTEXT_WINDOW` → `candidate.end *
-    // CONTEXT_WINDOW` survivor is equivalent. `end >= 2` always (min 2-char name),
-    // so the product only GROWS the window; the three `after` signals
-    // (`_HONORIFIC_SUFFIX`, `_PII_SUFFIX`, `_PAREN_PHONE`) are all `^`-anchored
-    // prefix matches, so a wider `after` never changes whether they fire.
-    let after_end = (candidate.end + CONTEXT_WINDOW).min(n);
-    let after: String = if after_start <= after_end {
-        text_chars[after_start..after_end].iter().collect()
-    } else {
-        String::new()
-    };
+    // These are CHAR slices in Python; computed in char-space (a multi-byte CJK
+    // window is never byte-sliced) by the shared `context_windows` helper. `chars`
+    // is the whole-text slice threaded in (no per-call re-collect). Widening the
+    // `after` window is safe: the three `after` signals (`_HONORIFIC_SUFFIX`,
+    // `_PII_SUFFIX`, `_PAREN_PHONE`) are all `^`-anchored prefix matches, so a
+    // wider `after` never changes whether they fire.
+    let (before, after) = context_windows(chars, candidate.start, candidate.end, CONTEXT_WINDOW);
 
     // Collect evidence signals — same order as Python:
     //   evidence = 0.0
