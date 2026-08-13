@@ -6,7 +6,9 @@ import csv
 import io
 import sys
 import warnings
+from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from argus_redact.exceptions import SecurityWarning
 from argus_redact.glue.redact import _build_type_map, _detect
@@ -107,6 +109,17 @@ def _redact_cell(
     return redacted, entities
 
 
+def _path_str(path: list[str]) -> str:
+    """Render a walk path as a dotted, PII-free location string for a warning.
+
+    Segments are dict KEYS (already emitted verbatim in the redacted output — a
+    structural identifier, never a redacted value) and ``"*"`` for list
+    positions, so echoing them into a warning discloses nothing the output does
+    not already carry. An empty path (a top-level scalar) renders as ``"<root>"``.
+    """
+    return ".".join(path) if path else "<root>"
+
+
 def _parse_paths(paths: list[str | list[str]]) -> list[list[str]]:
     """Parse path selectors into segments.
 
@@ -185,21 +198,27 @@ def redact_json(
 ) -> (
     tuple[dict | list, dict] | tuple[dict | list, dict, dict] | tuple[dict | list, dict, dict, dict]
 ):
-    """Redact PII in string and numeric leaf VALUES of a JSON-like structure.
+    """Redact PII in scalar leaf VALUES of a JSON-like structure.
 
-    Scope: string and numeric (int/float) leaves are redacted; dict KEYS are
+    Scope: string, numeric (``int``/``float``), ``Decimal``, ``UUID`` and
+    (utf-8) ``bytes``/``bytearray`` leaves are all redacted; dict KEYS are
     preserved verbatim — they are structural identifiers (like a CSV header),
     and rewriting them would reshape the document and break the restore
-    mapping. A numeric leaf (e.g. a national-ID or phone stored as a JSON
-    ``number``, not a string) is coerced to ``str`` for DETECTION only: a leaf
-    with no detectable PII passes through completely unchanged (its original
-    ``int``/``float`` type and exact value, including arbitrary-precision
-    ints, survive byte-for-byte); a leaf that DOES carry PII is redacted into
-    a placeholder string, same as a string leaf — a redacted leaf legitimately
-    changes type, since the placeholder is text. A PII-carrying dict KEY is
-    not similarly redactable (rewriting it would reshape the document) and
-    instead emits a (PII-free, count-only) ``SecurityWarning`` — move the
-    value into a leaf to have it redacted.
+    mapping. A non-string scalar leaf (e.g. a national-ID or phone stored as a
+    JSON ``number``, a SQL ``NUMERIC`` ``Decimal``, or a msgpack ``raw=True``
+    byte string) is coerced to text for DETECTION only — ``str(obj)`` for
+    numeric/Decimal/UUID, a strict utf-8 decode for bytes: a leaf with no
+    detectable PII passes through completely unchanged (its original type and
+    exact value, including arbitrary-precision ints, survive byte-for-byte); a
+    leaf that DOES carry PII is redacted into a placeholder string, same as a
+    string leaf — a redacted leaf legitimately changes type, since the
+    placeholder is text. ``None`` (JSON null) is a benign passthrough. A leaf of
+    any OTHER type — a non-utf-8 byte string, an arbitrary object — cannot be
+    coerced to text; it is forwarded unchanged but emits a (PII-free, path +
+    type-name) ``SecurityWarning`` rather than leaking silently. A PII-carrying
+    dict KEY is not similarly redactable (rewriting it would reshape the
+    document) and instead emits a (PII-free, count-only) ``SecurityWarning`` —
+    move the value into a leaf to have it redacted.
 
     Args:
         paths: If specified, only redact leaves in these subtrees (string or
@@ -247,6 +266,10 @@ def redact_json(
     pii_key_hits: list[int] = []
     matched_targets: set[int] = set()
     leaf_seen: list[bool] = []
+    # (path, type-name) of every leaf whose type we cannot coerce to text for
+    # detection (a non-utf-8 byte string, an arbitrary object). Recorded so the
+    # document-level warning names it — never a silent verbatim forward.
+    unscannable_leaves: list[tuple[str, str]] = []
     # `mode`/`lang` are constant for the whole walk, so `_cell_has_pii(k, ...)`
     # is a pure function of the key string — cache it so a key repeated across
     # array elements (a common JSON shape) is detected once, not once per
@@ -279,6 +302,17 @@ def redact_json(
             all_entities.extend(entities)
         return redacted_text
 
+    def _record_unscannable(obj: Any, current_path: list[str]) -> Any:
+        """Flag one leaf whose type we cannot scan, then forward it unchanged.
+
+        Appends to ``leaf_seen`` too, so ``saw_leaf`` becomes True and a
+        ``paths=`` selector-missed warning is no longer wrongly suppressed by a
+        leaf that never registered as seen (the compound half of this bug).
+        """
+        unscannable_leaves.append((_path_str(current_path), type(obj).__name__))
+        leaf_seen.append(True)
+        return obj
+
     def _walk(obj: Any, current_path: list[str] | None = None, depth: int = 0) -> Any:
         if current_path is None:
             current_path = []
@@ -303,6 +337,26 @@ def redact_json(
             # exact type (int vs float) and precision (arbitrary-size Python ints
             # round-trip byte-for-byte).
             return _redact_leaf(obj, str(obj), current_path)
+        # Decimal / UUID: extend the coerce-and-scan the int/float arm does, since
+        # both have a faithful str() round-trip. Decimal is what every SQL NUMERIC
+        # column and json.loads(..., parse_float=Decimal) produce; scanning str(obj)
+        # closes the same silent-leak the numeric arm closed for int/float. A clean
+        # leaf round-trips as the ORIGINAL object (str is only the detection probe);
+        # a PII-carrying one becomes the placeholder string, same type-change
+        # contract as int/float.
+        if isinstance(obj, (Decimal, UUID)):
+            return _redact_leaf(obj, str(obj), current_path)
+        # bytes / bytearray: a string leaf serialized as bytes (msgpack raw=True,
+        # BSON). Decode strict UTF-8 and scan the text — a clean leaf round-trips as
+        # the ORIGINAL bytes, a PII-carrying one becomes the placeholder string. A
+        # non-decodable byte string is not text we can scan; record it as
+        # un-scannable (below) rather than crash or silently forward it.
+        if isinstance(obj, (bytes, bytearray)):
+            try:
+                text = obj.decode("utf-8", errors="strict")
+            except UnicodeDecodeError:
+                return _record_unscannable(obj, current_path)
+            return _redact_leaf(obj, text, current_path)
         if isinstance(obj, dict):
             # Keys recurse only over VALUES (keys are preserved), so a PII key
             # would leak verbatim. Detect (detect-only, no redaction) and count
@@ -317,7 +371,12 @@ def redact_json(
             return {k: _walk(v, current_path + [k], depth + 1) for k, v in obj.items()}
         if isinstance(obj, list):
             return [_walk(item, current_path + ["*"], depth + 1) for item in obj]
-        return obj
+        # None is the one benign scalar passthrough (JSON null carries no PII).
+        # Every OTHER un-handled type is an arbitrary object we cannot coerce to
+        # text — flag it rather than silently forward a type that could carry PII.
+        if obj is None:
+            return obj
+        return _record_unscannable(obj, current_path)
 
     result = _walk(data)
     # Mirrors the one-shot `replace()` path: warn once, over the
@@ -332,6 +391,7 @@ def redact_json(
         parsed_paths=parsed_paths,
         matched_targets=matched_targets,
         saw_leaf=bool(leaf_seen),
+        unscannable_leaves=unscannable_leaves,
     )
     combined_key = session.into_key()
     extras: list = []
@@ -352,16 +412,29 @@ def _warn_structured_leaks(
     parsed_paths: list[list[str]] | None,
     matched_targets: set[int],
     saw_leaf: bool,
+    unscannable_leaves: list[tuple[str, str]],
 ) -> None:
     """Emit the document-level leak-visibility warnings for ``redact_json``.
 
-    One warning per class, PII-free (counts, or the caller's own selector
-    strings — never a PII value). Kept out of ``redact_json``'s body so the walk
-    reads as one thing and the warning policy as another. Numeric leaves are no
-    longer a separate warning class here — since v0.8.10 they are coerced and
-    scanned like string leaves (see the ``(int, float)`` branch of ``_walk``),
-    so a numeric leaf carrying PII is redacted rather than merely flagged.
+    One warning per class, PII-free (counts, path locations + type names, or the
+    caller's own selector strings — never a PII value). Kept out of
+    ``redact_json``'s body so the walk reads as one thing and the warning policy
+    as another. Numeric leaves are no longer a separate warning class here —
+    since v0.8.10 they are coerced and scanned like string leaves (see the
+    ``(int, float)`` branch of ``_walk``), so a numeric leaf carrying PII is
+    redacted rather than merely flagged; Decimal/UUID/utf-8 bytes joined that
+    scanned path afterwards, leaving only genuinely un-coercible leaves below.
     """
+    if unscannable_leaves:
+        detail = ", ".join(f"{loc} ({tname})" for loc, tname in unscannable_leaves)
+        warnings.warn(
+            f"redact_json: {len(unscannable_leaves)} leaf value(s) of an "
+            f"un-scannable type were forwarded WITHOUT scanning and may carry "
+            f"unredacted PII [path (type): {detail}]. Convert them to a "
+            f"str/int/float/Decimal/UUID or utf-8 bytes to have them redacted.",
+            SecurityWarning,
+            stacklevel=3,
+        )
     if pii_key_hits:
         warnings.warn(
             f"redact_json: {pii_key_hits} dict key(s) carry detectable PII and were "
@@ -431,6 +504,19 @@ def restore_json(
             )
         if isinstance(obj, str):
             return session.restore_cell(obj)
+        # Symmetric with redact_json's decode-and-scan: a placeholder that arrives
+        # as a byte string (a leaf re-serialized through msgpack raw=True / BSON)
+        # is decoded and restored. A non-decodable, or placeholder-free, byte
+        # string round-trips as the ORIGINAL bytes; a decoded string whose
+        # placeholder(s) were restored is returned as the restored text — mirroring
+        # the redact side, where a redacted leaf legitimately became a str.
+        if isinstance(obj, (bytes, bytearray)):
+            try:
+                text = obj.decode("utf-8", errors="strict")
+            except UnicodeDecodeError:
+                return obj
+            restored = session.restore_cell(text)
+            return restored if restored != text else obj
         if isinstance(obj, dict):
             return {k: _walk(v, depth + 1) for k, v in obj.items()}
         if isinstance(obj, list):
