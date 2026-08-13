@@ -14,11 +14,13 @@ from argus_redact.exceptions import SecurityWarning
 from argus_redact.pure.restore import restore
 from argus_redact.streaming import StreamingRedactor, StreamingRestorer
 
-# Matches the reserved-range audit-space placeholder shape emitted by the
-# "remove" strategy (e.g. "P-21929" for person, "PHON-76495" for phone,
-# "[TYPE-NNNNN]" style prefixes) — never a shape a realistic-strategy faker
-# would legitimately produce.
-_AUDIT_PLACEHOLDER_RE = re.compile(r"(?<![A-Za-z0-9_])[A-Z][A-Z_]*-\d{4,6}(?![0-9])")
+# Matches the bracketed audit-space placeholder shape emitted by the
+# "remove_bracketed" strategy (e.g. "[P-21929]" for person, "[PHON-76495]" for
+# phone) — the compliance-archive [PREFIX-NNNNN] namespace. The brackets are the
+# disjointness guarantee: a realistic-strategy faker (or a bare PREFIX-NNNNN
+# pool-exhaustion fallback, which legitimately appears in downstream_text) never
+# contains "[", so this pattern flags ONLY a genuine audit-placeholder leak.
+_AUDIT_PLACEHOLDER_RE = re.compile(r"\[[A-Z][A-Z_]*-\d{4,6}\]")
 
 _SRC_DIR = Path(__file__).resolve().parents[2] / "src"
 

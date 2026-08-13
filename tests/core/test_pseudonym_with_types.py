@@ -89,7 +89,7 @@ class TestBothFakeSpacesTyped:
         # placeholder ([EMAI-...]) both map to "email".
         email_fakes = [f for f, t in result.types.items() if t == "email"]
         assert any("@" in f for f in email_fakes)  # realistic fake
-        assert any(f.startswith("EMAI-") for f in email_fakes)  # audit placeholder
+        assert any(f.startswith("[EMAI-") for f in email_fakes)  # audit placeholder
 
 
 class TestCollisionCase:
@@ -105,7 +105,7 @@ class TestCollisionCase:
         assert "passport" in values
         assert "us_passport" in values
 
-        pass_prefixed = {f: t for f, t in result.types.items() if f.startswith("PASS-")}
+        pass_prefixed = {f: t for f, t in result.types.items() if f.startswith("[PASS-")}
         # Two distinct audit placeholders, one per canonical type.
         assert set(pass_prefixed.values()) == {"passport", "us_passport"}
 

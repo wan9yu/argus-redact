@@ -28,6 +28,49 @@ class PseudonymPollutionError(ValueError):
     """
 
 
+class PseudonymKeyCollisionError(RuntimeError):
+    """A single pseudonym code maps to two different originals in one key.
+
+    ``redact_pseudonym_llm`` unions the realistic pass's key with the audit
+    pass's key into one restore key. The two spaces are disjoint by construction
+    (realistic fakes / bare ``PREFIX-NNNNN`` fallbacks vs. bracketed
+    ``[PREFIX-NNNNN]`` audit placeholders), so a collision means overlapping code
+    spaces were re-introduced — a regression that would otherwise silently splice
+    one original's name onto another's surrogate. Failing loud is the backstop.
+
+    The message names only the colliding code (a surrogate, never PII) — never
+    the originals it maps to.
+    """
+
+
+def _put_key_checked(acc: dict[str, str], code: str, original: str) -> None:
+    """Insert ``code -> original`` into ``acc``, raising if ``code`` already maps
+    to a DIFFERENT original (an identity splice). A repeat of the same mapping is
+    idempotent (first-seen preserved)."""
+    prior = acc.get(code)
+    if prior is not None and prior != original:
+        raise PseudonymKeyCollisionError(
+            f"pseudonym code {code!r} maps to two different originals; the "
+            "realistic and audit key spaces must stay disjoint"
+        )
+    acc[code] = original
+
+
+def _merge_pseudonym_keys(
+    realistic_key: dict[str, str], audit_key: dict[str, str]
+) -> dict[str, str]:
+    """Union the realistic and audit keys into one restore key, raising
+    ``PseudonymKeyCollisionError`` if any code maps to two different originals.
+
+    Replaces the pre-fix blind ``{**realistic_key, **audit_key}``, whose silent
+    last-writer-wins let an audit code overwrite a colliding realistic (LLM-facing)
+    mapping."""
+    unified = dict(realistic_key)
+    for code, original in audit_key.items():
+        _put_key_checked(unified, code, original)
+    return unified
+
+
 def _check_input_pollution(
     text: str,
     *,
@@ -127,9 +170,6 @@ def redact_pseudonym_llm(
                 realistic_config[ent_type] = {"strategy": strategy}
     else:
         realistic_config = dict(profile["config"])
-    # Audit pass uses the (possibly extended) type set with "remove" strategy
-    # so audit_text always contains [TYPE-NNNNN] placeholders.
-    audit_config = {ent_type: {"strategy": "remove"} for ent_type in realistic_config}
 
     resolved_salt = _salt_to_bytes(salt)
 
@@ -161,6 +201,22 @@ def redact_pseudonym_llm(
 
     warn_coverage_restored(_restored_types)
 
+    # Audit pass: every DETECTED type gets the "remove_bracketed" strategy, so
+    # audit_text is entirely bracketed [PREFIX-NNNNN] placeholders. Keyed by the
+    # detected entity types (union the configured types too), NOT just
+    # realistic_config — a detected type absent from the profile config (e.g.
+    # ``us_passport``) would otherwise fall through to its registry-default
+    # strategy ("remove", bare PREFIX-NNNNN) and re-open the collision. The
+    # brackets are load-bearing, not cosmetic: they put every audit code in a
+    # namespace DISJOINT from any realistic code (a realistic fake or bare
+    # PREFIX-NNNNN pool-exhaustion fallback never contains "["), so the two
+    # passes' keys can never collide when unified below. Plain "remove" emitted
+    # bare PREFIX-NNNNN — identical to the realistic pass's person fallback —
+    # which let the audit mapping silently overwrite an LLM-facing one on the
+    # union (an identity splice; see _merge_pseudonym_keys).
+    audit_types = set(realistic_config) | {e.type for e in entities}
+    audit_config = {ent_type: {"strategy": "remove_bracketed"} for ent_type in audit_types}
+
     downstream_text, key, realistic_aliases = _redact_module._replace_and_emit(
         text,
         entities,
@@ -191,10 +247,15 @@ def redact_pseudonym_llm(
     marker = resolve_marker(display_marker)
     display_text = mark_for_display(downstream_text, key, marker=marker)
 
-    # Detection ran once with one seed; both replace passes use disjoint
-    # output spaces (realistic digits/Chinese vs [TYPE-NNNNN] placeholders),
-    # so a simple union is collision-free by construction.
-    unified_key = {**key, **audit_key}
+    # Detection ran once with one seed; the realistic pass emits realistic fakes
+    # (or bare PREFIX-NNNNN on pool exhaustion) and the audit pass emits bracketed
+    # [PREFIX-NNNNN] placeholders, so the two output spaces are disjoint by
+    # construction. _merge_pseudonym_keys enforces that as an invariant rather than
+    # trusting it: it raises PseudonymKeyCollisionError if any code maps to two
+    # different originals, turning a would-be silent identity splice (the pre-fix
+    # blind `{**key, **audit_key}`, where audit silently overwrote a colliding
+    # realistic mapping) into a loud failure.
+    unified_key = _merge_pseudonym_keys(key, audit_key)
     # fake → SSOT PII type, built PER PASS then merged. In the unified key each
     # original has TWO fakes (realistic + [TYPE-NNNNN] audit), so a single
     # original→fake reverse map would drop one — invert each pass's key

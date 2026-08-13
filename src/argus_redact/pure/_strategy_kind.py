@@ -13,6 +13,7 @@ VALID_STRATEGIES = (
     "realistic",
     "mask",
     "remove",
+    "remove_bracketed",
     "category",
     "name_mask",
     "landline_mask",
@@ -21,7 +22,11 @@ VALID_STRATEGIES = (
 
 # Strategies whose output can be mapped back to the original via the key dict.
 # Adding a new strategy to VALID_STRATEGIES requires classifying it here.
-_REVERSIBLE_STRATEGIES = frozenset({"pseudonym", "realistic", "remove", "keep"})
+# ``remove_bracketed`` emits a stable `[PREFIX-NNNNN]` pseudonym (like ``remove``
+# but in a bracketed namespace disjoint from realistic codes — used by the
+# pseudonym-llm audit pass); it is value-independent and LLM-round-trip-safe, so
+# it is reversible.
+_REVERSIBLE_STRATEGIES = frozenset({"pseudonym", "realistic", "remove", "remove_bracketed", "keep"})
 
 
 def is_strategy_reversible(strategy: str) -> bool:

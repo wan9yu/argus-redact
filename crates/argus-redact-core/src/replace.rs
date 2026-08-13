@@ -598,6 +598,31 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
                     );
                     pg.get_reserved(&entity.text, &mut self.used_labels)
                 }
+            } else if strategy == "remove_bracketed" {
+                // Bracketed reversible audit placeholder `[PREFIX-NNNNN]`. Same
+                // per-type generator, prefix, and seed as the `remove` fallback
+                // (and the realistic strategy's own faller-back), but wrapping the
+                // code in brackets moves it into a namespace DISJOINT from every
+                // realistic code — a realistic fake or bare `PREFIX-NNNNN` fallback
+                // never contains `[`. The pseudonym-llm profile runs a realistic
+                // pass and this audit pass over ONE detection and unions their two
+                // keys into one restore key; sharing a bare `PREFIX-NNNNN` space
+                // (the old `remove`) let a person's audit code collide with the
+                // realistic pass's exhausted-pool `P-NNNNN` fallback and silently
+                // overwrite the restore mapping (an identity splice). Bracketing
+                // makes that collision unrepresentable. `get_reserved` reserves the
+                // bare code in `used_labels`, keeping the bracketed forms unique.
+                let pg = get_type_gen(
+                    &mut self.type_gens,
+                    &entity.type_,
+                    info,
+                    self.unified_prefix.as_deref(),
+                    self.pseudo_seed_int,
+                    &self.result_key,
+                    self.factory,
+                );
+                let code = pg.get_reserved(&entity.text, &mut self.used_labels);
+                format!("[{code}]")
             } else if strategy == "category" {
                 let label = info
                     .and_then(|i| i.label.clone())

@@ -28,6 +28,7 @@ from argus_redact.glue._detect_partial import (
 )
 from argus_redact.glue.redact_pseudonym_llm import (
     _check_input_pollution,
+    _put_key_checked,
     _salt_to_bytes,
     redact_pseudonym_llm,
 )
@@ -586,10 +587,6 @@ class StreamingRedactor:
             # guards against pollution and avoids a redundant scan.
             _polluted_input_ok=True,
         )
-        # setdefault preserves first-seen mapping; realistic and audit spaces
-        # are disjoint by construction, so collisions are impossible.
-        for fake, original in result.key.items():
-            self._accumulated_key.setdefault(fake, original)
         # `result.downstream_key` (v0.8.2+) is the EXACT realistic-only key
         # `redact_pseudonym_llm` computed internally, before it was unioned
         # into `result.key` (the unified realistic+audit key). Using this
@@ -597,8 +594,28 @@ class StreamingRedactor:
         # substring heuristic — avoids both false positives (an audit
         # placeholder that happens to be a substring of some unrelated
         # downstream text) and false negatives.
+        #
+        # The realistic (LLM-facing) codes carry the identity-splice guarantee:
+        # the realistic pass threads `_accumulated_realistic_key` as its
+        # existing_key, so a recurring original reuses its code and a new original
+        # gets a fresh one. A realistic code mapping to two different originals is
+        # therefore an integrity failure, not a normal event — `_put_key_checked`
+        # fails loud rather than silently dropping one (the pre-fix `setdefault`).
         for fake, original in result.downstream_key.items():
-            self._accumulated_realistic_key.setdefault(fake, original)
+            _put_key_checked(self._accumulated_realistic_key, fake, original)
+        # Public unified aggregate. Realistic codes carry the same guard; the
+        # bracketed [PREFIX-NNNNN] audit placeholders are minted fresh per emit
+        # (the audit pass runs with existing_key=None), so the SAME placeholder may
+        # legitimately label different originals across emits — those accumulate
+        # first-seen, matching the pre-existing tolerant behaviour. They never
+        # appear in downstream text, so aggregate-key restore of the LLM reply is
+        # unaffected, and after the audit face moved to a bracketed namespace an
+        # audit placeholder can never equal a realistic code.
+        for fake, original in result.key.items():
+            if fake in result.downstream_key:
+                _put_key_checked(self._accumulated_key, fake, original)
+            else:
+                self._accumulated_key.setdefault(fake, original)
         for fake, t in result.types.items():
             self._accumulated_types.setdefault(fake, t)
         return result
