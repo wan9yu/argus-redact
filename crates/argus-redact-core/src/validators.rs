@@ -33,7 +33,7 @@ pub fn validate_luhn(value: &str) -> bool {
 }
 
 pub fn validate_credit_card_luhn(value: &str) -> bool {
-    let digits_only: String = value.replace(['-', ' '], "");
+    let digits_only: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
     if digits_only.is_empty() || !digits_only.chars().all(|c| c.is_ascii_digit()) {
         return false;
     }
@@ -73,7 +73,11 @@ pub fn gb11643_check_char(body17: &str) -> char {
 }
 
 pub fn validate_id_number(value: &str) -> bool {
-    let value: String = value.replace([' ', '-'], "").to_uppercase();
+    let value: String = value
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_uppercase();
     if value.chars().count() != 18 { return false; }
     let chars: Vec<char> = value.chars().collect();
     if !chars[..17].iter().all(|c| c.is_ascii_digit()) { return false; }
@@ -175,7 +179,7 @@ pub fn validate_credit_code(value: &str) -> bool {
 
 // ── My Number (JP) ──────────────────────────────────────────────────────────
 pub fn validate_my_number(value: &str) -> bool {
-    let digits: String = value.replace(' ', "");
+    let digits: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
     if digits.chars().count() != 12 || !digits.chars().all(|c| c.is_ascii_digit()) { return false; }
     let d: Vec<u32> = digits.chars().map(|c| c.to_digit(10).unwrap()).collect();
     let weights = [6u32,5,4,3,2,7,6,5,4,3,2];
@@ -233,7 +237,11 @@ fn iban_expected_len(cc: &str) -> Option<usize> {
 }
 
 pub fn validate_iban(value: &str) -> bool {
-    let iban: String = value.replace(' ', "").to_uppercase();
+    let iban: String = value
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_uppercase();
     let chars: Vec<char> = iban.chars().collect();
     if chars.len() < 2 { return false; }
     let cc: String = chars[..2].iter().collect();
@@ -284,7 +292,7 @@ pub fn validate_pan(value: &str) -> bool {
 }
 
 pub fn validate_ssn(value: &str) -> bool {
-    let digits: String = value.replace(['-', ' '], "");
+    let digits: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
     if digits.chars().count() != 9 || !digits.chars().all(|c| c.is_ascii_digit()) { return false; }
     let (area, group, serial) = (&digits[..3], &digits[3..5], &digits[5..]);
     if area == "000" || group == "00" || serial == "0000" { return false; }
@@ -292,7 +300,7 @@ pub fn validate_ssn(value: &str) -> bool {
 }
 
 pub fn validate_itin(value: &str) -> bool {
-    let digits: String = value.replace(['-', ' '], "");
+    let digits: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
     if digits.chars().count() != 9 || !digits.chars().all(|c| c.is_ascii_digit()) { return false; }
     let (area, group) = (&digits[..3], &digits[3..5]);
     let area: u32 = area.parse().unwrap();
@@ -306,7 +314,7 @@ pub fn validate_itin(value: &str) -> bool {
 }
 
 pub fn validate_aadhaar(value: &str) -> bool {
-    let digits: String = value.replace([' ', '-'], "");
+    let digits: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
     let c: Vec<char> = digits.chars().collect();
     if c.len() != 12 || c[0] == '0' || c[0] == '1' { return false; }
     c.iter().all(|x| x.is_ascii_digit())
@@ -318,7 +326,7 @@ pub fn validate_de_phone(value: &str) -> bool {
 }
 
 pub fn validate_de_tax_id(value: &str) -> bool {
-    let digits: String = value.replace(' ', "");
+    let digits: String = value.chars().filter(|c| c.is_ascii_digit()).collect();
     let c: Vec<char> = digits.chars().collect();
     if c.len() != 11 || c[0] == '0' { return false; }
     c.iter().all(|x| x.is_ascii_digit())
@@ -673,5 +681,100 @@ mod tests {
         // leading-particle-prefixed values (what the regex captures) still validate
         assert!(validate_organization("在阿里巴巴有限公司"));
         assert!(validate_school("毕业于北京大学"));
+    }
+
+    // ── Whitespace-separator normalization matrix ───────────────────────────
+    // The structured-ID patterns accept the full `\s` class as an intra-value
+    // separator (e.g. SSN `\d{3}[-\s]?\d{2}[-\s]?\d{4}`), but these validators
+    // historically stripped only ' ' and '-'. A checksum-valid ID carrying a
+    // tab/newline/other-`\s` separator therefore failed the validator's
+    // length/checksum gate and was downgraded to a never-redacted near-miss.
+    // Each validator must normalise every ASCII/Unicode whitespace separator
+    // the regex can match before its gate runs.
+
+    /// Every non-space character the `\s` regex class can match as a separator.
+    /// (Plain space is already handled and covered by the existing tests.)
+    const WS_SEPARATORS: &[char] = &[
+        '\t',       // U+0009 TAB
+        '\n',       // U+000A LF
+        '\u{000B}', // U+000B VT
+        '\u{000C}', // U+000C FF
+        '\r',       // U+000D CR
+        '\u{0085}', // U+0085 NEL
+        '\u{2028}', // U+2028 LINE SEPARATOR
+        '\u{2029}', // U+2029 PARAGRAPH SEPARATOR
+        '\u{1680}', // U+1680 OGHAM SPACE MARK
+    ];
+
+    /// Insert `sep` between every character of `body` (dense worst case: the
+    /// validator must strip separators regardless of how many the caller feeds).
+    fn interleave(body: &str, sep: char) -> String {
+        let mut out = String::new();
+        for (i, c) in body.chars().enumerate() {
+            if i > 0 {
+                out.push(sep);
+            }
+            out.push(c);
+        }
+        out
+    }
+
+    #[test]
+    fn ws_separator_matrix_digit_only_validators() {
+        // (validator, checksum-valid digits-only body). Each must accept the
+        // body with any `\s`-class separator interleaved. Fails pre-fix because
+        // `str::replace([' ','-'])` leaves tab/newline/… in place → wrong length.
+        let cases: &[(fn(&str) -> bool, &str)] = &[
+            (validate_credit_card_luhn, "4111111111111111"), // Visa test, Luhn-valid
+            (validate_my_number, "100000000030"),            // JP My Number, valid
+            (validate_ssn, "123456789"),                      // valid area/group/serial
+            (validate_itin, "912701234"),                     // area 912, group 70
+            (validate_aadhaar, "234567890123"),               // 12 digits, first !=0/1
+            (validate_de_tax_id, "12345678901"),              // 11 digits, first !=0
+        ];
+        for &(validate, body) in cases {
+            assert!(validate(body), "control (no separator) must validate: {body}");
+            for &sep in WS_SEPARATORS {
+                let with_sep = interleave(body, sep);
+                assert!(
+                    validate(&with_sep),
+                    "digit-only validator must strip U+{:04X} separator in {with_sep:?}",
+                    sep as u32
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ws_separator_matrix_alphanumeric_validators() {
+        // id_number's GB11643 check char can be 'X'; IBAN carries country/BBAN
+        // letters — both KEEP alphanumerics (not digits-only) then upper-case.
+        let cases: &[(fn(&str) -> bool, &str)] = &[
+            (validate_id_number, "11010519491231002X"),
+            (validate_iban, "GB82WEST12345698765432"),
+        ];
+        for &(validate, body) in cases {
+            assert!(validate(body), "control (no separator) must validate: {body}");
+            for &sep in WS_SEPARATORS {
+                let with_sep = interleave(body, sep);
+                assert!(
+                    validate(&with_sep),
+                    "alphanumeric validator must strip U+{:04X} separator in {with_sep:?}",
+                    sep as u32
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ws_alphanumeric_validators_keep_letters_and_upcase() {
+        // Pins the alphanumeric+uppercase choice: a digits-only filter would drop
+        // the GB11643 'X' check char and the IBAN letters (wrong length → reject).
+        // Lowercase must upper-case through the filter, and the tab-separated form
+        // (the reproduce case) must survive with the letters intact.
+        assert!(validate_id_number("11010519491231002x")); // lowercase check char
+        assert!(validate_id_number("11010519491231002\tX")); // tab-separated, X kept
+        assert!(validate_iban("gb82west12345698765432")); // lowercase letters
+        assert!(validate_iban("GB82\tWEST12345698765432")); // tab-separated, letters kept
     }
 }
