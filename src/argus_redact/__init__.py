@@ -35,7 +35,7 @@ from argus_redact.structured import (
     restore_json,
 )
 
-__version__ = "0.8.11"
+__version__ = "0.8.12"
 __all__ = [
     # ─── Layer 1 — primitive (frozen at 1.0) ───
     "redact",

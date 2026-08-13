@@ -2,6 +2,32 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.12 — internal cleanup and an `/info` capability-reporting fix
+
+A whole-codebase cleanup release. The bulk is an internal, behaviour-preserving refactor pass across the
+Rust core, the PyO3 binding, the WebAssembly build, and the Python layer — removing duplication, dead code,
+and redundant work — verified byte-identical against the existing golden and offline test suites. One
+deliberate behaviour fix ships alongside it: the HTTP `/info` endpoint now reports NER availability honestly
+(see below). No public API changed, no wire format changed, and redaction/restore output is unchanged.
+
+### Behaviour changes
+
+- **HTTP `/info`: the `ner` flag now reflects true Layer-2 engine availability.** Previously `/info` could
+  report `ner: true` when the NER adapter module merely imported, even with no spaCy/HanLP engine installed —
+  contradicting the CLI and MCP `info` faces, which check for a usable engine. All three info faces now derive
+  `ner` from one shared source (`lang_capabilities()` backed by `ner_engine_available()`), so `/info` reports
+  `ner: true` only when an engine is actually present and usable.
+
+### Internal
+
+- **Whole-codebase cleanup pass** (no behavioural effect): deduplication, dead-code removal, and efficiency
+  cleanups across `argus-redact-core`, `argus-redact-py`, `argus-redact-wasm`, and the `argus_redact` Python
+  package. Representative changes: a single post-merge coverage/type-filter chokepoint in the core; one
+  `_RustPM` conversion seam between Python and the binding; unified detector candidate scans and
+  context-window / proximity helpers; one built-in faker table; a shared session base for the LangChain and
+  LlamaIndex adapters; and removal of a superseded faker-resolution code path. Every change was verified
+  byte-identical (Rust goldens + the full Python offline suite).
+
 ## v0.8.11 — server hardening & a restore-path denial-of-service fix
 
 A hardening slice for the HTTP `serve` face and the restore path. The headline is a remotely-reachable
