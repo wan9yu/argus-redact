@@ -47,6 +47,61 @@ def test_compound_zh_surname():
     assert "欧先生" not in expanded
 
 
+def test_compound_surname_drift_no_bogus_1char_honorific():
+    """A compound-surname original the zh DETECTOR reliably produces (长孙无忌)
+    must expand to the CORRECT compound honorific (长孙先生) and NEVER a bogus
+    1-char one (长先生).
+
+    长孙 is one of the compound surnames the core zh person detector
+    special-cases, so a redaction key reliably contains such an original. If
+    the alias extractor's compound pool has drifted from core's, it truncates
+    长孙无忌 to 长 and mints 长先生->长孙无忌. 长 is a high-frequency char, so
+    长先生 is a substring of ordinary phrases (市长先生 / 校长先生 / 部长先生),
+    and that bogus alias splices the redacted client's REAL name into a reply
+    that never referred to them.
+    """
+    from argus_redact import restore
+
+    key = {"P-83811": "长孙无忌"}  # compound-surname original the detector produces
+    expanded = expand_aliases(key, lang="zh")
+    # correct compound honorific present
+    assert expanded["长孙先生"] == "长孙无忌"
+    assert expanded["长孙总"] == "长孙无忌"
+    # bogus truncated 1-char honorific absent for every title
+    for title in ("先生", "女士", "总", "老师", "医生"):
+        assert f"长{title}" not in expanded, f"bogus 长{title} must not bind to a real original"
+    # the identity splice: an LLM reply mentioning 市长先生 must not restore the original
+    restored = restore("请确认市长先生的意见", {**key, **expanded}, guard=False)
+    assert "长孙无忌" not in restored, "original spliced into 市长先生 via a bogus 1-char alias"
+    assert "市长先生" in restored
+
+
+def test_compound_surname_drift_covers_all_core_compound_surnames():
+    """Every compound surname the core detector recognises must extract as a
+    2-char surname here — the two pools are single-sourced, so none can drift
+    into a truncated 1-char honorific. Guards令狐/南宫/司徒/宇文/慕容/端木/长孙
+    (the entries the old hand-maintained literal lacked)."""
+    from argus_redact._core_loader import _core
+
+    for compound in _core.person_compound_surnames_zh():
+        original = f"{compound}某"  # surname + a 1-char given name
+        expanded = expand_aliases({"P-1": original}, lang="zh")
+        assert expanded[f"{compound}先生"] == original, f"{compound} not extracted as compound"
+        # no truncated 1-char honorific for the compound's first char
+        assert f"{compound[0]}先生" not in expanded, f"{compound} truncated to {compound[0]}"
+
+
+def test_unrecognised_zh_surname_emits_no_honorific():
+    """Safe fallback: when the leading char is NOT a surname the detector
+    recognises, emit NO honorific rather than guessing name[:1]. A missing
+    alias is a safe coverage gap; a guessed 1-char surname is the mechanism
+    behind the identity splice and would misfire on any future drift."""
+    # 囧 is not a zh surname → the extractor must return None → no aliases.
+    key = {"P-1": "囧铁蛋"}
+    expanded = expand_aliases(key, lang="zh")
+    assert expanded == {"P-1": "囧铁蛋"}, "unrecognised surname must not mint a guessed honorific"
+
+
 def test_multi_token_en_with_trailing_initial():
     """John F. Smith → Smith (skip 'F.' single-letter initial)."""
     key = {"P-001": "John F. Smith"}
