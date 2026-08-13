@@ -85,6 +85,44 @@ class TestRedactBody:
         assert redacted == body
         assert key == {}
 
+    def test_on_missing_field_raise_fails_closed(self):
+        # Opt-in fail-closed: a security-conscious deployment sets
+        # on_missing_field="raise" so an absent field RAISES instead of returning
+        # the PII-carrying body un-redacted. A proxy that ignores warnings then
+        # cannot forward the leak. Mirrors the sibling restore_body (TypeError).
+        body = {"prompt": "姓名张伟，手机13812345678"}
+
+        with pytest.raises(TypeError, match="text"):
+            redact_body(
+                body, field="text", on_missing_field="raise", mode="fast", lang="zh", salt=42
+            )
+
+    def test_on_missing_field_raise_fails_closed_for_messages(self):
+        body = {"msgs": [{"role": "user", "content": "手机13812345678"}]}
+
+        with pytest.raises(TypeError, match="messages"):
+            redact_body(
+                body, field="messages", on_missing_field="raise", mode="fast", lang="zh", salt=42
+            )
+
+    def test_on_missing_field_default_is_warn_and_returns_unchanged(self):
+        # Default (on_missing_field="warn") is unchanged behaviour: warn naming
+        # the field, then return the body unchanged with an empty key — so the
+        # existing PII-free pass-through flow stays intact.
+        body = {"prompt": "姓名张伟，手机13812345678"}
+
+        with pytest.warns(SecurityWarning, match="text"):
+            redacted, key = redact_body(body, field="text", mode="fast", lang="zh", salt=42)
+
+        assert redacted == body
+        assert key == {}
+
+    def test_on_missing_field_rejects_unknown_value(self):
+        # A typo in the security switch must not silently fall back to "warn"
+        # (that would itself fail open). An unknown value is a ValueError.
+        with pytest.raises(ValueError, match="on_missing_field"):
+            redact_body({"text": "hi"}, on_missing_field="rais", mode="fast", lang="zh", salt=42)
+
     def test_should_handle_messages_array(self):
         body = {
             "messages": [

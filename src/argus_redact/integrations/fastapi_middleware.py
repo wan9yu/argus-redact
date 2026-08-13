@@ -67,12 +67,32 @@ def redact_body(
     mode: str = "fast",
     lang: str | list[str] = "zh",
     salt: int | bytes | None = None,
+    on_missing_field: str = "warn",
 ) -> tuple[dict, dict]:
     """Redact PII in a request body dict.
 
     Looks for `field` in body. If field is "messages", redacts each
     message's "content". Returns (redacted_body, key).
+
+    on_missing_field controls the absent-field branch — when `field` is not in
+    `body` there is nothing to redact, so the body would be returned unchanged
+    with an empty key, a false all-clear a forwarding proxy could ship upstream
+    in plaintext:
+        "warn" (default): emit a SecurityWarning naming the field, then return
+            the body unchanged. Keeps a benign metadata-only body working (an
+            OpenAI-style {model, temperature, ...} with no user-text field) while
+            surfacing the fail-open. A proxy that IGNORES warnings still forwards.
+        "raise": raise TypeError naming the field so a security-conscious
+            deployment genuinely fails CLOSED instead of forwarding an
+            un-redacted body — mirroring the sibling restore_body, which raises
+            on the identical condition. Set this once at the call/config site.
+    An unknown value is itself rejected (ValueError) rather than silently
+    treated as "warn": a typo in a security switch must not fail open.
     """
+    if on_missing_field not in ("warn", "raise"):
+        raise ValueError(
+            f"redact_body: on_missing_field must be 'warn' or 'raise', got {on_missing_field!r}"
+        )
     result = dict(body)
     combined_key: dict = {}
 
@@ -110,23 +130,25 @@ def redact_body(
         )
         result[field] = redacted_text
     else:
-        # Fail LOUD, not silent: a body missing the named field was handed back
-        # UN-REDACTED with an empty key — a false all-clear indistinguishable from
-        # "nothing to redact", so a proxy forwarding this output upstream ships any
-        # PII in the actual (mis-named) field in plaintext while the tuple looks
-        # successful. The sibling `restore_body` RAISES on the identical condition,
-        # but a missing field here can be a LEGITIMATE "this body carries no user
-        # text" case (an OpenAI-style body of only {model, temperature, ...}) —
-        # unlike restore, where the caller explicitly named a field to recover. So
-        # this warns instead of raising: it surfaces the fail-open (naming the
-        # missing field, matching `redact_json`'s SecurityWarning convention)
-        # without breaking a benign metadata-only body. The body is still returned
-        # unchanged with an empty key — now honestly, because the caller was told.
+        # A body missing the named field would be handed back UN-REDACTED with an
+        # empty key — a false all-clear indistinguishable from "nothing to
+        # redact", so a proxy forwarding this output ships any PII in the actual
+        # (mis-named) field in plaintext while the tuple looks successful.
+        # `on_missing_field` chooses the failure mode: "raise" (opt-in) fails
+        # CLOSED like the sibling `restore_body`, so a proxy that ignores warnings
+        # still cannot leak; "warn" (default) surfaces the fail-open without
+        # breaking a benign metadata-only body. Either way the field is named.
+        if on_missing_field == "raise":
+            raise TypeError(
+                f"redact_body: field {field!r} not found in body; nothing was "
+                f"redacted (on_missing_field='raise' → failing closed)."
+            )
+        # Default "warn": fail LOUD, not silent — matching `redact_json`'s
+        # SecurityWarning convention. (Set on_missing_field='raise' to fail closed.)
         warnings.warn(
-            f"redact_body: field {field!r} not found in body "
-            f"(keys present: {list(body.keys())}); nothing was redacted and the "
-            f"body is returned unchanged — any PII in other fields is NOT redacted. "
-            f"Pass field= naming the text field, or redact_json() for nested shapes.",
+            f"redact_body: field {field!r} not found in body; nothing was redacted "
+            f"and the body is returned unchanged — any PII in other fields is NOT "
+            f"redacted. Set on_missing_field='raise' to fail closed.",
             SecurityWarning,
             stacklevel=2,
         )
