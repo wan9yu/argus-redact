@@ -90,11 +90,16 @@ def test_detect_l1_releases_the_lock_so_threads_actually_parallelise() -> None:
         lambda: _elapsed(_detect_many, THREADS * CALLS_PER_THREAD),
         lambda: _threaded(THREADS, CALLS_PER_THREAD),
     )
-    # A GIL-holding binding lands at ~1.0 on every trial (often below it). The
-    # best of several trials clearly above 1 proves the lock was released;
-    # 1.5 leaves generous headroom for a loaded or throttled CI box while
-    # still failing the un-detached build on every single trial.
-    assert speedup > 1.5, (
+    # A GIL-holding binding cannot exceed ~1.0x on any trial: with the lock
+    # held, the 4 threads serialise, so parallel wall-clock is roughly serial
+    # wall-clock plus thread overhead (best-of-N tops out ~1.0-1.05x). A
+    # GIL-released build clears ~1.4x even on the weakest GitHub-hosted
+    # runner observed in CI (best-of-5 floor 1.41x there; a single-shot
+    # measurement on that same runner class was as low as 1.29x, which is
+    # what best-of-N is for). 1.2 sits ~0.2 above the held ceiling and below
+    # the released floor, so it still fails an un-detached build on every
+    # trial while no longer false-failing a correct build on a 2-core CI box.
+    assert speedup > 1.2, (
         f"detect_l1 does not appear to release the GIL (best of {_TRIALS}): "
         f"serial={serial:.3f}s parallel={parallel:.3f}s speedup={speedup:.2f}x"
     )
@@ -126,7 +131,10 @@ def test_restore_releases_the_lock_so_threads_actually_parallelise() -> None:
         return time.perf_counter() - start
 
     speedup, serial, parallel = _best_speedup(restore_serial, restore_parallel)
-    assert speedup > 1.5, (
+    # See test_detect_l1_releases_the_lock...'s comment: held ~1.0x vs
+    # released ~1.4x on GitHub-hosted runners, so 1.2 discriminates with
+    # margin without false-failing on a 2-core CI box.
+    assert speedup > 1.2, (
         f"restore does not appear to release the GIL (best of {_TRIALS}): "
         f"serial={serial:.3f}s parallel={parallel:.3f}s speedup={speedup:.2f}x"
     )
