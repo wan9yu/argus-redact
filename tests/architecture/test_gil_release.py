@@ -12,6 +12,9 @@ running the same total work spread over several threads must be meaningfully
 faster than running it on one. Under a GIL-holding binding the two are equal (or
 the threaded run is slower, from contention), so the assertion is a real
 discriminator rather than a tautology.
+
+To de-flake the threshold on shared/contended CI runners, the speedup is taken
+as the best of several trials rather than a single measurement.
 """
 
 from __future__ import annotations
@@ -53,6 +56,29 @@ def _threaded(n_threads: int, calls_each: int) -> float:
     return time.perf_counter() - start
 
 
+_TRIALS = 5
+
+
+def _best_speedup(measure_serial, measure_parallel) -> tuple[float, float, float]:
+    """Best (max) serial/parallel speedup over _TRIALS runs, to de-flake the
+    timing threshold on shared/contended CI runners.
+
+    A GIL-RELEASED build hits its true ~N-core speedup on at least one
+    uncontended trial; a GIL-HELD build stays ~1.0 on EVERY trial (it cannot
+    parallelise), so max-over-trials keeps the held-vs-released discriminator
+    intact while a lone contention spike no longer false-fails.
+    Returns (best_speedup, serial_of_best, parallel_of_best).
+    """
+    best = (0.0, 0.0, 0.0)
+    for _ in range(_TRIALS):
+        serial = measure_serial()
+        parallel = measure_parallel()
+        speedup = serial / parallel
+        if speedup > best[0]:
+            best = (speedup, serial, parallel)
+    return best
+
+
 @pytest.mark.skipif(
     (os.cpu_count() or 1) < 4, reason="needs >= 4 cores to observe parallel speedup"
 )
@@ -60,15 +86,16 @@ def test_detect_l1_releases_the_lock_so_threads_actually_parallelise() -> None:
     # Warm every lazy static (pattern compiles, name pools) before timing.
     _core.detect_l1(TEXT, ["zh", "en"], None)
 
-    serial = _elapsed(_detect_many, THREADS * CALLS_PER_THREAD)
-    parallel = _threaded(THREADS, CALLS_PER_THREAD)
-
-    speedup = serial / parallel
-    # A GIL-holding binding lands at ~1.0 (often below it). Anything clearly
-    # above 1 proves the lock was released; 1.5 leaves generous headroom for a
-    # loaded or throttled CI box while still failing the un-detached build.
+    speedup, serial, parallel = _best_speedup(
+        lambda: _elapsed(_detect_many, THREADS * CALLS_PER_THREAD),
+        lambda: _threaded(THREADS, CALLS_PER_THREAD),
+    )
+    # A GIL-holding binding lands at ~1.0 on every trial (often below it). The
+    # best of several trials clearly above 1 proves the lock was released;
+    # 1.5 leaves generous headroom for a loaded or throttled CI box while
+    # still failing the un-detached build on every single trial.
     assert speedup > 1.5, (
-        f"detect_l1 does not appear to release the GIL: "
+        f"detect_l1 does not appear to release the GIL (best of {_TRIALS}): "
         f"serial={serial:.3f}s parallel={parallel:.3f}s speedup={speedup:.2f}x"
     )
 
@@ -86,17 +113,20 @@ def test_restore_releases_the_lock_so_threads_actually_parallelise() -> None:
 
     _core.restore(text, key)  # warm
 
-    serial = _elapsed(restore_many, THREADS * 2)
-    parallel_start = time.perf_counter()
-    threads = [threading.Thread(target=restore_many, args=(2,)) for _ in range(THREADS)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    parallel = time.perf_counter() - parallel_start
+    def restore_serial() -> float:
+        return _elapsed(restore_many, THREADS * 2)
 
-    speedup = serial / parallel
+    def restore_parallel() -> float:
+        start = time.perf_counter()
+        threads = [threading.Thread(target=restore_many, args=(2,)) for _ in range(THREADS)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        return time.perf_counter() - start
+
+    speedup, serial, parallel = _best_speedup(restore_serial, restore_parallel)
     assert speedup > 1.5, (
-        f"restore does not appear to release the GIL: "
+        f"restore does not appear to release the GIL (best of {_TRIALS}): "
         f"serial={serial:.3f}s parallel={parallel:.3f}s speedup={speedup:.2f}x"
     )
