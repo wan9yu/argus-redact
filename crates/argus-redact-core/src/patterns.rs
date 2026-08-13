@@ -173,9 +173,13 @@ static FALSE_POSITIVE_PREFIX: LazyLock<Regex> = LazyLock::new(|| {
     ).unwrap()
 });
 
-// Arithmetic/code context after a number
+// Arithmetic/code context after a number. Group 1 captures the FIRST digit of the
+// "operand" that follows the operator — its offset lets the suppression site test
+// whether that operand is itself another same-type value (a delimiter between two
+// PII values) rather than an arithmetic term. `\s*` around the operator allows both
+// the no-space (`13800138000/13900139000`) and spaced (`4321 / 3333`) layouts.
 static FALSE_POSITIVE_SUFFIX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^\s*[/\*\+\-=%\^](?:\s*\d)").unwrap()
+    Regex::new(r"^\s*[/\*\+\-=%\^]\s*(\d)").unwrap()
 });
 
 // Context window in characters. Call sites multiply by 3 — the max UTF-8 byte
@@ -210,7 +214,27 @@ fn ceil_char_boundary(text: &str, pos: usize) -> usize {
     i
 }
 
-fn looks_like_false_positive(text: &str, start: usize, end: usize) -> bool {
+/// Which false-positive heuristic (if any) fires for a match, and — for the suffix
+/// case — where the operand that follows the operator begins.
+///
+/// The two heuristics are NOT symmetric at the suppression site: a PREFIX hit
+/// (a "version"/"订单号"/… label before the number) always suppresses, but a SUFFIX
+/// hit (an operator+digit after the number) may be a delimiter between two same-type
+/// PII values rather than arithmetic — so the site needs the operand's start offset
+/// to test that before deciding. Prefix is checked first and wins any overlap, so
+/// the prefix path is unchanged.
+enum FpKind {
+    /// Neither heuristic fired — the surrounding context does not look like a
+    /// version/serial/arithmetic use.
+    None,
+    /// A `FALSE_POSITIVE_PREFIX` label precedes the number.
+    Prefix,
+    /// A `FALSE_POSITIVE_SUFFIX` operator+digit follows the number; `operand_start`
+    /// is the absolute byte offset (in `text`) of that first operand digit.
+    Suffix { operand_start: usize },
+}
+
+fn classify_false_positive(text: &str, start: usize, end: usize) -> FpKind {
     let before_start = floor_char_boundary(text, start.saturating_sub(CONTEXT_WINDOW * 3));
     let start_safe = floor_char_boundary(text, start);
     let before = &text[before_start..start_safe];
@@ -218,8 +242,32 @@ fn looks_like_false_positive(text: &str, start: usize, end: usize) -> bool {
     let after_end = ceil_char_boundary(text, std::cmp::min(end + CONTEXT_WINDOW * 3, text.len()));
     let after = &text[end_safe..after_end];
 
-    FALSE_POSITIVE_PREFIX.is_match(before).unwrap_or(false)
-        || FALSE_POSITIVE_SUFFIX.is_match(after).unwrap_or(false)
+    if FALSE_POSITIVE_PREFIX.is_match(before).unwrap_or(false) {
+        return FpKind::Prefix;
+    }
+    if let Ok(Some(caps)) = FALSE_POSITIVE_SUFFIX.captures(after) {
+        if let Some(digit) = caps.get(1) {
+            // The captured digit's offset is relative to `after`, which begins at
+            // `end_safe` in `text`.
+            return FpKind::Suffix { operand_start: end_safe + digit.start() };
+        }
+    }
+    FpKind::None
+}
+
+/// True when `re` (the same pattern that just matched) has a match that BEGINS
+/// exactly at `operand_start` — i.e. the operand after an arithmetic-looking
+/// operator is itself another value of the same type. That makes the operator a
+/// delimiter between two PII values (`phone/phone`, `phone - phone`), not
+/// arithmetic, so the leading value must NOT be suppressed. The `start() ==
+/// operand_start` guard keeps this strict: a same-type value appearing only later
+/// (e.g. past a genuine ` * 5` term) does not count. Any scan error fails safe to
+/// `false` (keep the existing suppression).
+fn operand_begins_same_type(re: &Regex, text: &str, operand_start: usize) -> bool {
+    match re.captures_from_pos(text, operand_start) {
+        Ok(Some(caps)) => caps.get(0).map(|m| m.start() == operand_start).unwrap_or(false),
+        _ => false,
+    }
 }
 
 /// Run all regex patterns against text, return sorted matches.
@@ -367,8 +415,25 @@ fn match_patterns_impl(
             // by attacker-influenceable surrounding text (a prepended "version"/"计算" or an appended
             // " - 0" used to evade redaction). Non-validated/near-miss matches keep the heuristic,
             // which discriminates e.g. a real IP from a "1.2.3.4" version string.
-            if pat.check_context && validator_passed != Some(true) && looks_like_false_positive(text, start, end) {
-                continue;
+            //
+            // A SUFFIX hit whose operand is itself a same-type value is NOT arithmetic — it is a
+            // delimiter between two PII values (`phone/phone`, `phone - phone`), so the leading
+            // value must still be redacted. A genuinely-suppressed match is not discarded silently:
+            // it is recorded at confidence 0.3 so it routes to the near-miss channel (a hint for
+            // the L2/L3 layers), never to the redaction path — matching a validator-failure
+            // near-miss. This keeps a suppressed FP out of the output while making it visible.
+            let mut effective_confidence = confidence;
+            if pat.check_context && validator_passed != Some(true) {
+                let suppress = match classify_false_positive(text, start, end) {
+                    FpKind::None => false,
+                    FpKind::Prefix => true,
+                    FpKind::Suffix { operand_start } => {
+                        !operand_begins_same_type(&re, text, operand_start)
+                    }
+                };
+                if suppress {
+                    effective_confidence = 0.3;
+                }
             }
 
             // Convert byte offsets to char offsets (Python uses char positions)
@@ -380,7 +445,7 @@ fn match_patterns_impl(
                 type_: pat.type_.clone(),
                 start: char_start,
                 end: char_end,
-                confidence,
+                confidence: effective_confidence,
                 layer: 0,
             });
         }
@@ -405,23 +470,30 @@ mod tests {
     fn check_context_suppresses_fp() {
         // 订单号 is a FALSE_POSITIVE_PREFIX trigger. With validator: None there is
         // no checksum confirmation, so the FP heuristic applies and the match in
-        // this context IS suppressed (the precision guard for format-ambiguous
-        // types, e.g. a phone-shaped 订单号 / order number).
+        // this context IS suppressed from the redaction path (the precision guard
+        // for format-ambiguous types, e.g. a phone-shaped 订单号 / order number).
+        // A suppressed match is no longer discarded silently: it comes back at
+        // confidence 0.3, which the caller routes to the near-miss channel (a hint,
+        // never a redaction) — so it is visible to the L2/L3 layers.
         let cfg = PatternConfig { type_: "phone".into(), pattern: r"\d{3}".into(), check_context: true, group: None, validator: None };
         let out = match_patterns("订单号123", &[cfg]).unwrap();
-        assert_eq!(out.len(), 0, "订单号 prefix should suppress a no-validator FP match");
+        assert_eq!(out.len(), 1, "prefix-suppressed match is surfaced, not dropped");
+        assert_eq!(out[0].confidence, 0.3, "surfaced as a near-miss, not a confidence-1.0 redaction");
+        assert_eq!(out[0].text, "123");
     }
     #[test]
     fn check_context_suppresses_near_miss() {
         // 订单号 is a FALSE_POSITIVE_PREFIX trigger. The ssn validator FAILS on
         // "000-..." (invalid area), so this is a confidence-0.3 near-miss — not a
-        // checksum-confirmed value — and a near-miss in an FP context IS suppressed.
+        // checksum-confirmed value — and a near-miss in an FP context stays a
+        // near-miss (confidence 0.3, surfaced but never redacted).
         let cfg = PatternConfig {
             type_: "ssn".into(), pattern: r"\d{3}-\d{2}-\d{4}".into(),
             check_context: true, group: None, validator: Some("ssn".into()),
         };
         let out = match_patterns("订单号000-12-3456", &[cfg]).unwrap();
-        assert_eq!(out.len(), 0, "订单号 prefix should suppress a failing near-miss");
+        assert_eq!(out.len(), 1, "prefix-suppressed near-miss is surfaced, not dropped");
+        assert_eq!(out[0].confidence, 0.3, "stays a near-miss (never promoted to redaction)");
     }
     #[test]
     fn check_context_does_not_suppress_validated_match() {
@@ -570,23 +642,111 @@ mod tests {
     }
 
     #[test]
-    fn looks_like_false_positive_prefix_and_suffix() {
-        // looks_like_false_positive (L94-104): a FALSE_POSITIVE_PREFIX in the BEFORE
-        // window OR a FALSE_POSITIVE_SUFFIX in the AFTER window flags a number as a
-        // non-PII (version/serial/arithmetic) context. Multi-byte CJK ("版本") in the
-        // window also exercises the floor/ceil boundary slicing on non-ASCII.
-        //   - prefix "version " before "1.2.3.4" → flagged.
+    fn classify_false_positive_prefix_and_suffix() {
+        // classify_false_positive: a FALSE_POSITIVE_PREFIX in the BEFORE window is a
+        // Prefix, a FALSE_POSITIVE_SUFFIX in the AFTER window is a Suffix carrying the
+        // operand's absolute start offset, and neutral context is None. Multi-byte CJK
+        // ("版本") in the window also exercises the floor/ceil boundary slicing.
+        //   - prefix "version " before "1.2.3.4" → Prefix.
         let t1 = "version 1.2.3.4 rest";
-        assert!(looks_like_false_positive(t1, 8, 15)); // "1.2.3.4"
-        //   - CJK prefix "版本" before the number → flagged (boundary slicing on CJK).
+        assert!(matches!(classify_false_positive(t1, 8, 15), FpKind::Prefix)); // "1.2.3.4"
+        //   - CJK prefix "版本" before the number → Prefix (boundary slicing on CJK).
         let t2 = "版本1234567";
         // "1234567" starts after the two 3-byte CJK chars (byte 6).
-        assert!(looks_like_false_positive(t2, 6, 13));
-        //   - arithmetic suffix " / 2" after the number → flagged.
+        assert!(matches!(classify_false_positive(t2, 6, 13), FpKind::Prefix));
+        //   - arithmetic suffix " / 2" after the number → Suffix, operand digit "2".
         let t3 = "12345 / 2";
-        assert!(looks_like_false_positive(t3, 0, 5));
-        //   - a plain number in neutral context is NOT flagged.
-        assert!(!looks_like_false_positive("call 4155551234 now", 5, 15));
+        // "12345" is bytes 0..5; the operand digit "2" is the last byte (index 8).
+        assert!(matches!(classify_false_positive(t3, 0, 5), FpKind::Suffix { operand_start: 8 }));
+        //   - no-space suffix "/1..." → Suffix, operand digit right after the operator.
+        let t4 = "13800138000/13900139000";
+        assert!(matches!(classify_false_positive(t4, 0, 11), FpKind::Suffix { operand_start: 12 }));
+        //   - a plain number in neutral context is None.
+        assert!(matches!(classify_false_positive("call 4155551234 now", 5, 15), FpKind::None));
+    }
+
+    #[test]
+    fn operand_same_type_check_is_strict() {
+        // operand_begins_same_type releases only when a same-type value BEGINS exactly
+        // at the operand offset — a value that starts later (past a genuine term) does not.
+        let re = get_regex(r"\d{11}").unwrap();
+        // "13900139000" begins right at byte 12 → release.
+        assert!(operand_begins_same_type(&re, "13800138000/13900139000", 12));
+        // A short operand ("2") is not an 11-digit value → no release.
+        assert!(!operand_begins_same_type(&re, "13800138000/2", 12));
+        // A same-type value that appears only LATER (operand offset points at "5",
+        // which is a lone digit, and the 11-digit run starts further on) → no release.
+        assert!(!operand_begins_same_type(&re, "13800138000/5 13900139000", 12));
+    }
+
+    #[test]
+    fn suffix_same_type_operand_is_not_suppressed() {
+        // Two same-type values separated by "/" (no space) — the second is a same-type
+        // operand, so the FIRST must NOT be suppressed: both come back at confidence 1.0.
+        // (Reproduces the zh two-mobile leak `13800138000/13900139000`.)
+        let cfg = PatternConfig {
+            type_: "phone".into(), pattern: r"\d{11}".into(),
+            check_context: true, group: None, validator: None,
+        };
+        let out = match_patterns("13800138000/13900139000", &[cfg]).unwrap();
+        assert_eq!(out.len(), 2, "both same-type values are kept");
+        assert!(out.iter().all(|m| m.confidence == 1.0), "neither is downgraded to a near-miss");
+        assert_eq!(out[0].text, "13800138000");
+        assert_eq!(out[1].text, "13900139000");
+    }
+
+    #[test]
+    fn suffix_same_type_operand_spaced_is_not_suppressed() {
+        // The spaced delimiter form `4321 / 3333` — an operator with whitespace on both
+        // sides — must behave identically: the operand right after " / " is a same-type
+        // value, so the leading value is kept at confidence 1.0.
+        let cfg = PatternConfig {
+            type_: "phone".into(), pattern: r"\d{4}".into(),
+            check_context: true, group: None, validator: None,
+        };
+        let out = match_patterns("4321 / 3333", &[cfg]).unwrap();
+        assert_eq!(out.len(), 2, "spaced same-type operand keeps both values");
+        assert!(out.iter().all(|m| m.confidence == 1.0));
+    }
+
+    #[test]
+    fn suffix_arithmetic_operand_still_suppressed() {
+        // A genuine single-operand arithmetic suffix (` * 5`, where "5" is NOT another
+        // 11-digit value) must STILL be suppressed — surfaced as a near-miss (0.3), not
+        // redacted. This is the precision control the same-type release must not break.
+        let cfg = PatternConfig {
+            type_: "phone".into(), pattern: r"\d{11}".into(),
+            check_context: true, group: None, validator: None,
+        };
+        let out = match_patterns("13800138000 * 5", &[cfg]).unwrap();
+        assert_eq!(out.len(), 1, "the leading value is still recognised…");
+        assert_eq!(out[0].confidence, 0.3, "…but stays a suppressed near-miss (arithmetic operand)");
+    }
+
+    #[test]
+    fn check_context_free_types_release_on_same_type_operand() {
+        // The six validator-free check_context types (zh phone, ip_address, eep, hrp,
+        // housing_fund, br phone) all share the suppression path. Exercise it with the
+        // real zh-mobile and IPv4 shapes to prove the release reaches them, not only the
+        // synthetic \d{n} fixtures above.
+        let zh_mobile = PatternConfig {
+            type_: "phone".into(),
+            pattern: r"(?<![0-9])(?:\+86)?1[3-9]\d(?:[\s-]?\d){8}(?![0-9])".into(),
+            check_context: true, group: None, validator: None,
+        };
+        let out = match_patterns("13800138000/13900139000", &[zh_mobile]).unwrap();
+        assert_eq!(out.len(), 2, "zh two-mobile delimiter releases both");
+        assert!(out.iter().all(|m| m.confidence == 1.0));
+
+        let ipv4 = PatternConfig {
+            type_: "ip_address".into(),
+            pattern: r"(?<![0-9.])(?:\d{1,3}\.){3}\d{1,3}(?![0-9.])".into(),
+            check_context: true, group: None, validator: None,
+        };
+        // Two IPs separated by " - " (a range) — the operand IP is same-type → keep both.
+        let out = match_patterns("10.0.0.1 - 10.0.0.2", &[ipv4]).unwrap();
+        assert_eq!(out.len(), 2, "ip range delimiter releases both IPs");
+        assert!(out.iter().all(|m| m.confidence == 1.0));
     }
 
     // ── Structural prefilter ─────────────────────────────────────────────────
@@ -749,7 +909,7 @@ mod tests {
         // changes the match — those survivors cannot be killed by any input.)
         let t = format!("version{}1.2.3.4", " ".repeat(25));
         let numstart = t.find("1.2.3.4").unwrap();
-        assert!(looks_like_false_positive(&t, numstart, numstart + 7));
+        assert!(matches!(classify_false_positive(&t, numstart, numstart + 7), FpKind::Prefix));
     }
 
     // ── Cooperative cancellation (base scan) ─────────────────────────────────
