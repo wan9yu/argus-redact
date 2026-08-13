@@ -3,7 +3,7 @@
     PatternData(
         type_: r"aadhaar",
         label: r"[AADHAAR]",
-        pattern: r"(?<!\d)\d{4}[\s-]?\d{4}[\s-]?\d{4}(?!\d)",
+        pattern: r"(?<![0-9])\d{4}[\s-]?\d{4}[\s-]?\d{4}(?![0-9])",
         validator: Some(r"aadhaar"),
         description: r"Indian Aadhaar number (12 digits)",
     ),
@@ -22,7 +22,7 @@
     PatternData(
         type_: r"phone",
         label: r"[PHONE]",
-        pattern: r"(?:\+91[-\s]?)?[6-9]\d{4}[-\s]?\d{5}(?!\d)",
+        pattern: r"(?:\+91[-\s]?)?[6-9]\d{4}[-\s]?\d{5}(?![0-9])",
         description: r"Indian mobile phone number",
     ),
 ]

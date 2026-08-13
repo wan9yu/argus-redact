@@ -91,6 +91,7 @@ const LEADING_LOOKBEHINDS: &[(&str, &str)] = &[
     (r"(?<![A-Za-z])", r"(?:^|[^A-Za-z])"),
     (r"(?<![:\w])", r"(?:^|[^:\w])"),
     (r"(?<![A-Z])", r"(?:^|[^A-Z])"),
+    (r"(?<![0-9])", r"(?:^|[^0-9])"),
     (r"(?<!\d)", r"(?:^|\D)"),
     (r"(?<!\w)", r"(?:^|\W)"),
 ];
@@ -99,6 +100,7 @@ const TRAILING_LOOKAHEADS: &[(&str, &str)] = &[
     (r"(?![0-9A-Fa-f:.-])", r"(?:[^0-9A-Fa-f:.-]|$)"),
     (r"(?![A-Z0-9])", r"(?:[^A-Z0-9]|$)"),
     (r"(?![A-Za-z])", r"(?:[^A-Za-z]|$)"),
+    (r"(?![0-9])", r"(?:[^0-9]|$)"),
     (r"(?!\d)", r"(?:\D|$)"),
     (r"(?!\w)", r"(?:\W|$)"),
 ];
@@ -609,6 +611,22 @@ mod tests {
         assert_eq!(
             prefilter_source(r"\d{4}-\d{4}(?!\d)").as_deref(),
             Some(r"\d{4}-\d{4}(?:\D|$)")
+        );
+        // ASCII-scoped digit boundaries (v0.8.13): the numeric PII patterns use
+        // `(?<![0-9])` / `(?![0-9])` so an adjacent non-ASCII decimal digit does not
+        // suppress the match. Their gates consume one `[^0-9]` char (a superset of
+        // the real match, so still a valid necessary condition) rather than `\D`.
+        assert_eq!(
+            prefilter_source(r"(?<![0-9])\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?![0-9])").as_deref(),
+            Some(r"(?:^|[^0-9])\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?:[^0-9]|$)")
+        );
+        assert_eq!(
+            prefilter_source(r"(?<![0-9])\d{11}").as_deref(),
+            Some(r"(?:^|[^0-9])\d{11}")
+        );
+        assert_eq!(
+            prefilter_source(r"\d{4}-\d{4}(?![0-9])").as_deref(),
+            Some(r"\d{4}-\d{4}(?:[^0-9]|$)")
         );
     }
 

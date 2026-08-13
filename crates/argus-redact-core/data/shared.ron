@@ -24,7 +24,7 @@
     PatternData(
         type_: "ip_address",
         label: "[IP已脱敏]",
-        pattern: r"(?<!\d)(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(?:/\d{1,2})?(?!\d)",
+        pattern: r"(?<![0-9])(?:(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(?:/\d{1,2})?(?![0-9])",
         check_context: true,
         description: "IPv4 address",
     ),
@@ -43,7 +43,7 @@
     PatternData(
         type_: "imei",
         label: "[IMEI已脱敏]",
-        pattern: r"(?i:IMEI)\s*(?:号|[:：])?\s*(?P<imei>\d{15})(?!\d)",
+        pattern: r"(?i:IMEI)\s*(?:号|[:：])?\s*(?P<imei>\d{15})(?![0-9])",
         group: Some("imei"),
         description: "IMEI device identifier (15 digits, keyword-triggered)",
     ),

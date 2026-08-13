@@ -3,20 +3,20 @@
     PatternData(
         type_: r"phone",
         label: r"[電話番号]",
-        pattern: r"0[789]0[- \t(]?\d{4}[- \t)]?\d{4}(?!\d)",
+        pattern: r"0[789]0[- \t(]?\d{4}[- \t)]?\d{4}(?![0-9])",
         description: r"Japanese mobile phone (070/080/090)",
     ),
     PatternData(
         type_: r"phone",
         label: r"[電話番号]",
-        pattern: r"0[1-9]\d{0,3}[- \t(]?\d{1,4}[- \t)]?\d{4}(?!\d)",
+        pattern: r"0[1-9]\d{0,3}[- \t(]?\d{1,4}[- \t)]?\d{4}(?![0-9])",
         validator: Some(r"jp_phone"),
         description: r"Japanese landline phone",
     ),
     PatternData(
         type_: r"my_number",
         label: r"[マイナンバー]",
-        pattern: r"(?<!\d)\d{4}\s?\d{4}\s?\d{4}(?!\d)",
+        pattern: r"(?<![0-9])\d{4}\s?\d{4}\s?\d{4}(?![0-9])",
         validator: Some(r"my_number"),
         description: r"Japanese My Number (12 digits, check digit)",
         // The check-digit algorithm is the same digits regardless of surrounding
