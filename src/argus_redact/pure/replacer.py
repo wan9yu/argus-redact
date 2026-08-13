@@ -12,6 +12,7 @@ from argus_redact._types import PatternMatch, to_rust_pm
 from argus_redact.exceptions import SecurityWarning  # noqa: F401
 from argus_redact.lang.zh.hints import KINSHIP as _ZH_KINSHIP
 from argus_redact.pure._strategy_kind import (
+    _ALL_STRATEGIES,
     VALID_STRATEGIES,
     is_strategy_reversible,
 )
@@ -379,10 +380,19 @@ def _get_entity_config(
     return {}
 
 
-def _validate_config(config: dict | None) -> None:
-    """Validate user config, raise ValueError on invalid strategy."""
+def _validate_config(config: dict | None, *, allow_internal: bool = False) -> None:
+    """Validate config, raise ValueError on invalid strategy.
+
+    Default validates against the PUBLIC ``VALID_STRATEGIES`` — the set a user's
+    ``config`` may select from. ``allow_internal=True`` (set only for configs
+    argus builds itself, e.g. the pseudonym-llm audit pass) additionally accepts
+    the internal-only strategies (``remove_bracketed``). The user-facing error
+    always lists the public strategies, so an internal strategy is never
+    advertised as selectable.
+    """
     if not config:
         return
+    valid = _ALL_STRATEGIES if allow_internal else VALID_STRATEGIES
     if not isinstance(config, Mapping):
         raise TypeError(
             f"config must be a dict mapping entity type to settings, got {type(config).__name__}"
@@ -401,7 +411,7 @@ def _validate_config(config: dict | None) -> None:
                 f"config[{entity_type!r}] must be a dict, got {type(type_config).__name__}"
             )
         strategy = type_config.get("strategy")
-        if strategy and strategy not in VALID_STRATEGIES:
+        if strategy and strategy not in valid:
             raise ValueError(
                 f"Unknown strategy '{strategy}' for entity type "
                 f"'{entity_type}'. Valid: {', '.join(VALID_STRATEGIES)}"
@@ -590,6 +600,7 @@ def replace(
     langs: list[str] | None = None,
     unified_prefix: str | None = None,
     _mask_collisions: list[str] | None = None,
+    _allow_internal_strategies: bool = False,
 ) -> tuple[str, dict[str, str], dict[str, list[str]]]:
     """Replace detected entities in text, producing ``(redacted_text, key, aliases)``.
 
@@ -618,10 +629,16 @@ def replace(
     out-param idiom in ``glue/redact.py``. ``glue._replace_and_emit`` uses it
     to build the structured ``mask_collision`` security_event without
     widening this function's public 3-tuple return.
+
+    ``_allow_internal_strategies`` is internal: default ``False`` validates
+    ``config`` against the PUBLIC ``VALID_STRATEGIES``. The pseudonym-llm audit
+    pass sets it ``True`` for its internally-built ``remove_bracketed`` config;
+    no user-facing path enables it, so ``remove_bracketed`` stays unselectable
+    from ``config`` / ``strategy_overrides``.
     """
     # Validate + reject the removed _unified_prefix sentinel up front so both
     # paths raise identically (the Rust path would otherwise silently accept it).
-    _validate_config(config)
+    _validate_config(config, allow_internal=_allow_internal_strategies)
     if config and "_unified_prefix" in config:
         raise ValueError(
             "_unified_prefix is no longer accepted as a config key in v0.6.0. "

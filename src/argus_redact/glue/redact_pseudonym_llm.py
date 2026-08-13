@@ -242,6 +242,12 @@ def redact_pseudonym_llm(
         timing=dict(timing),
         mode=mode,
         unified_prefix=unified_prefix,
+        # audit_config is built internally (above) and uses the internal-only
+        # "remove_bracketed" strategy, which is absent from the public
+        # VALID_STRATEGIES; opt this trusted pass out of the public-strategy
+        # config check. No user-facing path sets this, so "remove_bracketed"
+        # stays unselectable from config / strategy_overrides.
+        _allow_internal_strategies=True,
     )
 
     marker = resolve_marker(display_marker)

@@ -769,6 +769,7 @@ def _replace_and_emit(
     mode: str,
     unified_prefix: str | None = None,
     security_events: list[dict] | None = None,
+    _allow_internal_strategies: bool = False,
 ) -> tuple[str, dict, dict[str, list[str]]]:
     """Apply replacement, run grammar normalization, emit telemetry, persist key file.
 
@@ -779,6 +780,12 @@ def _replace_and_emit(
     event is appended when this call's masked-strategy entities
     collided. Same out-param idiom as `timing` — kept separate from the public
     3-tuple return so this internal signature stays additive.
+
+    ``_allow_internal_strategies`` is internal: forwarded to ``replace()`` so a
+    caller that builds its own config with an internal-only strategy (the
+    pseudonym-llm audit pass's ``remove_bracketed``) can opt out of the
+    public-strategy config check. Default ``False`` keeps every user-facing path
+    strict.
 
     Returns ``(redacted_text, key, aliases)``. ``aliases`` carries the cross-language
     transliterations emitted by realistic-strategy fakers (empty dict when none ran).
@@ -794,6 +801,7 @@ def _replace_and_emit(
         langs=langs,
         unified_prefix=unified_prefix,
         _mask_collisions=mask_collisions,
+        _allow_internal_strategies=_allow_internal_strategies,
     )
     effective_lang = _effective_lang(lang)
     if effective_lang == "en":

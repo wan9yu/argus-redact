@@ -21,7 +21,7 @@ Invariants pinned here:
 
 import pytest
 
-from argus_redact import restore
+from argus_redact import is_strategy_reversible, redact, restore
 from argus_redact.glue.redact_pseudonym_llm import (
     PseudonymKeyCollisionError,
     _merge_pseudonym_keys,
@@ -128,3 +128,58 @@ def test_streaming_aggregate_key_recovers_every_name():
     restored = restore(down, agg, guard=False)
     missing = [n for n in _NAMES if n not in restored]
     assert not missing, f"streaming aggregate key lost real names: {missing}"
+
+
+# ``remove_bracketed`` is the audit pass's INTERNAL strategy. It is dispatched by
+# the core and used for the config argus builds itself, but it is deliberately
+# NOT part of the public, user-selectable strategy surface — a user must not be
+# able to reach the bracketed audit namespace via config / strategy_overrides.
+def test_remove_bracketed_rejected_from_public_redact_config():
+    with pytest.raises(ValueError) as exc:
+        redact(
+            "电话13800138000",
+            config={"phone": {"strategy": "remove_bracketed"}},
+            salt=1,
+            lang="zh",
+            mode="fast",
+        )
+    assert "remove_bracketed" in str(exc.value)
+    assert "Unknown strategy" in str(exc.value)
+
+
+def test_remove_bracketed_rejected_from_strategy_overrides():
+    with pytest.raises(ValueError) as exc:
+        redact_pseudonym_llm(
+            "客户王建国来访",
+            salt=5,
+            lang="zh",
+            mode="fast",
+            names=["王建国"],
+            strict_input=False,
+            strategy_overrides={"person": "remove_bracketed"},
+        )
+    assert "remove_bracketed" in str(exc.value)
+
+
+def test_remove_bracketed_absent_from_public_valid_strategies():
+    # The public tuple a user's config is validated against must not list it.
+    from argus_redact.pure.replacer import VALID_STRATEGIES
+
+    assert "remove_bracketed" not in VALID_STRATEGIES
+
+
+def test_remove_bracketed_still_classified_reversible():
+    # Internal, but still classified (not "unclassified") so the reversibility
+    # SSOT covers it; is_strategy_reversible must not raise on it.
+    assert is_strategy_reversible("remove_bracketed") is True
+
+
+def test_audit_pass_still_uses_remove_bracketed_end_to_end():
+    # The audit face is unchanged by the visibility restriction: bracketed
+    # placeholders, disjoint from the realistic codes, full restore.
+    r = redact_pseudonym_llm(
+        "客户王建国来访", salt=5, lang="zh", mode="fast", names=["王建国"], strict_input=False
+    )
+    audit_only = [c for c in r.key if c not in r.downstream_key]
+    assert audit_only and all(c.startswith("[") and c.endswith("]") for c in audit_only)
+    assert restore(r.downstream_text, r.key, guard=False) == "客户王建国来访"
