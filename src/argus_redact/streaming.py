@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import bisect
 import dataclasses
+import threading
 import warnings
 
 from argus_redact._core_loader import _core
@@ -190,6 +191,15 @@ class StreamingRestorer:
         # itself (a prefix SET would be the key size times the fake length).
         self._sorted_restorable = sorted(restorable)
         self._buffer = ""
+        # Serialises the buffer read-modify-write in feed()/flush(). Without it
+        # two threads sharing one instance interleave `self._buffer += chunk` /
+        # split / `self._buffer = residual` at an interpreter switch point and
+        # splice each other's tokens into the buffer. The lock makes that RMW
+        # atomic; the underlying Rust session's `restore_cell` (`&mut self`)
+        # runs OUTSIDE it, so a genuinely concurrent restore still trips the
+        # runtime borrow check and raises `Already borrowed` rather than
+        # corrupting output — one instance per session remains the contract.
+        self._lock = threading.Lock()
         if strategy not in ("sentence", "none"):
             raise ValueError(f"Unknown strategy '{strategy}'. Use 'sentence' or 'none'.")
         self._strategy = strategy
@@ -326,44 +336,52 @@ class StreamingRestorer:
         # stream, so per-chunk guarding is structurally impossible. self._session
         # is the explicit unguarded opt-out (a stored key, no per-call anchor),
         # not the fail-closed default.
-        self._buffer += chunk
+        #
+        # The buffer read-modify-write is under self._lock so it is atomic
+        # against a concurrent feed()/flush() (see __init__). `restore_cell`
+        # runs OUTSIDE the lock: it is the Rust session's exclusive-borrow
+        # backstop, so a genuinely concurrent restore raises `Already borrowed`
+        # instead of silently corrupting output.
+        with self._lock:
+            self._buffer += chunk
 
-        if self._strategy == "none":
-            # No sentence buffering — emit as much as the straddle scan allows,
-            # every chunk. Restoring the bare `chunk` instead (the pre-fix
-            # behaviour) restored each chunk in isolation, so ANY pseudonym
-            # straddling a chunk boundary was never restored at all: fed one
-            # char at a time, nothing was restored. The held-back tail is
-            # bounded by the longest fake/alias, so per-chunk latency is kept.
-            complete, self._buffer = self._force_flush_split()
-            if not complete:
-                return ""
-            result = self._session.restore_cell(complete)
-            self._warn_if_substituted(complete, result)
-            return result
+            if self._strategy == "none":
+                # No sentence buffering — emit as much as the straddle scan
+                # allows, every chunk. Restoring the bare `chunk` instead (the
+                # pre-fix behaviour) restored each chunk in isolation, so ANY
+                # pseudonym straddling a chunk boundary was never restored at
+                # all: fed one char at a time, nothing was restored. The
+                # held-back tail is bounded by the longest fake/alias, so
+                # per-chunk latency is kept.
+                complete, self._buffer = self._force_flush_split()
+            else:
+                complete, residual = _core.streaming_restorer_split(self._buffer)
+                # H7: no sentence boundary anywhere in the buffer yet. Left
+                # unchecked this buffers the entire stream and re-scans it in
+                # full on every feed() — bound it via force-flush once it grows
+                # past max_buffer, instead of accumulating without limit.
+                if not complete and len(self._buffer) > self._max_buffer:
+                    complete, residual = self._force_flush_split()
+                if complete:
+                    self._buffer = residual
 
-        complete, residual = _core.streaming_restorer_split(self._buffer)
         if not complete:
-            # H7: no sentence boundary anywhere in the buffer yet. Left
-            # unchecked this buffers the entire stream and re-scans it in
-            # full on every feed() — bound it via force-flush once it grows
-            # past max_buffer, instead of accumulating without limit.
-            if len(self._buffer) > self._max_buffer:
-                complete, residual = self._force_flush_split()
-            if not complete:
-                return ""
-        self._buffer = residual
+            return ""
         result = self._session.restore_cell(complete)
         self._warn_if_substituted(complete, result)
         return result
 
     def flush(self) -> str:
         """Flush remaining buffer."""
-        if not self._buffer:
-            return ""
-        buffer = self._buffer
+        # Same split as feed(): drain the buffer under the lock (atomic RMW),
+        # then restore OUTSIDE it so the session's exclusive borrow still backs
+        # a concurrent call (see feed() and __init__).
+        with self._lock:
+            if not self._buffer:
+                return ""
+            buffer = self._buffer
+            self._buffer = ""
         result = self._session.restore_cell(buffer)  # see feed(): no per-call anchor
-        self._buffer = ""
         self._warn_if_substituted(buffer, result)
         return result
 

@@ -12,7 +12,7 @@ behavior directly.
 
 from __future__ import annotations
 
-import re
+import threading
 
 import argus_redact._core as _core
 import pytest
@@ -61,23 +61,48 @@ def test_session_wipe_drops_state():
     assert restorer.restore_cell(text) == text
 
 
-def test_make_structured_restorer_docstring_states_thread_safety():
-    """`make_structured_restorer`'s docstring must warn that the returned
-    `StructuredRestorer` session is single-thread/single-session — a
-    concurrent `restore_cell` alongside `wipe()`/`close()` on a SHARED
-    instance hits the underlying Rust runtime-borrow check and raises
-    `Already borrowed`. Mirrors the single-session contract already
-    documented on `StreamingRedactor` (`argus_redact.streaming`).
-    """
+def test_make_structured_restorer_shared_session_raises_already_borrowed():
+    """The single-session guarantee `make_structured_restorer`'s docstring
+    documents must be REAL, not just prose: a concurrent `restore_cell` on a
+    SHARED session from two threads hits the underlying Rust runtime borrow
+    check and raises `Already borrowed`, rather than silently restoring both
+    cells (which splices one caller's PII into another's output). This holds
+    only because `restore_cell` takes an exclusive `&mut self` borrow; see
+    `tests/core/test_restore_concurrency.py` for the binding-level SSOT. The
+    docstring must still name the failure mode so callers know what a raise
+    means."""
+    # Large key so each restore spends real time in its GIL-released Rust
+    # section — the exclusive borrow is then held while the other thread tries
+    # to take it, so a conflict is observed within the first overlaps.
+    key = {f"P-{i:05d}": f"Person Number {i}" for i in range(12000)}
+    text = " ".join(f"P-{i:05d}" for i in range(0, 12000, 3))
+    restorer = make_structured_restorer(key)
+    restorer.restore_cell(text)  # warm lazy statics before the timed overlap
+
+    errors: list[str] = []
+    barrier = threading.Barrier(2)
+
+    def hammer() -> None:
+        barrier.wait()
+        for _ in range(60):
+            try:
+                restorer.restore_cell(text)
+            except Exception as exc:  # noqa: BLE001 — the message IS the contract
+                errors.append(str(exc))
+
+    threads = [threading.Thread(target=hammer) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert any("Already borrowed" in e for e in errors), (
+        "a shared make_structured_restorer() session used concurrently must "
+        f"raise `Already borrowed`; saw {len(errors)} error(s): {errors[:3]}"
+    )
+    # The docstring still has to name the concrete failure mode.
     doc = make_structured_restorer.__doc__ or ""
-    assert re.search(r"(?i)across threads", doc), (
-        "make_structured_restorer docstring must warn against sharing the "
-        "returned session across threads"
-    )
-    assert "Already borrowed" in doc, (
-        "make_structured_restorer docstring must name the concrete failure "
-        "mode (Already borrowed) a shared, concurrently-used session raises"
-    )
+    assert "Already borrowed" in doc
 
 
 class TestMakeStructuredRestorerAliasesValidation:

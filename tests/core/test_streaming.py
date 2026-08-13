@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import warnings
 from pathlib import Path
 
@@ -103,22 +104,54 @@ class TestStreamingRestorer:
         with pytest.raises(ValueError, match="Unknown strategy"):
             StreamingRestorer({}, strategy="invalid")
 
-    def test_docstring_states_thread_safety(self):
-        """Class docstring must warn that one `StreamingRestorer` instance is
-        single-thread/single-session — it wraps a Rust-backed restore session,
-        and a concurrent `feed()`/`flush()` alongside that session's
-        `wipe()`/`close()` on a SHARED instance raises `Already borrowed`.
-        Mirrors the single-session contract already documented on
-        `StreamingRedactor` above it in this module.
+    def test_shared_instance_concurrent_feed_raises_already_borrowed(self):
+        """The single-session guarantee the class docstring documents must be
+        REAL, not just prose: two threads sharing one `StreamingRestorer` and
+        calling `feed()` concurrently trip the underlying Rust session's
+        exclusive (`&mut self`) borrow and raise `Already borrowed`, rather
+        than splicing one stream's restored PII into the other's output. The
+        buffer read-modify-write is lock-guarded so it stays atomic;
+        `restore_cell` runs OUTSIDE the lock, so a genuinely concurrent restore
+        still surfaces the raise. The docstring must still name the mode.
         """
+        # Large key so each restore spends real time in its GIL-released Rust
+        # section — the exclusive borrow is then held while the other thread
+        # tries to take it, so a conflict is observed within the first overlaps.
+        key = {f"P-{i:05d}": f"Person Number {i}" for i in range(12000)}
+        sentence = " ".join(f"P-{i:05d}" for i in range(0, 12000, 3)) + "。"
+        restorer = StreamingRestorer(key)
+        errors: list[str] = []
+        barrier = threading.Barrier(2)
+
+        def hammer() -> None:
+            barrier.wait()
+            for _ in range(60):
+                try:
+                    restorer.feed(sentence)
+                except Exception as exc:  # noqa: BLE001 — the message IS the contract
+                    errors.append(str(exc))
+
+        with warnings.catch_warnings():
+            # feed() emits the one-time unguarded-restore SecurityWarning on its
+            # first real substitution; absorb it here on the single-threaded warm
+            # call (catch_warnings is process-global, so keep it off the threads).
+            # `_warned` is then set, so the concurrent feeds below stay quiet.
+            warnings.simplefilter("ignore", SecurityWarning)
+            restorer.feed(sentence)  # warm lazy statics + absorb the one-time warning
+
+        threads = [threading.Thread(target=hammer) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert any("Already borrowed" in e for e in errors), (
+            "a shared StreamingRestorer used concurrently from two threads must "
+            f"raise `Already borrowed`; saw {len(errors)} error(s): {errors[:3]}"
+        )
+        # The docstring still has to name the concrete failure mode.
         doc = StreamingRestorer.__doc__ or ""
-        assert re.search(r"(?i)across threads", doc), (
-            "StreamingRestorer docstring must warn against sharing one instance across threads"
-        )
-        assert "Already borrowed" in doc, (
-            "StreamingRestorer docstring must name the concrete failure mode "
-            "(Already borrowed) a shared, concurrently-used instance raises"
-        )
+        assert "Already borrowed" in doc
 
 
 class TestStreamingRestorerSecurityWarning:

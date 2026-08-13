@@ -169,7 +169,18 @@ impl StructuredRestorer {
     }
 
     /// Restore one cell of text against the session's precomputed key.
-    fn restore_cell(&self, py: Python<'_>, text: &str) -> PyResult<String> {
+    ///
+    /// Takes `&mut self` (an EXCLUSIVE PyO3 borrow), matching `redact_cell` on
+    /// the redact side. A single-threaded / single-session caller is
+    /// unaffected — each call takes then releases the borrow. But because the
+    /// pure-Rust substitution runs under `py.detach` (interpreter lock
+    /// released), the exclusive borrow is held across a window in which another
+    /// thread can run: a concurrent call on a SHARED instance then trips the
+    /// runtime borrow check and raises `Already borrowed` rather than silently
+    /// splicing one caller's restored PII into another's output. A shared
+    /// borrow (`&self`) would let unlimited concurrent restores through, so the
+    /// documented single-session guarantee only holds with `&mut self`.
+    fn restore_cell(&mut self, py: Python<'_>, text: &str) -> PyResult<String> {
         py.detach(|| self.session.restore_cell(text))
             .map(|r| r.restored)
             .map_err(|e| PyValueError::new_err(e.to_string()))
