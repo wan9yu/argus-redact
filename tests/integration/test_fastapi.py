@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from argus_redact import SecurityWarning
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.integrations.fastapi_middleware import (
     redact_body,
@@ -56,6 +57,33 @@ class TestRedactBody:
 
         with pytest.raises(TypeError):
             redact_body(body, mode="fast", lang="zh", salt=42)
+
+    def test_should_warn_and_not_silently_pass_pii_when_field_absent(self):
+        # A body whose named field is ABSENT but which carries PII in ANOTHER
+        # field was returned UN-REDACTED with an empty key — a false all-clear a
+        # forwarding proxy would ship upstream in plaintext. The sibling
+        # restore_body RAISES on the identical condition; redact_body must at
+        # least WARN (a missing field can be a legitimate "no text here" case,
+        # unlike restore). The warning must NAME the missing field.
+        body = {"prompt": "姓名张伟，手机13812345678"}
+
+        with pytest.warns(SecurityWarning, match="text"):
+            redacted, key = redact_body(body, field="text", mode="fast", lang="zh", salt=42)
+
+        # Still returned unchanged (no raise) so a benign no-field body is not broken,
+        # but the caller was warned it is NOT redacted — the empty key is honest.
+        assert redacted == body
+        assert key == {}
+
+    def test_should_warn_when_messages_field_absent(self):
+        # Same fail-open for field='messages' over a body keyed differently.
+        body = {"msgs": [{"role": "user", "content": "手机13812345678"}]}
+
+        with pytest.warns(SecurityWarning, match="messages"):
+            redacted, key = redact_body(body, field="messages", mode="fast", lang="zh", salt=42)
+
+        assert redacted == body
+        assert key == {}
 
     def test_should_handle_messages_array(self):
         body = {

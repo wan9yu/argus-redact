@@ -103,6 +103,60 @@ def test_restore_non_dict_anchor_returns_400(client):
     assert resp.status_code == 400
 
 
+@pytest.mark.parametrize("bad_guard", [None, 0, "", [], {}, "false", 1])
+def test_restore_non_bool_guard_returns_400_never_unguarded(client, bad_guard):
+    """An explicit non-bool `guard` is a 400 — never the silent unguarded path.
+
+    ``guard`` was the one optional field with no type-check: an explicit JSON
+    ``null`` reached the core as ``guard=None``, the deprecated legacy mode
+    (unconditional substitution, no provenance/scope guard). The client got a 200
+    with ``security_events: []`` — byte-identical to a clean guarded restore —
+    while a real anchor-less request correctly fails closed. Falsy/truthy was also
+    inverted: ``null``/``0``/``""``/``[]``/``{}`` failed OPEN, ``"false"``/``1``
+    failed CLOSED. Every one is now a 400, like the sibling fields.
+    """
+    resp = client.post(
+        "/restore",
+        json={
+            "text": "P-77197 说要打 138****8000",
+            "key": {"P-77197": "张三", "138****8000": "13800138000"},
+            "guard": bad_guard,
+        },
+    )
+    assert resp.status_code == 400, f"guard={bad_guard!r} should 400, got {resp.status_code}"
+    data = resp.json()
+    assert "guard" in data.get("error", "")
+    # The original must never appear in the (error) response — no unguarded leak.
+    assert "张三" not in resp.text
+    assert "13800138000" not in resp.text
+
+
+@pytest.mark.parametrize("bad_strict", [None, 0, "", [], {}, "false", 1])
+def test_restore_non_bool_strict_returns_400(client, bad_strict):
+    """`strict` gets the same type-check as `guard` — a non-bool is a 400."""
+    resp = client.post(
+        "/restore",
+        json={"text": "hello P-1", "key": {"P-1": "Alice"}, "strict": bad_strict},
+    )
+    assert resp.status_code == 400, f"strict={bad_strict!r} should 400, got {resp.status_code}"
+    assert "strict" in resp.json().get("error", "")
+
+
+def test_restore_bool_guard_and_omitted_still_behave(client):
+    """The fix is surgical: guard true/false and an omitted key keep v0.8.0 meaning."""
+    # guard=False → legacy plain substitution, empty events (unchanged).
+    r_false = client.post(
+        "/restore", json={"text": "hello P-1", "key": {"P-1": "Alice"}, "guard": False}
+    )
+    assert r_false.status_code == 200
+    assert "Alice" in r_false.json()["restored"]
+    # guard omitted → fail closed with a guard_no_anchor event (unchanged).
+    r_omit = client.post("/restore", json={"text": "hello P-1", "key": {"P-1": "Alice"}})
+    assert r_omit.status_code == 200
+    assert "Alice" not in r_omit.json()["restored"]
+    assert "guard_no_anchor" in [e["reason_code"] for e in r_omit.json()["security_events"]]
+
+
 def test_restore_narrow_scope_withholds_without_splicing(client):
     """An out-of-scope pseudonym must come back verbatim, never half-restored.
 

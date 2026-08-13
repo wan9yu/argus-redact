@@ -25,7 +25,10 @@ Usage (endpoint-level) with guard-by-default restore:
 
 from __future__ import annotations
 
+import warnings
+
 from argus_redact import redact
+from argus_redact.exceptions import SecurityWarning
 from argus_redact.glue.guarded_restore import guarded_restore
 from argus_redact.pure.security_events import COMPLETE
 
@@ -107,6 +110,26 @@ def redact_body(
         )
         result[field] = redacted_text
     else:
+        # Fail LOUD, not silent: a body missing the named field was handed back
+        # UN-REDACTED with an empty key — a false all-clear indistinguishable from
+        # "nothing to redact", so a proxy forwarding this output upstream ships any
+        # PII in the actual (mis-named) field in plaintext while the tuple looks
+        # successful. The sibling `restore_body` RAISES on the identical condition,
+        # but a missing field here can be a LEGITIMATE "this body carries no user
+        # text" case (an OpenAI-style body of only {model, temperature, ...}) —
+        # unlike restore, where the caller explicitly named a field to recover. So
+        # this warns instead of raising: it surfaces the fail-open (naming the
+        # missing field, matching `redact_json`'s SecurityWarning convention)
+        # without breaking a benign metadata-only body. The body is still returned
+        # unchanged with an empty key — now honestly, because the caller was told.
+        warnings.warn(
+            f"redact_body: field {field!r} not found in body "
+            f"(keys present: {list(body.keys())}); nothing was redacted and the "
+            f"body is returned unchanged — any PII in other fields is NOT redacted. "
+            f"Pass field= naming the text field, or redact_json() for nested shapes.",
+            SecurityWarning,
+            stacklevel=2,
+        )
         return result, {}
 
     return result, combined_key

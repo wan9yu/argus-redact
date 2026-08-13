@@ -612,6 +612,23 @@ async def handle_restore(request: Request) -> JSONResponse:
 
     # v0.8.0: guard defaults to True — a restore with no anchor fails closed. A
     # caller wanting the legacy plain substitution passes "guard": false.
+    #
+    # Type-check `guard` and `strict` the way every OTHER optional field already
+    # is (aliases/display_marker/anchor all 400 on the wrong shape). `guard` was
+    # the one hole: an explicit JSON `null`/`0`/`""`/`[]`/`{}` reaches the core as
+    # a falsy NON-bool, and `guard=None` is the THIRD, WEAKER legacy mode
+    # (unconditional longest-key-first substitution, no provenance/scope guard).
+    # That failed OPEN silently — a 200 with `security_events: []`, byte-identical
+    # to a clean guarded restore, while a truthy non-bool like `1`/`"false"` failed
+    # CLOSED (the inversion made the type confusion a live security hole). Only a
+    # real JSON bool (or an omitted key) is now accepted; anything else is a 400
+    # BEFORE the falsy/truthy branch can pick a mode. `isinstance(x, bool)` is
+    # exact here — Python bools are the only `bool` instances, and `1`/`0` are
+    # `int`, not `bool`, so they are correctly rejected.
+    if "guard" in body and not isinstance(body["guard"], bool):
+        return JSONResponse({"error": "guard must be a boolean"}, status_code=400)
+    if "strict" in body and not isinstance(body["strict"], bool):
+        return JSONResponse({"error": "strict must be a boolean"}, status_code=400)
     guard = body.get("guard", True)
     strict = body.get("strict", False)
 
