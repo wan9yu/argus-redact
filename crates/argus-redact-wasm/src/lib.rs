@@ -854,9 +854,16 @@ impl StreamingRedactor {
         let detect: BoxedDetect = Box::new(move |text: &str| {
             match detect_l1(text, &detect_params.langs, &detect_params.names) {
                 Ok(r) => flatten_l1(r),
-                // A detect failure (e.g. oversize buffer) yields no spans → the
-                // carry-window falls back to its non-entity-aware cut; the redact
-                // closure surfaces the real error on emit.
+                // Oversize input (> MAX_INPUT_SIZE) is rejected by the core
+                // `feed`/`flush` size guard BEFORE this closure is ever called, and
+                // guarded again by `replace()` — so the oversize case now fails
+                // closed upstream (matching the one-shot `redact` and the Python
+                // `StreamingRedactor`, which raise) and never reaches here. This
+                // `BoxedDetect` callback is infallible (`Fn(&str) -> DetectSpans`),
+                // so it cannot itself propagate an error; any other detect failure
+                // yields no spans (the carry-window then makes a non-entity-aware
+                // cut) and can never emit oversize plaintext, because `replace()`
+                // fails closed on that too.
                 Err(_) => DetectSpans::default(),
             }
         });

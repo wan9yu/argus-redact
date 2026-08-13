@@ -938,6 +938,91 @@ fn multi_chunk_redact_restore_roundtrip() {
     assert_eq!(restore_full(&out, &agg, None, None).unwrap().0, joined);
 }
 
+// ── Oversize input fails closed ─────────────────────────────────────────────
+//
+// The wasm `StreamingRedactor` used to emit a chunk larger than `MAX_INPUT_SIZE`
+// as UNREDACTED plaintext: `detect_l1` fails closed on oversize input, but the
+// wasm detect closure mapped that Err to an EMPTY `DetectSpans`, so the
+// carry-window made a non-entity-aware cut and the redact tail echoed the whole
+// oversize chunk in cleartext with an empty key (reading as "nothing to redact").
+// The Python `StreamingRedactor` instead RAISES on the same input — its `_detect`
+// PROPAGATES the `detect_l1` oversize `ValueError` (`glue/redact.py::_detect` →
+// `_core.detect_l1`; the cap itself is `glue/redact.py:386`). `feed` now rejects
+// oversize input BEFORE buffering, restoring that cross-face fail-closed parity.
+//
+// Normal-size streaming is unchanged — the guard fires ONLY above the cap; see
+// `normal_sentence_boundary_stream_unchanged` and `multi_chunk_redact_restore_roundtrip`.
+
+#[test]
+fn feed_rejects_oversize_chunk_failing_closed() {
+    // A chunk that would push the buffer past `MAX_INPUT_SIZE` must be REJECTED by
+    // `feed` (fail closed), not emitted verbatim over an empty span set. The detect
+    // closure mirrors the wasm one (a detect failure yields no spans) and the redact
+    // closure is identity, so the ONLY thing that can make `feed` return Err is the
+    // core feed size guard itself — isolating the PRIMARY fix.
+    let lang = s(&["en"]);
+    let detect = move |text: &str| -> DetectSpans {
+        match detect_l1(text, &lang, &[]) {
+            Ok(r) => {
+                let mut entities = r.layer1.clone();
+                entities.extend(r.person.clone());
+                DetectSpans { entities, hints: r.hints }
+            }
+            // Mirror the wasm production closure: a detect failure yields no spans.
+            Err(_) => DetectSpans::default(),
+        }
+    };
+    let redact = |text: &str, _spans: &DetectSpans| -> Result<RedactSegment, String> {
+        // Identity emit — models a redact path that would echo the slice verbatim
+        // over an empty span set. `feed` must NEVER reach here for oversize input.
+        Ok(RedactSegment {
+            downstream_text: text.to_string(),
+            ..Default::default()
+        })
+    };
+    let mut r = StreamingRedactor::new(detect, redact);
+
+    let big = "a".repeat(crate::MAX_INPUT_SIZE + 1);
+    assert!(big.len() > crate::MAX_INPUT_SIZE);
+    let err = r
+        .feed(&big)
+        .expect_err("feed must reject an oversize chunk (fail closed)");
+    assert!(
+        err.contains("input too large") && err.contains(&crate::MAX_INPUT_SIZE.to_string()),
+        "error must name the cap: {err}"
+    );
+    // Rejecting BEFORE the push keeps the buffer uncorrupted: a rejected feed must
+    // not leave the oversize content for a later flush to drain.
+    assert!(r.buffer().is_empty(), "a rejected feed must not buffer the oversize chunk");
+    assert!(r.aggregate_key().is_empty(), "nothing was emitted, so no key accrues");
+    // The flush path is unreachable with an oversize buffer (feed rejected first),
+    // so the following flush drains an empty buffer cleanly.
+    let flushed = r.flush().expect("flush after a rejected feed drains an empty buffer");
+    assert_eq!(flushed.segment.downstream_text, "");
+}
+
+#[test]
+fn feed_at_exactly_max_input_size_is_accepted() {
+    // The cap boundary is strict `>`: a buffer of EXACTLY `MAX_INPUT_SIZE` bytes
+    // must NOT be rejected (a mutant using `>=` would wrongly reject it), mirroring
+    // `detect_l1` / `redact_l1` at the cap. Identity closures keep this fast and
+    // pin the guard boundary alone.
+    let detect = |_text: &str| -> DetectSpans { DetectSpans::default() };
+    let redact = |text: &str, _spans: &DetectSpans| -> Result<RedactSegment, String> {
+        Ok(RedactSegment {
+            downstream_text: text.to_string(),
+            ..Default::default()
+        })
+    };
+    let mut r = StreamingRedactor::new(detect, redact);
+    let at_cap = "a".repeat(crate::MAX_INPUT_SIZE);
+    assert_eq!(at_cap.len(), crate::MAX_INPUT_SIZE);
+    assert!(
+        r.feed(&at_cap).is_ok(),
+        "exactly-MAX_INPUT_SIZE input must not be rejected"
+    );
+}
+
 // ── StreamingRestorer parity (test_streaming.py::TestStreamingRestorer) ─────────
 
 #[test]

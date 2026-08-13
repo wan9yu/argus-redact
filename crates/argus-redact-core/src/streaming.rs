@@ -562,6 +562,22 @@ where
     /// [`EmitResult`] with an empty `downstream_text` when nothing past the retained
     /// left-context is safe to emit yet. Mirrors `StreamingRedactor.feed`.
     pub fn feed(&mut self, chunk: &str) -> Result<EmitResult, String> {
+        // Fail closed on oversize input BEFORE touching the buffer. A chunk that
+        // would push the buffer past `MAX_INPUT_SIZE` cannot be detected (`detect_l1`
+        // rejects it), so without this guard the detect closure returns no spans and
+        // the redact tail emits the chunk VERBATIM (unredacted) over an empty span
+        // set — a PII leak. Rejecting before `push_str` keeps the buffer uncorrupted
+        // so a later `flush` cannot drain the oversize content either. Mirrors
+        // `detect_l1` (redact_l1.rs) and the Python `StreamingRedactor`, which fail
+        // closed on oversize input (its `_detect` propagates the same error).
+        let projected = self.buffer.len().saturating_add(chunk.len());
+        if projected > crate::MAX_INPUT_SIZE {
+            return Err(format!(
+                "input too large: {} bytes exceeds MAX_INPUT_SIZE {}",
+                projected,
+                crate::MAX_INPUT_SIZE
+            ));
+        }
         self.buffer.push_str(chunk);
         let chars: Vec<char> = self.buffer.chars().collect();
         // `buffer` is not mutated until after the cut below, so the PEM ceiling is

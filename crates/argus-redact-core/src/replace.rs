@@ -190,6 +190,22 @@ pub fn replace<F: PseudoFactory>(
         keep_whitelist,
     } = args;
 
+    // Fail closed on oversize input (defense-in-depth), mirroring `detect_l1`
+    // (redact_l1.rs) and the restore path. Detection already rejects oversize
+    // input upstream, but an entity-detection failure can leave `entities` empty
+    // for oversize `text` (e.g. the streaming detect closure swallowing a detect
+    // error) — without this guard `replace()` would then emit that `text` VERBATIM
+    // (unredacted). The guard fires ONLY above `MAX_INPUT_SIZE`, so normal-size
+    // inputs are unchanged and the one-shot path (which already errors earlier at
+    // detect) is untouched.
+    if text.len() > crate::MAX_INPUT_SIZE {
+        return Err(format!(
+            "input too large: {} bytes exceeds MAX_INPUT_SIZE {}",
+            text.len(),
+            crate::MAX_INPUT_SIZE
+        ));
+    }
+
     let mut session = ReplaceSession::new(
         factory,
         salt,
@@ -1332,5 +1348,70 @@ mod tests {
         )
         .unwrap();
         assert!(r.mask_collisions.is_empty(), "no collision expected: {:?}", r.mask_collisions);
+    }
+
+    #[test]
+    fn replace_rejects_oversize_input() {
+        // Defense-in-depth: `replace()` must fail closed on input larger than
+        // MAX_INPUT_SIZE, mirroring `detect_l1` (redact_l1.rs) and the restore path,
+        // so NO caller can emit oversize text VERBATIM over an empty span set (the
+        // wasm streaming leak: detect fails closed → empty spans → replace echoes the
+        // input). Empty entities would otherwise take the no-entities early return and
+        // echo `text`; the guard sits BEFORE the session, so it fires regardless.
+        let info_map = HashMap::new();
+        let wl = empty_whitelist();
+        let big = "a".repeat(crate::MAX_INPUT_SIZE + 1);
+        assert!(big.len() > crate::MAX_INPUT_SIZE);
+        // `ReplaceResult` has no `Debug`, so match rather than `expect_err`.
+        let err = match replace(
+            ReplaceArgs {
+                text: &big,
+                entities: &[],
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+            },
+            &SeqFactory,
+            None,
+        ) {
+            Ok(_) => panic!("replace must reject oversize input"),
+            Err(e) => e,
+        };
+        assert!(
+            err.contains("input too large") && err.contains(&crate::MAX_INPUT_SIZE.to_string()),
+            "error must name the cap: {err}"
+        );
+    }
+
+    #[test]
+    fn replace_at_exactly_max_input_size_is_accepted() {
+        // The cap boundary is strict `>`: EXACTLY MAX_INPUT_SIZE bytes must be
+        // accepted (a mutant using `>=` would wrongly reject it). No entities → text
+        // returned verbatim, but crucially NOT an Err.
+        let info_map = HashMap::new();
+        let wl = empty_whitelist();
+        let at_cap = "a".repeat(crate::MAX_INPUT_SIZE);
+        assert_eq!(at_cap.len(), crate::MAX_INPUT_SIZE);
+        let r = replace(
+            ReplaceArgs {
+                text: &at_cap,
+                entities: &[],
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+            },
+            &SeqFactory,
+            None,
+        )
+        .expect("exactly-MAX_INPUT_SIZE input must not be rejected");
+        assert_eq!(r.redacted, at_cap);
     }
 }
