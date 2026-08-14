@@ -243,16 +243,28 @@ pub(crate) fn detect_regions_zh(
     // char. This only WIDENS an already-emitted match — it can never create a
     // new one, so the precision guards (北京时间/北京大学/北京烤鸭, which never
     // emit) are unaffected.
+    // One reused probe buffer for every candidate `s` across every match. A long
+    // parent chain probes millions of prefixes; `clear` keeps the capacity so no
+    // per-probe heap allocation happens. Byte-identical: same prefix content,
+    // same longest-match-first scan order, same membership test.
+    let mut prefix = String::with_capacity(region_detector().max_len() * 4);
     for m in out.iter_mut() {
+        // `m.end` never moves during the walk, so the widened span is always
+        // `chars[m.start..m.end]`. Only slide `m.start` left here; materialize
+        // `m.text` ONCE after the loop. Re-collecting the whole `chars[s..m.end]`
+        // on every absorption step made a k-region chain O(k²) char copies — a
+        // legal `上海市`×32000 input (288 KB, under the 1 MiB cap) burned tens of
+        // seconds. Materialize-once drops it to O(k): byte-identical output (same
+        // absorption decisions, same final `(text, start, end)`), only faster.
         loop {
             let probe_lo = m.start.saturating_sub(region_detector().max_len());
             let mut absorbed = false;
             for s in probe_lo..m.start {
-                let prefix: String = chars[s..m.start].iter().collect();
+                prefix.clear();
+                prefix.extend(chars[s..m.start].iter());
                 if region_detector().name_set().contains(prefix.as_str())
                     || is_suffix_elided_region(&prefix)
                 {
-                    m.text = chars[s..m.end].iter().collect();
                     m.start = s;
                     absorbed = true;
                     break;
@@ -262,6 +274,7 @@ pub(crate) fn detect_regions_zh(
                 break;
             }
         }
+        m.text = chars[m.start..m.end].iter().collect();
     }
 
     out
@@ -379,6 +392,58 @@ mod tests {
         assert!(
             detect_regions_zh(t, &[url, phone]).iter().any(|h| h.text == "西湖区"),
             "phone must still corroborate region even when a url_token precedes it in the list"
+        );
+    }
+
+    #[test]
+    fn parent_prefix_absorption_span_is_byte_identical() {
+        // Pins the exact absorbed span for a multi-region chain. `浦东新区`
+        // (chars 5..9) is the only candidate that clears evidence (cue `住`);
+        // parent-prefix absorption then slides the start left over the
+        // suffix-elided parent `上海` (`上海市` minus 市), giving the single
+        // widened unit `上海浦东新区` at [3, 9). The materialize-once fix must
+        // reproduce this tuple exactly — same absorption decisions, same
+        // `(text, start, end)`, just computed once instead of per step.
+        let hits = detect_regions_zh("他住在上海浦东新区。", &[]);
+        let loc: Vec<_> = hits.iter().filter(|h| h.type_ == "location").collect();
+        assert_eq!(
+            loc.len(),
+            1,
+            "expected exactly one location hit, got {hits:?}"
+        );
+        assert_eq!(loc[0].text, "上海浦东新区");
+        assert_eq!((loc[0].start, loc[0].end), (3, 9));
+    }
+
+    #[test]
+    fn parent_prefix_absorption_chain_stays_byte_identical() {
+        // The degenerate parent-chain that used to blow up. The trailing `住`
+        // (residence cue) makes every `上海市` candidate clear evidence, and each
+        // walks the full chain leftward, absorbing all preceding parents and
+        // stopping at 0 — so the emitted set is nested {上海市, 上海市上海市, …}.
+        // Re-materializing `chars[s..end]` on every absorption step made a
+        // k-region chain O(k²) char copies: a legal `上海市`×32000 (288 KB, under
+        // the 1 MiB cap, reachable on a default `redact()`) burned ~34s and
+        // outran the 30s scan deadline uninterruptibly. Materialize-once drops
+        // each chain to O(k) — measured release scaling is 2× per input doubling
+        // (linear), down from ~4× (quadratic). This pins the chain-scale output
+        // as byte-identical: same absorption decisions, same final
+        // (text, start, end), only computed once per match.
+        let mut input = "上海市".repeat(3);
+        input.push('住');
+        let mut got: Vec<(String, usize, usize)> = detect_regions_zh(&input, &[])
+            .into_iter()
+            .map(|h| (h.text, h.start, h.end))
+            .collect();
+        got.sort();
+        assert_eq!(
+            got,
+            vec![
+                ("上海市".to_string(), 0, 3),
+                ("上海市上海市".to_string(), 0, 6),
+                ("上海市上海市上海市".to_string(), 0, 9),
+            ],
+            "degenerate parent-chain absorption must stay byte-identical"
         );
     }
 
