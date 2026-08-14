@@ -99,16 +99,14 @@ def _measure_import_time() -> float:
     """
     env = os.environ.copy()
     env["PYTHONPATH"] = _REPO_SRC
-    times = []
-    for _ in range(11):
-        start = time.perf_counter()
-        subprocess.run(
+    return _measure_min(
+        lambda: subprocess.run(
             [sys.executable, "-c", "import argus_redact"],
             check=True,
             env=env,
-        )
-        times.append((time.perf_counter() - start) * 1000)
-    return min(times)
+        ),
+        runs=11,
+    )
 
 
 def main() -> None:
