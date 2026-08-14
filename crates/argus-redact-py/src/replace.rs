@@ -251,27 +251,51 @@ pub fn replace(
     let faker_arg = py_faker_factory.as_arg();
 
     let factory = PyPseudoFactory;
-    let result = core_replace(
-        ReplaceArgs {
-            text,
-            entities: &core_entities,
-            salt: salt.as_ref(),
-            key: key.as_ref(),
-            type_info: &info_map,
-            person_prefix,
-            org_prefix,
-            unified_prefix,
-            keep_whitelist: &keep_whitelist,
-        },
-        &factory,
-        faker_arg,
-    )
+
+    // Build the core call once; the two arms below differ only in whether they
+    // hold the GIL while it runs.
+    let run = |faker: Option<&dyn FakerFactory>| {
+        core_replace(
+            ReplaceArgs {
+                text,
+                entities: &core_entities,
+                salt: salt.as_ref(),
+                key: key.as_ref(),
+                type_info: &info_map,
+                person_prefix,
+                org_prefix,
+                unified_prefix,
+                keep_whitelist: &keep_whitelist,
+            },
+            &factory,
+            faker,
+        )
+    };
+
+    // `type_info` carries the GIL token this call runs under; grab it once for
+    // the detach and the later `signals` build.
+    let py = type_info.py();
+
+    // Release the GIL for the CPU-bound replace on the common no-custom-faker
+    // path. There the whole pass is pure Rust — masks, built-in realistic fakers,
+    // and the seeded MT19937 pseudonym stream — so holding the lock only serialises
+    // unrelated callers and (over HTTP) freezes the server event loop on a large
+    // input. Detaching restores the 504 deadline / disconnect / shutdown guards.
+    //
+    // The only Python touchpoint reachable on this no-faker path is the UNSEEDED
+    // `secrets.randbelow` draw (salt=None), and `PyRandomSource::randbelow`
+    // re-attaches via `Python::attach` for each draw, so it is safe inside the
+    // detached region.
+    //
+    // When a custom Python faker is registered (`faker_arg` is Some) the pass can
+    // call back into arbitrary Python, so run ATTACHED (hold the GIL) — the safe
+    // choice, and a custom faker is not the attacker-reachable large-input path.
+    let result = match faker_arg {
+        Some(faker) => run(Some(faker)),
+        None => py.detach(|| run(None)),
+    }
     .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
-    // `type_info` is a `Bound<'_, PyDict>` we already hold, so it carries the
-    // GIL token this call is running under — reuse it to build `signals`
-    // rather than re-attaching.
-    let py = type_info.py();
     let signals = PyDict::new(py);
     signals.set_item("keep_downgraded", result.keep_downgraded)?;
     signals.set_item("mask_collisions", result.mask_collisions)?;

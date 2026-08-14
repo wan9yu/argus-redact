@@ -26,6 +26,7 @@ import time
 import pytest
 
 from argus_redact import _core
+from argus_redact.pure.replacer import _KEEP_WHITELIST, DEFAULT_PREFIXES, _build_type_info
 
 # Enough text that one call is comfortably longer than thread-spawn overhead.
 _UNIT = "Contact Zhang Wei at 13812345678 or wei.zhang@example.com in Beijing. "
@@ -136,5 +137,83 @@ def test_restore_releases_the_lock_so_threads_actually_parallelise() -> None:
     # margin without false-failing on a 2-core CI box.
     assert speedup > 1.2, (
         f"restore does not appear to release the GIL (best of {_TRIALS}): "
+        f"serial={serial:.3f}s parallel={parallel:.3f}s speedup={speedup:.2f}x"
+    )
+
+
+def _make_replace_workload() -> tuple[str, list, dict]:
+    """A pure-Rust replace workload: many DISTINCT phone values under the
+    realistic strategy (built-in Rust faker → SHAKE, no Python callback). Each
+    distinct value drives one faker generation, so the work is CPU-bound in Rust
+    and scales with the entity count.
+    """
+    n = 4000
+    numbers = [str(13800000000 + i) for i in range(n)]  # 11 digits each, distinct
+    text = " ".join(numbers)
+    entities = []
+    pos = 0
+    for num in numbers:
+        entities.append(_core.PatternMatch(num, "phone", pos, pos + len(num), 1.0, 0))
+        pos += len(num) + 1  # +1 for the single-space separator
+    type_info, custom_fakers = _build_type_info(
+        entities, {"phone": {"strategy": "realistic"}}, ["zh"]
+    )
+    # The whole point of this test is the no-custom-faker path (the one that
+    # detaches). A built-in realistic faker must NOT register a custom callable.
+    assert not custom_fakers, "workload must stay on the pure-Rust no-custom-faker path"
+    return text, entities, type_info
+
+
+@pytest.mark.skipif(
+    (os.cpu_count() or 1) < 4, reason="needs >= 4 cores to observe parallel speedup"
+)
+def test_replace_releases_the_lock_so_threads_actually_parallelise() -> None:
+    # `_core.replace` was the odd one out: it held the GIL for a CPU-bound pass
+    # (unlike detect_l1 / restore), so a large redact serialised every other
+    # thread — and, over HTTP, froze the whole server event loop. It must now
+    # release the lock on the common no-custom-faker path.
+    text, entities, type_info = _make_replace_workload()
+
+    def replace_once() -> None:
+        _core.replace(
+            text,
+            entities,
+            salt=42,
+            key=None,
+            type_info=type_info,
+            person_prefix=DEFAULT_PREFIXES["person"],
+            org_prefix=DEFAULT_PREFIXES["organization"],
+            unified_prefix=None,
+            keep_whitelist=_KEEP_WHITELIST,
+            custom_fakers=None,
+        )
+
+    def replace_many(n: int) -> None:
+        for _ in range(n):
+            replace_once()
+
+    replace_once()  # warm the lazy statics (faker pools, salt resolve)
+
+    def replace_serial() -> float:
+        return _elapsed(replace_many, THREADS * CALLS_PER_THREAD)
+
+    def replace_parallel() -> float:
+        threads = [
+            threading.Thread(target=replace_many, args=(CALLS_PER_THREAD,)) for _ in range(THREADS)
+        ]
+        start = time.perf_counter()
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        return time.perf_counter() - start
+
+    speedup, serial, parallel = _best_speedup(replace_serial, replace_parallel)
+    # See test_detect_l1_releases_the_lock...'s comment for the 1.2 threshold:
+    # a GIL-holding replace tops out ~1.0x on every trial (the 4 threads
+    # serialise), a released one clears ~1.4x, so 1.2 fails the un-detached
+    # binding while leaving margin on a contended CI box.
+    assert speedup > 1.2, (
+        f"replace does not appear to release the GIL (best of {_TRIALS}): "
         f"serial={serial:.3f}s parallel={parallel:.3f}s speedup={speedup:.2f}x"
     )

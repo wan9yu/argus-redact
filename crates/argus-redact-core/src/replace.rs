@@ -676,47 +676,117 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
             }
         }
 
-        // Replace right-to-left, dedup by (start, end). Char-based slicing to match
+        // Assemble the redacted text. Char-based slicing throughout to match
         // Python string indexing (code points, not bytes).
+        //
+        // Dedup by (start, end): sort DESCENDING by start (stable, so equal-start
+        // entities keep their input order) and keep the FIRST-seen position —
+        // exactly the winner the previous right-to-left splice loop selected.
         let chars: Vec<char> = text.chars().collect();
         let mut sorted: Vec<&PatternMatch> = entities.iter().collect();
         sorted.sort_by(|a, b| b.start.cmp(&a.start));
-
-        let mut result_chars = chars;
-        let mut seen_positions: HashSet<(usize, usize)> = HashSet::new();
+        let mut seen_positions: HashSet<(usize, usize)> = HashSet::with_capacity(sorted.len());
+        let mut deduped: Vec<SpliceSpan<'_>> = Vec::with_capacity(sorted.len());
         for entity in sorted {
-            let pos = (entity.start, entity.end);
-            if seen_positions.contains(&pos) {
+            if !seen_positions.insert((entity.start, entity.end)) {
                 continue;
             }
-            seen_positions.insert(pos);
             let replacement = entity_replacements
                 .get(&entity.text)
                 .expect("entity.text must have a replacement");
-            let repl_chars: Vec<char> = replacement.chars().collect();
-            // result = result[:start] + replacement + result[end:]
-            //
-            // Python slicing silently clamps out-of-range indices: `s[:start]` with
-            // `start > len(s)` yields the whole string, `s[end:]` with `end > len(s)`
-            // yields "". The Presidio bridge feeds stale offsets into a string that
-            // the prior (right-to-left) replacements already shortened, relying on
-            // exactly this leniency — so we clamp to the current length to stay
-            // byte-identical to `_replace_python` (a hard slice would panic).
-            let cur_len = result_chars.len();
-            let lo = entity.start.min(cur_len);
-            let hi = entity.end.min(cur_len);
-            let mut new_chars =
-                Vec::with_capacity(lo + repl_chars.len() + cur_len.saturating_sub(hi));
-            new_chars.extend_from_slice(&result_chars[..lo]);
-            new_chars.extend_from_slice(&repl_chars);
-            if hi < cur_len {
-                new_chars.extend_from_slice(&result_chars[hi..]);
-            }
-            result_chars = new_chars;
+            deduped.push((entity.start, entity.end, replacement.as_str()));
         }
 
-        Ok(result_chars.into_iter().collect())
+        // Fast path: a non-overlapping, in-range span set assembles in ONE
+        // forward pass over the original coordinates — O(total len) instead of
+        // the old per-entity full-buffer rebuild (O(#entities × len), which held
+        // the CPU on attacker-sized input). Overlapping / stale spans (only the
+        // Presidio bring-your-own-detector path produces these; normal detection
+        // merges overlaps away) fall back to the exact right-to-left splice, which
+        // clamps against the mutating buffer the way Python's slice does. The two
+        // are byte-identical for every input — proven by the differential fuzz
+        // test `forward_pass_is_byte_identical_to_right_to_left_splice`.
+        let redacted = if forward_eligible(&deduped, chars.len()) {
+            let spans_asc: Vec<SpliceSpan<'_>> = deduped.iter().rev().copied().collect();
+            assemble_forward(&chars, &spans_asc)
+        } else {
+            assemble_splice(&chars, &deduped)
+        };
+        Ok(redacted)
     }
+}
+
+/// One deduped span to place: char-index `start`/`end` into the ORIGINAL text
+/// plus the already-resolved replacement string.
+type SpliceSpan<'a> = (usize, usize, &'a str);
+
+/// Whether a single forward pass reproduces [`assemble_splice`] for `spans_desc`
+/// (given in DESCENDING start order, as produced by the dedup above). True iff
+/// every span is well-formed and in range (`start <= end <= n`) AND no two
+/// overlap — read ascending (reverse of `spans_desc`), each span's `start` must
+/// be `>=` the previous span's `end`. Any overlap or stale/out-of-range offset
+/// (the Presidio bring-your-own-detector path) returns `false`, routing to the
+/// exact splice fallback whose length-clamp reproduces Python's slice leniency.
+///
+/// Soundness: under these conditions the right-to-left splice never shifts a
+/// coordinate into a region a later (leftward) span reuses, and the length clamp
+/// never fires (every span sits inside the untouched original prefix when it is
+/// processed), so the forward pass over original coordinates yields the same
+/// bytes. This is a SOUND (never a false fast-path) but intentionally not
+/// exhaustive predicate — when in doubt it falls back to the exact splice.
+fn forward_eligible(spans_desc: &[SpliceSpan<'_>], n: usize) -> bool {
+    let mut prev_end = 0usize;
+    for &(start, end, _) in spans_desc.iter().rev() {
+        if start > end || end > n || start < prev_end {
+            return false;
+        }
+        prev_end = end;
+    }
+    true
+}
+
+/// Single forward pass: `original[cursor..start] ++ replacement` per span in
+/// ASCENDING order, then the trailing `original[cursor..]`. The caller must have
+/// established [`forward_eligible`] (in-range, non-overlapping), so every slice
+/// index is valid and `start >= cursor`. O(total len).
+fn assemble_forward(chars: &[char], spans_asc: &[SpliceSpan<'_>]) -> String {
+    let repl_bytes: usize = spans_asc.iter().map(|(_, _, r)| r.len()).sum();
+    // Lower-bound hint (one byte per original char); replacements add their bytes.
+    let mut out = String::with_capacity(chars.len() + repl_bytes);
+    let mut cursor = 0usize;
+    for &(start, end, repl) in spans_asc {
+        out.extend(chars[cursor..start].iter().copied());
+        out.push_str(repl);
+        cursor = end;
+    }
+    out.extend(chars[cursor..].iter().copied());
+    out
+}
+
+/// Right-to-left splice — the reference semantics. For each span (DESCENDING by
+/// start) rebuild `result[:start] + repl + result[end:]`, clamping `start`/`end`
+/// to the CURRENT (mutating) buffer length exactly as Python slicing does
+/// (`s[:start]` past the end → whole string; `s[end:]` past the end → ""). This
+/// is O(#spans × len) but runs only for the overlapping / stale (Presidio)
+/// fallback; the common path uses [`assemble_forward`]. Kept as the single SSOT
+/// for both the fallback and the differential test's oracle.
+fn assemble_splice(chars: &[char], spans_desc: &[SpliceSpan<'_>]) -> String {
+    let mut result_chars: Vec<char> = chars.to_vec();
+    for &(start, end, repl) in spans_desc {
+        let repl_chars: Vec<char> = repl.chars().collect();
+        let cur_len = result_chars.len();
+        let lo = start.min(cur_len);
+        let hi = end.min(cur_len);
+        let mut new_chars =
+            Vec::with_capacity(lo + repl_chars.len() + cur_len.saturating_sub(hi));
+        new_chars.extend_from_slice(&result_chars[..lo]);
+        new_chars.extend_from_slice(&repl_chars);
+        if hi < cur_len {
+            new_chars.extend_from_slice(&result_chars[hi..]);
+        }
+        result_chars = new_chars;
+    }
+    result_chars.into_iter().collect()
 }
 
 /// Lazily build (or fetch) a person/organization pseudonym generator, preloading
@@ -1413,5 +1483,124 @@ mod tests {
         )
         .expect("exactly-MAX_INPUT_SIZE input must not be rejected");
         assert_eq!(r.redacted, at_cap);
+    }
+
+    #[test]
+    fn forward_pass_is_byte_identical_to_right_to_left_splice() {
+        // The byte-identity proof for the Part-1 assembly rewrite. Fuzz a wide
+        // range of span geometries — non-overlapping, adjacent, fully
+        // overlapping, nested, stale (offsets past the end), duplicate
+        // (start,end), empty replacement, multi-byte CJK — and assert the
+        // production assembler (fast forward pass where eligible, exact splice
+        // fallback otherwise) matches a from-scratch right-to-left reference for
+        // EVERY case. This exercises exactly the overlapping / stale inputs the
+        // normal pipeline merges away but the Presidio bring-your-own-detector
+        // path can still feed in, which the end-to-end goldens cannot reach.
+
+        // A tiny deterministic LCG so the fuzz is reproducible without a dep.
+        struct Lcg(u64);
+        impl Lcg {
+            fn next(&mut self, bound: usize) -> usize {
+                self.0 = self
+                    .0
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                ((self.0 >> 33) as usize) % bound.max(1)
+            }
+        }
+
+        // Dedup EXACTLY as `process` does: stable descending sort by start, keep
+        // the first-seen (start,end). Shared by the reference and the production
+        // driver so the differential isolates the ASSEMBLY change (the dedup is
+        // unchanged from the pre-rewrite loop).
+        fn dedup_desc(raw: &[(usize, usize, String)]) -> Vec<(usize, usize, &str)> {
+            let mut idx: Vec<usize> = (0..raw.len()).collect();
+            idx.sort_by(|&a, &b| raw[b].0.cmp(&raw[a].0));
+            let mut seen: HashSet<(usize, usize)> = HashSet::new();
+            let mut out: Vec<(usize, usize, &str)> = Vec::new();
+            for &i in &idx {
+                let (s, e, ref repl) = raw[i];
+                if seen.insert((s, e)) {
+                    out.push((s, e, repl.as_str()));
+                }
+            }
+            out
+        }
+
+        // Reference oracle: the pre-rewrite right-to-left splice, reimplemented
+        // from scratch (not the production `assemble_splice`) so a bug in the
+        // shared fallback cannot hide behind itself.
+        fn reference(chars: &[char], deduped_desc: &[(usize, usize, &str)]) -> String {
+            let mut result: Vec<char> = chars.to_vec();
+            for &(s, e, repl) in deduped_desc {
+                let rc: Vec<char> = repl.chars().collect();
+                let cur = result.len();
+                let lo = s.min(cur);
+                let hi = e.min(cur);
+                let mut nc = Vec::with_capacity(lo + rc.len() + cur.saturating_sub(hi));
+                nc.extend_from_slice(&result[..lo]);
+                nc.extend_from_slice(&rc);
+                if hi < cur {
+                    nc.extend_from_slice(&result[hi..]);
+                }
+                result = nc;
+            }
+            result.into_iter().collect()
+        }
+
+        // Production driver: the exact fast/slow dispatch `process` runs.
+        fn production(chars: &[char], deduped_desc: &[(usize, usize, &str)]) -> (String, bool) {
+            let n = chars.len();
+            let fast = forward_eligible(deduped_desc, n);
+            let out = if fast {
+                let asc: Vec<SpliceSpan<'_>> = deduped_desc.iter().rev().copied().collect();
+                assemble_forward(chars, &asc)
+            } else {
+                assemble_splice(chars, deduped_desc)
+            };
+            (out, fast)
+        }
+
+        let base_texts = ["ABCDEFGH", "电话13812345678好", "", "x", "aaaaaaaaaaaaaaaa"];
+        let repls = ["", "R", "长长", "P-00007", "x"];
+
+        let mut rng = Lcg(0x9E37_79B9_7F4A_7C15);
+        let mut fast_seen = 0usize;
+        let mut slow_seen = 0usize;
+        for text in base_texts {
+            let chars: Vec<char> = text.chars().collect();
+            let n = chars.len();
+            for _ in 0..5000 {
+                let k = rng.next(5); // 0..=4 spans
+                let mut raw: Vec<(usize, usize, String)> = Vec::new();
+                for _ in 0..k {
+                    // Deliberately allow offsets PAST the end (stale) and any
+                    // pairing (nested / overlapping / adjacent / zero-width).
+                    let a = rng.next(n + 3);
+                    let b = rng.next(n + 3);
+                    let (s, e) = if a <= b { (a, b) } else { (b, a) };
+                    raw.push((s, e, repls[rng.next(repls.len())].to_string()));
+                }
+                // Sometimes inject an exact-duplicate (start,end) with a DIFFERENT
+                // replacement, to exercise first-seen dedup.
+                if !raw.is_empty() && rng.next(3) == 0 {
+                    let (s, e, _) = raw[rng.next(raw.len())].clone();
+                    raw.push((s, e, "DUP".to_string()));
+                }
+                let deduped = dedup_desc(&raw);
+                let (prod, fast) = production(&chars, &deduped);
+                let refr = reference(&chars, &deduped);
+                assert_eq!(prod, refr, "divergence: text={text:?} raw={raw:?} fast={fast}");
+                if fast {
+                    fast_seen += 1;
+                } else {
+                    slow_seen += 1;
+                }
+            }
+        }
+        // The fuzz must actually drive BOTH paths, else it proves nothing about
+        // the fast forward pass (or the fallback) it claims to cover.
+        assert!(fast_seen > 0, "fast forward path never exercised");
+        assert!(slow_seen > 0, "splice fallback path never exercised");
     }
 }
