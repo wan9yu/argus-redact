@@ -2,6 +2,80 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.13 — availability hardening and detection-entry correctness
+
+A security-hardening release closing the critical and high findings of the post-v0.8.12 whole-codebase
+audit. The headline is three remotely-reachable denial-of-service paths — substitution, Layer-1 near-miss
+hint suppression, and Chinese region parent-prefix absorption — each of which turned an attacker-chosen input
+under the 1 MiB cap into seconds-to-minutes of uninterruptible CPU. All three are now linear or
+sub-quadratic, and the substitution pass releases the GIL on its pure-Rust path, so a large `/redact` no
+longer freezes the server event loop (its deadline, disconnect watcher, and shutdown keep running). Alongside
+the availability work: several fail-open and identity-splice faces are closed, detection-entry normalization
+is tightened, and the streaming restore face now restores pseudonyms that straddle a chunk boundary.
+
+No public API changed — the `redact` / `restore` signatures are frozen and every new parameter lives on an
+internal seam or an opt-in keyword. The three performance rewrites are verified byte-identical to the previous
+output by in-crate differential oracles (the prior algorithm kept as a test-only reference and fuzzed against
+the new one), so redaction and restore output is unchanged.
+
+### Behaviour changes
+
+- **The `remove` audit placeholder format is now bracketed.** The internal audit pass emits `[TYPE-NNNNN]`
+  (e.g. `[EMAIL-00001]`) rather than a bare token. Pseudonym derivation and the KDF are unchanged; this
+  affects only the human-readable audit view.
+- **Structured redaction now scans `Decimal`, `UUID`, and `bytes` leaves** instead of forwarding them
+  verbatim. A leaf that still cannot be scanned (non-UTF-8 bytes, an arbitrary object) is left in place and
+  now raises a `SecurityWarning` rather than passing silently.
+- **The HTTP server and FastAPI middleware reject a non-boolean `guard` / `strict` with 400** instead of
+  coercing it, and `redact_body` gained an opt-in `on_missing_field="warn"|"raise"` so an absent field can be
+  made a hard failure.
+
+### Availability (remotely reachable; availability-only — fails safe, no PII leak)
+
+- **Substitution was `O(#entities × len)` and held the GIL.** `ReplaceSession` now does a single forward
+  pass, and the PyO3 binding releases the GIL on the common (no Python-callable faker) path.
+- **Layer-1 near-miss hint suppression was `O(#near_misses × #entities)`.** Replaced with a start-ordered
+  active-set sweep (`O((n+m) log n)`).
+- **Chinese region parent-prefix absorption re-materialized the whole span each step (`O(k²)`).** The span is
+  now materialized once after the leftward walk.
+- **The streaming redactor now enforces the input-size cap before buffering** (`StreamingRedactor::feed` and
+  `replace`), failing closed on oversize input.
+
+### Security / fail-open
+
+- **Pseudonym-LLM audit codes could splice identities in the unified key.** Key merges are now checked and
+  raise `PseudonymKeyCollisionError` on a collision instead of overwriting; the `remove_bracketed` audit
+  strategy is internal-only under a default-deny config validation.
+- **The Chinese compound-surname pool is single-sourced** from the Rust core (`person_compound_surnames_zh`)
+  with a safe no-guess fallback, so alias expansion cannot splice a real original.
+- **The shared streaming restorer's concurrency guarantee is now real** (`&mut self` behind a buffer lock).
+
+### Detection-entry correctness
+
+- **Anchor lookarounds narrowed from `\d` to `[0-9]`** where ASCII was intended, and an interior non-ASCII
+  decimal digit now folds to ASCII so a PII value hiding one no longer defeats the checksum validators. The
+  decimal-digit table covers the Unicode `Nd` blocks through Unicode 15.0, including Kawi and Nag Mundari.
+- **Structured-ID validators strip the full whitespace class** (and filter to ASCII digits / alphanumerics)
+  before the checksum.
+- **False-positive classification is typed**, and a near-miss is surfaced at low confidence rather than
+  silently dropped.
+- **Two adjacent Chinese names the greedy person match fused into one are now split** (a documented,
+  round-trip-correct over-split remains on genuine four-character combined-surname names).
+
+### Streaming
+
+- **The default sentence-strategy restorer no longer cuts through a restorable at an internal `". "`.** Fakes
+  and aliases containing `". "` (e.g. `John Q. Public`, `Mr. Smith`) now restore under the sentence strategy
+  via the same restorable-straddle hold-back the `none` strategy uses.
+- **The emit-time input-pollution scan is re-enabled** on the reassembled emit slice.
+
+### Internal / tests
+
+- **The GIL-release tests are de-flaked** (best-of-N trials with the speedup threshold recalibrated to the
+  observed CI-runner ceiling).
+- **The `ai4privacy` benchmark now skips when the dataset Hub is unreachable** instead of erroring, so a
+  network outage no longer looks like a detection regression.
+
 ## v0.8.12 — internal cleanup and an `/info` capability-reporting fix
 
 A whole-codebase cleanup release. The bulk is an internal, behaviour-preserving refactor pass across the
