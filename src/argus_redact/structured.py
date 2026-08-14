@@ -195,6 +195,7 @@ def redact_json(
     paths: list[str | list[str]] | None = None,
     with_types: bool = False,
     with_aliases: bool = False,
+    on_unscannable: str = "warn",
 ) -> (
     tuple[dict | list, dict] | tuple[dict | list, dict, dict] | tuple[dict | list, dict, dict, dict]
 ):
@@ -237,6 +238,21 @@ def redact_json(
             can restore an LLM that rewrote a fake into one of its aliases —
             pass it to ``restore_json(..., aliases=...)``. Mirrors the batch
             ``redact()``/``restore()`` and streaming alias contract.
+        on_unscannable: controls the un-coercible-leaf branch — a leaf whose
+            type cannot be coerced to text for detection (a non-utf-8 byte
+            string, an arbitrary object), which is otherwise forwarded verbatim.
+            Mirrors ``redact_body``'s ``on_missing_field``:
+
+            - ``"warn"`` (default): emit the PII-free ``SecurityWarning`` naming
+              the leaf's path + type and forward it unchanged — surfaces the
+              fail-open, but a caller that ignores warnings still forwards
+              possibly-unredacted bytes.
+            - ``"raise"``: raise ``TypeError`` naming the un-scannable leaves so
+              a security-conscious pipeline fails CLOSED (no document is
+              returned) instead of forwarding a leaf that may carry PII.
+
+            An unknown value is rejected (``ValueError``) rather than treated as
+            ``"warn"`` — a typo in a security switch must not fail open.
 
     Returns:
         ``(data, key)``; with ``with_types`` a ``types`` element is appended;
@@ -245,10 +261,17 @@ def redact_json(
         2-tuple is unchanged, so existing 2-/3-tuple callers keep working.
 
     Raises:
-        ValueError: if the document nests deeper than ``_MAX_STRUCTURED_DEPTH``.
+        ValueError: if the document nests deeper than ``_MAX_STRUCTURED_DEPTH``,
+            or if ``on_unscannable`` is not ``"warn"``/``"raise"``.
+        TypeError: if ``on_unscannable="raise"`` and the document contains a leaf
+            whose type cannot be scanned for PII.
     """
     if isinstance(paths, str):
         raise TypeError("paths must be a list of path strings, not a str")
+    if on_unscannable not in ("warn", "raise"):
+        raise ValueError(
+            f"redact_json: on_unscannable must be 'warn' or 'raise', got {on_unscannable!r}"
+        )
     _warn_low_entropy_salt(salt)
     session = make_structured_session(salt=salt, key=key, config=config)
     parsed_paths = _parse_paths(paths) if paths else None
@@ -379,6 +402,15 @@ def redact_json(
         return _record_unscannable(obj, current_path)
 
     result = _walk(data)
+    if unscannable_leaves and on_unscannable == "raise":
+        # Fail CLOSED before the redacted document or key is read out: a leaf we
+        # could not scan may carry PII, and this caller asked not to forward it.
+        raise TypeError(
+            f"redact_json: {len(unscannable_leaves)} leaf value(s) of an un-scannable "
+            f"type cannot be redacted (on_unscannable='raise') "
+            f"[path (type): {_unscannable_detail(unscannable_leaves)}]. Convert them to "
+            f"a str/int/float/Decimal/UUID or utf-8 bytes to have them redacted."
+        )
     # Mirrors the one-shot `replace()` path: warn once, over the
     # WHOLE document's cumulative collisions, before the key is read out — a
     # column of similarly-masked values (e.g. phone numbers) is exactly the
@@ -405,6 +437,14 @@ def redact_json(
     return (result, combined_key, *extras)
 
 
+def _unscannable_detail(leaves: list[tuple[str, str]]) -> str:
+    """Render un-scannable leaves as a PII-free ``path (type), …`` string — the
+    leaf's location and Python type name only, never a value. Shared by the
+    ``on_unscannable='raise'`` error and the default ``SecurityWarning`` so the
+    two faces name the leaves identically."""
+    return ", ".join(f"{loc} ({tname})" for loc, tname in leaves)
+
+
 def _warn_structured_leaks(
     *,
     pii_key_hits: int,
@@ -426,7 +466,7 @@ def _warn_structured_leaks(
     scanned path afterwards, leaving only genuinely un-coercible leaves below.
     """
     if unscannable_leaves:
-        detail = ", ".join(f"{loc} ({tname})" for loc, tname in unscannable_leaves)
+        detail = _unscannable_detail(unscannable_leaves)
         warnings.warn(
             f"redact_json: {len(unscannable_leaves)} leaf value(s) of an "
             f"un-scannable type were forwarded WITHOUT scanning and may carry "

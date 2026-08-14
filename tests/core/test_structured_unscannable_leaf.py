@@ -205,6 +205,49 @@ class TestUnscannableLeaf:
         assert out["deleted"] is None
 
 
+class TestOnUnscannableRaise:
+    """The opt-in fail-CLOSED switch: `on_unscannable='raise'` makes an
+    un-coercible leaf a hard error instead of a warn-and-forward, mirroring
+    `redact_body(on_missing_field='raise')`."""
+
+    def test_raise_fails_closed_on_non_utf8_bytes_leaf_without_leaking_the_value(self):
+        data = {"ssn_note": b"\xff SSN 123-45-6789"}
+        with pytest.raises(TypeError) as exc:
+            redact_json(data, mode="fast", lang="zh", salt=_HI_SALT, on_unscannable="raise")
+        msg = str(exc.value)
+        # Names the leaf's path + type (PII-free) …
+        assert "ssn_note" in msg
+        assert "bytes" in msg
+        # … and NEVER the PII value carried in the un-scannable bytes.
+        assert "123-45-6789" not in msg
+
+    def test_raise_fails_closed_on_arbitrary_object_leaf(self):
+        with pytest.raises(TypeError, match="un-scannable"):
+            redact_json(
+                {"x": object()}, mode="fast", lang="zh", salt=_HI_SALT, on_unscannable="raise"
+            )
+
+    def test_default_still_warns_and_forwards(self):
+        # Default is unchanged: warn + forward, no raise.
+        data = {"x": b"\xff\xfe"}
+        with pytest.warns(SecurityWarning, match="un-scannable"):
+            out, key = redact_json(data, mode="fast", lang="zh", salt=_HI_SALT)
+        assert out["x"] == b"\xff\xfe"
+
+    def test_raise_does_not_fire_on_a_fully_scannable_document(self):
+        # A document with no un-scannable leaf redacts normally under 'raise'.
+        data = {"note": "手机13800138000"}
+        out, key = redact_json(data, mode="fast", lang="zh", salt=_HI_SALT, on_unscannable="raise")
+        assert "13800138000" not in repr(out)
+
+    def test_unknown_on_unscannable_value_is_rejected(self):
+        # A typo in a security switch must not silently fall back to 'warn'.
+        with pytest.raises(ValueError, match="on_unscannable"):
+            redact_json(
+                {"x": "no pii"}, mode="fast", lang="zh", salt=_HI_SALT, on_unscannable="skip"
+            )
+
+
 # ══════════════════════════════════════════════════════════════
 # The brief's combined repro — Decimal + bytes leak beside int forms
 # ══════════════════════════════════════════════════════════════
