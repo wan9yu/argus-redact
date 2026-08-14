@@ -1407,7 +1407,7 @@ Redact PII in JSON structures and CSV strings:
 ```python
 from argus_redact.structured import redact_json, restore_json, redact_csv, restore_csv
 
-# JSON — recursively walks all string values
+# JSON — recursively walks all scalar leaf values
 data = {"user": {"name": "张三", "phone": "13812345678"}, "action": "login"}
 redacted, key = redact_json(data, mode="fast")
 restored = restore_json(redacted, key)
@@ -1417,6 +1417,8 @@ csv_text = "name,phone\n张三,13812345678"
 redacted_csv, key = redact_csv(csv_text, mode="fast")
 restored_csv = restore_csv(redacted_csv, key)
 ```
+
+**Scalar leaves, not just strings.** `redact_json` scans every scalar leaf VALUE — strings, `int`/`float`, `Decimal`, `UUID`, and utf-8 `bytes`/`bytearray` (a national ID stored as a JSON number, a SQL `NUMERIC`, or a msgpack byte string all get redacted); a non-string leaf with no detectable PII passes through byte-for-byte with its original type. Dict KEYS are preserved verbatim (structural identifiers, like a CSV header). A leaf whose type cannot be coerced to text — a non-utf-8 byte string, an arbitrary object — is forwarded unchanged and emits a PII-free `SecurityWarning` (path + type name). Pass `on_unscannable="raise"` to fail CLOSED instead: `redact_json` then raises `TypeError` naming those leaves before any document or key is returned, so a security-conscious pipeline never forwards an un-scanned value (mirrors `redact_body(on_missing_field="raise")`).
 
 **Unguarded by design.** `restore_json` / `restore_csv` apply `key` (+ optional `aliases=`) mechanically over every leaf/cell, with no per-call anchor — unlike the scalar `restore()` / `restore_guarded()` faces, which guard by default since v0.8.0 (see [`guard=True` is the default](#guardtrue-is-the-default-v080)). Threading that same provenance/scope guard through structured restore is a cross-layer redesign, not a parameter add, so it stays out of scope here; if a document came back from an LLM reply you don't fully trust, restore the plain text through `guarded_restore()` yourself instead. A benign leaf/cell that happens to equal one of `key`'s pseudonym codes is also restored — see each function's docstring for the same collision hazard `restore()` documents.
 
