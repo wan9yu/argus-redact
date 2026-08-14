@@ -22,6 +22,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
 
 use argus_redact_wasm::{restore, StreamingRedactor};
@@ -130,7 +131,7 @@ fn chunk(text: &str, size: usize) -> Vec<String> {
 
 fn restore_key(text: &str, key: &HashMap<String, String>) -> String {
     let key_js = serde_wasm_bindgen::to_value(key).expect("key serialize");
-    restore(text, key_js).expect("restore")
+    restore(text, key_js, JsValue::UNDEFINED).expect("restore")
 }
 
 // ── SAFETY: straddle / leak cases ────────────────────────────────────────────

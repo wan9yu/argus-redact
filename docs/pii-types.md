@@ -3,7 +3,7 @@
 Auto-generated from `argus_redact.specs.list_types()`. Do not hand-edit.
 Regenerate via: `make catalog`
 
-Total: 74 types (36 zh / 16 en / 12 shared / 10 international)
+Total: 78 types (36 zh / 16 en / 16 shared / 10 international)
 
 ## Chinese (zh) — 36 types
 
@@ -14,7 +14,7 @@ Total: 74 types (36 zh / 16 en / 12 shared / 10 international)
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `geographic` |
 | Examples | `北京市朝阳区建国路100号`, `广东省深圳市南山区科技路1号`, `朝阳建国路100号` |
 | Source | GB/T 2260《中华人民共和国行政区划代码》 |
@@ -28,7 +28,7 @@ Chinese structured address
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `32岁`, `年龄: 32`, `32 years old` |
 | Source | GB/T 2261.1《个人基本信息分类与代码》 |
 
@@ -71,7 +71,7 @@ Biometric data (fingerprint/DNA/face/iris/voiceprint)
 | Default strategy | `remove` |
 | Sensitivity | 3 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Checksum | MOD 31 |
 | Examples | `91110108MA01YBNX62`, `52100000500000784G` |
 | Source | GB 32100-2015《法人和其他组织统一社会信用代码编码规则》 |
@@ -86,7 +86,7 @@ Unified Social Credit Code for enterprises and organizations
 | Sensitivity | 4 |
 | Reversible | ✓ |
 | PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
-| GDPR Art.9 special category | ✓ |
+| GDPR Art.10 (criminal convictions) | ✓ |
 | Examples | `此人有前科`, `被判刑三年`, `他有犯罪记录` |
 | Source | PIPL Art.28/51 敏感个人信息 |
 
@@ -99,7 +99,7 @@ Criminal record (explicit keywords)
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `dates` |
 | Examples | `出生日期1990年3月7日`, `生日是90年3月`, `出生三月七号` |
 | Source | GB/T 2261.1《个人基本信息分类与代码》 |
@@ -113,7 +113,7 @@ Chinese date of birth (keyword-triggered, multiple formats)
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Examples | `往来港澳通行证C12345678`, `电子往来港澳通行证CA0000001`, `港澳通行证号码：CB1234567` |
 | Source | 国家移民管理局《出入境证件简明手册》; 电子往来港澳通行证号码编制规则调整公告(2018) |
 
@@ -126,7 +126,7 @@ Chinese date of birth (keyword-triggered, multiple formats)
 | Default strategy | `remove` |
 | Sensitivity | 3 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | GDPR Art.9 special category | ✓ |
 | Examples | `民族：汉族`, `他是藏族` |
 | Source | 中华人民共和国民族区域自治法 |
@@ -141,7 +141,6 @@ Chinese ethnicity (56 ethnic groups)
 | Sensitivity | 3 |
 | Reversible | ✓ |
 | PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
-| HIPAA Safe Harbor | `account_numbers` |
 | Examples | `月薪2万元`, `年收入50万`, `信用评分680分` |
 | Source | PIPL Art.28/51 敏感个人信息 |
 
@@ -154,7 +153,7 @@ Financial info (salary/debt/credit score with amounts)
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Checksum | HKID mod-11 |
 | Examples | `A123456(9)`, `Z684325(1)`, `WX123456(8)` |
 | Source | Hong Kong Immigration Department; Wikipedia HKID |
@@ -168,7 +167,7 @@ Hong Kong Identity Card — 1-2 letter + 6 digit + parenthesized check
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `喜欢攀岩`, `爱好书法`, `经常钓鱼` |
 | Source | re-identification quasi-identifier (not a GDPR special / PIPL sensitive category) |
 
@@ -181,7 +180,8 @@ Hobby/interest — a re-id quasi-identifier; not a GDPR special category or PIPL
 | Default strategy | `remove` |
 | Sensitivity | 3 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
+| HIPAA Safe Harbor | `account_numbers` |
 | Examples | `公积金账号：110123456789`, `住房公积金账户 123456789012`, `公积金账号 6001234567` |
 | Source | 《住房公积金管理条例》（国务院令第350号）— 账号格式由各地公积金管理中心自定，无全国统一标准 |
 
@@ -194,7 +194,7 @@ Hobby/interest — a re-id quasi-identifier; not a GDPR special category or PIPL
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Examples | `港澳居民来往内地通行证H12345678`, `回乡证 M87654321`, `回乡卡H1234567801` |
 | Source | 公安部《关于启用新版港澳居民来往内地通行证的公告》; 国家移民管理局《出入境证件简明手册》 |
 
@@ -207,7 +207,7 @@ Hobby/interest — a re-id quasi-identifier; not a GDPR special category or PIPL
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Checksum | MOD 11-2 |
 | Examples | `110101199003074610`, `11010119900307002X`, `110101 19900307 4610` |
 | Source | GB 11643-1999《公民身份号码》 |
@@ -221,7 +221,7 @@ Chinese 18-digit national ID
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `项目经理说`, `骨科医生建议`, `张董事长出席` |
 | Source | 常用中文职务名称 |
 
@@ -234,7 +234,7 @@ Chinese job title (suffix-based detection)
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `vehicle_identifier` |
 | Examples | `京A12345`, `粤B·12345`, `沪A12345F` |
 | Source | GA 36-2018《中华人民共和国机动车号牌》 |
@@ -248,7 +248,7 @@ Chinese license plate
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Examples | `1/234567/8`, `5/123456/0`, `7/000001/2` |
 | Source | Macau Identification Services Bureau |
 
@@ -276,7 +276,7 @@ Medical/health info (diagnosis/medication/disease/surgery)
 | Default strategy | `remove` |
 | Sensitivity | 3 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Examples | `军字第12345678号`, `武字第87654321号`, `士兵证号12345678` |
 | Source | 中国人民解放军军官证管理规定 |
 
@@ -289,7 +289,7 @@ Chinese military ID number
 | Default strategy | `pseudonym` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `腾讯计算机系统有限公司`, `阿里巴巴集团`, `北京协和医院` |
 | Source | 中国法人组织命名规则 |
 
@@ -302,7 +302,7 @@ Chinese organization name (CJK prefix + legal/industry suffix)
 | Default strategy | `remove` |
 | Sensitivity | 3 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | HIPAA Safe Harbor | `certificate_number` |
 | Examples | `护照号E12345678`, `护照G87654321` |
 | Source | 中华人民共和国护照法 |
@@ -316,7 +316,7 @@ Chinese passport number
 | Default strategy | `pseudonym` |
 | Sensitivity | 3 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `names` |
 | Examples | `客户张三`, `联系人王小明`, `赵敏女士` |
 | Source | 公安部全国姓名统计, 百家姓 |
@@ -330,7 +330,7 @@ Chinese person name (candidate generation + evidence scoring). The detection log
 | Default strategy | `mask` |
 | Sensitivity | 3 |
 | Reversible | ✗ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `phone_numbers` |
 | Examples | `13812345678`, `138 1234 5678`, `138-1234-5678` |
 | Source | 工信部《电信网编号计划》(2017) |
@@ -344,7 +344,7 @@ Chinese mobile phone number
 | Default strategy | `mask` |
 | Sensitivity | 3 |
 | Reversible | ✗ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `phone_numbers` |
 | Examples | `010-12345678`, `021-87654321`, `0755-12345678` |
 | Source | 工信部《电信网编号计划》(2017) |
@@ -372,7 +372,7 @@ Political opinion (party membership/voting/protest)
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `QQ12345678`, `QQ 987654321`, `qq:10001` |
 | Source | 腾讯QQ号码规则 |
 
@@ -399,7 +399,7 @@ Religious belief (believer types/practices/declarations)
 | Default strategy | `pseudonym` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `计算机学院很好`, `人大附中的学生`, `实验小学报名` |
 | Source | 中国教育机构命名规则 |
 
@@ -412,7 +412,7 @@ Chinese school name (CJK prefix + educational suffix)
 | Default strategy | `keep` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `我确诊了糖尿病`, `我妈住院了`, `我们公司裁员了` |
 | Source | Privacy-by-design: first-person binds all PII to user identity |
 
@@ -439,7 +439,7 @@ Sexual orientation (explicit terms)
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | HIPAA Safe Harbor | `ssn` |
 | Examples | `社保号110101199003074610`, `社保卡号：A12345678` |
 | Source | 人力资源和社会保障部社保卡管理规定 |
@@ -453,7 +453,7 @@ Chinese social security number (keyword-triggered)
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Examples | `AB12345678`, `AC98765432`, `WX00000001` |
 | Source | ROC National Immigration Agency |
 
@@ -466,7 +466,7 @@ Taiwan Alien Resident Certificate (post-2020)
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Checksum | TWID weighted mod-10 |
 | Examples | `A123456789`, `B142536472`, `F131011128` |
 | Source | ROC household registration; Wikipedia ROC ID |
@@ -480,7 +480,7 @@ Republic of China (Taiwan) national ID
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `微信wxid_abc123`, `微信号zhangsan_2024` |
 | Source | 微信号命名规则 |
 
@@ -493,7 +493,7 @@ WeChat ID
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `工作单位：中国电信`, `就职于华为技术` |
 | Source | 个人信息登记表常见字段 |
 
@@ -508,7 +508,7 @@ Chinese workplace (keyword-triggered)
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `geographic` |
 | Examples | `1234 Main St, Anytown, USA` |
 | Source | US/UK address conventions; faker uses fictional pop-culture addresses |
@@ -553,7 +553,7 @@ Credit card — realistic faker uses 999999 BIN
 | Sensitivity | 4 |
 | Reversible | ✓ |
 | PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
-| GDPR Art.9 special category | ✓ |
+| GDPR Art.10 (criminal convictions) | ✓ |
 | Examples | `convicted of fraud`, `felony record` |
 | Source | GDPR special category / CCPA sensitive personal info |
 
@@ -566,7 +566,7 @@ Criminal record
 | Default strategy | `remove` |
 | Sensitivity | 3 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `dates` |
 | Examples | `DOB: 01/15/1990`, `Born on March 5, 1985` |
 | Source | Common US/UK DOB formats; keyword-triggered for precision |
@@ -581,7 +581,6 @@ English date of birth — keyword-triggered, multiple formats
 | Sensitivity | 3 |
 | Reversible | ✓ |
 | PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
-| HIPAA Safe Harbor | `account_numbers` |
 | Examples | `salary of $75,000`, `credit score 720` |
 | Source | GLBA/financial privacy categories |
 
@@ -594,7 +593,8 @@ Financial information (income/debt/credit/bankruptcy)
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
+| HIPAA Safe Harbor | `other_unique_identifier` |
 | Examples | `912-70-1234` |
 | Source | IRS ITIN format (area 900-999, group ranges 50-65/70-88/90-92/94-99) |
 
@@ -622,7 +622,7 @@ Medical/health information
 | Default strategy | `pseudonym` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `names` |
 | Examples | `John Smith`, `Mary Johnson` |
 | Source | Detection requires NER (spaCy en_core_web_sm). No fast-mode list fallback. Faker uses US legal placeholder names (John Doe etc.) |
@@ -636,7 +636,7 @@ Person name (en) — NER-only detection; realistic mode requires mode='ner' or n
 | Default strategy | `mask` |
 | Sensitivity | 2 |
 | Reversible | ✗ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `phone_numbers` |
 | Examples | `(415) 555-1234`, `+1-415-555-1234` |
 | Source | NANP; faker uses NANP 555-0100..0199 (FCC 47 CFR § 52.15(f)(1)(ii)) |
@@ -678,7 +678,7 @@ Religious belief
 | Default strategy | `keep` |
 | Sensitivity | 1 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `my mother`, `my husband`, `I` |
 | Source | proximity-hint signal for L1b person scoring |
 
@@ -705,7 +705,7 @@ Sexual orientation
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | HIPAA Safe Harbor | `ssn` |
 | Examples | `123-45-6789` |
 | Source | SSA SSN format; faker uses 999-XX-XXXX (SSA never assigns 9XX area) |
@@ -719,14 +719,14 @@ US Social Security Number — realistic faker uses 999-XX
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | HIPAA Safe Harbor | `certificate_number` |
 | Examples | `Passport: A12345678` |
 | Source | US Department of State passport format |
 
 US passport — keyword-triggered, letter + 8 digits
 
-## Shared (cross-lang) — 12 types
+## Shared (cross-lang) — 16 types
 
 ### `anthropic_api_key`
 
@@ -735,7 +735,7 @@ US passport — keyword-triggered, letter + 8 digits
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `sk-ant-api03-FAKE0000000000000000000000000000abcdefghij`, `sk-ant-TEST0000000000000000000000000000000000fakekey` |
 | Source | Anthropic platform key format |
 
@@ -748,7 +748,7 @@ Anthropic API key (sk-ant- prefix)
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `AKIAIOSFODNN7EXAMPLE`, `AKIA0000TEST1234FAKE` |
 | Source | AWS IAM access key ID format |
 
@@ -761,7 +761,7 @@ AWS IAM access key ID (does not cover the secret access key — that needs keywo
 | Default strategy | `remove` |
 | Sensitivity | 1 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `dates` |
 
 Date / temporal identifier — detected via NER or Presidio; HIPAA shift-by-N is a v0.7+ candidate
@@ -773,12 +773,24 @@ Date / temporal identifier — detected via NER or Presidio; HIPAA shift-by-N is
 | Default strategy | `mask` |
 | Sensitivity | 2 |
 | Reversible | ✗ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `email_addresses` |
 | Examples | `alice@example.com`, `用户@example.org` |
 | Source | RFC 5321 + RFC 6531 (faker uses RFC 2606 reserved domains) |
 
 Email address — detection in lang/shared/patterns.py; realistic faker uses example.{com,org,net}
+
+### `gender`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 2 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
+| Source | Gender / sex mention (Chinese 性别 + English gender/sex) |
+
+Gender / sex — detection in shared.ron; ordinary personal information (not, by itself, GDPR Art.9 special-category or PIPL sensitive PI)
 
 ### `github_token`
 
@@ -787,11 +799,37 @@ Email address — detection in lang/shared/patterns.py; realistic faker uses exa
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `ghp_0000000000000000000000000000000000FAKE`, `github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde`, `gho_0000000000000000000000000000000000FAKE` |
 | Source | GitHub personal/OAuth/app token formats |
 
 GitHub tokens: classic PAT (ghp_), OAuth (gho_), user (ghu_), server (ghs_), refresh (ghr_), fine-grained (github_pat_)
+
+### `iban`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 3 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
+| HIPAA Safe Harbor | `account_numbers` |
+| Checksum | MOD97-10 (ISO 7064) |
+| Source | ISO 13616 (IBAN); mod-97 checksum per ISO 7064 |
+
+International Bank Account Number — detection in shared.ron (mod-97 validated); a financial-account identifier
+
+### `imei`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 3 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
+| Source | 3GPP TS 23.003 (IMEI); GSMA-allocated TAC |
+
+IMEI mobile-device identifier — detection in shared.ron (15 digits, keyword-triggered)
 
 ### `ip_address`
 
@@ -800,7 +838,7 @@ GitHub tokens: classic PAT (ghp_), OAuth (gho_), user (ghu_), server (ghs_), ref
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `ip_address` |
 | Examples | `192.168.1.1`, `2001:db8::1` |
 | Source | RFC 791 (v4) / RFC 4291 (v6); faker uses RFC 5737 / RFC 3849 documentation ranges |
@@ -814,7 +852,7 @@ IPv4 or IPv6 address — detection in lang/shared/patterns.py; realistic faker u
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Checksum | base64url decode + JSON.alg field |
 | Examples | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef` |
 | Source | RFC 7519 (JSON Web Token) |
@@ -828,7 +866,7 @@ JWT token (validated: 3 base64url segments, header decodes to JSON with 'alg' fi
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `device_identifier` |
 | Examples | `aa:bb:cc:dd:ee:ff` |
 | Source | IEEE 802 OUI; faker uses RFC 7042 documentation block 00:00:5E:00:53:xx |
@@ -842,7 +880,7 @@ MAC address — detection in lang/shared/patterns.py; realistic faker uses RFC 7
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ`, `sk-proj-FAKE00000000000000000000000000000000000001test` |
 | Source | OpenAI platform key format |
 
@@ -855,7 +893,7 @@ OpenAI API key (legacy sk- and project sk-proj- prefixes)
 | Default strategy | `mask` |
 | Sensitivity | 2 |
 | Reversible | ✗ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `phone_numbers` |
 
 Landline phone number — detected via NER or Presidio; prefix LL avoids collision with mobile phone prefix
@@ -867,7 +905,7 @@ Landline phone number — detected via NER or Presidio; prefix LL avoids collisi
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Examples | `-----BEGIN OPENSSH PRIVATE KEY----- / FAKEKEYDATA / -----END OPENSSH PRIVATE KEY-----`, `-----BEGIN RSA PRIVATE KEY----- / FAKERSA / -----END RSA PRIVATE KEY-----` |
 | Source | PEM format (RFC 7468) for SSH / TLS private keys |
 
@@ -880,10 +918,22 @@ SSH private key PEM block (RSA, OPENSSH, DSA, EC variants)
 | Default strategy | `remove` |
 | Sensitivity | 1 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `url` |
 
 URL / web address — detected via NER or Presidio; removed because query parameters may carry PII
+
+### `url_token`
+
+| Field | Value |
+|---|---|
+| Default strategy | `remove` |
+| Sensitivity | 4 |
+| Reversible | ✓ |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
+| Source | URL query-string credential leakage (OWASP) |
+
+URL carrying a sensitive token/key/secret query parameter — detection in shared.ron; treated as a security secret
 
 ## International — 10 types
 
@@ -894,7 +944,7 @@ URL / web address — detected via NER or Presidio; removed because query parame
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
 | Source | Receita Federal — Cadastro Nacional da Pessoa Jurídica |
 
 Brazilian company taxpayer registry (legal-entity identifier)
@@ -906,7 +956,7 @@ Brazilian company taxpayer registry (legal-entity identifier)
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Source | Receita Federal — Cadastro de Pessoas Físicas |
 
 Brazilian individual taxpayer registry — de facto national ID (11 digits)
@@ -918,7 +968,7 @@ Brazilian individual taxpayer registry — de facto national ID (11 digits)
 | Default strategy | `remove` |
 | Sensitivity | 3 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Source | Bundeszentralamt für Steuern — Steuerliche Identifikationsnummer |
 
 German national tax identification number (11 digits)
@@ -930,7 +980,7 @@ German national tax identification number (11 digits)
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Source | UIDAI — Aadhaar number |
 
 Indian Aadhaar national identification number (12 digits)
@@ -942,7 +992,7 @@ Indian Aadhaar national identification number (12 digits)
 | Default strategy | `remove` |
 | Sensitivity | 3 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Source | Income Tax Department — Permanent Account Number |
 
 Indian Permanent Account Number (tax identifier)
@@ -954,7 +1004,7 @@ Indian Permanent Account Number (tax identifier)
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Source | Japan My Number (Individual Number) Act |
 
 Japanese national identification number (My Number, 12 digits)
@@ -966,7 +1016,7 @@ Japanese national identification number (My Number, 12 digits)
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Source | Korea Resident Registration Number (주민등록번호) |
 
 Korean resident registration number — national ID encoding DOB + sex
@@ -978,7 +1028,7 @@ Korean resident registration number — national ID encoding DOB + sex
 | Default strategy | `remove` |
 | Sensitivity | 4 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | GDPR Art.9 special category | ✓ |
 | HIPAA Safe Harbor | `medical_record` |
 | Source | NHS Digital — NHS Number (patient health identifier) |
@@ -992,7 +1042,7 @@ UK National Health Service number (health identifier)
 | Default strategy | `remove` |
 | Sensitivity | 3 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.51, PIPL Art.29, PIPL Art.55, PIPL Art.56 |
 | Source | HMRC — National Insurance Number |
 
 UK National Insurance number (tax / benefits identifier)
@@ -1004,7 +1054,8 @@ UK National Insurance number (tax / benefits identifier)
 | Default strategy | `remove` |
 | Sensitivity | 2 |
 | Reversible | ✓ |
-| PIPL articles | PIPL Art.13, PIPL Art.28, PIPL Art.56 |
+| PIPL articles | PIPL Art.13, PIPL Art.51 |
+| HIPAA Safe Harbor | `geographic` |
 | Source | Royal Mail — UK postcode |
 
 UK postcode (geographic identifier)

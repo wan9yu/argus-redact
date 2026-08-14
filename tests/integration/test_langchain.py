@@ -59,6 +59,18 @@ class TestRedactRunnable:
 
         assert runnable.make_prompt_addendum() == ""
 
+    def test_make_prompt_addendum_uses_en_template_for_list_lang(self):
+        """A list lang (e.g. ['en']) must not collapse to the zh anchor
+        template — a mismatched-language nonce-echo can fail-close the
+        guarded restore downstream."""
+        runnable = RedactRunnable(mode="fast", lang=["en"], salt=42)
+        runnable.invoke("Call 555-123-4567, SSN 123-45-6789")
+
+        addendum = runnable.make_prompt_addendum()
+
+        assert "Redaction placeholder list" in addendum
+        assert "脱敏标识符清单" not in addendum
+
 
 class TestRestoreRunnable:
     def test_should_restore_text_when_invoked(self):
@@ -155,3 +167,36 @@ class TestRedactRestoreChain:
         runnable.reset()
         assert runnable.last_key is None
         assert runnable.last_anchor is None
+
+
+class TestRestoreRunnableAliases:
+    """A cross-language alias form the LLM emitted must restore through the
+    guarded RestoreRunnable when aliases are configured on the constructor."""
+
+    def test_restore_runnable_forwards_aliases(self):
+        redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
+        redacted = redact_r.invoke(f"张三的电话是{13912345678}")
+        person_fake = next(p for p, o in redact_r.last_key.items() if o == "张三")
+        alias = "Zhang San"
+
+        restore_r = RestoreRunnable(redact_r, aliases={person_fake: (alias,)})
+        reply = redacted.replace(person_fake, alias) + "\n" + redact_r.last_anchor.nonce
+
+        out = restore_r.invoke(reply)
+
+        assert "张三" in out
+        assert alias not in out
+
+    def test_restore_runnable_rejects_malformed_aliases(self):
+        # RestoreRunnable -> guarded_restore -> pure.restore.restore, the same
+        # seam every other face funnels through — a bare-string alias value
+        # must raise ValueError, not silently split into characters.
+        redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
+        redacted = redact_r.invoke("张三的电话是13912345678")
+        person_fake = next(p for p, o in redact_r.last_key.items() if o == "张三")
+
+        restore_r = RestoreRunnable(redact_r, aliases={person_fake: "Zhang San"})
+        reply = redacted + "\n" + redact_r.last_anchor.nonce
+
+        with pytest.raises(ValueError):
+            restore_r.invoke(reply)

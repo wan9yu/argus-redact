@@ -2,6 +2,283 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.14 — fail-closed structured redaction and streaming-restore parity
+
+A follow-up release closing the low-severity findings from the post-v0.8.13 whole-branch review, plus the
+Performance Budget gate de-flake that landed on `main` after the v0.8.13 tag. No Layer-1 API changed; one
+additive, opt-in structured-API keyword.
+
+### Behaviour changes
+
+- **`redact_json` gains an opt-in fail-closed `on_unscannable="warn"|"raise"`** (default `"warn"`, so existing
+  behaviour is unchanged). A leaf whose type cannot be coerced to text for detection (a non-utf-8 byte string,
+  an arbitrary object) is forwarded verbatim with a `SecurityWarning` under `"warn"`; under `"raise"` it
+  raises `TypeError` naming the leaf's PII-free path + type before any document or key is returned, so a
+  security-conscious pipeline can fail closed. Mirrors `redact_body(on_missing_field=…)`. Additive and
+  keyword-only (minor-compatible per the structured stability contract).
+
+### Fixed
+
+- **The Rust core `StreamingRestorer`'s `None` strategy now holds back a restorable straddling a chunk
+  boundary** instead of restoring each bare chunk, matching the Python `"none"` strategy and the batch restore
+  (a pseudonym fed as `P` then `-1` now reassembles and restores rather than emitting unrestored halves). Both
+  feed branches share one hold-back helper. Core-only face — not exposed through the wasm / PyO3 bindings; the
+  hold-back is the restorable-prefix subset of the Python `_hold_back`.
+
+### Internal / tests
+
+- **The Performance Budget gate is de-flaked** — `min` over 21 runs (was 7), import time over 11 (was a median
+  of 5), and the regression threshold widened to ±25% to match the shared CI-runner noise floor (it failed the
+  v0.8.13 tag on runner noise — a different metric each run). It still catches the O(n²)/GIL-cliff regressions
+  it exists for. See `docs/perf-history.md`.
+- **Documentation consistency**: the structured API reference now describes scalar-leaf scanning (strings,
+  numbers, `Decimal`, `UUID`, utf-8 bytes) rather than "string values", and the streaming emit-scan comment
+  and the GIL-release test's sensitivity tradeoff are scoped honestly.
+- Small refactors: the import-time measurement folds into the shared `_measure_min`, and a shared
+  `_unscannable_detail` formatter backs both the `redact_json` warning and its new `raise`.
+
+## v0.8.13 — availability hardening and detection-entry correctness
+
+A security-hardening release closing the critical and high findings of the post-v0.8.12 whole-codebase
+audit. The headline is three remotely-reachable denial-of-service paths — substitution, Layer-1 near-miss
+hint suppression, and Chinese region parent-prefix absorption — each of which turned an attacker-chosen input
+under the 1 MiB cap into seconds-to-minutes of uninterruptible CPU. All three are now linear or
+sub-quadratic, and the substitution pass releases the GIL on its pure-Rust path, so a large `/redact` no
+longer freezes the server event loop (its deadline, disconnect watcher, and shutdown keep running). Alongside
+the availability work: several fail-open and identity-splice faces are closed, detection-entry normalization
+is tightened, and the streaming restore face now restores pseudonyms that straddle a chunk boundary.
+
+No public API changed — the `redact` / `restore` signatures are frozen and every new parameter lives on an
+internal seam or an opt-in keyword. The three performance rewrites are verified byte-identical to the previous
+output by in-crate differential oracles (the prior algorithm kept as a test-only reference and fuzzed against
+the new one), so redaction and restore output is unchanged.
+
+### Behaviour changes
+
+- **The `remove` audit placeholder format is now bracketed.** The internal audit pass emits `[TYPE-NNNNN]`
+  (e.g. `[EMAIL-00001]`) rather than a bare token. Pseudonym derivation and the KDF are unchanged; this
+  affects only the human-readable audit view.
+- **Structured redaction now scans `Decimal`, `UUID`, and `bytes` leaves** instead of forwarding them
+  verbatim. A leaf that still cannot be scanned (non-UTF-8 bytes, an arbitrary object) is left in place and
+  now raises a `SecurityWarning` rather than passing silently.
+- **The HTTP server and FastAPI middleware reject a non-boolean `guard` / `strict` with 400** instead of
+  coercing it, and `redact_body` gained an opt-in `on_missing_field="warn"|"raise"` so an absent field can be
+  made a hard failure.
+
+### Availability (remotely reachable; availability-only — fails safe, no PII leak)
+
+- **Substitution was `O(#entities × len)` and held the GIL.** `ReplaceSession` now does a single forward
+  pass, and the PyO3 binding releases the GIL on the common (no Python-callable faker) path.
+- **Layer-1 near-miss hint suppression was `O(#near_misses × #entities)`.** Replaced with a start-ordered
+  active-set sweep (`O((n+m) log n)`).
+- **Chinese region parent-prefix absorption re-materialized the whole span each step (`O(k²)`).** The span is
+  now materialized once after the leftward walk.
+- **The streaming redactor now enforces the input-size cap before buffering** (`StreamingRedactor::feed` and
+  `replace`), failing closed on oversize input.
+
+### Security / fail-open
+
+- **Pseudonym-LLM audit codes could splice identities in the unified key.** Key merges are now checked and
+  raise `PseudonymKeyCollisionError` on a collision instead of overwriting; the `remove_bracketed` audit
+  strategy is internal-only under a default-deny config validation.
+- **The Chinese compound-surname pool is single-sourced** from the Rust core (`person_compound_surnames_zh`)
+  with a safe no-guess fallback, so alias expansion cannot splice a real original.
+- **The shared streaming restorer's concurrency guarantee is now real** (`&mut self` behind a buffer lock).
+
+### Detection-entry correctness
+
+- **Anchor lookarounds narrowed from `\d` to `[0-9]`** where ASCII was intended, and an interior non-ASCII
+  decimal digit now folds to ASCII so a PII value hiding one no longer defeats the checksum validators. The
+  decimal-digit table covers the Unicode `Nd` blocks through Unicode 15.0, including Kawi and Nag Mundari.
+- **Structured-ID validators strip the full whitespace class** (and filter to ASCII digits / alphanumerics)
+  before the checksum.
+- **False-positive classification is typed**, and a near-miss is surfaced at low confidence rather than
+  silently dropped.
+- **Two adjacent Chinese names the greedy person match fused into one are now split** (a documented,
+  round-trip-correct over-split remains on genuine four-character combined-surname names).
+
+### Streaming
+
+- **The default sentence-strategy restorer no longer cuts through a restorable at an internal `". "`.** Fakes
+  and aliases containing `". "` (e.g. `John Q. Public`, `Mr. Smith`) now restore under the sentence strategy
+  via the same restorable-straddle hold-back the `none` strategy uses.
+- **The emit-time input-pollution scan is re-enabled** on the reassembled emit slice.
+
+### Internal / tests
+
+- **The GIL-release tests are de-flaked** (best-of-N trials with the speedup threshold recalibrated to the
+  observed CI-runner ceiling).
+- **The `ai4privacy` benchmark now skips when the dataset Hub is unreachable** instead of erroring, so a
+  network outage no longer looks like a detection regression.
+
+## v0.8.12 — internal cleanup and an `/info` capability-reporting fix
+
+A whole-codebase cleanup release. The bulk is an internal, behaviour-preserving refactor pass across the
+Rust core, the PyO3 binding, the WebAssembly build, and the Python layer — removing duplication, dead code,
+and redundant work — verified byte-identical against the existing golden and offline test suites. One
+deliberate behaviour fix ships alongside it: the HTTP `/info` endpoint now reports NER availability honestly
+(see below). No public API changed, no wire format changed, and redaction/restore output is unchanged.
+
+### Behaviour changes
+
+- **HTTP `/info`: the `ner` flag now reflects true Layer-2 engine availability.** Previously `/info` could
+  report `ner: true` when the NER adapter module merely imported, even with no spaCy/HanLP engine installed —
+  contradicting the CLI and MCP `info` faces, which check for a usable engine. All three info faces now derive
+  `ner` from one shared source (`lang_capabilities()` backed by `ner_engine_available()`), so `/info` reports
+  `ner: true` only when an engine is actually present and usable.
+
+### Internal
+
+- **Whole-codebase cleanup pass** (no behavioural effect): deduplication, dead-code removal, and efficiency
+  cleanups across `argus-redact-core`, `argus-redact-py`, `argus-redact-wasm`, and the `argus_redact` Python
+  package. Representative changes: a single post-merge coverage/type-filter chokepoint in the core; one
+  `_RustPM` conversion seam between Python and the binding; unified detector candidate scans and
+  context-window / proximity helpers; one built-in faker table; a shared session base for the LangChain and
+  LlamaIndex adapters; and removal of a superseded faker-resolution code path. Every change was verified
+  byte-identical (Rust goldens + the full Python offline suite).
+
+## v0.8.11 — server hardening & a restore-path denial-of-service fix
+
+A hardening slice for the HTTP `serve` face and the restore path. The headline is a remotely-reachable
+denial-of-service on restore — a super-linear matcher with no input cap — now closed with a linear matcher and
+a 1 MiB input cap. Alongside it: cooperative cancellation so a `/redact` scan reclaims its CPU when the client
+goes away (deadline, disconnect, or shutdown), an admission ceiling on total in-flight scans (memory-flood
+backpressure), a correct 503 for the not-yet-started case, the scan task group moved onto `app.state`, and one
+shared validation seam for restore `aliases`.
+
+No public API was removed. Two behaviour changes need attention (see below): malformed `aliases` now raise
+`ValueError` at every restore face, and a restore of input over 1 MiB now errors.
+
+### Behaviour changes
+
+- **HTTP server: a scan against an unstarted app now returns 503, not 500.** A `/redact` or `/restore` request
+  made against a bare `create_app()` whose ASGI lifespan never ran (so the scan task group was never installed)
+  previously surfaced an unhandled `RuntimeError` as a 500; it now returns a 503 (service not ready) with a
+  well-formed error body. The scan task group also moved from a process-global to `app.state`, so two apps in
+  one process no longer share or clobber one another's group.
+- **Malformed `aliases` now raise `ValueError` at every restore face.** `restore()`, `restore_json` /
+  `restore_csv`, the streaming restorer, the HTTP `/restore` endpoint, the CLI, and the five `guarded_restore`
+  integration wrappers now validate the `aliases` mapping through one shared seam. A value that is a bare
+  string (which the streaming path previously split silently into per-character aliases), an element that is
+  not a string, or an `aliases` that is not a mapping now raises a `ValueError` naming the offending key and
+  the expected shape — never the value — where before it either corrupted the restore or surfaced a cryptic
+  boundary `TypeError`. Well-formed list- or tuple-valued aliases are byte-identical to before, so the
+  canonical redact → LLM → restore round-trip is unaffected.
+- **Restore of input larger than 1 MiB now errors.** Every restore entry point caps input at 1 MiB and raises
+  a `ValueError` above it (part of the denial-of-service fix below). Restores of realistic key / text sizes
+  are unaffected.
+
+### Security / correctness
+
+- **Restore path: closed a remotely-reachable denial-of-service.** The restore matcher was O(shards · N²) in
+  the input length and had no input-size cap, so a single large `/restore` request — or any `restore()` /
+  `RestoreSession` call on large text — could pin a CPU on super-linear work. The matcher is now a linear
+  K-way merge across the shards, and every restore entry point caps input at 1 MiB. This is an availability
+  fix: it did not affect redaction correctness or leak PII — the matcher fails safe — but a restore over the
+  cap now errors where it previously ran (see Behaviour changes).
+- **HTTP server: bounded scan admission (memory-amplification backpressure).** The in-flight limiter bounds
+  concurrently *running* scans, but a queued worker retains its request body (≤ 10 MiB) and key while it waits
+  for a slot — so an unbounded queue was an unbounded-memory amplification under a request flood. Total
+  in-flight scans (running + queued) are now capped: a request over the ceiling is shed with a prompt 503
+  ("server busy") before its worker is spawned, so it never retains its body. Per-process / single-node like
+  the in-flight bound; tunable via `ARGUS_MAX_ADMITTED_SCANS` (default 2× `ARGUS_MAX_INFLIGHT_SCANS`).
+- **HTTP server: cooperative cancellation reclaims CPU when the client goes away — `/redact` fast-mode-L1.** A
+  scan that lost its client previously ran to completion on its non-preemptible thread, so the CPU was not
+  reclaimed. The L1 detect path now polls a per-scan cancel token at coarse boundaries, and the server trips
+  that token from **all three** ways a scan's client goes away: the request **deadline** fires (prompt 504),
+  the client **disconnects** mid-scan (the handler watches the ASGI receive channel and returns **499**
+  client-closed-request), or the server **shuts down** (the lifespan trips every in-flight scan's token so
+  workers abort and the app task group drains promptly instead of blocking on abandoned scans). In each case
+  the abandoned worker returns at its next poll and frees its slot instead of finishing discarded work. Scope
+  stays deliberately narrow: this reclaims CPU **only on the `/redact` fast-mode-L1 path** — the only path with
+  a cancellable detect scan — and the granularity is between-phase / between-pattern (a single detect phase
+  over a >1 MiB input is the coarse worst case). It does **not** reclaim on `/restore` (a linear key
+  substitution with no detect scan; that path is not cancellable and no token is created for it — a
+  disconnect/shutdown still ends the request promptly, but its worker runs to completion). This is not
+  endpoint-wide or symmetric reclamation. The token is fresh per scan, so tripping one request's scan never
+  affects another's. Cancellation is an internal HTTP-server mechanism only: the public `redact()` and
+  `restore()` signatures are unchanged (Layer 1 stays frozen), and no cancellation keyword is exposed on the
+  library API.
+
+## v0.8.10 — compliance, spelled out
+
+A compliance, hardening, and accuracy release. The PIPL / GDPR / HIPAA mapping was made precise and
+testable — a frozen decision-table oracle now binds every type's statute classification — and the backlog of
+audit findings from the 0.8.x line was cleared: honest resource bounding on the HTTP server, a closed
+credential-leak class in error messages, and cross-language recall for checksum-validated national IDs.
+
+No public API was removed. The on-disk `risk_data.ron` was regenerated (its pinned hash changed) but the
+redaction / restore wire formats are unchanged. Detection now flags inputs it previously passed through
+(numeric JSON leaves; four national IDs outside their home language), and several types' compliance
+classifications changed — so snapshot consumers should re-baseline and compliance-report consumers should
+re-check (see Behaviour changes).
+
+### Behaviour changes
+
+- **Compliance classification made precise (PIPL / GDPR / HIPAA).** The statute mapping moved from a
+  score-gated heuristic to an explicit, membership-driven model, frozen against a decision-table oracle:
+  - `iban` is now PIPL sensitive personal information (financial account — Art. 28/29/55/56 atop the
+    Art. 13/51 floor) and carries the HIPAA account-number identifier (J), for parity with `bank_card` /
+    `credit_card` / `housing_fund`. (Previously detected and redacted but carrying no compliance metadata.)
+  - `url_token` and `imei` are cited non-member Art. 13/51 floor downgrades; `gender` is ordinary personal
+    information (not a GDPR Art. 9 special category, not PIPL sensitive-PI on its own).
+  - `criminal_record` is GDPR Article 10 data (criminal convictions/offences), mutually exclusive with the
+    Article 9 special categories; `gdpr_art10` is now an explicit report field. `itin` carries a HIPAA
+    identifier; the `cnpj` legal-entity number is a cited downgrade; a universal Art. 13/51 floor applies.
+  - `nhs` is documented as format-only (no MOD11 checksum enforced) — the spec now matches the implementation.
+- **Cross-language recall for checksum-validated national IDs.** `cpf`, `cnpj`, `my_number`, and `pan` are
+  now detected regardless of the document's routed language (e.g. a Brazilian CPF inside an English document).
+  All four are validator-gated (checksum, or tight structure for `pan`), so activation is bounded to
+  well-formed IDs. Format-only IDs (`aadhaar`, the German `tax_id`) are intentionally NOT cross-language.
+- **Numeric JSON leaves are now scanned.** `redact_json` coerces a numeric leaf to text for detection, so a
+  national ID or phone stored as a JSON *number* (not a string) is now detected and redacted. Un-detected
+  numeric leaves round-trip byte-identically (int/float precision preserved); a detected leaf becomes a
+  placeholder string. A legitimate integer that matches an ID/phone pattern will now be redacted (fail-safe) —
+  scope with `paths=` to opt a subtree out; there is no global switch to restore the old string-only scope.
+- **Four always-on shared detectors now report compliance.** `iban` / `url_token` / `gender` / `imei` report
+  a real sensitivity and statute mapping under `report=True` (previously bare sensitivity 2, no mapping).
+  Detection and redaction output are unchanged.
+- **Detection recall (merge boundary).** An overlapping lower-priority match's non-overlapping head/tail is
+  now re-admitted, so a span previously dropped at a merge boundary can be detected. Recall-monotone.
+
+### Security / correctness
+
+- **`OLLAMA_HOST` credential leak closed.** An invalid-scheme error interpolated the full connection URL —
+  including any `user:password@` userinfo — into a message reachable from the HTTP 400 body and CLI stderr; it
+  now names only the scheme and host. Ollama request failures are logged by exception type, never with a full
+  traceback (which could embed input fragments).
+- **HTTP server: honest resource bounding.** The in-flight scan limiter now bounds concurrently *running*
+  scans — a request timeout returns a prompt 504 without freeing the slot while the scan is still using a core,
+  so the advertised bound is not defeated under a timeout storm — and request-body parsing runs off the event
+  loop so a large body cannot stall `GET /health`. Per-process / single-node; bound multi-tenant deployments at
+  the gateway. Tunable via `ARGUS_MAX_INFLIGHT_SCANS` / `ARGUS_SCAN_TIMEOUT_SECONDS`. (A timeout frees the
+  client, not the CPU: the abandoned scan runs to completion on its non-preemptible thread; cooperative
+  cancellation that reclaims CPU at the deadline is planned.)
+- **Integration adapters.** LangChain and LlamaIndex now emit the correct-language anchor prompt for a list
+  `lang` (previously collapsed to `zh`, which could fail-close a guarded restore); LlamaIndex's transform
+  gained the session lock its LangChain sibling already had; the Presidio bridge runs the full pipeline
+  (telemetry / key-file / profile) even when nothing is detected.
+- **Risk-score honesty.** The multiple-high-entity amplification now requires two distinct high/critical
+  *types*, not repeats of a single type.
+- **Guarded-restore parity and fail-closed inputs.** Alias / display-marker forwarding is consistent across
+  the integration wrappers; overflow and non-UTF-8 inputs raise a clean `ValueError` rather than crashing.
+- **`restore_cell` collision documented.** A benign structured cell whose literal equals a real pseudonym
+  code restores to that entity's original text — documented as a known limitation of the placeholder scheme.
+
+### API additions (backward-compatible)
+
+- `redact_json` / `restore_json` / `redact_csv` / `restore_csv` are promoted to the top-level `argus_redact`
+  namespace (one canonical import path). The structured restore faces are documented as unguarded-by-design;
+  the default-on guard remains on the scalar `restore()` / `restore_guarded()`.
+- `with_aliases=` / `aliases=` on the structured redact/restore faces; `--aliases` / `--display-marker` on the
+  CLI restore and `aliases` / `display_marker` in the HTTP restore body; `aliases` on the WASM restore faces.
+- Structured `paths=` accepts a list-of-segments form for keys containing dots or brackets.
+
+### Docs
+
+- `StructuredRestorer` / `StreamingRestorer` are documented as single-thread / single-session: concurrent
+  `restore_cell` / `wipe` / `close` on a shared instance raises `Already borrowed`.
+
 ## v0.8.9 — nothing fails quietly
 
 A security and correctness release. The changes below share one shape: each closes a gap
@@ -74,6 +351,10 @@ consumers should re-baseline.
   is now held and restored so the streamed output is byte-for-byte identical to restoring the
   whole reply at once. `StreamingRestorer` gains an `aliases=` parameter matching batch
   `restore(...)`, held-back tails are bounded, and the key is snapshotted at construction.
+  Scope note: this byte-for-byte parity is a property of the *restore* face. Streaming
+  *detection* stays sentence-buffered by design — true byte-level partial detection (a state
+  machine across regex/NER boundaries) is out of scope and roadmapped, so "byte-for-byte
+  identical" is not a byte-level *detection* guarantee (see `docs/design-streaming-incremental.md`).
 
 ### Performance
 
@@ -1127,10 +1408,11 @@ if you pin on exact redaction results.
   JSON content.
 - **`redact_body` fails closed** on non-string fields instead of returning them
   un-redacted.
-- **Restore is collision-safe:** purely-numeric restore keys are digit-bounded so a
-  fake can never match inside a longer number; a bare marker character following a
+- **Restore is collision-resistant** (not collision-proof — masked-strategy cross-salt
+  isolation remains a known, tracked gap): purely-numeric restore keys are digit-bounded
+  so a fake is not matched inside a longer number; a bare marker character following a
   key no longer triggers double-replacement; and the realistic faker re-rolls off
-  every entity's original, so one fake can never expose another real value.
+  every entity's original, so one fake does not expose another real value.
 - **A container entity stays whole** when an interior self-reference overruns it —
   no unredacted head fragment leaks.
 - **Streaming carries multi-line SSH/PEM private keys whole** (the key head is never

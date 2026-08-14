@@ -5,8 +5,10 @@ must still map the alias back to the original. v0.6.0 unified API: pass
 ``result.key`` plus the new ``aliases=`` kwarg with ``result.aliases``.
 """
 
-from argus_redact import redact_pseudonym_llm
-from argus_redact.pure.restore import restore
+import pytest
+
+from argus_redact import make_anchor, redact_pseudonym_llm
+from argus_redact.pure.restore import _normalize_aliases, restore
 
 
 class TestLegacyDictStillWorks:
@@ -109,3 +111,93 @@ class TestResultAliasesField:
         import argus_redact
 
         assert not hasattr(argus_redact, "KeyEntry"), "KeyEntry removed in v0.6.0"
+
+
+class TestNormalizeAliasesSeam:
+    """`_normalize_aliases` is the ONE seam every restore face funnels an
+    `aliases` argument through (`restore`, `make_structured_restorer`,
+    `StreamingRestorer.__init__`). It both validates AND coerces, so no
+    construction point can coerce a malformed shape without validating it
+    first — pinned directly here; the faces themselves are pinned in
+    `TestAliasesRejectionAtEveryFace` below.
+    """
+
+    def test_none_normalizes_to_empty_dict(self):
+        assert _normalize_aliases(None) == {}
+
+    def test_list_values_coerced_to_tuples(self):
+        assert _normalize_aliases({"P-1": ["a", "b"]}) == {"P-1": ("a", "b")}
+
+    def test_tuple_values_pass_through(self):
+        assert _normalize_aliases({"P-1": ("a", "b")}) == {"P-1": ("a", "b")}
+
+    def test_non_mapping_aliases_rejected(self):
+        with pytest.raises(ValueError):
+            _normalize_aliases(["not", "a", "mapping"])
+
+    def test_bare_string_value_rejected_not_split_into_chars(self):
+        # The exact footgun: pre-fix, `tuple("abc")` silently became
+        # `('a', 'b', 'c')` instead of raising.
+        with pytest.raises(ValueError):
+            _normalize_aliases({"P-1": "abc"})
+
+    def test_bare_bytes_value_rejected(self):
+        with pytest.raises(ValueError):
+            _normalize_aliases({"P-1": b"abc"})
+
+    def test_non_str_element_rejected(self):
+        with pytest.raises(ValueError):
+            _normalize_aliases({"P-1": [123]})
+
+    def test_nested_list_element_rejected(self):
+        with pytest.raises(ValueError):
+            _normalize_aliases({"P-1": [["a"]]})
+
+    def test_error_message_names_key_not_value(self):
+        # PII-free: the offending KEY and shape class, never the alias text.
+        with pytest.raises(ValueError, match=r"P-1") as excinfo:
+            _normalize_aliases({"P-1": "super-secret-alias-text"})
+        assert "super-secret-alias-text" not in str(excinfo.value)
+
+
+class TestAliasesRejectionAtEveryFace:
+    """The seam is wired at every real construction point — a malformed
+    `aliases` shape must raise ValueError there, not silently corrupt (bare
+    string -> per-character split) or crash later with a cryptic TypeError.
+    """
+
+    def test_scalar_restore_unguarded_rejects_bare_string(self):
+        with pytest.raises(ValueError):
+            restore("x", {"P-1": "orig"}, aliases={"P-1": "abc"}, guard=False)
+
+    def test_scalar_restore_unguarded_rejects_non_str_element(self):
+        with pytest.raises(ValueError):
+            restore("x", {"P-1": "orig"}, aliases={"P-1": [123]}, guard=False)
+
+    def test_scalar_restore_guarded_rejects_bare_string(self):
+        # The seam runs before the guard/no-guard dispatch, so the guarded
+        # branch must reject too, not just the guard=False legacy path.
+        key = {"P-1": "orig"}
+        anchor = make_anchor(key)
+        with pytest.raises(ValueError):
+            restore("x", key, aliases={"P-1": "abc"}, guard=True, anchor=anchor)
+
+
+class TestAliasesTupleRoundTrip:
+    """Round-trip safety: aliases are canonically TUPLE-valued
+    (``PseudonymLLMResult.aliases``), so the seam must ACCEPT tuples, not
+    just lists, or it breaks the redact -> LLM -> restore round trip. Uses
+    ``redact_pseudonym_llm`` (NOT batch ``redact()``, which returns no
+    aliases at all) as the producer, per the canonical shape it emits.
+    """
+
+    def test_tuple_valued_aliases_from_redact_pseudonym_llm_round_trip(self):
+        r = redact_pseudonym_llm("联系王建国", salt=b"tuple-rt", lang="zh")
+        person_fakes = {f: r.key[f] for f in r.aliases if r.key.get(f) == "王建国"}
+        assert person_fakes, "realistic person fake should carry aliases"
+        fake = next(iter(person_fakes))
+        alias = r.aliases[fake][0]
+        assert isinstance(r.aliases[fake], tuple), "aliases values must be tuple-valued"
+        llm_output = r.downstream_text.replace(fake, alias)
+        restored = restore(llm_output, r.key, aliases=r.aliases, guard=False)
+        assert restored == "联系王建国"

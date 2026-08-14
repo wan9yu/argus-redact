@@ -25,8 +25,12 @@ Usage (endpoint-level) with guard-by-default restore:
 
 from __future__ import annotations
 
+import warnings
+
 from argus_redact import redact
+from argus_redact.exceptions import SecurityWarning
 from argus_redact.glue.guarded_restore import guarded_restore
+from argus_redact.pure.security_events import COMPLETE
 
 
 def _validate_message(i: int, msg: object) -> None:
@@ -63,12 +67,32 @@ def redact_body(
     mode: str = "fast",
     lang: str | list[str] = "zh",
     salt: int | bytes | None = None,
+    on_missing_field: str = "warn",
 ) -> tuple[dict, dict]:
     """Redact PII in a request body dict.
 
     Looks for `field` in body. If field is "messages", redacts each
     message's "content". Returns (redacted_body, key).
+
+    on_missing_field controls the absent-field branch — when `field` is not in
+    `body` there is nothing to redact, so the body would be returned unchanged
+    with an empty key, a false all-clear a forwarding proxy could ship upstream
+    in plaintext:
+        "warn" (default): emit a SecurityWarning naming the field, then return
+            the body unchanged. Keeps a benign metadata-only body working (an
+            OpenAI-style {model, temperature, ...} with no user-text field) while
+            surfacing the fail-open. A proxy that IGNORES warnings still forwards.
+        "raise": raise TypeError naming the field so a security-conscious
+            deployment genuinely fails CLOSED instead of forwarding an
+            un-redacted body — mirroring the sibling restore_body, which raises
+            on the identical condition. Set this once at the call/config site.
+    An unknown value is itself rejected (ValueError) rather than silently
+    treated as "warn": a typo in a security switch must not fail open.
     """
+    if on_missing_field not in ("warn", "raise"):
+        raise ValueError(
+            f"redact_body: on_missing_field must be 'warn' or 'raise', got {on_missing_field!r}"
+        )
     result = dict(body)
     combined_key: dict = {}
 
@@ -106,6 +130,28 @@ def redact_body(
         )
         result[field] = redacted_text
     else:
+        # A body missing the named field would be handed back UN-REDACTED with an
+        # empty key — a false all-clear indistinguishable from "nothing to
+        # redact", so a proxy forwarding this output ships any PII in the actual
+        # (mis-named) field in plaintext while the tuple looks successful.
+        # `on_missing_field` chooses the failure mode: "raise" (opt-in) fails
+        # CLOSED like the sibling `restore_body`, so a proxy that ignores warnings
+        # still cannot leak; "warn" (default) surfaces the fail-open without
+        # breaking a benign metadata-only body. Either way the field is named.
+        if on_missing_field == "raise":
+            raise TypeError(
+                f"redact_body: field {field!r} not found in body; nothing was "
+                f"redacted (on_missing_field='raise' → failing closed)."
+            )
+        # Default "warn": fail LOUD, not silent — matching `redact_json`'s
+        # SecurityWarning convention. (Set on_missing_field='raise' to fail closed.)
+        warnings.warn(
+            f"redact_body: field {field!r} not found in body; nothing was redacted "
+            f"and the body is returned unchanged — any PII in other fields is NOT "
+            f"redacted. Set on_missing_field='raise' to fail closed.",
+            SecurityWarning,
+            stacklevel=2,
+        )
         return result, {}
 
     return result, combined_key
@@ -121,6 +167,8 @@ def restore_body(
     redacted: str | None = None,
     strict: bool = False,
     detailed: bool = False,
+    aliases: dict[str, tuple[str, ...]] | None = None,
+    display_marker: str | None = None,
 ) -> "dict | str | tuple[dict | str, dict]":
     """Restore PII in a response body.
 
@@ -136,10 +184,17 @@ def restore_body(
             supplementary heuristic (H) check fires and an INJECTION_SUSPECTED
             event is emitted when suspicious patterns are detected.
         detailed: When True, returns (result, {"security_events": [...]}).
+        aliases: {fake: (alternate, ...)} forwarded to guarded_restore so a
+            cross-language alias form the model emitted still restores.
+        display_marker: decoration marker to strip before key lookup; forwarded
+            to guarded_restore.
     """
     if not key:
+        # An empty key means there was nothing to restore — a vacuous COMPLETE,
+        # carrying the same {"security_events", "outcome"} shape guarded_restore
+        # returns so callers never special-case this branch.
         if detailed:
-            return response, {"security_events": []}
+            return response, {"security_events": [], "outcome": COMPLETE}
         return response
 
     # Bound once: the str and dict branches below differ ONLY in which string they
@@ -147,7 +202,13 @@ def restore_body(
     # new guarded_restore kwarg had to be threaded twice — the copy-paste drift this
     # release exists to remove.
     guard_kwargs = dict(
-        redacted=redacted, anchor=anchor, guard=guard, strict=strict, detailed=detailed
+        redacted=redacted,
+        anchor=anchor,
+        guard=guard,
+        strict=strict,
+        detailed=detailed,
+        aliases=aliases,
+        display_marker=display_marker,
     )
 
     if isinstance(response, str):
@@ -168,6 +229,13 @@ def restore_body(
         # all-clear that hides the fact that nothing was restored.
         raise TypeError(f"restore_body: field {field!r} missing or not a str; nothing was restored")
 
-    if detailed:
-        return response, {"security_events": []}
-    return response
+    # Fail CLOSED for every remaining shape too: a dict with a falsy/omitted
+    # field, or a response that is neither str nor dict, would otherwise fall
+    # through and be handed straight back with an empty security_events list —
+    # the same false all-clear the field-truthy branch above guards against, but
+    # nested inside `and field` so it never fired for the no-field case.
+    raise TypeError(
+        f"restore_body: response is a {type(response).__name__} with no restorable "
+        f"field (field={field!r}); nothing was restored. Pass a str response, or a "
+        f"dict with field= naming a str field."
+    )

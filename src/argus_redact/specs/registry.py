@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from argus_redact.pure._strategy_kind import is_strategy_reversible
+from argus_redact.specs._compliance import gdpr_art10_for as _gdpr_art10_for
 from argus_redact.specs._compliance import gdpr_special_for as _gdpr_special_for
 from argus_redact.specs._compliance import hipaa_for as _hipaa_for
 from argus_redact.specs._compliance import pipl_articles_for as _pipl_articles_for
@@ -69,6 +70,7 @@ class PIITypeDef:
     # need to mirror the rules. (v0.5.9+)
     pipl_articles: tuple[str, ...] = ()  # e.g. ("PIPL Art.13", "PIPL Art.51")
     gdpr_special_category: bool = False  # GDPR Art.9 special category
+    gdpr_art10: bool = False  # GDPR Art.10 (criminal convictions and offences)
     hipaa_phi_category: str | None = None  # one of HIPAA Safe Harbor 18
 
     # ── Description ──
@@ -155,18 +157,21 @@ def register(typedef: PIITypeDef) -> PIITypeDef:
     caller can pre-populate `pipl_articles` while still letting `gdpr_*` /
     `hipaa_*` derive from the central rule book.
     """
-    pipl = typedef.pipl_articles or _pipl_articles_for(typedef.name, typedef.sensitivity)
+    pipl = typedef.pipl_articles or _pipl_articles_for(typedef.name)
     gdpr = typedef.gdpr_special_category or _gdpr_special_for(typedef.name)
+    art10 = typedef.gdpr_art10 or _gdpr_art10_for(typedef.name)
     hipaa = typedef.hipaa_phi_category or _hipaa_for(typedef.name)
-    if (pipl, gdpr, hipaa) != (
+    if (pipl, gdpr, art10, hipaa) != (
         typedef.pipl_articles,
         typedef.gdpr_special_category,
+        typedef.gdpr_art10,
         typedef.hipaa_phi_category,
     ):
         typedef = dataclasses.replace(
             typedef,
             pipl_articles=pipl,
             gdpr_special_category=gdpr,
+            gdpr_art10=art10,
             hipaa_phi_category=hipaa,
         )
     key = (typedef.lang, typedef.name)
@@ -222,3 +227,25 @@ def list_types(lang: str | None = None) -> list[PIITypeDef]:
     if lang:
         return [v for (lng, _), v in list(_REGISTRY.items()) if lng == lang]
     return list(_REGISTRY.values())
+
+
+def build_patterns(lang: str) -> list[dict]:
+    """Collect every core-sourced pattern for ``lang`` into one list.
+
+    Test / generator helper (no runtime caller) — mirrors the runtime pattern set
+    by concatenating each registered typedef's core patterns in registration
+    order. It fetches ``core_patterns(lang)`` ONCE and groups by pattern ``type``,
+    so the cost is O(patterns), not the O(types × patterns) a per-typedef
+    ``PIITypeDef.to_patterns()`` loop incurs (each of those re-fetches and
+    re-scans the whole core list). The output is identical to
+    ``[p for td in list_types(lang) for p in td.to_patterns()]``.
+    """
+    from argus_redact.lang._loader import core_patterns
+
+    by_type: dict[str, list[dict]] = {}
+    for pattern in core_patterns(lang):
+        by_type.setdefault(pattern.get("type"), []).append(pattern)
+    patterns: list[dict] = []
+    for typedef in list_types(lang):
+        patterns.extend(dict(p) for p in by_type.get(typedef.name, ()))
+    return patterns

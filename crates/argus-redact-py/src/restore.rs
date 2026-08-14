@@ -7,7 +7,7 @@ use pyo3::types::PyDict;
 use argus_redact_core::check_restore_safety as core_check_safety;
 use argus_redact_core::restore_full as core_restore_full;
 use argus_redact_core::restore_full_guarded as core_restore_full_guarded;
-use argus_redact_core::{Anchor, GuardEventKind, RestoreOutcome, RestoreSession};
+use argus_redact_core::{Anchor, RestoreSession};
 
 /// Restore redacted text by replacing pseudonyms with originals (simple 2-arg form).
 /// Kept for back-compat; new callers should prefer `restore` with keyword args.
@@ -42,32 +42,6 @@ pub fn restore<'py>(
     signals.set_item("alias_collisions", alias_collisions)?;
 
     Ok((restored, signals.unbind()))
-}
-
-/// Map a [`GuardEventKind`] to its stable snake_case name. `#[non_exhaustive]`
-/// on the core enum means a future variant compiles here as "unknown" rather
-/// than breaking the build — the Python layer (a later addition) is expected
-/// to grow its own mapping in lockstep, this is just the fallback until it does.
-fn guard_event_kind_str(kind: &GuardEventKind) -> &'static str {
-    match kind {
-        GuardEventKind::GuardNoAnchor => "guard_no_anchor",
-        GuardEventKind::ProvenanceFailed => "provenance_failed",
-        GuardEventKind::EmptyKeyWithScope => "empty_key_with_scope",
-        GuardEventKind::OutOfScopePseudonym => "out_of_scope_pseudonym",
-        GuardEventKind::AliasCollision => "alias_collision",
-        _ => "unknown",
-    }
-}
-
-/// Map a [`RestoreOutcome`] to its stable snake_case name. Same
-/// `#[non_exhaustive]` fallback reasoning as [`guard_event_kind_str`].
-fn restore_outcome_str(outcome: &RestoreOutcome) -> &'static str {
-    match outcome {
-        RestoreOutcome::Blocked => "blocked",
-        RestoreOutcome::Partial => "partial",
-        RestoreOutcome::Complete => "complete",
-        _ => "unknown",
-    }
 }
 
 /// Guarded restore: the (P)rovenance + (S)cope checks live in
@@ -119,14 +93,14 @@ pub fn restore_guarded<'py>(
         .iter()
         .map(|event| {
             let d = PyDict::new(py);
-            d.set_item("kind", guard_event_kind_str(&event.kind))?;
+            d.set_item("kind", event.kind.as_str())?;
             d.set_item("count", event.count)?;
             d.set_item("tokens", event.detail.clone())?;
             Ok(d.unbind())
         })
         .collect::<PyResult<Vec<_>>>()?;
 
-    let outcome = restore_outcome_str(&result.outcome);
+    let outcome = result.outcome.as_str();
 
     Ok((result.restored, result.alias_collisions, events, outcome))
 }
@@ -156,6 +130,13 @@ pub fn check_restore_safety(
 /// `'static` lifetime bound. Bulk callers (structured CSV/JSON, streaming)
 /// route through this instead of the stateless [`restore`] to avoid
 /// re-merging and re-compiling the same key on every cell.
+///
+/// Thread safety: construct one session per thread / per logical restore
+/// session and do NOT share a single instance across threads. `restore_cell`
+/// and `wipe()`/`close()` all borrow this session's Rust-side state; a
+/// concurrent call on a SHARED instance from another thread hits the runtime
+/// borrow check and raises `Already borrowed` rather than silently
+/// corrupting output.
 #[pyclass]
 pub struct StructuredRestorer {
     session: RestoreSession,
@@ -188,7 +169,18 @@ impl StructuredRestorer {
     }
 
     /// Restore one cell of text against the session's precomputed key.
-    fn restore_cell(&self, py: Python<'_>, text: &str) -> PyResult<String> {
+    ///
+    /// Takes `&mut self` (an EXCLUSIVE PyO3 borrow), matching `redact_cell` on
+    /// the redact side. A single-threaded / single-session caller is
+    /// unaffected — each call takes then releases the borrow. But because the
+    /// pure-Rust substitution runs under `py.detach` (interpreter lock
+    /// released), the exclusive borrow is held across a window in which another
+    /// thread can run: a concurrent call on a SHARED instance then trips the
+    /// runtime borrow check and raises `Already borrowed` rather than silently
+    /// splicing one caller's restored PII into another's output. A shared
+    /// borrow (`&self`) would let unlimited concurrent restores through, so the
+    /// documented single-session guarantee only holds with `&mut self`.
+    fn restore_cell(&mut self, py: Python<'_>, text: &str) -> PyResult<String> {
         py.detach(|| self.session.restore_cell(text))
             .map(|r| r.restored)
             .map_err(|e| PyValueError::new_err(e.to_string()))

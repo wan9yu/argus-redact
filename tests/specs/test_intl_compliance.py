@@ -20,7 +20,7 @@ _EXPECTED = {
     "rrn": (4, False, None),
     "nhs_number": (4, True, "medical_record"),  # health identifier
     "nino": (3, False, None),
-    "postcode": (2, False, None),
+    "postcode": (2, False, "geographic"),  # v0.8.10: postcode→geographic HIPAA (B)
     "aadhaar": (4, False, None),
     "pan": (3, False, None),
     "cpf": (4, False, None),
@@ -44,13 +44,29 @@ def test_intl_type_registered_with_compliance(name, expected):
     assert td.pipl_articles, f"{name} has no PIPL articles"
 
 
+def test_nhs_number_format_spec_does_not_overclaim_checksum():
+    """nhs_number ships NO MOD11 validator (`checksum` is unset on the typedef) —
+    any 10-digit run in a uk-routed doc is redacted as a health identifier
+    (fail-safe over-redaction, not checksum-gated). The free-text `format` spec
+    must say so, not claim checksum enforcement the implementation lacks."""
+    td = lookup("nhs_number")[0]
+    assert td.checksum is None, "no MOD11 validator is implemented for nhs_number"
+    fmt = td.format.lower()
+    assert "mod11" not in fmt and "mod 11" not in fmt, (
+        f"nhs_number format spec overclaims a checksum that isn't implemented: {td.format!r}"
+    )
+    assert "format-only" in fmt and "no checksum" in fmt, (
+        f"nhs_number format spec should state format-only / no-checksum-enforced: {td.format!r}"
+    )
+
+
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
 def test_nhs_number_assess_risk_flags_health():
     # The one health identifier must surface GDPR Art.9 special category + a HIPAA
     # PHI category through assess_risk (the report path), keyed on its own lang.
     import argus_redact._core as _core
 
-    _score, _level, _ents, _reasons, pipl, gdpr, hipaa = _core.assess_risk(
+    _score, _level, _ents, _reasons, pipl, gdpr, hipaa, _gdpr_art10 = _core.assess_risk(
         [("nhs_number", 4)], "uk"
     )
     assert gdpr is True
@@ -65,5 +81,7 @@ def test_foreign_tax_id_no_longer_understated():
     # the any-lang name fallback keeps it working under other langs).
     import argus_redact._core as _core
 
-    _score, _level, _ents, _reasons, pipl, _gdpr, _hipaa = _core.assess_risk([("tax_id", 3)], "de")
+    _score, _level, _ents, _reasons, pipl, _gdpr, _hipaa, _gdpr_art10 = _core.assess_risk(
+        [("tax_id", 3)], "de"
+    )
     assert pipl, "de tax_id must carry PIPL articles after registration"

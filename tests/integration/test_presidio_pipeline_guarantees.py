@@ -40,3 +40,52 @@ def test_presidio_returns_redacted_and_key():
     redacted, key = bridge.redact(text)
     # Some redaction must have happened
     assert redacted != text or len(key) > 0
+
+
+class _NoOpAnalyzer:
+    """Stub analyzer that always finds nothing — no presidio_analyzer install
+    required, since PresidioBridge(analyzer=...) bypasses AnalyzerEngine()."""
+
+    def analyze(self, *, text, language):
+        return []
+
+
+def test_presidio_empty_detection_still_routes_through_redact_pipeline():
+    """The empty-detection branch must run the SAME redact() pipeline as the
+    detected path — telemetry included — not an early return that skips it.
+    Before the fix, `if not results: return text, key or {}` short-circuited
+    before redact() ever ran, so telemetry never fired for empty detections.
+    """
+    from argus_redact.integrations.presidio import PresidioBridge
+    from argus_redact.telemetry import set_perf_hook
+
+    bridge = PresidioBridge(analyzer=_NoOpAnalyzer())
+    records = []
+    set_perf_hook(lambda r: records.append(r))
+    try:
+        redacted, key = bridge.redact("nothing sensitive here", language="en", salt=42)
+    finally:
+        set_perf_hook(None)
+
+    # Same return shape as the detected path: (redacted_text, key).
+    assert redacted == "nothing sensitive here"
+    assert key == {}
+    assert records, "empty-detection path must still run redact()'s telemetry emission"
+
+
+def test_presidio_empty_detection_with_existing_key_preserves_it():
+    """The empty-detection route (above) must also honor a pre-existing key: when
+    nothing new is detected, the returned key is value-equal to the key that was
+    passed in (object identity may differ) — not silently dropped or replaced
+    with a fresh empty dict.
+    """
+    from argus_redact.integrations.presidio import PresidioBridge
+
+    bridge = PresidioBridge(analyzer=_NoOpAnalyzer())
+    existing_key = {"P-1": "张三"}
+
+    _redacted, key = bridge.redact(
+        "nothing sensitive here", language="en", salt=42, key=existing_key
+    )
+
+    assert key == existing_key

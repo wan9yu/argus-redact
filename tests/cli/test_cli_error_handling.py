@@ -9,6 +9,9 @@ Three `cmd_redact` crashes fixed:
 
 from __future__ import annotations
 
+import subprocess
+import sys
+
 from tests.cli.conftest import run_cli
 
 
@@ -93,6 +96,65 @@ class TestTrailingCommaLang:
         assert code == 0, stderr
         assert "Traceback" not in stderr
         assert "13812345678" not in stdout
+
+
+class TestOversizedSeed:
+    def test_oversized_seed_gives_clean_error_not_traceback(self, tmp_path):
+        # int(args.seed) accepts arbitrarily large ints; the salt->8-byte
+        # coercion then raised an uncaught OverflowError (missed by the CLI's
+        # (ValueError, TypeError, FileNotFoundError) net) -> raw traceback.
+        key_file = tmp_path / "key.json"
+
+        code, stdout, stderr = run_cli(
+            "redact",
+            "-k",
+            str(key_file),
+            "-m",
+            "fast",
+            "-s",
+            "18446744073709551616",  # 2**64 — one past the 8-byte range
+            "--profile",
+            "pseudonym-llm",
+            stdin="电话13812345678",
+        )
+
+        assert code != 0
+        assert "Error:" in stderr
+        assert "Traceback" not in stderr
+        assert "OverflowError" not in stderr
+        assert "out of range" in stderr
+
+
+class TestNonUtf8Stdin:
+    def test_non_utf8_stdin_gives_clean_error_not_traceback(self, tmp_path):
+        # The file branch already guards UnicodeDecodeError; the stdin branch
+        # decoded raw bytes as UTF-8 with no guard -> raw traceback. run_cli
+        # pins text=True/encoding=utf-8, so bytes stdin needs a direct call.
+        key_file = tmp_path / "key.json"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "argus_redact.cli.main",
+                "redact",
+                "-k",
+                str(key_file),
+                "-m",
+                "fast",
+                "-s",
+                "42",
+            ],
+            input=b"\xff\xfe\x00 not utf-8",
+            capture_output=True,
+        )
+        stderr = result.stderr.decode("utf-8", errors="replace")
+
+        assert result.returncode == 1
+        assert "Error:" in stderr
+        assert "Traceback" not in stderr
+        assert "UnicodeDecodeError" not in stderr
+        assert "not valid UTF-8" in stderr
 
 
 class TestProfileConfigCliRegression:

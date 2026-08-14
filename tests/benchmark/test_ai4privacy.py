@@ -4,11 +4,9 @@ Run with: pytest tests/benchmark/test_ai4privacy.py -v -s --timeout=300
 Requires: pip install datasets
 """
 
-import importlib.util
-
 import pytest
 
-HAS_DATASETS = importlib.util.find_spec("datasets") is not None
+from tests.benchmark._ai4privacy_dataset import iter_examples
 
 pytestmark = pytest.mark.slow
 
@@ -31,11 +29,6 @@ DETECTABLE_LABELS = set(LABEL_MAP.keys())
 
 @pytest.fixture(scope="module")
 def benchmark_results():
-    if not HAS_DATASETS:
-        pytest.skip("datasets not installed")
-
-    from datasets import load_dataset
-
     from argus_redact.lang.de.patterns import PATTERNS as DE
     from argus_redact.lang.en.patterns import PATTERNS as EN
     from argus_redact.lang.in_.patterns import PATTERNS as IN
@@ -45,20 +38,12 @@ def benchmark_results():
 
     patterns = EN + DE + UK + IN + SHARED
 
-    ds = load_dataset(
-        "ai4privacy/pii-masking-400k",
-        split="train",
-        streaming=True,
-    )
-
     tp, fp, fn = 0, 0, 0
     per_type = {}
     n_examples = 0
     max_examples = 1000
 
-    for ex in ds:
-        if n_examples >= max_examples:
-            break
+    for ex in iter_examples(max_examples):
         n_examples += 1
 
         text = ex["source_text"]

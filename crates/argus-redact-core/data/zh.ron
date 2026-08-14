@@ -3,7 +3,7 @@
     PatternData(
         type_: r"phone",
         label: r"[手机号已脱敏]",
-        pattern: r"(?<!\d)(?:\+86)?1[3-9]\d(?:[\s-]?\d){8}(?!\d)",
+        pattern: r"(?<![0-9])(?:\+86)?1[3-9]\d(?:[\s-]?\d){8}(?![0-9])",
         check_context: true,
         description: r"Chinese mobile phone number (with optional spaces/dashes)",
         language_neutral: true,
@@ -11,14 +11,14 @@
     PatternData(
         type_: r"phone",
         label: r"[电话号已脱敏]",
-        pattern: r"(?<!\d)0[1-9]\d{1,2}-?\d{7,8}(?!\d)",
+        pattern: r"(?<![0-9])0[1-9]\d{1,2}-?\d{7,8}(?![0-9])",
         description: r"Chinese landline phone number",
         language_neutral: true,
     ),
     PatternData(
         type_: r"id_number",
         label: r"[身份证号已脱敏]",
-        pattern: r"(?<!\d)[1-9]\d{5}[\s-]?(?:19|20)\d{2}[\s-]?(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])[\s-]?\d{3}[\dXx](?!\d)",
+        pattern: r"(?<![0-9])[1-9]\d{5}[\s-]?(?:19|20)\d{2}[\s-]?(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])[\s-]?\d{3}[\dXx](?![0-9])",
         validator: Some(r"gb11643_mod11"),
         description: r"Chinese 18-digit national ID (MOD 11-2)",
         language_neutral: true,
@@ -26,7 +26,7 @@
     PatternData(
         type_: r"id_number",
         label: r"[身份证号已脱敏]",
-        pattern: r"(?<!\d)[1-9]\d{5}(?:[2-9]\d)(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}(?!\d)",
+        pattern: r"(?<![0-9])[1-9]\d{5}(?:[2-9]\d)(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}(?![0-9])",
         description: r"Chinese 15-digit national ID (pre-1999, no checksum)",
         language_neutral: true,
     ),
@@ -40,26 +40,26 @@
     PatternData(
         type_: r"tw_id",
         label: r"[TWID-REDACTED]",
-        pattern: r"(?<![A-Za-z0-9])[A-Z]\d{9}(?!\d)",
+        pattern: r"(?<![A-Za-z0-9])[A-Z]\d{9}(?![0-9])",
         validator: Some(r"twid"),
         description: r"Taiwan (ROC) national ID (1 letter + 9 digits, weighted mod-10)",
     ),
     PatternData(
         type_: r"macau_id",
         label: r"[MACAU-ID-REDACTED]",
-        pattern: r"(?<!\d)[1-9]/\d{6}/\d(?!\d)",
+        pattern: r"(?<![0-9])[1-9]/\d{6}/\d(?![0-9])",
         description: r"Macau Resident ID Card — format-only (no public check-digit algorithm)",
     ),
     PatternData(
         type_: r"taiwan_arc",
         label: r"[ARC-REDACTED]",
-        pattern: r"(?<![A-Za-z0-9])[A-Z]{2}\d{8}(?!\d)",
+        pattern: r"(?<![A-Za-z0-9])[A-Z]{2}\d{8}(?![0-9])",
         description: r"Taiwan Alien Resident Certificate (post-2020 LL+8-digit format)",
     ),
     PatternData(
         type_: r"bank_card",
         label: r"[银行卡号已脱敏]",
-        pattern: r"(?<!\d)[3-6]\d{3}(?:[\s-]?\d{4}){2,3}[\s-]?\d{1,4}(?!\d)",
+        pattern: r"(?<![0-9])[3-6]\d{3}(?:[\s-]?\d{4}){2,3}[\s-]?\d{1,4}(?![0-9])",
         validator: Some(r"cn_bank_card"),
         check_context: true,
         description: r"Bank card number (16-19 digits, optional spaces/dashes, Luhn or BIN prefix)",
@@ -67,7 +67,7 @@
     PatternData(
         type_: r"passport",
         label: r"[护照号已脱敏]",
-        pattern: r"(?:护照\s*(?:号[码]?\s*)?[:：]?\s*)(?P<passport>[A-Z]\d{8})(?!\d)",
+        pattern: r"(?:护照\s*(?:号[码]?\s*)?[:：]?\s*)(?P<passport>[A-Z]\d{8})(?![0-9])",
         group: Some(r"passport"),
         description: r"Chinese passport number (keyword-triggered, reduces false positives)",
     ),
@@ -93,7 +93,7 @@
     PatternData(
         type_: r"qq",
         label: r"[QQ号已脱敏]",
-        pattern: r"[Qq]{2}\s*(?:[:：是]?\s*)(?P<qq>[1-9]\d{4,11})(?!\d)",
+        pattern: r"[Qq]{2}\s*(?:[:：是]?\s*)(?P<qq>[1-9]\d{4,11})(?![0-9])",
         group: Some(r"qq"),
         description: r"QQ number (5-12 digits, requires QQ keyword context)",
     ),
@@ -143,7 +143,7 @@
     PatternData(
         type_: r"hrp",
         label: r"[回乡证已脱敏]",
-        pattern: r"(?:港澳居民来往内地通行证(?:号码?)?|来往内地通行证(?:号码?)?|回乡证(?:号码?)?|回乡卡|Home\s*Return\s*Permit)\s*(?:[:：是为]?\s*)(?P<hrp>[HM]\d{8}(?:\d{2})?)(?!\d)",
+        pattern: r"(?:港澳居民来往内地通行证(?:号码?)?|来往内地通行证(?:号码?)?|回乡证(?:号码?)?|回乡卡|Home\s*Return\s*Permit)\s*(?:[:：是为]?\s*)(?P<hrp>[HM]\d{8}(?:\d{2})?)(?![0-9])",
         group: Some(r"hrp"),
         check_context: true,
         description: r"HRP (港澳居民来往内地通行证/回乡证) — H/M-prefix, 9(+2) digits, no public checksum, anchor-required",
@@ -151,7 +151,7 @@
     PatternData(
         type_: r"housing_fund",
         label: r"[公积金账号已脱敏]",
-        pattern: r"(?:住房公积金|公积金)(?:账号码?|账户|帐号码?|帐户)\s*(?:[:：是为]?\s*)(?P<housing_fund>[0-9]{6,20})(?!\d)",
+        pattern: r"(?:住房公积金|公积金)(?:账号码?|账户|帐号码?|帐户)\s*(?:[:：是为]?\s*)(?P<housing_fund>[0-9]{6,20})(?![0-9])",
         group: Some(r"housing_fund"),
         check_context: true,
         description: r"Housing provident fund account — no national format, anchor-required, digits only",

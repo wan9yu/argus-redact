@@ -15,13 +15,13 @@
     PatternData(
         type_: r"phone",
         label: r"[PHONE]",
-        pattern: r"(?:\+44|0044|0)[-\s]?\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}(?!\d)",
+        pattern: r"(?:\+44|0044|0)[-\s]?\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}(?![0-9])",
         description: r"UK phone number",
     ),
     PatternData(
         type_: r"nhs_number",
         label: r"[NHS NUMBER]",
-        pattern: r"(?<!\d)\d{3}\s?\d{3}\s?\d{4}(?!\d)",
+        pattern: r"(?<![0-9])\d{3}\s?\d{3}\s?\d{4}(?![0-9])",
         description: r"UK NHS number (10 digits)",
     ),
 ]

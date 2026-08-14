@@ -25,6 +25,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
 
 use argus_redact_wasm::{redact, restore};
@@ -287,7 +288,7 @@ fn golden_fast_mode_byte_parity() {
         // 3. restore(redacted, key) recovers the ORIGINAL input exactly.
         let key_js = serde_wasm_bindgen::to_value(&out.key)
             .unwrap_or_else(|e| panic!("[{}] key serialize failed: {e}", case.label));
-        let restored = restore(&out.text, key_js)
+        let restored = restore(&out.text, key_js, JsValue::UNDEFINED)
             .unwrap_or_else(|e| panic!("[{}] restore errored: {e:?}", case.label));
         assert_eq!(
             restored, case.text,

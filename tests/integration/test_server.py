@@ -1,13 +1,34 @@
 """Tests for HTTP API server — using Starlette TestClient (in-process, coverage tracked)."""
 
 import importlib.util
+import json
 
 import pytest
+
+from tests.integration.conftest import _lifespan_running, _make_app, _yield_until
 
 HAS_STARLETTE = importlib.util.find_spec("starlette") is not None
 HAS_HTTPX = importlib.util.find_spec("httpx") is not None
 
 pytestmark = pytest.mark.skipif(not HAS_STARLETTE, reason="starlette not installed")
+
+_REAL_FIND_SPEC = importlib.util.find_spec
+
+
+def _patch_ner_engines(monkeypatch, *, hanlp: bool, spacy: bool):
+    """Force ``importlib.util.find_spec`` to report hanlp/spaCy availability,
+    delegating every other name (including the adapter-module checks) to the real
+    lookup — mirrors the CLI/MCP info-honesty tests so the /info face is held to
+    the same NER-gating contract."""
+
+    def fake(name, *args, **kwargs):
+        if name == "hanlp":
+            return object() if hanlp else None
+        if name == "spacy":
+            return object() if spacy else None
+        return _REAL_FIND_SPEC(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.util, "find_spec", fake)
 
 
 @pytest.fixture(scope="module")
@@ -23,7 +44,10 @@ def client():
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SecurityWarning)
-        return TestClient(create_app(allow_no_auth=True))
+        app = create_app(allow_no_auth=True)
+
+    with TestClient(app) as client:
+        yield client
 
 
 class TestServerRedact:
@@ -196,6 +220,55 @@ class TestServerRestore:
         assert r2.status_code == 200
         assert "13812345678" in r2.json()["restored"]
 
+    def test_should_restore_alternate_transliteration_via_aliases_field(self, client):
+        r = client.post(
+            "/restore",
+            json={
+                "text": "Wang Wu phoned",
+                "key": {"王五": "王建国"},
+                "aliases": {"王五": ["Wang Wu"]},
+                "guard": False,
+            },
+        )
+
+        assert r.status_code == 200
+        assert r.json()["restored"] == "王建国 phoned"
+
+    def test_should_reject_non_object_aliases(self, client):
+        r = client.post(
+            "/restore",
+            json={"text": "x", "key": {}, "aliases": ["not", "an", "object"], "guard": False},
+        )
+
+        assert r.status_code == 400
+
+    def test_should_reject_non_str_alias_elements(self, client):
+        # A well-formed JSON object with LIST values but a non-str element
+        # (e.g. a number) passed the old list-only check and only surfaced as
+        # a ValueError from restore()'s own seam, offloaded behind
+        # _run_scan's CapacityLimiter/deadline. The pre-check now rejects it
+        # up front too, so this stays a deterministic 400 under load.
+        r = client.post(
+            "/restore",
+            json={"text": "x", "key": {}, "aliases": {"P-1": [123]}, "guard": False},
+        )
+
+        assert r.status_code == 400
+
+    def test_should_strip_display_marker_field(self, client):
+        r = client.post(
+            "/restore",
+            json={
+                "text": "P-037ⓥ说了话",
+                "key": {"P-037": "王五"},
+                "display_marker": "ⓥ",
+                "guard": False,
+            },
+        )
+
+        assert r.status_code == 200
+        assert r.json()["restored"] == "王五说了话"
+
 
 class TestServerInfo:
     def test_should_return_info(self, client):
@@ -214,6 +287,43 @@ class TestServerInfo:
         for code, info in data["languages"].items():
             assert info["patterns"] > 0, f"{code}: expected non-zero patterns"
             assert isinstance(info["ner"], bool), f"{code}: ner field should be a bool"
+
+
+class TestServerInfoHonesty:
+    """The HTTP /info `ner` field must reflect TRUE Layer-2 engine availability
+    (ner_engine_available), not merely that the adapter module imports — the same
+    NER-gating honesty the CLI `info` and MCP `redact_info` faces already enforce.
+
+    Before v0.8.12, /info derived `ner` from a raw adapter-module `find_spec`, so
+    it reported `ner: true` even with hanlp/spaCy absent — an over-claim the other
+    two faces did not make. handle_info now routes through the shared
+    `lang_capabilities`, closing that gap.
+    """
+
+    def test_ner_flag_false_when_engines_absent(self, monkeypatch):
+        import asyncio
+
+        from argus_redact.server import handle_info
+
+        _patch_ner_engines(monkeypatch, hanlp=False, spacy=False)
+
+        resp = asyncio.run(handle_info(None))
+        data = json.loads(resp.body)
+        assert all(not info["ner"] for info in data["languages"].values()), (
+            "/info must not report ner: true when neither hanlp nor spacy is installed"
+        )
+
+    def test_ner_flag_true_when_engines_installed(self, monkeypatch):
+        import asyncio
+
+        from argus_redact.server import handle_info
+
+        _patch_ner_engines(monkeypatch, hanlp=True, spacy=True)
+
+        resp = asyncio.run(handle_info(None))
+        data = json.loads(resp.body)
+        assert data["languages"]["zh"]["ner"] is True
+        assert data["languages"]["en"]["ner"] is True
 
 
 class TestServerHealth:
@@ -235,7 +345,8 @@ def auth_client():
     from argus_redact.server import create_app
 
     app = create_app()
-    yield TestClient(app)
+    with TestClient(app) as client:
+        yield client
     del os.environ["ARGUS_API_KEY"]
 
 
@@ -351,51 +462,61 @@ class TestServerConcurrency:
     concurrent request, including a plain ``GET /health``, behind one
     expensive ``/redact`` call. ``run_in_threadpool`` offloads the call so the
     GIL-released scan and the loop's ability to serve others actually compose.
+
+    These drive the app's own ASGI lifespan (``_lifespan_running``) — httpx's
+    ``ASGITransport`` does not, and the scan task group now lives on
+    ``app.state`` — and gate on a ``threading.Event`` the fake scan sets when it
+    enters its worker thread, so the ordering fact is observed deterministically
+    (no wall-clock ``sleep`` as a synchronization primitive).
     """
 
     @pytest.mark.asyncio
     async def test_slow_redact_does_not_block_a_concurrent_health_check(self, monkeypatch):
         import asyncio
-        import time
+        import threading
 
         import httpx
         from httpx import ASGITransport
 
-        from argus_redact import server as server_module
-
-        slow_seconds = 1.0
+        entered = threading.Event()  # set on the worker thread once the scan runs
+        release = threading.Event()  # the test frees the still-running scan
 
         def _slow_redact(*args, **kwargs):
-            # Stands in for the GIL-detached blocking scan: a plain
-            # synchronous sleep occupies the calling thread exactly like a
-            # long Rust-core call would, without the cost of a real scan.
-            time.sleep(slow_seconds)
+            # Stands in for the GIL-detached blocking scan: occupies the WORKER
+            # thread (like a long Rust-core call) until the test releases it —
+            # gated, never a wall-clock sleep used as synchronization.
+            entered.set()
+            assert release.wait(timeout=10), "scan gate was never released"
             return "redacted", {}
 
-        monkeypatch.setattr(server_module, "redact", _slow_redact)
+        # String target (not a `server as server_module` handle) so the local
+        # import stays unused-free; the handler resolves `_redact_impl` (the
+        # internal scan seam the /redact path calls) at call time.
+        monkeypatch.setattr("argus_redact.server._redact_impl", _slow_redact)
         # Independent of whatever ARGUS_API_KEY state another test in this
         # module left behind (TestServerAuth's module-scoped fixture sets it
         # for the whole file) — this test wants the unauthenticated app.
         monkeypatch.delenv("ARGUS_API_KEY", raising=False)
 
-        app = server_module.create_app(allow_no_auth=True)
+        app = _make_app()
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
-            redact_task = asyncio.create_task(ac.post("/redact", json={"text": "x"}))
-            # Give the slow request a head start so a non-offloaded (inline)
-            # handler is already occupying the event loop by the time the
-            # health check is fired.
-            await asyncio.sleep(0.05)
-            health_resp = await ac.get("/health")
-            # Timing-robust discriminator: capture whether the slow /redact call
-            # is STILL in flight at the instant /health returned. Inline, the
-            # blocking call owns the single event-loop thread until it returns,
-            # so /health cannot complete before redact_task — it would already
-            # be `.done()` here. Offloaded to a threadpool, the loop stays free
-            # and /health returns first. This is an ordering fact, immune to
-            # absolute wall-clock contention (no `elapsed < X` threshold).
-            redact_still_in_flight = not redact_task.done()
-            redact_resp = await redact_task
+        async with _lifespan_running(app):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+                redact_task = asyncio.create_task(ac.post("/redact", json={"text": "x"}))
+                try:
+                    # Gate on the slow scan actually occupying its worker thread
+                    # (not a fixed head-start sleep); then fire the health check.
+                    await _yield_until(entered.is_set)
+                    health_resp = await ac.get("/health")
+                    # Ordering fact (no wall-clock threshold): the slow /redact is
+                    # STILL in flight at the instant /health returned. Inline, the
+                    # blocking call owns the single event-loop thread until it
+                    # returns, so /health could not complete first. Offloaded, the
+                    # loop stays free and /health returns while /redact is blocked.
+                    redact_still_in_flight = not redact_task.done()
+                finally:
+                    release.set()
+                redact_resp = await redact_task
 
         assert health_resp.status_code == 200
         assert health_resp.json() == {"status": "ok"}
@@ -412,34 +533,38 @@ class TestServerConcurrency:
         # Symmetric to the /redact case: handle_restore offloads its core call
         # too, so an expensive /restore must not stall a concurrent /health.
         import asyncio
-        import time
+        import threading
 
         import httpx
         from httpx import ASGITransport
 
-        from argus_redact import server as server_module
-
-        slow_seconds = 1.0
+        entered = threading.Event()
+        release = threading.Event()
 
         def _slow_restore(*args, **kwargs):
-            time.sleep(slow_seconds)
+            entered.set()
+            assert release.wait(timeout=10), "scan gate was never released"
             return "restored", {}
 
-        monkeypatch.setattr(server_module, "restore", _slow_restore)
+        monkeypatch.setattr("argus_redact.server.restore", _slow_restore)
         monkeypatch.delenv("ARGUS_API_KEY", raising=False)
 
-        app = server_module.create_app(allow_no_auth=True)
+        app = _make_app()
         transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
-            # guard=False with no anchor is the legacy round-trip path; it still
-            # reaches the offloaded restore() call.
-            restore_task = asyncio.create_task(
-                ac.post("/restore", json={"text": "x", "key": {}, "guard": False})
-            )
-            await asyncio.sleep(0.05)
-            health_resp = await ac.get("/health")
-            restore_still_in_flight = not restore_task.done()
-            restore_resp = await restore_task
+        async with _lifespan_running(app):
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+                # guard=False with no anchor is the legacy round-trip path; it
+                # still reaches the offloaded restore() call.
+                restore_task = asyncio.create_task(
+                    ac.post("/restore", json={"text": "x", "key": {}, "guard": False})
+                )
+                try:
+                    await _yield_until(entered.is_set)
+                    health_resp = await ac.get("/health")
+                    restore_still_in_flight = not restore_task.done()
+                finally:
+                    release.set()
+                restore_resp = await restore_task
 
         assert health_resp.status_code == 200
         assert health_resp.json() == {"status": "ok"}
@@ -450,3 +575,49 @@ class TestServerConcurrency:
             "event loop was blocked by an inline core call instead of offloading "
             "it to a threadpool thread"
         )
+
+
+@pytest.mark.skipif(not HAS_HTTPX, reason="httpx not installed")
+class TestServerNotReadyWithoutLifespan:
+    """A bare ``create_app()`` whose ASGI lifespan never ran has no scan task
+    group on ``app.state``. A scan request must fail fast with **503** (service
+    not ready) — not a 500 from an unhandled ``RuntimeError``, and not an
+    ``AttributeError`` from reading an unset ``app.state.task_group``. httpx's
+    ``ASGITransport`` deliberately does NOT run the lifespan here, which is
+    exactly the misuse this guards."""
+
+    @pytest.mark.asyncio
+    async def test_redact_without_lifespan_returns_503(self, monkeypatch):
+        import httpx
+        from httpx import ASGITransport
+
+        monkeypatch.delenv("ARGUS_API_KEY", raising=False)
+
+        app = _make_app()
+        transport = ASGITransport(app=app)
+        # No `_lifespan_running`: the lifespan never runs, so the task group is
+        # never installed on app.state.
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.post("/redact", json={"text": "x", "mode": "fast"})
+
+        assert resp.status_code == 503
+        body = resp.json()
+        assert isinstance(body.get("error"), str) and body["error"], (
+            "503 must carry a well-formed contract error body"
+        )
+
+    @pytest.mark.asyncio
+    async def test_restore_without_lifespan_returns_503(self, monkeypatch):
+        # Both handler ladders map _ServerNotReady -> 503, not just /redact.
+        import httpx
+        from httpx import ASGITransport
+
+        monkeypatch.delenv("ARGUS_API_KEY", raising=False)
+
+        app = _make_app()
+        transport = ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+            resp = await ac.post("/restore", json={"text": "x", "key": {}, "guard": False})
+
+        assert resp.status_code == 503
+        assert isinstance(resp.json().get("error"), str) and resp.json()["error"]

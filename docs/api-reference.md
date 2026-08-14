@@ -123,7 +123,7 @@ redacted, key, details = redact("张三在星巴克", detailed=True)
 | LLM detection (Layer 3) | No | LLM output may vary | Mock LLM response |
 | `key=dict` | Yes | No I/O, no mutation of input dict | — |
 | `key=str` (file path) | No — file I/O | Reads and writes the file system | Use `key=dict` in tests |
-| `restore()` | **Yes** | Pure string replacement, fully deterministic | — |
+| `restore()` | **Yes** | Deterministic substitution; the v0.8.0+ provenance/scope guard is deterministic too | — |
 
 **Rule for tests:** Use `salt` + `key=dict` + `mode="fast"` and your tests become fully deterministic with zero side effects:
 
@@ -162,10 +162,11 @@ restored = restore("any text", {})
 # restored = "any text"
 
 # Pseudonym appears as substring in a word — still matched
-redacted, key = redact("王五说了话")
-# redacted = "P-037说了话"
-restored = restore("关于P-037的建议", key, guard=False)  # local text, no LLM round-trip
-# "关于王五的建议"  ← P-037 matched even without whitespace boundaries
+redacted, key = redact("王五说了话", names=["王五"])
+# redacted → "<P-code>说了话"; the P-code is random, e.g. "P-22560" (not sequential)
+(code,) = key                        # exactly one entity was detected
+restored = restore(f"关于{code}的建议", key, guard=False)  # local text, no LLM round-trip
+# "关于王五的建议"  ← the pseudonym matched even without whitespace boundaries
 
 # Unknown pseudonyms left unchanged
 restored = restore("P-999 is unknown", {"P-037": "王五"})
@@ -588,7 +589,7 @@ except RestoreGuardError as e:
 
 ### Behavior
 
-- **Exact string replacement.** `P-037` in text → looked up in key → replaced with original.
+- **Exact substring match.** `P-037` in text → looked up in key → replaced with original (this substitution is what runs once the guard, above, lets the restore proceed).
 - **Longer replacements first.** `[某公司总部]` is matched before `[某公司]` to avoid partial replacement.
 - **Unknown pseudonyms are left unchanged.** If the text contains `P-099` but the key has no `P-099`, it stays as `P-099`.
 - **Cross-language aliases** *(v0.6.0+, via `aliases=` kwarg)*: alternates in `aliases` are added to the alternation alongside the canonical fake. If an LLM transliterates `张三` into `Zhang San`, both forms map back to the original. Pass `result.aliases` from `redact_pseudonym_llm()` to enable.
@@ -1146,7 +1147,7 @@ from argus_redact import (
 )
 
 PIPL_REFERENCES["phone"]
-# ('PIPL Art.13', 'PIPL Art.28', 'PIPL Art.51', 'PIPL Art.29', 'PIPL Art.56')
+# ('PIPL Art.13', 'PIPL Art.51')
 
 GDPR_SPECIAL_CATEGORIES["medical"]
 # True
@@ -1395,6 +1396,8 @@ restorer = StreamingRestorer(dict(result.key), aliases=dict(result.aliases))
 
 `StreamingRestorer(key, max_buffer=4096)` bounds the "sentence" strategy's buffer the same way `StreamingRedactor` does: a reply that never emits a sentence terminator is force-flushed once the buffer exceeds `max_buffer`, instead of accumulating without limit. The straddle tail sits on top of that as fixed headroom, so the real bound is `max(max_buffer, longest fake)` — a token is never split just to satisfy the buffer bound.
 
+**Single-session, not thread-safe.** Construct one `StreamingRestorer` per thread / per session, same as `StreamingRedactor` above; do not share one instance across threads. `feed()`/`flush()` borrow the underlying Rust restore session's state on every call, so a concurrent call on a shared instance from another thread raises `Already borrowed` instead of corrupting output.
+
 ---
 
 ## Structured Data
@@ -1404,7 +1407,7 @@ Redact PII in JSON structures and CSV strings:
 ```python
 from argus_redact.structured import redact_json, restore_json, redact_csv, restore_csv
 
-# JSON — recursively walks all string values
+# JSON — recursively walks all scalar leaf values
 data = {"user": {"name": "张三", "phone": "13812345678"}, "action": "login"}
 redacted, key = redact_json(data, mode="fast")
 restored = restore_json(redacted, key)
@@ -1415,6 +1418,10 @@ redacted_csv, key = redact_csv(csv_text, mode="fast")
 restored_csv = restore_csv(redacted_csv, key)
 ```
 
+**Scalar leaves, not just strings.** `redact_json` scans every scalar leaf VALUE — strings, `int`/`float`, `Decimal`, `UUID`, and utf-8 `bytes`/`bytearray` (a national ID stored as a JSON number, a SQL `NUMERIC`, or a msgpack byte string all get redacted); a non-string leaf with no detectable PII passes through byte-for-byte with its original type. Dict KEYS are preserved verbatim (structural identifiers, like a CSV header). A leaf whose type cannot be coerced to text — a non-utf-8 byte string, an arbitrary object — is forwarded unchanged and emits a PII-free `SecurityWarning` (path + type name). Pass `on_unscannable="raise"` to fail CLOSED instead: `redact_json` then raises `TypeError` naming those leaves before any document or key is returned, so a security-conscious pipeline never forwards an un-scanned value (mirrors `redact_body(on_missing_field="raise")`).
+
+**Unguarded by design.** `restore_json` / `restore_csv` apply `key` (+ optional `aliases=`) mechanically over every leaf/cell, with no per-call anchor — unlike the scalar `restore()` / `restore_guarded()` faces, which guard by default since v0.8.0 (see [`guard=True` is the default](#guardtrue-is-the-default-v080)). Threading that same provenance/scope guard through structured restore is a cross-layer redesign, not a parameter add, so it stays out of scope here; if a document came back from an LLM reply you don't fully trust, restore the plain text through `guarded_restore()` yourself instead. A benign leaf/cell that happens to equal one of `key`'s pseudonym codes is also restored — see each function's docstring for the same collision hazard `restore()` documents.
+
 ---
 
 ## Limitations
@@ -1424,5 +1431,6 @@ restored_csv = restore_csv(redacted_csv, key)
 | YAML config requires `pyyaml` | Pass dict or JSON file path if pyyaml not installed |
 | Streaming restore is sentence-based | Pseudonyms split across chunks are buffered until a sentence boundary |
 | `StreamingRestorer` is unguarded | No per-call anchor mid-stream; a one-time `SecurityWarning` fires on the first real substitution, and the buffer is capped (`max_buffer`, default 4096) |
+| `restore_json` / `restore_csv` are unguarded | Same reasoning as `StreamingRestorer` above — a stored key applied over a whole document with no per-call anchor. A benign leaf/cell that coincidentally equals a pseudonym code is also restored (see [Structured Data](#structured-data)) |
 | `restore()` is global replacement | If LLM output naturally contains a pseudonym pattern, it gets replaced. Use a unique `prefix` in `config` to minimize risk |
 | Pseudonym codes auto-expand | 5-digit codes (99,999 per prefix); automatically expands range on exhaustion |

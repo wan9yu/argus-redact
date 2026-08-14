@@ -8,8 +8,7 @@ import pytest
 from argus_redact import redact
 from argus_redact.pure.replacer import (
     VALID_STRATEGIES,
-    _faker_reserved_cached,
-    _find_faker_reserved,
+    _clear_faker_caches,
     _resolve_realistic_faker,
     replace,
 )
@@ -119,7 +118,7 @@ class TestRealisticStrategy:
 
 
 class TestLangAwareLookup:
-    """`_find_faker_reserved` must prefer entity's detected lang, then 'shared', then any.
+    """`_resolve_realistic_faker` must prefer entity's detected lang, then 'shared', then any.
 
     Critical for v0.5.1 where en + zh both register `phone`/`address`/`person`.
     """
@@ -142,14 +141,14 @@ class TestLangAwareLookup:
                 faker_reserved=_en_phone_faker,
             )
         )
-        _faker_reserved_cached.cache_clear()
+        _clear_faker_caches()
 
     def teardown_method(self):
         if self._original_en_phone is not None:
             register(self._original_en_phone)
         else:
             unregister("en", "phone")
-        _faker_reserved_cached.cache_clear()
+        _clear_faker_caches()
 
     def test_should_prefer_detected_lang(self):
         # v0.7.5: built-in zh/phone is callable-less; lang preference resolves
@@ -169,12 +168,11 @@ class TestLangAwareLookup:
 
     def test_should_fall_through_to_shared_when_lang_not_registered(self):
         # 'ja' not registered → falls through; with no shared/phone, returns first available
-        faker = _find_faker_reserved("phone", ["ja"])
-        # Either zh or en faker is acceptable as fallback (any-match)
-        assert faker is not None
+        # (zh built-in or en custom — either is acceptable as fallback, any-match).
+        assert _resolve_realistic_faker("phone", ["ja"]) is not None
 
     def test_should_return_none_when_no_faker_reserved_anywhere(self):
-        assert _find_faker_reserved("nonexistent_type_xyz", ["zh", "en"]) is None
+        assert _resolve_realistic_faker("nonexistent_type_xyz", ["zh", "en"]) is None
 
     def test_replace_should_use_lang_preference(self):
         # When replace() gets langs=["en"], should pick en faker for phone

@@ -197,6 +197,35 @@ Argus Gateway is the canonical enterprise downstream. The OSS↔Gateway boundary
 These are **different layers, not an upsell funnel**. Both can exist
 independently and serve different audiences.
 
+#### Layer-status value sets on the wire
+
+A downstream that threads payloads through the wire faces (the gateway does)
+reads the per-run layer status out of the redact envelope's `stats` block. Both
+keys are always present; their values come from a fixed, closed set. The full
+contract that governs these keys — and why adding a value is compatible but
+removing one is not — is [`docs/stability-contract.md`](stability-contract.md).
+
+`stats.layer_2_status` (NER layer) is one of:
+
+| value | meaning |
+|---|---|
+| `skipped` | Layer 2 did not run this call — either the mode did not request it (`fast`), or a model was present but the run was hint-gated out for this text. |
+| `no_model` | Layer 2 was requested (`mode="auto"`) but no NER model is installed; the call degraded to Layer 1 only. |
+| `partial` | Layer 2 ran, but at least one requested language's model could not load, so coverage is narrower than asked for. |
+| `ok` | Layer 2 ran and every requested language that has a model contributed. |
+
+`stats.layer_3_status` (semantic LLM layer) is one of:
+
+| value | meaning |
+|---|---|
+| `skipped` | Layer 3 did not run — `mode` was not `"auto"`, or no semantic adapter is configured. |
+| `ok` | Layer 3 ran and returned. |
+| `error` | the Layer-3 adapter raised; the call continued with Layer 1 + Layer 2 and recorded the failure here (**not** `ok`). |
+
+A consumer should treat any value it does not recognise as "not `ok`" rather
+than assuming coverage — a new status value would only ever narrow, never widen,
+what a run is claimed to have covered.
+
 ---
 
 ## How to decide where a new feature belongs

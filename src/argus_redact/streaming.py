@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import bisect
 import dataclasses
+import threading
 import warnings
 
 from argus_redact._core_loader import _core
@@ -28,10 +29,12 @@ from argus_redact.glue._detect_partial import (
 )
 from argus_redact.glue.redact_pseudonym_llm import (
     _check_input_pollution,
+    _put_key_checked,
+    _salt_to_bytes,
     redact_pseudonym_llm,
 )
 from argus_redact.pure.replacer import warn_alias_collisions, warn_coverage_restored
-from argus_redact.pure.restore import make_structured_restorer
+from argus_redact.pure.restore import _normalize_aliases, make_structured_restorer
 
 
 def _empty_result() -> PseudonymLLMResult:
@@ -106,6 +109,16 @@ class StreamingRestorer:
     reinserts a pseudonym, the instance emits a one-time ``SecurityWarning``
     naming that risk.
 
+    Thread safety: construct one ``StreamingRestorer`` per thread / per
+    session; do NOT share a single instance across threads. Internally it
+    holds a `_core.StructuredRestorer` session, and ``feed()``/``flush()``
+    borrow that session's Rust-side state on every call — a concurrent call
+    on a SHARED instance from another thread (or a concurrent
+    ``wipe()``/``close()`` on the underlying session) hits the runtime borrow
+    check and raises ``Already borrowed``. Mirrors the single-session
+    contract ``StreamingRedactor`` documents above (construct one per logical
+    session and discard it when done).
+
     Usage:
         restorer = StreamingRestorer(key)
         for chunk in llm_stream:
@@ -127,12 +140,16 @@ class StreamingRestorer:
         *,
         aliases: dict[str, tuple[str, ...]] | None = None,
     ):
+        # FIRST statement: `_normalize_aliases` both validates AND coerces —
+        # the historical `{k: tuple(v) for k, v in (aliases or {}).items()}`
+        # here blindly mangled a bare string into a per-character tuple
+        # (`"abc"` -> `('a', 'b', 'c')`) instead of rejecting it.
+        self._aliases = _normalize_aliases(aliases)
         # dict(key): the session copies the key anyway, so aliasing the
         # caller's dict here would let a post-construction mutation change
         # _force_flush_split's hold decisions while the restorable set stayed
         # frozen — the two halves of the class disagreeing about the key.
         self._key = dict(key)
-        self._aliases = {k: tuple(v) for k, v in (aliases or {}).items()}
         # Precompiles the key/alias merge + regex once, up front, instead of
         # re-merging/re-compiling on every feed()/flush() call — mirrors
         # StreamingRedactor's one-time setup cost. self._key is kept
@@ -174,6 +191,15 @@ class StreamingRestorer:
         # itself (a prefix SET would be the key size times the fake length).
         self._sorted_restorable = sorted(restorable)
         self._buffer = ""
+        # Serialises the buffer read-modify-write in feed()/flush(). Without it
+        # two threads sharing one instance interleave `self._buffer += chunk` /
+        # split / `self._buffer = residual` at an interpreter switch point and
+        # splice each other's tokens into the buffer. The lock makes that RMW
+        # atomic; the underlying Rust session's `restore_cell` (`&mut self`)
+        # runs OUTSIDE it, so a genuinely concurrent restore still trips the
+        # runtime borrow check and raises `Already borrowed` rather than
+        # corrupting output — one instance per session remains the contract.
+        self._lock = threading.Lock()
         if strategy not in ("sentence", "none"):
             raise ValueError(f"Unknown strategy '{strategy}'. Use 'sentence' or 'none'.")
         self._strategy = strategy
@@ -208,12 +234,21 @@ class StreamingRestorer:
         )
         self._warned = True
 
-    def _force_flush_split(self) -> tuple[str, str]:
-        """Bounded-drain split: flush the buffer up to the last position that is
-        safe to cut, holding back the tail that a later chunk could still change
-        the meaning of.
+    def _hold_back(self, text: str) -> int:
+        """Number of trailing chars of ``text`` that are unsafe to cut after,
+        because a later chunk could still change what they mean.
 
-        The held-back tail is the longest buffer suffix that is a prefix of some
+        This is the shared straddle-safety step. BOTH flush paths route through
+        it: the ``"none"`` strategy (and the sentence strategy's max_buffer
+        force-flush) apply it to the whole buffer via ``_force_flush_split``, and
+        the sentence strategy applies it to the ``complete`` half of its boundary
+        split (see ``feed``) — a sentence boundary can fall INSIDE a restorable
+        that contains ``". "`` (the built-in en fake ``John Q. Public``, every
+        ``Mr./Dr. <Surname>`` honorific alias), and without this hold-back the
+        split would cut the restorable in two and leave the pseudonym
+        unrestored.
+
+        The held tail is the longest ``text`` suffix that is a prefix of some
         restorable string (a key ``fake`` or one of its ``aliases``), INCLUDING
         the whole string. Two distinct hazards, one scan:
 
@@ -234,17 +269,16 @@ class StreamingRestorer:
         ``bounded_drain_cut`` in ``crates/argus-redact-core/src/streaming.rs``),
         adapted to restore's exact-string keys instead of detected entity spans.
 
-        Forward progress and the memory bound both follow from ``hold <=
-        self._longest``: once the buffer exceeds that fixed headroom the cut is
-        necessarily >= 1, so the buffer is bounded by ``max(max_buffer,
-        longest)`` and no token is ever split to satisfy the bound.
+        Forward progress and the memory bound both follow from the returned hold
+        being ``<= max(max_buffer, longest)``: once the buffer exceeds that fixed
+        headroom the cut is necessarily >= 1, so the buffer is bounded and no
+        token is ever split to satisfy the bound.
         """
-        buffer = self._buffer
         hold = 0
         # `self._longest` (not `- 1`): a trailing COMPLETE match is held too.
         # Longest first, so the first hit is the answer.
-        for n in range(min(self._longest, len(buffer)), 0, -1):
-            suffix = buffer[-n:]
+        for n in range(min(self._longest, len(text)), 0, -1):
+            suffix = text[-n:]
             i = bisect.bisect_left(self._sorted_restorable, suffix)
             if i < len(self._sorted_restorable) and self._sorted_restorable[i].startswith(suffix):
                 hold = n
@@ -267,7 +301,10 @@ class StreamingRestorer:
         # (longer than the budget, no boundary anywhere) still drains at least
         # max_buffer // 2 characters per force-flush instead of stalling — the
         # same token-integrity-for-a-memory-bound trade the `hold` cap below
-        # already makes for an over-long fake.
+        # already makes for an over-long fake. (When applied to the sentence
+        # split's ``complete``, the tail char is always a boundary char, never a
+        # digit, so this run is empty there — the scan above is what recovers
+        # ``John Q. Public``.)
         #
         # Only when the key/aliases actually contain an all-digit fake: with
         # none, no cut can produce the digit-boundary splice this guards
@@ -276,8 +313,8 @@ class StreamingRestorer:
         # hazard.
         digit_run = 0
         if self._has_numeric_restorable:
-            digit_cap = min(len(buffer), max(1, self._max_buffer // 2))
-            while digit_run < digit_cap and buffer[-1 - digit_run].isdigit():
+            digit_cap = min(len(text), max(1, self._max_buffer // 2))
+            while digit_run < digit_cap and text[-1 - digit_run].isdigit():
                 digit_run += 1
         hold = max(hold, digit_run)
         # Bound the hold by the fixed headroom rather than by max_buffer. The
@@ -286,8 +323,15 @@ class StreamingRestorer:
         # pre-fix behaviour) split any fake longer than max_buffer mid-token,
         # leaving the pseudonym unrestored in the user-visible output — a bound
         # far stricter than forward progress requires.
-        hold = min(hold, max(self._max_buffer, self._longest))
-        cut = len(buffer) - hold
+        return min(hold, max(self._max_buffer, self._longest))
+
+    def _force_flush_split(self) -> tuple[str, str]:
+        """Bounded-drain split: flush the buffer up to the last position that is
+        safe to cut, holding back (via ``_hold_back``) the tail that a later
+        chunk could still change the meaning of.
+        """
+        buffer = self._buffer
+        cut = len(buffer) - self._hold_back(buffer)
         return buffer[:cut], buffer[cut:]
 
     def feed(self, chunk: str) -> str:
@@ -310,44 +354,71 @@ class StreamingRestorer:
         # stream, so per-chunk guarding is structurally impossible. self._session
         # is the explicit unguarded opt-out (a stored key, no per-call anchor),
         # not the fail-closed default.
-        self._buffer += chunk
+        #
+        # The buffer read-modify-write is under self._lock so it is atomic
+        # against a concurrent feed()/flush() (see __init__). `restore_cell`
+        # runs OUTSIDE the lock: it is the Rust session's exclusive-borrow
+        # backstop, so a genuinely concurrent restore raises `Already borrowed`
+        # instead of silently corrupting output.
+        with self._lock:
+            self._buffer += chunk
 
-        if self._strategy == "none":
-            # No sentence buffering — emit as much as the straddle scan allows,
-            # every chunk. Restoring the bare `chunk` instead (the pre-fix
-            # behaviour) restored each chunk in isolation, so ANY pseudonym
-            # straddling a chunk boundary was never restored at all: fed one
-            # char at a time, nothing was restored. The held-back tail is
-            # bounded by the longest fake/alias, so per-chunk latency is kept.
-            complete, self._buffer = self._force_flush_split()
-            if not complete:
-                return ""
-            result = self._session.restore_cell(complete)
-            self._warn_if_substituted(complete, result)
-            return result
+            if self._strategy == "none":
+                # No sentence buffering — emit as much as the straddle scan
+                # allows, every chunk. Restoring the bare `chunk` instead (the
+                # pre-fix behaviour) restored each chunk in isolation, so ANY
+                # pseudonym straddling a chunk boundary was never restored at
+                # all: fed one char at a time, nothing was restored. The
+                # held-back tail is bounded by the longest fake/alias, so
+                # per-chunk latency is kept.
+                complete, self._buffer = self._force_flush_split()
+            else:
+                complete, residual = _core.streaming_restorer_split(self._buffer)
+                if complete:
+                    # The sentence split can cut THROUGH a restorable that
+                    # contains ". ": ``streaming_restorer_split`` treats an ASCII
+                    # `.` before whitespace as a sentence end, so `John Q. Public`
+                    # (the built-in en fake) and every `Mr./Dr. <Surname>` alias
+                    # split at their interior dot — `complete` ends `…John Q.`,
+                    # `residual` starts `Public…`, neither half matches the key,
+                    # and the pseudonym is emitted verbatim, never restored. Hold
+                    # a `complete`-tail that is a prefix of some restorable back
+                    # into `residual` (the SAME straddle scan `_force_flush_split`
+                    # applies to the whole buffer), so the restorable reassembles
+                    # and restores once the rest of it arrives. Bounded by the
+                    # longest restorable, so a genuine boundary NOT inside a
+                    # restorable still cuts there (hold == 0).
+                    hold = self._hold_back(complete)
+                    if hold:
+                        residual = complete[len(complete) - hold :] + residual
+                        complete = complete[: len(complete) - hold]
+                # H7: no sentence boundary anywhere in the buffer yet (or the
+                # hold-back pulled the whole `complete` back). Left unchecked this
+                # buffers the entire stream and re-scans it in full on every
+                # feed() — bound it via force-flush once it grows past
+                # max_buffer, instead of accumulating without limit.
+                if not complete and len(self._buffer) > self._max_buffer:
+                    complete, residual = self._force_flush_split()
+                if complete:
+                    self._buffer = residual
 
-        complete, residual = _core.streaming_restorer_split(self._buffer)
         if not complete:
-            # H7: no sentence boundary anywhere in the buffer yet. Left
-            # unchecked this buffers the entire stream and re-scans it in
-            # full on every feed() — bound it via force-flush once it grows
-            # past max_buffer, instead of accumulating without limit.
-            if len(self._buffer) > self._max_buffer:
-                complete, residual = self._force_flush_split()
-            if not complete:
-                return ""
-        self._buffer = residual
+            return ""
         result = self._session.restore_cell(complete)
         self._warn_if_substituted(complete, result)
         return result
 
     def flush(self) -> str:
         """Flush remaining buffer."""
-        if not self._buffer:
-            return ""
-        buffer = self._buffer
+        # Same split as feed(): drain the buffer under the lock (atomic RMW),
+        # then restore OUTSIDE it so the session's exclusive borrow still backs
+        # a concurrent call (see feed() and __init__).
+        with self._lock:
+            if not self._buffer:
+                return ""
+            buffer = self._buffer
+            self._buffer = ""
         result = self._session.restore_cell(buffer)  # see feed(): no per-call anchor
-        self._buffer = ""
         self._warn_if_substituted(buffer, result)
         return result
 
@@ -398,11 +469,7 @@ class StreamingRedactor:
     ):
         if not isinstance(salt, (int, bytes, bytearray)):
             raise TypeError(f"salt must be int or bytes, got {type(salt).__name__}")
-        if isinstance(salt, int):
-            signed = salt < 0
-            self._salt = salt.to_bytes(8, "big", signed=signed)
-        else:
-            self._salt = bytes(salt)
+        self._salt = _salt_to_bytes(salt)
         self._display_marker = display_marker
         self._lang = lang
         self._mode = mode
@@ -424,6 +491,34 @@ class StreamingRedactor:
         self._accumulated_realistic_key: dict[str, str] = {}
         self._accumulated_types: dict[str, str] = {}
 
+    def _cut(self, force_flush: bool) -> tuple[int, bool, list[PatternMatch]]:
+        """Run one ``_context_cut`` detection over the retained buffer and emit
+        the coverage-restored warning. ``force_flush`` is the ONLY thing that
+        differs between the mid-stream ``feed()`` cut (hold back ≥ W chars of
+        forward context) and the end-of-stream ``flush()`` drain (drain to len
+        with batch's view of the tail). Returns the raw ``_context_cut`` result
+        ``(cut, redetect, entities)``; ``flush()`` ignores ``redetect`` since
+        force_flush never sets it.
+        """
+        _restored_types: list[str] = []
+        cut, redetect, entities = _context_cut(
+            self._inc_buffer,
+            self._ctx_len,
+            lang=self._lang,
+            mode=self._mode,
+            names=self._names,
+            types=self._types,
+            types_exclude=self._types_exclude,
+            max_buffer=DEFAULT_MAX_BUFFER,
+            force_flush=force_flush,
+            restored_types=_restored_types,
+        )
+        # Warn regardless of the emit-or-hold branch in the caller: the
+        # restoration already happened inside this round's _detect call (over the
+        # full buffer), even on a round that ends up holding everything back.
+        warn_coverage_restored(_restored_types)
+        return cut, redetect, entities
+
     def feed(self, chunk: str) -> PseudonymLLMResult:
         """Accumulate ``chunk`` and emit up to the context-cut boundary, redacted.
 
@@ -440,23 +535,7 @@ class StreamingRedactor:
             _check_input_pollution(chunk, reserved_names=self._reserved_names)
 
         self._inc_buffer += chunk
-        _restored_types: list[str] = []
-        cut, redetect, entities = _context_cut(
-            self._inc_buffer,
-            self._ctx_len,
-            lang=self._lang,
-            mode=self._mode,
-            names=self._names,
-            types=self._types,
-            types_exclude=self._types_exclude,
-            max_buffer=DEFAULT_MAX_BUFFER,
-            force_flush=False,
-            restored_types=_restored_types,
-        )
-        # Warn regardless of the emit-or-hold branch below: the restoration
-        # already happened inside this round's _detect call (over the full
-        # buffer), even on a round that ends up holding everything back.
-        warn_coverage_restored(_restored_types)
+        cut, redetect, entities = self._cut(force_flush=False)
         if cut <= self._ctx_len:
             return _empty_result()
 
@@ -488,20 +567,7 @@ class StreamingRedactor:
             self._inc_buffer = ""
             self._ctx_len = 0
             return _empty_result()
-        _restored_types: list[str] = []
-        cut, _redetect, entities = _context_cut(
-            self._inc_buffer,
-            self._ctx_len,
-            lang=self._lang,
-            mode=self._mode,
-            names=self._names,
-            types=self._types,
-            types_exclude=self._types_exclude,
-            max_buffer=DEFAULT_MAX_BUFFER,
-            force_flush=True,
-            restored_types=_restored_types,
-        )
-        warn_coverage_restored(_restored_types)
+        cut, _redetect, entities = self._cut(force_flush=True)
         # force_flush never sets redetect (it drains to len with full-buffer
         # context ≡ batch's view of the tail), so always range-shift.
         ctx = self._ctx_len  # snapshot before reset
@@ -571,15 +637,28 @@ class StreamingRedactor:
             # re-detects the bare emit slice internally (pre-rework drain safety);
             # otherwise the range-shifted full-buffer detection.
             _pre_detected=entities,
-            # Mid-stream slices are fresh original text, but pass
-            # _polluted_input_ok=True since the eager check in feed() already
-            # guards against pollution and avoids a redundant scan.
-            _polluted_input_ok=True,
+            # DO NOT opt out of the emit-time pollution scan. The eager
+            # _check_input_pollution in feed() is a WHOLE-TOKEN regex, so it is
+            # only a cheap fast path: a reserved-range value split across
+            # feed-chunk boundaries (real streaming deltas are token-sized)
+            # matches neither half. This emit-time scan runs over the REASSEMBLED
+            # emit slice ``text`` (= buffer[ctx:cut]), where a reserved value
+            # split across FEED chunks but landing within one emit slice is whole
+            # again — the guard for the common streaming case. ``text`` excludes
+            # the retained left-context, so the scan sees only new input and never
+            # double-fires on already-emitted text; and the buffer only ever holds
+            # INPUT (never argus's own fakes), so the scan cannot spuriously raise
+            # on a fake this redactor produced. It fires exactly when
+            # ``strict_input=True`` (opt-out preserved for ``strict_input=False``
+            # via redact_pseudonym_llm's own guard).
+            # RESIDUAL (not a complete guard): a reserved value straddling an
+            # EMIT cut — head already emitted into the left-context, tail in this
+            # slice — is seen only in fragments by each scan and is not caught.
+            # Reaching it needs a reserved value the context-cut did not snap
+            # around, then a boundary-less run; closing it would need a
+            # left-context-aware, overlap-only scan (to avoid re-firing on
+            # already-emitted text), deferred as disproportionate to that case.
         )
-        # setdefault preserves first-seen mapping; realistic and audit spaces
-        # are disjoint by construction, so collisions are impossible.
-        for fake, original in result.key.items():
-            self._accumulated_key.setdefault(fake, original)
         # `result.downstream_key` (v0.8.2+) is the EXACT realistic-only key
         # `redact_pseudonym_llm` computed internally, before it was unioned
         # into `result.key` (the unified realistic+audit key). Using this
@@ -587,8 +666,28 @@ class StreamingRedactor:
         # substring heuristic — avoids both false positives (an audit
         # placeholder that happens to be a substring of some unrelated
         # downstream text) and false negatives.
+        #
+        # The realistic (LLM-facing) codes carry the identity-splice guarantee:
+        # the realistic pass threads `_accumulated_realistic_key` as its
+        # existing_key, so a recurring original reuses its code and a new original
+        # gets a fresh one. A realistic code mapping to two different originals is
+        # therefore an integrity failure, not a normal event — `_put_key_checked`
+        # fails loud rather than silently dropping one (the pre-fix `setdefault`).
         for fake, original in result.downstream_key.items():
-            self._accumulated_realistic_key.setdefault(fake, original)
+            _put_key_checked(self._accumulated_realistic_key, fake, original)
+        # Public unified aggregate. Realistic codes carry the same guard; the
+        # bracketed [PREFIX-NNNNN] audit placeholders are minted fresh per emit
+        # (the audit pass runs with existing_key=None), so the SAME placeholder may
+        # legitimately label different originals across emits — those accumulate
+        # first-seen, matching the pre-existing tolerant behaviour. They never
+        # appear in downstream text, so aggregate-key restore of the LLM reply is
+        # unaffected, and after the audit face moved to a bracketed namespace an
+        # audit placeholder can never equal a realistic code.
+        for fake, original in result.key.items():
+            if fake in result.downstream_key:
+                _put_key_checked(self._accumulated_key, fake, original)
+            else:
+                self._accumulated_key.setdefault(fake, original)
         for fake, t in result.types.items():
             self._accumulated_types.setdefault(fake, t)
         return result

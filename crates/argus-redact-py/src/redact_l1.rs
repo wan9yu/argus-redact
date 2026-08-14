@@ -26,6 +26,7 @@ use std::collections::{HashMap, HashSet};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 
+use argus_redact_core::cancel::{CancelFlag, DetectError};
 use argus_redact_core::coverage::{
     restore_lost_coverage as core_restore_lost_coverage, FilterScope,
 };
@@ -34,9 +35,10 @@ use argus_redact_core::hints::{
     get_person_threshold as core_get_person_threshold, produce_hints_l1 as core_produce_hints_l1,
     Hint, HintKind,
 };
-use argus_redact_core::redact_l1::{detect_l1 as core_detect_l1, redact_l1 as core_redact_l1};
+use argus_redact_core::redact_l1::{
+    detect_l1_cancellable as core_detect_l1_cancellable, redact_l1 as core_redact_l1,
+};
 use argus_redact_core::redact_l1::RedactL1Args;
-use argus_redact_core::FakerFactory;
 use argus_redact_core::PatternMatch as CorePM;
 
 use crate::replace::{build_faker_factory, build_info_map, parse_salt, PyPseudoFactory};
@@ -130,6 +132,82 @@ fn hints_from_py(hints: &Bound<'_, PyAny>) -> PyResult<Vec<Hint>> {
     Ok(out)
 }
 
+// ── cooperative cancellation (CancelToken + ScanAborted) ───────────────────────
+
+// The cooperative-cancellation abort raised when a scan observes a tripped
+// `CancelToken`. It MUST derive `Exception` (via `PyException`), NEVER
+// `BaseException`: the HTTP server offloads each scan into a detached worker whose
+// `except Exception` forwards the error to the awaiting request. A
+// `BaseException`-derived abort would slip past that guard, propagate into the
+// app-lifetime task group, and tear the whole server down at every cancellation.
+// The message is a fixed, PII-free string (`DetectError::Aborted`'s `Display`,
+// "detection cancelled") — it never echoes scanned text.
+pyo3::create_exception!(
+    argus_redact._core,
+    ScanAborted,
+    pyo3::exceptions::PyException,
+    "cooperative-cancellation abort of an L1 detection scan"
+);
+
+/// A cooperative-cancellation handle for a single detection scan.
+///
+/// Wraps the core [`CancelFlag`] (an `Arc<AtomicBool>`). A fresh token is
+/// un-cancelled; [`cancel`](CancelToken::cancel) trips it from another thread and
+/// the detached scan returns [`ScanAborted`] at its next poll boundary. Both
+/// `cancel()` and the scan-side read take `&self` (a SHARED borrow), so tripping
+/// the token from one thread never conflicts with the in-flight scan's borrow.
+///
+/// One token PER scan — it is never shared across scans (a shared token would
+/// abort unrelated in-flight scans); the server constructs a fresh one per
+/// `_run_scan`.
+#[pyclass]
+pub struct CancelToken {
+    flag: CancelFlag,
+}
+
+#[pymethods]
+impl CancelToken {
+    #[new]
+    fn new() -> Self {
+        CancelToken {
+            flag: CancelFlag::new(),
+        }
+    }
+
+    /// Trip the token. Idempotent; the next scan poll returns `ScanAborted`.
+    fn cancel(&self) {
+        self.flag.cancel();
+    }
+
+    /// `True` once `cancel()` has been called on this token (or a clone of its
+    /// underlying flag). Exposed for cooperative pollers and test observability.
+    fn is_cancelled(&self) -> bool {
+        self.flag.is_cancelled()
+    }
+}
+
+impl CancelToken {
+    /// Clone the underlying [`CancelFlag`] (shares the same atomic). The `Arc`
+    /// crosses `py.detach`; the `Bound<CancelToken>` cannot.
+    fn flag(&self) -> CancelFlag {
+        self.flag.clone()
+    }
+}
+
+/// Map a core [`DetectError`] onto the Python exception ladder: an abort becomes
+/// [`ScanAborted`] (mapped to 504 at the server), and any other pattern/input
+/// error stays a `ValueError` (mapped to 400 at the server) — byte-identical to the
+/// pre-cancellation `.map_err(|e| PyValueError::new_err(e.to_string()))`, since a
+/// no-cancel scan can only ever produce `DetectError::Pattern` and its `Display`
+/// delegates to the inner `PatternError`.
+fn map_detect_error(e: DetectError) -> PyErr {
+    let msg = e.to_string();
+    match e {
+        DetectError::Aborted => ScanAborted::new_err(msg),
+        DetectError::Pattern(_) => pyo3::exceptions::PyValueError::new_err(msg),
+    }
+}
+
 // ── detect_l1 ─────────────────────────────────────────────────────────────────
 
 /// `(redacted, key, aliases, keep_downgraded, mask_collisions)` — the
@@ -161,21 +239,32 @@ type DetectL1Out<'py> = (
 ///
 /// Mirrors `argus_redact_core::redact_l1::detect_l1`. `known_names=None` behaves
 /// like the Python detector's empty-names default.
+///
+/// The keyword-only `cancel_token` opts into cooperative cancellation: a
+/// [`CancelToken`] tripped from another thread makes the scan return
+/// [`ScanAborted`] at its next poll boundary. `cancel_token=None` (the default) is
+/// byte-identical to the pre-cancellation path — every poll is a no-op.
 #[pyfunction]
-#[pyo3(signature = (text, lang, known_names=None))]
+#[pyo3(signature = (text, lang, known_names=None, *, cancel_token=None))]
 pub fn detect_l1<'py>(
     py: Python<'py>,
     text: &str,
     lang: Vec<String>,
     known_names: Option<Vec<String>>,
+    cancel_token: Option<&CancelToken>,
 ) -> PyResult<DetectL1Out<'py>> {
     let names = known_names.unwrap_or_default();
+    // The `Bound<CancelToken>` cannot cross `py.detach`, but the `Arc<AtomicBool>`
+    // inside it can — clone the flag out here and hand `Some(&flag)` to the core.
+    // With no token the flag is `None`: every poll is a no-op and only
+    // `DetectError::Pattern` can arise, so this is byte-identical to the old path.
+    let flag = cancel_token.map(CancelToken::flag);
     // Detection is pure Rust (normalize + regex + person scoring) with no
     // Python callback anywhere in it, so the lock is released for the whole
     // scan — this is the expensive half of a redact.
     let result = py
-        .detach(|| core_detect_l1(text, &lang, &names))
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        .detach(|| core_detect_l1_cancellable(text, &lang, &names, flag.as_ref()))
+        .map_err(map_detect_error)?;
     let layer1: Vec<PyPatternMatch> =
         result.layer1.into_iter().map(PyPatternMatch::from).collect();
     let person: Vec<PyPatternMatch> =
@@ -234,11 +323,7 @@ pub fn redact_l1(
     // SAME type_info / faker adaptation as `_core.replace` (shared helpers).
     let info_map = build_info_map(type_info)?;
     let py_faker_factory = build_faker_factory(custom_fakers)?;
-    let faker_arg: Option<&dyn FakerFactory> = if py_faker_factory.fakers.is_empty() {
-        None
-    } else {
-        Some(&py_faker_factory)
-    };
+    let faker_arg = py_faker_factory.as_arg();
 
     let factory = PyPseudoFactory;
     let result = core_redact_l1(
@@ -292,7 +377,7 @@ pub fn produce_hints_l1<'py>(
         .map(CorePM::from)
         .collect();
     let hints = core_produce_hints_l1(&ents, text, &nms);
-    hints.iter().map(|h| hint_to_py(py, h)).collect()
+    hints_to_py(py, &hints)
 }
 
 /// Person-name threshold from the hints (1.2 instruction / 0.8 otherwise).

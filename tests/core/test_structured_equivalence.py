@@ -23,7 +23,7 @@ second draw's literal code asserted.
 import warnings
 
 from argus_redact import restore
-from argus_redact.structured import redact_csv, redact_json
+from argus_redact.structured import redact_csv, redact_json, restore_csv, restore_json
 
 # A high-salt-warning-free capture is not needed: salt=42 is deterministic and
 # the low-entropy SecurityWarning is irrelevant to the mapping under test.
@@ -208,3 +208,124 @@ class TestPersistedRngContinuation:
         # maps to a single type entry (not two divergent ones).
         assert redacted["x"] == redacted["y"]["z"]
         assert types["P-83811"] == "person"
+
+
+# ── Path-scoped JSON golden (the gateway wire-face shape) ──
+#
+# The gateway threads argus over provider payloads with a `paths=` selector so
+# only the model-facing text leaves are redacted; every other leaf (a decoy no
+# path selects) must survive verbatim. `probe-structured-parity.py` exercises
+# all 24 gateway path patterns as a version-diff probe; this pins ONE
+# representative scenario as a committed golden so a redacted-output / key /
+# decoy-survival drift REDs a normal test run (the probe is not collected).
+_PATH_INPUT = {
+    "model": "gpt-4o",
+    "system": "联系人王建国，电话13912345678",
+    "messages": [
+        {"role": "user", "content": "我叫李明明，手机13800138000"},
+        {"role": "assistant", "content": "同事张伟"},
+    ],
+    "metadata": {"trace": "联系人赵敏13611136111"},
+}
+_PATH_REDACTED = {
+    "model": "gpt-4o",
+    "system": "联系人王建国，电话13912345678",  # decoy leaf: no path selects it
+    "messages": [
+        {"role": "user", "content": "我叫P-83811，手机138****8000"},
+        {"role": "assistant", "content": "同事P-14593"},
+    ],
+    "metadata": {"trace": "联系人赵敏13611136111"},  # decoy leaf: no path selects it
+}
+_PATH_KEY = {
+    "138****8000": "13800138000",
+    "P-83811": "李明明",
+    "P-14593": "张伟",
+}
+
+
+class TestPathScopedJsonGolden:
+    def test_path_scoped_redaction_and_decoys_byte_identical(self):
+        import copy
+
+        with warnings.catch_warnings():
+            _ignore_salt_warning()
+            redacted, key = redact_json(
+                copy.deepcopy(_PATH_INPUT),
+                mode="fast",
+                lang="zh",
+                salt=42,
+                paths=["messages[*].content"],
+            )
+        assert redacted == _PATH_REDACTED
+        assert key == _PATH_KEY
+
+    def test_path_scoped_roundtrip_restores_original(self):
+        import copy
+
+        with warnings.catch_warnings():
+            _ignore_salt_warning()
+            redacted, key = redact_json(
+                copy.deepcopy(_PATH_INPUT),
+                mode="fast",
+                lang="zh",
+                salt=42,
+                paths=["messages[*].content"],
+            )
+        assert restore_json(copy.deepcopy(redacted), key) == _PATH_INPUT
+
+
+# ── CSV round-trip through restore_csv ──
+#
+# The equivalence snapshots above restore CSV via the string `restore()`; the
+# probe covers restore_json only. This pins the dedicated `restore_csv` face:
+# parse → restore → reserialize reconstructs the data (line endings normalise to
+# the writer's \r\n, so the round-trip target is the reserialized input).
+_RT_CSV_INPUT = "name,phone\n张三,13812345678\n李四,15900001234"
+_RT_CSV_REDACTED = "name,phone\r\n张三,138****5678\r\n李四,159****1234"
+_RT_CSV_KEY = {"138****5678": "13812345678", "159****1234": "15900001234"}
+_RT_CSV_RESTORED = "name,phone\r\n张三,13812345678\r\n李四,15900001234"
+
+
+class TestCsvRestoreRoundTrip:
+    def test_redact_then_restore_csv_reconstructs_data(self):
+        with warnings.catch_warnings():
+            _ignore_salt_warning()
+            redacted, key = redact_csv(_RT_CSV_INPUT, mode="fast", lang="zh", salt=42)
+        assert redacted == _RT_CSV_REDACTED
+        assert key == _RT_CSV_KEY
+        restored = restore_csv(redacted, key)
+        assert restored == _RT_CSV_RESTORED
+        # The reserialized restore equals the reserialized input (line endings
+        # normalised to the csv writer's \r\n) — no cell lost or split.
+        assert restored == _RT_CSV_INPUT.replace("\n", "\r\n")
+
+
+# ── Cross-instance determinism ──
+#
+# Two independent calls with the same salt must produce byte-identical output
+# AND key — the property the gateway relies on to reproduce a redaction (and to
+# diff two argus versions with `probe-structured-parity.py`). Distinct from the
+# equivalence snapshots (which pin absolute literals): this pins that the
+# function is a pure function of (input, salt), holding across fresh sessions.
+_DET_JSON = {"a": "李明明13800138000", "b": {"c": "张伟"}}
+_DET_CSV = "name,phone\n张三,13812345678\n李四,15900001234"
+
+
+class TestCrossInstanceDeterminism:
+    def test_redact_json_is_deterministic_across_instances(self):
+        import copy
+
+        with warnings.catch_warnings():
+            _ignore_salt_warning()
+            r1, k1 = redact_json(copy.deepcopy(_DET_JSON), mode="fast", lang="zh", salt=42)
+            r2, k2 = redact_json(copy.deepcopy(_DET_JSON), mode="fast", lang="zh", salt=42)
+        assert r1 == r2
+        assert k1 == k2
+
+    def test_redact_csv_is_deterministic_across_instances(self):
+        with warnings.catch_warnings():
+            _ignore_salt_warning()
+            r1, k1 = redact_csv(_DET_CSV, mode="fast", lang="zh", salt=42)
+            r2, k2 = redact_csv(_DET_CSV, mode="fast", lang="zh", salt=42)
+        assert r1 == r2
+        assert k1 == k2

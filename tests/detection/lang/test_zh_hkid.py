@@ -4,9 +4,9 @@ Algorithm reference: https://en.wikipedia.org/wiki/Hong_Kong_identity_card
 (check-digit section with worked example uses weights 9,8,7,6,5,4,3,2 over
 the body, with single-letter HKIDs left-padded by space (value 36)).
 The first VALID_HKID entry is independently traceable through that
-formulation; the others are derived using the same algorithm in
-``hkid_check_digit`` but cross-validate the implementation by being
-constructed for distinct letter prefixes.
+formulation; the others were derived with an independent reimplementation
+of the same algorithm and cross-validate the Rust core's HKID checksum
+(which drives the detection here) across distinct letter prefixes.
 """
 
 import pytest

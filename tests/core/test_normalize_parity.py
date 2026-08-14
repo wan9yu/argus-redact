@@ -36,6 +36,9 @@ NORMALIZE_CORPUS = [
     "café münchen",  # precomposed accents (é, ü) — fold to ASCII
     "áé",  # decomposed combining acute (NFD) — fold to ASCII
     "José",  # precomposed é at token end — folds to "Jose"
+    "11010١199003070468",  # interior Arabic-Indic Nd (U+0661) -> folds to ASCII
+    "11010१199003070468",  # interior Devanagari Nd (U+0967) -> folds to ASCII
+    "电话١13800138000",  # boundary Arabic-Indic Nd -> NOT folded (kept verbatim)
 ]
 LANG_CORPUS = [
     "",

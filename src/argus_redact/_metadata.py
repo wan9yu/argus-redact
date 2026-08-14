@@ -1,9 +1,11 @@
 """Compliance metadata projections from the PII type registry.
 
-Three top-level dicts re-exported from ``argus_redact``:
+Four top-level dicts re-exported from ``argus_redact``:
 
 - ``PIPL_REFERENCES``        : per-type tuple of PIPL article strings
 - ``GDPR_SPECIAL_CATEGORIES``: per-type GDPR Article 9 special-category flag
+- ``GDPR_ART10_CATEGORIES``  : per-type GDPR Article 10 flag (criminal
+                              convictions and offences)
 - ``HIPAA_PHI_CATEGORIES``   : per-type HIPAA Safe Harbor identifier category
                               (or ``None`` when the type is not a Safe Harbor identifier)
 
@@ -13,6 +15,7 @@ Keys are the canonical ``PIITypeDef.name`` (e.g. ``"phone"``, ``"id_number"``,
 
 - ``PIPL_REFERENCES``: union of articles across lang variants, preserving order
 - ``GDPR_SPECIAL_CATEGORIES``: ``True`` if ANY lang variant marks it special
+- ``GDPR_ART10_CATEGORIES``: ``True`` if ANY lang variant marks it Art.10
 - ``HIPAA_PHI_CATEGORIES``: first non-``None`` value wins (registry order is
   ``zh`` → ``en`` → ``shared``; deterministic for a given argus-redact version)
 
@@ -29,10 +32,12 @@ from .specs import list_types
 def _build() -> tuple[
     dict[str, tuple[str, ...]],
     dict[str, bool],
+    dict[str, bool],
     dict[str, str | None],
 ]:
     pipl: dict[str, tuple[str, ...]] = {}
     gdpr: dict[str, bool] = {}
+    gdpr_art10: dict[str, bool] = {}
     hipaa: dict[str, str | None] = {}
     for td in list_types():
         merged = dict.fromkeys(pipl.get(td.name, ()))
@@ -40,9 +45,10 @@ def _build() -> tuple[
             merged[art] = None
         pipl[td.name] = tuple(merged)
         gdpr[td.name] = gdpr.get(td.name, False) or bool(td.gdpr_special_category)
+        gdpr_art10[td.name] = gdpr_art10.get(td.name, False) or bool(td.gdpr_art10)
         if hipaa.get(td.name) is None:
             hipaa[td.name] = td.hipaa_phi_category
-    return pipl, gdpr, hipaa
+    return pipl, gdpr, gdpr_art10, hipaa
 
 
-PIPL_REFERENCES, GDPR_SPECIAL_CATEGORIES, HIPAA_PHI_CATEGORIES = _build()
+PIPL_REFERENCES, GDPR_SPECIAL_CATEGORIES, GDPR_ART10_CATEGORIES, HIPAA_PHI_CATEGORIES = _build()

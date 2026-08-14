@@ -18,7 +18,7 @@ from __future__ import annotations
 import pytest
 
 from argus_redact._core_loader import HAS_CORE
-from argus_redact.pure.replacer import _faker_reserved_cached, replace
+from argus_redact.pure.replacer import _clear_faker_caches, replace
 from argus_redact.pure.restore import restore
 from argus_redact.specs.registry import PIITypeDef, register, unregister
 from tests.conftest import make_match
@@ -97,11 +97,11 @@ def _register_custom_types():
     """Register the three test types, clear the LRU cache, then tear down."""
     for td in _CUSTOM_TYPES:
         register(td)
-    _faker_reserved_cached.cache_clear()
+    _clear_faker_caches()
     yield
     for td in _CUSTOM_TYPES:
         unregister(td.lang, td.name)
-    _faker_reserved_cached.cache_clear()
+    _clear_faker_caches()
 
 
 # ---------------------------------------------------------------------------
@@ -417,7 +417,7 @@ def test_custom_faker_tuple_enforcement():
         faker_reserved=_bad_faker,
     )
     register(td)
-    _faker_reserved_cached.cache_clear()
+    _clear_faker_caches()
 
     text = "bad BAD bad"
     entities = [make_match("BAD", "test_parity_bad_faker", 4)]
@@ -428,7 +428,7 @@ def test_custom_faker_tuple_enforcement():
             replace(text, entities, salt=b"x" * 32, config=config)
     finally:
         unregister("shared", "test_parity_bad_faker")
-        _faker_reserved_cached.cache_clear()
+        _clear_faker_caches()
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
@@ -461,7 +461,7 @@ def test_custom_faker_multi_lang_preference():
     )
     register(td_zh)
     register(td_en)
-    _faker_reserved_cached.cache_clear()
+    _clear_faker_caches()
 
     text = "contact LiMing today"
     entities = [make_match("LiMing", "test_parity_lang_person", 8)]
@@ -477,7 +477,7 @@ def test_custom_faker_multi_lang_preference():
     finally:
         unregister("zh", "test_parity_lang_person")
         unregister("en", "test_parity_lang_person")
-        _faker_reserved_cached.cache_clear()
+        _clear_faker_caches()
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")

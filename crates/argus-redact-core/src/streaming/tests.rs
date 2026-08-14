@@ -938,6 +938,91 @@ fn multi_chunk_redact_restore_roundtrip() {
     assert_eq!(restore_full(&out, &agg, None, None).unwrap().0, joined);
 }
 
+// ── Oversize input fails closed ─────────────────────────────────────────────
+//
+// The wasm `StreamingRedactor` used to emit a chunk larger than `MAX_INPUT_SIZE`
+// as UNREDACTED plaintext: `detect_l1` fails closed on oversize input, but the
+// wasm detect closure mapped that Err to an EMPTY `DetectSpans`, so the
+// carry-window made a non-entity-aware cut and the redact tail echoed the whole
+// oversize chunk in cleartext with an empty key (reading as "nothing to redact").
+// The Python `StreamingRedactor` instead RAISES on the same input — its `_detect`
+// PROPAGATES the `detect_l1` oversize `ValueError` (`glue/redact.py::_detect` →
+// `_core.detect_l1`; the cap itself is `glue/redact.py:386`). `feed` now rejects
+// oversize input BEFORE buffering, restoring that cross-face fail-closed parity.
+//
+// Normal-size streaming is unchanged — the guard fires ONLY above the cap; see
+// `normal_sentence_boundary_stream_unchanged` and `multi_chunk_redact_restore_roundtrip`.
+
+#[test]
+fn feed_rejects_oversize_chunk_failing_closed() {
+    // A chunk that would push the buffer past `MAX_INPUT_SIZE` must be REJECTED by
+    // `feed` (fail closed), not emitted verbatim over an empty span set. The detect
+    // closure mirrors the wasm one (a detect failure yields no spans) and the redact
+    // closure is identity, so the ONLY thing that can make `feed` return Err is the
+    // core feed size guard itself — isolating the PRIMARY fix.
+    let lang = s(&["en"]);
+    let detect = move |text: &str| -> DetectSpans {
+        match detect_l1(text, &lang, &[]) {
+            Ok(r) => {
+                let mut entities = r.layer1.clone();
+                entities.extend(r.person.clone());
+                DetectSpans { entities, hints: r.hints }
+            }
+            // Mirror the wasm production closure: a detect failure yields no spans.
+            Err(_) => DetectSpans::default(),
+        }
+    };
+    let redact = |text: &str, _spans: &DetectSpans| -> Result<RedactSegment, String> {
+        // Identity emit — models a redact path that would echo the slice verbatim
+        // over an empty span set. `feed` must NEVER reach here for oversize input.
+        Ok(RedactSegment {
+            downstream_text: text.to_string(),
+            ..Default::default()
+        })
+    };
+    let mut r = StreamingRedactor::new(detect, redact);
+
+    let big = "a".repeat(crate::MAX_INPUT_SIZE + 1);
+    assert!(big.len() > crate::MAX_INPUT_SIZE);
+    let err = r
+        .feed(&big)
+        .expect_err("feed must reject an oversize chunk (fail closed)");
+    assert!(
+        err.contains("input too large") && err.contains(&crate::MAX_INPUT_SIZE.to_string()),
+        "error must name the cap: {err}"
+    );
+    // Rejecting BEFORE the push keeps the buffer uncorrupted: a rejected feed must
+    // not leave the oversize content for a later flush to drain.
+    assert!(r.buffer().is_empty(), "a rejected feed must not buffer the oversize chunk");
+    assert!(r.aggregate_key().is_empty(), "nothing was emitted, so no key accrues");
+    // The flush path is unreachable with an oversize buffer (feed rejected first),
+    // so the following flush drains an empty buffer cleanly.
+    let flushed = r.flush().expect("flush after a rejected feed drains an empty buffer");
+    assert_eq!(flushed.segment.downstream_text, "");
+}
+
+#[test]
+fn feed_at_exactly_max_input_size_is_accepted() {
+    // The cap boundary is strict `>`: a buffer of EXACTLY `MAX_INPUT_SIZE` bytes
+    // must NOT be rejected (a mutant using `>=` would wrongly reject it), mirroring
+    // `detect_l1` / `redact_l1` at the cap. Identity closures keep this fast and
+    // pin the guard boundary alone.
+    let detect = |_text: &str| -> DetectSpans { DetectSpans::default() };
+    let redact = |text: &str, _spans: &DetectSpans| -> Result<RedactSegment, String> {
+        Ok(RedactSegment {
+            downstream_text: text.to_string(),
+            ..Default::default()
+        })
+    };
+    let mut r = StreamingRedactor::new(detect, redact);
+    let at_cap = "a".repeat(crate::MAX_INPUT_SIZE);
+    assert_eq!(at_cap.len(), crate::MAX_INPUT_SIZE);
+    assert!(
+        r.feed(&at_cap).is_ok(),
+        "exactly-MAX_INPUT_SIZE input must not be rejected"
+    );
+}
+
 // ── StreamingRestorer parity (test_streaming.py::TestStreamingRestorer) ─────────
 
 #[test]
@@ -994,12 +1079,43 @@ fn restorer_empty_key() {
 }
 
 #[test]
-fn restorer_none_strategy_restores_immediately() {
+fn restorer_none_strategy_holds_trailing_restorable_until_flush() {
+    // "none" does no SENTENCE buffering, but a trailing restorable-prefix is
+    // held so a pseudonym split across chunks reassembles (mirrors Python
+    // "none"). Feeding "结果是P-1" emits the non-restorable prefix and holds
+    // "P-1" (which could still grow, e.g. "P-10") until flush().
     let mut key = HashMap::new();
     key.insert("P-1".to_string(), "13812345678".to_string());
     let mut restorer = StreamingRestorer::new(key, RestoreStrategy::None);
-    let result = restorer.feed("结果是P-1").unwrap();
-    assert!(result.contains("13812345678")); // no buffering, restored immediately
+    let mut out = restorer.feed("结果是P-1").unwrap();
+    out.push_str(&restorer.flush().unwrap());
+    assert_eq!(out, "结果是13812345678");
+}
+
+#[test]
+fn restorer_none_strategy_restores_pseudonym_split_across_chunks() {
+    // REGRESSION (v0.8.14): the None branch used to restore each BARE chunk, so
+    // "P" then "-1" never matched the "P-1" key and the pseudonym was emitted
+    // unrestored — diverging from the Python "none" strategy and the batch
+    // restore. It now holds the straddling prefix and restores on flush.
+    let mut key = HashMap::new();
+    key.insert("P-1".to_string(), "13812345678".to_string());
+    let mut restorer = StreamingRestorer::new(key, RestoreStrategy::None);
+    let mut out = String::new();
+    out.push_str(&restorer.feed("P").unwrap());
+    out.push_str(&restorer.feed("-1").unwrap());
+    out.push_str(&restorer.flush().unwrap());
+    assert_eq!(out, "13812345678");
+}
+
+#[test]
+fn restorer_none_strategy_emits_non_restorable_chunk_whole() {
+    // No latency for ordinary text: the hold-back retains only a suffix that
+    // could grow into a fake, so a chunk with no such tail emits in full.
+    let mut key = HashMap::new();
+    key.insert("P-1".to_string(), "13812345678".to_string());
+    let mut restorer = StreamingRestorer::new(key, RestoreStrategy::None);
+    assert_eq!(restorer.feed("just text ").unwrap(), "just text ");
 }
 
 #[test]
@@ -1096,6 +1212,58 @@ fn restorer_dotted_fake_ipv4_round_trips_char_by_char() {
     }
     out.push_str(&restorer.flush().unwrap());
     assert_eq!(out, "server 10.1.2.3 up.");
+}
+
+#[test]
+fn restorer_fake_with_internal_dot_space_round_trips() {
+    // REGRESSION: a fake containing ". " (the built-in en realistic fake
+    // `John Q. Public`; every `Mr./Dr. <Surname>` honorific alias) — the
+    // sentence split treats the interior `. ` as a boundary, so without the
+    // restorable-straddle hold-back it cut the fake in two (`…John Q.` |
+    // `Public…`), neither half matched the key, and the pseudonym was emitted
+    // verbatim, never restored. Both char-by-char AND small-chunk streaming
+    // must now round-trip, byte-identical to a one-shot restore.
+    let mut key = HashMap::new();
+    key.insert("John Q. Public".to_string(), "Susan Miller".to_string());
+    let ds = "Signed by John Q. Public";
+    let one_shot = restore_full(ds, &key, None, None).unwrap().0;
+    assert_eq!(one_shot, "Signed by Susan Miller");
+
+    // char-by-char
+    let mut restorer = StreamingRestorer::new(key.clone(), RestoreStrategy::Sentence);
+    let mut out = String::new();
+    for c in ds.chars() {
+        out.push_str(&restorer.feed(&c.to_string()).unwrap());
+    }
+    out.push_str(&restorer.flush().unwrap());
+    assert_eq!(out, one_shot, "char-by-char must restore the dotted fake");
+
+    // 3-char chunks (a boundary can land mid-fake at a chunk edge)
+    let mut restorer = StreamingRestorer::new(key.clone(), RestoreStrategy::Sentence);
+    let chars: Vec<char> = ds.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let end = (i + 3).min(chars.len());
+        let chunk: String = chars[i..end].iter().collect();
+        out.push_str(&restorer.feed(&chunk).unwrap());
+        i = end;
+    }
+    out.push_str(&restorer.flush().unwrap());
+    assert_eq!(out, one_shot, "3-char chunks must restore the dotted fake");
+}
+
+#[test]
+fn restorer_genuine_sentence_boundary_not_inside_a_fake_still_cuts() {
+    // Control: the straddle hold-back must NOT delay a real boundary that is not
+    // inside a fake — it emits the completed sentence immediately (hold == 0).
+    let mut key = HashMap::new();
+    key.insert("P-5".to_string(), "Alice Wong".to_string());
+    let mut restorer = StreamingRestorer::new(key, RestoreStrategy::Sentence);
+    // The last real boundary is the ". " after "follows"; `complete` ends at that
+    // dot (the trailing space stays in the buffer) and emits immediately.
+    let emitted = restorer.feed("First P-5 here. Second follows. ").unwrap();
+    assert_eq!(emitted, "First Alice Wong here. Second follows.");
 }
 
 // ── StreamingRestorer over a cached session (internal reimpl parity) ───────────

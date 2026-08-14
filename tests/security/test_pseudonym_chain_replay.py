@@ -25,26 +25,35 @@ import pytest
 from argus_redact import redact_pseudonym_llm
 
 # (salt, input_text, target_value, lang, entity_type, expected_placeholder)
+#
+# ``inverted[target_value]`` resolves to the AUDIT-space placeholder (the audit
+# key is unioned last, so it wins the inversion), which is where the KDF-derived
+# number surfaces directly. v0.8.13 moved the audit face into a bracketed
+# namespace ([PREFIX-NNNNN], the shape the docstring always documented) so it is
+# disjoint from the realistic pass's codes and can never overwrite an LLM-facing
+# mapping. The KDF DERIVATION (the number itself) is unchanged — each expected
+# value is the pre-v0.8.13 code wrapped in brackets — so the cryptographic chain
+# is intact; only the audit-face presentation is bracketed.
 REPLAY_VECTORS = [
-    (b"a" * 32, "客户黄芳来访", "黄芳", "zh", "person", "P-24813"),
-    (b"\x00" * 32, "13912345678", "13912345678", "zh", "phone", "PHON-61048"),
+    (b"a" * 32, "客户黄芳来访", "黄芳", "zh", "person", "[P-24813]"),
+    (b"\x00" * 32, "13912345678", "13912345678", "zh", "phone", "[PHON-61048]"),
     (
         b"email-replay-salt!!!!!!!!!!!!!!!",
         "alice@acme.io",
         "alice@acme.io",
         "en",
         "email",
-        "EMAI-26776",
+        "[EMAI-26776]",
     ),
-    (b"deterministic-salt!!!!!!!!!!!!!!", "John Smith", "John Smith", "en", "person", "P-07850"),
-    (b"compound-surname!!!!!!!!!!!!!!!!", "客户欧阳锋来访", "欧阳锋", "zh", "person", "P-07038"),
+    (b"deterministic-salt!!!!!!!!!!!!!!", "John Smith", "John Smith", "en", "person", "[P-07850]"),
+    (b"compound-surname!!!!!!!!!!!!!!!!", "客户欧阳锋来访", "欧阳锋", "zh", "person", "[P-07038]"),
     (
         b"id-number-test!!!!!!!!!!!!!!!!!!",
         "110101199003074610",
         "110101199003074610",
         "zh",
         "id_number",
-        "ID-39097",
+        "[ID-39097]",
     ),
     (
         b"license-plate!!!!!!!!!!!!!!!!!!!",
@@ -52,7 +61,7 @@ REPLAY_VECTORS = [
         "京A12345",
         "zh",
         "license_plate",
-        "PLATE-15042",
+        "[PLATE-15042]",
     ),
     (
         b"passport-salt!!!!!!!!!!!!!!!!!!!",
@@ -60,7 +69,7 @@ REPLAY_VECTORS = [
         "E12345678",
         "zh",
         "passport",
-        "PASS-20713",
+        "[PASS-20713]",
     ),
     (
         b"bank-card-salt!!!!!!!!!!!!!!!!!!",
@@ -68,7 +77,7 @@ REPLAY_VECTORS = [
         "6217001234567890",
         "zh",
         "bank_card",
-        "BANK-59244",
+        "[BANK-59244]",
     ),
     (
         b"address-salt!!!!!!!!!!!!!!!!!!!!",
@@ -76,27 +85,27 @@ REPLAY_VECTORS = [
         "北京市朝阳区建国路100号",
         "zh",
         "address",
-        "ADDR-25695",
+        "[ADDR-25695]",
     ),
-    (b"compound-3char!!!!!!!!!!!!!!!!!!", "客户司马懿来访", "司马懿", "zh", "person", "P-07038"),
+    (b"compound-3char!!!!!!!!!!!!!!!!!!", "客户司马懿来访", "司马懿", "zh", "person", "[P-07038]"),
     (
         b"edge-mid-initial!!!!!!!!!!!!!!!!",
         "John F. Smith",
         "John F. Smith",
         "en",
         "person",
-        "P-67822",
+        "[P-67822]",
     ),
     # v0.6.11 edge vectors: full-FF salt (formerly OverflowError) + 10KB input
     # (locks HMAC-input-length stability)
-    (b"\xff" * 32, "user@acme.io", "user@acme.io", "en", "email", "EMAI-54564"),
+    (b"\xff" * 32, "user@acme.io", "user@acme.io", "en", "email", "[EMAI-54564]"),
     (
         b"long-input-salt-32-byte-padding!",
         "a" * 9992 + "@acme.io",
         "a" * 9992 + "@acme.io",
         "en",
         "email",
-        "EMAI-62284",
+        "[EMAI-62284]",
     ),
 ]
 

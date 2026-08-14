@@ -105,9 +105,9 @@ class TestToPatterns:
 
     def test_build_patterns_replaces_hand_written(self):
         """build_patterns('zh') should be a drop-in replacement."""
-        from argus_redact.specs.zh import build_patterns
+        from argus_redact.specs.registry import build_patterns
 
-        built = build_patterns()
+        built = build_patterns("zh")
 
         for text in TEST_INPUTS:
             hand = {
@@ -163,9 +163,9 @@ class TestToPatternsEn:
         spec/core skew.
         """
         from argus_redact.lang.en.patterns import PATTERNS as EN_PATTERNS
-        from argus_redact.specs.en import build_patterns
+        from argus_redact.specs.registry import build_patterns
 
-        built = build_patterns()
+        built = build_patterns("en")
         assert len(built) == len(EN_PATTERNS), (
             "spec and core must expose the same number of en patterns"
         )

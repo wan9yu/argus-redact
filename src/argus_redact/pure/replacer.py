@@ -8,10 +8,11 @@ from collections.abc import Mapping
 from typing import Callable
 
 from argus_redact._core_loader import _core
-from argus_redact._types import PatternMatch
+from argus_redact._types import PatternMatch, to_rust_pm
 from argus_redact.exceptions import SecurityWarning  # noqa: F401
 from argus_redact.lang.zh.hints import KINSHIP as _ZH_KINSHIP
 from argus_redact.pure._strategy_kind import (
+    _ALL_STRATEGIES,
     VALID_STRATEGIES,
     is_strategy_reversible,
 )
@@ -24,9 +25,6 @@ from argus_redact.pure.security_events import (
     _auto_stacklevel,
     security_event,
 )
-
-# Rust PatternMatch class, resolved once at import (same idiom as pure/merger.py).
-_RustPM = _core.PatternMatch
 
 # Strategy-classification SSOT lives in the dependency-free `_strategy_kind`
 # leaf and is re-exported here for back-compat (public `argus_redact.
@@ -52,19 +50,6 @@ _ZH_PRONOUNS = frozenset({"我", "我的", "我们", "我们的"})
 _KEEP_WHITELIST = SELF_REF_PRONOUNS | _ZH_PRONOUNS | _ZH_KINSHIP
 
 
-def _find_faker_reserved(name: str, langs: list[str] | None) -> Callable | None:
-    """Find faker_reserved for a type, preferring detected langs, then 'shared', then any.
-
-    Lang-aware lookup is required when zh and en both register same-named types
-    (e.g., `phone`, `address`, `person`); without preference order, the first
-    registered lang silently wins regardless of the entity's actual language.
-
-    Cached on (name, lang_tuple, registry generation) — see
-    ``_registry_generation`` for why the generation is part of the key.
-    """
-    return _faker_reserved_cached(name, tuple(langs or ()), _registry_generation())
-
-
 def _registry_generation() -> int:
     """Read the registry's current generation counter.
 
@@ -86,39 +71,44 @@ def _registry_generation() -> int:
     return registry.generation()
 
 
-@functools.lru_cache(maxsize=256)
-def _faker_reserved_cached(name: str, langs: tuple[str, ...], _generation: int) -> Callable | None:
-    from argus_redact.specs.registry import lookup
-
-    by_lang = {td.lang: td for td in lookup(name)}
-    for lang in langs:
-        if lang in by_lang and by_lang[lang].faker_reserved:
-            return by_lang[lang].faker_reserved
-    if "shared" in by_lang and by_lang["shared"].faker_reserved:
-        return by_lang["shared"].faker_reserved
-    for td in by_lang.values():
-        if td.faker_reserved:
-            return td.faker_reserved
-    return None
-
-
-def _resolve_default_strategy(entity_type: str) -> str:
+def _resolve_default_strategy(entity_type: str, langs: list[str] | None = None) -> str:
     """Look up the type's declared strategy from the typedef registry.
 
     v0.6.8: single source of truth = specs/{zh,en,shared}.py PIITypeDef.strategy.
+
+    v0.8.10: lang-aware. When the same type NAME is registered under more than
+    one language, prefer the typedef for one of the entity's detected `langs`
+    (in order), then 'shared', then whichever typedef happens to be first (the
+    old lang-blind behaviour) as a last resort — the SAME preference order
+    `_resolve_realistic_faker` already uses for the realistic-faker lookup. No
+    currently-registered type disagrees on `strategy` across languages, so this
+    is a forward-looking correctness fix (dormant today), not an observed bug.
     """
     # Lazy import to avoid circular: registry imports types, types reference replacer
     from argus_redact.specs.registry import lookup
 
     typedef_list = lookup(entity_type)
-    if typedef_list:
-        return typedef_list[0].strategy
-    return "remove"  # fallback for unknown types
+    if not typedef_list:
+        return "remove"  # fallback for unknown types
+    by_lang = {td.lang: td for td in typedef_list}
+    for lang in langs or ():
+        if lang in by_lang:
+            return by_lang[lang].strategy
+    if "shared" in by_lang:
+        return by_lang["shared"].strategy
+    return typedef_list[0].strategy
 
 
 def _resolved_strategy(entity_type: str, config: dict | None) -> str:
     """The strategy that applies to ``entity_type`` — explicit config over the
-    registry default. Single source for keep-downgrade + residual-PII."""
+    registry default. Single source for keep-downgrade + residual-PII.
+
+    Intentionally lang-blind: this only decides whether the effective strategy
+    is ``keep`` (the self_reference/kinship whitelist check), not which
+    replacement fires, and no caller here has a detected-langs list in scope.
+    The lang-aware resolution lives in ``_build_type_info``, the path that
+    actually determines the applied redaction strategy.
+    """
     ec = _get_entity_config(entity_type, config)
     return ec.get("strategy") or _resolve_default_strategy(entity_type)
 
@@ -161,6 +151,32 @@ def keep_downgraded_event(entities, config: dict | None) -> dict | None:
     if not ents:
         return None
     return _types_event(KEEP_DOWNGRADED, len(ents), (e.type for e in ents))
+
+
+def warn_keep_downgraded(entities, config: dict | None) -> None:
+    """Emit the ``keep_downgraded`` SecurityWarning once per downgraded entity —
+    a no-op when nothing downgraded. THE single source for that warning's
+    text/category/stacklevel, shared by the one-shot ``replace()`` path and the
+    structured (``redact_csv``/``redact_json``) ``replace_into_session`` path, so
+    the two can never drift apart. Entity SELECTION is single-sourced through
+    ``_keep_downgraded_entities`` (the SAME predicate the structured
+    ``keep_downgraded_event`` uses).
+
+    The offending text is, by construction, an un-redacted identifier — the whole
+    reason this warning fires. Naming the TYPE only keeps the warning stream
+    PII-free, matching its sibling ``keep_downgraded_event`` (which emits
+    detail="types: ...") and the log-scrub discipline in
+    tests/safety/test_layer3_log_scrub.py. Use redact(detailed=True) ->
+    security_events for the structured signal.
+    """
+    for entity in _keep_downgraded_entities(entities, config):
+        warnings.warn(
+            f"strategy='keep' is only supported for self_reference "
+            f"pronouns and kinship phrases; downgrading to default for "
+            f"type={entity.type!r}.",
+            SecurityWarning,
+            stacklevel=_auto_stacklevel(),  # see warn_mask_collisions
+        )
 
 
 def mask_collision_event(mask_collisions: list[str]) -> dict | None:
@@ -364,10 +380,19 @@ def _get_entity_config(
     return {}
 
 
-def _validate_config(config: dict | None) -> None:
-    """Validate user config, raise ValueError on invalid strategy."""
+def _validate_config(config: dict | None, *, allow_internal: bool = False) -> None:
+    """Validate config, raise ValueError on invalid strategy.
+
+    Default validates against the PUBLIC ``VALID_STRATEGIES`` — the set a user's
+    ``config`` may select from. ``allow_internal=True`` (set only for configs
+    argus builds itself, e.g. the pseudonym-llm audit pass) additionally accepts
+    the internal-only strategies (``remove_bracketed``). The user-facing error
+    always lists the public strategies, so an internal strategy is never
+    advertised as selectable.
+    """
     if not config:
         return
+    valid = _ALL_STRATEGIES if allow_internal else VALID_STRATEGIES
     if not isinstance(config, Mapping):
         raise TypeError(
             f"config must be a dict mapping entity type to settings, got {type(config).__name__}"
@@ -386,7 +411,7 @@ def _validate_config(config: dict | None) -> None:
                 f"config[{entity_type!r}] must be a dict, got {type(type_config).__name__}"
             )
         strategy = type_config.get("strategy")
-        if strategy and strategy not in VALID_STRATEGIES:
+        if strategy and strategy not in valid:
             raise ValueError(
                 f"Unknown strategy '{strategy}' for entity type "
                 f"'{entity_type}'. Valid: {', '.join(VALID_STRATEGIES)}"
@@ -426,9 +451,9 @@ def _resolve_realistic_faker(
     Returns ``("builtin", faker_name)`` / ``("custom", callable)`` / ``None``.
 
     Bit-identity critical: built-ins (callable-less, resolved via the Rust
-    ``_core`` association) and custom ``faker_reserved`` callables compete in the
-    SAME single lang-preference pass the old ``_faker_reserved_cached`` used
-    (detected langs → 'shared' → any registered, each in registry order). The
+    ``_core`` association) and custom ``faker_reserved`` callables compete in a
+    single lang-preference pass (detected langs → 'shared' → any registered,
+    each in registry order). The
     first candidate lang that has EITHER a built-in association OR a custom
     callable wins — so a built-in for the detected lang is never shadowed by a
     custom faker registered for a different lang (the #1 wrong-language risk).
@@ -446,9 +471,8 @@ def _resolve_realistic_faker_cached(
 
     def _for_lang(lang: str) -> tuple[str, str | Callable] | None:
         # A registered custom callable for this lang wins (it OVERRODE the
-        # typedef, the same way it did in the old `_faker_reserved_cached`); the
-        # built-in `_core` association is the callable-less fallback when the
-        # typedef carries no custom faker.
+        # typedef); the built-in `_core` association is the callable-less
+        # fallback when the typedef carries no custom faker.
         td = by_lang.get(lang)
         if td is not None and td.faker_reserved is not None:
             return ("custom", td.faker_reserved)
@@ -474,23 +498,18 @@ def _resolve_realistic_faker_cached(
     return None
 
 
-# These caches all key off the (frozen-at-import) registry's `faker_reserved`
-# state, so they must invalidate together. Tests that inject/remove a temporary
-# custom type call ``_faker_reserved_cached.cache_clear()``; chain the realistic
-# resolver caches onto that single entry point so they never go stale.
+# The single cache-invalidation entry point for the realistic faker resolver;
+# register()/unregister() call it.
 def _clear_faker_caches() -> None:
-    _faker_reserved_cached_clear()
     _resolve_realistic_faker_cached.cache_clear()
-
-
-_faker_reserved_cached_clear = _faker_reserved_cached.cache_clear
-_faker_reserved_cached.cache_clear = _clear_faker_caches  # type: ignore[attr-defined]
 
 
 def _build_type_info(
     entities: list[PatternMatch],
     config: dict | None,
     langs: list[str] | None,
+    *,
+    rust_entities: list | None = None,
 ) -> tuple[dict[str, dict], dict[str, Callable]]:
     """Resolve the per-type replacement info the Rust ``replace`` needs, plus any
     custom Python ``faker_reserved`` callables to pass as the Rust callback map.
@@ -529,11 +548,14 @@ def _build_type_info(
     flip the core's ``faker_name``/``custom_faker`` fields and collect the callable.
     """
     # Built-in assembly in Rust (single SSOT). `custom_faker` is always False here.
-    # The core reads only `entity.type`; convert the dataclass entities into the
-    # Rust PatternMatch the binding expects (same idiom as `replace()` / merger).
-    rust_entities = [
-        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
-    ]
+    # The core reads only `entity.type` off the Rust PatternMatch the binding
+    # expects. `replace()` / `replace_into_session()` already marshal that list for
+    # their own `_core.replace` / `session.redact_cell` call, so they thread it in
+    # here (`rust_entities=`) to avoid building the identical list twice per call —
+    # paid per cell on redact_csv / redact_json. A standalone caller omits it and
+    # one is built here (same idiom as `replace()` / merger).
+    if rust_entities is None:
+        rust_entities = [to_rust_pm(e) for e in entities]
     # Per-type defaults from the live registry (SSOT; includes runtime adapter
     # types). Resolve once per distinct detected type — the same lookups the
     # pre-port `_build_type_info` did inline (strategy from the registry, prefix /
@@ -544,7 +566,7 @@ def _build_type_info(
         if e.type in registry_defaults:
             continue
         registry_defaults[e.type] = {
-            "strategy": _resolve_default_strategy(e.type),
+            "strategy": _resolve_default_strategy(e.type, langs),
             "prefix": DEFAULT_PREFIXES.get(e.type, e.type.upper()[:4]),
             "category_label": DEFAULT_CATEGORY_LABEL.get(e.type, f"[{e.type}]"),
         }
@@ -578,6 +600,7 @@ def replace(
     langs: list[str] | None = None,
     unified_prefix: str | None = None,
     _mask_collisions: list[str] | None = None,
+    _allow_internal_strategies: bool = False,
 ) -> tuple[str, dict[str, str], dict[str, list[str]]]:
     """Replace detected entities in text, producing ``(redacted_text, key, aliases)``.
 
@@ -606,10 +629,16 @@ def replace(
     out-param idiom in ``glue/redact.py``. ``glue._replace_and_emit`` uses it
     to build the structured ``mask_collision`` security_event without
     widening this function's public 3-tuple return.
+
+    ``_allow_internal_strategies`` is internal: default ``False`` validates
+    ``config`` against the PUBLIC ``VALID_STRATEGIES``. The pseudonym-llm audit
+    pass sets it ``True`` for its internally-built ``remove_bracketed`` config;
+    no user-facing path enables it, so ``remove_bracketed`` stays unselectable
+    from ``config`` / ``strategy_overrides``.
     """
     # Validate + reject the removed _unified_prefix sentinel up front so both
     # paths raise identically (the Rust path would otherwise silently accept it).
-    _validate_config(config)
+    _validate_config(config, allow_internal=_allow_internal_strategies)
     if config and "_unified_prefix" in config:
         raise ValueError(
             "_unified_prefix is no longer accepted as a config key in v0.6.0. "
@@ -617,21 +646,23 @@ def replace(
             "redact_pseudonym_llm() instead."
         )
 
+    # Convert the dataclass entities into the Rust PatternMatch the binding
+    # expects (via the shared `to_rust_pm` seam, same as pure/merger.py). Built
+    # ONCE here and threaded into `_build_type_info` so the identical list is not
+    # rebuilt inside it as well.
+    rust_entities = [to_rust_pm(e) for e in entities]
+
     # Build the per-type info once; the custom_fakers dict is passed to _core.replace
     # so Rust can invoke Python callables via PyFakerFactory. The Rust core is
     # required (lang/_loader raises ImportError without it); replace() always runs
     # in Rust and the historical pure-Python orchestrator has been removed.
-    type_info, custom_fakers = _build_type_info(entities, config, langs)
+    type_info, custom_fakers = _build_type_info(
+        entities, config, langs, rust_entities=rust_entities
+    )
 
     # Person / organization pseudonym prefixes (config can override) — via the
     # SSOT so this one-shot path and the structured session builder never drift.
     person_prefix, org_prefix = _resolve_person_org_prefixes(config)
-
-    # Convert the dataclass entities into the Rust PatternMatch the binding
-    # expects (same idiom as pure/merger.py). `_RustPM` is resolved at import.
-    rust_entities = [
-        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
-    ]
 
     redacted, result_key, aliases, signals = _core.replace(
         text,
@@ -655,20 +686,7 @@ def replace(
     # `keep_downgraded_event` cannot drift from each other. If the Rust whitelist
     # logic (`keep_whitelist=`) ever changes, update `_keep_downgraded_entities` too.
     if keep_downgraded:
-        for entity in _keep_downgraded_entities(entities, config):
-            # The offending text is, by construction, an un-redacted identifier — the
-            # whole reason this warning fires. Naming the TYPE only keeps the warning
-            # stream PII-free, matching its sibling `keep_downgraded_event` (which
-            # emits detail="types: ...") and the log-scrub discipline in
-            # tests/safety/test_layer3_log_scrub.py. Use redact(detailed=True) ->
-            # security_events for the structured signal.
-            warnings.warn(
-                f"strategy='keep' is only supported for self_reference "
-                f"pronouns and kinship phrases; downgrading to default for "
-                f"type={entity.type!r}.",
-                SecurityWarning,
-                stacklevel=_auto_stacklevel(),  # see warn_mask_collisions
-            )
+        warn_keep_downgraded(entities, config)
 
     # `mask_collisions`: the Rust core disambiguated a mask-family
     # collision (two different originals wanting the same visible label) with a
@@ -750,25 +768,20 @@ def replace_into_session(
     replace engine, emits the SAME per-cell ``keep``-downgrade warnings, and applies
     the SAME English grammar normalization — only the key stays in Rust across cells.
     """
-    type_info, custom_fakers = _build_type_info(entities, config, langs)
-    rust_entities = [
-        _RustPM(e.text, e.type, e.start, e.end, e.confidence, e.layer) for e in entities
-    ]
+    # Marshal the dataclass entities once and thread the same list into
+    # `_build_type_info` so it is not rebuilt there as well (paid per cell).
+    rust_entities = [to_rust_pm(e) for e in entities]
+    type_info, custom_fakers = _build_type_info(
+        entities, config, langs, rust_entities=rust_entities
+    )
     redacted = session.redact_cell(
         text, rust_entities, type_info, custom_fakers if custom_fakers else None
     )
 
     # Same per-cell keep-downgrade warning selection as `replace` (single-sourced
-    # through `_keep_downgraded_entities`); the session's cumulative flag is a
-    # cross-check, not the per-cell signal.
-    for entity in _keep_downgraded_entities(entities, config):
-        warnings.warn(
-            f"strategy='keep' is only supported for self_reference "
-            f"pronouns and kinship phrases; downgrading to default for "
-            f"type={entity.type!r}.",
-            SecurityWarning,
-            stacklevel=_auto_stacklevel(),  # see warn_mask_collisions
-        )
+    # through `warn_keep_downgraded` -> `_keep_downgraded_entities`); the session's
+    # cumulative flag is a cross-check, not the per-cell signal.
+    warn_keep_downgraded(entities, config)
 
     # English article/grammar fix-up, exactly as `_replace_and_emit`. Normalize
     # against THIS cell's own originals only — the cumulative key's extras are not

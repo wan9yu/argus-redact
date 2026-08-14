@@ -5,13 +5,14 @@
 //! used as a place a person is associated with, gated on positive evidence so
 //! 北京时间 / 北京大学 don't fire. Shared by PyO3 + wasm; feeds the default
 //! `remove` strategy for `location`.
-use std::collections::HashSet;
 use std::sync::{LazyLock, OnceLock};
 
 use fancy_regex::Regex;
 use serde::Deserialize;
 
-use crate::evidence_detector::is_person_identifying;
+use crate::evidence_detector::{
+    candidates_cjk, context_windows, is_person_identifying, proximity_evidence, DetectorConfig,
+};
 
 #[derive(Debug, Deserialize)]
 struct ZhRegionData {
@@ -25,19 +26,6 @@ fn zh_region_data() -> &'static ZhRegionData {
         ron::from_str(include_str!("../data/regions/zh.ron"))
             .unwrap_or_else(|e| panic!("RON parse error in data/regions/zh.ron: {e}"))
     })
-}
-
-/// All region names sorted LONGEST-first (by char count), for greedy
-/// longest-match scans.
-fn region_names_longest_first() -> &'static [&'static str] {
-    static CELL: OnceLock<Vec<&'static str>> = OnceLock::new();
-    CELL.get_or_init(|| {
-        let mut names: Vec<&'static str> =
-            zh_region_data().regions.iter().map(|r| r.0.as_str()).collect();
-        names.sort_by(|a, b| b.chars().count().cmp(&a.chars().count()).then(a.cmp(b)));
-        names
-    })
-    .as_slice()
 }
 
 // ── Evidence-gated bare-region detection ──
@@ -55,38 +43,23 @@ fn region_names_longest_first() -> &'static [&'static str] {
 // continuation, or proximity to other PII), so a region mention with none of
 // those is left for L2 NER rather than emitted at L1.
 
-/// Membership set of every gazetteer region name, for O(1) longest-match
-/// probing in [`region_candidates`]. Built once.
-fn region_name_set() -> &'static HashSet<&'static str> {
-    static CELL: OnceLock<HashSet<&'static str>> = OnceLock::new();
-    CELL.get_or_init(|| region_names_longest_first().iter().copied().collect())
-}
-
-/// First chars of every gazetteer region name, for a cheap prefilter before the
-/// longest-match probe in [`region_candidates`]: a position whose char never
-/// starts ANY region name cannot begin a match, so the probe (up to `max_len`
-/// substring allocations + lookups) is skipped there. Pure speedup — the set of
-/// emitted matches is unchanged. Built once.
-fn region_first_chars() -> &'static HashSet<char> {
-    static CELL: OnceLock<HashSet<char>> = OnceLock::new();
+/// The gazetteer as a shared [`DetectorConfig`], built once. `DetectorConfig::new`
+/// indexes the names into the SAME membership set / first-char prefilter / max
+/// char-length this module used to build by hand, so the candidate scan reuses
+/// `evidence_detector::candidates_cjk` — byte-identical to the hand-rolled region
+/// scan this module used to carry — and the parent-prefix absorption reuses the
+/// name set + max_len via the config's accessors. The names are collected
+/// straight off `zh_region_data()` in gazetteer order: `new` builds an
+/// order-insensitive index (set / first_chars / max), so no longest-first sort is
+/// needed. The cue / weights the config also carries are unused here — region
+/// detection layers its OWN signals (struct-suffix / cue / proximity) in
+/// `detect_regions_zh`.
+fn region_detector() -> &'static DetectorConfig {
+    static CELL: OnceLock<DetectorConfig> = OnceLock::new();
     CELL.get_or_init(|| {
-        region_names_longest_first()
-            .iter()
-            .filter_map(|n| n.chars().next())
-            .collect()
-    })
-}
-
-/// Longest region-name length in **chars**, the upper bound for the
-/// longest-match probe window. Built once from the gazetteer.
-fn region_max_len() -> usize {
-    static CELL: OnceLock<usize> = OnceLock::new();
-    *CELL.get_or_init(|| {
-        region_names_longest_first()
-            .iter()
-            .map(|n| n.chars().count())
-            .max()
-            .unwrap_or(0)
+        let names: Vec<&'static str> =
+            zh_region_data().regions.iter().map(|r| r.0.as_str()).collect();
+        DetectorConfig::new(&names, &REGION_CUE, "location")
     })
 }
 
@@ -105,7 +78,7 @@ fn is_suffix_elided_region(prefix: &str) -> bool {
     if prefix.is_empty() {
         return false;
     }
-    let set = region_name_set();
+    let set = region_detector().name_set();
     REGION_ADMIN_SUFFIXES.iter().any(|suf| {
         let mut candidate = String::with_capacity(prefix.len() + suf.len_utf8());
         candidate.push_str(prefix);
@@ -160,54 +133,14 @@ const REGION_WINDOW: usize = 40;
 /// task 8 tunes this against the fixture corpus.
 const REGION_THRESHOLD: f64 = 0.5;
 
-/// Scan `chars` for gazetteer region names, returning non-overlapping
-/// `(name, start_char, end_char)` matches, longest-match-first at each
-/// position. Char offsets throughout (consistent with `person_zh` +
-/// `PatternMatch`).
-///
-/// Left-to-right greedy: at each position try the longest possible substring
-/// (down to length 1) and take the first gazetteer hit; on a hit, advance past
-/// it so matches never overlap. O(text · max_name_len) with O(1) set lookups.
-fn region_candidates(chars: &[char]) -> Vec<(String, usize, usize)> {
-    let names = region_name_set();
-    let first_chars = region_first_chars();
-    let max_len = region_max_len();
-    let n = chars.len();
-    let mut out: Vec<(String, usize, usize)> = Vec::new();
-
-    let mut i = 0;
-    while i < n {
-        // Prefilter: if chars[i] never starts any region name, no candidate can
-        // begin here — skip the (up to max_len) substring probe entirely. Keeps
-        // the longest-match result identical; only avoids wasted work (the bulk
-        // of any non-region text, e.g. phone/email runs).
-        if !first_chars.contains(&chars[i]) {
-            i += 1;
-            continue;
-        }
-        // Longest-match probe: try length max_len down to 1, first hit wins.
-        let hi = max_len.min(n - i);
-        let mut matched_len = 0usize;
-        for len in (1..=hi).rev() {
-            let cand: String = chars[i..i + len].iter().collect();
-            if names.contains(cand.as_str()) {
-                out.push((cand, i, i + len));
-                matched_len = len;
-                break;
-            }
-        }
-        // Advance past the match (non-overlapping), or one char on a miss.
-        i += matched_len.max(1);
-    }
-
-    out
-}
-
 /// Detect Chinese admin-region names used as *locations*, gated on positive
 /// evidence. Mirrors `person_zh::score_candidate`'s evidence model.
 ///
-/// For each gazetteer candidate found by [`region_candidates`] this slices a
-/// `±REGION_WINDOW` char window, accumulates:
+/// The gazetteer scan reuses [`evidence_detector::candidates_cjk`] over the
+/// shared [`region_detector`] config — a left-to-right greedy longest-match,
+/// first-char-prefiltered, non-overlapping substring scan (byte-identical to the
+/// hand-rolled scan this module used to carry). For each gazetteer candidate it
+/// then slices a `±REGION_WINDOW` char window and accumulates:
 ///   - `+= W_REGION_CUE` if an address-context cue is in the before/after
 ///     window,
 ///   - `+= W_REGION_STRUCT` if the chars immediately after the candidate are a
@@ -234,28 +167,13 @@ pub(crate) fn detect_regions_zh(
     // — candidate offsets and PatternMatch offsets are char offsets, and a
     // multi-byte CJK window must never be byte-sliced (mirrors person_zh).
     let chars: Vec<char> = text.chars().collect();
-    let n = chars.len();
 
     let mut out: Vec<crate::types::PatternMatch> = Vec::new();
 
-    for (name, start, end) in region_candidates(&chars) {
+    for (name, start, end) in candidates_cjk(&chars, region_detector()) {
         // before = chars[max(0, start - REGION_WINDOW) : start]
         // after  = chars[end : end + REGION_WINDOW]   (char slices)
-        let before_start = start.saturating_sub(REGION_WINDOW);
-        let before_end = start.min(n);
-        let before: String = if before_start <= before_end {
-            chars[before_start..before_end].iter().collect()
-        } else {
-            String::new()
-        };
-
-        let after_start = end.min(n);
-        let after_end = (end + REGION_WINDOW).min(n);
-        let after: String = if after_start <= after_end {
-            chars[after_start..after_end].iter().collect()
-        } else {
-            String::new()
-        };
+        let (before, after) = context_windows(&chars, start, end, REGION_WINDOW);
 
         let mut evidence = 0.0_f64;
 
@@ -279,7 +197,7 @@ pub(crate) fn detect_regions_zh(
         }
 
         // Proximity to person-identifying PII — first entity within a bucket wins
-        // (break). abs_diff over usize char offsets == Python abs() on ints.
+        // (near before mid), via the shared `proximity_evidence` helper.
         //
         // Only PII that NAMES, CONTACTS, or LOCATES a specific person corroborates
         // (phone/person/id/email/…). Technical tokens (url_token/jwt/ip_address/
@@ -289,26 +207,16 @@ pub(crate) fn detect_regions_zh(
         // is an allowlist (is_person_identifying): new technical types are safe by
         // default. This subsumes the old self_reference/organization denylist —
         // both are simply absent from the allowlist.
-        for pii in pii_entities {
-            if !is_person_identifying(&pii.type_) {
-                continue;
-            }
-            let distance = start
-                .abs_diff(pii.end)
-                .min(pii.start.abs_diff(end));
-            if distance <= REGION_PROX_NEAR {
-                evidence += W_REGION_PII_PROX;
-                break;
-            } else if distance <= REGION_PROX_MID {
-                evidence += W_REGION_PII_MID;
-                break;
-            }
-        }
-
-        // No evidence → don't match at L1 (leave to L2 NER).
-        if evidence == 0.0_f64 {
-            continue;
-        }
+        evidence += proximity_evidence(
+            start,
+            end,
+            pii_entities.iter(),
+            &[
+                (REGION_PROX_NEAR, W_REGION_PII_PROX),
+                (REGION_PROX_MID, W_REGION_PII_MID),
+            ],
+            |pii| is_person_identifying(&pii.type_),
+        );
 
         if evidence >= REGION_THRESHOLD {
             out.push(crate::types::PatternMatch {
@@ -335,16 +243,28 @@ pub(crate) fn detect_regions_zh(
     // char. This only WIDENS an already-emitted match — it can never create a
     // new one, so the precision guards (北京时间/北京大学/北京烤鸭, which never
     // emit) are unaffected.
+    // One reused probe buffer for every candidate `s` across every match. A long
+    // parent chain probes millions of prefixes; `clear` keeps the capacity so no
+    // per-probe heap allocation happens. Byte-identical: same prefix content,
+    // same longest-match-first scan order, same membership test.
+    let mut prefix = String::with_capacity(region_detector().max_len() * 4);
     for m in out.iter_mut() {
+        // `m.end` never moves during the walk, so the widened span is always
+        // `chars[m.start..m.end]`. Only slide `m.start` left here; materialize
+        // `m.text` ONCE after the loop. Re-collecting the whole `chars[s..m.end]`
+        // on every absorption step made a k-region chain O(k²) char copies — a
+        // legal `上海市`×32000 input (288 KB, under the 1 MiB cap) burned tens of
+        // seconds. Materialize-once drops it to O(k): byte-identical output (same
+        // absorption decisions, same final `(text, start, end)`), only faster.
         loop {
-            let probe_lo = m.start.saturating_sub(region_max_len());
+            let probe_lo = m.start.saturating_sub(region_detector().max_len());
             let mut absorbed = false;
             for s in probe_lo..m.start {
-                let prefix: String = chars[s..m.start].iter().collect();
-                if region_name_set().contains(prefix.as_str())
+                prefix.clear();
+                prefix.extend(chars[s..m.start].iter());
+                if region_detector().name_set().contains(prefix.as_str())
                     || is_suffix_elided_region(&prefix)
                 {
-                    m.text = chars[s..m.end].iter().collect();
                     m.start = s;
                     absorbed = true;
                     break;
@@ -354,6 +274,7 @@ pub(crate) fn detect_regions_zh(
                 break;
             }
         }
+        m.text = chars[m.start..m.end].iter().collect();
     }
 
     out
@@ -471,6 +392,58 @@ mod tests {
         assert!(
             detect_regions_zh(t, &[url, phone]).iter().any(|h| h.text == "西湖区"),
             "phone must still corroborate region even when a url_token precedes it in the list"
+        );
+    }
+
+    #[test]
+    fn parent_prefix_absorption_span_is_byte_identical() {
+        // Pins the exact absorbed span for a multi-region chain. `浦东新区`
+        // (chars 5..9) is the only candidate that clears evidence (cue `住`);
+        // parent-prefix absorption then slides the start left over the
+        // suffix-elided parent `上海` (`上海市` minus 市), giving the single
+        // widened unit `上海浦东新区` at [3, 9). The materialize-once fix must
+        // reproduce this tuple exactly — same absorption decisions, same
+        // `(text, start, end)`, just computed once instead of per step.
+        let hits = detect_regions_zh("他住在上海浦东新区。", &[]);
+        let loc: Vec<_> = hits.iter().filter(|h| h.type_ == "location").collect();
+        assert_eq!(
+            loc.len(),
+            1,
+            "expected exactly one location hit, got {hits:?}"
+        );
+        assert_eq!(loc[0].text, "上海浦东新区");
+        assert_eq!((loc[0].start, loc[0].end), (3, 9));
+    }
+
+    #[test]
+    fn parent_prefix_absorption_chain_stays_byte_identical() {
+        // The degenerate parent-chain that used to blow up. The trailing `住`
+        // (residence cue) makes every `上海市` candidate clear evidence, and each
+        // walks the full chain leftward, absorbing all preceding parents and
+        // stopping at 0 — so the emitted set is nested {上海市, 上海市上海市, …}.
+        // Re-materializing `chars[s..end]` on every absorption step made a
+        // k-region chain O(k²) char copies: a legal `上海市`×32000 (288 KB, under
+        // the 1 MiB cap, reachable on a default `redact()`) burned ~34s and
+        // outran the 30s scan deadline uninterruptibly. Materialize-once drops
+        // each chain to O(k) — measured release scaling is 2× per input doubling
+        // (linear), down from ~4× (quadratic). This pins the chain-scale output
+        // as byte-identical: same absorption decisions, same final
+        // (text, start, end), only computed once per match.
+        let mut input = "上海市".repeat(3);
+        input.push('住');
+        let mut got: Vec<(String, usize, usize)> = detect_regions_zh(&input, &[])
+            .into_iter()
+            .map(|h| (h.text, h.start, h.end))
+            .collect();
+        got.sort();
+        assert_eq!(
+            got,
+            vec![
+                ("上海市".to_string(), 0, 3),
+                ("上海市上海市".to_string(), 0, 6),
+                ("上海市上海市上海市".to_string(), 0, 9),
+            ],
+            "degenerate parent-chain absorption must stay byte-identical"
         );
     }
 

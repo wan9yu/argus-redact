@@ -30,8 +30,9 @@ use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
+use argus_redact_core::coverage::{finalize_entities, FilterScope};
 use argus_redact_core::grammar::normalize_grammar_en;
-use argus_redact_core::redact_l1::{detect_l1, redact_l1, RedactL1Args};
+use argus_redact_core::redact_l1::detect_l1;
 use argus_redact_core::replace::{replace, ReplaceArgs};
 use argus_redact_core::restore::restore_full;
 use argus_redact_core::seed::Salt;
@@ -40,7 +41,10 @@ use argus_redact_core::streaming::{
     DetectSpans, RedactSegment, StreamingRedactor as CoreStreamingRedactor,
 };
 use argus_redact_core::typeinfo::{build_type_info, Config, EntityConfig};
-use argus_redact_core::{kinship_exact, MtRandomSource, PseudoFactory, SELF_REF_PRONOUNS, TypeInfo};
+use argus_redact_core::{
+    detect_languages, kinship_exact, MtRandomSource, PatternMatch, PseudoFactory, SELF_REF_PRONOUNS,
+    TypeInfo,
+};
 
 // ── pseudonym RNG: the core's CPython-exact MT19937 (shared with PyO3) ───────
 
@@ -159,6 +163,16 @@ fn to_object_serializer() -> serde_wasm_bindgen::Serializer {
     serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true)
 }
 
+/// Serialize a result value to a plain-JS-object [`JsValue`] via
+/// [`to_object_serializer`], mapping any serialization failure to the SAME
+/// `failed to serialize result` JS `Error`. The single return-marshalling idiom
+/// shared by every JS-object entry point (`redact`, both `restore_guarded`
+/// branches, and the streaming `emit_to_js`).
+fn serialize_result<T: Serialize>(out: &T) -> Result<JsValue, JsValue> {
+    out.serialize(&to_object_serializer())
+        .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
+}
+
 /// The `redact` return shape `{ text, key, aliases, keep_downgraded,
 /// mask_collisions }`. `key` is `{fake: original}` (for `restore`); `aliases` is
 /// `{fake: [alias, ...]}` from realistic fakers. `keep_downgraded` /
@@ -223,10 +237,47 @@ fn lookup_prefix(info: &[(String, argus_redact_core::TypeInfo)], type_: &str, fa
         .unwrap_or_else(|| fallback.to_string())
 }
 
+/// Resolve the per-type info map plus the `person` / `organization` prefixes from
+/// a set of entities — the `build_type_info` → `lookup_prefix` → `info_map`
+/// assembly shared by the one-shot [`redact_segment`] and the streaming redact
+/// closure (`registry_defaults = None` on both — built-in tables are the SSOT).
+/// A `config` prefix override threads through `build_type_info`, so it is picked
+/// up by the `lookup_prefix` reads.
+fn build_info(
+    entities: &[PatternMatch],
+    config: Option<&Config>,
+    langs: &[String],
+) -> (HashMap<String, TypeInfo>, String, String) {
+    let info_pairs = build_type_info(entities, config, langs, None);
+    let person_prefix = lookup_prefix(&info_pairs, "person", "P");
+    let org_prefix = lookup_prefix(&info_pairs, "organization", "O");
+    let info_map: HashMap<String, TypeInfo> = info_pairs.into_iter().collect();
+    (info_map, person_prefix, org_prefix)
+}
+
+/// Flatten a raw [`DetectL1Result`](argus_redact_core::redact_l1::DetectL1Result)
+/// into the fast-mode `{ entities, hints }` bundle both detect paths consume:
+/// `layer1 ++ person ++ regions ++ job_titles ++ framework` (Python's fast
+/// `_detect` extend order), carried together with the L1 `hints` as a
+/// [`DetectSpans`]. Shared by [`redact_segment`] (which then finalizes + redacts)
+/// and the streaming detect closure (which returns the bundle to the carry-window
+/// engine). Consumes the result by value so no entity vec is cloned.
+fn flatten_l1(d: argus_redact_core::redact_l1::DetectL1Result) -> DetectSpans {
+    let mut entities = d.layer1;
+    entities.extend(d.person);
+    entities.extend(d.regions);
+    entities.extend(d.job_titles);
+    entities.extend(d.framework);
+    DetectSpans {
+        entities,
+        hints: d.hints,
+    }
+}
+
 /// The resolved redaction params shared by the one-shot `redact` and the streaming
-/// `feed`/`flush` closures: the SAME detect → `build_type_info` → `redact_l1` path
-/// with one set of langs/names/config/salt/whitelist. Holding them once keeps the
-/// streaming closures byte-parity with the one-shot path (and with Python).
+/// `feed`/`flush` closures: the SAME detect → `build_info` → `finalize` → `replace`
+/// path with one set of langs/names/config/salt/whitelist. Holding them once keeps
+/// the streaming closures byte-parity with the one-shot path (and with Python).
 struct RedactParams {
     langs: Vec<String>,
     names: Vec<String>,
@@ -248,62 +299,128 @@ struct RedactSegmentWithSignals {
     mask_collisions: Vec<String>,
 }
 
-/// Run the one-shot fast-mode redact path over `text`, optionally threading an
-/// `existing_key` for cross-chunk collision continuity (same original reuses the
-/// same fake — mirrors the Python `existing_key=` / `setdefault` merge). This is
-/// the SSOT for the one-shot [`redact`] entry point: `detect_l1` →
-/// `build_type_info` (`registry_defaults = None`) → `redact_l1` with the wasm
-/// MT19937 pseudo-factory. Returns the segment PLUS the `keep_downgraded` /
-/// `mask_collisions` signals (see [`RedactSegmentWithSignals`]).
-/// The streaming path uses a separate replace-based redact closure (no re-detect).
-fn redact_segment(
+/// The detect-once SSOT tail shared by the one-shot [`redact_segment`] and the
+/// streaming redact closure: `replace` (wasm MT19937 pseudo-factory, no custom
+/// fakers) → the en-only `normalize_grammar_en` tail, over an already-built
+/// `type_info` + `person` / `organization` prefixes and a resolved entity set. This
+/// is the ACTUALLY-duplicated part — the two copies were byte-for-byte identical.
+///
+/// `build_info` is DELIBERATELY NOT folded in here: each caller runs it over its OWN
+/// set and threads the result in. The one-shot path resolves it over the RAW
+/// pre-finalize entities (then `replace`s the finalized subset); the streaming
+/// closure resolves it over `spans.entities` (the same set it `replace`s). Those two
+/// sets are NOT interchangeable — `person_prefix` is the SHARED generator prefix for
+/// every non-org `pseudonym`-strategy entity (e.g. `school`), so if `finalize`
+/// dropped a config-prefix-overridden `person` span that a surviving `school` span
+/// is seeded from, building the info over the finalized set would silently lose the
+/// override and change the redacted text + key. Keeping `build_info` at the call
+/// site preserves the exact a414e4a behaviour on both paths.
+///
+/// `existing_key` threads cross-chunk collision continuity (a repeated original
+/// reuses its fake). Returns the segment PLUS the `keep_downgraded` /
+/// `mask_collisions` signals — the one-shot path surfaces them, the streaming face
+/// drops them.
+fn replace_and_grammar(
     params: &RedactParams,
     text: &str,
+    info_map: &HashMap<String, TypeInfo>,
+    person_prefix: &str,
+    org_prefix: &str,
+    entities: &[PatternMatch],
     existing_key: Option<&HashMap<String, String>>,
 ) -> Result<RedactSegmentWithSignals, String> {
-    // Detect first so build_type_info only resolves the types that actually
-    // appear — redact_l1 re-detects internally; this re-detect feeds type_info,
-    // matching the Python shim's build-type-info-over-detected-entities order.
-    let detected = detect_l1(text, &params.langs, &params.names).map_err(|e| e.to_string())?;
-    let mut entities = detected.layer1;
-    entities.extend(detected.person);
-    entities.extend(detected.regions);
-    entities.extend(detected.job_titles);
-    entities.extend(detected.framework);
-
-    let info_pairs = build_type_info(&entities, params.config.as_ref(), &params.langs, None);
-    let person_prefix = lookup_prefix(&info_pairs, "person", "P");
-    let org_prefix = lookup_prefix(&info_pairs, "organization", "O");
-    let info_map: HashMap<String, TypeInfo> = info_pairs.into_iter().collect();
-
-    let result = redact_l1(
-        RedactL1Args {
+    let result = replace(
+        ReplaceArgs {
             text,
-            lang: &params.langs,
-            names: &params.names,
-            type_info: &info_map,
+            entities,
             salt: params.salt.as_ref(),
             key: existing_key,
-            person_prefix: &person_prefix,
-            org_prefix: &org_prefix,
+            type_info: info_map,
+            person_prefix,
+            org_prefix,
             unified_prefix: params.unified_prefix.as_deref(),
             keep_whitelist: &params.whitelist,
-            types: None,
-            types_exclude: None,
         },
         &WasmPseudoFactory,
         None, // no custom Python fakers in wasm
     )?;
 
+    // en-only grammar tail — a SEPARATE step exactly as `redact_l1` step 7 applies
+    // it (`replace` never calls grammar internally). `effective_lang` = lang[0] else
+    // "zh", mirroring Python.
+    let effective_lang = params.langs.first().map(String::as_str).unwrap_or("zh");
+    let downstream = if effective_lang == "en" {
+        let originals: Vec<String> = result.key.values().cloned().collect();
+        normalize_grammar_en(&result.redacted, &originals)
+    } else {
+        result.redacted
+    };
+
     Ok(RedactSegmentWithSignals {
         segment: RedactSegment {
-            downstream_text: result.redacted,
+            downstream_text: downstream,
             key: result.key,
             aliases: result.aliases,
         },
         keep_downgraded: result.keep_downgraded,
         mask_collisions: result.mask_collisions,
     })
+}
+
+/// Run the one-shot fast-mode redact path over `text`, optionally threading an
+/// `existing_key` for cross-chunk collision continuity (same original reuses the
+/// same fake — mirrors the Python `existing_key=` / `setdefault` merge). This is
+/// the SSOT for the one-shot [`redact`] entry point.
+///
+/// Detection runs EXACTLY ONCE (`detect_l1`), matching the Python `redact()` glue
+/// (`_detect` → `_build_type_info` → `_replace_and_emit`) rather than the previous
+/// detect-twice shape (an outer `detect_l1` to seed `build_type_info`, then a
+/// `redact_l1` that re-detected internally). The single detection feeds BOTH
+/// [`build_info`] over the RAW (pre-finalize) entities AND the post-detect pipeline:
+/// `finalize_entities` (merge → self-reference filter → type filter → coverage
+/// restore, `apply_type_filter = true`, no `types` scope) → the shared
+/// [`replace_and_grammar`] tail (`replace` → en-grammar) over that finalized set,
+/// carrying the RAW-derived `type_info` / prefixes. Byte-identical to the old
+/// `redact_l1` call: the re-detect it dropped was deterministic (same raw entities),
+/// and the `type_info` (resolved over the raw set, as the old outer `build_type_info`
+/// did) / filter scope / grammar step are the same. Returns the segment PLUS the
+/// `keep_downgraded` / `mask_collisions` signals (see [`RedactSegmentWithSignals`]).
+fn redact_segment(
+    params: &RedactParams,
+    text: &str,
+    existing_key: Option<&HashMap<String, String>>,
+) -> Result<RedactSegmentWithSignals, String> {
+    // ONE detection, flattened into the fast-mode { entities, hints } bundle.
+    let DetectSpans { entities, hints } =
+        flatten_l1(detect_l1(text, &params.langs, &params.names).map_err(|e| e.to_string())?);
+
+    // type_info over the RAW (pre-finalize) entities — the exact set the old outer
+    // `build_type_info` resolved, so the per-type info AND the shared `person` /
+    // `organization` pseudonym prefixes are unchanged even when finalize later drops
+    // a (prefix-overridden) person span that a surviving non-org pseudonym entity
+    // (e.g. school) is seeded from. Resolving over the finalized set would lose that
+    // override — a reachable byte-identity break.
+    let (info_map, person_prefix, org_prefix) =
+        build_info(&entities, params.config.as_ref(), &params.langs);
+
+    // Post-detect pipeline, reproducing `redact_l1`'s steps 2-5a over this single
+    // detection: merge → self-reference filter → type filter (none) → coverage
+    // restore. `apply_type_filter = true` + `FilterScope::from_hints(None, None,…)`
+    // are exactly the arguments `redact_l1` passed for the wasm (no-`types`) call.
+    let scope = FilterScope::from_hints(None, None, &hints);
+    let filtered = finalize_entities(entities, &hints, &scope, text, true);
+
+    // Shared `replace` → en-grammar tail: replace runs over the FILTERED set with the
+    // RAW-derived type_info / prefixes (a414e4a order).
+    replace_and_grammar(
+        params,
+        text,
+        &info_map,
+        &person_prefix,
+        &org_prefix,
+        &filtered,
+        existing_key,
+    )
 }
 
 // ── public API ──────────────────────────────────────────────────────────────
@@ -321,6 +438,36 @@ fn set_panic_hook() {
 #[wasm_bindgen(start)]
 pub fn init() {
     set_panic_hook();
+}
+
+/// Deserialize + validate a `redact` opts object once for BOTH the one-shot
+/// [`redact`] and the [`StreamingRedactor`] constructor. `undefined`/`null` yields
+/// [`RedactOpts::default`] ("use defaults"); otherwise unknown keys are rejected
+/// (via [`reject_unknown_opts`] — serde's `deny_unknown_fields` is a no-op under
+/// `serde-wasm-bindgen`), then the object is deserialized, then the mode is gated
+/// (wasm ships fast mode only — no NER / semantic adapters). Sharing this keeps the
+/// `invalid opts` message AND the multi-line mode-gate error string byte-identical
+/// across the two entry points.
+fn parse_opts(opts: JsValue) -> Result<RedactOpts, JsValue> {
+    let opts: RedactOpts = if opts.is_undefined() || opts.is_null() {
+        RedactOpts::default()
+    } else {
+        reject_unknown_opts(&opts)?;
+        serde_wasm_bindgen::from_value(opts)
+            .map_err(|e| JsValue::from_str(&format!("invalid opts: {e}")))?
+    };
+
+    // Mode gate: wasm ships fast mode only (no NER / semantic adapters).
+    match opts.mode.as_deref() {
+        None | Some("fast") => {}
+        Some(other) => {
+            return Err(JsValue::from_str(&format!(
+                "mode='{other}' is not supported in wasm — only mode='fast' (regex \
+                 + known-names) is available; NER/semantic layers need the Python build"
+            )));
+        }
+    }
+    Ok(opts)
 }
 
 /// Fast-mode redact. `text` is the source; `opts` is a JS object deserialized
@@ -342,28 +489,14 @@ pub fn init() {
 pub fn redact(text: &str, opts: JsValue) -> Result<JsValue, JsValue> {
     set_panic_hook();
 
-    let opts: RedactOpts = if opts.is_undefined() || opts.is_null() {
-        RedactOpts::default()
-    } else {
-        // Reject typo'd / unknown keys BEFORE deserializing (serde's
-        // deny_unknown_fields is a no-op under serde-wasm-bindgen).
-        reject_unknown_opts(&opts)?;
-        serde_wasm_bindgen::from_value(opts)
-            .map_err(|e| JsValue::from_str(&format!("invalid opts: {e}")))?
-    };
+    let opts = parse_opts(opts)?;
 
-    // Mode gate: wasm ships fast mode only (no NER / semantic adapters).
-    match opts.mode.as_deref() {
-        None | Some("fast") => {}
-        Some(other) => {
-            return Err(JsValue::from_str(&format!(
-                "mode='{other}' is not supported in wasm — only mode='fast' (regex \
-                 + known-names) is available; NER/semantic layers need the Python build"
-            )));
-        }
-    }
-
-    let params = resolve_params(opts);
+    let mut params = resolve_params(opts);
+    // Resolve the `lang="auto"` sentinel against the actual text (Python parity —
+    // `glue/redact.py`'s `if lang == "auto": lang = detect_languages(text)`) so a
+    // `{lang:'auto'}` caller runs the real zh/en detectors instead of the literal
+    // "auto" lang, which matches neither and silently under-redacts.
+    params.langs = resolve_auto_lang(params.langs, text);
     let with_signals = redact_segment(&params, text, None).map_err(|e| JsValue::from_str(&e))?;
 
     let out = RedactResult {
@@ -373,8 +506,7 @@ pub fn redact(text: &str, opts: JsValue) -> Result<JsValue, JsValue> {
         keep_downgraded: with_signals.keep_downgraded,
         mask_collisions: with_signals.mask_collisions,
     };
-    out.serialize(&to_object_serializer())
-        .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
+    serialize_result(&out)
 }
 
 /// Resolve a deserialized [`RedactOpts`] into the shared [`RedactParams`] (langs
@@ -399,24 +531,114 @@ fn resolve_params(opts: RedactOpts) -> RedactParams {
     }
 }
 
-/// Restore redacted text using the `key` map (`{fake: original}`) returned by
-/// [`redact`]. The optional `aliases` are NOT taken here (fast-mode realistic
-/// aliases are carried on the redact result); this is the core restore path used
-/// for the common `(text, key)` roundtrip.
-#[wasm_bindgen]
-pub fn restore(text: &str, key: JsValue) -> Result<String, JsValue> {
-    set_panic_hook();
+/// Resolve the `lang="auto"` sentinel to concrete language codes via the core's
+/// script-range [`detect_languages`] — the SAME resolver the Python `redact()`
+/// shim runs (`glue/redact.py`: `if lang == "auto": lang = detect_languages(text)`).
+///
+/// Without this, a `{lang:'auto'}` opts object reaches `detect_l1` as the LITERAL
+/// lang list `["auto"]`, which matches NEITHER `"zh"` NOR `"en"`. The lang-GATED
+/// person detector (zh/en) is then skipped, so a name like 张伟 leaks silently.
+/// (Language-NEUTRAL patterns — the phone / national-id regexes — still load
+/// regardless of the requested lang, so those are unaffected; the leak on the
+/// `"auto"` path is the person detector specifically.) A `"auto"` lang is not the
+/// same code path as an OMITTED lang, which correctly defaults to `["zh"]`. Any
+/// non-`"auto"` lang list passes through unchanged.
+///
+/// Both `{lang:'auto'}` and `{lang:['auto']}` collapse to `["auto"]` before this
+/// point, so both resolve. The Python shim special-cases only the bare string, but
+/// resolving the single-element list too only ever redacts MORE, never less — the
+/// safe direction — so the tiny divergence cannot leak.
+fn resolve_auto_lang(langs: Vec<String>, text: &str) -> Vec<String> {
+    if langs.len() == 1 && langs[0] == "auto" {
+        detect_languages(text)
+    } else {
+        langs
+    }
+}
 
-    let key: HashMap<String, String> = if key.is_undefined() || key.is_null() {
-        HashMap::new()
+/// `true` when the requested lang is (solely) the `"auto"` sentinel. The streaming
+/// constructor uses this to REJECT `"auto"` loudly: a stream has no full text at
+/// construction to script-detect from (unlike one-shot [`redact`], which resolves
+/// it via [`resolve_auto_lang`]). This is the pre-collapse form of that check —
+/// both `{lang:'auto'}` and a single-element `{lang:['auto']}` count.
+fn lang_is_auto(lang: &Option<StringOrVec>) -> bool {
+    match lang {
+        Some(StringOrVec::One(s)) => s == "auto",
+        Some(StringOrVec::Many(v)) => v.len() == 1 && v[0] == "auto",
+        None => false,
+    }
+}
+
+/// Deserialize the optional `aliases` JS argument shared by [`restore`] and
+/// [`restore_guarded`]: `undefined`/`null` means "no aliases" (`None`);
+/// otherwise the `{fake: [alternate-transliteration, ...]}` map.
+fn opt_aliases(aliases: JsValue) -> Result<Option<HashMap<String, Vec<String>>>, JsValue> {
+    if aliases.is_undefined() || aliases.is_null() {
+        Ok(None)
+    } else {
+        serde_wasm_bindgen::from_value(aliases)
+            .map(Some)
+            .map_err(|e| JsValue::from_str(&format!("invalid aliases: {e}")))
+    }
+}
+
+/// Deserialize the `key` JS argument shared by [`restore`] and
+/// [`restore_guarded`] — the `{fake: original}` restore map returned by
+/// [`redact`]. `undefined`/`null` means "no key" (an empty map); otherwise the
+/// map is deserialized, mapping any failure to the SAME `invalid key` JS
+/// `Error`. Mirrors [`opt_aliases`] (by-value `JsValue`, `Result<_, JsValue>`).
+fn opt_key(key: JsValue) -> Result<HashMap<String, String>, JsValue> {
+    if key.is_undefined() || key.is_null() {
+        Ok(HashMap::new())
     } else {
         serde_wasm_bindgen::from_value(key)
-            .map_err(|e| JsValue::from_str(&format!("invalid key: {e}")))?
-    };
+            .map_err(|e| JsValue::from_str(&format!("invalid key: {e}")))
+    }
+}
 
-    // No `aliases` are taken here (see the doc comment above), so
-    // `alias_collisions` is always empty — discard it.
-    restore_full(text, &key, None, None)
+/// Restore redacted text using the `key` map (`{fake: original}`) returned by
+/// [`redact`]. `aliases` is an optional `{fake: [alternate-transliteration,
+/// ...]}` map — mirrors the Python `restore(text, key, aliases=...)` /
+/// `restore_json` / `restore_csv` faces, so a reply that rewrote a fake into
+/// one of its aliases (e.g. pinyin for a Chinese name) still round-trips.
+/// `undefined` / `null` means "no aliases", identical to omitting the
+/// argument entirely from JS.
+///
+/// `aliases` is APPENDED after `key` rather than inserted before it, so
+/// existing two-argument callers (`restore(text, key)`) are unaffected — a
+/// JS call that does not pass a third argument gets `undefined` for it, the
+/// same as every optional trailing argument on this binding.
+///
+/// # Security: UNGUARDED by default (a stated trade-off)
+///
+/// This entry point is **unguarded** — it applies the `key` (+ `aliases`) map
+/// unconditionally, with NO (P)rovenance or (S)cope check. A caller who
+/// restores attacker-chosen text against a key can therefore surface
+/// originals for tokens that were never part of the intended exchange. This
+/// is a DELIBERATE trade-off: `restore` keeps the minimal `(text, key)`
+/// roundtrip the browser demo and simple integrations depend on, and (unlike
+/// the Python `restore()` shim, which fails closed by default since v0.8.0)
+/// this browser binding does NOT guard by default in this release.
+///
+/// For fail-closed, **Python-parity** behaviour use [`restore_guarded`]: it runs
+/// the core (P)rovenance + (S)cope guard against a caller-supplied anchor and
+/// refuses (`outcome: "blocked"`) when provenance cannot be proven. New
+/// security-sensitive callers SHOULD prefer [`restore_guarded`]. (A
+/// guarded-by-default flip / rename for this binding is deferred to a future
+/// wasm-hardening pass.)
+#[wasm_bindgen]
+pub fn restore(text: &str, key: JsValue, aliases: JsValue) -> Result<String, JsValue> {
+    set_panic_hook();
+
+    let key = opt_key(key)?;
+
+    let aliases = opt_aliases(aliases)?;
+
+    // `alias_collisions` is discarded here — this entry point's return shape
+    // is a bare `String`; a caller that needs collision detail should use
+    // [`restore_guarded`], whose `events` surface an `alias_collision` guard
+    // event the same way the PyO3 binding does.
+    restore_full(text, &key, aliases.as_ref(), None)
         .map(|(result, _)| result)
         .map_err(|e| JsValue::from_str(&e.0))
 }
@@ -460,38 +682,14 @@ struct GuardedRestoreJs {
     events: Vec<GuardEventJs>,
 }
 
-/// Map a core [`GuardEventKind`] to its stable snake_case name — identical to
-/// the PyO3 binding's `guard_event_kind_str`. `#[non_exhaustive]` on the core
-/// enum means a future variant compiles here as `"unknown"` rather than
-/// breaking the build; this mapping is expected to grow in lockstep.
-fn guard_event_kind_str(kind: &GuardEventKind) -> &'static str {
-    match kind {
-        GuardEventKind::GuardNoAnchor => "guard_no_anchor",
-        GuardEventKind::ProvenanceFailed => "provenance_failed",
-        GuardEventKind::EmptyKeyWithScope => "empty_key_with_scope",
-        GuardEventKind::OutOfScopePseudonym => "out_of_scope_pseudonym",
-        GuardEventKind::AliasCollision => "alias_collision",
-        _ => "unknown",
-    }
-}
-
-/// Map a core [`RestoreOutcome`] to its stable snake_case name — identical to
-/// the PyO3 binding's `restore_outcome_str`. Same `#[non_exhaustive]`
-/// fallback reasoning as [`guard_event_kind_str`].
-fn restore_outcome_str(outcome: &RestoreOutcome) -> &'static str {
-    match outcome {
-        RestoreOutcome::Blocked => "blocked",
-        RestoreOutcome::Partial => "partial",
-        RestoreOutcome::Complete => "complete",
-        _ => "unknown",
-    }
-}
-
 /// Anchor-taking guarded restore — the browser-facing counterpart to the
-/// PyO3 `restore_guarded` binding. Runs the core (P)rovenance + (S)cope guard
-/// (`restore_full_guarded`) and returns a STRUCTURED-ONLY `{ restored,
-/// outcome, events }` object; no human-readable prose crosses this boundary
-/// (the demo layer owns any zh/en copy over these codes).
+/// PyO3 `restore_guarded` binding, and the **fail-closed, Python-parity**
+/// counterpart to the unguarded [`restore`] (which applies the key with no
+/// provenance/scope check — see its doc for that trade-off). Runs the core
+/// (P)rovenance + (S)cope guard (`restore_full_guarded`) and returns a
+/// STRUCTURED-ONLY `{ restored, outcome, events }` object; no human-readable
+/// prose crosses this boundary (the demo layer owns any zh/en copy over these
+/// codes).
 ///
 /// `anchor` is deserialized as `{ nonce: string, scope: string[] }`
 /// ([`AnchorSpec`]), mirroring `src/argus_redact/server.py`'s reconstruction
@@ -506,54 +704,61 @@ fn restore_outcome_str(outcome: &RestoreOutcome) -> &'static str {
 /// through to an unguarded restore. `restored` in that case is the raw input
 /// `text`, byte-for-byte UNCHANGED — not even nonce-stripped, since no anchor
 /// means nothing was there to prove any nonce is ours.
+///
+/// `aliases` is an optional `{fake: [alternate-transliteration, ...]}` map,
+/// APPENDED after `anchor` (never inserted before it — an existing
+/// three-argument JS call site must keep meaning `(text, key, anchor)`, not
+/// silently reinterpret its third argument as aliases). It mirrors the same
+/// parameter on [`restore`]; if the caller's aliases collide (two fakes
+/// claiming the same alias), that already surfaces as an `alias_collision`
+/// event via `result.events` below — no extra wiring needed here.
 #[wasm_bindgen]
-pub fn restore_guarded(text: &str, key: JsValue, anchor: JsValue) -> Result<JsValue, JsValue> {
+pub fn restore_guarded(
+    text: &str,
+    key: JsValue,
+    anchor: JsValue,
+    aliases: JsValue,
+) -> Result<JsValue, JsValue> {
     set_panic_hook();
 
-    let key: HashMap<String, String> = if key.is_undefined() || key.is_null() {
-        HashMap::new()
-    } else {
-        serde_wasm_bindgen::from_value(key)
-            .map_err(|e| JsValue::from_str(&format!("invalid key: {e}")))?
-    };
+    let key = opt_key(key)?;
 
     if anchor.is_undefined() || anchor.is_null() {
         let out = GuardedRestoreJs {
             restored: text.to_string(),
-            outcome: restore_outcome_str(&RestoreOutcome::Blocked).to_string(),
+            outcome: RestoreOutcome::Blocked.as_str().to_string(),
             events: vec![GuardEventJs {
-                kind: guard_event_kind_str(&GuardEventKind::GuardNoAnchor).to_string(),
+                kind: GuardEventKind::GuardNoAnchor.as_str().to_string(),
                 count: key.len(),
                 tokens: None,
             }],
         };
-        return out
-            .serialize(&to_object_serializer())
-            .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")));
+        return serialize_result(&out);
     }
 
     let spec: AnchorSpec = serde_wasm_bindgen::from_value(anchor)
         .map_err(|e| JsValue::from_str(&format!("invalid anchor: {e}")))?;
     let core_anchor = Anchor::new(spec.nonce, spec.scope.into_iter().collect());
 
-    let result = restore_full_guarded(text, &key, None, None, Some(&core_anchor))
+    let aliases = opt_aliases(aliases)?;
+
+    let result = restore_full_guarded(text, &key, aliases.as_ref(), None, Some(&core_anchor))
         .map_err(|e| JsValue::from_str(&e.0))?;
 
     let out = GuardedRestoreJs {
         restored: result.restored,
-        outcome: restore_outcome_str(&result.outcome).to_string(),
+        outcome: result.outcome.as_str().to_string(),
         events: result
             .events
             .iter()
             .map(|ev| GuardEventJs {
-                kind: guard_event_kind_str(&ev.kind).to_string(),
+                kind: ev.kind.as_str().to_string(),
                 count: ev.count,
                 tokens: ev.detail.clone(),
             })
             .collect(),
     };
-    out.serialize(&to_object_serializer())
-        .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
+    serialize_result(&out)
 }
 
 // ── streaming: feed / flush over the core carry-window engine ─────────────────
@@ -614,25 +819,17 @@ impl StreamingRedactor {
     pub fn new(opts: JsValue) -> Result<StreamingRedactor, JsValue> {
         set_panic_hook();
 
-        let opts: RedactOpts = if opts.is_undefined() || opts.is_null() {
-            RedactOpts::default()
-        } else {
-            // Reject typo'd / unknown keys BEFORE deserializing (serde's
-            // deny_unknown_fields is a no-op under serde-wasm-bindgen).
-            reject_unknown_opts(&opts)?;
-            serde_wasm_bindgen::from_value(opts)
-                .map_err(|e| JsValue::from_str(&format!("invalid opts: {e}")))?
-        };
+        let opts = parse_opts(opts)?;
 
-        // Mode gate: wasm streaming ships fast mode only.
-        match opts.mode.as_deref() {
-            None | Some("fast") => {}
-            Some(other) => {
-                return Err(JsValue::from_str(&format!(
-                    "mode='{other}' is not supported in wasm — only mode='fast' (regex \
-                     + known-names) is available; NER/semantic layers need the Python build"
-                )));
-            }
+        // lang="auto" needs the FULL text to script-detect (see `resolve_auto_lang`);
+        // a stream has none at construction, so refuse it loudly rather than pass
+        // the literal "auto" lang through and silently under-redact every chunk.
+        if lang_is_auto(&opts.lang) {
+            return Err(JsValue::from_str(
+                "lang='auto' is not supported for the streaming redactor — \
+                 auto-detection needs the full text, which a stream does not have \
+                 at construction; pass a concrete lang (e.g. 'zh' or 'en')",
+            ));
         }
 
         // Salt is required: there is no host entropy source for the unseeded
@@ -656,70 +853,52 @@ impl StreamingRedactor {
         let detect_params = Rc::clone(&params);
         let detect: BoxedDetect = Box::new(move |text: &str| {
             match detect_l1(text, &detect_params.langs, &detect_params.names) {
-                Ok(r) => {
-                    let mut entities = r.layer1;
-                    entities.extend(r.person);
-                    entities.extend(r.regions);
-                    entities.extend(r.job_titles);
-                    entities.extend(r.framework);
-                    DetectSpans {
-                        entities,
-                        hints: r.hints,
-                    }
-                }
-                // A detect failure (e.g. oversize buffer) yields no spans → the
-                // carry-window falls back to its non-entity-aware cut; the redact
-                // closure surfaces the real error on emit.
+                Ok(r) => flatten_l1(r),
+                // Oversize input (> MAX_INPUT_SIZE) is rejected by the core
+                // `feed`/`flush` size guard BEFORE this closure is ever called, and
+                // guarded again by `replace()` — so the oversize case now fails
+                // closed upstream (matching the one-shot `redact` and the Python
+                // `StreamingRedactor`, which raise) and never reaches here. This
+                // `BoxedDetect` callback is infallible (`Fn(&str) -> DetectSpans`),
+                // so it cannot itself propagate an error; any other detect failure
+                // yields no spans (the carry-window then makes a non-entity-aware
+                // cut) and can never emit oversize plaintext, because `replace()`
+                // fails closed on that too.
                 Err(_) => DetectSpans::default(),
             }
         });
 
         // Redact closure: detect-once path — redact the GIVEN pre-detected,
-        // range-shifted entities over `text` via `build_type_info` → `replace` +
-        // en-grammar tail. No internal re-detect (the core engine already detected
-        // once over the full ±W buffer and shifted the spans into the emit range).
-        // Threads the accumulated key for cross-chunk collision continuity so the
-        // same original reuses its existing fake across segments.
+        // range-shifted entities over `text`. `build_info` runs over `spans.entities`
+        // (this path's own set — the same set `replace` consumes, unchanged from
+        // a414e4a), then the shared `replace_and_grammar` tail (`replace` + en-grammar)
+        // — the SAME tail the one-shot `redact_segment` runs. No internal re-detect
+        // (the core engine already detected once over the full ±W buffer and shifted
+        // the spans into the emit range). Threads the accumulated key (the
+        // `Rc<RefCell>` mirror the core keeps in sync) as `existing_key` for
+        // cross-chunk collision continuity so the same original reuses its existing
+        // fake across segments. The segment's `keep_downgraded` / `mask_collisions`
+        // signals are not part of the streaming face, so the `RedactSegmentWithSignals`
+        // wrapper is unwrapped to its segment.
         let redact_params = Rc::clone(&params);
         let redact_key = Rc::clone(&accumulated_key);
         let redact: BoxedRedact = Box::new(move |text: &str, spans: &DetectSpans| {
             let existing = redact_key.borrow();
-            let info_pairs = build_type_info(
+            let (info_map, person_prefix, org_prefix) = build_info(
                 &spans.entities,
                 redact_params.config.as_ref(),
                 &redact_params.langs,
-                None,
             );
-            let person_prefix = lookup_prefix(&info_pairs, "person", "P");
-            let org_prefix = lookup_prefix(&info_pairs, "organization", "O");
-            let info_map: HashMap<String, TypeInfo> = info_pairs.into_iter().collect();
-            let result = replace(
-                ReplaceArgs {
-                    text,
-                    entities: &spans.entities,
-                    salt: redact_params.salt.as_ref(),
-                    key: Some(&*existing),
-                    type_info: &info_map,
-                    person_prefix: &person_prefix,
-                    org_prefix: &org_prefix,
-                    unified_prefix: redact_params.unified_prefix.as_deref(),
-                    keep_whitelist: &redact_params.whitelist,
-                },
-                &WasmPseudoFactory,
-                None,
-            )?;
-            let effective_lang = redact_params.langs.first().map(String::as_str).unwrap_or("zh");
-            let downstream = if effective_lang == "en" {
-                let originals: Vec<String> = result.key.values().cloned().collect();
-                normalize_grammar_en(&result.redacted, &originals)
-            } else {
-                result.redacted
-            };
-            Ok(RedactSegment {
-                downstream_text: downstream,
-                key: result.key,
-                aliases: result.aliases,
-            })
+            replace_and_grammar(
+                &redact_params,
+                text,
+                &info_map,
+                &person_prefix,
+                &org_prefix,
+                &spans.entities,
+                Some(&*existing),
+            )
+            .map(|with_signals| with_signals.segment)
         });
 
         Ok(StreamingRedactor {
@@ -758,7 +937,164 @@ impl StreamingRedactor {
             key: emit.accumulated_key,
             aliases: emit.segment.aliases,
         };
-        out.serialize(&to_object_serializer())
-            .map_err(|e| JsValue::from_str(&format!("failed to serialize result: {e}")))
+        serialize_result(&out)
+    }
+}
+
+// ── regression: lang="auto" must resolve, not silently under-redact ───────────
+//
+// Pure-Rust tests over `resolve_auto_lang` + the core `detect_l1` seam, runnable
+// via `cargo test -p argus-redact-wasm --lib` WITHOUT a wasm runtime (the JsValue
+// public API in `tests/*.rs` still needs `wasm-pack test --node`). They pin the
+// under-redaction the fix closes: a literal `"auto"` lang is NOT a real language,
+// so the language-gated detectors are skipped unless `"auto"` is resolved first.
+#[cfg(test)]
+mod auto_lang_tests {
+    use super::{lang_is_auto, resolve_auto_lang, StringOrVec};
+    use argus_redact_core::redact_l1::detect_l1;
+
+    const LEAKY: &str = "张伟的电话13800138000";
+
+    /// Sanity: the LITERAL `"auto"` lang matches neither zh nor en, so the zh
+    /// person detector never runs and 张伟 would be left in the clear — the exact
+    /// mechanism the fix must close.
+    #[test]
+    fn literal_auto_lang_skips_the_zh_person_detector() {
+        let d = detect_l1(LEAKY, &["auto".to_string()], &[]).unwrap();
+        assert!(
+            d.person.is_empty(),
+            "the literal \"auto\" lang is expected to skip the zh person detector"
+        );
+    }
+
+    /// The fix: `resolve_auto_lang` maps the `"auto"` sentinel to the
+    /// script-detected langs (`["zh"]` here), so BOTH 张伟 (person) and the phone
+    /// (L1 regex) are detected — neither is left unredacted.
+    #[test]
+    fn resolve_auto_lang_recovers_zh_person_and_phone() {
+        let resolved = resolve_auto_lang(vec!["auto".to_string()], LEAKY);
+        assert_eq!(resolved, vec!["zh".to_string()], "\"auto\" must resolve to zh");
+
+        let d = detect_l1(LEAKY, &resolved, &[]).unwrap();
+        assert!(!d.person.is_empty(), "张伟 must be detected as a person");
+        assert!(!d.layer1.is_empty(), "the phone must be detected by the L1 regex");
+    }
+
+    /// A concrete lang list is untouched by the resolver.
+    #[test]
+    fn non_auto_lang_passes_through_unchanged() {
+        assert_eq!(
+            resolve_auto_lang(vec!["en".to_string()], LEAKY),
+            vec!["en".to_string()]
+        );
+        assert_eq!(
+            resolve_auto_lang(vec!["zh".to_string(), "en".to_string()], LEAKY),
+            vec!["zh".to_string(), "en".to_string()]
+        );
+    }
+
+    /// The streaming constructor REJECTS `lang="auto"` (a stream can't script-detect
+    /// without the full text). `lang_is_auto` is the predicate behind that refusal —
+    /// pin it so a future change can't silently re-open the per-chunk under-redaction.
+    #[test]
+    fn lang_is_auto_flags_only_the_solo_auto_sentinel() {
+        use StringOrVec::{Many, One};
+        assert!(lang_is_auto(&Some(One("auto".to_string()))));
+        assert!(lang_is_auto(&Some(Many(vec!["auto".to_string()]))));
+        assert!(!lang_is_auto(&Some(One("zh".to_string()))));
+        assert!(!lang_is_auto(&None));
+        // "auto" alongside a concrete lang is NOT the solo sentinel → not rejected.
+        assert!(!lang_is_auto(&Some(Many(vec![
+            "auto".to_string(),
+            "zh".to_string()
+        ]))));
+    }
+}
+
+// ── regression: one-shot build_info must resolve over the RAW pre-finalize set ──
+//
+// `person_prefix` is the SHARED pseudonym-generator prefix for EVERY non-org
+// `pseudonym`-strategy entity (e.g. `school`; see core `replace.rs` — a non-org
+// pseudonym entity with no per-type prefix override draws from `person_prefix`).
+// Resolving the one-shot `type_info` / prefixes over the FINALIZED set instead of the
+// raw pre-finalize set silently drops a config `person`-prefix override whenever a
+// `person` span is merge-absorbed by an overlapping surviving `school` span: the
+// school's pseudonym code flips from the override "X-…" to the fallback "P-…",
+// changing BOTH the redacted text AND the key. This pins `redact_segment` to the
+// raw-set order (parity with the Python reference and parent a414e4a). Runs native
+// via `cargo test -p argus-redact-wasm --lib`; fails against the pre-fix (finalized)
+// shape, which would emit "P-83811是名校。".
+#[cfg(test)]
+mod raw_typeinfo_prefix_tests {
+    use super::*;
+
+    #[test]
+    fn one_shot_person_prefix_override_survives_person_absorbed_into_school() {
+        // 曾宪梓中 (person) overlaps 曾宪梓中学 (school). Detection surfaces BOTH in the
+        // raw set; finalize absorbs the person into the surviving school. Config
+        // overrides the person prefix to "X"; the school (non-org pseudonym) draws
+        // from `person_prefix`, so its code must carry "X" — exactly what the Python
+        // reference `redact(...)` emits for the same (text, salt, config).
+        let text = "曾宪梓中学是名校。";
+
+        let mut config: Config = HashMap::new();
+        config.insert(
+            "person".to_string(),
+            EntityConfig {
+                strategy: None,
+                prefix: Some("X".to_string()),
+                replacement: None,
+                label: None,
+                visible_prefix: None,
+                visible_suffix: None,
+            },
+        );
+        let params = RedactParams {
+            langs: vec!["zh".to_string()],
+            names: Vec::new(),
+            salt: Some(Salt::Int(42)),
+            config: Some(config),
+            unified_prefix: None,
+            whitelist: keep_whitelist(),
+        };
+
+        // Preconditions — fail loudly if detection drifts (never silently vacuous):
+        // the raw set carries BOTH person + school; finalize keeps school, drops person.
+        let DetectSpans { entities, hints } =
+            flatten_l1(detect_l1(text, &params.langs, &params.names).unwrap());
+        assert!(
+            entities.iter().any(|e| e.type_ == "person"),
+            "precondition: a person span must be detected in the raw set: {entities:?}"
+        );
+        assert!(
+            entities.iter().any(|e| e.type_ == "school"),
+            "precondition: a school span must be detected in the raw set: {entities:?}"
+        );
+        let scope = FilterScope::from_hints(None, None, &hints);
+        let filtered = finalize_entities(entities, &hints, &scope, text, true);
+        assert!(
+            filtered.iter().any(|e| e.type_ == "school"),
+            "precondition: school must survive finalize: {filtered:?}"
+        );
+        assert!(
+            !filtered.iter().any(|e| e.type_ == "person"),
+            "precondition: the person span must be merge-absorbed (absent from finalized): {filtered:?}"
+        );
+
+        // The guard: build_info over the RAW set keeps the person entry, so
+        // `person_prefix` = the override "X" and the surviving school's code carries
+        // it. Byte-identical to the Python reference for (text, salt=42, config).
+        let out = redact_segment(&params, text, None).expect("redact_segment");
+        assert_eq!(
+            out.segment.downstream_text, "X-83811是名校。",
+            "school must redact with the config person-prefix override 'X' (build_info over the \
+             RAW set); a 'P-' prefix here means build_info regressed to the finalized set"
+        );
+        let mut expected_key: HashMap<String, String> = HashMap::new();
+        expected_key.insert("X-83811".to_string(), "曾宪梓中学".to_string());
+        assert_eq!(
+            out.segment.key, expected_key,
+            "key must map the X-prefixed school fake to the original school name"
+        );
     }
 }

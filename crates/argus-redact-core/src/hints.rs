@@ -160,11 +160,16 @@ pub fn produce_hints_l1(
     // covered by a real detection, and the "near miss" is only the other type's validator
     // disagreeing. A same-type claimer is NOT suppressed — that is one detector
     // disagreeing with itself, which is worth reporting.
-    for nm in near_misses {
-        let claimed_by_other_type = entities
-            .iter()
-            .any(|e| e.type_ != nm.type_ && e.start < nm.end && nm.start < e.end);
-        if claimed_by_other_type {
+    //
+    // `near_miss_suppressed` decides this in O((n+m) log n) instead of the naïve
+    // O(#near_misses × #entities) full scan (a same-type near-miss never short-circuits
+    // the `e.type_ != nm.type_` filter, so the old scan walked every entity for every
+    // near-miss — ~45s of uninterruptible CPU on a crafted 1 MiB body). The decision per
+    // near-miss is byte-identical (see the differential test); emission stays in
+    // `near_misses` order, so the surviving hints are unchanged.
+    let suppressed = near_miss_suppressed(entities, near_misses);
+    for (i, nm) in near_misses.iter().enumerate() {
+        if suppressed[i] {
             continue;
         }
         hints.push(Hint {
@@ -216,6 +221,124 @@ pub fn produce_hints_l1(
     });
 
     hints
+}
+
+/// For each near-miss (in `near_misses` order) decide whether its span is
+/// "claimed by another type" — i.e. whether SOME entity of a DIFFERENT type
+/// overlaps it (`e.type_ != nm.type_ && e.start < nm.end && nm.start < e.end`,
+/// strict `<` so merely touching spans do NOT overlap). This is byte-identical to
+/// the naïve
+///
+/// ```ignore
+/// near_misses.iter().map(|nm| entities.iter().any(|e|
+///     e.type_ != nm.type_ && e.start < nm.end && nm.start < e.end)).collect()
+/// ```
+///
+/// but sub-quadratic. A start-ordered sweep tests each near-miss against only the
+/// entities that can overlap it, so a same-type-heavy input no longer forces a
+/// full entity walk per near-miss. Overlapping entities of a query `[qs, qe)` are
+/// partitioned by their start relative to `qs`:
+///
+/// * `e.start < qs` — the entity began before the near-miss. It overlaps iff its
+///   end is still past `qs` (`e.start < qe` holds automatically since
+///   `e.start < qs <= qe`). These are the "active" entities: added as the start
+///   pointer passes `qs`, expired by end via a min-heap as `qs` advances
+///   monotonically. A per-type histogram answers "any DIFFERENT-type active
+///   entity" in O(1) (`active_total > count[nm.type_]`).
+/// * `e.start >= qs` — the entity starts at/after the near-miss start. It overlaps
+///   iff `e.start < qe` (and `e.end > qs`). These sit just past the start pointer;
+///   a bounded look-ahead scans exactly the entities whose start falls in
+///   `[qs, qe)` without consuming the pointer (later near-misses still need them).
+///
+/// Total: each entity is pushed/popped once (O(n log n)); the look-ahead is
+/// bounded by the summed near-miss span, which is O(n) because near-misses of a
+/// given type are non-overlapping. The result is order-independent per near-miss,
+/// so `entities` is sorted through an index (the caller's `layer1` is start-sorted
+/// on the common path but the L1 fan-out union may append out-of-order spans — we
+/// do not assume order); near-misses drive the sweep in start order but decisions
+/// are written back at each near-miss's ORIGINAL index, keeping emission order.
+fn near_miss_suppressed(entities: &[PatternMatch], near_misses: &[PatternMatch]) -> Vec<bool> {
+    use std::cmp::Reverse;
+    use std::collections::{BinaryHeap, HashMap};
+
+    let mut suppressed = vec![false; near_misses.len()];
+    if entities.is_empty() || near_misses.is_empty() {
+        return suppressed; // nothing can claim a span (or nothing to claim)
+    }
+
+    // Start-ordered view of both lists. Sorting is safe: the predicate is an
+    // existence test, independent of the order entities are examined in.
+    let mut ent_order: Vec<usize> = (0..entities.len()).collect();
+    ent_order.sort_by_key(|&i| entities[i].start);
+    let mut nm_order: Vec<usize> = (0..near_misses.len()).collect();
+    nm_order.sort_by_key(|&i| near_misses[i].start);
+
+    // Active entities = those with `start < qs` that still cover `qs` (`end > qs`),
+    // keyed for monotonic expiry by end. `type_counts`/`active_total` give O(1)
+    // "any different-type active entity".
+    let mut active: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new(); // (end, ent index)
+    let mut type_counts: HashMap<&str, usize> = HashMap::new();
+    let mut active_total: usize = 0;
+    let mut ei = 0usize; // next start-ordered entity not yet passed by the sweep
+
+    for &qi in &nm_order {
+        let nm = &near_misses[qi];
+        let (qs, qe) = (nm.start, nm.end);
+
+        // Admit every entity that starts strictly before qs. One that already ended
+        // (`end <= qs`) can never cover this or a later (larger) qs, so it is dropped
+        // outright rather than pushed; either way the pointer moves past it.
+        while ei < ent_order.len() && entities[ent_order[ei]].start < qs {
+            let e = &entities[ent_order[ei]];
+            if e.end > qs {
+                active.push(Reverse((e.end, ent_order[ei])));
+                *type_counts.entry(e.type_.as_str()).or_insert(0) += 1;
+                active_total += 1;
+            }
+            ei += 1;
+        }
+        // Expire entities that no longer cover qs (monotonic: qs only grows).
+        while let Some(&Reverse((end, idx))) = active.peek() {
+            if end > qs {
+                break;
+            }
+            active.pop();
+            let t = entities[idx].type_.as_str();
+            let c = type_counts.get_mut(t).expect("active type present");
+            *c -= 1;
+            if *c == 0 {
+                type_counts.remove(t);
+            }
+            active_total -= 1;
+        }
+
+        // (a) A different-type entity with start < qs covers qs.
+        let same = *type_counts.get(nm.type_.as_str()).unwrap_or(&0);
+        let mut claimed = active_total > same;
+
+        // (b) A different-type entity starts inside [qs, qe). Bounded look-ahead from
+        // the sweep pointer (start >= qs there); do NOT advance ei — later near-misses
+        // still need these. `e.end > qs` guards the degenerate empty-entity case; for
+        // real (non-empty) spans it is implied by start >= qs.
+        if !claimed {
+            let mut j = ei;
+            while j < ent_order.len() {
+                let e = &entities[ent_order[j]];
+                if e.start >= qe {
+                    break;
+                }
+                if e.type_ != nm.type_ && e.end > qs {
+                    claimed = true;
+                    break;
+                }
+                j += 1;
+            }
+        }
+
+        suppressed[qi] = claimed;
+    }
+
+    suppressed
 }
 
 // ── Consumers ─────────────────────────────────────────────────────────────────
@@ -483,6 +606,154 @@ mod tests {
         let nms_first = [pm_at("13800138000", "id_number", 0)];
         let after = [pm_at("110101199003078888", "phone", 11)];
         assert_eq!(near_miss_count(&produce_hints_l1(&after, text, &nms_first)), 1);
+    }
+
+    // ── near_miss suppression: differential byte-identity proof ──
+    //
+    // `near_miss_suppressed` is the sub-quadratic replacement for the original
+    // O(#near_misses × #entities) scan. The optimisation is only legitimate if it
+    // is BYTE-IDENTICAL — the same near-misses survive, in the same order. The
+    // original scan is kept verbatim below as the reference oracle; the tests fuzz
+    // both against it (and pin the named edge cases the goldens cannot fully
+    // exercise). A divergence here means the rewrite changed behaviour.
+
+    /// The pre-optimisation suppression scan, verbatim, as the differential oracle.
+    fn near_miss_suppressed_reference(
+        entities: &[PatternMatch],
+        near_misses: &[PatternMatch],
+    ) -> Vec<bool> {
+        near_misses
+            .iter()
+            .map(|nm| {
+                entities
+                    .iter()
+                    .any(|e| e.type_ != nm.type_ && e.start < nm.end && nm.start < e.end)
+            })
+            .collect()
+    }
+
+    fn span(type_: &str, start: usize, end: usize) -> PatternMatch {
+        PatternMatch {
+            text: String::new(),
+            type_: type_.to_string(),
+            start,
+            end,
+            confidence: 0.3,
+            layer: 1,
+        }
+    }
+
+    /// Deterministic xorshift64* — a differential fuzz needs no external rand crate.
+    fn xorshift(state: &mut u64) -> u64 {
+        *state ^= *state >> 12;
+        *state ^= *state << 25;
+        *state ^= *state >> 27;
+        (*state).wrapping_mul(0x2545_F491_4F6C_DD1D)
+    }
+
+    /// `n` random spans over a 3-type pool; lengths include 0 (empty spans) and
+    /// starts are unsorted, so the corpus hits same-/different-type overlaps,
+    /// nesting, containment, adjacency/touching, and out-of-order (fan-out-style)
+    /// entity input.
+    fn rand_spans(state: &mut u64, n: usize) -> Vec<PatternMatch> {
+        const TYPES: [&str; 3] = ["a", "b", "c"];
+        (0..n)
+            .map(|_| {
+                let start = (xorshift(state) % 24) as usize;
+                let len = (xorshift(state) % 7) as usize; // 0..=6 — includes empty spans
+                let ty = TYPES[(xorshift(state) % 3) as usize];
+                span(ty, start, start + len)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn near_miss_suppressed_matches_reference_over_fuzz() {
+        let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+        for _ in 0..20_000 {
+            let ne = (xorshift(&mut state) % 8) as usize; // 0..=7 entities (incl. zero)
+            let nm = (xorshift(&mut state) % 8) as usize; // 0..=7 near-misses (incl. zero)
+            let ents = rand_spans(&mut state, ne);
+            let nms = rand_spans(&mut state, nm);
+            assert_eq!(
+                near_miss_suppressed(&ents, &nms),
+                near_miss_suppressed_reference(&ents, &nms),
+                "diverged for entities={ents:?} near_misses={nms:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn near_miss_suppressed_named_edge_cases() {
+        let check = |ents: &[PatternMatch], nms: &[PatternMatch]| {
+            assert_eq!(
+                near_miss_suppressed(ents, nms),
+                near_miss_suppressed_reference(ents, nms),
+                "diverged for entities={ents:?} near_misses={nms:?}"
+            );
+        };
+        // zero entities / zero near-misses
+        check(&[], &[]);
+        check(&[], &[span("a", 0, 5)]);
+        check(&[span("a", 0, 5)], &[]);
+        // all same type (the DoS shape): nothing of a different type claims → all survive
+        check(
+            &[span("a", 0, 2), span("a", 4, 6), span("a", 8, 10)],
+            &[span("a", 1, 3), span("a", 5, 7)],
+        );
+        // all different type, overlapping → all suppressed
+        check(&[span("a", 0, 5)], &[span("b", 1, 4), span("b", 0, 5)]);
+        // mixed: a same-type overlapper AND a different-type overlapper on one span —
+        // the different-type one must still be found (scan the whole overlap window)
+        check(&[span("a", 0, 10), span("b", 2, 4)], &[span("a", 1, 3)]);
+        // nested / contained spans
+        check(&[span("b", 0, 20), span("a", 5, 7)], &[span("a", 6, 8), span("c", 1, 2)]);
+        // adjacent / touching: e.end == nm.start and nm.end == e.start are NOT overlaps
+        check(&[span("b", 0, 11)], &[span("a", 11, 29)]); // entity immediately before
+        check(&[span("b", 11, 29)], &[span("a", 0, 11)]); // entity immediately after
+        // a near-miss overlapping several mixed-type entities
+        check(
+            &[span("a", 0, 3), span("b", 2, 5), span("c", 4, 9), span("a", 8, 12)],
+            &[span("a", 1, 10)],
+        );
+        // out-of-order (fan-out-style) entity input stays byte-identical
+        check(
+            &[span("a", 8, 10), span("b", 0, 3), span("a", 4, 6)],
+            &[span("b", 5, 9), span("a", 1, 2)],
+        );
+        // empty near-miss span (qs == qe): claimed only by a strictly-containing
+        // different-type entity — the reference oracle pins the exact boundary
+        check(&[span("b", 0, 5)], &[span("a", 3, 3)]); // contained → suppressed
+        check(&[span("b", 0, 3)], &[span("a", 3, 3)]); // e.end == qs, touch → survives
+    }
+
+    #[test]
+    fn produce_hints_emits_reference_near_miss_sequence() {
+        // Proves the PUBLIC path emits the same NearMissFormat hints (fields + order)
+        // the reference oracle would keep — not just the same boolean decisions.
+        let ents = [pm_at("6217000000000001", "bank_card", 3), pm_at("13800138000", "phone", 30)];
+        let nms = [
+            pm_at("6217000000000001", "credit_card", 3), // overlaps bank_card (diff type)
+            pm_at("110101199003078888", "id_number", 50), // nothing claims it
+            pm_at("13800138000", "id_number", 30),        // overlaps phone (diff type)
+        ];
+        let h = produce_hints_l1(&ents, "unused for near-miss decisions", &nms);
+        let expected: Vec<(String, usize, usize)> = nms
+            .iter()
+            .zip(near_miss_suppressed_reference(&ents, &nms))
+            .filter(|(_, s)| !s)
+            .map(|(nm, _)| (nm.type_.clone(), nm.start, nm.end))
+            .collect();
+        let got: Vec<(String, usize, usize)> = h
+            .iter()
+            .filter_map(|hint| match &hint.kind {
+                HintKind::NearMissFormat { original_type, start, end, .. } => {
+                    Some((original_type.clone(), *start, *end))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(got, expected);
     }
 
     // ── get_person_threshold (exact == captured from live Python) ──

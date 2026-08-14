@@ -335,6 +335,8 @@ def safe_ollama(text: str, model: str = "qwen2.5:7b") -> str:
 
 ### llama.cpp (via llama-cpp-python)
 
+**Note:** `llama-cpp-python` is not a dependency of argus-redact — install it separately (`pip install llama-cpp-python`) if you use this local-LLM example.
+
 ```python
 from argus_redact import redact, guarded_restore, make_anchor
 from argus_redact.compose import prompt_anchor

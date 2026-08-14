@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import statistics
 import subprocess
 import sys
 import time
@@ -67,14 +66,16 @@ _restore_1kb_redacted = ""
 _restore_1kb_key: dict = {}
 
 
-def _measure_min(fn, runs: int = 7) -> float:
+def _measure_min(fn, runs: int = 21) -> float:
     """Return the MINIMUM wall-clock duration over `runs` calls (milliseconds).
 
     Minimum, not median: interference on a shared runner (co-tenant CPU, page
     cache misses, GC) can only make a run SLOWER, never faster, so the fastest
     observation is the least noise-contaminated estimate of the code's own cost.
     A median still carries whatever noise the middle sample happened to absorb,
-    which is what made this gate flap against its ±10% band.
+    which is what made this gate flap against its regression band. More runs
+    tighten the estimate: the more samples, the likelier one lands in a quiet
+    window near the true hardware floor.
     """
     times = []
     for _ in range(runs):
@@ -85,26 +86,27 @@ def _measure_min(fn, runs: int = 7) -> float:
 
 
 def _measure_import_time() -> float:
-    """Cold-start import time via subprocess (median of 5 runs).
+    """Cold-start import time via subprocess (minimum of 11 runs).
 
     Includes process-spawn overhead (~20-50ms); useful for relative
     regression detection, less useful as an absolute "import argus_redact"
-    cost. Inherits parent env to keep platform PATH semantics — hardcoding
-    PATH would break Windows CI (no /usr/bin) and surface env-resolution
-    differences across runners.
+    cost. Minimum, not median, for the same reason as `_measure_min`: spawn +
+    load noise only ever adds time, so the fastest run is the least
+    contaminated floor — a median-of-5 was the noisiest metric in the budget
+    (it spanned ~14% run-to-run and flapped the gate). Inherits parent env to
+    keep platform PATH semantics — hardcoding PATH would break Windows CI (no
+    /usr/bin) and surface env-resolution differences across runners.
     """
     env = os.environ.copy()
     env["PYTHONPATH"] = _REPO_SRC
-    times = []
-    for _ in range(5):
-        start = time.perf_counter()
-        subprocess.run(
+    return _measure_min(
+        lambda: subprocess.run(
             [sys.executable, "-c", "import argus_redact"],
             check=True,
             env=env,
-        )
-        times.append((time.perf_counter() - start) * 1000)
-    return statistics.median(times)
+        ),
+        runs=11,
+    )
 
 
 def main() -> None:
@@ -163,13 +165,13 @@ def main() -> None:
         # the feeds that reach a sentence boundary run detection. Reported as the
         # TOTAL wall-time of the whole dribble+flush run (ms-scale, stable) rather
         # than a per-chunk number (which is µs-scale and noise-flaky against the
-        # ±10% gate). Captures the gate optimization as a number that won't flap.
+        # regression gate). Captures the gate optimization as a number that won't flap.
         "streaming_dribble_total_ms": _measure_min(_streaming_dribble_workload),
         # Bulk restore_csv over a ~300-row CSV (a few PII columns per row) through
         # the ONE session restore_csv builds for the whole document (see
         # _restore_bulk_workload below), instead of recompiling per cell. Reported
         # as the TOTAL wall-time of one restore_csv call — ms-scale and stable
-        # against the ±10% gate, mirroring streaming_dribble_total_ms's framing.
+        # against the regression gate, mirroring streaming_dribble_total_ms's framing.
         "restore_bulk_csv_total_ms": _measure_min(_restore_bulk_workload),
     }
 
@@ -235,7 +237,7 @@ def _streaming_dribble_workload() -> None:
     The emit_possible gate makes the majority of feeds (boundary-less holds) cheap:
     the gate fires before _detect runs; only the feeds that reach a sentence boundary
     trigger detection. Timed by _measure_min as one ms-scale unit (total run time) —
-    stable against the ±10% regression gate, unlike a µs-scale per-chunk figure.
+    stable against the regression gate, unlike a µs-scale per-chunk figure.
     """
     from argus_redact.compose import StreamingRedactor
 

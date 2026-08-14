@@ -6,8 +6,12 @@ argus-redact works like encryption:
 
 ```
 GPG:           encrypt(plaintext, pubkey) → ciphertext     decrypt(ciphertext, privkey) → plaintext
-argus-redact:  redact(plaintext)          → (redacted, key) restore(redacted, key)       → plaintext
+argus-redact:  redact(plaintext)          → (redacted, key) guarded_restore(redacted, key, anchor=...) → original text
 ```
+
+(Since v0.8.0 `restore()` defaults to `guard=True` and fails closed without a valid
+anchor — see [Guarded restore](#guarded-restore) below; `guard=False` is the explicit
+unguarded opt-out.)
 
 The critical difference:
 
@@ -216,7 +220,7 @@ salt-keyed masking is planned for a future release.
 
 ### China PIPL — Cross-border LLM usage
 
-China's Personal Information Protection Law (PIPL) cross-border data transfer rules (effective January 2026) require organizations to minimize personal data sent to overseas services. When using overseas LLM APIs (OpenAI, Anthropic, Google), user PII must be de-identified before transmission.
+China's Personal Information Protection Law (PIPL) cross-border data transfer rules (in force since January 2026) require organizations to minimize personal data sent to overseas services. When using overseas LLM APIs (OpenAI, Anthropic, Google), user PII must be de-identified before transmission.
 
 argus-redact provides the technical implementation:
 
@@ -229,7 +233,7 @@ This does not replace a Data Protection Impact Assessment (DPIA) or legal review
 
 ### EU AI Act / GDPR
 
-The EU AI Act (effective August 2026) imposes data minimization requirements on AI systems. GDPR Article 25 requires data protection by design. argus-redact supports both by ensuring that only the minimum necessary data — semantically preserved but identity-removed — is processed by external AI services.
+The EU AI Act (in force since August 2026) imposes data minimization requirements on AI systems. GDPR Article 25 requires data protection by design. argus-redact supports both by ensuring that only the minimum necessary data — semantically preserved but identity-removed — is processed by external AI services.
 
 v0.7.18 adds machine-readable compliance artifacts that make the pseudonymization/anonymization boundary explicit: `RedactReport.residual_personal_data` (accessible via `redact(report=True)`) is `True` whenever any PII was detected — a retained recovery key makes masked/category output just as re-linkable as a pseudonym, and `keep` leaves the original verbatim — signalling that output remains personal data under GDPR Art.4(5). See [Compliance artifacts (v0.7.18)](#compliance-artifacts-v0718) below for the full artifact set.
 

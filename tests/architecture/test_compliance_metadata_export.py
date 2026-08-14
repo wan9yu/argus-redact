@@ -64,8 +64,10 @@ def test_hipaa_phi_categories_values_are_str_or_none():
 
 def test_well_known_types_have_expected_classification():
     """Smoke check on classifier output for stability across releases."""
-    # phone: base personal info under PIPL; not GDPR special; HIPAA phone identifier
-    assert "PIPL Art.28" in PIPL_REFERENCES["phone"]
+    # phone: ordinary personal info under PIPL (universal floor only, not a
+    # sensitive-PI member); not GDPR special; HIPAA phone identifier
+    assert "PIPL Art.13" in PIPL_REFERENCES["phone"]
+    assert "PIPL Art.28" not in PIPL_REFERENCES["phone"]  # not sensitive PI
     assert GDPR_SPECIAL_CATEGORIES["phone"] is False
     assert HIPAA_PHI_CATEGORIES["phone"] == "phone_numbers"
 

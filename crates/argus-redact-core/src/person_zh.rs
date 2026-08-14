@@ -21,6 +21,7 @@ use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
+use crate::evidence_detector::{context_windows, proximity_evidence};
 use crate::person_data::{
     common_words_zh_set, compound_surnames_zh, not_names_zh_set, surnames_zh,
 };
@@ -536,32 +537,13 @@ pub(crate) fn score_candidate(
 ) -> f64 {
     // before = text[max(0, candidate.start - _CONTEXT_WINDOW) : candidate.start]
     // after  = text[candidate.end : candidate.end + _CONTEXT_WINDOW]
-    // These are CHAR slices in Python; compute them in char-space so a
-    // multi-byte CJK window is never byte-sliced. `chars` is the shared
-    // whole-text slice (no per-call re-collect).
-    let text_chars = chars;
-    let n = text_chars.len();
-
-    let before_start = candidate.start.saturating_sub(CONTEXT_WINDOW);
-    let before_end = candidate.start.min(n);
-    let before: String = if before_start <= before_end {
-        text_chars[before_start..before_end].iter().collect()
-    } else {
-        String::new()
-    };
-
-    let after_start = candidate.end.min(n);
-    // Mutation note: the `candidate.end + CONTEXT_WINDOW` → `candidate.end *
-    // CONTEXT_WINDOW` survivor is equivalent. `end >= 2` always (min 2-char name),
-    // so the product only GROWS the window; the three `after` signals
-    // (`_HONORIFIC_SUFFIX`, `_PII_SUFFIX`, `_PAREN_PHONE`) are all `^`-anchored
-    // prefix matches, so a wider `after` never changes whether they fire.
-    let after_end = (candidate.end + CONTEXT_WINDOW).min(n);
-    let after: String = if after_start <= after_end {
-        text_chars[after_start..after_end].iter().collect()
-    } else {
-        String::new()
-    };
+    // These are CHAR slices in Python; computed in char-space (a multi-byte CJK
+    // window is never byte-sliced) by the shared `context_windows` helper. `chars`
+    // is the whole-text slice threaded in (no per-call re-collect). Widening the
+    // `after` window is safe: the three `after` signals (`_HONORIFIC_SUFFIX`,
+    // `_PII_SUFFIX`, `_PAREN_PHONE`) are all `^`-anchored prefix matches, so a
+    // wider `after` never changes whether they fire.
+    let (before, after) = context_windows(chars, candidate.start, candidate.end, CONTEXT_WINDOW);
 
     // Collect evidence signals — same order as Python:
     //   evidence = 0.0
@@ -583,27 +565,26 @@ pub(crate) fn score_candidate(
         evidence += W_PAREN_PHONE;
     }
 
-    // Proximity to structural PII — first entity within a bucket wins (break).
+    // Proximity to structural PII — first entity within a bucket wins (near
+    // before mid), via the shared `proximity_evidence` helper:
     //   for pii in pii_entities:
     //       distance = min(abs(candidate.start - pii.end), abs(pii.start - candidate.end))
     //       if distance <= 50:    evidence += 0.5; break
     //       elif distance <= 150: evidence += 0.3; break
     //
-    // `abs(...)` over usize char offsets — use abs_diff so subtraction never
-    // underflows; abs_diff(a, b) == |a - b| matches Python's abs() on ints.
-    for pii in pii_entities {
-        let distance = candidate
-            .start
-            .abs_diff(pii.end)
-            .min(pii.start.abs_diff(candidate.end));
-        if distance <= PROXIMITY_NEAR {
-            evidence += W_PROXIMITY_NEAR;
-            break;
-        } else if distance <= PROXIMITY_MID {
-            evidence += W_PROXIMITY_MID;
-            break;
-        }
-    }
+    // The `pii_entities` slice is already filtered upstream (self_reference
+    // dropped in `detect_person_names`), so every entity is eligible — the gate
+    // is `|_| true`. `abs_diff` over usize char offsets == Python `abs()` on
+    // ints. This `+=` runs AFTER the four regex signals, so the accumulation
+    // order the bit-identity goldens lock is preserved (adding the helper's 0.0
+    // when nothing matches is a no-op on the non-negative running total).
+    evidence += proximity_evidence(
+        candidate.start,
+        candidate.end,
+        pii_entities.iter(),
+        &[(PROXIMITY_NEAR, W_PROXIMITY_NEAR), (PROXIMITY_MID, W_PROXIMITY_MID)],
+        |_| true,
+    );
 
     // No evidence signal → don't match at L1b (leave to L2 NER).
     //   if evidence == 0.0: return 0.0
@@ -729,17 +710,20 @@ fn resolve_variants(
 
         // if len(best.text) == 3:
         //
-        // Mutation note: this 3-char swallow arm is a faithful port of the
-        // pre-`{1,3}`-cap Python, retained for parity, but a genuine SWALLOW is
-        // effectively unreachable under the current cap — if the 3rd name char plus
-        // the next text char form a CJK common word, the greedy `[surname][CJK]{1,3}`
-        // already grabbed 4 chars and routes through the `best_len == 4` branch
-        // instead. So the arm's surviving arithmetic / `==`-find mutants (the `after`
-        // window offsets and the 2-char `.find`) cannot be reached by a swallow-firing
-        // input; the NON-swallow path (e.g. `客户何秀珍已登记`) is exercised but is
-        // insensitive to those edits (the `^`-anchored common-word check is unaffected
-        // by a wider `after` window). The 4-char arm's equivalent gate IS killed
-        // (`detect_four_char_real_name_no_common_tail_kept`).
+        // This 3-char swallow arm is a faithful port of the pre-`{1,3}`-cap Python
+        // and is LOAD-BEARING (not dead). A swallow fires on the trailing-particle
+        // TRUNCATION path: the greedy `[surname][CJK]{1,3}` grabs 4 chars, then
+        // `trim_candidate` strips a trailing particle back to 3, so the match
+        // routes through `best_len == 3` — NOT the `best_len == 4` branch. When the
+        // 3rd (last kept) name char plus that stripped particle form a common word,
+        // the greedy match over-grabbed a following word, so we down-shift to the
+        // 2-char root. Example: `客户张三上来了` → greedy `张三上来` → trim strips
+        // `来` → `张三上` (best_len 3); `上` + `来` = `上来` ∈ common → down-shift to
+        // `张三`. Pinned by `detect_best_len3_swallow_truncated_particle`; deleting
+        // this arm silently changes that output. (A 4-char match that SURVIVES
+        // trimming never reaches here: it always outscores its 3-char prefix — base
+        // 0.5 > 0.4, evidence never lower — so it is the longest passing variant and
+        // the `best_len == 4` branch owns the swallow.)
         let best_len = best.text.chars().count();
         if best_len == 3 {
             let last_char = best.text.chars().next_back().unwrap();
@@ -824,6 +808,148 @@ fn resolve_variants(
     }
 
     results
+}
+
+// ── Adjacent-name split ──
+
+/// Longest tail window a second name can occupy: a compound surname (2) + a
+/// triple given name (`{1,3}`) = 5 chars, plus the 2-char honorific / particle
+/// lookahead `interior_name_len` reads past the name. An 8-char slice is
+/// sufficient and keeps the boundary re-scan O(1) per resolved candidate.
+const ADJACENT_TAIL_WINDOW: usize = 8;
+
+/// Split a resolved SINGLE-surname candidate that greedily fused two ADJACENT
+/// names into one, leaking the second name's tail.
+///
+/// `[surname][一-鿿]{1,3}` with non-overlapping `find_iter` makes a 3-char name
+/// immediately followed by another name over-grab the second name's surname as
+/// its 4th char: `王小明李华` → `王小明李` (a non-name) with `华` leaked, and
+/// `客户张三李四…` collapses two people into one pseudonym. The greedy match already
+/// consumed the boundary, so `find_iter` never rescans the second name — we
+/// detect the boundary here and return BOTH names so the caller emits two
+/// entities.
+///
+/// ## ACCEPTED over-split (this is NOT a "no real-name over-split" fix)
+///
+/// The rule fires on ANY 4-char single-surname entity behind a context prefix
+/// whose interior surname begins a valid second name — which includes REAL 4-char
+/// combined-surname names, not just two juxtaposed people. `客户李陈金龙` splits to
+/// `李陈` + `金龙` and `客户刘杨林峰` to `刘杨` + `林峰` by the exact same rule as
+/// `张三李四`, because a real combined-surname name is LOCALLY INDISTINGUISHABLE
+/// from two adjacent names (every one of `李陈金龙` is a surname). This over-split
+/// is INTENDED and accepted: it is SAFE — the two entities cover the full original
+/// span, so no char leaks and redact→restore round-trips to the exact original —
+/// and it is aligned with docs/architecture.md:397 (adjacent names → separate
+/// pseudonyms). We deliberately do NOT suppress it by enlarging the negative dict:
+/// `not_names` is the GLOBAL candidate filter, so blocking `金龙` / `林峰` there
+/// would make them undetectable as STANDALONE names (a real recall leak, worse
+/// than a cosmetic double-pseudonym). See `detect_adjacent_names_combined_surname`.
+///
+/// ## What the split will NOT do
+///
+/// The person path is the most precision-tuned detector, and many given-name chars
+/// are surname homographs (`林`, `石`, …). The gates below keep the split from
+/// firing where it would over-grab a following NON-name word:
+///   - `best` is a 3-/4-char SINGLE-surname entity (a compound-led name carries a
+///     fixed head and is never split);
+///   - a `_CONTEXT_PREFIX` (`客户` / `联系人` / `我叫` / …) immediately precedes it —
+///     the strong name-list signal that also confirmed the fused candidate, which
+///     the confirmed cases all share;
+///   - the SMALLEST interior index `k >= 2` whose char begins a valid second name,
+///     re-scanned from the boundary through the SAME candidate generator (so the
+///     negative dict / trim / interior-truncation all apply), where the first name
+///     `best.text[..k]` also clears the negative dict;
+///   - the second name's first given char does NOT begin a common word with the
+///     following char (`林` + `你好` → `你好` ∈ common → the "surname" `林` is really
+///     the first name's given tail and `你` starts a following word, so DON'T
+///     split). This is the guard that keeps a real 3-char name whose last char is a
+///     surname homograph (`李文林你好`) intact.
+///
+/// Returns `(first, second)` when a split fires, else `None` (the caller keeps
+/// `best` intact — declining is the safe direction where a following word, not a
+/// second name, abuts the entity).
+fn split_adjacent_names(
+    best: &NameCandidate,
+    chars: &[char],
+) -> Option<(NameCandidate, NameCandidate)> {
+    let s = best.start;
+    let best_chars: Vec<char> = best.text.chars().collect();
+    let len = best_chars.len();
+    if !(3..=4).contains(&len) {
+        return None;
+    }
+    // A compound-led entity is a genuine single name — never split.
+    let head2: String = best_chars.iter().take(2).collect();
+    if compound_surnames_zh().iter().any(|cs| cs.as_str() == head2) {
+        return None;
+    }
+    // Strong name-list signal required: a `_CONTEXT_PREFIX` right before `best`,
+    // over the SAME +/-20 `before` window `score_candidate` uses.
+    let before_start = s.saturating_sub(CONTEXT_WINDOW);
+    let before: String = chars[before_start..s.min(chars.len())].iter().collect();
+    if !CONTEXT_PREFIX.is_match(&before).unwrap_or(false) {
+        return None;
+    }
+
+    let neg = not_names_zh_set();
+    let common = common_words_zh_set();
+
+    // Smallest interior boundary `k` (>= 2, so the first name keeps >= 2 chars)
+    // whose char begins a valid second name.
+    for k in 2..len {
+        let boundary = s + k;
+        // First name must clear the negative dict (whole word + 2-char root). A
+        // blocked root blocks every larger `k` too, but `continue` is harmless.
+        let first_text: String = best_chars.iter().take(k).collect();
+        let first_root: String = best_chars.iter().take(2).collect();
+        if neg.contains(&first_text) || neg.contains(&first_root) {
+            continue;
+        }
+        // Re-scan the detector from the boundary — `find_iter` is non-overlapping,
+        // so the greedy first match already consumed this position and the second
+        // name was never generated. The longest candidate anchored at the boundary
+        // is the second name; a non-surname start, a negative-dict word or a bare
+        // surname yields nothing there.
+        let tail_end = (boundary + ADJACENT_TAIL_WINDOW).min(chars.len());
+        let tail: String = chars[boundary..tail_end].iter().collect();
+        let tail_chars: Vec<char> = tail.chars().collect();
+        let Some(second) = generate_candidates(&tail, &tail_chars)
+            .into_iter()
+            .filter(|c| c.start == 0 && c.text.chars().count() >= 2)
+            .max_by_key(|c| c.text.chars().count())
+        else {
+            continue;
+        };
+        let second_len = second.text.chars().count();
+        // Surname length of the second name (compound head = 2, else single = 1).
+        let sur_len = {
+            let sh2: String = second.text.chars().take(2).collect();
+            if compound_surnames_zh().iter().any(|cs| cs.as_str() == sh2) {
+                2
+            } else {
+                1
+            }
+        };
+        // Anti-false-split guard: if the second name's first given char begins a
+        // common word with the char after it, the "surname" is really the first
+        // name's given tail and the next char starts a following word — DON'T
+        // split. (`林` `你` `好` → `你好` ∈ common → keep `李文林你` fused.)
+        let given_idx = boundary + sur_len;
+        if given_idx + 1 < chars.len() {
+            let given_pair: String = [chars[given_idx], chars[given_idx + 1]].iter().collect();
+            if common.contains(&given_pair) {
+                continue;
+            }
+        }
+        let first = NameCandidate { text: first_text, start: s, end: boundary };
+        let second = NameCandidate {
+            text: second.text,
+            start: boundary,
+            end: boundary + second_len,
+        };
+        return Some((first, second));
+    }
+    None
 }
 
 // ── Public API ──
@@ -984,6 +1110,38 @@ pub fn detect_person_names(
     }
 
     for (best, best_score) in resolve_variants(&grouped, &chars, threshold) {
+        // Split an adjacent-name fusion (`王小明李` → `王小明` + `李华`) that the
+        // greedy `{1,3}` match created by swallowing the following name's surname.
+        // Conservative — see `split_adjacent_names`. The recovered second name
+        // inherits the confirmed score: the split only fires behind a context
+        // prefix that already established a strong name-list signal, so both names
+        // share that confirmation.
+        if let Some((first, second)) = split_adjacent_names(&best, &chars) {
+            // Keep the fusion intact if the recovered second name would collide
+            // with a known-name occupied span (rare) rather than double-cover it.
+            let collides = occupied
+                .iter()
+                .any(|&(s0, e0)| second.start < e0 && s0 < second.end);
+            if !collides {
+                results.push(PatternMatch {
+                    text: first.text,
+                    type_: "person".to_string(),
+                    start: first.start,
+                    end: first.end,
+                    confidence: best_score,
+                    layer: 0,
+                });
+                results.push(PatternMatch {
+                    text: second.text,
+                    type_: "person".to_string(),
+                    start: second.start,
+                    end: second.end,
+                    confidence: best_score,
+                    layer: 0,
+                });
+                continue;
+            }
+        }
         results.push(PatternMatch {
             text: best.text,
             type_: "person".to_string(),
@@ -1104,6 +1262,15 @@ mod tests {
         // particle/honorific, so interior_name_len keeps all 4 chars; _emit then
         // offers the 4-char word + 3-char + 2-char prefixes at the same start.
         // (Old {1,2}: greedy 张三李 → [('张三李',0,3),('张三',0,2)].)
+        //
+        // `generate_candidates` STILL fuses the adjacency here (this is the
+        // non-overlapping `find_iter` behavior). The two-name SPLIT lives one layer
+        // up in `detect_person_names` (`split_adjacent_names`), where the boundary
+        // is re-scanned and both names are emitted — see
+        // `detect_adjacent_names_two_char_split` and friends below. Keeping the
+        // split at the detector level (not here) leaves the candidate goldens and
+        // the bit-identity scorer untouched and lets the recovered second name
+        // inherit the confirmed score (it has no independent evidence of its own).
         assert_candidates(
             "张三李四",
             &[("张三李四", 0, 4), ("张三李", 0, 3), ("张三", 0, 2)],
@@ -1565,6 +1732,133 @@ mod tests {
         );
     }
 
+    // ── Adjacent-name split (`split_adjacent_names`) ──
+    //
+    // The greedy `[surname][一-鿿]{1,3}` match with non-overlapping `find_iter`
+    // fuses a name that is immediately followed by another name, leaking the
+    // second name's tail. `detect_person_names` splits the fusion back into two
+    // entities. These pin the intended splits, the ACCEPTED combined-surname
+    // over-split (`detect_adjacent_names_combined_surname` — a real 4-char name is
+    // locally indistinguishable from two adjacent names, and the split is safe /
+    // round-trip-correct), and the cases the split must NOT touch.
+
+    #[test]
+    fn detect_adjacent_names_three_plus_two_split() {
+        // 联系人王小明李华 — greedy 王 + 小明李 = 王小明李 (a non-name), leaking 华.
+        // The boundary is 李 at index 3 (小/明 are not surnames): first name 王小明,
+        // second name 李华. 华 has no evidence of its own, so the recovered second
+        // name inherits the context-confirmed score (1.0). PRE-FIX this returned a
+        // single fused ('王小明李', 3, 7, 1.0) with 华 leaked entirely.
+        assert_eq!(
+            detect("联系人王小明李华", &[], &[], 0.8),
+            vec![
+                ("王小明".to_string(), 3, 6, 1.0),
+                ("李华".to_string(), 6, 8, 1.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn detect_adjacent_names_two_char_split() {
+        // 客户张三李四的电话13800138000 — greedy 张 + 三李四 = 张三李四 collapses two
+        // 2-char names. Boundary 李 at index 2: 张三 | 李四. Both are covered as
+        // distinct person entities (docs/architecture.md:397: 张三李四 → two
+        // pseudonyms). PRE-FIX this returned a single fused ('张三李四', 2, 6, 1.0).
+        assert_eq!(
+            detect("客户张三李四的电话13800138000", &[], &[], 0.8),
+            vec![
+                ("张三".to_string(), 2, 4, 1.0),
+                ("李四".to_string(), 4, 6, 1.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn detect_adjacent_names_combined_surname() {
+        // ACCEPTED OVER-SPLIT (intended, safe, round-trip-correct): a REAL 4-char
+        // combined-surname name is split by the SAME rule as 张三李四, because it is
+        // LOCALLY INDISTINGUISHABLE from two adjacent names — every char of 李陈金龙
+        // is a surname, so nothing at L1 can tell "one person named 李陈金龙" from
+        // "李陈 and 金龙". 客户李陈金龙 → 李陈 | 金龙 (boundary 金 at index 2).
+        //
+        // This is NOT a bug and NOT suppressed: the two entities cover the FULL
+        // original span (2..6), so no char leaks and redact→restore reproduces the
+        // exact original, and it matches docs/architecture.md:397 (adjacent names →
+        // separate pseudonyms). Blocking it via the negative dict was deliberately
+        // rejected: `not_names` is the global candidate filter, so adding 金龙 there
+        // would make 金龙 undetectable as a STANDALONE name (a real recall leak).
+        assert_eq!(
+            detect("客户李陈金龙", &[], &[], 0.8),
+            vec![
+                ("李陈".to_string(), 2, 4, 1.0),
+                ("金龙".to_string(), 4, 6, 1.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn detect_adjacent_names_single_then_compound_split() {
+        // 客户张三欧阳娜娜 — greedy 张 + 三欧阳 = 张三欧阳 (a non-name) swallowed the
+        // compound surname's head, leaking 娜娜. Boundary 欧 at index 2 re-scans to
+        // the compound second name 欧阳娜娜: 张三 | 欧阳娜娜. PRE-FIX this returned a
+        // single fused ('张三欧阳', 2, 6, 1.0) with 娜娜 leaked entirely.
+        assert_eq!(
+            detect("客户张三欧阳娜娜", &[], &[], 0.8),
+            vec![
+                ("张三".to_string(), 2, 4, 1.0),
+                ("欧阳娜娜".to_string(), 4, 8, 1.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn detect_adjacent_split_leaves_genuine_three_char_name() {
+        // NO-OVER-SPLIT CONTROL: a genuine 3-char name behind a context prefix
+        // stays ONE entity. 明 (index 2) is not a surname, so there is no interior
+        // boundary and the name is untouched.
+        assert_eq!(
+            detect("客户王小明", &[], &[], 0.8),
+            vec![("王小明".to_string(), 2, 5, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_adjacent_split_leaves_surname_homograph_given_char() {
+        // NO-OVER-SPLIT CONTROL: a real 3-char name whose LAST char is a surname
+        // homograph (林), followed by the greeting 你好 with no delimiter. The
+        // greedy match over-grabs 你 → 李文林你 (a pre-existing 4-char over-grab
+        // unrelated to this fix). The boundary 林 (index 2) would split to
+        // 李文 | 林你好, BUT the second name's first given char 你 begins the common
+        // word 你好 — so the anti-false-split guard DECLINES the split and the
+        // (unchanged) fused entity is kept. A bounded stale over-grab is preferable
+        // to over-splitting the real name 李文林.
+        assert_eq!(
+            detect("客户李文林你好", &[], &[], 0.8),
+            vec![("李文林你".to_string(), 2, 6, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_adjacent_split_leaves_foreign_four_char_name() {
+        // NO-OVER-SPLIT CONTROL: a genuine 4-char foreign name (马 + 尔克斯). None of
+        // 尔/克/斯 is a surname, so no interior boundary exists and the name stays
+        // one entity even behind a context prefix (redundant with
+        // `detect_single_surname_four_char_foreign_name`, kept adjacent as a split
+        // control).
+        assert_eq!(
+            detect("客户马尔克斯已登记", &[], &[], 0.8),
+            vec![("马尔克斯".to_string(), 2, 6, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_adjacent_split_requires_context_prefix() {
+        // NO-OVER-SPLIT CONTROL: the bare adjacency 张三李四 with no context prefix
+        // and no PII has no evidence at all → nothing is confirmed, so there is
+        // nothing to split (matches the pre-fix behavior for the bare case).
+        assert!(detect("张三李四", &[], &[], 0.8).is_empty());
+    }
+
     #[test]
     fn detect_threshold_boundary_passes_at_0_8() {
         // T1 zh_float_2char_strong_at_threshold — 张明 + phone exactly within the
@@ -1751,6 +2045,25 @@ mod tests {
         assert_eq!(
             detect("马尔斯顿13800138000", &pii, &[], 0.8),
             vec![("马尔斯顿".to_string(), 0, 4, 1.0)]
+        );
+    }
+
+    #[test]
+    fn detect_best_len3_swallow_truncated_particle() {
+        // resolve_variants `best_len == 3` swallow arm — LOAD-BEARING (this pins
+        // that the arm is NOT dead code and must not be removed). `客户张三上来了`:
+        // the greedy `[surname][CJK]{1,3}` grabs the 4-char `张三上来`, then
+        // `trim_candidate` strips the trailing particle `来`, leaving `张三上`
+        // (3 chars) — so the match routes through `best_len == 3`, NOT the 4-char
+        // branch. Its last kept char `上` + the stripped `来` = `上来`, a common
+        // word, so the greedy match over-grabbed a following word and the arm
+        // down-shifts to the 2-char root `张三` (context-prefix `客户` → base 0.3 +
+        // 0.6). Candidate generation confirms the routing (only 3-/2-char variants
+        // exist here, no 4-char). Deleting the arm would leave `张三上` at 1.0.
+        assert_candidates("客户张三上来了", &[("张三上", 2, 5), ("张三", 2, 4)]);
+        assert_eq!(
+            detect("客户张三上来了", &[], &[], 0.8),
+            vec![("张三".to_string(), 2, 4, 0.8999999999999999)]
         );
     }
 

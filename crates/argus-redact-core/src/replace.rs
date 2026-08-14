@@ -190,6 +190,22 @@ pub fn replace<F: PseudoFactory>(
         keep_whitelist,
     } = args;
 
+    // Fail closed on oversize input (defense-in-depth), mirroring `detect_l1`
+    // (redact_l1.rs) and the restore path. Detection already rejects oversize
+    // input upstream, but an entity-detection failure can leave `entities` empty
+    // for oversize `text` (e.g. the streaming detect closure swallowing a detect
+    // error) — without this guard `replace()` would then emit that `text` VERBATIM
+    // (unredacted). The guard fires ONLY above `MAX_INPUT_SIZE`, so normal-size
+    // inputs are unchanged and the one-shot path (which already errors earlier at
+    // detect) is untouched.
+    if text.len() > crate::MAX_INPUT_SIZE {
+        return Err(format!(
+            "input too large: {} bytes exceeds MAX_INPUT_SIZE {}",
+            text.len(),
+            crate::MAX_INPUT_SIZE
+        ));
+    }
+
     let mut session = ReplaceSession::new(
         factory,
         salt,
@@ -434,16 +450,11 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
                         // redraws the first number, but the up-to-date key forces a
                         // fresh code on collision. (replacer.py:578–583)
                         let prefix = info.map(|i| i.prefix.as_str()).unwrap_or("O");
-                        let live = if self.result_key.is_empty() {
-                            None
-                        } else {
-                            Some(&self.result_key)
-                        };
-                        self.org_gen = Some(PseudonymGenerator::new(
+                        self.org_gen = Some(new_gen(
                             prefix,
-                            PSEUDONYM_CODE_RANGE,
-                            self.factory.make(offset_seed(self.pseudo_seed_int, 1)),
-                            live,
+                            offset_seed(self.pseudo_seed_int, 1),
+                            &self.result_key,
+                            self.factory,
                         ));
                     }
                     let org_prefix = self
@@ -463,16 +474,11 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
                         // Same rebuild semantics for the person generator
                         // (replacer.py:586–591): config prefix + live result_key.
                         let prefix = info.map(|i| i.prefix.as_str()).unwrap_or("P");
-                        let live = if self.result_key.is_empty() {
-                            None
-                        } else {
-                            Some(&self.result_key)
-                        };
-                        self.pseudo_gen = Some(PseudonymGenerator::new(
+                        self.pseudo_gen = Some(new_gen(
                             prefix,
-                            PSEUDONYM_CODE_RANGE,
-                            self.factory.make(self.pseudo_seed_int),
-                            live,
+                            self.pseudo_seed_int,
+                            &self.result_key,
+                            self.factory,
                         ));
                     }
                     let person_prefix = self
@@ -608,6 +614,31 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
                     );
                     pg.get_reserved(&entity.text, &mut self.used_labels)
                 }
+            } else if strategy == "remove_bracketed" {
+                // Bracketed reversible audit placeholder `[PREFIX-NNNNN]`. Same
+                // per-type generator, prefix, and seed as the `remove` fallback
+                // (and the realistic strategy's own faller-back), but wrapping the
+                // code in brackets moves it into a namespace DISJOINT from every
+                // realistic code — a realistic fake or bare `PREFIX-NNNNN` fallback
+                // never contains `[`. The pseudonym-llm profile runs a realistic
+                // pass and this audit pass over ONE detection and unions their two
+                // keys into one restore key; sharing a bare `PREFIX-NNNNN` space
+                // (the old `remove`) let a person's audit code collide with the
+                // realistic pass's exhausted-pool `P-NNNNN` fallback and silently
+                // overwrite the restore mapping (an identity splice). Bracketing
+                // makes that collision unrepresentable. `get_reserved` reserves the
+                // bare code in `used_labels`, keeping the bracketed forms unique.
+                let pg = get_type_gen(
+                    &mut self.type_gens,
+                    &entity.type_,
+                    info,
+                    self.unified_prefix.as_deref(),
+                    self.pseudo_seed_int,
+                    &self.result_key,
+                    self.factory,
+                );
+                let code = pg.get_reserved(&entity.text, &mut self.used_labels);
+                format!("[{code}]")
             } else if strategy == "category" {
                 let label = info
                     .and_then(|i| i.label.clone())
@@ -645,47 +676,117 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
             }
         }
 
-        // Replace right-to-left, dedup by (start, end). Char-based slicing to match
+        // Assemble the redacted text. Char-based slicing throughout to match
         // Python string indexing (code points, not bytes).
+        //
+        // Dedup by (start, end): sort DESCENDING by start (stable, so equal-start
+        // entities keep their input order) and keep the FIRST-seen position —
+        // exactly the winner the previous right-to-left splice loop selected.
         let chars: Vec<char> = text.chars().collect();
         let mut sorted: Vec<&PatternMatch> = entities.iter().collect();
         sorted.sort_by(|a, b| b.start.cmp(&a.start));
-
-        let mut result_chars = chars;
-        let mut seen_positions: HashSet<(usize, usize)> = HashSet::new();
+        let mut seen_positions: HashSet<(usize, usize)> = HashSet::with_capacity(sorted.len());
+        let mut deduped: Vec<SpliceSpan<'_>> = Vec::with_capacity(sorted.len());
         for entity in sorted {
-            let pos = (entity.start, entity.end);
-            if seen_positions.contains(&pos) {
+            if !seen_positions.insert((entity.start, entity.end)) {
                 continue;
             }
-            seen_positions.insert(pos);
             let replacement = entity_replacements
                 .get(&entity.text)
                 .expect("entity.text must have a replacement");
-            let repl_chars: Vec<char> = replacement.chars().collect();
-            // result = result[:start] + replacement + result[end:]
-            //
-            // Python slicing silently clamps out-of-range indices: `s[:start]` with
-            // `start > len(s)` yields the whole string, `s[end:]` with `end > len(s)`
-            // yields "". The Presidio bridge feeds stale offsets into a string that
-            // the prior (right-to-left) replacements already shortened, relying on
-            // exactly this leniency — so we clamp to the current length to stay
-            // byte-identical to `_replace_python` (a hard slice would panic).
-            let cur_len = result_chars.len();
-            let lo = entity.start.min(cur_len);
-            let hi = entity.end.min(cur_len);
-            let mut new_chars =
-                Vec::with_capacity(lo + repl_chars.len() + cur_len.saturating_sub(hi));
-            new_chars.extend_from_slice(&result_chars[..lo]);
-            new_chars.extend_from_slice(&repl_chars);
-            if hi < cur_len {
-                new_chars.extend_from_slice(&result_chars[hi..]);
-            }
-            result_chars = new_chars;
+            deduped.push((entity.start, entity.end, replacement.as_str()));
         }
 
-        Ok(result_chars.into_iter().collect())
+        // Fast path: a non-overlapping, in-range span set assembles in ONE
+        // forward pass over the original coordinates — O(total len) instead of
+        // the old per-entity full-buffer rebuild (O(#entities × len), which held
+        // the CPU on attacker-sized input). Overlapping / stale spans (only the
+        // Presidio bring-your-own-detector path produces these; normal detection
+        // merges overlaps away) fall back to the exact right-to-left splice, which
+        // clamps against the mutating buffer the way Python's slice does. The two
+        // are byte-identical for every input — proven by the differential fuzz
+        // test `forward_pass_is_byte_identical_to_right_to_left_splice`.
+        let redacted = if forward_eligible(&deduped, chars.len()) {
+            let spans_asc: Vec<SpliceSpan<'_>> = deduped.iter().rev().copied().collect();
+            assemble_forward(&chars, &spans_asc)
+        } else {
+            assemble_splice(&chars, &deduped)
+        };
+        Ok(redacted)
     }
+}
+
+/// One deduped span to place: char-index `start`/`end` into the ORIGINAL text
+/// plus the already-resolved replacement string.
+type SpliceSpan<'a> = (usize, usize, &'a str);
+
+/// Whether a single forward pass reproduces [`assemble_splice`] for `spans_desc`
+/// (given in DESCENDING start order, as produced by the dedup above). True iff
+/// every span is well-formed and in range (`start <= end <= n`) AND no two
+/// overlap — read ascending (reverse of `spans_desc`), each span's `start` must
+/// be `>=` the previous span's `end`. Any overlap or stale/out-of-range offset
+/// (the Presidio bring-your-own-detector path) returns `false`, routing to the
+/// exact splice fallback whose length-clamp reproduces Python's slice leniency.
+///
+/// Soundness: under these conditions the right-to-left splice never shifts a
+/// coordinate into a region a later (leftward) span reuses, and the length clamp
+/// never fires (every span sits inside the untouched original prefix when it is
+/// processed), so the forward pass over original coordinates yields the same
+/// bytes. This is a SOUND (never a false fast-path) but intentionally not
+/// exhaustive predicate — when in doubt it falls back to the exact splice.
+fn forward_eligible(spans_desc: &[SpliceSpan<'_>], n: usize) -> bool {
+    let mut prev_end = 0usize;
+    for &(start, end, _) in spans_desc.iter().rev() {
+        if start > end || end > n || start < prev_end {
+            return false;
+        }
+        prev_end = end;
+    }
+    true
+}
+
+/// Single forward pass: `original[cursor..start] ++ replacement` per span in
+/// ASCENDING order, then the trailing `original[cursor..]`. The caller must have
+/// established [`forward_eligible`] (in-range, non-overlapping), so every slice
+/// index is valid and `start >= cursor`. O(total len).
+fn assemble_forward(chars: &[char], spans_asc: &[SpliceSpan<'_>]) -> String {
+    let repl_bytes: usize = spans_asc.iter().map(|(_, _, r)| r.len()).sum();
+    // Lower-bound hint (one byte per original char); replacements add their bytes.
+    let mut out = String::with_capacity(chars.len() + repl_bytes);
+    let mut cursor = 0usize;
+    for &(start, end, repl) in spans_asc {
+        out.extend(chars[cursor..start].iter().copied());
+        out.push_str(repl);
+        cursor = end;
+    }
+    out.extend(chars[cursor..].iter().copied());
+    out
+}
+
+/// Right-to-left splice — the reference semantics. For each span (DESCENDING by
+/// start) rebuild `result[:start] + repl + result[end:]`, clamping `start`/`end`
+/// to the CURRENT (mutating) buffer length exactly as Python slicing does
+/// (`s[:start]` past the end → whole string; `s[end:]` past the end → ""). This
+/// is O(#spans × len) but runs only for the overlapping / stale (Presidio)
+/// fallback; the common path uses [`assemble_forward`]. Kept as the single SSOT
+/// for both the fallback and the differential test's oracle.
+fn assemble_splice(chars: &[char], spans_desc: &[SpliceSpan<'_>]) -> String {
+    let mut result_chars: Vec<char> = chars.to_vec();
+    for &(start, end, repl) in spans_desc {
+        let repl_chars: Vec<char> = repl.chars().collect();
+        let cur_len = result_chars.len();
+        let lo = start.min(cur_len);
+        let hi = end.min(cur_len);
+        let mut new_chars =
+            Vec::with_capacity(lo + repl_chars.len() + cur_len.saturating_sub(hi));
+        new_chars.extend_from_slice(&result_chars[..lo]);
+        new_chars.extend_from_slice(&repl_chars);
+        if hi < cur_len {
+            new_chars.extend_from_slice(&result_chars[hi..]);
+        }
+        result_chars = new_chars;
+    }
+    result_chars.into_iter().collect()
 }
 
 /// Lazily build (or fetch) a person/organization pseudonym generator, preloading
@@ -699,10 +800,22 @@ fn lazy_gen<'a, F: PseudoFactory>(
     result_key: &HashMap<String, String>,
     factory: &F,
 ) -> &'a mut PseudonymGenerator<F::Source> {
-    slot.get_or_insert_with(|| {
-        let existing = if result_key.is_empty() { None } else { Some(result_key) };
-        PseudonymGenerator::new(prefix, PSEUDONYM_CODE_RANGE, factory.make(seed), existing)
-    })
+    slot.get_or_insert_with(|| new_gen(prefix, seed, result_key, factory))
+}
+
+/// Construct a fresh pseudonym generator, preloading the codes of `prefix` from
+/// the live `result_key` (empty key → no preload). The single site for the
+/// `PseudonymGenerator::new(prefix, PSEUDONYM_CODE_RANGE, factory.make(seed), <nonempty key>)`
+/// construction shared by the two prefix-override rebuilds, `lazy_gen`, and
+/// `get_type_gen`.
+fn new_gen<F: PseudoFactory>(
+    prefix: &str,
+    seed: Option<u64>,
+    result_key: &HashMap<String, String>,
+    factory: &F,
+) -> PseudonymGenerator<F::Source> {
+    let existing = if result_key.is_empty() { None } else { Some(result_key) };
+    PseudonymGenerator::new(prefix, PSEUDONYM_CODE_RANGE, factory.make(seed), existing)
 }
 
 /// Lazily build (or fetch) the per-type pseudonym generator for the remove /
@@ -725,8 +838,7 @@ fn get_type_gen<'a, F: PseudoFactory>(
         // Python side into TypeInfo.prefix, with the type.upper()[:4] fallback).
         let prefix = unified_prefix.unwrap_or_else(|| info.map(|i| i.prefix.as_str()).unwrap_or(""));
         let seed = offset_seed(pseudo_seed_int, type_seed_offset(entity_type) as u64);
-        let existing = if result_key.is_empty() { None } else { Some(result_key) };
-        PseudonymGenerator::new(prefix, PSEUDONYM_CODE_RANGE, factory.make(seed), existing)
+        new_gen(prefix, seed, result_key, factory)
     })
 }
 
@@ -1306,5 +1418,189 @@ mod tests {
         )
         .unwrap();
         assert!(r.mask_collisions.is_empty(), "no collision expected: {:?}", r.mask_collisions);
+    }
+
+    #[test]
+    fn replace_rejects_oversize_input() {
+        // Defense-in-depth: `replace()` must fail closed on input larger than
+        // MAX_INPUT_SIZE, mirroring `detect_l1` (redact_l1.rs) and the restore path,
+        // so NO caller can emit oversize text VERBATIM over an empty span set (the
+        // wasm streaming leak: detect fails closed → empty spans → replace echoes the
+        // input). Empty entities would otherwise take the no-entities early return and
+        // echo `text`; the guard sits BEFORE the session, so it fires regardless.
+        let info_map = HashMap::new();
+        let wl = empty_whitelist();
+        let big = "a".repeat(crate::MAX_INPUT_SIZE + 1);
+        assert!(big.len() > crate::MAX_INPUT_SIZE);
+        // `ReplaceResult` has no `Debug`, so match rather than `expect_err`.
+        let err = match replace(
+            ReplaceArgs {
+                text: &big,
+                entities: &[],
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+            },
+            &SeqFactory,
+            None,
+        ) {
+            Ok(_) => panic!("replace must reject oversize input"),
+            Err(e) => e,
+        };
+        assert!(
+            err.contains("input too large") && err.contains(&crate::MAX_INPUT_SIZE.to_string()),
+            "error must name the cap: {err}"
+        );
+    }
+
+    #[test]
+    fn replace_at_exactly_max_input_size_is_accepted() {
+        // The cap boundary is strict `>`: EXACTLY MAX_INPUT_SIZE bytes must be
+        // accepted (a mutant using `>=` would wrongly reject it). No entities → text
+        // returned verbatim, but crucially NOT an Err.
+        let info_map = HashMap::new();
+        let wl = empty_whitelist();
+        let at_cap = "a".repeat(crate::MAX_INPUT_SIZE);
+        assert_eq!(at_cap.len(), crate::MAX_INPUT_SIZE);
+        let r = replace(
+            ReplaceArgs {
+                text: &at_cap,
+                entities: &[],
+                salt: Some(&Salt::Int(42)),
+                key: None,
+                type_info: &info_map,
+                person_prefix: "P",
+                org_prefix: "O",
+                unified_prefix: None,
+                keep_whitelist: &wl,
+            },
+            &SeqFactory,
+            None,
+        )
+        .expect("exactly-MAX_INPUT_SIZE input must not be rejected");
+        assert_eq!(r.redacted, at_cap);
+    }
+
+    #[test]
+    fn forward_pass_is_byte_identical_to_right_to_left_splice() {
+        // The byte-identity proof for the Part-1 assembly rewrite. Fuzz a wide
+        // range of span geometries — non-overlapping, adjacent, fully
+        // overlapping, nested, stale (offsets past the end), duplicate
+        // (start,end), empty replacement, multi-byte CJK — and assert the
+        // production assembler (fast forward pass where eligible, exact splice
+        // fallback otherwise) matches a from-scratch right-to-left reference for
+        // EVERY case. This exercises exactly the overlapping / stale inputs the
+        // normal pipeline merges away but the Presidio bring-your-own-detector
+        // path can still feed in, which the end-to-end goldens cannot reach.
+
+        // A tiny deterministic LCG so the fuzz is reproducible without a dep.
+        struct Lcg(u64);
+        impl Lcg {
+            fn next(&mut self, bound: usize) -> usize {
+                self.0 = self
+                    .0
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                ((self.0 >> 33) as usize) % bound.max(1)
+            }
+        }
+
+        // Dedup EXACTLY as `process` does: stable descending sort by start, keep
+        // the first-seen (start,end). Shared by the reference and the production
+        // driver so the differential isolates the ASSEMBLY change (the dedup is
+        // unchanged from the pre-rewrite loop).
+        fn dedup_desc(raw: &[(usize, usize, String)]) -> Vec<(usize, usize, &str)> {
+            let mut idx: Vec<usize> = (0..raw.len()).collect();
+            idx.sort_by(|&a, &b| raw[b].0.cmp(&raw[a].0));
+            let mut seen: HashSet<(usize, usize)> = HashSet::new();
+            let mut out: Vec<(usize, usize, &str)> = Vec::new();
+            for &i in &idx {
+                let (s, e, ref repl) = raw[i];
+                if seen.insert((s, e)) {
+                    out.push((s, e, repl.as_str()));
+                }
+            }
+            out
+        }
+
+        // Reference oracle: the pre-rewrite right-to-left splice, reimplemented
+        // from scratch (not the production `assemble_splice`) so a bug in the
+        // shared fallback cannot hide behind itself.
+        fn reference(chars: &[char], deduped_desc: &[(usize, usize, &str)]) -> String {
+            let mut result: Vec<char> = chars.to_vec();
+            for &(s, e, repl) in deduped_desc {
+                let rc: Vec<char> = repl.chars().collect();
+                let cur = result.len();
+                let lo = s.min(cur);
+                let hi = e.min(cur);
+                let mut nc = Vec::with_capacity(lo + rc.len() + cur.saturating_sub(hi));
+                nc.extend_from_slice(&result[..lo]);
+                nc.extend_from_slice(&rc);
+                if hi < cur {
+                    nc.extend_from_slice(&result[hi..]);
+                }
+                result = nc;
+            }
+            result.into_iter().collect()
+        }
+
+        // Production driver: the exact fast/slow dispatch `process` runs.
+        fn production(chars: &[char], deduped_desc: &[(usize, usize, &str)]) -> (String, bool) {
+            let n = chars.len();
+            let fast = forward_eligible(deduped_desc, n);
+            let out = if fast {
+                let asc: Vec<SpliceSpan<'_>> = deduped_desc.iter().rev().copied().collect();
+                assemble_forward(chars, &asc)
+            } else {
+                assemble_splice(chars, deduped_desc)
+            };
+            (out, fast)
+        }
+
+        let base_texts = ["ABCDEFGH", "电话13812345678好", "", "x", "aaaaaaaaaaaaaaaa"];
+        let repls = ["", "R", "长长", "P-00007", "x"];
+
+        let mut rng = Lcg(0x9E37_79B9_7F4A_7C15);
+        let mut fast_seen = 0usize;
+        let mut slow_seen = 0usize;
+        for text in base_texts {
+            let chars: Vec<char> = text.chars().collect();
+            let n = chars.len();
+            for _ in 0..5000 {
+                let k = rng.next(5); // 0..=4 spans
+                let mut raw: Vec<(usize, usize, String)> = Vec::new();
+                for _ in 0..k {
+                    // Deliberately allow offsets PAST the end (stale) and any
+                    // pairing (nested / overlapping / adjacent / zero-width).
+                    let a = rng.next(n + 3);
+                    let b = rng.next(n + 3);
+                    let (s, e) = if a <= b { (a, b) } else { (b, a) };
+                    raw.push((s, e, repls[rng.next(repls.len())].to_string()));
+                }
+                // Sometimes inject an exact-duplicate (start,end) with a DIFFERENT
+                // replacement, to exercise first-seen dedup.
+                if !raw.is_empty() && rng.next(3) == 0 {
+                    let (s, e, _) = raw[rng.next(raw.len())].clone();
+                    raw.push((s, e, "DUP".to_string()));
+                }
+                let deduped = dedup_desc(&raw);
+                let (prod, fast) = production(&chars, &deduped);
+                let refr = reference(&chars, &deduped);
+                assert_eq!(prod, refr, "divergence: text={text:?} raw={raw:?} fast={fast}");
+                if fast {
+                    fast_seen += 1;
+                } else {
+                    slow_seen += 1;
+                }
+            }
+        }
+        // The fuzz must actually drive BOTH paths, else it proves nothing about
+        // the fast forward pass (or the fallback) it claims to cover.
+        assert!(fast_seen > 0, "fast forward path never exercised");
+        assert!(slow_seen > 0, "splice fallback path never exercised");
     }
 }

@@ -223,6 +223,88 @@ register(
 )
 
 
+# ── Cross-language format-based identifiers (detection SSOT in shared.ron) ──
+# These load unconditionally from shared.ron and are detected + redacted at runtime;
+# registering them here gives each a sensitivity and a compliance classification.
+# strategy="remove" matches the Rust built-in fallback so redaction output is unchanged.
+
+register(
+    PIITypeDef(
+        name="iban",
+        lang="shared",
+        format="CC KK + up to 30 alnum (2-letter country + 2 check digits + BBAN)",
+        charset="uppercase alnum",
+        checksum="MOD97-10 (ISO 7064)",
+        strategy="remove",
+        label="[IBAN]",
+        examples=(),
+        counterexamples=(),
+        sensitivity=3,
+        source="ISO 13616 (IBAN); mod-97 checksum per ISO 7064",
+        description=(
+            "International Bank Account Number — detection in shared.ron "
+            "(mod-97 validated); a financial-account identifier"
+        ),
+    )
+)
+
+register(
+    PIITypeDef(
+        name="imei",
+        lang="shared",
+        format="15 decimal digits (keyword-triggered: IMEI …)",
+        charset="digits",
+        strategy="remove",
+        label="[IMEI已脱敏]",
+        examples=(),
+        counterexamples=(),
+        sensitivity=3,
+        source="3GPP TS 23.003 (IMEI); GSMA-allocated TAC",
+        description=(
+            "IMEI mobile-device identifier — detection in shared.ron (15 digits, keyword-triggered)"
+        ),
+    )
+)
+
+register(
+    PIITypeDef(
+        name="url_token",
+        lang="shared",
+        format="http(s) URL carrying a token/api_key/secret query parameter",
+        charset="ASCII URL characters",
+        strategy="remove",
+        label="[URL已脱敏]",
+        examples=(),
+        counterexamples=(),
+        sensitivity=4,
+        source="URL query-string credential leakage (OWASP)",
+        description=(
+            "URL carrying a sensitive token/key/secret query parameter — "
+            "detection in shared.ron; treated as a security secret"
+        ),
+    )
+)
+
+register(
+    PIITypeDef(
+        name="gender",
+        lang="shared",
+        format="性别/男性/女性 or gender|sex: male|female|…",
+        charset="text",
+        strategy="remove",
+        label="[性别已脱敏]",
+        examples=(),
+        counterexamples=(),
+        sensitivity=2,
+        source="Gender / sex mention (Chinese 性别 + English gender/sex)",
+        description=(
+            "Gender / sex — detection in shared.ron; ordinary personal information "
+            "(not, by itself, GDPR Art.9 special-category or PIPL sensitive PI)"
+        ),
+    )
+)
+
+
 # ── Cross-language quasi-identifiers (no format-based detection; NER / downstream) ──
 
 register(

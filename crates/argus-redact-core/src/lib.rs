@@ -5,6 +5,7 @@
 /// are capped identically to the Python wrapper (`pure/normalize.py`).
 pub const MAX_INPUT_SIZE: usize = 1024 * 1024;
 
+pub mod cancel;
 pub mod types;
 pub mod merger;
 pub mod coverage;
@@ -43,11 +44,12 @@ pub mod conditions;
 pub mod hobbies;
 pub(crate) mod fanout;
 
+pub use cancel::{CancelFlag, DetectError};
 pub use types::PatternMatch;
 pub use merger::{merge_entities, merge_entities_with_text};
 pub use coverage::{restore_lost_coverage, FilterScope};
 pub use restore::{restore, restore_full, restore_full_guarded, check_restore_safety, RestoreError, RestoreResult, RestoreSession};
-pub use patterns::{match_patterns, PatternConfig, PatternError};
+pub use patterns::{match_patterns, match_patterns_cancellable, PatternConfig, PatternError};
 pub use pseudonym::{PseudonymGenerator, RandomSource};
 pub use mt19937::{Mt19937, MtRandomSource};
 pub use validators::resolve_validator;
@@ -72,7 +74,7 @@ pub use person_zh::SCORE_THRESHOLD;
 pub use reserved_range::{scan_for_pollution, reserved_range_patterns};
 pub use replace::{replace, FakerFactory, FakerResolution, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
 pub use typeinfo::{build_type_info, Config, EntityConfig};
-pub use redact_l1::{detect_l1, redact_l1, DetectL1Result, RedactL1Args};
+pub use redact_l1::{detect_l1, detect_l1_cancellable, redact_l1, DetectL1Result, RedactL1Args};
 pub use streaming::{
     context_cut, emit_possible, pem_begin_present,
     last_boundary_index, restorer_split, ContextCut, DetectSpans, EmitResult, RedactSegment,

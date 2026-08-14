@@ -50,6 +50,24 @@ const DEFAULT_IGNORABLE: &[(char, char)] = &[
     ('\u{e0000}', '\u{e0fff}'), // Tag block + VS17..256 + the unassigned tail
 ];
 
+/// Membership test over a sorted, non-overlapping inclusive-range table via
+/// binary search. Shared by the two predicates below ([`is_invisible`] and
+/// [`is_nfkc_digit_yielding_non_decimal`]), which differ only in their table
+/// and the fast-path guard constant they gate this call behind.
+fn in_sorted_char_ranges(c: char, ranges: &[(char, char)]) -> bool {
+    ranges
+        .binary_search_by(|&(lo, hi)| {
+            if c < lo {
+                std::cmp::Ordering::Greater
+            } else if c > hi {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .is_ok()
+}
+
 fn is_invisible(c: char) -> bool {
     // Invisible / zero-width / direction-control characters stripped BEFORE
     // detection so text-smuggling can't split a token and fail-open a regex
@@ -62,17 +80,7 @@ fn is_invisible(c: char) -> bool {
     if c < '\u{00ad}' {
         return false; // ASCII fast-path: no ignorable below U+00AD
     }
-    DEFAULT_IGNORABLE
-        .binary_search_by(|&(lo, hi)| {
-            if c < lo {
-                std::cmp::Ordering::Greater
-            } else if c > hi {
-                std::cmp::Ordering::Less
-            } else {
-                std::cmp::Ordering::Equal
-            }
-        })
-        .is_ok()
+    in_sorted_char_ranges(c, DEFAULT_IGNORABLE)
 }
 
 fn is_droppable_mark(c: char) -> bool {
@@ -158,7 +166,117 @@ pub(crate) fn is_nfkc_digit_yielding_non_decimal(c: char) -> bool {
     if c < '\u{b2}' {
         return false; // ASCII + Latin-1 head fast-path
     }
-    NFKC_DIGIT_YIELDING_NON_DECIMAL
+    in_sorted_char_ranges(c, NFKC_DIGIT_YIELDING_NON_DECIMAL)
+}
+
+/// A char the regex layer already sees as `\d` (ASCII or any other `Nd`), i.e.
+/// one that needs no manufacturing. `Nl` (Roman numerals) folds to LETTERS, so it
+/// is not a digit either way; counting it here only widens a run's denominator.
+pub(crate) fn is_plain_digit_char(c: char) -> bool {
+    c.is_ascii_digit() || (c.is_numeric() && !is_nfkc_digit_yielding_non_decimal(c))
+}
+
+/// Unicode `Nd` (decimal-digit) blocks EXCLUDING ASCII `0`–`9`, as sorted,
+/// non-overlapping inclusive 10-code-point ranges — 67 blocks / 670 digits.
+///
+/// Each block is a contiguous run whose members carry decimal values `0..=9` in
+/// code-point order (a Unicode invariant for `Nd`), so [`nd_digit_value`] reads
+/// the value straight off the offset from the block's start (`c - lo`).
+///
+/// This mirrors the full `Nd` derived property through Unicode 15.0, not a
+/// curated subset — the same completeness stance as [`DEFAULT_IGNORABLE`]: a
+/// non-ASCII decimal digit the table forgot would be a free detection bypass.
+/// A later Unicode revision that adds an `Nd` block must append it here (in
+/// sorted order); the last additions were Kawi and Nag Mundari in 15.0. Such a
+/// digit passes the
+/// Unicode-`\d`-aware regex body but defeats the `is_ascii_digit()` checksum
+/// validators (→ confidence 0.3 near-miss, never redacted), so an ID/phone
+/// hiding one interior exotic digit would leak. [`normalize_digit_sequences`]
+/// folds an INTERIOR exotic digit (ASCII digits on both immediate sides) back to
+/// ASCII so the validator sees a clean number; a BOUNDARY exotic digit is left
+/// unfolded (the ASCII-scoped `(?<![0-9])` / `(?![0-9])` pattern anchors handle
+/// that case) — folding a boundary digit would fuse it into the run and re-break
+/// the anchor.
+const DECIMAL_DIGIT_RANGES: &[(char, char)] = &[
+    ('\u{0660}', '\u{0669}'),   // ARABIC-INDIC
+    ('\u{06f0}', '\u{06f9}'),   // EXTENDED ARABIC-INDIC
+    ('\u{07c0}', '\u{07c9}'),   // NKO
+    ('\u{0966}', '\u{096f}'),   // DEVANAGARI
+    ('\u{09e6}', '\u{09ef}'),   // BENGALI
+    ('\u{0a66}', '\u{0a6f}'),   // GURMUKHI
+    ('\u{0ae6}', '\u{0aef}'),   // GUJARATI
+    ('\u{0b66}', '\u{0b6f}'),   // ORIYA
+    ('\u{0be6}', '\u{0bef}'),   // TAMIL
+    ('\u{0c66}', '\u{0c6f}'),   // TELUGU
+    ('\u{0ce6}', '\u{0cef}'),   // KANNADA
+    ('\u{0d66}', '\u{0d6f}'),   // MALAYALAM
+    ('\u{0de6}', '\u{0def}'),   // SINHALA LITH
+    ('\u{0e50}', '\u{0e59}'),   // THAI
+    ('\u{0ed0}', '\u{0ed9}'),   // LAO
+    ('\u{0f20}', '\u{0f29}'),   // TIBETAN
+    ('\u{1040}', '\u{1049}'),   // MYANMAR
+    ('\u{1090}', '\u{1099}'),   // MYANMAR SHAN
+    ('\u{17e0}', '\u{17e9}'),   // KHMER
+    ('\u{1810}', '\u{1819}'),   // MONGOLIAN
+    ('\u{1946}', '\u{194f}'),   // LIMBU
+    ('\u{19d0}', '\u{19d9}'),   // NEW TAI LUE
+    ('\u{1a80}', '\u{1a89}'),   // TAI THAM HORA
+    ('\u{1a90}', '\u{1a99}'),   // TAI THAM THAM
+    ('\u{1b50}', '\u{1b59}'),   // BALINESE
+    ('\u{1bb0}', '\u{1bb9}'),   // SUNDANESE
+    ('\u{1c40}', '\u{1c49}'),   // LEPCHA
+    ('\u{1c50}', '\u{1c59}'),   // OL CHIKI
+    ('\u{a620}', '\u{a629}'),   // VAI
+    ('\u{a8d0}', '\u{a8d9}'),   // SAURASHTRA
+    ('\u{a900}', '\u{a909}'),   // KAYAH LI
+    ('\u{a9d0}', '\u{a9d9}'),   // JAVANESE
+    ('\u{a9f0}', '\u{a9f9}'),   // MYANMAR TAI LAING
+    ('\u{aa50}', '\u{aa59}'),   // CHAM
+    ('\u{abf0}', '\u{abf9}'),   // MEETEI MAYEK
+    ('\u{ff10}', '\u{ff19}'),   // FULLWIDTH (NFKC-folded earlier; listed for completeness)
+    ('\u{104a0}', '\u{104a9}'), // OSMANYA
+    ('\u{10d30}', '\u{10d39}'), // HANIFI ROHINGYA
+    ('\u{11066}', '\u{1106f}'), // BRAHMI
+    ('\u{110f0}', '\u{110f9}'), // SORA SOMPENG
+    ('\u{11136}', '\u{1113f}'), // CHAKMA
+    ('\u{111d0}', '\u{111d9}'), // SHARADA
+    ('\u{112f0}', '\u{112f9}'), // KHUDAWADI
+    ('\u{11450}', '\u{11459}'), // NEWA
+    ('\u{114d0}', '\u{114d9}'), // TIRHUTA
+    ('\u{11650}', '\u{11659}'), // MODI
+    ('\u{116c0}', '\u{116c9}'), // TAKRI
+    ('\u{11730}', '\u{11739}'), // AHOM
+    ('\u{118e0}', '\u{118e9}'), // WARANG CITI
+    ('\u{11950}', '\u{11959}'), // DIVES AKURU
+    ('\u{11c50}', '\u{11c59}'), // BHAIKSUKI
+    ('\u{11d50}', '\u{11d59}'), // MASARAM GONDI
+    ('\u{11da0}', '\u{11da9}'), // GUNJALA GONDI
+    ('\u{11f50}', '\u{11f59}'), // KAWI (Unicode 15.0)
+    ('\u{16a60}', '\u{16a69}'), // MRO
+    ('\u{16ac0}', '\u{16ac9}'), // TANGSA
+    ('\u{16b50}', '\u{16b59}'), // PAHAWH HMONG
+    ('\u{1d7ce}', '\u{1d7d7}'), // MATHEMATICAL BOLD (NFKC-folded earlier)
+    ('\u{1d7d8}', '\u{1d7e1}'), // MATHEMATICAL DOUBLE-STRUCK (NFKC-folded earlier)
+    ('\u{1d7e2}', '\u{1d7eb}'), // MATHEMATICAL SANS-SERIF (NFKC-folded earlier)
+    ('\u{1d7ec}', '\u{1d7f5}'), // MATHEMATICAL SANS-SERIF BOLD (NFKC-folded earlier)
+    ('\u{1d7f6}', '\u{1d7ff}'), // MATHEMATICAL MONOSPACE (NFKC-folded earlier)
+    ('\u{1e140}', '\u{1e149}'), // NYIAKENG PUACHUE HMONG
+    ('\u{1e2f0}', '\u{1e2f9}'), // WANCHO
+    ('\u{1e4f0}', '\u{1e4f9}'), // NAG MUNDARI (Unicode 15.0)
+    ('\u{1e950}', '\u{1e959}'), // ADLAM
+    ('\u{1fbf0}', '\u{1fbf9}'), // SEGMENTED
+];
+
+/// Decimal value `0..=9` of a NON-ASCII Unicode `Nd` digit, else `None`.
+///
+/// ASCII digits are handled by `is_ascii_digit()` before this is consulted, so a
+/// `Some` result is always a non-ASCII decimal digit. Binary-searches
+/// [`DECIMAL_DIGIT_RANGES`]; the value is the offset of `c` from the block start.
+fn nd_digit_value(c: char) -> Option<u32> {
+    if c < '\u{0660}' {
+        return None; // ASCII + Latin-1 head fast-path: the first non-ASCII Nd is U+0660
+    }
+    DECIMAL_DIGIT_RANGES
         .binary_search_by(|&(lo, hi)| {
             if c < lo {
                 std::cmp::Ordering::Greater
@@ -168,14 +286,45 @@ pub(crate) fn is_nfkc_digit_yielding_non_decimal(c: char) -> bool {
                 std::cmp::Ordering::Equal
             }
         })
-        .is_ok()
+        .ok()
+        .map(|i| c as u32 - DECIMAL_DIGIT_RANGES[i].0 as u32)
 }
 
-/// A char the regex layer already sees as `\d` (ASCII or any other `Nd`), i.e.
-/// one that needs no manufacturing. `Nl` (Roman numerals) folds to LETTERS, so it
-/// is not a digit either way; counting it here only widens a run's denominator.
-pub(crate) fn is_plain_digit_char(c: char) -> bool {
-    c.is_ascii_digit() || (c.is_numeric() && !is_nfkc_digit_yielding_non_decimal(c))
+/// Walk `chars` and collect each maximal digit run. A run begins at a char that
+/// `classify` maps to `Some`, extends over further `Some` chars and interior
+/// [`is_digit_sep`] separators, and ends at the first char that is neither;
+/// separators are consumed but excluded from the run. Each run entry is
+/// `(char_index, payload)`, where `payload` is whatever `classify` returned for
+/// that char — so a caller reads its per-char classification straight off the
+/// run instead of re-deriving it.
+///
+/// This is the one boundary rule the two digit-normalization callers share
+/// ([`suppressed_nfkc_folds`] and [`normalize_digit_sequences`]); they differ
+/// only in their per-char `classify` and their fold threshold.
+fn digit_runs<T>(chars: &[char], classify: impl Fn(char) -> Option<T>) -> Vec<Vec<(usize, T)>> {
+    let n = chars.len();
+    let mut runs: Vec<Vec<(usize, T)>> = Vec::new();
+    let mut i = 0;
+    while i < n {
+        let Some(first) = classify(chars[i]) else {
+            i += 1;
+            continue;
+        };
+        let mut run: Vec<(usize, T)> = vec![(i, first)];
+        i += 1;
+        while i < n {
+            if let Some(payload) = classify(chars[i]) {
+                run.push((i, payload));
+                i += 1;
+            } else if is_digit_sep(chars[i]) {
+                i += 1; // interior separator bridges the run
+            } else {
+                break; // run terminator
+            }
+        }
+        runs.push(run);
+    }
+    runs
 }
 
 /// Decide, per source char, whether the step-3 NFKC fold of a `No`/`So`
@@ -193,33 +342,28 @@ pub(crate) fn is_plain_digit_char(c: char) -> bool {
 /// * `x²³` → 2 of 2 → majority → folded to `x23`, unchanged from before.
 fn suppressed_nfkc_folds(chars: &[char]) -> Option<Vec<bool>> {
     let n = chars.len();
+    // payload: is this run member an NFKC digit-yielding non-decimal (an `exotic`
+    // that would manufacture an ASCII digit) rather than a plain digit?
+    let runs = digit_runs(chars, |c| {
+        if is_nfkc_digit_yielding_non_decimal(c) {
+            Some(true)
+        } else if is_plain_digit_char(c) {
+            Some(false)
+        } else {
+            None
+        }
+    });
     let mut mask: Option<Vec<bool>> = None;
-    let mut i = 0;
-    while i < n {
-        let exotic = is_nfkc_digit_yielding_non_decimal(chars[i]);
-        if !exotic && !is_plain_digit_char(chars[i]) {
-            i += 1;
-            continue;
-        }
-        let mut exotic_idx: Vec<usize> = Vec::new();
-        let mut total = 0usize;
-        while i < n {
-            if is_nfkc_digit_yielding_non_decimal(chars[i]) {
-                exotic_idx.push(i);
-                total += 1;
-            } else if is_plain_digit_char(chars[i]) {
-                total += 1;
-            } else if !is_digit_sep(chars[i]) {
-                break;
-            }
-            i += 1;
-        }
+    for run in &runs {
         // Strict majority to fold — a minority of non-decimals in a run of real
         // digits is a neighbour (footnote marker, fraction, unit), not part of
         // the number, and folding it fuses the two and fails the regex open.
-        if !exotic_idx.is_empty() && exotic_idx.len() * 2 <= total {
+        // `run.len()` is the run's total digit count (separators are excluded).
+        let exotic: Vec<usize> =
+            run.iter().filter(|&&(_, ex)| ex).map(|&(idx, _)| idx).collect();
+        if !exotic.is_empty() && exotic.len() * 2 <= run.len() {
             let m = mask.get_or_insert_with(|| vec![false; n]);
-            for idx in exotic_idx {
+            for idx in exotic {
                 m[idx] = true;
             }
         }
@@ -232,54 +376,101 @@ pub(crate) fn is_digit_sep(c: char) -> bool {
     matches!(c, ' '|'\t'|'.'|'-'|'/'|'，'|'、'|'·'|';'|'；'|':'|'：')
 }
 
-fn digit_value(c: char) -> Option<char> {
-    // Python: _CN_DIGIT_MAP.get(c) or (c if c.isdigit() else None)
-    // `is_numeric()` (Nd|Nl|No) == Python str.isdigit() (Numeric_Type Decimal/Digit)
-    // for every char that reaches this step: it runs AFTER NFKC, which folds the
-    // categories where the two differ (Roman numerals Nl → letters, vulgar
-    // fractions No-Numeric → "1⁄2"). The surviving digits are Nd (incl. Arabic-Indic,
-    // Devanagari, …), where both agree. Matches Python's `ch if ch.isdigit()` —
-    // the non-ASCII digit char is kept as-is (not folded to ASCII), same as Python.
-    cn_digit(c).or(if c.is_numeric() { Some(c) } else { None })
+/// Per-char classification of a digit-run member, carrying the ASCII fold char
+/// where one exists. Computed ONCE per char in the `digit_runs` classifier so
+/// neither the CJK-majority count nor either fold recomputes it.
+#[derive(Clone, Copy)]
+enum DigitClass {
+    /// CJK numeral homograph (一二三…壹贰叁…); carries its ASCII fold char.
+    Cjk(char),
+    /// ASCII decimal digit `0`–`9`.
+    Ascii,
+    /// A non-ASCII Unicode `Nd` digit (Arabic-Indic ١, Devanagari १, …); carries
+    /// its ASCII fold char.
+    Exotic(char),
+    /// `is_numeric` but not a decimal digit — an `Nl`/`No` leftover, e.g. a
+    /// superscript kept unfolded beside a run by the minority rule. Never folded.
+    Other,
 }
 
 fn normalize_digit_sequences(chars: &mut [char]) {
-    let n = chars.len();
-    let mut i = 0;
-    while i < n {
-        if digit_value(chars[i]).is_none() {
-            i += 1;
-            continue;
+    // Classify each digit-run member ONCE. `is_numeric()` (Nd|Nl|No) == Python
+    // str.isdigit() for every char that reaches this step: it runs AFTER NFKC,
+    // which folds the categories where the two differ (Roman numerals Nl →
+    // letters, vulgar fractions No → "1⁄2"). Run membership is exactly the old
+    // `cn_digit(c).is_some() || c.is_numeric()` — `Ascii`/`Exotic`/`Other` are all
+    // `is_numeric`, so the runs are byte-identical to before; only the payload is
+    // richer, splitting out the two folds below.
+    let runs = digit_runs(chars, |c| {
+        if let Some(ascii) = cn_digit(c) {
+            Some(DigitClass::Cjk(ascii))
+        } else if c.is_ascii_digit() {
+            Some(DigitClass::Ascii)
+        } else if let Some(v) = nd_digit_value(c) {
+            // v is 0..=9 by construction, so from_digit(v, 10) is always Some.
+            Some(DigitClass::Exotic(char::from_digit(v, 10).unwrap()))
+        } else if c.is_numeric() {
+            Some(DigitClass::Other)
+        } else {
+            None
         }
-        let mut run: Vec<usize> = vec![i]; // indices of digit chars
-        let first = digit_value(chars[i]).unwrap();
-        let mut ascii: Vec<char> = vec![first];
-        i += 1;
-        while i < n {
-            if is_digit_sep(chars[i]) {
-                i += 1;
+    });
+    for run in &runs {
+        // Fold 1 — CJK-majority (unchanged behaviour). Count CJK digits in the run
+        // and fold the WHOLE run's CJK members to ASCII only when they are a strict
+        // MAJORITY: a genuine Chinese-digit number (一三八零零…) is all/mostly CJK,
+        // whereas a name/word char that is also a digit homograph (三 in 张三, 四 in
+        // 李四) abutting an ASCII PII number is a lone minority. Folding such a
+        // boundary homograph would merge it into the digit run and break the PII
+        // regex's `(?<![0-9])` anchor — leaking e.g. "张三13800138000". The majority
+        // test keeps the homograph intact so the adjacent phone/id/card still
+        // matches. Non-CJK members (ASCII / exotic Nd / other) are left as their
+        // original char here — identical to the old "fold to `c`" no-op — so a lone
+        // exotic digit inside a majority-CJK run (一二三٤五六七) is still KEPT, not
+        // manufactured into ASCII.
+        let cn_count = run
+            .iter()
+            .filter(|&&(_, cls)| matches!(cls, DigitClass::Cjk(_)))
+            .count();
+        if run.len() >= MIN_DIGIT_SEQ && cn_count * 2 > run.len() {
+            for &(idx, cls) in run {
+                if let DigitClass::Cjk(ascii) = cls {
+                    chars[idx] = ascii;
+                }
+            }
+        }
+        // Fold 2 — interior non-ASCII decimal digit(s). Fold a maximal block of
+        // consecutive exotic `Nd` digits to ASCII IFF, within the run, it is flanked
+        // by ASCII digits on BOTH sides — then it is unambiguously part of an ASCII
+        // number (公民身份号码11010١199003070468). Otherwise the Unicode-`\d` regex body
+        // matches but the `is_ascii_digit` checksum validator fails (near-miss → the
+        // ID leaks). Flanks are read from the ORIGINAL classification, so:
+        //   * a block at either run EDGE — the BOUNDARY case (电话١13800138000,
+        //     13800138000٩, card ١4111…) — stays unfolded; the ASCII-scoped
+        //     `(?<![0-9])` / `(?![0-9])` anchors detect the adjacent ASCII run.
+        //   * a CJK-flanked exotic (٤ in 一二三٤五六七) stays unfolded even after Fold 1
+        //     rewrote its CJK neighbours to ASCII — the flank test sees the original
+        //     `Cjk`, matching the frozen no-fold behaviour.
+        let n = run.len();
+        let mut j = 0;
+        while j < n {
+            if !matches!(run[j].1, DigitClass::Exotic(_)) {
+                j += 1;
                 continue;
             }
-            match digit_value(chars[i]) {
-                Some(d) => {
-                    run.push(i);
-                    ascii.push(d);
-                    i += 1;
-                }
-                None => break,
+            let start = j;
+            while j < n && matches!(run[j].1, DigitClass::Exotic(_)) {
+                j += 1;
             }
-        }
-        // Count CJK digits in the run. Fold only when they are a strict MAJORITY:
-        // a genuine Chinese-digit number (一三八零零…) is all/mostly CJK, whereas a
-        // name/word char that is also a digit homograph (三 in 张三, 四 in 李四)
-        // abutting an ASCII PII number is a lone minority. Folding such a boundary
-        // homograph would merge it into the digit run and break the PII regex's
-        // `(?<!\d)` anchor — leaking e.g. "张三13800138000". The majority test keeps
-        // the homograph intact so the adjacent phone/id/card still matches.
-        let cn_count = run.iter().filter(|&&idx| cn_digit(chars[idx]).is_some()).count();
-        if run.len() >= MIN_DIGIT_SEQ && cn_count * 2 > run.len() {
-            for (k, &idx) in run.iter().enumerate() {
-                chars[idx] = ascii[k];
+            let end = j; // block is run[start..end]
+            let left_ascii = start > 0 && matches!(run[start - 1].1, DigitClass::Ascii);
+            let right_ascii = end < n && matches!(run[end].1, DigitClass::Ascii);
+            if left_ascii && right_ascii {
+                for &(idx, cls) in &run[start..end] {
+                    if let DigitClass::Exotic(ascii) = cls {
+                        chars[idx] = ascii;
+                    }
+                }
             }
         }
     }
@@ -390,7 +581,10 @@ pub(crate) fn normalize_core(text: &str) -> Option<(Vec<char>, Vec<usize>)> {
         let suppressed = suppressed_nfkc_folds(&chars);
         let mut new_chars: Vec<char> = Vec::new();
         let mut new_map: Vec<usize> = Vec::new();
-        for (si, ch) in joined.chars().enumerate() {
+        // Iterate `chars` directly — `joined` (built above, kept only for the
+        // `is_nfkc` test) holds this exact char sequence, so re-decoding it would
+        // just reproduce these chars.
+        for (si, &ch) in chars.iter().enumerate() {
             if suppressed.as_ref().is_some_and(|m| m[si]) {
                 new_chars.push(ch); // keep verbatim: folding it would fuse a neighbour's digits
                 new_map.push(offset_map[si]);
@@ -803,11 +997,144 @@ mod tests {
     #[test]
     fn non_ascii_digit_in_cn_run_matches_python() {
         // 6 CN digits + Arabic-Indic ٤ (U+0664, is_numeric, NFKC-stable) = 7-char run.
-        // Python str.isdigit('٤') is True, so it joins the run; CN digits fold to ASCII,
-        // ٤ is kept as-is (Python writes `ch`, not an ASCII fold). is_ascii_digit would
-        // have broken the run → no conversion. is_numeric reproduces Python.
+        // The CJK-majority fold folds the CN digits to ASCII; the exotic ٤ is
+        // CJK-flanked (NOT ASCII-flanked), so the interior-exotic fold leaves it as-is
+        // — the run stays "123٤567", NOT "1234567". This pins that the exotic fold
+        // reads the ORIGINAL neighbour classes, not the CJK-folded values.
         let (out, _m) = normalize_text("一二三\u{0664}五六七");
         assert_eq!(out, "123\u{0664}567");
+    }
+
+    // ── Non-ASCII decimal-digit (Nd) folding (v0.8.13) ───────────────────────
+    // A non-ASCII Nd digit (Arabic-Indic ١, Devanagari १, …) is Unicode-`\d` but
+    // not `is_ascii_digit`, so it silently defeats the checksum validators. An
+    // INTERIOR one (ASCII on both sides) folds to ASCII; a BOUNDARY one stays put
+    // (the ASCII-scoped `(?<![0-9])`/`(?![0-9])` anchors handle it).
+
+    #[test]
+    fn nd_digit_value_maps_non_ascii_decimals_only() {
+        assert_eq!(nd_digit_value('\u{0661}'), Some(1)); // Arabic-Indic ١
+        assert_eq!(nd_digit_value('\u{0669}'), Some(9)); // Arabic-Indic ٩
+        assert_eq!(nd_digit_value('\u{0660}'), Some(0)); // Arabic-Indic ٠ (block start)
+        assert_eq!(nd_digit_value('\u{0967}'), Some(1)); // Devanagari १
+        assert_eq!(nd_digit_value('\u{0e53}'), Some(3)); // Thai ๓
+        assert_eq!(nd_digit_value('\u{ff19}'), Some(9)); // fullwidth ９ (folds via NFKC earlier)
+        assert_eq!(nd_digit_value('\u{11f50}'), Some(0)); // Kawi 𑽐 (Unicode 15.0 block start)
+        assert_eq!(nd_digit_value('\u{11f51}'), Some(1)); // Kawi 𑽑
+        assert_eq!(nd_digit_value('\u{1e4f0}'), Some(0)); // Nag Mundari 𞓰 (Unicode 15.0 block start)
+        assert_eq!(nd_digit_value('\u{1e4f3}'), Some(3)); // Nag Mundari 𞓳
+        // ASCII digits are handled before this is consulted → None here.
+        assert_eq!(nd_digit_value('0'), None);
+        assert_eq!(nd_digit_value('9'), None);
+        // Not decimal digits: superscript ¹ (No), CJK numeral 三 (Lo), letters.
+        assert_eq!(nd_digit_value('\u{00b9}'), None);
+        assert_eq!(nd_digit_value('三'), None);
+        assert_eq!(nd_digit_value('a'), None);
+    }
+
+    #[test]
+    fn interior_exotic_nd_digit_folds_to_ascii() {
+        // Arm (a): an exotic digit INSIDE an ASCII checksum ID folds so the
+        // validator (is_ascii_digit) sees a clean number.
+        assert_eq!(
+            normalize_text("11010\u{0661}199003070468").0,
+            "110101199003070468"
+        );
+        // Devanagari interior variant.
+        assert_eq!(
+            normalize_text("11010\u{0967}199003070468").0,
+            "110101199003070468"
+        );
+        // A short interior run folds too (the condition is ASCII-on-both-sides, not
+        // a length threshold): 1 ٥ 2 → "152".
+        assert_eq!(normalize_text("1\u{0665}2").0, "152");
+        // Two interior exotics in a row both fold when ASCII-flanked through the run.
+        assert_eq!(normalize_text("1\u{0662}\u{0663}4").0, "1234");
+        // The Unicode 15.0 blocks fold like any other exotic Nd: an interior Kawi
+        // or Nag Mundari digit is folded to its ASCII value (pre-fix these were
+        // absent from the table, passed through unfolded, and defeated the
+        // is_ascii_digit checksum validators).
+        assert_eq!(normalize_text("1\u{11f51}2").0, "112"); // Kawi one
+        assert_eq!(normalize_text("1\u{1e4f3}2").0, "132"); // Nag Mundari three
+    }
+
+    #[test]
+    fn boundary_exotic_nd_digit_not_folded() {
+        // Arm (b): a BOUNDARY exotic digit (run edge, or flanked by a non-digit) is
+        // NOT folded — folding it would fuse it into the ASCII run and re-break the
+        // anchor. It passes through verbatim (nothing else to normalize → None map).
+        assert_eq!(
+            normalize_text("电话\u{0661}13800138000"),
+            ("电话\u{0661}13800138000".to_string(), None)
+        );
+        assert_eq!(
+            normalize_text("13800138000\u{0669}"),
+            ("13800138000\u{0669}".to_string(), None)
+        );
+        // Flanked by a non-digit on one side (space) → still boundary → kept.
+        assert_eq!(
+            normalize_text("card \u{0661}4111111111111111"),
+            ("card \u{0661}4111111111111111".to_string(), None)
+        );
+    }
+
+    #[test]
+    fn decimal_digit_ranges_table_is_complete_and_consistent() {
+        // Sorted, non-overlapping, each block exactly 10 wide with values 0..=9,
+        // ASCII excluded — the completeness stance of DEFAULT_IGNORABLE. Blocks are
+        // NOT merged even when adjacent (the mathematical-digit blocks abut, e.g.
+        // U+1D7D7→U+1D7D8): each must stay a distinct 10-wide range so the value is
+        // the offset from ITS block start.
+        assert_eq!(DECIMAL_DIGIT_RANGES.len(), 67);
+        let mut prev: Option<char> = None;
+        for &(lo, hi) in DECIMAL_DIGIT_RANGES {
+            assert_eq!(hi as u32 - lo as u32, 9, "block {lo:?} must be 10 wide");
+            assert!(lo != '0', "ASCII 0-9 must be excluded");
+            if let Some(p) = prev {
+                assert!((p as u32) < (lo as u32), "unsorted/overlapping at {lo:?}");
+            }
+            for k in 0..=9u32 {
+                let c = char::from_u32(lo as u32 + k).unwrap();
+                assert!(c.is_numeric(), "{c:?} must be numeric");
+                assert_eq!(nd_digit_value(c), Some(k), "{c:?} value");
+            }
+            prev = Some(hi);
+        }
+    }
+
+    #[test]
+    fn detect_recovers_boundary_and_interior_exotic_digit_pii() {
+        // End-to-end at the detection layer: both arms now produce a redactable
+        // entity where the pre-fix code returned zero.
+        // Arm (b) leading boundary exotic → zh phone recovered.
+        let lead = crate::redact_l1::detect_l1("电话\u{0661}13800138000", &["zh".to_string()], &[])
+            .unwrap();
+        assert_eq!(lead.layer1.iter().filter(|e| e.type_ == "phone").count(), 1);
+        // Arm (b) trailing boundary exotic → zh phone recovered.
+        let trail = crate::redact_l1::detect_l1("电话13800138000\u{0669}", &["zh".to_string()], &[])
+            .unwrap();
+        assert_eq!(trail.layer1.iter().filter(|e| e.type_ == "phone").count(), 1);
+        // Arm (a) interior exotic in a checksum ID → id_number recovered (folds to a
+        // valid all-ASCII ID that passes the GB11643 validator).
+        let interior = crate::redact_l1::detect_l1(
+            "公民身份号码11010\u{0661}199003070468",
+            &["zh".to_string()],
+            &[],
+        )
+        .unwrap();
+        assert!(
+            interior.layer1.iter().any(|e| e.type_ == "id_number"),
+            "interior exotic ID must be detected: {:?}",
+            interior.layer1
+        );
+        // No-regression control: the lone CJK homograph beside a phone still lets the
+        // phone match (the exotic fold must not disturb the CJK-majority guard).
+        let homograph =
+            crate::redact_l1::detect_l1("客户张三13800138000", &["zh".to_string()], &[]).unwrap();
+        assert_eq!(
+            homograph.layer1.iter().filter(|e| e.type_ == "phone").count(),
+            1
+        );
     }
 
     #[test]

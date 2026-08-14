@@ -81,7 +81,8 @@ fn key_survives_json_roundtrip_one_shot() {
         .unwrap()
         .as_string()
         .unwrap();
-    let restored = restore(&redacted, key_reparsed).expect("restore should succeed");
+    let restored =
+        restore(&redacted, key_reparsed, JsValue::UNDEFINED).expect("restore should succeed");
     assert_eq!(
         restored, original,
         "restore(text, JSON.parse(JSON.stringify(key))) must recover the original"
@@ -130,7 +131,8 @@ fn key_survives_json_roundtrip_streaming() {
     );
 
     let key_reparsed = json_roundtrip(&key);
-    let restored = restore(&downstream, key_reparsed).expect("restore should succeed");
+    let restored =
+        restore(&downstream, key_reparsed, JsValue::UNDEFINED).expect("restore should succeed");
     assert_eq!(
         restored, original,
         "streamed restore(downstream, JSON.parse(JSON.stringify(key))) must recover the original"

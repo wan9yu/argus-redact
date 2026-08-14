@@ -152,3 +152,42 @@ class TestPresidioNERAdapter:
         assert "John Smith" not in redacted
         restored = restore(redacted, key, guard=False)
         assert "John Smith" in restored
+
+
+class TestPresidioRestoreAliases:
+    """bridge.restore() must forward aliases/display_marker into guarded_restore.
+
+    Constructs PresidioBridge() directly — the restore path never touches the
+    Presidio analyzer, so this runs whether or not the presidio extra is
+    installed (it does NOT depend on the presidio-gated fixtures above).
+    """
+
+    def test_restore_forwards_aliases(self):
+        from argus_redact.integrations.presidio import PresidioBridge
+
+        bridge = PresidioBridge()
+        key = {"P-1": "张三"}
+        aliases = {"P-1": ("Zhang San",)}
+
+        out = bridge.restore("P-1 and Zhang San", key, guard=False, aliases=aliases)
+
+        assert out == "张三 and 张三"
+
+    def test_restore_rejects_malformed_aliases(self):
+        from argus_redact.integrations.presidio import PresidioBridge
+
+        bridge = PresidioBridge()
+        key = {"P-1": "张三"}
+
+        with pytest.raises(ValueError):
+            bridge.restore("P-1 and Zhang San", key, guard=False, aliases={"P-1": "Zhang San"})
+
+    def test_restore_forwards_display_marker(self):
+        from argus_redact.integrations.presidio import PresidioBridge
+
+        bridge = PresidioBridge()
+        key = {"P-1": "张三"}
+
+        out = bridge.restore("P-1ⓕ来了", key, guard=False, display_marker="ⓕ")
+
+        assert out == "张三来了"

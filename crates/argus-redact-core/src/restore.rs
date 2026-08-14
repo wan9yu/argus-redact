@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
 use fancy_regex::Regex;
 
@@ -61,6 +62,27 @@ pub enum RestoreOutcome {
     Complete,
 }
 
+impl RestoreOutcome {
+    /// The stable snake_case name of this outcome — the SECURITY vocabulary the
+    /// Python (`crates/argus-redact-py/src/restore.rs`) and wasm
+    /// (`crates/argus-redact-wasm/src/lib.rs`) faces both surface verbatim. This
+    /// is the single source of that wire string; both bindings call it, so the
+    /// emitted names are byte-identical across runtimes.
+    ///
+    /// The match is exhaustive over every variant (no wildcard arm): although the
+    /// enum is `#[non_exhaustive]` for downstream crates, this crate OWNS the
+    /// enum, so adding a variant is a compile error here until its name is added
+    /// — the "grow in lockstep" invariant, now enforced at the source instead of
+    /// silently degrading to a fallback string in each binding.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RestoreOutcome::Blocked => "blocked",
+            RestoreOutcome::Partial => "partial",
+            RestoreOutcome::Complete => "complete",
+        }
+    }
+}
+
 /// The kind of guard check a [`GuardEvent`] reports on.
 ///
 /// `#[non_exhaustive]` for the same forward-compatibility reason as
@@ -73,6 +95,23 @@ pub enum GuardEventKind {
     EmptyKeyWithScope,
     OutOfScopePseudonym,
     AliasCollision,
+}
+
+impl GuardEventKind {
+    /// The stable snake_case name of this guard-event kind — the SECURITY
+    /// vocabulary the Python and wasm faces both surface verbatim (see
+    /// [`RestoreOutcome::as_str`] for the SSOT / byte-identical reasoning). The
+    /// match is exhaustive over every variant for the same reason: a new variant
+    /// must gain its name here, in the crate that owns the enum.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            GuardEventKind::GuardNoAnchor => "guard_no_anchor",
+            GuardEventKind::ProvenanceFailed => "provenance_failed",
+            GuardEventKind::EmptyKeyWithScope => "empty_key_with_scope",
+            GuardEventKind::OutOfScopePseudonym => "out_of_scope_pseudonym",
+            GuardEventKind::AliasCollision => "alias_collision",
+        }
+    }
 }
 
 /// One guard check's outcome. `count` is how many instances the check found;
@@ -183,10 +222,36 @@ fn reject_empty_key_entry(key: &HashMap<String, String>) -> Result<(), RestoreEr
     Ok(())
 }
 
+/// Reject a restore input larger than [`crate::MAX_INPUT_SIZE`] (1 MiB) BEFORE
+/// any substitution scan touches it — the same ceiling the redact path
+/// (`patterns.rs`, `redact_l1.rs`) and `check_restore_safety` already enforce.
+///
+/// The K-way-merge matcher already makes the substitution scan LINEAR, so this
+/// is defense-in-depth rather than the primary DoS cure: it bounds a single
+/// restore call's worst-case time and memory and gives one consistent 1 MiB
+/// ceiling across the whole redact + restore surface. The message names only
+/// the byte count and the limit — never the text — so an oversized hostile
+/// payload cannot smuggle content out through the error string.
+///
+/// Applied at the public entry points (`restore`, `restore_full_guarded`,
+/// `RestoreSession::restore_cell`) so the check sits at the API boundary and is
+/// not re-run by the private helpers they share.
+fn check_input_size(text: &str) -> Result<(), RestoreError> {
+    if text.len() > crate::MAX_INPUT_SIZE {
+        return Err(RestoreError(format!(
+            "input too large: {} bytes exceeds MAX_INPUT_SIZE {}",
+            text.len(),
+            crate::MAX_INPUT_SIZE
+        )));
+    }
+    Ok(())
+}
+
 /// Restore redacted text by replacing pseudonyms with originals.
 /// Keys sorted by length descending to prevent partial matches.
 /// Single-pass replacement prevents re-scanning of replaced content.
 pub fn restore(text: &str, key: &HashMap<String, String>) -> Result<String, RestoreError> {
+    check_input_size(text)?;
     restore_tracking_self_ref(text, key, &[]).map(|(result, _spans)| result)
 }
 
@@ -363,13 +428,16 @@ fn advance_chars(s: &str, from: usize, n_chars: usize) -> usize {
 /// pseudonyms, and an alias inherits the scope of the fake that owns it, so
 /// without an owner the guard cannot tell an authorised alias from one that
 /// smuggles a withheld identity back into the reply.
-fn merge_aliases(
-    key: &HashMap<String, String>,
+fn merge_aliases<'k>(
+    key: &'k HashMap<String, String>,
     aliases: Option<&HashMap<String, Vec<String>>>,
-) -> (HashMap<String, String>, Vec<String>, HashMap<String, String>) {
+) -> (Cow<'k, HashMap<String, String>>, Vec<String>, HashMap<String, String>) {
     let mut alias_collisions: Vec<String> = Vec::new();
     let mut alias_owner: HashMap<String, String> = HashMap::new();
-    let flat: HashMap<String, String> = if let Some(alias_map) = aliases {
+    // With aliases → build the merged map (owned). Without → the flat map IS the
+    // key, so BORROW it: the common `restore_body`/`RestoreSession` no-alias path
+    // no longer deep-clones the whole key map just to hand out a `&HashMap`.
+    let flat: Cow<HashMap<String, String>> = if let Some(alias_map) = aliases {
         let mut m: HashMap<String, String> = key.clone();
         let mut fakes: Vec<&String> = alias_map.keys().collect();
         fakes.sort();
@@ -393,9 +461,9 @@ fn merge_aliases(
                 }
             }
         }
-        m
+        Cow::Owned(m)
     } else {
-        key.clone()
+        Cow::Borrowed(key)
     };
     (flat, alias_collisions, alias_owner)
 }
@@ -441,8 +509,11 @@ fn restore_body(
 
     // The display-marker strip is scoped to this key's own FAKES (not the
     // merged map): markers are written by `mark_for_display` against the
-    // pseudonyms, so that is exactly where they can be.
-    let marker_fakes: Vec<String> = key.keys().cloned().collect();
+    // pseudonyms, so that is exactly where they can be. `restore_flat` only
+    // reads `marker_fakes` when `display_marker` is Some, so building the list
+    // otherwise is wasted work whose empty result is never observed.
+    let marker_fakes: Vec<String> =
+        if display_marker.is_some() { key.keys().cloned().collect() } else { Vec::new() };
 
     // No shield on the unguarded path: nothing is withheld, so every token in
     // the merged map is substitutable.
@@ -497,10 +568,16 @@ fn restore_flat(
     // A shield entry that is ALSO a lookup key would be SUBSTITUTED, not
     // shielded — the lookup wins in `substitute_with`. The guarded caller
     // derives the two sets by complementary filters on one map so they cannot
-    // intersect; this filter makes the property local rather than a contract
-    // the caller has to remember.
-    let shield_only: Vec<String> =
-        shield.iter().filter(|s| !flat.contains_key(*s)).cloned().collect();
+    // intersect (and the unguarded path passes an empty shield); this filter
+    // makes the property local rather than a contract the caller has to
+    // remember. Since a collision never happens on either real path, borrow
+    // `shield` as-is and only allocate the filtered copy if one ever does —
+    // byte-identical either way.
+    let shield_only: Cow<[String]> = if shield.iter().any(|s| flat.contains_key(s)) {
+        Cow::Owned(shield.iter().filter(|s| !flat.contains_key(*s)).cloned().collect())
+    } else {
+        Cow::Borrowed(shield)
+    };
 
     // Step 3: core substitution over the flat lookup.
     //
@@ -566,6 +643,10 @@ pub fn restore_full_guarded(
     display_marker: Option<&str>,
     anchor: Option<&Anchor>,
 ) -> Result<RestoreResult, RestoreError> {
+    // Size cap BEFORE any scan — covers both the unguarded `restore_body`
+    // branch and the guarded `tokens_present` + substitution branch (the latter
+    // otherwise scans `text` in `tokens_present` before restoring it).
+    check_input_size(text)?;
     let Some(anchor) = anchor else {
         let (result, alias_collisions) = restore_body(text, key, aliases, display_marker)?;
         return Ok(RestoreResult {
@@ -807,7 +888,7 @@ impl RestoreSession {
             )
         };
 
-        Ok(RestoreSession { flat, matcher, alias_collisions })
+        Ok(RestoreSession { flat: flat.into_owned(), matcher, alias_collisions })
     }
 
     /// Aliases claimed by more than one original — one entry per LOSING claim,
@@ -824,6 +905,7 @@ impl RestoreSession {
     /// against `restore_full(..., None, None)`), so `events` is always empty
     /// and `outcome` is always `Complete`.
     pub fn restore_cell(&self, text: &str) -> Result<RestoreResult, RestoreError> {
+        check_input_size(text)?;
         let Some(matcher) = &self.matcher else {
             return Ok(RestoreResult {
                 restored: text.to_string(),
@@ -981,16 +1063,15 @@ possible hallucination or fabrication"
 
 /// Count non-overlapping occurrences of `needle` in `haystack` (mirrors Python `str.count`).
 fn count_occurrences(haystack: &str, needle: &str) -> usize {
+    // `str::matches` is non-overlapping (it resumes after each match), matching
+    // the hand-rolled `start += pos + needle.len()` advance this replaced. The
+    // empty-needle guard stays: `matches("")` splits at every boundary, whereas
+    // the contract here (and Python `str.count`'s non-empty case) is 0.
     if needle.is_empty() {
-        return 0;
+        0
+    } else {
+        haystack.matches(needle).count()
     }
-    let mut count = 0;
-    let mut start = 0;
-    while let Some(pos) = haystack[start..].find(needle) {
-        count += 1;
-        start += pos + needle.len();
-    }
-    count
 }
 
 #[cfg(test)]
@@ -1028,6 +1109,26 @@ mod integration_probe {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Pin the SECURITY wire vocabulary the Python + wasm bindings surface. These
+    /// strings are a cross-runtime contract: changing one silently breaks the
+    /// `security_events` / guard-outcome names the two faces expose, so pin every
+    /// variant's exact bytes here at the SSOT.
+    #[test]
+    fn restore_outcome_as_str_is_the_stable_vocabulary() {
+        assert_eq!(RestoreOutcome::Blocked.as_str(), "blocked");
+        assert_eq!(RestoreOutcome::Partial.as_str(), "partial");
+        assert_eq!(RestoreOutcome::Complete.as_str(), "complete");
+    }
+
+    #[test]
+    fn guard_event_kind_as_str_is_the_stable_vocabulary() {
+        assert_eq!(GuardEventKind::GuardNoAnchor.as_str(), "guard_no_anchor");
+        assert_eq!(GuardEventKind::ProvenanceFailed.as_str(), "provenance_failed");
+        assert_eq!(GuardEventKind::EmptyKeyWithScope.as_str(), "empty_key_with_scope");
+        assert_eq!(GuardEventKind::OutOfScopePseudonym.as_str(), "out_of_scope_pseudonym");
+        assert_eq!(GuardEventKind::AliasCollision.as_str(), "alias_collision");
+    }
 
     #[test]
     fn longest_key_first() {
@@ -1959,6 +2060,90 @@ possible hallucination or fabrication"
         assert!(
             !warns.iter().any(|w| w.contains("too large")),
             "exactly-MAX_INPUT_SIZE input must not be refused: {warns:?}"
+        );
+    }
+
+    // ── restore input cap (Fix B): oversized input rejected, not scanned ────
+
+    #[test]
+    fn restore_rejects_oversized_input_with_pii_free_error() {
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        // One byte over the cap. The error must name only the size + limit.
+        let over = "x".repeat(crate::MAX_INPUT_SIZE + 1);
+        let err = restore(&over, &k).unwrap_err();
+        assert!(err.0.contains("too large"), "unexpected error: {}", err.0);
+        assert!(err.0.contains(&crate::MAX_INPUT_SIZE.to_string()));
+        // PII-free: neither the payload nor any key value leaks into the message.
+        assert!(!err.0.contains("Alice"));
+    }
+
+    #[test]
+    fn restore_at_exactly_max_input_size_is_not_rejected() {
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        // Exactly the cap must still restore normally (byte-identical).
+        let at_cap = "P-1 ".repeat(crate::MAX_INPUT_SIZE / 4);
+        assert_eq!(at_cap.len(), crate::MAX_INPUT_SIZE);
+        let restored = restore(&at_cap, &k).unwrap();
+        assert!(restored.starts_with("Alice "));
+    }
+
+    #[test]
+    fn restore_full_guarded_rejects_oversized_input_on_both_branches() {
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        let over = "x".repeat(crate::MAX_INPUT_SIZE + 1);
+        // Unguarded branch (anchor = None) — reached via restore_full too.
+        assert!(restore_full(&over, &k, None, None).unwrap_err().0.contains("too large"));
+        // Guarded branch (anchor = Some): the cap must fire BEFORE tokens_present
+        // scans the oversized text.
+        let anchor = Anchor::new(
+            "0123456789abcdef0123456789abcdef".to_string(),
+            std::collections::HashSet::new(),
+        );
+        let err = restore_full_guarded(&over, &k, None, None, Some(&anchor)).unwrap_err();
+        assert!(err.0.contains("too large"), "unexpected error: {}", err.0);
+    }
+
+    #[test]
+    fn restore_session_cell_rejects_oversized_input() {
+        let mut k = HashMap::new();
+        k.insert("P-1".to_string(), "Alice".to_string());
+        let session = RestoreSession::new(&k, None).unwrap();
+        let over = "x".repeat(crate::MAX_INPUT_SIZE + 1);
+        assert!(session.restore_cell(&over).unwrap_err().0.contains("too large"));
+        // A cell exactly at the cap still restores.
+        let at_cap = "y".repeat(crate::MAX_INPUT_SIZE);
+        assert!(session.restore_cell(&at_cap).is_ok());
+    }
+
+    #[test]
+    fn restore_substitution_scales_linearly_in_input_length() {
+        // Fix A: the substitution scan is the K-way merge, LINEAR in text length
+        // even when the key spans multiple shards and one shard never matches
+        // again — the shape that made the old find_from_pos-per-position loop
+        // re-scan the whole tail at every step (O(shards · matches · text)). A
+        // dense single-key text over a 2-shard key reproduces that shape: only
+        // "P-0" occurs, so the shard that does NOT hold it is exhausted after
+        // one scan instead of being re-scanned per step.
+        let key: HashMap<String, String> = (0..(crate::sharded::MAX_KEYS_PER_SHARD + 100))
+            .map(|i| (format!("P-{i}"), format!("v{i}")))
+            .collect();
+        let time_for = |n: usize| {
+            let text = "P-0 ".repeat(n);
+            let t = std::time::Instant::now();
+            let _ = restore(&text, &key).unwrap();
+            t.elapsed().as_secs_f64()
+        };
+        time_for(5_000); // warm up
+        let small = time_for(20_000);
+        let large = time_for(80_000);
+        // 4x the input. Linear => ~4x; the old quadratic => ~16x. 8x is a wide
+        // margin that still fails the quadratic shape decisively.
+        assert!(
+            large < small * 8.0 + 0.05,
+            "restore substitution is super-linear: 20k={small:.4}s 80k={large:.4}s"
         );
     }
 

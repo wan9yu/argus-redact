@@ -27,6 +27,7 @@ from mcp.server import MCPServer
 from argus_redact import RedactReport, __version__, redact
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.glue.guarded_restore import guarded_restore
+from argus_redact.glue.redact import _effective_lang, _parse_lang_arg
 from argus_redact.pure.wire import common_report_fields, risk_payload
 
 mcp = MCPServer("argus-redact")
@@ -140,9 +141,9 @@ async def redact_text(
       the response. Pass as a system message to the LLM. Empty string when no PII
       was detected.
     """
-    lang_param: str | list[str] = lang
-    if "," in lang:
-        lang_param = [code.strip() for code in lang.split(",") if code.strip()]
+    # MCP faces strip whitespace from CSV codes (the CLI faces do not — see
+    # _parse_lang_arg); a single code passes straight through as a str.
+    lang_param = _parse_lang_arg(lang, strip=True)
 
     # No explicit salt → strong per-call random salt (CSPRNG). Making the
     # CSPRNG explicit here keeps this tool's security boundary auditable:
@@ -161,8 +162,10 @@ async def redact_text(
     anchor = make_anchor(key)
     token = _create_key_token(key, anchor, redacted_text)
 
-    # Build the system-prompt addendum; use the lang string (first code if CSV)
-    prompt_lang = lang_param if isinstance(lang_param, str) else lang_param[0]
+    # Build the system-prompt addendum with one representative language (the
+    # first code for a CSV). _effective_lang falls back to the default rather than
+    # IndexError-ing on an all-separator CSV that resolves to an empty list.
+    prompt_lang = _effective_lang(lang_param)
     addendum = prompt_anchor(key, prompt_lang, anchor=anchor)
 
     return json.dumps(
@@ -263,9 +266,9 @@ async def assess_text(
         lang: Language code(s). Use comma-separated for multiple: "zh,en".
         mode: Detection mode — "fast" (regex), "ner" (regex+NER), "auto" (all).
     """
-    lang_param: str | list[str] = lang
-    if "," in lang:
-        lang_param = [code.strip() for code in lang.split(",") if code.strip()]
+    # MCP faces strip whitespace from CSV codes (the CLI faces do not — see
+    # _parse_lang_arg); a single code passes straight through as a str.
+    lang_param = _parse_lang_arg(lang, strip=True)
 
     report: RedactReport = redact(
         text,
@@ -292,35 +295,12 @@ async def assess_text(
 @mcp.tool(name="info")
 async def redact_info() -> str:
     """Show argus-redact version and installed capabilities."""
-    import importlib
-    import importlib.util
-
-    from argus_redact.glue.redact import (
-        _LANG_DISPLAY_NAMES,
-        _LANG_PATTERNS,
-        ner_engine_available,
-    )
-    from argus_redact.lang.shared.patterns import PATTERNS as SHARED
-
-    lang_info = {}
-    for code in _LANG_PATTERNS:
-        mod_code = "in_" if code == "in" else code
-        try:
-            mod = importlib.import_module(f"argus_redact.lang.{mod_code}.patterns")
-            count = len(mod.PATTERNS) + len(SHARED)
-        except ModuleNotFoundError:
-            count = 0
-        has_ner = ner_engine_available(code)
-        lang_info[code] = {
-            "name": _LANG_DISPLAY_NAMES.get(code, code),
-            "patterns": count,
-            "ner": has_ner,
-        }
+    from argus_redact.glue.redact import lang_capabilities
 
     return json.dumps(
         {
             "version": __version__,
-            "languages": lang_info,
+            "languages": lang_capabilities(),
         },
         ensure_ascii=False,
         indent=2,

@@ -3,11 +3,11 @@
 Each register() call defines a PII type with its rich metadata (format,
 checksum prose, sensitivity, examples, fakers, ...). The Layer-1 regex and
 validators live in the Rust core (SSOT); PIITypeDef.to_patterns() derives the
-pattern dict(s) from there. build_patterns() collects all of them into a single
-list mirroring the runtime pattern set.
+pattern dict(s) from there, and specs.registry.build_patterns() collects all of
+them into a single list mirroring the runtime pattern set.
 """
 
-from .registry import PIITypeDef, list_types, register
+from .registry import PIITypeDef, register
 
 # ── Phone ──
 
@@ -1012,17 +1012,3 @@ register(
         description="Age (Chinese 岁/年龄/周岁 + English years old/aged)",
     )
 )
-
-
-# ── build_patterns() ──
-
-
-def build_patterns() -> list[dict]:
-    """Build the complete pattern list for Chinese from registered specs.
-
-    This is a drop-in replacement for lang/zh/patterns.py PATTERNS.
-    """
-    patterns = []
-    for typedef in list_types("zh"):
-        patterns.extend(typedef.to_patterns())
-    return patterns

@@ -36,6 +36,7 @@ def risk_payload(risk: RiskResult) -> dict:
         "reasons": list(risk.reasons),
         "pipl_articles": list(risk.pipl_articles),
         "gdpr_special_category": risk.gdpr_special_category,
+        "gdpr_art10": risk.gdpr_art10,
         "hipaa_categories": list(risk.hipaa_categories),
     }
 

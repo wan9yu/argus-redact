@@ -21,13 +21,14 @@
 //! as a `Vec<char>` once and all windowing works in char-space (mirrors
 //! `regions.rs` + `person_zh.rs`).
 
-use std::collections::HashSet;
 use std::sync::{LazyLock, OnceLock};
 
 use fancy_regex::Regex;
 use serde::Deserialize;
 
-use crate::evidence_detector::is_person_identifying;
+use crate::evidence_detector::{
+    candidates_cjk, context_windows, is_person_identifying, proximity_evidence, DetectorConfig,
+};
 
 #[derive(Debug, Deserialize)]
 struct ZhOccupationData {
@@ -44,36 +45,26 @@ fn zh_occupation_data() -> &'static ZhOccupationData {
     })
 }
 
-/// All occupation names sorted LONGEST-first (by char count), for greedy
-/// longest-match scans. Built once.
-fn occupation_names_longest_first() -> &'static [&'static str] {
-    static CELL: OnceLock<Vec<&'static str>> = OnceLock::new();
+/// The lexicon as a shared [`DetectorConfig`], built once, and scanned by
+/// [`candidates_cjk`] in pass 1 of [`occupation_candidates`] — the same shared
+/// gazetteer scan `regions.rs` uses — so this module no longer hand-rolls its own
+/// longest-match loop or re-derives its own index. `DetectorConfig::new` indexes
+/// the occupation names into the membership set + first-char prefilter + max
+/// char-length that `candidates_cjk` reads straight off the config. The names are
+/// collected off `zh_occupation_data()` in lexicon order — `new` builds an
+/// order-insensitive index (set / first_chars / max), so no longest-first sort is
+/// needed. `candidates_cjk` uses `first_chars` as a top-of-loop prefilter; for
+/// this lexicon it is a proven no-op — every lexicon term's first char is in the
+/// set, so it never skips a position where a longest-match would emit — leaving
+/// pass 1 byte-identical to the old hand-rolled scan. The config's cue / weights
+/// are unused here: occupation runs its OWN evidence model and pass-2
+/// productive-suffix heuristic in `detect_occupation_zh` / `occupation_candidates`.
+fn occupation_detector() -> &'static DetectorConfig {
+    static CELL: OnceLock<DetectorConfig> = OnceLock::new();
     CELL.get_or_init(|| {
-        let mut names: Vec<&'static str> =
+        let names: Vec<&'static str> =
             zh_occupation_data().occupations.iter().map(|s| s.as_str()).collect();
-        names.sort_by(|a, b| b.chars().count().cmp(&a.chars().count()).then(a.cmp(b)));
-        names
-    })
-    .as_slice()
-}
-
-/// Membership set of every lexicon occupation name, for O(1) longest-match
-/// probing. Built once.
-fn occupation_name_set() -> &'static HashSet<&'static str> {
-    static CELL: OnceLock<HashSet<&'static str>> = OnceLock::new();
-    CELL.get_or_init(|| occupation_names_longest_first().iter().copied().collect())
-}
-
-/// Longest lexicon-name length in **chars**, the upper bound for the
-/// longest-match probe window. Built once.
-fn occupation_max_len() -> usize {
-    static CELL: OnceLock<usize> = OnceLock::new();
-    *CELL.get_or_init(|| {
-        occupation_names_longest_first()
-            .iter()
-            .map(|n| n.chars().count())
-            .max()
-            .unwrap_or(0)
+        DetectorConfig::new(&names, &OCC_CUE, "job_title")
     })
 }
 
@@ -170,8 +161,6 @@ fn is_honorific_title(cand: &str) -> bool {
 /// `is_lexicon` records whether a candidate came from pass 1 (drives the
 /// high-confidence `W_OCC_LEXICON` weight). Returns candidates sorted by start.
 fn occupation_candidates(chars: &[char]) -> Vec<(String, usize, usize, bool)> {
-    let names = occupation_name_set();
-    let lex_max = occupation_max_len();
     let n = chars.len();
 
     // `consumed[k]` = char k is inside a lexicon span (pass 1 owns it).
@@ -179,22 +168,12 @@ fn occupation_candidates(chars: &[char]) -> Vec<(String, usize, usize, bool)> {
     let mut out: Vec<(String, usize, usize, bool)> = Vec::new();
 
     // ── Pass 1: greedy longest-match lexicon scan ──
-    let mut i = 0;
-    while i < n {
-        let hi = lex_max.min(n - i);
-        let mut matched_len = 0usize;
-        for len in (1..=hi).rev() {
-            let cand: String = chars[i..i + len].iter().collect();
-            if names.contains(cand.as_str()) {
-                out.push((cand, i, i + len, true));
-                for c in consumed.iter_mut().take(i + len).skip(i) {
-                    *c = true;
-                }
-                matched_len = len;
-                break;
-            }
-        }
-        i += matched_len.max(1);
+    // The shared gazetteer scan `regions.rs` uses; `candidates_cjk` reads the
+    // occupation name_set / first_chars / max_len straight off the config, so the
+    // loop is no longer hand-rolled here. `is_lexicon = true` for every span.
+    for (cand, start, end) in candidates_cjk(chars, occupation_detector()) {
+        consumed[start..end].fill(true);
+        out.push((cand, start, end, true));
     }
 
     // ── Pass 2: suffix-run heuristic over unconsumed chars ──
@@ -223,9 +202,7 @@ fn occupation_candidates(chars: &[char]) -> Vec<(String, usize, usize, bool)> {
             if end - start >= 2 && (start..end).all(|k| !consumed[k]) {
                 let cand: String = chars[start..end].iter().collect();
                 out.push((cand, start, end, false));
-                for c in consumed.iter_mut().take(end).skip(start) {
-                    *c = true;
-                }
+                consumed[start..end].fill(true);
             }
         }
         j += 1;
@@ -296,28 +273,13 @@ pub fn detect_occupation_zh(
 
     // Materialize the whole text as a char slice ONCE, then work in char-space.
     let chars: Vec<char> = text.chars().collect();
-    let n = chars.len();
 
     let mut out: Vec<crate::types::PatternMatch> = Vec::new();
 
     for (name, start, end, is_lexicon) in occupation_candidates(&chars) {
         // before = chars[max(0, start - OCC_WINDOW) : start]
         // after  = chars[end : end + OCC_WINDOW]   (char slices)
-        let before_start = start.saturating_sub(OCC_WINDOW);
-        let before_end = start.min(n);
-        let before: String = if before_start <= before_end {
-            chars[before_start..before_end].iter().collect()
-        } else {
-            String::new()
-        };
-
-        let after_start = end.min(n);
-        let after_end = (end + OCC_WINDOW).min(n);
-        let after: String = if after_start <= after_end {
-            chars[after_start..after_end].iter().collect()
-        } else {
-            String::new()
-        };
+        let (before, after) = context_windows(&chars, start, end, OCC_WINDOW);
 
         // Occupation-context cue anywhere in the ±window (before OR after).
         let cue_hit = OCC_CUE.is_match(&before).unwrap_or(false)
@@ -355,27 +317,20 @@ pub fn detect_occupation_zh(
         }
 
         // Proximity to person-identifying PII — first entity within the near
-        // bucket wins (break). Only PII that NAMES or CONTACTS a specific person
-        // (phone/email/id/…) answers "is someone identifiable nearby?" and
-        // corroborates. Technical tokens (ip_address/jwt/url_token/api-key), org
-        // names, and weak/sensitive attributes do not. The allowlist gate
-        // (is_person_identifying) enforces this; new technical types are safe by
-        // default. This subsumes the old self_reference/organization denylist.
-        for pii in pii_entities {
-            if !is_person_identifying(&pii.type_) {
-                continue;
-            }
-            let distance = start.abs_diff(pii.end).min(pii.start.abs_diff(end));
-            if distance <= OCC_PROX_NEAR {
-                evidence += W_OCC_PII_PROX;
-                break;
-            }
-        }
-
-        // No evidence → don't match at L1 (leave to L2 NER).
-        if evidence == 0.0_f64 {
-            continue;
-        }
+        // bucket wins, via the shared `proximity_evidence` helper (occupation has
+        // a single near bucket, no mid). Only PII that NAMES or CONTACTS a
+        // specific person (phone/email/id/…) answers "is someone identifiable
+        // nearby?" and corroborates. Technical tokens (ip_address/jwt/url_token/
+        // api-key), org names, and weak/sensitive attributes do not. The allowlist
+        // gate (is_person_identifying) enforces this; new technical types are safe
+        // by default. This subsumes the old self_reference/organization denylist.
+        evidence += proximity_evidence(
+            start,
+            end,
+            pii_entities.iter(),
+            &[(OCC_PROX_NEAR, W_OCC_PII_PROX)],
+            |pii| is_person_identifying(&pii.type_),
+        );
 
         if evidence >= OCC_THRESHOLD {
             out.push(crate::types::PatternMatch {

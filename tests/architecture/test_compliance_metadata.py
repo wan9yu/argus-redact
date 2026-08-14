@@ -44,43 +44,52 @@ class TestUniversalPIPLArticles:
         for td in list_types():
             assert "PIPL Art.13" in td.pipl_articles, f"{td.lang}/{td.name} missing PIPL Art.13"
 
-    def test_every_pii_type_includes_art_28(self):
-        # PIPL Art.28: de-identification requirement — universal.
+    def test_every_pii_type_includes_art_51(self):
+        # v0.8.10: PIPL Art.51 (security-measures obligation on all processing)
+        # is a universal floor article alongside Art.13.
         for td in list_types():
-            assert "PIPL Art.28" in td.pipl_articles, f"{td.lang}/{td.name} missing PIPL Art.28"
+            assert "PIPL Art.51" in td.pipl_articles, f"{td.lang}/{td.name} missing PIPL Art.51"
 
-    def test_every_pii_type_includes_art_56(self):
-        # PIPL Art.56: record-keeping obligation — universal.
+
+class TestSensitivePIMemberArticles:
+    """v0.8.10: Art.28/29/55/56 attach IFF the type is a sensitive-PI member
+    (``name in PIPL_SENSITIVE_PI``), not by sensitivity score. Art.55 keeps its
+    own IFF test in ``TestSensitivePITypesCoverage`` below."""
+
+    def test_art_28_iff_sensitive_pi(self):
         for td in list_types():
-            assert "PIPL Art.56" in td.pipl_articles, f"{td.lang}/{td.name} missing PIPL Art.56"
+            has = "PIPL Art.28" in td.pipl_articles
+            member = td.name in _PIPL_SENSITIVE_TYPES
+            assert has == member, f"{td.lang}/{td.name}: Art.28 present={has} but member={member}"
 
-
-class TestSensitivityDrivenPIPLArticles:
-    def test_sensitivity_3plus_triggers_art_51_and_29(self):
-        # PIPL Art.51 (sensitive PI definition) + Art.29 (separate consent)
-        # apply when sensitivity >= 3.
+    def test_art_29_iff_sensitive_pi(self):
         for td in list_types():
-            if td.sensitivity >= 3:
-                assert "PIPL Art.51" in td.pipl_articles, (
-                    f"{td.lang}/{td.name} sens={td.sensitivity} missing Art.51"
-                )
-                assert "PIPL Art.29" in td.pipl_articles, (
-                    f"{td.lang}/{td.name} sens={td.sensitivity} missing Art.29"
-                )
+            has = "PIPL Art.29" in td.pipl_articles
+            member = td.name in _PIPL_SENSITIVE_TYPES
+            assert has == member, f"{td.lang}/{td.name}: Art.29 present={has} but member={member}"
 
-    def test_sensitivity_below_3_does_not_trigger_art_51(self):
+    def test_art_56_iff_sensitive_pi(self):
+        for td in list_types():
+            has = "PIPL Art.56" in td.pipl_articles
+            member = td.name in _PIPL_SENSITIVE_TYPES
+            assert has == member, f"{td.lang}/{td.name}: Art.56 present={has} but member={member}"
+
+    def test_sensitivity_below_3_still_carries_universal_art_51(self):
+        # Inverted from the old "sens<3 must NOT have Art.51": Art.51 is now a
+        # universal floor, so even low-sensitivity non-members carry it.
         for td in list_types():
             if td.sensitivity < 3:
-                assert "PIPL Art.51" not in td.pipl_articles, (
-                    f"{td.lang}/{td.name} sens={td.sensitivity} should NOT have Art.51"
+                assert "PIPL Art.51" in td.pipl_articles, (
+                    f"{td.lang}/{td.name} sens={td.sensitivity} missing universal Art.51"
                 )
 
 
 class TestSensitivePITypesCoverage:
     def test_art_55_iff_sensitive_pi_type(self):
         # Art.55 (impact assessment) on a typedef must align exactly with
-        # PIPL_SENSITIVE_PI. The cardinality rule (≥3 entities → Art.55)
-        # is enforced separately by assess_risk(), not at the typedef level.
+        # PIPL_SENSITIVE_PI. As of v0.8.10 Art.55 attaches ONLY via sensitive-PI
+        # membership; the old ≥3-entity cardinality trigger in assess_risk() was
+        # removed (it asserted a named statute on a basis the statute lacks).
         for td in list_types():
             has_art_55 = "PIPL Art.55" in td.pipl_articles
             should_have = td.name in _PIPL_SENSITIVE_TYPES

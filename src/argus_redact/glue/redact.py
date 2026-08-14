@@ -38,6 +38,34 @@ from argus_redact._core_loader import HAS_CORE as _RUST_CORE  # noqa: E402
 from argus_redact._core_loader import _core  # noqa: E402
 
 
+def _effective_lang(lang: "str | list[str] | None", default: str = "zh") -> str:
+    """Resolve a single effective language from a ``str | list[str] | None`` param.
+
+    A ``str`` is returned as-is; a list resolves to its first entry (or
+    ``default`` if empty/None). Shared by the langchain/llamaindex integrations
+    and the risk/grammar call sites here that need one representative language.
+    """
+    if isinstance(lang, str):
+        return lang
+    return lang[0] if lang else default
+
+
+def _parse_lang_arg(raw: str, *, strip: bool = False) -> str | list[str]:
+    """Parse a comma-or-single ``lang`` argument from the CLI/MCP faces.
+
+    With a comma, returns the list of non-empty codes; without a comma, returns
+    the bare string unchanged. ``strip=True`` trims surrounding whitespace from
+    each split code (and drops codes that are only whitespace); ``strip=False``
+    keeps the codes verbatim. The MCP faces strip and the CLI faces do not — that
+    difference is intentional and preserved here, so do not unify it.
+    """
+    if "," not in raw:
+        return raw
+    if strip:
+        return [code.strip() for code in raw.split(",") if code.strip()]
+    return [code for code in raw.split(",") if code]
+
+
 @functools.lru_cache(maxsize=1)
 def _warn_ablation_once() -> None:
     """Warn ONCE per process if any research ablation env toggle is active.
@@ -153,6 +181,36 @@ def ner_engine_available(code: str) -> bool:
     return importlib.util.find_spec(f"argus_redact.lang.{mod_code}.ner_adapter") is not None
 
 
+def lang_capabilities() -> dict[str, dict[str, object]]:
+    """Per-language capability map shared by the three `info` faces — CLI `info`,
+    HTTP `/info`, and MCP `redact_info` — keyed by locale-pack code.
+
+    Each value is ``{"name": <display>, "patterns": <count>, "ner": <bool>}``.
+    ``patterns`` is the language's own pattern count plus the shared pack, and
+    ``ner`` reflects TRUE Layer-2 engine availability via ``ner_engine_available``
+    (the adapter module AND its engine, hanlp/spaCy) — so no face over-claims
+    ``ner: true`` when only the adapter module is importable. Single source so the
+    three faces cannot drift: they carried a byte-identical loop, and HTTP `/info`
+    used the raw adapter-module ``find_spec`` and over-claimed the engine.
+    """
+    from argus_redact.lang.shared.patterns import PATTERNS as SHARED
+
+    caps: dict[str, dict[str, object]] = {}
+    for code in _LANG_PATTERNS:
+        mod_code = "in_" if code == "in" else code
+        try:
+            mod = importlib.import_module(f"argus_redact.lang.{mod_code}.patterns")
+            count = len(mod.PATTERNS) + len(SHARED)
+        except ModuleNotFoundError:
+            count = 0
+        caps[code] = {
+            "name": _LANG_DISPLAY_NAMES.get(code, code),
+            "patterns": count,
+            "ner": ner_engine_available(code),
+        }
+    return caps
+
+
 # Plausible ISO-639-1 codes a caller might reach for instead of an argus
 # locale-pack code that collides with a *different* ISO-639-1 language:
 # `uk` is Ukrainian in ISO-639-1 (argus uses it for British English), and
@@ -170,7 +228,21 @@ def _validate_langs(langs: tuple[str, ...] | list[str]) -> None:
     """Raise ValueError for any requested language code not in the known set.
 
     'shared' is merged in implicitly and is never requestable on its own.
+
+    An empty resolved language list is also rejected. An empty *string*
+    (``lang=""``) already fails the unknown-code branch below, but an empty
+    *list* (``lang=[]``, or a CSV of only separators split down to nothing)
+    would otherwise pass silently: no language pattern pack loads, so every
+    non-language-neutral detector is dropped (a fail-open under-redaction), and
+    the downstream ``lang[0]`` in the report/anchor build raises IndexError
+    (surfacing over HTTP as a 500 rather than a 400). Reject it here — the one
+    choke point shared by ``_load_patterns`` and ``_detect``.
     """
+    if not langs:
+        raise ValueError(
+            "No language specified: the resolved language list is empty. "
+            "Pass at least one language code (e.g. lang='zh' or lang=['zh', 'en'])."
+        )
     for code in langs:
         if code not in _LANG_PATTERNS:
             available = list(_LANG_PATTERNS.keys())
@@ -292,6 +364,34 @@ _LANG_NER_ADAPTERS = {
 }
 
 VALID_MODES = ("auto", "fast", "ner")
+
+
+def _validate_redact_inputs(
+    text: str,
+    mode: str,
+    types: list[str] | None,
+    types_exclude: list[str] | None,
+) -> None:
+    """Shared entry-guard for the two redact paths — ``_redact_impl`` (the frozen
+    ``redact()`` internal) and ``redact_pseudonym_llm``.
+
+    Both carried a byte-identical block; extracting it keeps the two entry
+    contracts from drifting. Raises the SAME exception types, messages, and order
+    as before: a non-str ``text`` → ``TypeError``; ``text`` over ``MAX_INPUT_SIZE``
+    → ``ValueError``; an invalid ``mode`` → ``ValueError``; ``types`` and
+    ``types_exclude`` both set → ``ValueError``.
+    """
+    if not isinstance(text, str):
+        raise TypeError(f"text must be a string, got {type(text).__name__}")
+    if len(text) > MAX_INPUT_SIZE:
+        raise ValueError(
+            f"Input text ({len(text)} chars) exceeds maximum allowed size "
+            f"({MAX_INPUT_SIZE} chars). Split into smaller chunks."
+        )
+    if mode not in VALID_MODES:
+        raise ValueError(f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}")
+    if types is not None and types_exclude is not None:
+        raise ValueError("types and types_exclude are mutually exclusive")
 
 
 _pattern_cache: dict[tuple[str, ...], list[dict]] = {}
@@ -448,6 +548,7 @@ def _detect(
     types_exclude: list[str] | None,
     strict: bool = False,
     restored_types: list[str] | None = None,
+    cancel_token: object | None = None,
 ) -> tuple[list[PatternMatch], list[str], dict, dict]:
     """Run the full detection pipeline (L1 regex + L1b person + L2 NER + L3 LLM + merge).
 
@@ -481,8 +582,12 @@ def _detect(
     # ``hobby`` — also tagged LAYER_REGEX), the internal L1 hints, and validator
     # ``near_misses``. detect_l1 takes the ORIGINAL text (it normalizes internally).
     t0 = time.perf_counter()
+    # ``cancel_token`` (a ``_core.CancelToken`` or None) opts L1 into cooperative
+    # cancellation: a token tripped from another thread makes this scan raise
+    # ``_core.ScanAborted`` at its next poll boundary, reclaiming the CPU. None (the
+    # default and every non-server caller) is byte-identical to the old no-token call.
     layer1, person, regions, job_titles, framework, l1_hints, near_misses = _core.detect_l1(
-        text, langs, names or []
+        text, langs, names or [], cancel_token=cancel_token
     )
     timing["layer_1_ms"] = (time.perf_counter() - t0) * 1000
     entities.extend(layer1)
@@ -664,6 +769,7 @@ def _replace_and_emit(
     mode: str,
     unified_prefix: str | None = None,
     security_events: list[dict] | None = None,
+    _allow_internal_strategies: bool = False,
 ) -> tuple[str, dict, dict[str, list[str]]]:
     """Apply replacement, run grammar normalization, emit telemetry, persist key file.
 
@@ -674,6 +780,12 @@ def _replace_and_emit(
     event is appended when this call's masked-strategy entities
     collided. Same out-param idiom as `timing` — kept separate from the public
     3-tuple return so this internal signature stays additive.
+
+    ``_allow_internal_strategies`` is internal: forwarded to ``replace()`` so a
+    caller that builds its own config with an internal-only strategy (the
+    pseudonym-llm audit pass's ``remove_bracketed``) can opt out of the
+    public-strategy config check. Default ``False`` keeps every user-facing path
+    strict.
 
     Returns ``(redacted_text, key, aliases)``. ``aliases`` carries the cross-language
     transliterations emitted by realistic-strategy fakers (empty dict when none ran).
@@ -689,8 +801,9 @@ def _replace_and_emit(
         langs=langs,
         unified_prefix=unified_prefix,
         _mask_collisions=mask_collisions,
+        _allow_internal_strategies=_allow_internal_strategies,
     )
-    effective_lang = lang if isinstance(lang, str) else (lang[0] if lang else "zh")
+    effective_lang = _effective_lang(lang)
     if effective_lang == "en":
         redacted = normalize_grammar_en(redacted, list(result_key.values()))
     timing["replace_ms"] = (time.perf_counter() - t0) * 1000
@@ -766,8 +879,52 @@ def redact(
         (redacted_text, key, details) when detailed=True.
         RedactReport when report=True.
     """
-    if not isinstance(text, str):
-        raise TypeError(f"text must be a string, got {type(text).__name__}")
+    return _redact_impl(
+        text,
+        key=key,
+        lang=lang,
+        mode=mode,
+        salt=salt,
+        config=config,
+        names=names,
+        detailed=detailed,
+        report=report,
+        with_types=with_types,
+        profile=profile,
+        types=types,
+        types_exclude=types_exclude,
+        unified_prefix=unified_prefix,
+        strict=strict,
+        cancel_token=None,
+        _pre_detected=_pre_detected,
+    )
+
+
+def _redact_impl(
+    text: str,
+    *,
+    key: dict | str | None = None,
+    lang: str | list[str] = "zh",
+    mode: str = "fast",
+    salt: int | bytes | None = None,
+    config: dict | str | None = None,
+    names: list[str] | None = None,
+    detailed: bool = False,
+    report: bool = False,
+    with_types: bool = False,
+    profile: str | None = None,
+    types: list[str] | None = None,
+    types_exclude: list[str] | None = None,
+    unified_prefix: str | None = None,
+    strict: bool = False,
+    cancel_token: object | None = None,
+    _pre_detected: "list[PatternMatch] | None" = None,
+):
+    """Internal full redact pipeline; ``cancel_token`` opts the L1 scan into
+    cooperative cancellation for the HTTP server. Public ``redact()`` wraps this
+    with ``cancel_token=None``.
+    """
+    _validate_redact_inputs(text, mode, types, types_exclude)
 
     # Fail closed if the compiled core is missing. _core has been mandatory since
     # v0.7.1; without it the fast path would otherwise call detect_l1 on None and
@@ -781,18 +938,6 @@ def redact(
             "argus-redact requires the compiled _core extension for redaction "
             "(install the wheel or build with maturin)."
         )
-
-    if len(text) > MAX_INPUT_SIZE:
-        raise ValueError(
-            f"Input text ({len(text)} chars) exceeds maximum allowed size "
-            f"({MAX_INPUT_SIZE} chars). Split into smaller chunks."
-        )
-
-    if mode not in VALID_MODES:
-        raise ValueError(f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}")
-
-    if types is not None and types_exclude is not None:
-        raise ValueError("types and types_exclude are mutually exclusive")
 
     if salt is not None and (
         isinstance(salt, int) or (isinstance(salt, (bytes, bytearray)) and len(salt) < 16)
@@ -883,6 +1028,10 @@ def redact(
         entities, _restored = _pre_detected_pipeline(_pre_detected, types, types_exclude, text)
         _restored_types.extend(_restored)
         langs = [lang] if isinstance(lang, str) else list(lang)
+        # The _detect branch validates langs; this branch skips it, so the
+        # empty-lang guard must run here too (otherwise the report build's
+        # lang[0] would IndexError on lang=[]).
+        _validate_langs(langs)
         timing: dict[str, float] = {}
         layer_stats = {
             "layer1_count": 0,
@@ -901,6 +1050,7 @@ def redact(
             types_exclude=types_exclude,
             strict=strict,
             restored_types=_restored_types,
+            cancel_token=cancel_token,
         )
 
     warn_coverage_restored(_restored_types)
@@ -977,16 +1127,40 @@ def redact(
             from argus_redact.pure.risk import assess_risk
             from argus_redact.specs import lookup
 
-            # Build risk input with cached sensitivity lookup
+            # Build risk input with cached sensitivity lookup. The score TIER
+            # and the PIPL/GDPR/HIPAA article set must resolve from ONE language
+            # entry: assess_risk resolves the articles via Rust
+            # compliance_for(effective_lang, t) — exact effective-lang match,
+            # else the first-registered entry — so the sensitivity that feeds the
+            # score tier must come from that SAME typedef. Keying off the
+            # first-registered (zh) entry made the two disagree for every zh+en
+            # type (person / phone / date_of_birth / religion / political /
+            # self_reference), so the report classified ordinary-PII while
+            # scoring high/critical (or the inverse). Reuse the redact.py:693
+            # effective-lang idiom; the empty case is already rejected upstream.
+            effective_lang = _effective_lang(lang)
             sens_cache: dict[str, int] = {}
             risk_entities = []
             for e in entity_details:
                 t = e["type"]
                 if t not in sens_cache:
                     typedefs = lookup(t)
-                    sens_cache[t] = typedefs[0].sensitivity if typedefs else 2
+                    if typedefs:
+                        # Mirror compliance_for's selection EXACTLY: exact
+                        # effective-lang match, else first-registered
+                        # (== lookup(t)[0]). The first-registered fallback is
+                        # also the FALLBACK when compliance_for returns None —
+                        # a register_pii_type type absent from risk_data.ron
+                        # still scores off its registered sensitivity.
+                        chosen = next(
+                            (td for td in typedefs if td.lang == effective_lang),
+                            typedefs[0],
+                        )
+                        sens_cache[t] = chosen.sensitivity
+                    else:
+                        sens_cache[t] = 2
                 risk_entities.append({"type": t, "sensitivity": sens_cache[t]})
-            risk = assess_risk(risk_entities, lang=lang if isinstance(lang, str) else lang[0])
+            risk = assess_risk(risk_entities, lang=effective_lang)
 
             return RedactReport(
                 redacted_text=redacted,

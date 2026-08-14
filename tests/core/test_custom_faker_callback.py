@@ -14,7 +14,7 @@ import pytest
 
 from argus_redact import redact
 from argus_redact._core_loader import HAS_CORE
-from argus_redact.pure.replacer import _faker_reserved_cached, replace
+from argus_redact.pure.replacer import _clear_faker_caches, replace
 from argus_redact.specs.registry import PIITypeDef, register, unregister
 from tests.conftest import make_match
 
@@ -49,10 +49,10 @@ def _register_test_account(monkeypatch):
         faker_reserved=_account_faker,
     )
     register(td)
-    _faker_reserved_cached.cache_clear()
+    _clear_faker_caches()
     yield
     unregister("shared", _ENTITY_TYPE)
-    _faker_reserved_cached.cache_clear()
+    _clear_faker_caches()
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
@@ -135,7 +135,7 @@ def test_adapter_realistic_default_fires_custom_faker_without_config():
         sensitivity=2,
     )
     register(td)
-    _faker_reserved_cached.cache_clear()
+    _clear_faker_caches()
     try:
         pm = make_match("1HGCM82633A004352", "vehicle_vin", 7)
         with warnings.catch_warnings():
@@ -153,7 +153,7 @@ def test_adapter_realistic_default_fires_custom_faker_without_config():
         )
     finally:
         unregister("en", "vehicle_vin")
-        _faker_reserved_cached.cache_clear()
+        _clear_faker_caches()
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
@@ -177,7 +177,7 @@ def test_adapter_pseudonym_default_applies_without_config():
         sensitivity=2,
     )
     register(td)
-    _faker_reserved_cached.cache_clear()
+    _clear_faker_caches()
     try:
         pm = make_match("LID-42", "loyalty_id", 0)
         info, _ = _build_type_info([pm], None, ["en"])
@@ -190,4 +190,4 @@ def test_adapter_pseudonym_default_applies_without_config():
         )
     finally:
         unregister("en", "loyalty_id")
-        _faker_reserved_cached.cache_clear()
+        _clear_faker_caches()

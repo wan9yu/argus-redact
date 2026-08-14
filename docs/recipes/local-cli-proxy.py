@@ -75,6 +75,12 @@ def _restore_sse_line(line: str, key: dict) -> str:
     OpenAI/DeepSeek deltas typically fit a token) would slip the per-chunk
     restore. For stricter guarantees, swap this for argus_redact.streaming
     StreamingRestorer (sentence-buffered). See local-cli-proxy.md §Limitations.
+
+    Guard note: since v0.8.0 restore() defaults to guard=True and fails closed
+    without an Anchor. This proxy restores upstream text per chunk and has no
+    per-exchange anchor to bind to, so it passes guard=False — the explicit,
+    informed opt-out for a plain substitution. A guarded round-trip belongs in
+    the caller that owns the prompt (make_anchor + prompt_anchor + guarded_restore).
     """
     if not line.startswith("data: "):
         return line
@@ -90,12 +96,12 @@ def _restore_sse_line(line: str, key: dict) -> str:
         delta = choice.get("delta") or {}
         content = delta.get("content")
         if isinstance(content, str) and content:
-            delta["content"] = restore(content, key)
+            delta["content"] = restore(content, key, guard=False)
         # also restore on non-streaming-style choices (some upstreams mix)
         msg = choice.get("message") or {}
         content = msg.get("content")
         if isinstance(content, str) and content:
-            msg["content"] = restore(content, key)
+            msg["content"] = restore(content, key, guard=False)
     return "data: " + json.dumps(payload, ensure_ascii=False) + "\n\n"
 
 
@@ -166,7 +172,9 @@ async def chat_completions(request):
     for choice in data.get("choices") or []:
         msg = choice.get("message") or {}
         if isinstance(msg.get("content"), str) and msg["content"]:
-            msg["content"] = restore(msg["content"], key)
+            # guard=False: plain substitution — the proxy holds no per-exchange
+            # anchor (see _restore_sse_line's guard note).
+            msg["content"] = restore(msg["content"], key, guard=False)
     return JSONResponse(data)
 
 

@@ -41,6 +41,8 @@ def guarded_restore(
     text: str,
     key: dict[str, str] | str,
     *,
+    aliases: dict[str, tuple[str, ...]] | None = None,
+    display_marker: str | None = None,
     redacted: str | None = None,
     anchor: object | None = None,
     guard: bool | None = True,
@@ -53,6 +55,12 @@ def guarded_restore(
     Args:
         text: the model's reply, containing pseudonyms.
         key: the key dict from redact(), or a str path to a key file.
+        aliases: optional {fake: (alternate, ...)} from redact(); each alternate
+            is also mapped back to the fake's original. Without it a
+            cross-language alias form the model emitted (张三 -> "Zhang San")
+            silently fails to restore on this recommended guarded path.
+        display_marker: optional decoration marker to strip from `text` before
+            key lookup. Both are forwarded verbatim into the core restore.
         redacted: the redacted prompt. Supply it to enable the supplementary
             injection heuristic (H); without it, no H check runs.
         anchor: the Anchor from make_anchor(key). Required for the guard to pass.
@@ -103,7 +111,15 @@ def guarded_restore(
     # warning below. _warn=False does NOT suppress the guard=None DeprecationWarning,
     # which is about the caller's own code and propagates untouched.
     result_text, details = _restore(
-        text, key_dict, guard=guard, anchor=anchor, strict=strict, detailed=True, _warn=False
+        text,
+        key_dict,
+        aliases=aliases,
+        display_marker=display_marker,
+        guard=guard,
+        anchor=anchor,
+        strict=strict,
+        detailed=True,
+        _warn=False,
     )
 
     all_events = h_events + details.get("security_events", [])

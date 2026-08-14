@@ -31,7 +31,14 @@ def _read_input(input_path: str | None) -> str:
     # Bypass platform-default encoding (cp1252 on Windows) — read raw bytes
     # and decode as UTF-8. Without this, Chinese stdin produces surrogate
     # characters that downstream Rust regex / json.dumps reject.
-    return sys.stdin.buffer.read().decode("utf-8")
+    try:
+        return sys.stdin.buffer.read().decode("utf-8")
+    except UnicodeDecodeError:
+        # The file branch above already guards this; stdin was the last raw
+        # traceback. Do NOT decode with errors="replace" — that silently
+        # corrupts PII text rather than refusing the input.
+        print("Error: stdin is not valid UTF-8", file=sys.stderr)
+        sys.exit(1)
 
 
 def _write_output(text: str, output_path: str | None, mode: int = 0o644):
@@ -101,8 +108,43 @@ def _load_key_file(key_path: Path, arg: str) -> dict:
     return loaded
 
 
+def _load_aliases_file(aliases_path: Path, arg: str) -> dict[str, list[str]]:
+    """Load and validate an ``--aliases`` sidecar file, or exit with a clean
+    message. Mirrors ``_load_key_file``'s error contract: a not-found path is
+    exit 4 (matching ``--key``'s not-found code), a malformed/wrong-shaped
+    file is exit 5 (matching ``--key``'s invalid-shape code).
+
+    Each value must be a JSON array of strings — a bare string value would
+    otherwise iterate character-by-character once handed to ``restore()``
+    (the same footgun the HTTP face's ``anchor.scope`` check guards against),
+    silently building garbage single-character aliases instead of failing.
+    """
+    if not aliases_path.exists():
+        print(f"Error: aliases file not found: {arg}", file=sys.stderr)
+        sys.exit(4)
+    try:
+        loaded = json.loads(_safe_read_text(aliases_path))
+    except json.JSONDecodeError:
+        print(f"Error: invalid aliases file: {arg}", file=sys.stderr)
+        sys.exit(5)
+    except OSError as e:
+        print(f"Error: cannot read aliases file {arg}: {e}", file=sys.stderr)
+        sys.exit(5)
+    except UnicodeDecodeError:
+        print(f"Error: aliases file is not valid UTF-8: {arg}", file=sys.stderr)
+        sys.exit(5)
+    if not isinstance(loaded, dict) or not all(isinstance(v, list) for v in loaded.values()):
+        print(
+            f"Error: aliases file must contain a JSON object of {{fake: [alias, ...]}}: {arg}",
+            file=sys.stderr,
+        )
+        sys.exit(5)
+    return loaded
+
+
 def cmd_redact(args):
     from argus_redact import redact, redact_pseudonym_llm
+    from argus_redact.glue.redact import _parse_lang_arg
 
     text = _read_input(args.input)
     key_path = Path(args.key)
@@ -123,7 +165,7 @@ def cmd_redact(args):
             file=sys.stderr,
         )
         sys.exit(2)
-    lang = [code for code in args.lang.split(",") if code] if "," in args.lang else args.lang
+    lang = _parse_lang_arg(args.lang)
 
     raw_override = getattr(args, "strategy_override", None)
     try:
@@ -197,11 +239,18 @@ def cmd_restore(args):
 
     key = _load_key_file(key_path, args.key)
 
+    aliases = None
+    aliases_arg = getattr(args, "aliases", None)
+    if aliases_arg:
+        aliases = _load_aliases_file(Path(aliases_arg), aliases_arg)
+
+    display_marker = getattr(args, "display_marker", None)
+
     text = _read_input(args.input)
     # guard=False: the CLI restores an operator-held key file locally, with no
     # per-call anchor — the explicit unguarded opt-out, not the fail-closed default.
     try:
-        restored = restore(text, key, guard=False)
+        restored = restore(text, key, aliases=aliases, display_marker=display_marker, guard=False)
     except (ValueError, TypeError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(3)
@@ -213,37 +262,26 @@ def cmd_restore(args):
 
 
 def cmd_info(args):
-    import importlib
     import importlib.util
 
     from argus_redact import __version__
-    from argus_redact.glue.redact import (
-        _LANG_DISPLAY_NAMES,
-        _LANG_PATTERNS,
-        ner_engine_available,
-    )
-    from argus_redact.lang.shared.patterns import PATTERNS as SHARED
+    from argus_redact.glue.redact import lang_capabilities
+
+    caps = lang_capabilities()
 
     print(f"argus-redact v{__version__}")
     print()
     print("Languages:")
-    for code in _LANG_PATTERNS:
-        mod_code = "in_" if code == "in" else code
-        try:
-            mod = importlib.import_module(f"argus_redact.lang.{mod_code}.patterns")
-            count = len(mod.PATTERNS) + len(SHARED)
-        except ModuleNotFoundError:
-            count = 0
-        ner_label = " + NER" if ner_engine_available(code) else ""
-        name = _LANG_DISPLAY_NAMES.get(code, code)
-        print(f"  {code}  {name:20s} regex ({count} patterns){ner_label}")
+    for code, info in caps.items():
+        ner_label = " + NER" if info["ner"] else ""
+        print(f"  {code}  {info['name']:20s} regex ({info['patterns']} patterns){ner_label}")
 
     print()
     print("Layers:")
     print("  1 Pattern (regex)       ✓")
     # Same signal as the per-language "+ NER" labels above, so the Layer-2
     # line can never claim more than they do.
-    ner_ok = any(ner_engine_available(code) for code in _LANG_PATTERNS)
+    ner_ok = any(info["ner"] for info in caps.values())
     print(f"  2 Entity (NER)          {'✓' if ner_ok else '✗'}")
     ollama_ok = importlib.util.find_spec("requests") is not None
     if ollama_ok:
@@ -256,10 +294,11 @@ def cmd_info(args):
 
 def cmd_assess(args):
     from argus_redact import redact
+    from argus_redact.glue.redact import _parse_lang_arg
     from argus_redact.pure.wire import common_report_fields, risk_payload
 
     text = _read_input(args.input)
-    lang = [code for code in args.lang.split(",") if code] if "," in args.lang else args.lang
+    lang = _parse_lang_arg(args.lang)
 
     report = redact(
         text,
@@ -299,7 +338,13 @@ def cmd_assess(args):
 
 def cmd_setup(args):
     """Pre-download NER models for offline use."""
-    langs = [code for code in args.lang.split(",") if code] if "," in args.lang else [args.lang]
+    from argus_redact.glue.redact import _parse_lang_arg
+
+    # setup takes a single code without a comma (unlike redact/assess, which pass
+    # the bare string straight through as `lang`) — wrap it so the loop below
+    # iterates codes, not characters.
+    parsed = _parse_lang_arg(args.lang)
+    langs = parsed if isinstance(parsed, list) else [parsed]
 
     for code in langs:
         print(f"Setting up {code}...")
@@ -399,6 +444,22 @@ def _build_parser() -> argparse.ArgumentParser:
     p_restore.add_argument("input", nargs="?", default=None, help="Input file (default: stdin)")
     p_restore.add_argument("-k", "--key", required=True, help="Key file path")
     p_restore.add_argument("-o", "--output", default=None, help="Output file (default: stdout)")
+    p_restore.add_argument(
+        "--aliases",
+        default=None,
+        metavar="FILE",
+        help=(
+            "Aliases sidecar file: a JSON object {fake: [alternate-transliteration, ...]} "
+            "mirroring restore(text, key, aliases=...) — lets an LLM's alternate "
+            "transliteration of a fake (e.g. pinyin for a Chinese name) still restore."
+        ),
+    )
+    p_restore.add_argument(
+        "--display-marker",
+        default=None,
+        metavar="MARKER",
+        help="Marker (e.g. 'ⓕ') to strip from the input before key lookup.",
+    )
     p_restore.set_defaults(func=cmd_restore)
 
     # assess

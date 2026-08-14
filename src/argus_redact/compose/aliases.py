@@ -15,6 +15,7 @@ Known limitations (out of scope per docs/architecture-layers.md §Layer 2):
 
 from __future__ import annotations
 
+from argus_redact._core_loader import _core
 from argus_redact.pure.lang_detect import detect_languages
 
 _ZH_TITLES = ("先生", "女士", "总", "老师", "医生")
@@ -26,32 +27,38 @@ _EN_TITLES = ("Mr.", "Mrs.", "Ms.", "Dr.", "Prof.")
 _EN_GENERATIONAL_JR_SR = frozenset({"JR", "SR"})
 _EN_GENERATIONAL_ROMAN = frozenset({"II", "III", "IV"})
 
-# Compound Chinese surnames (2-char). When original starts with one of these,
-# use 2 chars as surname; otherwise use 1 char. Coverage: top compound surnames
-# from《百家姓》— not exhaustive, conservative.
-_ZH_COMPOUND_SURNAMES = frozenset(
-    {
-        "欧阳",
-        "司马",
-        "诸葛",
-        "上官",
-        "夏侯",
-        "公孙",
-        "皇甫",
-        "尉迟",
-        "东方",
-        "西门",
-    }
-)
+# Zh surname pools — single-sourced from the core zh person DETECTOR (cached once
+# at import, like ``pure.grammar``'s _core reads). The originals this extractor
+# sees are exactly the names that detector produced, so keying surname extraction
+# on the detector's own pools means it can never truncate a surname the detector
+# recognises. Previously this module hand-maintained its own compound list, which
+# drifted (it lacked 令狐/南宫/司徒/宇文/慕容/端木/长孙); a compound original like
+# 长孙无忌 then fell through to name[:1]=长 and minted a bogus 长先生->长孙无忌 —
+# and 长先生 is a substring of ordinary phrases (市长先生/校长先生), so that alias
+# spliced a redacted client's real name into text that never referred to them.
+_ZH_COMPOUND_SURNAMES = frozenset(_core.person_compound_surnames_zh())
+_ZH_SURNAMES = frozenset(_core.person_surnames_zh())
 
 
 def _extract_surname_zh(name: str) -> str | None:
-    """Extract Chinese surname. Returns None if input can't be parsed safely."""
+    """Extract the Chinese surname, or None when the leading char(s) are not a
+    surname the detector recognises.
+
+    Resolves the FULL surname — a 2-char compound when present, else the single
+    leading char — but ONLY when it is a KNOWN surname. An unrecognised lead
+    yields None (no honorific): a missing alias is a safe coverage gap, whereas
+    a blind name[:1] guess mints an honorific bound to the real original and,
+    for a high-frequency lead char, splices that original into unrelated
+    phrases. Returning the fully-resolved surname (长孙, not 长) also lets the
+    caller's shared-surname ambiguity guard compare on the real surname.
+    """
     if not name or len(name) < 2:
         return None
-    if len(name) >= 2 and name[:2] in _ZH_COMPOUND_SURNAMES:
+    if name[:2] in _ZH_COMPOUND_SURNAMES:
         return name[:2]
-    return name[:1]
+    if name[:1] in _ZH_SURNAMES:
+        return name[:1]
+    return None
 
 
 def _extract_surname_en(name: str) -> str | None:
@@ -139,32 +146,29 @@ def expand_aliases(key: dict, lang: str | None = None) -> dict:
         return {}
     expanded = dict(key)
 
-    # Per-Person (titles, extract) resolution. Explicit lang: one shared decision
-    # for the whole key (unchanged behavior — do not detect per-name here). Auto
-    # (lang=None): each Person's OWN original name picks its own script, so a
-    # MIXED-language key (e.g. one zh name + one Latin name) doesn't force every
-    # name through the same extractor/titles.
-    person_config: dict[str, tuple[str, tuple[str, ...], object]] = {}
+    # Single walk over every Person pseudonym. Resolve its (titles, extract): under
+    # explicit `lang`, one shared decision for the whole key (unchanged behavior — do
+    # not detect per-name here); under auto (lang=None), each Person's OWN original
+    # name picks its own script, so a MIXED-language key (e.g. one zh name + one Latin
+    # name) doesn't force every name through the same extractor/titles. Extraction is
+    # pure (same original → same surname), so the surname is extracted ONCE here and
+    # stored in `person_config` for the emit pass to reuse — one extract() per Person.
+    #
+    # surname_originals records which surnames are shared by ≥2 DISTINCT Person
+    # originals: a bare {surname}{title} alias for a shared surname is ambiguous — it
+    # cannot restore to one identity — so the emit pass must not emit it at all.
+    # Emitting it would silently bind the alias to the first-iterated Person = a
+    # confident wrong-identity restore. Surnames are extracted with each Person's OWN
+    # extractor, so a zh surname and an en surname never spuriously collide.
+    person_config: dict[str, tuple[str, tuple[str, ...], str]] = {}
+    surname_originals: dict[str, set[str]] = {}
     for pseudonym, original in key.items():
         if not pseudonym.startswith("P-"):
             continue
         lang_code = lang if lang is not None else _detect_name_lang(original)
         titles, extract = _titles_and_extract(lang_code)
-        person_config[pseudonym] = (lang_code, titles, extract)
-
-    # First pass: which surnames are shared by ≥2 DISTINCT Person originals? A bare
-    # {surname}{title} alias for a shared surname is ambiguous — it cannot restore to
-    # one identity — so it must not be emitted at all. Emitting it would silently bind
-    # the alias to the first-iterated Person = a confident wrong-identity restore.
-    # Surnames are extracted with each Person's OWN extractor, so a zh surname and
-    # an en surname never spuriously collide.
-    surname_originals: dict[str, set[str]] = {}
-    for pseudonym, original in key.items():
-        config = person_config.get(pseudonym)
-        if config is None:
-            continue
-        _, _, extract = config
         surname = extract(original)
+        person_config[pseudonym] = (lang_code, titles, surname)
         if surname:
             surname_originals.setdefault(surname, set()).add(original)
 
@@ -172,8 +176,7 @@ def expand_aliases(key: dict, lang: str | None = None) -> dict:
         config = person_config.get(pseudonym)
         if config is None:
             continue
-        lang_code, titles, extract = config
-        surname = extract(original)
+        lang_code, titles, surname = config
         if not surname:
             continue
         if len(surname_originals.get(surname, ())) > 1:

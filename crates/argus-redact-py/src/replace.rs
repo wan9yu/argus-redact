@@ -75,6 +75,17 @@ impl FakerFactory for PyFakerFactory {
     }
 }
 
+impl PyFakerFactory {
+    /// The `Option<&dyn FakerFactory>` the core `replace` / `redact_l1` / session
+    /// take: `Some(self)` iff a custom faker is registered, else `None` (the common
+    /// path — core then skips the custom-faker overlay entirely). One SSOT for the
+    /// "empty map → None" selection, shared by the one-shot [`replace`], the
+    /// [`StructuredRedactor`] session, and `redact_l1`.
+    pub(crate) fn as_arg(&self) -> Option<&dyn FakerFactory> {
+        (!self.fakers.is_empty()).then_some(self as &dyn FakerFactory)
+    }
+}
+
 /// Parse the Python salt object (`int | bytes | None`) into a core [`Salt`].
 pub(crate) fn parse_salt(salt: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Salt>> {
     match salt {
@@ -101,14 +112,19 @@ pub(crate) fn parse_salt(salt: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Sal
     }
 }
 
+/// Read an optional string field from a `PyDict`: `None` when the key is absent OR
+/// present-but-`None`, otherwise the extracted `str` (and `None` if the value is
+/// present but not a string). The "None → absent" extraction shared verbatim by
+/// [`parse_type_info`], [`parse_config`], and [`parse_registry_defaults`].
+fn opt_str(d: &Bound<'_, PyDict>, key: &str) -> Option<String> {
+    d.get_item(key)
+        .ok()
+        .flatten()
+        .and_then(|v| if v.is_none() { None } else { v.extract::<String>().ok() })
+}
+
 /// Parse one per-type info dict into a [`TypeInfo`].
 fn parse_type_info(d: &Bound<'_, PyDict>) -> PyResult<TypeInfo> {
-    let get_str = |k: &str| -> Option<String> {
-        d.get_item(k)
-            .ok()
-            .flatten()
-            .and_then(|v| if v.is_none() { None } else { v.extract::<String>().ok() })
-    };
     let get_bool = |k: &str| -> bool {
         d.get_item(k)
             .ok()
@@ -126,7 +142,7 @@ fn parse_type_info(d: &Bound<'_, PyDict>) -> PyResult<TypeInfo> {
     // Fold the existing dict fields into FakerResolution, preserving the old
     // dispatch precedence: faker_name (built-in) wins, then custom_faker, then
     // none. The Python dict shape is unchanged (still `faker_name`/`custom_faker`).
-    let faker_resolution = if let Some(name) = get_str("faker_name") {
+    let faker_resolution = if let Some(name) = opt_str(d, "faker_name") {
         FakerResolution::Builtin(name)
     } else if get_bool("custom_faker") {
         FakerResolution::Custom
@@ -134,14 +150,14 @@ fn parse_type_info(d: &Bound<'_, PyDict>) -> PyResult<TypeInfo> {
         FakerResolution::None
     };
     Ok(TypeInfo {
-        strategy: get_str("strategy").unwrap_or_else(|| "remove".to_string()),
-        default_strategy: get_str("default_strategy").unwrap_or_else(|| "remove".to_string()),
-        prefix: get_str("prefix").unwrap_or_default(),
+        strategy: opt_str(d, "strategy").unwrap_or_else(|| "remove".to_string()),
+        default_strategy: opt_str(d, "default_strategy").unwrap_or_else(|| "remove".to_string()),
+        prefix: opt_str(d, "prefix").unwrap_or_default(),
         prefix_overridden: get_bool("prefix_overridden"),
         faker_resolution,
-        replacement: get_str("replacement"),
-        label: get_str("label"),
-        default_category_label: get_str("default_category_label").unwrap_or_default(),
+        replacement: opt_str(d, "replacement"),
+        label: opt_str(d, "label"),
+        default_category_label: opt_str(d, "default_category_label").unwrap_or_default(),
         visible_prefix: get_usize("visible_prefix"),
         visible_suffix: get_usize("visible_suffix"),
     })
@@ -232,34 +248,54 @@ pub fn replace(
     // Build the custom-faker map: {type_name: callable}. Empty when no custom
     // fakers are registered (the common path), so we pass `None` to core.
     let py_faker_factory = build_faker_factory(custom_fakers)?;
-    let faker_arg: Option<&dyn FakerFactory> = if py_faker_factory.fakers.is_empty() {
-        None
-    } else {
-        Some(&py_faker_factory)
-    };
+    let faker_arg = py_faker_factory.as_arg();
 
     let factory = PyPseudoFactory;
-    let result = core_replace(
-        ReplaceArgs {
-            text,
-            entities: &core_entities,
-            salt: salt.as_ref(),
-            key: key.as_ref(),
-            type_info: &info_map,
-            person_prefix,
-            org_prefix,
-            unified_prefix,
-            keep_whitelist: &keep_whitelist,
-        },
-        &factory,
-        faker_arg,
-    )
+
+    // Build the core call once; the two arms below differ only in whether they
+    // hold the GIL while it runs.
+    let run = |faker: Option<&dyn FakerFactory>| {
+        core_replace(
+            ReplaceArgs {
+                text,
+                entities: &core_entities,
+                salt: salt.as_ref(),
+                key: key.as_ref(),
+                type_info: &info_map,
+                person_prefix,
+                org_prefix,
+                unified_prefix,
+                keep_whitelist: &keep_whitelist,
+            },
+            &factory,
+            faker,
+        )
+    };
+
+    // `type_info` carries the GIL token this call runs under; grab it once for
+    // the detach and the later `signals` build.
+    let py = type_info.py();
+
+    // Release the GIL for the CPU-bound replace on the common no-custom-faker
+    // path. There the whole pass is pure Rust — masks, built-in realistic fakers,
+    // and the seeded MT19937 pseudonym stream — so holding the lock only serialises
+    // unrelated callers and (over HTTP) freezes the server event loop on a large
+    // input. Detaching restores the 504 deadline / disconnect / shutdown guards.
+    //
+    // The only Python touchpoint reachable on this no-faker path is the UNSEEDED
+    // `secrets.randbelow` draw (salt=None), and `PyRandomSource::randbelow`
+    // re-attaches via `Python::attach` for each draw, so it is safe inside the
+    // detached region.
+    //
+    // When a custom Python faker is registered (`faker_arg` is Some) the pass can
+    // call back into arbitrary Python, so run ATTACHED (hold the GIL) — the safe
+    // choice, and a custom faker is not the attacker-reachable large-input path.
+    let result = match faker_arg {
+        Some(faker) => run(Some(faker)),
+        None => py.detach(|| run(None)),
+    }
     .map_err(pyo3::exceptions::PyValueError::new_err)?;
 
-    // `type_info` is a `Bound<'_, PyDict>` we already hold, so it carries the
-    // GIL token this call is running under — reuse it to build `signals`
-    // rather than re-attaching.
-    let py = type_info.py();
     let signals = PyDict::new(py);
     signals.set_item("keep_downgraded", result.keep_downgraded)?;
     signals.set_item("mask_collisions", result.mask_collisions)?;
@@ -281,15 +317,6 @@ fn parse_config(config: Option<&Bound<'_, PyDict>>) -> PyResult<Option<CoreConfi
             Err(_) => continue,
         };
         let Ok(ec) = v.cast::<PyDict>() else { continue };
-        let get_str = |key: &str| -> Option<String> {
-            ec.get_item(key).ok().flatten().and_then(|x| {
-                if x.is_none() {
-                    None
-                } else {
-                    x.extract::<String>().ok()
-                }
-            })
-        };
         // visible_prefix/suffix: reproduce Python `int(ec.get(key, 0) or 0)`
         // followed by the downstream non-positive → per-type-default behavior.
         //
@@ -338,16 +365,16 @@ fn parse_config(config: Option<&Bound<'_, PyDict>>) -> PyResult<Option<CoreConfi
         out.insert(
             type_name,
             EntityConfig {
-                strategy: get_str("strategy"),
+                strategy: opt_str(ec, "strategy"),
                 // `prefix` present (even if None) sets prefix_overridden in
                 // Python (`"prefix" in ec`). Match that: Some iff the key exists.
                 prefix: if ec.contains("prefix").unwrap_or(false) {
-                    Some(get_str("prefix").unwrap_or_default())
+                    Some(opt_str(ec, "prefix").unwrap_or_default())
                 } else {
                     None
                 },
-                replacement: get_str("replacement"),
-                label: get_str("label"),
+                replacement: opt_str(ec, "replacement"),
+                label: opt_str(ec, "label"),
                 visible_prefix: get_usize("visible_prefix"),
                 visible_suffix: get_usize("visible_suffix"),
             },
@@ -377,21 +404,12 @@ fn parse_registry_defaults(
             Err(_) => continue,
         };
         let Ok(rd) = v.cast::<PyDict>() else { continue };
-        let get_str = |key: &str| -> Option<String> {
-            rd.get_item(key).ok().flatten().and_then(|x| {
-                if x.is_none() {
-                    None
-                } else {
-                    x.extract::<String>().ok()
-                }
-            })
-        };
         out.insert(
             type_name,
             RegistryDefault {
-                strategy: get_str("strategy"),
-                prefix: get_str("prefix"),
-                category_label: get_str("category_label"),
+                strategy: opt_str(rd, "strategy"),
+                prefix: opt_str(rd, "prefix"),
+                category_label: opt_str(rd, "category_label"),
             },
         );
     }
@@ -533,11 +551,7 @@ impl StructuredRedactor {
         let core_entities: Vec<CorePM> = entities.iter().map(CorePM::from).collect();
         let info_map = build_info_map(type_info)?;
         let py_faker_factory = build_faker_factory(custom_fakers)?;
-        let faker_arg: Option<&dyn FakerFactory> = if py_faker_factory.fakers.is_empty() {
-            None
-        } else {
-            Some(&py_faker_factory)
-        };
+        let faker_arg = py_faker_factory.as_arg();
         self.session
             .process(
                 text,
@@ -568,5 +582,17 @@ impl StructuredRedactor {
     #[getter]
     fn mask_collisions(&self) -> Vec<String> {
         self.session.mask_collisions().to_vec()
+    }
+
+    /// The accumulated `{fake: aliases}` map for realistic fakers that emitted
+    /// alternate transliterations so far this session (a snapshot copy). Mirrors
+    /// the one-shot [`replace`] path's fourth return element, so a structured
+    /// (CSV / JSON) redaction can thread the SAME aliases into
+    /// `make_structured_restorer` that the batch and streaming faces already do
+    /// — without it an LLM that rewrote a realistic fake into one of its aliases
+    /// would silently stay unrestored on the structured face.
+    #[getter]
+    fn aliases(&self) -> HashMap<String, Vec<String>> {
+        self.session.aliases().clone()
     }
 }

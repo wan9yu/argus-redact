@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from argus_redact import SecurityWarning
 from argus_redact.compose import make_anchor, prompt_anchor
 from argus_redact.integrations.fastapi_middleware import (
     redact_body,
@@ -56,6 +57,71 @@ class TestRedactBody:
 
         with pytest.raises(TypeError):
             redact_body(body, mode="fast", lang="zh", salt=42)
+
+    def test_should_warn_and_not_silently_pass_pii_when_field_absent(self):
+        # A body whose named field is ABSENT but which carries PII in ANOTHER
+        # field was returned UN-REDACTED with an empty key — a false all-clear a
+        # forwarding proxy would ship upstream in plaintext. The sibling
+        # restore_body RAISES on the identical condition; redact_body must at
+        # least WARN (a missing field can be a legitimate "no text here" case,
+        # unlike restore). The warning must NAME the missing field.
+        body = {"prompt": "姓名张伟，手机13812345678"}
+
+        with pytest.warns(SecurityWarning, match="text"):
+            redacted, key = redact_body(body, field="text", mode="fast", lang="zh", salt=42)
+
+        # Still returned unchanged (no raise) so a benign no-field body is not broken,
+        # but the caller was warned it is NOT redacted — the empty key is honest.
+        assert redacted == body
+        assert key == {}
+
+    def test_should_warn_when_messages_field_absent(self):
+        # Same fail-open for field='messages' over a body keyed differently.
+        body = {"msgs": [{"role": "user", "content": "手机13812345678"}]}
+
+        with pytest.warns(SecurityWarning, match="messages"):
+            redacted, key = redact_body(body, field="messages", mode="fast", lang="zh", salt=42)
+
+        assert redacted == body
+        assert key == {}
+
+    def test_on_missing_field_raise_fails_closed(self):
+        # Opt-in fail-closed: a security-conscious deployment sets
+        # on_missing_field="raise" so an absent field RAISES instead of returning
+        # the PII-carrying body un-redacted. A proxy that ignores warnings then
+        # cannot forward the leak. Mirrors the sibling restore_body (TypeError).
+        body = {"prompt": "姓名张伟，手机13812345678"}
+
+        with pytest.raises(TypeError, match="text"):
+            redact_body(
+                body, field="text", on_missing_field="raise", mode="fast", lang="zh", salt=42
+            )
+
+    def test_on_missing_field_raise_fails_closed_for_messages(self):
+        body = {"msgs": [{"role": "user", "content": "手机13812345678"}]}
+
+        with pytest.raises(TypeError, match="messages"):
+            redact_body(
+                body, field="messages", on_missing_field="raise", mode="fast", lang="zh", salt=42
+            )
+
+    def test_on_missing_field_default_is_warn_and_returns_unchanged(self):
+        # Default (on_missing_field="warn") is unchanged behaviour: warn naming
+        # the field, then return the body unchanged with an empty key — so the
+        # existing PII-free pass-through flow stays intact.
+        body = {"prompt": "姓名张伟，手机13812345678"}
+
+        with pytest.warns(SecurityWarning, match="text"):
+            redacted, key = redact_body(body, field="text", mode="fast", lang="zh", salt=42)
+
+        assert redacted == body
+        assert key == {}
+
+    def test_on_missing_field_rejects_unknown_value(self):
+        # A typo in the security switch must not silently fall back to "warn"
+        # (that would itself fail open). An unknown value is a ValueError.
+        with pytest.raises(ValueError, match="on_missing_field"):
+            redact_body({"text": "hi"}, on_missing_field="rais", mode="fast", lang="zh", salt=42)
 
     def test_should_handle_messages_array(self):
         body = {
@@ -199,6 +265,63 @@ class TestRestoreBody:
         restored = restore_body(response, {}, field="result", guard=False)
 
         assert restored == response
+
+    def test_should_fail_closed_when_dict_field_omitted(self):
+        # A dict response with NO field selector was silently returned unchanged
+        # with an empty security_events list — a false all-clear that hides the
+        # fact that nothing was restored. It must fail CLOSED (raise) instead.
+        body = {"text": "电话13812345678"}
+        redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)
+        response = {"result": redacted["text"]}
+
+        with pytest.raises(TypeError):
+            restore_body(response, key, guard=False)
+
+    def test_should_fail_closed_when_response_is_neither_str_nor_dict(self):
+        # A list/other shape can carry no restorable string — fail CLOSED rather
+        # than hand it straight back as an implied all-clear.
+        body = {"text": "电话13812345678"}
+        _, key = redact_body(body, mode="fast", lang="zh", salt=42)
+
+        with pytest.raises(TypeError):
+            restore_body(["not", "a", "string"], key, guard=False)
+
+    def test_empty_key_detailed_returns_outcome_key(self):
+        # Shape parity with guarded_restore: the detailed no-op return must carry
+        # an "outcome" key too, not just "security_events".
+        response = {"result": "no PII here"}
+
+        _restored, details = restore_body(response, {}, field="result", guard=False, detailed=True)
+
+        assert "outcome" in details
+
+    def test_restore_body_forwards_aliases(self):
+        # A cross-language alias form must restore through restore_body when
+        # aliases= is supplied (and not without it).
+        key = {"P-1": "张三"}
+        response = {"result": "P-1 and Zhang San"}
+        aliases = {"P-1": ("Zhang San",)}
+
+        restored = restore_body(response, key, field="result", guard=False, aliases=aliases)
+
+        assert restored["result"] == "张三 and 张三"
+
+    def test_restore_body_rejects_malformed_aliases(self):
+        # A non-empty key is required: restore_body short-circuits on an
+        # empty key before ever reaching guarded_restore.
+        key = {"P-1": "张三"}
+        response = {"result": "P-1 and Zhang San"}
+
+        with pytest.raises(ValueError):
+            restore_body(response, key, field="result", guard=False, aliases={"P-1": "Zhang San"})
+
+    def test_restore_body_forwards_display_marker(self):
+        key = {"P-1": "张三"}
+        response = {"result": "P-1ⓕ来了"}
+
+        restored = restore_body(response, key, field="result", guard=False, display_marker="ⓕ")
+
+        assert restored["result"] == "张三来了"
 
 
 class TestRoundtrip:

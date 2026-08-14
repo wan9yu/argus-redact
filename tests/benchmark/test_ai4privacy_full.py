@@ -4,12 +4,11 @@ Compares: fast (regex) vs ner (regex+NER) vs auto (regex+NER+Ollama)
 Run with: pytest tests/benchmark/test_ai4privacy_full.py -v -s -m slow --timeout=600
 """
 
-import importlib.util
 import time
 
 import pytest
 
-HAS_DATASETS = importlib.util.find_spec("datasets") is not None
+from tests.benchmark._ai4privacy_dataset import iter_examples
 
 pytestmark = pytest.mark.slow
 
@@ -34,23 +33,12 @@ DETECTABLE_LABELS = set(LABEL_MAP.keys())
 
 
 def _run_benchmark(mode, n_examples=200):
-    from datasets import load_dataset
-
     from argus_redact import redact
-
-    ds = load_dataset(
-        "ai4privacy/pii-masking-400k",
-        split="train",
-        streaming=True,
-    )
 
     tp, fp, fn = 0, 0, 0
     t_start = time.perf_counter()
 
-    for i, ex in enumerate(ds):
-        if i >= n_examples:
-            break
-
+    for ex in iter_examples(n_examples):
         text = ex["source_text"]
 
         expected_pii = set()
@@ -99,8 +87,9 @@ def _print_result(r):
 class TestThreeLayerComparison:
     @pytest.fixture(scope="class")
     def results(self):
-        if not HAS_DATASETS:
-            pytest.skip("datasets not installed")
+        # The dataset-availability skip lives in iter_examples (invoked by each
+        # test via _run_benchmark); this fixture only carries results across the
+        # comparison.
         return {}
 
     def test_layer1_regex_only(self, results):

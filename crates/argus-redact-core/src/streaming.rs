@@ -69,9 +69,8 @@ use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
-use crate::coverage::{restore_lost_coverage, FilterScope};
-use crate::hints::{filter_self_reference, Hint};
-use crate::merger::merge_entities_with_text;
+use crate::coverage::{finalize_entities, FilterScope};
+use crate::hints::Hint;
 use crate::restore::{RestoreError, RestoreSession};
 use crate::types::PatternMatch;
 
@@ -563,14 +562,34 @@ where
     /// [`EmitResult`] with an empty `downstream_text` when nothing past the retained
     /// left-context is safe to emit yet. Mirrors `StreamingRedactor.feed`.
     pub fn feed(&mut self, chunk: &str) -> Result<EmitResult, String> {
+        // Fail closed on oversize input BEFORE touching the buffer. A chunk that
+        // would push the buffer past `MAX_INPUT_SIZE` cannot be detected (`detect_l1`
+        // rejects it), so without this guard the detect closure returns no spans and
+        // the redact tail emits the chunk VERBATIM (unredacted) over an empty span
+        // set — a PII leak. Rejecting before `push_str` keeps the buffer uncorrupted
+        // so a later `flush` cannot drain the oversize content either. Mirrors
+        // `detect_l1` (redact_l1.rs) and the Python `StreamingRedactor`, which fail
+        // closed on oversize input (its `_detect` propagates the same error).
+        let projected = self.buffer.len().saturating_add(chunk.len());
+        if projected > crate::MAX_INPUT_SIZE {
+            return Err(format!(
+                "input too large: {} bytes exceeds MAX_INPUT_SIZE {}",
+                projected,
+                crate::MAX_INPUT_SIZE
+            ));
+        }
         self.buffer.push_str(chunk);
         let chars: Vec<char> = self.buffer.chars().collect();
+        // `buffer` is not mutated until after the cut below, so the PEM ceiling is
+        // stable across this `feed` — scan for the opener once and pass the bound to
+        // both the emit gate and `context_cut` (they MUST see the same `max_buffer`).
+        let max_buffer = self.pem_max_buffer();
         // Cheap emit gate: if no spans-independent trigger of `context_cut` can fire
         // for this buffer, the cut provably holds (≤ ctx_len), so skip the expensive
         // full-buffer detect + cut. CONSERVATIVE — `emit_possible` is a strict
         // superset of `context_cut`'s emit set (same max_buffer + W), so a buffer
         // that would emit is never skipped.
-        if !emit_possible(&chars, self.ctx_len, self.pem_max_buffer(), EVIDENCE_CONTEXT_WINDOW, false) {
+        if !emit_possible(&chars, self.ctx_len, max_buffer, EVIDENCE_CONTEXT_WINDOW, false) {
             return Ok(self.empty_result());
         }
         let final_entities = self.detect_final(&self.buffer);
@@ -578,7 +597,7 @@ where
             &self.snap_spans(&final_entities, chars.len()),
             &chars,
             self.ctx_len,
-            self.pem_max_buffer(),
+            max_buffer,
             EVIDENCE_CONTEXT_WINDOW,
             false,
         );
@@ -631,24 +650,15 @@ where
     /// set that drives both the cut and the redaction.
     fn detect_final(&self, buffer: &str) -> Vec<PatternMatch> {
         let DetectSpans { entities, hints } = (self.detect)(buffer);
-        // The streaming face applies no type filter — the caller-supplied
-        // redact closure owns that — so the only dropping filter here is the
-        // self-reference tier filter. The coverage invariant still applies:
-        // a dropped self_reference span may have absorbed a real entity.
+        // The streaming face applies NO type filter — the caller-supplied redact
+        // closure owns that — so `apply_type_filter` is false and the scope
+        // carries no type lists; the only dropping filter is the self-reference
+        // tier filter. The post-merge coverage invariant still applies (a dropped
+        // self_reference span may have absorbed a real entity), and it is the
+        // SAME `finalize_entities` the batch `redact_l1` drives — the two faces
+        // cannot diverge on it.
         let scope = FilterScope::from_hints(None, None, &hints);
-        let pre_merge: Option<Vec<PatternMatch>> =
-            if scope.admits_all(&entities) { None } else { Some(entities.clone()) };
-        let merged = merge_entities_with_text(entities, buffer);
-        // One Option carrying both halves — `merged` is moved into the filter
-        // below, so its spans must be taken first, and the snapshot is only
-        // ever useful paired with them. See the twin in `redact_l1`.
-        let snapshot: Option<(Vec<PatternMatch>, Vec<(usize, usize)>)> =
-            pre_merge.map(|pre| (pre, merged.iter().map(|e| (e.start, e.end)).collect()));
-        let filtered = filter_self_reference(merged, &hints);
-        match snapshot {
-            Some((pre, spans)) => restore_lost_coverage(&pre, &spans, filtered, &scope, buffer).0,
-            None => filtered,
-        }
+        finalize_entities(entities, &hints, &scope, buffer, false)
     }
 
     /// The snap input for [`context_cut`]: the final spans as `(start, end, type)`
@@ -728,11 +738,57 @@ where
 /// then restores the complete part via a [`RestoreSession`] built once (in `new`)
 /// over the fixed key and replayed across every call, rather than recompiling the
 /// key/alias merge + regex per call. Mirrors `StreamingRestorer`. `Sentence`
-/// buffers at boundaries; `None` restores every chunk immediately.
+/// buffers to sentence boundaries; `None` emits each chunk minus a held
+/// restorable-prefix tail. Both hold back a fake straddling a chunk boundary.
 pub struct StreamingRestorer {
     session: Result<RestoreSession, RestoreError>,
     buffer: String,
     strategy: RestoreStrategy,
+    /// Sorted non-empty key fakes, for the sentence-strategy straddle hold-back's
+    /// prefix bisect (mirrors the Python `_sorted_restorable`). This face threads
+    /// no aliases, so the restorable set is exactly the key fakes.
+    sorted_restorable: Vec<String>,
+    /// Longest restorable in CHARS — the fixed headroom the hold-back may consume.
+    longest_restorable: usize,
+}
+
+/// Number of trailing CHARS of `complete` that must be held back because a
+/// sentence boundary fell INSIDE a restorable that contains ". ": the longest
+/// `complete` suffix that is a prefix of some restorable (a key `fake`),
+/// INCLUDING the whole string. Mirrors the prefix scan in the Python
+/// `StreamingRestorer._hold_back`.
+///
+/// [`restorer_split`] treats an ASCII `.` before whitespace as a sentence end, so
+/// a fake like `John Q. Public` (the built-in en realistic fake) splits at its
+/// interior dot — `complete` ends `…John Q.`, `residual` starts `Public…`,
+/// neither half matches the key, and the pseudonym is emitted verbatim, never
+/// restored. Holding the prefix tail back into the buffer keeps the fake whole
+/// until the rest arrives.
+///
+/// `sorted_restorable` is sorted so "is this suffix a prefix of some restorable?"
+/// is one `partition_point` (bisect_left) probe — the block of strings sharing a
+/// prefix starts exactly there.
+///
+/// Subset parity: this is the restorable-prefix hold from the Python `_hold_back`
+/// only. `_hold_back` ALSO carries a numeric digit-run hold and a `max_buffer`
+/// force-flush cap. For the `Sentence` face those are no-ops (its `complete`
+/// ends in a non-digit boundary char). The `None` face can cut mid-run, so an
+/// ALL-DIGIT fake split across chunks can still diverge from Python here — a
+/// documented residual, acceptable because this restorer face is core-only (not
+/// exposed through the wasm/PyO3 bindings) and fails safe (a pseudonym shows
+/// unrestored; no real PII is ever leaked).
+fn restorable_prefix_hold(sorted_restorable: &[String], longest: usize, complete: &str) -> usize {
+    let chars: Vec<char> = complete.chars().collect();
+    // Longest first, so the first hit is the answer (`longest`, not `- 1`: a
+    // trailing COMPLETE match is held too, matching the Python scan).
+    for n in (1..=longest.min(chars.len())).rev() {
+        let suffix: String = chars[chars.len() - n..].iter().collect();
+        let i = sorted_restorable.partition_point(|s| s.as_str() < suffix.as_str());
+        if i < sorted_restorable.len() && sorted_restorable[i].starts_with(&suffix) {
+            return n;
+        }
+    }
+    0
 }
 
 /// The restorer's buffering strategy. Mirrors the Python `"sentence"` / `"none"`.
@@ -740,7 +796,10 @@ pub struct StreamingRestorer {
 pub enum RestoreStrategy {
     /// Flush at sentence boundaries (`。.！!？?；;\n`).
     Sentence,
-    /// Restore every chunk immediately (no buffering).
+    /// No sentence buffering: emit each chunk immediately EXCEPT a trailing
+    /// restorable-prefix tail, which is held so a pseudonym split across chunks
+    /// still restores (drained by `flush`). The hold is bounded by the longest
+    /// restorable — not unbounded buffering.
     None,
 }
 
@@ -783,10 +842,20 @@ impl StreamingRestorer {
     /// stored `Result` and surfaces the first time `feed`/`flush` actually
     /// needs the session, never as a panic here.
     pub fn new(key: HashMap<String, String>, strategy: RestoreStrategy) -> Self {
+        let mut sorted_restorable: Vec<String> =
+            key.keys().filter(|k| !k.is_empty()).cloned().collect();
+        sorted_restorable.sort();
+        let longest_restorable = sorted_restorable
+            .iter()
+            .map(|s| s.chars().count())
+            .max()
+            .unwrap_or(0);
         Self {
             session: RestoreSession::new(&key, None),
             buffer: String::new(),
             strategy,
+            sorted_restorable,
+            longest_restorable,
         }
     }
 
@@ -797,23 +866,59 @@ impl StreamingRestorer {
         self.session.as_ref().map_err(|e| RestoreError(e.0.clone()))
     }
 
+    /// Split `text` into `(emit, held_tail)`, where `held_tail` is the trailing
+    /// suffix that is (or could grow into) a restorable — held back so a fake
+    /// straddling a chunk boundary reassembles before restore instead of being
+    /// emitted in unrestorable halves. `held_tail` is bounded by the longest
+    /// restorable, so latency stays bounded and a `text` with no such tail
+    /// emits whole (`held_tail == ""`). Both `feed` branches route through this
+    /// one hold-back rule.
+    fn split_off_restorable_tail(&self, text: &str) -> (String, String) {
+        let hold =
+            restorable_prefix_hold(&self.sorted_restorable, self.longest_restorable, text);
+        if hold == 0 {
+            return (text.to_string(), String::new());
+        }
+        let chars: Vec<char> = text.chars().collect();
+        let keep = chars.len() - hold;
+        (chars[..keep].iter().collect(), chars[keep..].iter().collect())
+    }
+
     /// Feed a chunk. Returns restored text based on the strategy. Mirrors
     /// `StreamingRestorer.feed`.
     pub fn feed(&mut self, chunk: &str) -> Result<String, RestoreError> {
-        if self.strategy == RestoreStrategy::None {
-            // No `aliases` are threaded through this streaming path, so
-            // `alias_collisions` is always empty — discard it.
-            return self.session()?.restore_cell(chunk).map(|r| r.restored);
-        }
-
         self.buffer.push_str(chunk);
 
-        // Find the last sentence boundary + split, via the SSOT helper.
+        if self.strategy == RestoreStrategy::None {
+            // "none" does no SENTENCE buffering, but still holds back a trailing
+            // restorable-prefix so a pseudonym split across chunks (`P`, `-1`)
+            // reassembles rather than emitting unrestorable halves — mirrors the
+            // Python `"none"` hold-back. The hold is bounded by the longest
+            // restorable, so a chunk with no such tail emits in full.
+            let (complete, held) = self.split_off_restorable_tail(&self.buffer);
+            self.buffer = held;
+            if complete.is_empty() {
+                return Ok("".to_string());
+            }
+            return self.session()?.restore_cell(&complete).map(|r| r.restored);
+        }
+
+        // Sentence: emit up to the last real sentence boundary, via the SSOT split.
         let (complete, residual) = restorer_split(&self.buffer);
         if complete.is_empty() {
             return Ok("".to_string());
         }
-        self.buffer = residual;
+        // A sentence boundary can fall INSIDE a fake containing ". " (the en
+        // `John Q. Public`): hold that `complete`-tail back into the buffer so
+        // the fake reassembles and restores once the rest arrives. Same
+        // restorable-tail hold-back the `none` branch uses; a genuine boundary
+        // NOT inside a fake still cuts there (held == "").
+        let (complete, held) = self.split_off_restorable_tail(&complete);
+        self.buffer = format!("{held}{residual}");
+        if complete.is_empty() {
+            // The whole `complete` was a fake prefix — hold everything, wait.
+            return Ok("".to_string());
+        }
         self.session()?.restore_cell(&complete).map(|r| r.restored)
     }
 

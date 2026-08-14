@@ -206,6 +206,82 @@ class TestRestoreCommand:
         assert code == 5
 
 
+class TestRestoreAliases:
+    """`restore()` accepts `aliases=` (+ `display_marker=`); the CLI must
+    forward them too, mirroring how `-k/--key` already passes the key as a
+    JSON sidecar file."""
+
+    def test_should_restore_alternate_transliteration_via_aliases_file(self, tmp_path):
+        key_file = tmp_path / "key.json"
+        key_file.write_text(json.dumps({"王五": "王建国"}), encoding="utf-8")
+        aliases_file = tmp_path / "aliases.json"
+        aliases_file.write_text(json.dumps({"王五": ["Wang Wu"]}), encoding="utf-8")
+
+        code, stdout, stderr = run_cli(
+            "restore",
+            "-k",
+            str(key_file),
+            "--aliases",
+            str(aliases_file),
+            stdin="Wang Wu phoned",
+        )
+
+        assert code == 0, stderr
+        assert "王建国" in stdout
+
+    def test_should_exit_3_when_aliases_element_is_not_a_string(self, tmp_path):
+        # `_load_aliases_file` only checks list-ness, not element type — a
+        # non-str element (e.g. a number) passes its own shape check and is
+        # caught instead by restore()'s own `_normalize_aliases` seam
+        # (belt-and-suspenders), surfacing as a clean exit(3), not a crash.
+        key_file = tmp_path / "key.json"
+        key_file.write_text(json.dumps({"王五": "王建国"}), encoding="utf-8")
+        aliases_file = tmp_path / "aliases.json"
+        aliases_file.write_text(json.dumps({"王五": [123]}), encoding="utf-8")
+
+        code, _, stderr = run_cli(
+            "restore",
+            "-k",
+            str(key_file),
+            "--aliases",
+            str(aliases_file),
+            stdin="Wang Wu phoned",
+        )
+
+        assert code == 3, stderr
+
+    def test_should_leave_alias_form_unrestored_without_aliases_flag(self, tmp_path):
+        key_file = tmp_path / "key.json"
+        key_file.write_text(json.dumps({"王五": "王建国"}), encoding="utf-8")
+
+        code, stdout, _ = run_cli(
+            "restore",
+            "-k",
+            str(key_file),
+            stdin="Wang Wu phoned",
+        )
+
+        assert code == 0
+        assert "王建国" not in stdout
+
+    def test_should_strip_display_marker_via_display_marker_flag(self, tmp_path):
+        key_file = tmp_path / "key.json"
+        key_file.write_text(json.dumps({"P-037": "王五"}), encoding="utf-8")
+
+        code, stdout, stderr = run_cli(
+            "restore",
+            "-k",
+            str(key_file),
+            "--display-marker",
+            "ⓥ",
+            stdin="P-037ⓥ说了话",
+        )
+
+        assert code == 0, stderr
+        assert "ⓥ" not in stdout
+        assert "王五说了话" in stdout
+
+
 class TestRedactRestoreRoundtrip:
     def test_should_recover_original_when_redact_then_restore(self, tmp_path):
         key_file = tmp_path / "key.json"

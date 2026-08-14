@@ -49,17 +49,17 @@
 
 use std::collections::HashSet;
 
-use crate::coverage::{restore_lost_coverage, FilterScope};
+use crate::cancel::{poll_abort, CancelFlag, DetectError};
+use crate::coverage::{finalize_entities, FilterScope};
 use crate::data::{all_langs, builtin_patterns};
 use crate::fanout;
 use crate::grammar::normalize_grammar_en;
-use crate::hints::{filter_self_reference, get_person_threshold, produce_hints_l1, Hint};
-use crate::merger::merge_entities_with_text;
+use crate::hints::{get_person_threshold, produce_hints_l1, Hint};
 use crate::normalize::{
     finalize, map_spans_to_original, normalize_core, normalize_text_for_person,
 };
 use crate::occupation::detect_occupation_zh;
-use crate::patterns::{match_patterns, PatternConfig, PatternError};
+use crate::patterns::{match_patterns_cancellable, PatternConfig, PatternError};
 use crate::regions::detect_regions_zh;
 use crate::replace::{replace, FakerFactory, PseudoFactory, ReplaceArgs, ReplaceResult, TypeInfo};
 use crate::reserved_range::{CharOffsetCursor, char_slice};
@@ -216,21 +216,95 @@ fn map_matches_to_original(
     }
 }
 
+/// Run one zh-only, evidence-gated detector phase and map its spans back to the
+/// ORIGINAL text — the shared body of the region / occupation / framework phases
+/// (steps 10/11/12). When `has_zh` is false the detector never runs and the
+/// mapped result is empty, exactly like the inlined form. `detect` receives the
+/// person-detect-text and `layer1_raw` (the untagged raw regex matches used as
+/// the structural PII proximity context) and returns detect-coord matches; they
+/// are tagged `LAYER_REGEX`, then mapped to ORIGINAL coords via the person offset
+/// map — the identical sequence each phase ran inline. The framework phase passes
+/// a closure that composes two detectors (conditions ++ hobbies) as its `detect`.
+fn run_zh_detector<F>(
+    has_zh: bool,
+    person_detect_text: &str,
+    layer1_raw: &[PatternMatch],
+    text: &str,
+    person_offset_map: Option<&[usize]>,
+    orig_len: usize,
+    detect: F,
+) -> Vec<PatternMatch>
+where
+    F: FnOnce(&str, &[PatternMatch]) -> Vec<PatternMatch>,
+{
+    let mut v: Vec<PatternMatch> = Vec::new();
+    if has_zh {
+        v = detect(person_detect_text, layer1_raw);
+        tag_layer(&mut v, LAYER_REGEX);
+    }
+    map_matches_to_original(&v, text, person_offset_map, orig_len)
+}
+
+/// Derive a normalized detect view from a [`normalize_core`] intermediate: apply
+/// [`finalize`] with the requested step-4 digit fold when the core produced an
+/// intermediate, else pass the text through unchanged (identity, no offset map).
+/// The full detect view (`digit_fold = true`) and the person-detect view
+/// (`digit_fold = false`) both go through here — the only thing that differs
+/// between them is that bool.
+fn normalize_view(
+    core: &Option<(Vec<char>, Vec<usize>)>,
+    text: &str,
+    digit_fold: bool,
+) -> (String, Option<Vec<usize>>) {
+    match core {
+        Some((chars, omap)) => finalize(chars, omap, text, digit_fold),
+        None => (text.to_string(), None),
+    }
+}
+
 /// Run the fast-mode L1 detection sequence, returning the RAW (unmerged) result.
 ///
 /// `lang` is the resolved language list (e.g. `["zh"]`, `["zh","en"]`). `names`
 /// is the known-names list. No merge/filter/boost is applied.
+///
+/// This is the never-cancel entry point — a thin 3-arg wrapper over
+/// [`detect_l1_cancellable`] with `cancel = None`, kept at the exact arity + arg
+/// types callers (the wasm crate, the PyO3 binding, `redact_l1`, the goldens) use
+/// today. Its return type widens `PatternError` → [`DetectError`]; the
+/// `.map_err(|e| e.to_string())` call sites keep working through
+/// [`DetectError`]'s `Display`. With `cancel = None` every poll is a no-op, so the
+/// output is byte-identical to the pre-cancellation implementation.
 pub fn detect_l1(
     text: &str,
     lang: &[String],
     names: &[String],
-) -> Result<DetectL1Result, PatternError> {
+) -> Result<DetectL1Result, DetectError> {
+    detect_l1_cancellable(text, lang, names, None)
+}
+
+/// The cancellable form of [`detect_l1`]. Identical detection sequence, but polls
+/// the supplied [`CancelFlag`] at the base-scan loop (via
+/// [`match_patterns_cancellable`], which the fan-out re-invokes so it inherits the
+/// poll through `?`) and BETWEEN the six person-family phases. A tripped flag turns
+/// the next poll into an `Err(DetectError::Aborted)` — never a partial `Ok`
+/// (`poll_abort!` can only `return Err`). `cancel = None` = never cancel.
+///
+/// Coarse granularity is intentional for v0.8.11: a single ≥1 MiB person phase is
+/// the worst-case latency between two polls; an intra-detector poll is a future
+/// contingency, deliberately NOT built here.
+pub fn detect_l1_cancellable(
+    text: &str,
+    lang: &[String],
+    names: &[String],
+    cancel: Option<&CancelFlag>,
+) -> Result<DetectL1Result, DetectError> {
     if text.len() > crate::MAX_INPUT_SIZE {
         return Err(PatternError(format!(
             "input too large: {} bytes exceeds MAX_INPUT_SIZE {}",
             text.len(),
             crate::MAX_INPUT_SIZE
-        )));
+        ))
+        .into());
     }
     // 1. Normalize. The expensive steps 1–3 (invisible strip + accent fold +
     //    confusables + per-char NFKC) run ONCE via `normalize_core`; the full
@@ -238,10 +312,7 @@ pub fn detect_l1(
     //    same intermediate, so they STRUCTURALLY share char positions + offset
     //    map (see step 7). `use_normalized` iff an offset map was produced.
     let core = normalize_core(text);
-    let (normalized, offset_map) = match &core {
-        Some((chars, omap)) => finalize(chars, omap, text, true),
-        None => (text.to_string(), None),
-    };
+    let (normalized, offset_map) = normalize_view(&core, text, true);
     let use_normalized = offset_map.is_some();
     let detect_text: &str = if use_normalized { &normalized } else { text };
 
@@ -251,19 +322,16 @@ pub fn detect_l1(
     //    start-sorted order, matching Python (results are re-sorted by start —
     //    already start-sorted here; near_misses keep append order = start order).
     let patterns = load_patterns(lang);
-    let all_matches = match_patterns(detect_text, &patterns)?;
+    let all_matches = match_patterns_cancellable(detect_text, &patterns, cancel)?;
     let mut layer1_raw: Vec<PatternMatch> = Vec::new();
     let mut near_misses: Vec<PatternMatch> = Vec::new();
     for m in all_matches {
+        // `match_patterns` already stamps every sub-1.0 match at EXACTLY 0.3 (its
+        // confidence is `0.3` on a failed validator and `1.0` otherwise — no other
+        // value is reachable), so a near-miss moves straight into the list with no
+        // field-by-field rebuild to re-assert the 0.3.
         if m.confidence < 1.0 {
-            near_misses.push(PatternMatch {
-                text: m.text,
-                type_: m.type_,
-                start: m.start,
-                end: m.end,
-                confidence: 0.3,
-                layer: m.layer,
-            });
+            near_misses.push(m);
         } else {
             layer1_raw.push(m);
         }
@@ -341,11 +409,14 @@ pub fn detect_l1(
                                    orig_chars: &mut Option<Vec<char>>,
                                    cand_text: &str,
                                    cand_omap: &[usize]|
-             -> Result<(), PatternError> {
-                let results: Vec<PatternMatch> = match_patterns(cand_text, &patterns)?
-                    .into_iter()
-                    .filter(|m| m.confidence >= 1.0)
-                    .collect();
+             -> Result<(), DetectError> {
+                // Re-invokes the cancellable base scan, so a per-candidate scan
+                // inherits the loop-top poll through `?` — no separate poll here.
+                let results: Vec<PatternMatch> =
+                    match_patterns_cancellable(cand_text, &patterns, cancel)?
+                        .into_iter()
+                        .filter(|m| m.confidence >= 1.0)
+                        .collect();
                 let spans: Vec<(usize, usize)> =
                     results.iter().map(|m| (m.start, m.end)).collect();
                 let mapped = map_spans_to_original(&spans, Some(cand_omap), orig_len);
@@ -455,9 +526,24 @@ pub fn detect_l1(
     //    SAME person normalization (a plain name folds to itself). Spans map back
     //    to the original below, so an accented/fullwidth known-name still restores
     //    correctly.
-    let (person_normalized, person_offset_map) = match &core {
-        Some((chars, omap)) => finalize(chars, omap, text, false),
-        None => (text.to_string(), None),
+    let has_zh = lang.iter().any(|c| c == "zh");
+    let has_en = lang.iter().any(|c| c == "en");
+
+    // Deriving the person-detect view (finalize's char-vec clone + String rebuild
+    // + offset-map clone) is worthwhile only when a person-family phase will read
+    // it. When NEITHER "zh" NOR "en" is in lang AND no known names are supplied,
+    // none of the six phases produce anything: phases 1-2 are gated on
+    // `has_zh`/`has_en`; phase 3 (names-only) has an empty `scan_names`; phases
+    // 4-6 short-circuit inside `run_zh_detector` on `has_zh == false`. The step-9
+    // map-back then runs over an EMPTY `person`, which `map_matches_to_original`
+    // returns as `[]` regardless of the offset map. So the placeholder below is
+    // provably unread and the whole detect result stays byte-identical — the gate
+    // only skips the wasted work (which otherwise fires per call for ja/ko/
+    // fullwidth-only locales).
+    let (person_normalized, person_offset_map) = if has_zh || has_en || !names.is_empty() {
+        normalize_view(&core, text, false)
+    } else {
+        (text.to_string(), None)
     };
     let person_use_normalized = person_offset_map.is_some();
     let person_detect_text: &str =
@@ -468,10 +554,12 @@ pub fn detect_l1(
         names.to_vec()
     };
 
-    let has_zh = lang.iter().any(|c| c == "zh");
-    let has_en = lang.iter().any(|c| c == "en");
-
     let mut person: Vec<PatternMatch> = Vec::new();
+    // Cooperative-cancellation boundary before each of the six person-family
+    // phases: these detectors return a plain `Vec`, so the poll sits BETWEEN them.
+    // `poll_abort!` can only `return Err(DetectError::Aborted)`, so an assembled-
+    // so-far `person`/`regions`/… Vec can never escape as a partial `Ok`.
+    poll_abort!(cancel); // phase 1: person_zh
     if has_zh {
         let mut zh = person_zh::detect_person_names(
             person_detect_text,
@@ -482,6 +570,7 @@ pub fn detect_l1(
         tag_layer(&mut zh, LAYER_REGEX);
         person.extend(zh);
     }
+    poll_abort!(cancel); // phase 2: person_en
     if has_en {
         let mut en = person_en::detect_person_names(
             person_detect_text,
@@ -504,6 +593,7 @@ pub fn detect_l1(
     //    confidence 1.0, with `text = name` (exactly as Python sets `text=name`,
     //    not the matched slice — equal for a literal match). Appended AFTER layer1
     //    in `.layer1_and_person()`, matching Python's `entities.append` order.
+    poll_abort!(cancel); // phase 3: names-only fallback
     if !has_zh && !has_en && !scan_names.is_empty() {
         for name in &scan_names {
             // Python `if not name: continue` — skip empty names.
@@ -547,54 +637,53 @@ pub fn detect_l1(
     );
 
     // 10. Evidence-gated Chinese admin-region detection (only when "zh" is in
-    //     lang). Mirrors the person block: run on the SAME person-detect-text
-    //     (digit-step-skipped normalization, so a region name that shares a CJK
-    //     digit homograph isn't folded away), pass `layer1_raw` as the structural
-    //     PII proximity context (same detect-coord convention as the zh person
-    //     detector — positions line up with the person-detect-text), tag the
-    //     LAYER_REGEX layer like person does, then map the spans back to the
-    //     ORIGINAL text exactly like layer1/person. Empty when "zh" is absent.
-    let mut regions: Vec<PatternMatch> = Vec::new();
-    if has_zh {
-        let mut zh_regions = detect_regions_zh(person_detect_text, &layer1_raw);
-        tag_layer(&mut zh_regions, LAYER_REGEX);
-        regions = zh_regions;
-    }
-    let regions = map_matches_to_original(
-        &regions,
+    //     lang). Runs on the SAME person-detect-text (digit-step-skipped
+    //     normalization, so a region name that shares a CJK digit homograph isn't
+    //     folded away), with `layer1_raw` as the structural PII proximity context
+    //     (same detect-coord convention as the zh person detector — positions line
+    //     up with the person-detect-text), tagged LAYER_REGEX and mapped back to
+    //     the ORIGINAL text — all of that is `run_zh_detector`. Empty when "zh" is
+    //     absent.
+    poll_abort!(cancel); // phase 4: regions
+    let regions = run_zh_detector(
+        has_zh,
+        person_detect_text,
+        &layer1_raw,
         text,
         person_offset_map.as_deref(),
         orig_len,
+        detect_regions_zh,
     );
 
-    // 11. Evidence-gated Chinese occupation detection (only when "zh" is in
-    //     lang). Mirrors the region block: run on the SAME person-detect-text,
-    //     pass `layer1_raw` as the structural PII proximity context (same
-    //     detect-coord convention as the zh person/region detectors), tag the
-    //     LAYER_REGEX layer, then map the spans back to the ORIGINAL text exactly
-    //     like layer1/person/regions. Empty when "zh" is absent.
-    let mut job_titles: Vec<PatternMatch> = Vec::new();
-    if has_zh {
-        let mut zh_jobs = detect_occupation_zh(person_detect_text, &layer1_raw);
-        tag_layer(&mut zh_jobs, LAYER_REGEX);
-        job_titles = zh_jobs;
-    }
-    let job_titles = map_matches_to_original(
-        &job_titles,
+    // 11. Evidence-gated Chinese occupation detection (only when "zh" is in lang) —
+    //     same shape as the region phase.
+    poll_abort!(cancel); // phase 5: occupation
+    let job_titles = run_zh_detector(
+        has_zh,
+        person_detect_text,
+        &layer1_raw,
         text,
         person_offset_map.as_deref(),
         orig_len,
+        detect_occupation_zh,
     );
 
-    // 12. Evidence-gated framework detectors (zh only): conditions + hobbies.
-    //     Combined into one `framework` vec.
-    let mut framework: Vec<PatternMatch> = Vec::new();
-    if has_zh {
-        framework.extend(crate::conditions::detect_conditions_zh(person_detect_text, &layer1_raw));
-        framework.extend(crate::hobbies::detect_hobbies_zh(person_detect_text, &layer1_raw));
-        tag_layer(&mut framework, LAYER_REGEX);
-    }
-    let framework = map_matches_to_original(&framework, text, person_offset_map.as_deref(), orig_len);
+    // 12. Evidence-gated framework detectors (zh only): conditions ++ hobbies,
+    //     combined into one `framework` vec by the composing closure.
+    poll_abort!(cancel); // phase 6: framework
+    let framework = run_zh_detector(
+        has_zh,
+        person_detect_text,
+        &layer1_raw,
+        text,
+        person_offset_map.as_deref(),
+        orig_len,
+        |t, l1| {
+            let mut v = crate::conditions::detect_conditions_zh(t, l1);
+            v.extend(crate::hobbies::detect_hobbies_zh(t, l1));
+            v
+        },
+    );
 
     Ok(DetectL1Result {
         layer1,
@@ -616,7 +705,7 @@ pub fn detect_l1(
 ///
 /// 1. `detect_l1(text, lang, names)` → the RAW L1 entities (`layer1 ++ person`).
 /// 2. `merge_entities(entities, text)` — priority-aware (see
-///    [`merge_entities_with_text`]).
+///    [`crate::merger::merge_entities_with_text`]).
 /// 3. **`boost_cross_layer` is a NO-OP in fast mode** and is SKIPPED. Python
 ///    runs it (`hints.boost_cross_layer(merged, pre_merge)`), but it returns
 ///    `merged` unchanged whenever fewer than 2 distinct layers are present in
@@ -713,48 +802,17 @@ pub fn redact_l1<F: PseudoFactory>(
     entities.extend(job_titles);
     entities.extend(framework);
 
-    // 2. Priority-aware merge over the ORIGINAL text.
-    //
-    //    Snapshot the pre-merge set ONLY when a post-merge filter can actually
-    //    drop something — step 5a needs it to restore lost coverage. A merged
-    //    entity's type is always some pre-merge entity's type, so when every
-    //    pre-merge entity is admitted no filter drops anything and no coverage
-    //    can be lost. On the common path (no type filter, tier 1 or no
-    //    self_reference at all) this costs one pass and zero allocations.
+    // 2-5a. Priority-aware merge → self-reference filter → type filter →
+    //       post-merge coverage restore, all in the shared `finalize_entities`
+    //       (`crate::coverage`). That function IS the post-merge PII-leak
+    //       coverage invariant (v0.8.6); the streaming face
+    //       (`streaming::detect_final`) drives the SAME code so the two can
+    //       never disagree about it. Step 3 (`boost_cross_layer`) is a NO-OP in
+    //       fast mode (single layer) and is skipped. The batch face applies the
+    //       type filter (`apply_type_filter = true`), reading the `types` /
+    //       `types_exclude` lists off `scope`.
     let scope = FilterScope::from_hints(types, types_exclude, &hints);
-    let pre_merge: Option<Vec<PatternMatch>> =
-        if scope.admits_all(&entities) { None } else { Some(entities.clone()) };
-    let merged = merge_entities_with_text(entities, text);
-    //     Pair the pre-merge snapshot with the merged spans NOW, in ONE Option:
-    //     `merged` is moved into the filter below so its spans must be taken
-    //     before that, and the two values are only ever needed together. Two
-    //     separate Options would leave "always both or neither" to convention;
-    //     one tuple lets the compiler hold it.
-    let snapshot: Option<(Vec<PatternMatch>, Vec<(usize, usize)>)> =
-        pre_merge.map(|pre| (pre, merged.iter().map(|e| (e.start, e.end)).collect()));
-
-    // 3. boost_cross_layer: NO-OP in fast mode (single layer) — skipped.
-
-    // 4. Self-reference tier filter.
-    let filtered = filter_self_reference(merged, &hints);
-
-    // 5. Type filter (redact.py:337-343): types wins over types_exclude.
-    let filtered: Vec<PatternMatch> = if let Some(keep) = types {
-        filtered.into_iter().filter(|e| keep.contains(&e.type_)).collect()
-    } else if let Some(drop) = types_exclude {
-        filtered.into_iter().filter(|e| !drop.contains(&e.type_)).collect()
-    } else {
-        filtered
-    };
-
-    // 5a. Post-merge coverage invariant: steps 4 and 5 drop entities by type,
-    //     and a dropped entity may have absorbed a DIFFERENT real entity during
-    //     the merge. Re-admit anything whose coverage they destroyed. See
-    //     `crate::coverage`.
-    let filtered = match snapshot {
-        Some((pre, spans)) => restore_lost_coverage(&pre, &spans, filtered, &scope, text).0,
-        None => filtered,
-    };
+    let filtered = finalize_entities(entities, &hints, &scope, text, true);
 
     // 6. Replace. Both detect (above) and replace surface their error as a
     //    `String`, so the binding (T7) re-wraps a single error type into a
@@ -865,6 +923,35 @@ mod tests {
         assert_eq!(configs.iter().filter(|c| c.type_ == "bank_card").count(), 1);
     }
 
+    #[test]
+    fn en_load_includes_language_neutral_checksum_ids() {
+        // cpf/cnpj (br), my_number (ja) and pan (in) are all checksum- or
+        // format-validated identifiers whose characters are the same regardless
+        // of surrounding script, so an en-only request must still load them —
+        // not just the CN numeric / card patterns covered above.
+        let configs = load_patterns(&["en".to_string()]);
+        for type_ in ["cpf", "cnpj", "my_number", "pan"] {
+            assert!(
+                configs.iter().any(|c| c.type_ == type_),
+                "en pattern load must include the language-neutral {type_} pattern"
+            );
+        }
+    }
+
+    #[test]
+    fn en_load_excludes_the_format_only_ids_kept_language_scoped() {
+        // aadhaar (bare 12-digit run, no checksum) and the German tax_id
+        // (format-only) are deliberately NOT flagged language_neutral — too
+        // collision-prone to widen. An en-only request must still exclude them.
+        let configs = load_patterns(&["en".to_string()]);
+        for type_ in ["aadhaar", "tax_id"] {
+            assert!(
+                !configs.iter().any(|c| c.type_ == type_),
+                "en pattern load must NOT include the language-scoped {type_} pattern"
+            );
+        }
+    }
+
     // ── Golden fixtures captured from LIVE Python ─────────────────────────────
     //
     // Each fixture is the RAW (pre-merge) `_detect` fast-mode output: the
@@ -967,6 +1054,15 @@ mod tests {
         assert_near_misses(
             &r.near_misses,
             &[
+                // cpf is language_neutral (v0.8.10) so the br pattern now also
+                // cross-loads into zh; it shares the phone number's exact span
+                // and fails the CPF check-digit algorithm on these digits, so it
+                // surfaces as an extra near-miss here. The accepted entity list
+                // above is unaffected (`phone` still wins the overlap: same span
+                // length, same 1.0 confidence, phone's config position sorts
+                // first), and the hint layer suppresses a near-miss whose span
+                // an accepted entity of another type already claims.
+                ("13800138000", "cpf", 7, 18),
                 ("110101199003078888", "id_number", 22, 40),
                 ("110101199003078888", "credit_code", 22, 40),
             ],
@@ -1306,6 +1402,86 @@ mod tests {
             elapsed.as_secs() < 20,
             "fan-out union must be linear; took {elapsed:?} for N={N}"
         );
+    }
+
+    // ── Cooperative cancellation ─────────────────────────────────────────────
+    //
+    // The no-cancel golden fixtures above (captured from live Python) ARE the
+    // byte-identical proof for the 3-arg `detect_l1` wrapper, since that wrapper is
+    // exactly `detect_l1_cancellable(.., None)`. These add: (a) an untripped flag
+    // changes nothing; (b) a pre-tripped flag aborts the base scan (fail-closed,
+    // Err not Ok(partial)); (c) an empty base scan lands the first poll at the
+    // person-family phase boundary — a tripped flag there proves the between-phase
+    // poll is wired (an empty input would otherwise return Ok with no entities).
+
+    use crate::cancel::{CancelFlag, DetectError};
+
+    /// Compare two results field-by-field on the observable entity tuples.
+    fn same_entities(a: &DetectL1Result, b: &DetectL1Result) {
+        let tup = |e: &PatternMatch| {
+            (e.text.clone(), e.type_.clone(), e.start, e.end, e.confidence, e.layer)
+        };
+        let flat = |r: &DetectL1Result| {
+            let mut v: Vec<_> = r.layer1_and_person().iter().map(tup).collect();
+            v.extend(r.regions.iter().map(tup));
+            v.extend(r.job_titles.iter().map(tup));
+            v.extend(r.framework.iter().map(tup));
+            v.extend(r.near_misses.iter().map(tup));
+            v
+        };
+        assert_eq!(flat(a), flat(b));
+    }
+
+    #[test]
+    fn untripped_flag_is_byte_identical_to_no_cancel() {
+        // A present-but-untripped flag must not change the output vs the 3-arg
+        // (None) wrapper — over a representative zh fixture with phone + person +
+        // near-misses so every phase runs.
+        let text = "我叫张伟，电话13800138000，身份证110101199003078888。";
+        let none = detect_l1(text, &s(&["zh"]), &[]).unwrap();
+        let flag = CancelFlag::new();
+        let with_flag =
+            detect_l1_cancellable(text, &s(&["zh"]), &[], Some(&flag)).unwrap();
+        same_entities(&none, &with_flag);
+    }
+
+    #[test]
+    fn pre_tripped_flag_aborts_the_base_scan_fail_closed() {
+        // Non-empty, matching text: the FIRST poll reached is the base-scan loop
+        // top (before any match is assembled). A pre-tripped flag → Err(Aborted),
+        // never an Ok carrying the phone/person.
+        let flag = CancelFlag::new();
+        flag.cancel();
+        let out = detect_l1_cancellable(
+            "我叫张伟，电话13800138000",
+            &s(&["zh"]),
+            &[],
+            Some(&flag),
+        );
+        assert!(matches!(out, Err(DetectError::Aborted)));
+    }
+
+    #[test]
+    fn pre_tripped_flag_aborts_at_person_phase_on_empty_base() {
+        // Empty text: the base scan early-returns Ok([]) WITHOUT reaching its
+        // loop-top poll (the empty-text short-circuit sits above the loop), so the
+        // first poll reached is the person_zh between-phase boundary. A tripped flag
+        // there proves the between-phase poll fires — were it absent, an empty input
+        // would return Ok with no entities instead of Err.
+        let flag = CancelFlag::new();
+        flag.cancel();
+        let out = detect_l1_cancellable("", &s(&["zh"]), &[], Some(&flag));
+        assert!(matches!(out, Err(DetectError::Aborted)));
+    }
+
+    #[test]
+    fn empty_base_untripped_completes_ok() {
+        // The counterpart to the test above: without a trip, the same empty-base
+        // path completes Ok (so the abort above is caused by the flag, not the
+        // empty input). No entities, no panic.
+        let flag = CancelFlag::new();
+        let r = detect_l1_cancellable("", &s(&["zh"]), &[], Some(&flag)).unwrap();
+        assert!(r.layer1_and_person().is_empty());
     }
 }
 

@@ -34,7 +34,7 @@ PGP encryption available on request.
 
 ## Threat Model
 
-The full threat model lives at [docs/security.md](docs/security.md).
+The full threat model lives at [docs/security-model.md](docs/security-model.md).
 Headline guarantees:
 - Salt is the cryptographic root of trust; if it leaks, derivable mappings
   leak too. Treat as operational secret.

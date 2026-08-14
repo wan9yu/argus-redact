@@ -180,7 +180,7 @@ argus-redact info
 ### Output
 
 ```
-argus-redact v0.8.9
+argus-redact v0.8.14
 
 Languages:
   zh  Chinese    regex (14+ patterns) + NER
@@ -250,6 +250,8 @@ A malformed or empty request body returns 400 (`{"error": "request body must be 
 | `anchor` | `{"nonce": string, "scope": [string, ...]} \| null` | `null` | Optional provenance/scope anchor. Reconstructed into the same shape `make_anchor(key)` produces. Required for the guard to pass — with `guard` true and no `anchor`, restore fails closed. |
 | `guard` | `bool` | `true` | `true` (default) runs the deterministic provenance (P) + scope (S) checks; a request with no `anchor` fails closed. `false` runs a plain, unchecked restore — the explicit opt-out for text that never left your process. |
 | `strict` | `bool` | `false` | When `true` and `guard` is `true`, a security event returns 400 with `{"error": ..., "security_events": [...]}` instead of an un-restored 200. |
+| `aliases` | `{fake: [alt, ...]} \| null` | `null` | *(v0.8.10+)* Optional alternate-transliteration map — mirrors `restore(text, key, aliases=...)`. Each value must be a list of strings; a bare string is rejected with 400 (it would otherwise iterate character-by-character). |
+| `display_marker` | `string \| null` | `null` | *(v0.8.10+)* Optional marker (e.g. `"ⓕ"`) stripped from `text` before key lookup — mirrors `restore(text, key, display_marker=...)`. |
 
 The response always includes a `security_events` array (empty on a clean restore):
 

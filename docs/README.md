@@ -5,10 +5,15 @@
 argus-redact has two functions and one data type:
 
 ```
-redact(plaintext)       → (redacted_text, key)
-restore(text, key)      → plaintext
-key                     = dict[str, str]   # {"P-00037": "王五", ...}
+redact(plaintext)              → (redacted_text, key)
+restore(text, key, anchor=...) → original text   # guarded by default since v0.8.0
+key                            = dict[str, str]   # {"P-00037": "王五", ...}
 ```
+
+Since v0.8.0 `restore()` defaults to `guard=True`: pass an `anchor` from
+`make_anchor(key)` (or `guarded_restore(...)`) so the round-trip fails closed on a
+tampered reply. A bare `restore(text, key)` with no anchor now fails closed;
+`guard=False` is the explicit opt-out for a plain substitution.
 
 Everything else is optional.
 

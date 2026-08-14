@@ -18,7 +18,7 @@
 
 use std::collections::HashSet;
 
-use crate::hints::{get_self_reference_tier, Hint};
+use crate::hints::{filter_self_reference, get_self_reference_tier, Hint};
 use crate::merger::merge_entities_with_text;
 use crate::types::PatternMatch;
 
@@ -135,6 +135,70 @@ pub fn restore_lost_coverage(
     let mut all = filtered;
     all.extend(lost);
     (merge_entities_with_text(all, text), types)
+}
+
+/// Reduce a RAW detection set to the FINAL entity set — the post-merge pipeline
+/// every detection path shares: merge → self-reference filter → (optional) type
+/// filter → coverage restore. This is the ONE place the post-merge PII-leak
+/// coverage invariant (v0.8.6) lives, so the batch (`redact_l1`) and streaming
+/// (`streaming::detect_final`) faces can never drift on it.
+///
+/// `apply_type_filter` is the ONLY axis the two callers differ on:
+/// - `redact_l1` runs the `types`/`types_exclude` filter (`true`), reading the
+///   lists off `scope` — the very same lists the restorer's `admits` consults.
+/// - the streaming face applies NO type filter (`false`): its caller-supplied
+///   redact closure owns type selection, so its `scope` carries no lists.
+///
+/// Every other step — the pre-merge snapshot decision, merge order, self-ref
+/// tier filter, and `restore_lost_coverage` — is identical for both.
+///
+/// `scope` MUST be built from the same `hints` passed here (via
+/// [`FilterScope::from_hints`]): that is what keeps `scope.drop_self_reference`
+/// and `filter_self_reference` in agreement, which the coverage restore relies on.
+pub fn finalize_entities(
+    entities: Vec<PatternMatch>,
+    hints: &[Hint],
+    scope: &FilterScope<'_>,
+    text: &str,
+    apply_type_filter: bool,
+) -> Vec<PatternMatch> {
+    // Snapshot the pre-merge set ONLY when a post-merge filter can actually drop
+    // something — the restore step below needs it. A merged entity's type is
+    // always some pre-merge entity's type, so when every pre-merge entity is
+    // admitted no filter drops anything and no coverage can be lost.
+    let pre_merge: Option<Vec<PatternMatch>> =
+        if scope.admits_all(&entities) { None } else { Some(entities.clone()) };
+    let merged = merge_entities_with_text(entities, text);
+    // One Option carrying both halves — `merged` is moved into the filter below,
+    // so its spans must be taken first, and the snapshot is only ever useful
+    // paired with them.
+    let snapshot: Option<(Vec<PatternMatch>, Vec<(usize, usize)>)> =
+        pre_merge.map(|pre| (pre, merged.iter().map(|e| (e.start, e.end)).collect()));
+
+    // Self-reference tier filter (both faces run it).
+    let filtered = filter_self_reference(merged, hints);
+
+    // Type filter (redact.py:337-343): types wins over types_exclude. Only the
+    // batch path applies it; the streaming face leaves type selection to its
+    // caller's redact closure. Routed through `scope.admits` — the SAME single
+    // predicate `restore_lost_coverage` consults — so the two can never drift on
+    // the keep-over-deny precedence. `admits` also drops `self_reference` when
+    // `scope.drop_self_reference`, but `filter_self_reference` above already
+    // removed every `self_reference` span in exactly that case (both key off the
+    // same `get_self_reference_tier(hints)`), so that arm is a no-op here.
+    let filtered: Vec<PatternMatch> = if apply_type_filter {
+        filtered.into_iter().filter(|e| scope.admits(e)).collect()
+    } else {
+        filtered
+    };
+
+    // Post-merge coverage invariant: the filters above drop entities by type, and
+    // a dropped entity may have absorbed a DIFFERENT real entity during the merge.
+    // Re-admit anything whose coverage they destroyed.
+    match snapshot {
+        Some((pre, spans)) => restore_lost_coverage(&pre, &spans, filtered, scope, text).0,
+        None => filtered,
+    }
 }
 
 #[cfg(test)]

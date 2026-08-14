@@ -9,6 +9,7 @@ typedef-None skip path) so any rounding / lookup / ordering drift is caught.
 from __future__ import annotations
 
 from argus_redact.pure.risk import assess_risk
+from argus_redact.pure.wire import risk_payload
 
 
 def _astuple(r):
@@ -20,12 +21,13 @@ def _astuple(r):
         r.pipl_articles,
         r.gdpr_special_category,
         r.hipaa_categories,
+        r.gdpr_art10,
     )
 
 
 def test_empty_entities():
     r = assess_risk([])
-    assert _astuple(r) == (0.0, "none", (), (), (), False, ())
+    assert _astuple(r) == (0.0, "none", (), (), (), False, (), False)
 
 
 def test_single_low():
@@ -81,15 +83,43 @@ def test_quasi_id_combo_single_bonus():
     assert len(combo_reasons) == 1
 
 
-def test_cardinality_triggers_art55():
+def test_cardinality_alone_does_not_trigger_art55():
+    # v0.8.10: the ≥3-entity cardinality Art.55 trigger was removed — Art.55 now
+    # attaches only via sensitive-PI membership (the real Art.55(1) hook). Three
+    # non-member entities must NOT surface Art.55.
     r = assess_risk(
         [
             {"type": "phone", "sensitivity": 3},
             {"type": "email", "sensitivity": 2},
-            {"type": "name", "sensitivity": 2},
+            {"type": "ip_address", "sensitivity": 1},
         ]
     )
-    assert "PIPL Art.55" in r.pipl_articles
+    assert "PIPL Art.55" not in r.pipl_articles
+
+
+def test_ethnicity_membership_crosses_high_to_critical():
+    # ethnicity became a sensitive-PI member (Art.28 general clause). self_reference
+    # is pinned at sensitivity 1 so the high(0.75)→critical(0.90) crossing is driven
+    # PURELY by membership-fed self-ref amplification (+0.15), NOT the two-high-entity
+    # bonus (only one entity is sensitivity≥3, so that bonus does not fire).
+    r = assess_risk(
+        [
+            {"type": "self_reference", "sensitivity": 1},
+            {"type": "ethnicity", "sensitivity": 3},
+        ]
+    )
+    assert r.score == 0.9
+    assert r.level == "critical"
+    assert "self-reference amplification: PII directly linked to user" in r.reasons
+
+
+def test_criminal_record_is_gdpr_art10_not_art9():
+    # criminal_record moved out of GDPR Art.9 into the parallel, mutually exclusive
+    # Art.10 regime. The value flows all the way to the wire projection.
+    r = assess_risk([{"type": "criminal_record", "sensitivity": 3}])
+    assert r.gdpr_art10 is True
+    assert r.gdpr_special_category is False
+    assert risk_payload(r)["gdpr_art10"] is True
 
 
 def test_unregistered_type_skips_compliance():

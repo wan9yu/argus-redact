@@ -49,7 +49,8 @@ from __future__ import annotations
 
 import sys
 import urllib.request
-from pathlib import Path
+
+from argus_redact.specs._gen_ron import core_data_path, emit_or_check, ron_str
 
 # Pinned commit of first20hours/google-10000-english (frequency-ordered, MIT).
 GOOGLE_10K_COMMIT = "d0736d492489198e4f9d650c7ab4143bc14c1e9e"
@@ -116,13 +117,7 @@ NAME_EXCLUSIONS: frozenset[str] = frozenset(
     """.split()
 )
 
-_OUT = (
-    Path(__file__).resolve().parents[3]
-    / "crates"
-    / "argus-redact-core"
-    / "data"
-    / "en_common_words.ron"
-)
+_OUT = core_data_path("en_common_words.ron")
 
 
 def fetch_top_words() -> list[str]:
@@ -150,11 +145,6 @@ def build_word_set(top_words: list[str]) -> list[str]:
     # them — keeps the hand curation durable across a refresh.
     union -= NAME_EXCLUSIONS
     return sorted(union)
-
-
-def _ron_str(s: str) -> str:
-    """RON/serde string literal — backslash + quote escaped (words have neither)."""
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def build_ron(words: list[str]) -> str:
@@ -222,7 +212,7 @@ def build_ron(words: list[str]) -> str:
     lines.append("EnCommonWords(")
     lines.append("    words: [")
     for w in words:
-        lines.append(f"        {_ron_str(w)},")
+        lines.append(f"        {ron_str(w)},")
     lines.append("    ],")
     lines.append(")")
     return "\n".join(lines) + "\n"
@@ -231,26 +221,21 @@ def build_ron(words: list[str]) -> str:
 def main() -> int:
     top = fetch_top_words()
     words = build_word_set(top)
-    ron = build_ron(words)
-    if "--check" in sys.argv:
-        current = _OUT.read_text(encoding="utf-8") if _OUT.exists() else ""
-        if current != ron:
-            print(
-                "en_common_words.ron is out of sync. Review the diff, then run: "
-                "python -m argus_redact.specs.gen_en_common_words",
-                file=sys.stderr,
-            )
-            return 1
-        print("en_common_words.ron is in sync")
-        return 0
-    _OUT.parent.mkdir(parents=True, exist_ok=True)
-    _OUT.write_text(ron, encoding="utf-8")
-    rel = _OUT.relative_to(Path(__file__).resolve().parents[3])
-    print(f"Wrote {rel}")
-    print(f"  fetched top-N:   {len(top)} (TOP_N={TOP_N})")
-    print(f"  curated supp.:   {len(CURATED_SUPPLEMENT)}")
-    print(f"  total entries:   {len(words)}")
-    return 0
+    return emit_or_check(
+        _OUT,
+        build_ron(words),
+        sys.argv,
+        human_name="en_common_words.ron",
+        out_of_sync_msg=(
+            "en_common_words.ron is out of sync. Review the diff, then run: "
+            "python -m argus_redact.specs.gen_en_common_words"
+        ),
+        extra_write_lines=(
+            f"  fetched top-N:   {len(top)} (TOP_N={TOP_N})",
+            f"  curated supp.:   {len(CURATED_SUPPLEMENT)}",
+            f"  total entries:   {len(words)}",
+        ),
+    )
 
 
 if __name__ == "__main__":

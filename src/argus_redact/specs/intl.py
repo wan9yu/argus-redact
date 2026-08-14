@@ -72,7 +72,7 @@ register(
     PIITypeDef(
         name="nhs_number",
         lang="uk",
-        format="3-3-4 digits (10, MOD11 checksum)",
+        format="3-3-4 digits (10, format-only — no checksum enforced)",
         charset="digits",
         strategy="remove",
         label="[NHS number]",

@@ -1,8 +1,8 @@
 """Compare a current measurement JSON against a committed baseline.
 
 Exit codes:
-    0 — within ±10% on all workloads (or improvement)
-    1 — any workload regressed >10%
+    0 — within ±25% on all workloads (or improvement)
+    1 — any workload regressed >25%
 """
 
 from __future__ import annotations
@@ -13,7 +13,9 @@ import os
 import sys
 from pathlib import Path
 
-_THRESHOLD = 0.10  # regression gate: ±10% per workload (see docs/perf-history.md)
+# Regression gate: ±25% per workload — matches the shared-runner noise floor
+# (see docs/perf-history.md; catches the O(n²)/GIL cliffs, which are multiples).
+_THRESHOLD = 0.25
 
 
 def _compare(current: dict, baseline: dict) -> tuple[list[str], list[str]]:

@@ -17,8 +17,6 @@ const QUASI_ID_COMBOS: [[&str; 2]; 3] = [
 /// Self-ref amplifies when combined with PIPL_SENSITIVE_PI ∪ these structural types.
 const SELF_REF_EXTRA: [&str; 3] = ["phone", "id_number", "bank_card"];
 
-const PIPL_ART_55: &str = "PIPL Art.55";
-
 fn level_label(sensitivity: i64) -> &'static str {
     match sensitivity {
         1 => "low",
@@ -46,6 +44,7 @@ pub struct RiskOut {
     pub reasons: Vec<String>,
     pub pipl_articles: Vec<String>,
     pub gdpr_special_category: bool,
+    pub gdpr_art10: bool,
     pub hipaa_categories: Vec<String>,
 }
 
@@ -58,6 +57,7 @@ pub fn assess_risk(entities: &[(String, i64)], lang: &str) -> RiskOut {
             reasons: vec![],
             pipl_articles: vec![],
             gdpr_special_category: false,
+            gdpr_art10: false,
             hipaa_categories: vec![],
         };
     }
@@ -76,8 +76,17 @@ pub fn assess_risk(entities: &[(String, i64)], lang: &str) -> RiskOut {
         }
     }
 
-    // Combination amplification.
-    if entities.iter().filter(|(_, s)| *s >= 3).count() >= 2 {
+    // Combination amplification: two or more DISTINCT high/critical types.
+    // Counting entity instances would fire on repeats of one type (e.g. two
+    // phones), which the "multiple high/critical entities detected" reason
+    // misrepresents. Gate on distinct types with sensitivity >= 3, consistent
+    // with the quasi-id combo logic that reasons over the distinct-types set.
+    let distinct_high_types: BTreeSet<&str> = entities
+        .iter()
+        .filter(|(_, s)| *s >= 3)
+        .map(|(t, _)| t.as_str())
+        .collect();
+    if distinct_high_types.len() >= 2 {
         score += 0.1;
         reasons.push("multiple high/critical entities detected".to_string());
     }
@@ -128,6 +137,7 @@ pub fn assess_risk(entities: &[(String, i64)], lang: &str) -> RiskOut {
     // Compliance aggregation.
     let mut pipl_set: BTreeSet<String> = BTreeSet::new();
     let mut gdpr_special = false;
+    let mut gdpr_art10 = false;
     let mut hipaa_set: BTreeSet<String> = BTreeSet::new();
     for (t, _) in entities {
         if let Some(meta) = compliance_for(lang, t) {
@@ -137,13 +147,13 @@ pub fn assess_risk(entities: &[(String, i64)], lang: &str) -> RiskOut {
             if meta.gdpr_special_category {
                 gdpr_special = true;
             }
+            if meta.gdpr_art10 {
+                gdpr_art10 = true;
+            }
             if let Some(cat) = &meta.hipaa_phi_category {
                 hipaa_set.insert(cat.clone());
             }
         }
-    }
-    if entities.len() >= 3 {
-        pipl_set.insert(PIPL_ART_55.to_string());
     }
     // Sort by PIPL rank (BTreeSet gives a deterministic alpha pre-order; all
     // registry articles have unique ranks, so the result matches Python's sorted).
@@ -157,6 +167,7 @@ pub fn assess_risk(entities: &[(String, i64)], lang: &str) -> RiskOut {
         reasons,
         pipl_articles,
         gdpr_special_category: gdpr_special,
+        gdpr_art10,
         hipaa_categories: hipaa_set.into_iter().collect(),
     }
 }
@@ -170,6 +181,34 @@ mod tests {
         let r = assess_risk(&[], "zh");
         assert_eq!(r.score, 0.0);
         assert_eq!(r.level, "none");
+    }
+
+    #[test]
+    fn same_type_repeats_do_not_amplify() {
+        // Two `phone` entities are ONE distinct high/critical type, not two.
+        // The +0.1 "multiple high/critical" bonus must NOT fire: the score
+        // stays high(0.75) and the misleading reason is absent.
+        let r = assess_risk(&[("phone".into(), 3), ("phone".into(), 3)], "zh");
+        assert_eq!(r.score, 0.75);
+        assert_eq!(r.level, "high");
+        assert!(!r
+            .reasons
+            .iter()
+            .any(|x| x == "multiple high/critical entities detected"));
+    }
+
+    #[test]
+    fn distinct_high_types_amplify() {
+        // Two DISTINCT high types (phone + bank_card) still cross high→critical
+        // via the +0.1 bonus. Guards the regression the same-type gate must not
+        // introduce.
+        let r = assess_risk(&[("phone".into(), 3), ("bank_card".into(), 3)], "zh");
+        assert_eq!(r.score, 0.85);
+        assert_eq!(r.level, "critical");
+        assert!(r
+            .reasons
+            .iter()
+            .any(|x| x == "multiple high/critical entities detected"));
     }
 
     #[test]
