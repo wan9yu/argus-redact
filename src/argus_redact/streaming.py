@@ -642,14 +642,22 @@ class StreamingRedactor:
             # only a cheap fast path: a reserved-range value split across
             # feed-chunk boundaries (real streaming deltas are token-sized)
             # matches neither half. This emit-time scan runs over the REASSEMBLED
-            # emit slice ``text`` (= buffer[ctx:cut]), where a cross-chunk-split
-            # token is whole again — it is the real guard for both feed() and
-            # flush(). ``text`` excludes the retained left-context, so the scan
-            # sees only new input and never double-fires on already-emitted text;
-            # and the buffer only ever holds INPUT (never argus's own fakes), so
-            # the scan cannot spuriously raise on a fake this redactor produced.
-            # It fires exactly when ``strict_input=True`` (opt-out preserved for
-            # ``strict_input=False`` via redact_pseudonym_llm's own guard).
+            # emit slice ``text`` (= buffer[ctx:cut]), where a reserved value
+            # split across FEED chunks but landing within one emit slice is whole
+            # again — the guard for the common streaming case. ``text`` excludes
+            # the retained left-context, so the scan sees only new input and never
+            # double-fires on already-emitted text; and the buffer only ever holds
+            # INPUT (never argus's own fakes), so the scan cannot spuriously raise
+            # on a fake this redactor produced. It fires exactly when
+            # ``strict_input=True`` (opt-out preserved for ``strict_input=False``
+            # via redact_pseudonym_llm's own guard).
+            # RESIDUAL (not a complete guard): a reserved value straddling an
+            # EMIT cut — head already emitted into the left-context, tail in this
+            # slice — is seen only in fragments by each scan and is not caught.
+            # Reaching it needs a reserved value the context-cut did not snap
+            # around, then a boundary-less run; closing it would need a
+            # left-context-aware, overlap-only scan (to avoid re-firing on
+            # already-emitted text), deferred as disproportionate to that case.
         )
         # `result.downstream_key` (v0.8.2+) is the EXACT realistic-only key
         # `redact_pseudonym_llm` computed internally, before it was unioned
