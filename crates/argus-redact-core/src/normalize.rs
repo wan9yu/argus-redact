@@ -177,15 +177,18 @@ pub(crate) fn is_plain_digit_char(c: char) -> bool {
 }
 
 /// Unicode `Nd` (decimal-digit) blocks EXCLUDING ASCII `0`–`9`, as sorted,
-/// non-overlapping inclusive 10-code-point ranges — 65 blocks / 650 digits.
+/// non-overlapping inclusive 10-code-point ranges — 67 blocks / 670 digits.
 ///
 /// Each block is a contiguous run whose members carry decimal values `0..=9` in
 /// code-point order (a Unicode invariant for `Nd`), so [`nd_digit_value`] reads
 /// the value straight off the offset from the block's start (`c - lo`).
 ///
-/// This is the FULL derived property, not a curated subset — the same
-/// completeness stance as [`DEFAULT_IGNORABLE`]: a non-ASCII decimal digit the
-/// table forgot would be a free detection bypass. Such a digit passes the
+/// This mirrors the full `Nd` derived property through Unicode 15.0, not a
+/// curated subset — the same completeness stance as [`DEFAULT_IGNORABLE`]: a
+/// non-ASCII decimal digit the table forgot would be a free detection bypass.
+/// A later Unicode revision that adds an `Nd` block must append it here (in
+/// sorted order); the last additions were Kawi and Nag Mundari in 15.0. Such a
+/// digit passes the
 /// Unicode-`\d`-aware regex body but defeats the `is_ascii_digit()` checksum
 /// validators (→ confidence 0.3 near-miss, never redacted), so an ID/phone
 /// hiding one interior exotic digit would leak. [`normalize_digit_sequences`]
@@ -248,6 +251,7 @@ const DECIMAL_DIGIT_RANGES: &[(char, char)] = &[
     ('\u{11c50}', '\u{11c59}'), // BHAIKSUKI
     ('\u{11d50}', '\u{11d59}'), // MASARAM GONDI
     ('\u{11da0}', '\u{11da9}'), // GUNJALA GONDI
+    ('\u{11f50}', '\u{11f59}'), // KAWI (Unicode 15.0)
     ('\u{16a60}', '\u{16a69}'), // MRO
     ('\u{16ac0}', '\u{16ac9}'), // TANGSA
     ('\u{16b50}', '\u{16b59}'), // PAHAWH HMONG
@@ -258,6 +262,7 @@ const DECIMAL_DIGIT_RANGES: &[(char, char)] = &[
     ('\u{1d7f6}', '\u{1d7ff}'), // MATHEMATICAL MONOSPACE (NFKC-folded earlier)
     ('\u{1e140}', '\u{1e149}'), // NYIAKENG PUACHUE HMONG
     ('\u{1e2f0}', '\u{1e2f9}'), // WANCHO
+    ('\u{1e4f0}', '\u{1e4f9}'), // NAG MUNDARI (Unicode 15.0)
     ('\u{1e950}', '\u{1e959}'), // ADLAM
     ('\u{1fbf0}', '\u{1fbf9}'), // SEGMENTED
 ];
@@ -1014,6 +1019,10 @@ mod tests {
         assert_eq!(nd_digit_value('\u{0967}'), Some(1)); // Devanagari १
         assert_eq!(nd_digit_value('\u{0e53}'), Some(3)); // Thai ๓
         assert_eq!(nd_digit_value('\u{ff19}'), Some(9)); // fullwidth ９ (folds via NFKC earlier)
+        assert_eq!(nd_digit_value('\u{11f50}'), Some(0)); // Kawi 𑽐 (Unicode 15.0 block start)
+        assert_eq!(nd_digit_value('\u{11f51}'), Some(1)); // Kawi 𑽑
+        assert_eq!(nd_digit_value('\u{1e4f0}'), Some(0)); // Nag Mundari 𞓰 (Unicode 15.0 block start)
+        assert_eq!(nd_digit_value('\u{1e4f3}'), Some(3)); // Nag Mundari 𞓳
         // ASCII digits are handled before this is consulted → None here.
         assert_eq!(nd_digit_value('0'), None);
         assert_eq!(nd_digit_value('9'), None);
@@ -1041,6 +1050,12 @@ mod tests {
         assert_eq!(normalize_text("1\u{0665}2").0, "152");
         // Two interior exotics in a row both fold when ASCII-flanked through the run.
         assert_eq!(normalize_text("1\u{0662}\u{0663}4").0, "1234");
+        // The Unicode 15.0 blocks fold like any other exotic Nd: an interior Kawi
+        // or Nag Mundari digit is folded to its ASCII value (pre-fix these were
+        // absent from the table, passed through unfolded, and defeated the
+        // is_ascii_digit checksum validators).
+        assert_eq!(normalize_text("1\u{11f51}2").0, "112"); // Kawi one
+        assert_eq!(normalize_text("1\u{1e4f3}2").0, "132"); // Nag Mundari three
     }
 
     #[test]
@@ -1070,7 +1085,7 @@ mod tests {
         // NOT merged even when adjacent (the mathematical-digit blocks abut, e.g.
         // U+1D7D7→U+1D7D8): each must stay a distinct 10-wide range so the value is
         // the offset from ITS block start.
-        assert_eq!(DECIMAL_DIGIT_RANGES.len(), 65);
+        assert_eq!(DECIMAL_DIGIT_RANGES.len(), 67);
         let mut prev: Option<char> = None;
         for &(lo, hi) in DECIMAL_DIGIT_RANGES {
             assert_eq!(hi as u32 - lo as u32, 9, "block {lo:?} must be 10 wide");
