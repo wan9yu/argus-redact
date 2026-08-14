@@ -69,6 +69,19 @@ def _best_speedup(measure_serial, measure_parallel) -> tuple[float, float, float
     parallelise), so max-over-trials keeps the held-vs-released discriminator
     intact while a lone contention spike no longer false-fails.
     Returns (best_speedup, serial_of_best, parallel_of_best).
+
+    Deliberate tradeoff (documented, not an oversight): serial and parallel are
+    independent wall-clock samples, so max-over-trials favours the trial with
+    the most-inflated serial / quietest parallel. That is what makes it robust
+    to a false FAIL (a contention spike can only suppress the speedup, and one
+    good trial recovers the true value); the cost is reduced power against a
+    false PASS — a held build whose serial spikes ~>20% on some trial could
+    clear 1.2. That direction is bounded by the >held-ceiling threshold, and the
+    shipped build clears it with margin (the metric it guards is real GIL
+    release, not a hair-trigger). A noise-immune rewrite would need a
+    deterministic concurrency probe (per-thread execution-interval overlap)
+    rather than a throughput ratio — a larger change than this hypothetical
+    warrants, so the timing discriminator stands.
     """
     best = (0.0, 0.0, 0.0)
     for _ in range(_TRIALS):
