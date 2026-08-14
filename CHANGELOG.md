@@ -2,6 +2,41 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.14 — fail-closed structured redaction and streaming-restore parity
+
+A follow-up release closing the low-severity findings from the post-v0.8.13 whole-branch review, plus the
+Performance Budget gate de-flake that landed on `main` after the v0.8.13 tag. No Layer-1 API changed; one
+additive, opt-in structured-API keyword.
+
+### Behaviour changes
+
+- **`redact_json` gains an opt-in fail-closed `on_unscannable="warn"|"raise"`** (default `"warn"`, so existing
+  behaviour is unchanged). A leaf whose type cannot be coerced to text for detection (a non-utf-8 byte string,
+  an arbitrary object) is forwarded verbatim with a `SecurityWarning` under `"warn"`; under `"raise"` it
+  raises `TypeError` naming the leaf's PII-free path + type before any document or key is returned, so a
+  security-conscious pipeline can fail closed. Mirrors `redact_body(on_missing_field=…)`. Additive and
+  keyword-only (minor-compatible per the structured stability contract).
+
+### Fixed
+
+- **The Rust core `StreamingRestorer`'s `None` strategy now holds back a restorable straddling a chunk
+  boundary** instead of restoring each bare chunk, matching the Python `"none"` strategy and the batch restore
+  (a pseudonym fed as `P` then `-1` now reassembles and restores rather than emitting unrestored halves). Both
+  feed branches share one hold-back helper. Core-only face — not exposed through the wasm / PyO3 bindings; the
+  hold-back is the restorable-prefix subset of the Python `_hold_back`.
+
+### Internal / tests
+
+- **The Performance Budget gate is de-flaked** — `min` over 21 runs (was 7), import time over 11 (was a median
+  of 5), and the regression threshold widened to ±25% to match the shared CI-runner noise floor (it failed the
+  v0.8.13 tag on runner noise — a different metric each run). It still catches the O(n²)/GIL-cliff regressions
+  it exists for. See `docs/perf-history.md`.
+- **Documentation consistency**: the structured API reference now describes scalar-leaf scanning (strings,
+  numbers, `Decimal`, `UUID`, utf-8 bytes) rather than "string values", and the streaming emit-scan comment
+  and the GIL-release test's sensitivity tradeoff are scoped honestly.
+- Small refactors: the import-time measurement folds into the shared `_measure_min`, and a shared
+  `_unscannable_detail` formatter backs both the `redact_json` warning and its new `raise`.
+
 ## v0.8.13 — availability hardening and detection-entry correctness
 
 A security-hardening release closing the critical and high findings of the post-v0.8.12 whole-codebase

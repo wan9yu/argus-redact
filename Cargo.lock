@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "argus-redact-core"
-version = "0.8.13"
+version = "0.8.14"
 dependencies = [
  "base64",
  "fancy-regex",
@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "argus-redact-py"
-version = "0.8.13"
+version = "0.8.14"
 dependencies = [
  "argus-redact-core",
  "pyo3",
@@ -36,7 +36,7 @@ dependencies = [
 
 [[package]]
 name = "argus-redact-wasm"
-version = "0.8.13"
+version = "0.8.14"
 dependencies = [
  "argus-redact-core",
  "console_error_panic_hook",
