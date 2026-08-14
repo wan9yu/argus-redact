@@ -743,6 +743,45 @@ pub struct StreamingRestorer {
     session: Result<RestoreSession, RestoreError>,
     buffer: String,
     strategy: RestoreStrategy,
+    /// Sorted non-empty key fakes, for the sentence-strategy straddle hold-back's
+    /// prefix bisect (mirrors the Python `_sorted_restorable`). This face threads
+    /// no aliases, so the restorable set is exactly the key fakes.
+    sorted_restorable: Vec<String>,
+    /// Longest restorable in CHARS — the fixed headroom the hold-back may consume.
+    longest_restorable: usize,
+}
+
+/// Number of trailing CHARS of `complete` that must be held back because a
+/// sentence boundary fell INSIDE a restorable that contains ". ": the longest
+/// `complete` suffix that is a prefix of some restorable (a key `fake`),
+/// INCLUDING the whole string. Mirrors the prefix scan in the Python
+/// `StreamingRestorer._hold_back`.
+///
+/// [`restorer_split`] treats an ASCII `.` before whitespace as a sentence end, so
+/// a fake like `John Q. Public` (the built-in en realistic fake) splits at its
+/// interior dot — `complete` ends `…John Q.`, `residual` starts `Public…`,
+/// neither half matches the key, and the pseudonym is emitted verbatim, never
+/// restored. Holding the prefix tail back into the buffer keeps the fake whole
+/// until the rest arrives.
+///
+/// `sorted_restorable` is sorted so "is this suffix a prefix of some restorable?"
+/// is one `partition_point` (bisect_left) probe — the block of strings sharing a
+/// prefix starts exactly there. (The Python `_hold_back` also carries a numeric
+/// digit-run hold and a `max_buffer` force-flush cap; both are no-ops for a
+/// sentence cut, whose `complete` always ends in a non-digit boundary char, so
+/// this face needs only the prefix scan.)
+fn restorable_prefix_hold(sorted_restorable: &[String], longest: usize, complete: &str) -> usize {
+    let chars: Vec<char> = complete.chars().collect();
+    // Longest first, so the first hit is the answer (`longest`, not `- 1`: a
+    // trailing COMPLETE match is held too, matching the Python scan).
+    for n in (1..=longest.min(chars.len())).rev() {
+        let suffix: String = chars[chars.len() - n..].iter().collect();
+        let i = sorted_restorable.partition_point(|s| s.as_str() < suffix.as_str());
+        if i < sorted_restorable.len() && sorted_restorable[i].starts_with(&suffix) {
+            return n;
+        }
+    }
+    0
 }
 
 /// The restorer's buffering strategy. Mirrors the Python `"sentence"` / `"none"`.
@@ -793,10 +832,20 @@ impl StreamingRestorer {
     /// stored `Result` and surfaces the first time `feed`/`flush` actually
     /// needs the session, never as a panic here.
     pub fn new(key: HashMap<String, String>, strategy: RestoreStrategy) -> Self {
+        let mut sorted_restorable: Vec<String> =
+            key.keys().filter(|k| !k.is_empty()).cloned().collect();
+        sorted_restorable.sort();
+        let longest_restorable = sorted_restorable
+            .iter()
+            .map(|s| s.chars().count())
+            .max()
+            .unwrap_or(0);
         Self {
             session: RestoreSession::new(&key, None),
             buffer: String::new(),
             strategy,
+            sorted_restorable,
+            longest_restorable,
         }
     }
 
@@ -819,11 +868,29 @@ impl StreamingRestorer {
         self.buffer.push_str(chunk);
 
         // Find the last sentence boundary + split, via the SSOT helper.
-        let (complete, residual) = restorer_split(&self.buffer);
+        let (mut complete, mut residual) = restorer_split(&self.buffer);
         if complete.is_empty() {
             return Ok("".to_string());
         }
+        // A sentence boundary can fall INSIDE a fake containing ". " (the en
+        // `John Q. Public`): hold that `complete`-tail back into the buffer so
+        // the fake reassembles and restores once the rest arrives (mirrors the
+        // Python sentence-branch hold-back). Bounded by the longest fake, so a
+        // genuine boundary NOT inside a fake still cuts there (hold == 0).
+        let hold =
+            restorable_prefix_hold(&self.sorted_restorable, self.longest_restorable, &complete);
+        if hold > 0 {
+            let cchars: Vec<char> = complete.chars().collect();
+            let keep = cchars.len() - hold;
+            let held: String = cchars[keep..].iter().collect();
+            complete = cchars[..keep].iter().collect();
+            residual = format!("{held}{residual}");
+        }
         self.buffer = residual;
+        if complete.is_empty() {
+            // The whole `complete` was a fake prefix — hold everything, wait.
+            return Ok("".to_string());
+        }
         self.session()?.restore_cell(&complete).map(|r| r.restored)
     }
 

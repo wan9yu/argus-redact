@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from argus_redact import PseudonymPollutionError, redact, redact_pseudonym_llm
+from argus_redact.compose.aliases import expand_aliases
 from argus_redact.exceptions import SecurityWarning
 from argus_redact.pure.restore import restore
 from argus_redact.streaming import StreamingRedactor, StreamingRestorer
@@ -743,6 +744,90 @@ class TestStreamingRestorerStraddleParity:
         key["P-1001"] = "Bob"  # caller mutates after construction
         out = restorer.feed("yyyyyP-100") + restorer.flush()
         assert out == "yyyyyAlice"
+
+
+class TestStreamingRestorerSentenceBoundaryInsideRestorable:
+    """The default (``"sentence"``) strategy must not cut a restorable in half at
+    an ASCII ``". "`` that sits INSIDE it.
+
+    ``streaming_restorer_split`` counts an ASCII ``.`` before whitespace as a
+    sentence end (the SSOT boundary rule it shares with the redactor). So the
+    built-in en fake ``John Q. Public`` and every ``Mr./Dr. <Surname>`` honorific
+    alias ``expand_aliases`` emits split at their interior dot — ``complete`` ends
+    ``…John Q.``, ``residual`` starts ``Public…``, neither half matches the key,
+    and the pseudonym was emitted verbatim, never restored. The sentence branch
+    now applies the SAME restorable-straddle hold-back the ``"none"`` strategy
+    routes through ``_force_flush_split`` (shared ``_hold_back`` helper), so the
+    restorable reassembles before restore runs. Batch ``restore(..., guard=False)``
+    and ``strategy="none"`` were already correct; the sentence strategy must match
+    them, at char AND token granularity.
+    """
+
+    @pytest.mark.parametrize("granularity", ["char", "token"])
+    def test_dotted_key_fake_restores_under_sentence_strategy(self, granularity):
+        key = {"John Q. Public": "Susan Miller"}
+        text = "Signed by John Q. Public"
+        expected = restore(text, key, guard=False)
+        assert expected == "Signed by Susan Miller"  # batch baseline (already correct)
+        parts = (
+            list(text) if granularity == "char" else ["Signed ", "by ", "John ", "Q. ", "Public"]
+        )
+        assert "".join(parts) == text
+        restorer = StreamingRestorer(dict(key), strategy="sentence")
+        out = "".join(restorer.feed(p) for p in parts) + restorer.flush()
+        assert out == expected
+
+    def test_none_strategy_was_already_correct_for_the_dotted_fake(self):
+        """Control: ``"none"`` already restored the dotted fake (it routes its
+        flush through the straddle hold-back) — the defect was sentence-only."""
+        key = {"John Q. Public": "Susan Miller"}
+        text = "Signed by John Q. Public"
+        restorer = StreamingRestorer(dict(key), strategy="none")
+        out = "".join(restorer.feed(c) for c in text) + restorer.flush()
+        assert out == restore(text, key, guard=False) == "Signed by Susan Miller"
+
+    def test_builtin_en_realistic_fake_is_dotted_and_restores(self):
+        """Not a hypothetical key: the built-in en realistic pool emits
+        ``John Q. Public`` (a fake with an interior ``". "``), so a real
+        pseudonym-llm reply hits the same sentence split and must restore when
+        streamed under the default strategy."""
+        result = redact_pseudonym_llm(
+            "Please contact Susan Miller about the audit.", lang="en", salt=0
+        )
+        fake = next(f for f, o in result.key.items() if o == "Susan Miller")
+        assert fake == "John Q. Public"  # documents the built-in dotted fake
+        reply = f"Signed by {fake}"
+        restorer = StreamingRestorer(dict(result.key), strategy="sentence")
+        out = "".join(restorer.feed(c) for c in reply) + restorer.flush()
+        assert out == restore(reply, result.key, guard=False) == "Signed by Susan Miller"
+
+    @pytest.mark.parametrize("granularity", ["char", "word"])
+    def test_honorific_alias_restores_under_sentence_strategy(self, granularity):
+        key = expand_aliases({"P-1": "Susan Miller"})
+        assert "Mr. Miller" in key  # expand_aliases emits the honorific alias
+        text = "Hello there. Please ask Mr. Miller about it. Thanks."
+        expected = restore(text, key, guard=False)
+        assert "Susan Miller" in expected and "Mr. Miller" not in expected
+        parts = list(text) if granularity == "char" else [t for t in re.split(r"(\s+)", text) if t]
+        assert "".join(parts) == text
+        restorer = StreamingRestorer(dict(key), strategy="sentence")
+        out = "".join(restorer.feed(p) for p in parts) + restorer.flush()
+        assert out == expected
+        assert "Mr. Miller" not in out  # the honorific was actually restored
+
+    def test_genuine_boundary_not_inside_a_restorable_still_emits_at_boundary(self):
+        """Control: a real sentence boundary that is NOT inside a restorable must
+        still cut there — the hold-back is 0, so the completed sentences emit
+        BEFORE flush (bounded latency, not buffer-the-whole-stream)."""
+        key = {"P-5": "Alice Wong"}
+        text = "First P-5 here. Second sentence follows. Third one ends."
+        restorer = StreamingRestorer(dict(key), strategy="sentence")
+        emitted = restorer.feed(text)
+        # Everything up to the LAST real boundary emits immediately; only the
+        # trailing ambiguous end-dot waits for flush — boundaries still cut.
+        assert emitted == "First Alice Wong here. Second sentence follows."
+        final = restorer.flush()
+        assert emitted + final == restore(text, key, guard=False)
 
 
 class TestStreamingRestorerDigitRunHoldBack:

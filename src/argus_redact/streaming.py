@@ -234,12 +234,21 @@ class StreamingRestorer:
         )
         self._warned = True
 
-    def _force_flush_split(self) -> tuple[str, str]:
-        """Bounded-drain split: flush the buffer up to the last position that is
-        safe to cut, holding back the tail that a later chunk could still change
-        the meaning of.
+    def _hold_back(self, text: str) -> int:
+        """Number of trailing chars of ``text`` that are unsafe to cut after,
+        because a later chunk could still change what they mean.
 
-        The held-back tail is the longest buffer suffix that is a prefix of some
+        This is the shared straddle-safety step. BOTH flush paths route through
+        it: the ``"none"`` strategy (and the sentence strategy's max_buffer
+        force-flush) apply it to the whole buffer via ``_force_flush_split``, and
+        the sentence strategy applies it to the ``complete`` half of its boundary
+        split (see ``feed``) — a sentence boundary can fall INSIDE a restorable
+        that contains ``". "`` (the built-in en fake ``John Q. Public``, every
+        ``Mr./Dr. <Surname>`` honorific alias), and without this hold-back the
+        split would cut the restorable in two and leave the pseudonym
+        unrestored.
+
+        The held tail is the longest ``text`` suffix that is a prefix of some
         restorable string (a key ``fake`` or one of its ``aliases``), INCLUDING
         the whole string. Two distinct hazards, one scan:
 
@@ -260,17 +269,16 @@ class StreamingRestorer:
         ``bounded_drain_cut`` in ``crates/argus-redact-core/src/streaming.rs``),
         adapted to restore's exact-string keys instead of detected entity spans.
 
-        Forward progress and the memory bound both follow from ``hold <=
-        self._longest``: once the buffer exceeds that fixed headroom the cut is
-        necessarily >= 1, so the buffer is bounded by ``max(max_buffer,
-        longest)`` and no token is ever split to satisfy the bound.
+        Forward progress and the memory bound both follow from the returned hold
+        being ``<= max(max_buffer, longest)``: once the buffer exceeds that fixed
+        headroom the cut is necessarily >= 1, so the buffer is bounded and no
+        token is ever split to satisfy the bound.
         """
-        buffer = self._buffer
         hold = 0
         # `self._longest` (not `- 1`): a trailing COMPLETE match is held too.
         # Longest first, so the first hit is the answer.
-        for n in range(min(self._longest, len(buffer)), 0, -1):
-            suffix = buffer[-n:]
+        for n in range(min(self._longest, len(text)), 0, -1):
+            suffix = text[-n:]
             i = bisect.bisect_left(self._sorted_restorable, suffix)
             if i < len(self._sorted_restorable) and self._sorted_restorable[i].startswith(suffix):
                 hold = n
@@ -293,7 +301,10 @@ class StreamingRestorer:
         # (longer than the budget, no boundary anywhere) still drains at least
         # max_buffer // 2 characters per force-flush instead of stalling — the
         # same token-integrity-for-a-memory-bound trade the `hold` cap below
-        # already makes for an over-long fake.
+        # already makes for an over-long fake. (When applied to the sentence
+        # split's ``complete``, the tail char is always a boundary char, never a
+        # digit, so this run is empty there — the scan above is what recovers
+        # ``John Q. Public``.)
         #
         # Only when the key/aliases actually contain an all-digit fake: with
         # none, no cut can produce the digit-boundary splice this guards
@@ -302,8 +313,8 @@ class StreamingRestorer:
         # hazard.
         digit_run = 0
         if self._has_numeric_restorable:
-            digit_cap = min(len(buffer), max(1, self._max_buffer // 2))
-            while digit_run < digit_cap and buffer[-1 - digit_run].isdigit():
+            digit_cap = min(len(text), max(1, self._max_buffer // 2))
+            while digit_run < digit_cap and text[-1 - digit_run].isdigit():
                 digit_run += 1
         hold = max(hold, digit_run)
         # Bound the hold by the fixed headroom rather than by max_buffer. The
@@ -312,8 +323,15 @@ class StreamingRestorer:
         # pre-fix behaviour) split any fake longer than max_buffer mid-token,
         # leaving the pseudonym unrestored in the user-visible output — a bound
         # far stricter than forward progress requires.
-        hold = min(hold, max(self._max_buffer, self._longest))
-        cut = len(buffer) - hold
+        return min(hold, max(self._max_buffer, self._longest))
+
+    def _force_flush_split(self) -> tuple[str, str]:
+        """Bounded-drain split: flush the buffer up to the last position that is
+        safe to cut, holding back (via ``_hold_back``) the tail that a later
+        chunk could still change the meaning of.
+        """
+        buffer = self._buffer
+        cut = len(buffer) - self._hold_back(buffer)
         return buffer[:cut], buffer[cut:]
 
     def feed(self, chunk: str) -> str:
@@ -356,10 +374,29 @@ class StreamingRestorer:
                 complete, self._buffer = self._force_flush_split()
             else:
                 complete, residual = _core.streaming_restorer_split(self._buffer)
-                # H7: no sentence boundary anywhere in the buffer yet. Left
-                # unchecked this buffers the entire stream and re-scans it in
-                # full on every feed() — bound it via force-flush once it grows
-                # past max_buffer, instead of accumulating without limit.
+                if complete:
+                    # The sentence split can cut THROUGH a restorable that
+                    # contains ". ": ``streaming_restorer_split`` treats an ASCII
+                    # `.` before whitespace as a sentence end, so `John Q. Public`
+                    # (the built-in en fake) and every `Mr./Dr. <Surname>` alias
+                    # split at their interior dot — `complete` ends `…John Q.`,
+                    # `residual` starts `Public…`, neither half matches the key,
+                    # and the pseudonym is emitted verbatim, never restored. Hold
+                    # a `complete`-tail that is a prefix of some restorable back
+                    # into `residual` (the SAME straddle scan `_force_flush_split`
+                    # applies to the whole buffer), so the restorable reassembles
+                    # and restores once the rest of it arrives. Bounded by the
+                    # longest restorable, so a genuine boundary NOT inside a
+                    # restorable still cuts there (hold == 0).
+                    hold = self._hold_back(complete)
+                    if hold:
+                        residual = complete[len(complete) - hold :] + residual
+                        complete = complete[: len(complete) - hold]
+                # H7: no sentence boundary anywhere in the buffer yet (or the
+                # hold-back pulled the whole `complete` back). Left unchecked this
+                # buffers the entire stream and re-scans it in full on every
+                # feed() — bound it via force-flush once it grows past
+                # max_buffer, instead of accumulating without limit.
                 if not complete and len(self._buffer) > self._max_buffer:
                     complete, residual = self._force_flush_split()
                 if complete:

@@ -1183,6 +1183,58 @@ fn restorer_dotted_fake_ipv4_round_trips_char_by_char() {
     assert_eq!(out, "server 10.1.2.3 up.");
 }
 
+#[test]
+fn restorer_fake_with_internal_dot_space_round_trips() {
+    // REGRESSION: a fake containing ". " (the built-in en realistic fake
+    // `John Q. Public`; every `Mr./Dr. <Surname>` honorific alias) — the
+    // sentence split treats the interior `. ` as a boundary, so without the
+    // restorable-straddle hold-back it cut the fake in two (`…John Q.` |
+    // `Public…`), neither half matched the key, and the pseudonym was emitted
+    // verbatim, never restored. Both char-by-char AND small-chunk streaming
+    // must now round-trip, byte-identical to a one-shot restore.
+    let mut key = HashMap::new();
+    key.insert("John Q. Public".to_string(), "Susan Miller".to_string());
+    let ds = "Signed by John Q. Public";
+    let one_shot = restore_full(ds, &key, None, None).unwrap().0;
+    assert_eq!(one_shot, "Signed by Susan Miller");
+
+    // char-by-char
+    let mut restorer = StreamingRestorer::new(key.clone(), RestoreStrategy::Sentence);
+    let mut out = String::new();
+    for c in ds.chars() {
+        out.push_str(&restorer.feed(&c.to_string()).unwrap());
+    }
+    out.push_str(&restorer.flush().unwrap());
+    assert_eq!(out, one_shot, "char-by-char must restore the dotted fake");
+
+    // 3-char chunks (a boundary can land mid-fake at a chunk edge)
+    let mut restorer = StreamingRestorer::new(key.clone(), RestoreStrategy::Sentence);
+    let chars: Vec<char> = ds.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let end = (i + 3).min(chars.len());
+        let chunk: String = chars[i..end].iter().collect();
+        out.push_str(&restorer.feed(&chunk).unwrap());
+        i = end;
+    }
+    out.push_str(&restorer.flush().unwrap());
+    assert_eq!(out, one_shot, "3-char chunks must restore the dotted fake");
+}
+
+#[test]
+fn restorer_genuine_sentence_boundary_not_inside_a_fake_still_cuts() {
+    // Control: the straddle hold-back must NOT delay a real boundary that is not
+    // inside a fake — it emits the completed sentence immediately (hold == 0).
+    let mut key = HashMap::new();
+    key.insert("P-5".to_string(), "Alice Wong".to_string());
+    let mut restorer = StreamingRestorer::new(key, RestoreStrategy::Sentence);
+    // The last real boundary is the ". " after "follows"; `complete` ends at that
+    // dot (the trailing space stays in the buffer) and emits immediately.
+    let emitted = restorer.feed("First P-5 here. Second follows. ").unwrap();
+    assert_eq!(emitted, "First Alice Wong here. Second follows.");
+}
+
 // ── StreamingRestorer over a cached session (internal reimpl parity) ───────────
 
 #[test]
