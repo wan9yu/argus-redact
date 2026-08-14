@@ -824,14 +824,32 @@ const ADJACENT_TAIL_WINDOW: usize = 8;
 /// `[surname][一-鿿]{1,3}` with non-overlapping `find_iter` makes a 3-char name
 /// immediately followed by another name over-grab the second name's surname as
 /// its 4th char: `王小明李华` → `王小明李` (a non-name) with `华` leaked, and
-/// `客户张三李四…` fuses two people into one pseudonym. The greedy match already
+/// `客户张三李四…` collapses two people into one pseudonym. The greedy match already
 /// consumed the boundary, so `find_iter` never rescans the second name — we
 /// detect the boundary here and return BOTH names so the caller emits two
 /// entities.
 ///
-/// CONSERVATIVE by construction — the person path is the most precision-tuned
-/// detector, and many given-name chars are surname homographs (`林`, `石`, …), so
-/// a split fires ONLY when every one of these holds:
+/// ## ACCEPTED over-split (this is NOT a "no real-name over-split" fix)
+///
+/// The rule fires on ANY 4-char single-surname entity behind a context prefix
+/// whose interior surname begins a valid second name — which includes REAL 4-char
+/// combined-surname names, not just two juxtaposed people. `客户李陈金龙` splits to
+/// `李陈` + `金龙` and `客户刘杨林峰` to `刘杨` + `林峰` by the exact same rule as
+/// `张三李四`, because a real combined-surname name is LOCALLY INDISTINGUISHABLE
+/// from two adjacent names (every one of `李陈金龙` is a surname). This over-split
+/// is INTENDED and accepted: it is SAFE — the two entities cover the full original
+/// span, so no char leaks and redact→restore round-trips to the exact original —
+/// and it is aligned with docs/architecture.md:397 (adjacent names → separate
+/// pseudonyms). We deliberately do NOT suppress it by enlarging the negative dict:
+/// `not_names` is the GLOBAL candidate filter, so blocking `金龙` / `林峰` there
+/// would make them undetectable as STANDALONE names (a real recall leak, worse
+/// than a cosmetic double-pseudonym). See `detect_adjacent_names_combined_surname`.
+///
+/// ## What the split will NOT do
+///
+/// The person path is the most precision-tuned detector, and many given-name chars
+/// are surname homographs (`林`, `石`, …). The gates below keep the split from
+/// firing where it would over-grab a following NON-name word:
 ///   - `best` is a 3-/4-char SINGLE-surname entity (a compound-led name carries a
 ///     fixed head and is never split);
 ///   - a `_CONTEXT_PREFIX` (`客户` / `联系人` / `我叫` / …) immediately precedes it —
@@ -848,7 +866,8 @@ const ADJACENT_TAIL_WINDOW: usize = 8;
 ///     surname homograph (`李文林你好`) intact.
 ///
 /// Returns `(first, second)` when a split fires, else `None` (the caller keeps
-/// `best` intact — a bounded leak is preferable to over-splitting a real name).
+/// `best` intact — declining is the safe direction where a following word, not a
+/// second name, abuts the entity).
 fn split_adjacent_names(
     best: &NameCandidate,
     chars: &[char],
@@ -1718,7 +1737,10 @@ mod tests {
     // The greedy `[surname][一-鿿]{1,3}` match with non-overlapping `find_iter`
     // fuses a name that is immediately followed by another name, leaking the
     // second name's tail. `detect_person_names` splits the fusion back into two
-    // entities. These pin BOTH the intended splits AND the no-over-split controls.
+    // entities. These pin the intended splits, the ACCEPTED combined-surname
+    // over-split (`detect_adjacent_names_combined_surname` — a real 4-char name is
+    // locally indistinguishable from two adjacent names, and the split is safe /
+    // round-trip-correct), and the cases the split must NOT touch.
 
     #[test]
     fn detect_adjacent_names_three_plus_two_split() {
@@ -1738,15 +1760,38 @@ mod tests {
 
     #[test]
     fn detect_adjacent_names_two_char_split() {
-        // 客户张三李四的电话13800138000 — greedy 张 + 三李四 = 张三李四 fuses two
-        // people. Boundary 李 at index 2: 张三 | 李四. Both are covered as distinct
-        // person entities (docs/architecture.md: 张三李四 → two pseudonyms). PRE-FIX
-        // this returned a single fused ('张三李四', 2, 6, 1.0).
+        // 客户张三李四的电话13800138000 — greedy 张 + 三李四 = 张三李四 collapses two
+        // 2-char names. Boundary 李 at index 2: 张三 | 李四. Both are covered as
+        // distinct person entities (docs/architecture.md:397: 张三李四 → two
+        // pseudonyms). PRE-FIX this returned a single fused ('张三李四', 2, 6, 1.0).
         assert_eq!(
             detect("客户张三李四的电话13800138000", &[], &[], 0.8),
             vec![
                 ("张三".to_string(), 2, 4, 1.0),
                 ("李四".to_string(), 4, 6, 1.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn detect_adjacent_names_combined_surname() {
+        // ACCEPTED OVER-SPLIT (intended, safe, round-trip-correct): a REAL 4-char
+        // combined-surname name is split by the SAME rule as 张三李四, because it is
+        // LOCALLY INDISTINGUISHABLE from two adjacent names — every char of 李陈金龙
+        // is a surname, so nothing at L1 can tell "one person named 李陈金龙" from
+        // "李陈 and 金龙". 客户李陈金龙 → 李陈 | 金龙 (boundary 金 at index 2).
+        //
+        // This is NOT a bug and NOT suppressed: the two entities cover the FULL
+        // original span (2..6), so no char leaks and redact→restore reproduces the
+        // exact original, and it matches docs/architecture.md:397 (adjacent names →
+        // separate pseudonyms). Blocking it via the negative dict was deliberately
+        // rejected: `not_names` is the global candidate filter, so adding 金龙 there
+        // would make 金龙 undetectable as a STANDALONE name (a real recall leak).
+        assert_eq!(
+            detect("客户李陈金龙", &[], &[], 0.8),
+            vec![
+                ("李陈".to_string(), 2, 4, 1.0),
+                ("金龙".to_string(), 4, 6, 1.0),
             ]
         );
     }
