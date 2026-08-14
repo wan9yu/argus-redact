@@ -1079,12 +1079,43 @@ fn restorer_empty_key() {
 }
 
 #[test]
-fn restorer_none_strategy_restores_immediately() {
+fn restorer_none_strategy_holds_trailing_restorable_until_flush() {
+    // "none" does no SENTENCE buffering, but a trailing restorable-prefix is
+    // held so a pseudonym split across chunks reassembles (mirrors Python
+    // "none"). Feeding "结果是P-1" emits the non-restorable prefix and holds
+    // "P-1" (which could still grow, e.g. "P-10") until flush().
     let mut key = HashMap::new();
     key.insert("P-1".to_string(), "13812345678".to_string());
     let mut restorer = StreamingRestorer::new(key, RestoreStrategy::None);
-    let result = restorer.feed("结果是P-1").unwrap();
-    assert!(result.contains("13812345678")); // no buffering, restored immediately
+    let mut out = restorer.feed("结果是P-1").unwrap();
+    out.push_str(&restorer.flush().unwrap());
+    assert_eq!(out, "结果是13812345678");
+}
+
+#[test]
+fn restorer_none_strategy_restores_pseudonym_split_across_chunks() {
+    // REGRESSION (v0.8.14): the None branch used to restore each BARE chunk, so
+    // "P" then "-1" never matched the "P-1" key and the pseudonym was emitted
+    // unrestored — diverging from the Python "none" strategy and the batch
+    // restore. It now holds the straddling prefix and restores on flush.
+    let mut key = HashMap::new();
+    key.insert("P-1".to_string(), "13812345678".to_string());
+    let mut restorer = StreamingRestorer::new(key, RestoreStrategy::None);
+    let mut out = String::new();
+    out.push_str(&restorer.feed("P").unwrap());
+    out.push_str(&restorer.feed("-1").unwrap());
+    out.push_str(&restorer.flush().unwrap());
+    assert_eq!(out, "13812345678");
+}
+
+#[test]
+fn restorer_none_strategy_emits_non_restorable_chunk_whole() {
+    // No latency for ordinary text: the hold-back retains only a suffix that
+    // could grow into a fake, so a chunk with no such tail emits in full.
+    let mut key = HashMap::new();
+    key.insert("P-1".to_string(), "13812345678".to_string());
+    let mut restorer = StreamingRestorer::new(key, RestoreStrategy::None);
+    assert_eq!(restorer.feed("just text ").unwrap(), "just text ");
 }
 
 #[test]

@@ -738,7 +738,8 @@ where
 /// then restores the complete part via a [`RestoreSession`] built once (in `new`)
 /// over the fixed key and replayed across every call, rather than recompiling the
 /// key/alias merge + regex per call. Mirrors `StreamingRestorer`. `Sentence`
-/// buffers at boundaries; `None` restores every chunk immediately.
+/// buffers to sentence boundaries; `None` emits each chunk minus a held
+/// restorable-prefix tail. Both hold back a fake straddling a chunk boundary.
 pub struct StreamingRestorer {
     session: Result<RestoreSession, RestoreError>,
     buffer: String,
@@ -766,10 +767,16 @@ pub struct StreamingRestorer {
 ///
 /// `sorted_restorable` is sorted so "is this suffix a prefix of some restorable?"
 /// is one `partition_point` (bisect_left) probe — the block of strings sharing a
-/// prefix starts exactly there. (The Python `_hold_back` also carries a numeric
-/// digit-run hold and a `max_buffer` force-flush cap; both are no-ops for a
-/// sentence cut, whose `complete` always ends in a non-digit boundary char, so
-/// this face needs only the prefix scan.)
+/// prefix starts exactly there.
+///
+/// Subset parity: this is the restorable-prefix hold from the Python `_hold_back`
+/// only. `_hold_back` ALSO carries a numeric digit-run hold and a `max_buffer`
+/// force-flush cap. For the `Sentence` face those are no-ops (its `complete`
+/// ends in a non-digit boundary char). The `None` face can cut mid-run, so an
+/// ALL-DIGIT fake split across chunks can still diverge from Python here — a
+/// documented residual, acceptable because this restorer face is core-only (not
+/// exposed through the wasm/PyO3 bindings) and fails safe (a pseudonym shows
+/// unrestored; no real PII is ever leaked).
 fn restorable_prefix_hold(sorted_restorable: &[String], longest: usize, complete: &str) -> usize {
     let chars: Vec<char> = complete.chars().collect();
     // Longest first, so the first hit is the answer (`longest`, not `- 1`: a
@@ -789,7 +796,10 @@ fn restorable_prefix_hold(sorted_restorable: &[String], longest: usize, complete
 pub enum RestoreStrategy {
     /// Flush at sentence boundaries (`。.！!？?；;\n`).
     Sentence,
-    /// Restore every chunk immediately (no buffering).
+    /// No sentence buffering: emit each chunk immediately EXCEPT a trailing
+    /// restorable-prefix tail, which is held so a pseudonym split across chunks
+    /// still restores (drained by `flush`). The hold is bounded by the longest
+    /// restorable — not unbounded buffering.
     None,
 }
 
@@ -856,37 +866,55 @@ impl StreamingRestorer {
         self.session.as_ref().map_err(|e| RestoreError(e.0.clone()))
     }
 
+    /// Split `text` into `(emit, held_tail)`, where `held_tail` is the trailing
+    /// suffix that is (or could grow into) a restorable — held back so a fake
+    /// straddling a chunk boundary reassembles before restore instead of being
+    /// emitted in unrestorable halves. `held_tail` is bounded by the longest
+    /// restorable, so latency stays bounded and a `text` with no such tail
+    /// emits whole (`held_tail == ""`). Both `feed` branches route through this
+    /// one hold-back rule.
+    fn split_off_restorable_tail(&self, text: &str) -> (String, String) {
+        let hold =
+            restorable_prefix_hold(&self.sorted_restorable, self.longest_restorable, text);
+        if hold == 0 {
+            return (text.to_string(), String::new());
+        }
+        let chars: Vec<char> = text.chars().collect();
+        let keep = chars.len() - hold;
+        (chars[..keep].iter().collect(), chars[keep..].iter().collect())
+    }
+
     /// Feed a chunk. Returns restored text based on the strategy. Mirrors
     /// `StreamingRestorer.feed`.
     pub fn feed(&mut self, chunk: &str) -> Result<String, RestoreError> {
-        if self.strategy == RestoreStrategy::None {
-            // No `aliases` are threaded through this streaming path, so
-            // `alias_collisions` is always empty — discard it.
-            return self.session()?.restore_cell(chunk).map(|r| r.restored);
-        }
-
         self.buffer.push_str(chunk);
 
-        // Find the last sentence boundary + split, via the SSOT helper.
-        let (mut complete, mut residual) = restorer_split(&self.buffer);
+        if self.strategy == RestoreStrategy::None {
+            // "none" does no SENTENCE buffering, but still holds back a trailing
+            // restorable-prefix so a pseudonym split across chunks (`P`, `-1`)
+            // reassembles rather than emitting unrestorable halves — mirrors the
+            // Python `"none"` hold-back. The hold is bounded by the longest
+            // restorable, so a chunk with no such tail emits in full.
+            let (complete, held) = self.split_off_restorable_tail(&self.buffer);
+            self.buffer = held;
+            if complete.is_empty() {
+                return Ok("".to_string());
+            }
+            return self.session()?.restore_cell(&complete).map(|r| r.restored);
+        }
+
+        // Sentence: emit up to the last real sentence boundary, via the SSOT split.
+        let (complete, residual) = restorer_split(&self.buffer);
         if complete.is_empty() {
             return Ok("".to_string());
         }
         // A sentence boundary can fall INSIDE a fake containing ". " (the en
         // `John Q. Public`): hold that `complete`-tail back into the buffer so
-        // the fake reassembles and restores once the rest arrives (mirrors the
-        // Python sentence-branch hold-back). Bounded by the longest fake, so a
-        // genuine boundary NOT inside a fake still cuts there (hold == 0).
-        let hold =
-            restorable_prefix_hold(&self.sorted_restorable, self.longest_restorable, &complete);
-        if hold > 0 {
-            let cchars: Vec<char> = complete.chars().collect();
-            let keep = cchars.len() - hold;
-            let held: String = cchars[keep..].iter().collect();
-            complete = cchars[..keep].iter().collect();
-            residual = format!("{held}{residual}");
-        }
-        self.buffer = residual;
+        // the fake reassembles and restores once the rest arrives. Same
+        // restorable-tail hold-back the `none` branch uses; a genuine boundary
+        // NOT inside a fake still cuts there (held == "").
+        let (complete, held) = self.split_off_restorable_tail(&complete);
+        self.buffer = format!("{held}{residual}");
         if complete.is_empty() {
             // The whole `complete` was a fake prefix — hold everything, wait.
             return Ok("".to_string());
