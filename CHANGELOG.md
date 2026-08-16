@@ -2,6 +2,41 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.15 — dependency security bump and documentation accuracy
+
+A maintenance release: a pyo3 security-advisory upgrade, documentation corrections from an
+external audit, and dead-code/snapshot pruning. No library behaviour change — redaction,
+restore, and detection output are unchanged; the only dependency change is pyo3.
+
+### Security
+
+- **Upgraded pyo3 0.28 → 0.29** to clear RUSTSEC-2026-0176 (out-of-bounds read in
+  `nth`/`nth_back` for `PyList`/`PyTuple` iterators) and RUSTSEC-2026-0177 (missing `Sync`
+  bound on `PyCFunction::new_closure`). Neither vulnerable API is called directly by
+  argus-redact; the upgrade closes the transitive exposure. No source change was needed.
+
+### Documentation
+
+- Corrected stale redaction examples: the API-reference phone example (phones **mask** by
+  default — `138****5678` — not a `[手机号已脱敏]` label; pseudonym codes are 5-digit
+  `P-NNNNN`) and the README's default-output description (which conflated the default with
+  the `pseudonym-llm` audit form). The README no-salt example and the English
+  unified-prefix block are now deterministic and self-contained (salt-pinned, matching
+  README.zh).
+- Documented the `assess` and `setup` CLI commands (both shipped; previously undocumented).
+- Stamped the accuracy table and PRvL North Star as measured at v0.7.16.
+- Recorded, as a known Design Constraint, the super-linear CPU cost of person-name scanning
+  on adversarial name-dense input — bounded by the 1 MiB input cap (seconds, no hang or
+  leak), with the HTTP server's admission control as the mitigation for untrusted traffic;
+  a byte-identical sub-quadratic rewrite is tracked for a follow-up.
+
+### Internal
+
+- Removed the dead `mask_phone_regional` Rust mirror (no production caller; masking runs
+  through the Python path) and an unreferenced `run_mutmut.py` shim.
+- Pruned 8 superseded benchmark-result snapshots referenced by no test or doc (the
+  test-loaded and doc-cited provenance snapshots are kept).
+
 ## v0.8.14 — fail-closed structured redaction and streaming-restore parity
 
 A follow-up release closing the low-severity findings from the post-v0.8.13 whole-branch review, plus the
