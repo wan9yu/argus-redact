@@ -169,6 +169,25 @@ echo "P-037 should talk to P-012" | argus-redact restore -k key.json
 
 ---
 
+## assess
+
+Assess the privacy risk of text and print a JSON report — the same risk data as `redact(report=True)` — without changing the text.
+
+```bash
+argus-redact assess [input] [-o report.json] [-l LANG] [-m MODE]
+```
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `input` | stdin | Input file to assess (omit to read from stdin) |
+| `-o`, `--output` | stdout | Write the JSON report to a file |
+| `-l`, `--lang` | `zh` | Language pack |
+| `-m`, `--mode` | `fast` | Detection mode: `fast`, `ner`, `auto` |
+
+---
+
 ## info
 
 Show what's installed and available.
@@ -197,6 +216,23 @@ Layers:
   2 Entity (NER)          ✓
   3 Semantic (Ollama)     ✓
 ```
+
+---
+
+## setup
+
+Pre-download the NER model(s) for one or more languages, so a later `--mode ner` / `--mode auto` run needs no network fetch — useful for offline or air-gapped deployments.
+
+```bash
+argus-redact setup                    # download the default (zh) model
+argus-redact setup -l en              # download a specific language's model
+```
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-l`, `--lang` | `zh` | Language(s) whose NER model to pre-download |
 
 ---
 

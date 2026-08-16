@@ -83,9 +83,9 @@ redacted, key = redact("他在星巴克和Costa都喝了咖啡")
 
 ```python
 # Basic
-redacted, key = redact("张三的手机号是13812345678")
-# redacted = "P-042的手机号是[手机号已脱敏]"
-# key = {"P-042": "张三", "[手机号已脱敏]": "13812345678"}
+redacted, key = redact("张三的手机号是13812345678", salt=42)
+# redacted = "P-83811的手机号是138****5678"   # person → pseudonym code; phone → mask (the default strategy)
+# key = {"P-83811": "张三", "138****5678": "13812345678"}
 
 # Mixed language
 redacted, key = redact("王五给John发邮件", lang=["zh", "en"])
