@@ -45,7 +45,7 @@ After first load, models stay cached in memory for subsequent calls.
 
 1. **`mode="fast"` (regex only)** — no model loading, < 1ms total. Good default for CLI pipes.
 2. **Python API** — models load once, cached across calls within the same process.
-3. **Future: `argus-redact serve`** — daemon mode, models stay loaded, CLI communicates via Unix socket.
+3. **`argus-redact serve`** (since v0.6.0) — HTTP daemon mode; models stay loaded across requests, so the per-invocation reload cost is paid once.
 
 ## Text Scale
 
@@ -123,7 +123,7 @@ Results are saved as JSON snapshots for regression tracking. See [Benchmarks](..
 
 ## Implementation Language Strategy
 
-v0.1 is Python. Performance-critical paths are candidates for Rust rewrite (via PyO3):
+Layer 1 detection/redaction is implemented in Rust (`argus-redact-core`, since the v0.7.x core split) behind the PyO3 binding. The table below records, per component, the original rationale for its language choice:
 
 | Component | Language | Rationale |
 |-----------|----------|-----------|

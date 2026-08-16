@@ -298,6 +298,30 @@ Each entry follows three lines:
   SHA". If you are consuming from `main` rather than a release, check the workflow
   status for the exact commit you are pinning — do not assume it was gated.
 
+### Person-name scanning cost is super-linear on adversarial name-dense input
+
+`mode="fast"` Chinese person-name candidate scanning is super-linear in the number
+of overlapping name-like candidates. A crafted input that is almost entirely
+name-like characters — e.g. a surname+given pair repeated to near the input cap —
+costs several seconds of CPU (≈5 s for a ~900 KB all-`张三` input on an M1 Max)
+versus <1 s for neutral CJK of the same size. Ordinary text, where names are sparse
+among other content, is effectively linear and sub-millisecond per KB.
+
+The 1 MiB input cap (`MAX_INPUT_SIZE`) bounds this to a few seconds of CPU and
+finite memory — there is no unbounded hang and no leak — but the cap bounds input
+**size**, not per-call **CPU**. For untrusted/attacker-facing (e.g. gateway)
+traffic:
+
+- prefer the bundled HTTP server, which already bounds the blast radius with
+  admission control (`_MAX_INFLIGHT_SCANS`, `_MAX_ADMITTED_SCANS`) and a
+  `_SCAN_TIMEOUT_SECONDS=30` deadline (`server.py`), over embedding `redact()`
+  directly on a hot path; or
+- bound request size below 1 MiB at your edge.
+
+A byte-identical sub-quadratic rewrite of the candidate/occupancy scan — the same
+approach used for the v0.8.13 Layer-1 hint pass — is tracked for a follow-up
+release.
+
 ### Perf-budget baseline is platform-specific and drifts
 
 - **What**: The performance gate (`.github/workflows/perf.yml`) compares each
