@@ -19,10 +19,10 @@ const MAX_NUMERIC_COLLISION_SUFFIX: u32 = 10_000;
 
 /// Keep the first `p` and last `s` chars of `chars`, star the middle.
 ///
-/// The shared prefix/star/suffix block for [`mask_value`] and
-/// [`mask_phone_regional`]: when `len <= p + s` the whole value is masked
-/// (`"*".repeat(len)`), otherwise it is `prefix ++ stars ++ suffix`. Char-based
-/// throughout — the caller passes a Unicode-scalar `Vec<char>`.
+/// The shared prefix/star/suffix block for [`mask_value`]: when `len <= p + s`
+/// the whole value is masked (`"*".repeat(len)`), otherwise it is
+/// `prefix ++ stars ++ suffix`. Char-based throughout — the caller passes a
+/// Unicode-scalar `Vec<char>`.
 fn mask_prefix_suffix(chars: &[char], p: usize, s: usize) -> String {
     let len = chars.len();
     if len <= p + s {
@@ -163,33 +163,6 @@ pub fn mask_landline(value: &str) -> String {
     let stars = "*".repeat(number.len() - 3);
     let last3: String = number[number.len() - 3..].iter().collect();
     format!("{}{}{}", area, stars, last3)
-}
-
-/// Phone mask with regional rules.
-///
-/// Mirrors `_mask_phone_regional` (replacer.py:416–438):
-/// - cn / auto+11-digit: (3, 4)
-/// - hk / auto+8-digit:  (2, 2)
-/// - tw / auto+9-digit:  (2, 3)
-/// - default:            (2, 2)
-///
-/// Strips dashes and spaces before masking.
-pub fn mask_phone_regional(value: &str, region: &str) -> String {
-    let digits: String = value.chars().filter(|c| *c != '-' && *c != ' ').collect();
-    let dlen = digits.chars().count();
-
-    let (p, s) = match region {
-        "cn" => (3usize, 4usize),
-        "hk" => (2, 2),
-        "tw" => (2, 3),
-        "auto" if dlen == 11 => (3, 4),
-        "auto" if dlen == 8 => (2, 2),
-        "auto" if dlen == 9 => (2, 3),
-        _ => (2, 2),
-    };
-
-    let chars: Vec<char> = digits.chars().collect();
-    mask_prefix_suffix(&chars, p, s)
 }
 
 /// Append a circled-digit (or numeric) suffix to avoid label collisions.
@@ -371,35 +344,6 @@ mod tests {
     fn mask_landline_short_number() {
         // number.len() <= 3 → no masking of number
         assert_eq!(mask_landline("010-123"), "010-123");
-    }
-
-    // --- mask_phone_regional ---
-
-    #[test]
-    fn mask_phone_regional_cn() {
-        assert_eq!(mask_phone_regional("13812345678", "cn"), "138****5678");
-    }
-
-    #[test]
-    fn mask_phone_regional_hk() {
-        // 8-digit HK number
-        assert_eq!(mask_phone_regional("90123456", "hk"), "90****56");
-    }
-
-    #[test]
-    fn mask_phone_regional_tw() {
-        // 9-digit TW number
-        assert_eq!(mask_phone_regional("912345678", "tw"), "91****678");
-    }
-
-    #[test]
-    fn mask_phone_regional_default() {
-        assert_eq!(mask_phone_regional("1234567890", "us"), "12******90");
-    }
-
-    #[test]
-    fn mask_phone_regional_strips_dashes() {
-        assert_eq!(mask_phone_regional("138-1234-5678", "cn"), "138****5678");
     }
 
     // --- resolve_collision ---
