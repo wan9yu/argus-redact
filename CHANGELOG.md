@@ -2,6 +2,33 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.16 — zh organization / school false-positive fix
+
+A precision fix for Chinese Layer 1 detection: ordinary business / education prose that
+carries a legal, industry, or education suffix (公司/集团/有限公司/银行/医院/大学/小学…) is no
+longer mis-detected as an organization or school. Fail-safe change — the prior behaviour
+over-redacted (never leaked) and round-trip was always correct. No API change, and the
+detection regex is unchanged, so detection cost is unchanged.
+
+### Fixed
+
+- **zh `organization` / `school` no longer fire on suffix-only or generic-name prose.** The
+  Layer 1 validator now rejects a candidate whose name — after stripping leading noise and the
+  longest legal/education suffix — is empty or entirely generic (function words, quantifiers,
+  legal-form scaffolding). So bare `有限公司`, `改成公司`, `一家公司`, `成立集团`, `上市公司`,
+  `我们公司`, and `这所大学` are no longer redacted, while real names (`腾讯科技有限公司`,
+  `北京协和医院`, `北京大学`, `腾讯分公司`) still are. Reported by the Argus Gateway
+  integration team. Applies in every mode that runs Layer 1 (`fast` / `ner` / `auto`).
+
+### Known limitations (documented in docs/known-issues.md)
+
+- The detector is suffix-based, so three boundary residuals remain — all over- or
+  under-redaction, never a leak: (1) a content word directly before the suffix can still
+  over-match (`开办公司`, `附近的小学`); (2) a real org preceded by a leading verb / preposition
+  is captured with that prefix in the span (`张三在华为技术有限公司`); (3) an obscure
+  particle-initial two-character brand whose whole name reduces to a single generic char is now
+  missed (`有家集团`). Use `mode="ner"` for model-refined boundaries where a model is available.
+
 ## v0.8.15 — dependency security bump and documentation accuracy
 
 A maintenance release: a pyo3 security-advisory upgrade, documentation corrections from an
