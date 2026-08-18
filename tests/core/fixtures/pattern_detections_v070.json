@@ -2954,7 +2954,7 @@
       },
       {
         "end": 4,
-        "kind": "hit",
+        "kind": "near",
         "start": 0,
         "text": "我们公司",
         "type": "organization"

@@ -57,6 +57,44 @@
   `occupation` matches as approximate at the boundary — check entity spans via
   `redact(..., detailed=True)` before trusting the exact captured text.
 
+### zh `organization` / `school` is suffix-based — residual boundary errors both ways
+
+- **What**: zh org/school detection (`mode="fast"`, and any mode that runs Layer 1) keys
+  off a legal / industry / education suffix (`公司`/`集团`/`银行`/`医院`/`大学`/`小学`…)
+  preceded by a name. A validator rejects a candidate whose name-part — after stripping
+  leading noise and the longest suffix — is empty (bare `有限公司`) or entirely generic
+  (`改成公司`, `一家公司`, `成立集团`, `上市公司`, `这所大学`), so ordinary business prose no
+  longer redacts in the common cases. Three residuals remain:
+  1. **Over-detection** (over-redaction, never a leak, round-trips): a prose phrase whose
+     non-generic *content* word sits directly before the suffix still matches — `开办公司`,
+     `附近的小学`, `楼下的诊所`, `母公司和子公司`.
+  2. **Over-grab** (over-redaction, never a leak): a real org preceded by a leading verb /
+     preposition / bare surname is captured *with* that prefix in the span —
+     `redact('张三在华为技术有限公司')` redacts `张三在华为技术有限公司` (the person `张三` is
+     also flagged independently), `我先去工商银行` redacts `我先去工商银行`.
+  3. **Under-detection** (under-redaction — a real org left in cleartext): a short brand
+     whose *entire* name-part reduces to a single generic morpheme after the noise-strip is
+     rejected — e.g. `有家集团`, `到家集团`, `和成公司` are **not** detected (the leading
+     `有`/`到`/`和` strips as noise, leaving a lone generic `家`/`成`). This is the accepted
+     cost of rejecting the far more common prose false-positives; it affects only obscure
+     particle-initial two-character brands, and none of a 180-name mainstream set (all major
+     banks, hospitals, universities, SOEs) regressed.
+- **Who is affected**: zh callers relying on exact `organization`/`school` span boundaries,
+  on redacting every possible org/school name, or on minimising over-redaction of business
+  prose that happens to contain a legal suffix.
+- **Why we won't fix (now)**: distinguishing a proper name from a content-word prefix — or a
+  two-character brand from a generic phrase — by rule alone is the inherent limit of a
+  suffix-based detector. Tightening the gate to catch (3) re-admits the prose false-positives
+  the validator exists to remove, and risks real names that contain a generic char (e.g.
+  `北京协和医院`, whose name carries `和`). Trimming the leading prefix out of (2)'s span
+  needs either an unbounded regex prefix (measured to cause super-linear backtracking on
+  adversarial CJK) or a person-name model — both out of scope. Layer 2 (`mode="ner"`) refines
+  boundaries where a model is available.
+- **What you should do**: treat zh `organization`/`school` as approximate — spans may include
+  a leading particle, and a very short brand name may be missed. Inspect via
+  `redact(..., detailed=True)` where exact spans or completeness matter; use `mode="ner"` for
+  a model-refined boundary. What is redacted round-trips correctly and is never leaked.
+
 ### en `mode="ner"` can redact a sentence-initial verb as an organisation
 
 - **What**: In English `mode="ner"` (and `"auto"`), spaCy's `en_core_web_sm` can tag an

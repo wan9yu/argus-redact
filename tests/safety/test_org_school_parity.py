@@ -1,12 +1,21 @@
-"""Parity lock for the zh organization / school regexes.
+"""Parity lock for the zh organization / school regexes + validator.
 
 These patterns match the LONGEST ``(2-12 CJK prefix) + (suffix)`` at each
 position, ending at the suffix (regardless of trailing CJK), with the suffix
-alternation ordered longest-first so the longest applicable suffix wins.
+alternation ordered longest-first so the longest applicable suffix wins. The
+``validators.rs`` gate then DROPS any match whose name-part (leading noise and
+the longest suffix stripped) is empty or entirely generic — so bare ``有限公司``
+and prose like ``改成公司`` / ``一家公司`` yield no match (gateway P2, v0.8.16).
 
-Any rewrite of the patterns (e.g. atomic groups, reordered alternations) MUST
-keep these spans bit-identical. This is the hard parity gate: a single changed
-span here means the rewrite altered match results, which is forbidden.
+Any rewrite of the patterns or the validator MUST keep these spans bit-identical.
+This is the hard parity gate: a single changed span here means match results
+moved, which needs an explicit, reviewed update — not a silent drift.
+
+The greedy spans below deliberately over-include a leading bare surname /
+preposition / conjunction (``张三在华为技术有限公司``, ``我先去工商银行``,
+``和阿里巴巴集团``) and the ``{12}``-char cap clips a long affiliated name
+(``上海交通大学医学院附属瑞金医院``). These are PRESERVED, fail-safe over-redaction
+(never a PII leak), documented in docs/known-issues.md — not bugs to "fix" here.
 
 Spans come from the production path (``_core.detect_l1``) and cover the full
 match (optional prefix + group). Each ``(type, start, end, text)`` is pinned
@@ -33,8 +42,8 @@ CORPUS = [
     ("中国平安保险集团", [("organization", 0, 8, "中国平安保险集团")]),
     # suffix (银行) followed by trailing CJK → match ends at the suffix (中国银行)
     ("中国银行北京分行", [("organization", 0, 4, "中国银行")]),
-    # org whose first char (有) is also an optional prefix-word
-    ("有限公司", [("organization", 0, 4, "有限公司")]),
+    # bare legal form: name is empty after stripping 有限公司 → validator rejects
+    ("有限公司", []),
     ("北京大学", [("school", 0, 4, "北京大学")]),
     ("清华大学附属中学", [("school", 0, 8, "清华大学附属中学")]),
     ("某某科技有限公司", [("organization", 0, 8, "某某科技有限公司")]),

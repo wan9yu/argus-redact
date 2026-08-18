@@ -387,13 +387,36 @@ pub fn validate_jwt(value: &str) -> bool {
 }
 
 // ── Chinese organization / school (deferred → Rust in v0.7.7) ────────────────
-/// Leading verbs/particles/questions stripped from org/school candidates before
-/// validation. Stripped one at a time (`has_name_before_suffix` restarts the scan
-/// after each match), and the first entry that matches in array order wins.
-/// ORDER IS LOAD-BEARING: entries are ordered longest-prefix-first so a specific
-/// prefix shadows its own substring (e.g. "请查一下" before "请查"); reordering can
-/// change results and break parity with the Python `_has_name_before_suffix`
-/// (mirrors `lang/zh/patterns.py::_LEADING_NOISE`).
+/// GENERIC morphemes that appear before a legal / education suffix WITHOUT forming
+/// a proper name: particles, pronouns, adverbs, small numbers, measure words,
+/// demonstratives, relational morphemes (分/母/子/总), legal-form scaffolding
+/// (有限/责任/股份), and common prose verbs / nouns. After the leading-noise strip
+/// (below), a candidate whose name-part (the text before the suffix) is empty or
+/// ENTIRELY generic is business / education prose — not an organization / school —
+/// and is rejected. This is the precision gate the old `has_name_before_suffix`
+/// lacked: it accepted any single non-noise char as a "name", so `改成公司`,
+/// `一家公司`, and bare `有限公司` all validated (gateway P2 over-redaction, 2026-08).
+const GENERIC: &str = concat!(
+    "在去从到被给让有是的了和与把将已问看找",   // particles / prepositions / light verbs
+    "我你他她它咱们其",                          // pronouns + plural marker 们
+    "先再又也就才还并且",                        // adverbs / conjunctions
+    "一二两",                                    // small numbers
+    "家个些批间处座所名位类项块单只条张",      // measure words
+    "这那每各几整本该全此",                    // demonstratives / determiners
+    "分母子总",                                // relational: 分公司/母公司/子公司/总公司
+    "限责任股份",                              // legal-form scaffolding: 有限/责任/股份
+    "改成立挂注册为变需要上市收购兼经营运管理组搞弄做求目统来务方案调", // prose verbs / nouns
+    "下",                                      // 下 as a light locative morpheme (楼下/名下)
+);
+
+/// Leading verb / particle / query prefixes the L1 regex may leave inside the
+/// captured group (the group is `(prefix)?(name)(suffix)`, and the optional regex
+/// prefix trims at most ONE leading token — multi-token or untrimmed noise reaches
+/// the validator). We strip these before inspecting the name, so `请查一下公司`
+/// reduces to a bare `公司` (name empty → rejected) instead of reading `请查一下`
+/// as a name. Stripped one per pass, longest-first, never consuming the whole
+/// string (`len(stripped) > len(noise)`). ORDER IS LOAD-BEARING: longest-prefix-first
+/// so a specific prefix shadows its own substring (e.g. `请查一下` before `请查`).
 const LEADING_NOISE: &[&str] = &[
     "请查一下", "请查下", "请查", "查一下", "查下", "就职于", "供职于", "任职于",
     "毕业于", "就读于", "就读", "考入", "考上", "去过", "到过", "这是", "那是",
@@ -412,15 +435,9 @@ const SCHOOL_SUFFIXES: &[&str] = &[
     "外国语学校", "师范学校", "职业学校", "技术学校", "幼儿园", "书院", "学堂", "党校",
 ];
 
-/// Port of `lang/zh/patterns.py::_has_name_before_suffix`.
-///
-/// Repeatedly strips a single leading-noise prefix (the Python `for ... else break`
-/// loop strips at most one prefix per pass, restarting from the top until none
-/// matches — note: only strips when `len(stripped) > len(noise)`, never consuming
-/// the whole string), then returns `true` iff the remainder ends with any suffix
-/// AND is strictly longer than that suffix (so a real name char precedes it).
-/// All length comparisons are in char-space (Python `len(str)` over CJK text).
-fn has_name_before_suffix(value: &str, suffixes: &[&str]) -> bool {
+/// Strip leading-noise prefixes one per pass (longest-first), never consuming the
+/// whole string. Char-space throughout (Rust `chars().count()`).
+fn strip_leading_noise(value: &str) -> &str {
     let mut stripped = value;
     loop {
         let mut stripped_any = false;
@@ -437,18 +454,43 @@ fn has_name_before_suffix(value: &str, suffixes: &[&str]) -> bool {
             break;
         }
     }
-    let stripped_len = stripped.chars().count();
-    suffixes.iter().any(|suffix| {
-        stripped.ends_with(suffix) && stripped_len > suffix.chars().count()
-    })
+    stripped
+}
+
+/// The longest suffix in `suffixes` that `value` ends with, mapped to the NAME part
+/// (`value` minus that suffix). `None` if `value` ends with no suffix. Byte slicing
+/// is char-safe: `ends_with` guarantees the suffix falls on a char boundary.
+fn name_before_suffix<'a>(value: &'a str, suffixes: &[&str]) -> Option<&'a str> {
+    let mut best: Option<&str> = None;
+    for suffix in suffixes {
+        if value.ends_with(suffix)
+            && best.is_none_or(|b| suffix.chars().count() > b.chars().count())
+        {
+            best = Some(suffix);
+        }
+    }
+    best.map(|suffix| &value[..value.len() - suffix.len()])
+}
+
+/// A matched `name + suffix` is a real organization / school iff, after stripping
+/// leading noise and the longest suffix, the remaining NAME is non-empty AND not
+/// entirely [`GENERIC`]. Rejects bare legal forms (有限公司/集团/责任公司 → empty
+/// name) and generic prose (改成公司/一家公司/成立集团/上市公司 → all-generic name);
+/// keeps every proper name (腾讯科技/北京大学/工商银行/腾讯分公司 — each carries a
+/// non-generic name char).
+fn is_proper_name(name: Option<&str>) -> bool {
+    match name {
+        None => false,
+        Some(n) => !n.is_empty() && !n.chars().all(|c| GENERIC.contains(c)),
+    }
 }
 
 pub fn validate_organization(value: &str) -> bool {
-    has_name_before_suffix(value, ORG_SUFFIXES)
+    is_proper_name(name_before_suffix(strip_leading_noise(value), ORG_SUFFIXES))
 }
 
 pub fn validate_school(value: &str) -> bool {
-    has_name_before_suffix(value, SCHOOL_SUFFIXES)
+    is_proper_name(name_before_suffix(strip_leading_noise(value), SCHOOL_SUFFIXES))
 }
 
 // ── Dispatch ──────────────────────────────────────────────────────────────
@@ -675,12 +717,32 @@ mod tests {
     #[test]
     fn organization_school_validators() {
         assert!(validate_organization("阿里巴巴有限公司"));
-        assert!(!validate_organization("这是公司")); // all-noise prefix, no name before suffix
+        assert!(!validate_organization("这是公司")); // name "这是" all-generic → prose, not an org
         assert!(validate_school("北京大学"));
         assert!(!validate_school("这是大学"));
-        // leading-particle-prefixed values (what the regex captures) still validate
+        // leading-particle-prefixed values (what the regex captures) still validate:
+        // the name after stripping the suffix carries non-generic chars (阿里巴巴 / 北京).
         assert!(validate_organization("在阿里巴巴有限公司"));
         assert!(validate_school("毕业于北京大学"));
+    }
+
+    #[test]
+    fn organization_school_false_positive_rejection() {
+        // Bare legal / educational forms — name is empty after stripping the suffix.
+        assert!(!validate_organization("有限公司"));
+        assert!(!validate_organization("集团公司"));
+        assert!(!validate_organization("责任公司"));
+        // Generic business prose — the name before the suffix is entirely GENERIC.
+        assert!(!validate_organization("改成公司"));
+        assert!(!validate_organization("成立集团"));
+        assert!(!validate_organization("一家公司"));
+        assert!(!validate_organization("上市公司"));
+        assert!(!validate_school("这所大学"));
+        // Real names survive — a non-generic name char is present (guards recall).
+        assert!(validate_organization("腾讯分公司"));
+        assert!(validate_organization("中国建设银行"));
+        assert!(validate_organization("华夏基金管理有限公司"));
+        assert!(validate_school("清华大学附属中学"));
     }
 
     // ── Whitespace-separator normalization matrix ───────────────────────────
