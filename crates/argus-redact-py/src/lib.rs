@@ -24,6 +24,7 @@ mod person;
 /// argus-redact Rust core — high-performance pure functions over argus-redact-core.
 #[pymodule]
 fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("__build__", env!("ARGUS_BUILD"))?;
     m.add_class::<types::PyPatternMatch>()?;
     m.add_function(wrap_pyfunction!(patterns::match_patterns, m)?)?;
     m.add_function(wrap_pyfunction!(patterns::builtin_patterns, m)?)?;

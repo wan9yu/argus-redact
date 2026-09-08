@@ -1,5 +1,7 @@
 """argus-redact: Encrypt PII, not meaning. Locally."""
 
+__version__ = "0.8.16"
+
 from argus_redact import layers
 from argus_redact._metadata import (
     GDPR_ART10_CATEGORIES,
@@ -35,7 +37,6 @@ from argus_redact.structured import (
     restore_json,
 )
 
-__version__ = "0.8.16"
 __all__ = [
     # ─── Layer 1 — primitive (frozen at 1.0) ───
     "redact",

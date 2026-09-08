@@ -26,3 +26,26 @@ try:
 except ImportError:
     _core = None  # type: ignore[assignment]
     HAS_CORE = False
+
+
+def parse_build_stamp(stamp: str) -> tuple[str, str]:
+    """Split a ``_core.__build__`` stamp (``"{version}+{source_hash}"``) into its
+    ``(version, source_hash)`` parts — the one place that knows the stamp format."""
+    version, _, source_hash = stamp.partition("+")
+    return version, source_hash
+
+
+_build = getattr(_core, "__build__", None) if HAS_CORE else None
+if _build:
+    from argus_redact import __version__ as _pkg_version  # safe: bound at top of __init__
+
+    _core_version, _ = parse_build_stamp(_build)
+    if _core_version != _pkg_version:
+        import warnings
+
+        warnings.warn(
+            f"_core was built for {_core_version} but the package is {_pkg_version}; "
+            f"rebuild with `maturin develop --release`",
+            RuntimeWarning,
+            stacklevel=2,
+        )

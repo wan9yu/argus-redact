@@ -32,6 +32,7 @@ version = "0.8.16"
 dependencies = [
  "argus-redact-core",
  "pyo3",
+ "sha2",
 ]
 
 [[package]]
