@@ -218,6 +218,27 @@
   to restore coverage of the flat-per-cell-cost property without the timing
   flakiness.
 
+### A set of extras-gated tests runs on no CI leg (reachability gate is report-only)
+
+- **What**: the reachability gate (which flags tests collected but never executed
+  on any leg) found ~44 extras-gated tests that run nowhere in CI: the server
+  tests need `httpx` (for Starlette's `TestClient`), which no leg installs; and
+  the `starlette`/`mcp`/`presidio`-gated tests that live *outside*
+  `tests/integration/` (in `tests/architecture`, `tests/core`, `tests/cli`,
+  `tests/security`, `tests/benchmark`) are never collected by the extras leg,
+  which runs `pytest tests/integration` by path. So they skip on the base leg
+  (no extras) and are uncollected on the extras leg → executed nowhere.
+- **Impact**: these are pre-existing silent skips (false-greens) — the tests pass
+  locally where the extras are present, but a regression in server / MCP / face-
+  contract / Presidio behaviour would not be caught by CI.
+- **Current state**: the reachability gate is REPORT-ONLY (`continue-on-error` in
+  `test.yml`) so it surfaces the list without blocking; it does NOT allowlist
+  these (that would hide the gap).
+- **Planned follow-up**: run them on a leg that has their extras — add `httpx` to
+  the extras leg and collect the extras-gated tests outside `tests/integration/`
+  (widen the extras leg's paths, or move those tests). Once they execute, drop
+  `continue-on-error` to flip the gate back to required.
+
 ## Deprecation Notices
 
 ### bare `restore()` without `guard=` — flip shipped in v0.8.0

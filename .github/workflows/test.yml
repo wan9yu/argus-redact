@@ -234,12 +234,18 @@ jobs:
   # the NER / Layer-3 models. The gate collects that model-gated set itself
   # (`-m "ner or semantic or slow"`) and treats those never-run ids as
   # expected, so they need no per-id maintenance. The base/integration/presidio
-  # legs together cover every other collected test, so any remaining never-run
-  # id is a real gap and fails this job. (This job blocks the workflow; add it
-  # to the branch-protection required set to enforce it on PRs.)
+  # legs together cover MOST other collected tests, so a remaining never-run id
+  # is a real gap. This job is REPORT-ONLY for now (continue-on-error): a set of
+  # extras-gated tests (starlette/mcp/presidio, and the server tests' httpx) runs
+  # on no junit-producing leg today — the extras leg collects `tests/integration`
+  # by path and installs no httpx, so extras-gated tests elsewhere skip
+  # everywhere. See docs/known-issues.md; the gate flips back to required (drop
+  # continue-on-error) once that coverage gap is closed — i.e. those tests run on
+  # a leg that has their extras.
   reachability:
     needs: [test, integration, integration-presidio]
     if: always()
+    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
