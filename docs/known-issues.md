@@ -6,6 +6,49 @@
 
 ## Unresolved
 
+### In-document code / label capture is per-cell and mint-side only
+
+- **What**: a minted pseudonym code (`P-NNNNN`) or visible mask/category label can
+  collide with a value the source document *already contains verbatim*. Example:
+  `redact("老客户P-83811推荐了新客户王芳")` used to mint `P-83811` for 王芳 —
+  the code the document already carried — so the restore key held
+  `{"P-83811": "王芳"}` and `restore()` rewrote **both** occurrences, corrupting
+  the pre-existing token. This is now closed for the common case: before minting,
+  the engine seeds every `<PREFIX>-<digits>` code (≥5 digits, every length-5-and-up
+  prefix of the run) and every mask/category/replacement label already present in
+  the cell into the reserved set, so a minted value is forced off any value the
+  cell text already carries (a mask/category hit is bumped with a `①`-style
+  suffix; a pseudonym hit is re-drawn). Remaining gaps, deferred to the
+  **in-document capture hardening** follow-up:
+  - *(a) structured cross-leaf*: each JSON/CSV leaf only seeds against **its own**
+    text, not against sibling leaves. A code that appears literally in leaf A but
+    is minted for an entity in leaf B is not fenced (the session reserves minted
+    codes across leaves, but not raw pre-existing document tokens from other leaves).
+  - *(b) realistic-strategy fakes*: the `realistic` strategy's fake values (e.g. a
+    generated CJK name) are not scanned for against the document — they have no
+    fixed token shape to seed on, so a fake that happens to equal a value already
+    in the text is not fenced.
+  - *(d) restore-time substring, mint half only*: minting is fenced against the
+    document's codes, but the **restore** side still matches a key as a plain
+    substring (see the next entry) — a minted code that is a *substring* of a
+    longer adjacent document token preceded by an alphanumeric (so the leading
+    non-alphanumeric boundary rejects it as mid-identifier) is not seeded, and a
+    document code that is a substring of a longer minted code is a restore-time,
+    not mint-time, concern.
+- **Observability asymmetry**: a mask / category document hit is **visible** — it
+  is recorded in `mask_collisions` and surfaces as a `SecurityWarning`. Every other
+  document hit is **silent**: a pseudonym hit is an RNG re-draw the generator simply
+  skips over, and the `remove`-replacement and `[REDACTED]` fallbacks are bumped
+  through the untracked resolver, so neither records anything. All fail safe (no
+  leak, no corruption); only the mask / category path is reported.
+- **Who is affected**: only callers whose *input* already contains a value shaped
+  like the engine's own output (a `P-NNNNN`-style code, or a produced mask/category
+  label) — uncommon outside adversarial or machine-generated input. Always
+  in-scope: the value at risk is the caller's own document, never a cross-scope leak.
+- **What you should do**: for the deferred cases, prefer distinct prefixes per
+  document or the `remove` strategy when your inputs may echo prior redaction
+  output; inspect `mask_collisions` / the emitted `SecurityWarning` when it fires.
+
 ### `restore()` can substitute a pseudonym key inside a longer adjacent token
 
 - **What**: `restore()` matches a pseudonym as a plain substring scan, not on a token
