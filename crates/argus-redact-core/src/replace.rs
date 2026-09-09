@@ -1073,11 +1073,53 @@ fn get_type_gen<'a, F: PseudoFactory>(
 ///   surface);
 /// - the run after the dash must be `≥5` ASCII digits `[0-9]` (minted codes are
 ///   `{:05}`; saturation only ever WIDENS to 6+, never narrows);
-/// - no trailing boundary is required; every length-`5..=L` prefix of an
-///   `L`-digit run is emitted (bounded by run length) so a shorter minted code
-///   cannot restore-substring-collide with a longer document code
-///   (`P-83811` ⊂ `P-838110`).
+/// - no trailing boundary is required; every length-`5..=min(L, MAX_CODE_DIGITS)`
+///   prefix of an `L`-digit run is emitted so a shorter minted code cannot
+///   restore-substring-collide with a longer document code (`P-83811` ⊂
+///   `P-838110`). The cap is what keeps this linear: a minted code is
+///   `<PREFIX>-{:05}` of a `u32` counter (see `pseudonym.rs`), so it carries
+///   between 5 and 10 ASCII digits and NEVER more — a run prefix longer than 10
+///   digits can therefore never equal, nor be a collision surface for, any
+///   mintable code, and reserving it would never change a generator draw.
+///   Emitting the full `5..=L` set (the pre-cap behaviour) was O(L²) in time and
+///   memory for a single long digit run — a per-cell availability blow-up on a
+///   value that is byte-identical either way. Capping at `MAX_CODE_DIGITS` keeps
+///   the emitted set — and hence every downstream output — byte-identical on
+///   every input while making the scan linear in the cell length.
+///
+/// The seeded set is also read by `resolve_collision` (the visible mask / category
+/// / remove / faker labels), not only the pseudonym generator, and the cap stays
+/// byte-identical there too: a dropped `>10`-digit token ends in an ASCII digit,
+/// whereas every `resolve_collision` bump-form ends in a circled digit or `)` —
+/// so a dropped token can never be another candidate's disambiguation form — and
+/// if a candidate *equals* a dropped token it is by construction a substring of
+/// the cell, so `resolve_against_document`'s `text.contains(cand)` clause fires
+/// identically whether or not the token was reserved.
 fn scan_code_tokens(text: &str, prefixes: &[&str]) -> Vec<String> {
+    scan_code_tokens_capped(text, prefixes, MAX_CODE_DIGITS)
+}
+
+/// Widest digit run a minted `<PREFIX>-{:05}` code can carry: the code number is
+/// a `u32` (`pseudonym.rs`), so `u32::MAX` = 4_294_967_295 is 10 digits, and
+/// `{:05}` only ever pads UP to 5. No mintable code exceeds 10 digits.
+const MAX_CODE_DIGITS: usize = 10;
+
+/// `#[cfg(test)]` emit-work counter — incremented by each emitted prefix's digit
+/// length, so a test can pin that the capped scan copies O(cell) bytes while the
+/// uncapped `max_digits = usize::MAX` oracle copies O(run²). Compiled out of the
+/// release `_core` (counter and increment both behind `#[cfg(test)]`), so it
+/// never exists in shipped code and cannot perturb the byte-identical output.
+#[cfg(test)]
+thread_local! {
+    static SCAN_EMIT_BYTES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// Body of [`scan_code_tokens`], parameterized by the prefix-length cap so the
+/// `#[cfg(test)]` operation-count oracle can drive the pre-cap `usize::MAX`
+/// behaviour through the SAME code path (mirrors how [`process_with_capture`]
+/// parameterizes `capture_indoc`). Production always calls it with
+/// [`MAX_CODE_DIGITS`].
+fn scan_code_tokens_capped(text: &str, prefixes: &[&str], max_digits: usize) -> Vec<String> {
     let bytes = text.as_bytes();
     let mut out: Vec<String> = Vec::new();
     for &prefix in prefixes {
@@ -1107,10 +1149,16 @@ fn scan_code_tokens(text: &str, prefixes: &[&str]) -> Vec<String> {
             }
             let run = j - dstart;
             if run >= 5 {
-                // Emit every length-5..=run prefix. The needle and digits are all
-                // ASCII, so `text[dstart..dstart + take]` is a valid char boundary.
-                for take in 5..=run {
+                // Emit every length-5..=min(run, max_digits) prefix. Prefixes past
+                // MAX_CODE_DIGITS can never equal a mintable code (the code number
+                // is a u32), so capping there is byte-identical while making a long
+                // digit run O(1) to emit instead of O(run²). The needle and digits
+                // are all ASCII, so `text[dstart..dstart + take]` is a valid char
+                // boundary.
+                for take in 5..=run.min(max_digits) {
                     out.push(format!("{needle}{}", &text[dstart..dstart + take]));
+                    #[cfg(test)]
+                    SCAN_EMIT_BYTES.with(|c| c.set(c.get() + take as u64));
                 }
             }
             // Advance past the run (never re-scan its interior); always progress.
@@ -1955,7 +2003,8 @@ mod tests {
     #[test]
     fn scan_code_tokens_emits_every_prefix_of_a_long_run() {
         // A 7-digit run emits its length-5/6/7 prefixes so a shorter minted code
-        // cannot restore-substring-collide with the longer document code.
+        // cannot restore-substring-collide with the longer document code. 7 ≤
+        // MAX_CODE_DIGITS, so the cap does not touch this legitimate short run.
         assert_eq!(
             scan_code_tokens("户P-8381100元", &["P"]),
             vec![
@@ -1963,6 +2012,72 @@ mod tests {
                 "P-838110".to_string(),
                 "P-8381100".to_string(),
             ]
+        );
+    }
+
+    #[test]
+    fn scan_code_tokens_caps_run_at_max_code_digits() {
+        // A run longer than MAX_CODE_DIGITS emits ONLY its length-5..=10 prefixes:
+        // an 11+-digit prefix can never be a mintable code (the code number is a
+        // u32 ≤ 10 digits), so reserving it is inert. The emitted set — and every
+        // downstream output — is byte-identical to the pre-cap loop, which would
+        // have emitted 5..=15 (and copied O(15²) bytes doing it).
+        let got = scan_code_tokens("P-123456789012345", &["P"]); // 15-digit run
+        assert_eq!(
+            got,
+            vec![
+                "P-12345".to_string(),
+                "P-123456".to_string(),
+                "P-1234567".to_string(),
+                "P-12345678".to_string(),
+                "P-123456789".to_string(),
+                "P-1234567890".to_string(),
+            ]
+        );
+        assert_eq!(got.len(), MAX_CODE_DIGITS - 5 + 1);
+    }
+
+    // Operation-count gate for the in-document code scan. Emitting bytes for one
+    // digit run of `n` digits after a `P-`. The capped production scan is O(1) per
+    // run (≤ MAX_CODE_DIGITS prefixes); the uncapped oracle is O(n²).
+    #[cfg(test)]
+    fn scan_emit_bytes(run_len: usize, max_digits: usize) -> u64 {
+        let text = format!("P-{}", "1".repeat(run_len));
+        SCAN_EMIT_BYTES.with(|c| c.set(0));
+        let _ = scan_code_tokens_capped(&text, &["P"], max_digits);
+        SCAN_EMIT_BYTES.with(|c| c.get())
+    }
+
+    #[test]
+    fn scan_code_tokens_emit_work_is_linear() {
+        // Capped scan: doubling the run length leaves the emit work flat (the cap
+        // pins it at MAX_CODE_DIGITS prefixes regardless of run length), so the
+        // ratio is ~1× — well under the 3.0 midpoint a quadratic loop would blow
+        // through. (Excluded from release: SCAN_EMIT_BYTES is `#[cfg(test)]`.)
+        let k = scan_emit_bytes(4000, MAX_CODE_DIGITS);
+        let k2 = scan_emit_bytes(8000, MAX_CODE_DIGITS);
+        let ratio = k2 as f64 / k as f64;
+        assert!(
+            ratio < 3.0,
+            "capped scan emit work must be flat/linear: bytes(4000)={k} (8000)={k2}, \
+             ratio {ratio:.2} (quadratic would be ~4×)"
+        );
+    }
+
+    #[test]
+    fn scan_code_tokens_uncapped_emit_work_is_quadratic() {
+        // Pins that the linear gate above has real discriminating power. The
+        // pre-cap loop (max_digits = usize::MAX) copies Σ(5..=n) ≈ n²/2 bytes for
+        // one n-digit run, so doubling n ~quadruples the work. If the cap were
+        // reverted, the production ratio would flip from ~1× to ~4× and
+        // `scan_code_tokens_emit_work_is_linear` (< 3.0) would fail.
+        let n = scan_emit_bytes(4000, usize::MAX);
+        let n2 = scan_emit_bytes(8000, usize::MAX);
+        let ratio = n2 as f64 / n as f64;
+        assert!(
+            ratio > 3.0,
+            "uncapped scan emit work must be quadratic: bytes(4000)={n} (8000)={n2}, \
+             ratio {ratio:.2} (linear would be ~2×)"
         );
     }
 
