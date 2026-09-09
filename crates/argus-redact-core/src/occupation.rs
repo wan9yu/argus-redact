@@ -28,6 +28,7 @@ use serde::Deserialize;
 
 use crate::evidence_detector::{
     candidates_cjk, context_windows, is_person_identifying, proximity_evidence, DetectorConfig,
+    ProximityIndex,
 };
 
 #[derive(Debug, Deserialize)]
@@ -276,6 +277,12 @@ pub fn detect_occupation_zh(
 
     let mut out: Vec<crate::types::PatternMatch> = Vec::new();
 
+    // Build the proximity index ONCE for this invocation (the `is_person_identifying`
+    // allowlist gate is applied here), then share it across every candidate.
+    let prox_index = ProximityIndex::build(pii_entities.iter(), |pii| {
+        is_person_identifying(&pii.type_)
+    });
+
     for (name, start, end, is_lexicon) in occupation_candidates(&chars) {
         // before = chars[max(0, start - OCC_WINDOW) : start]
         // after  = chars[end : end + OCC_WINDOW]   (char slices)
@@ -324,13 +331,7 @@ pub fn detect_occupation_zh(
         // api-key), org names, and weak/sensitive attributes do not. The allowlist
         // gate (is_person_identifying) enforces this; new technical types are safe
         // by default. This subsumes the old self_reference/organization denylist.
-        evidence += proximity_evidence(
-            start,
-            end,
-            pii_entities.iter(),
-            &[(OCC_PROX_NEAR, W_OCC_PII_PROX)],
-            |pii| is_person_identifying(&pii.type_),
-        );
+        evidence += proximity_evidence(start, end, &prox_index, &[(OCC_PROX_NEAR, W_OCC_PII_PROX)]);
 
         if evidence >= OCC_THRESHOLD {
             out.push(crate::types::PatternMatch {

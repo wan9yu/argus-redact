@@ -69,20 +69,6 @@ _GUARD_NO_DETAILED = (
 )
 
 ALLOWLIST: dict[str, str] = {
-    # -- Superseded performance harness -------------------------------------
-    # Superseded by the operation-count performance gates; kept only until
-    # the structured-redaction proximity scan is linearized, at which point
-    # this whole file is deleted. It is also model-gated (`pytestmark =
-    # pytest.mark.slow`, so the marker collection already exempts it); this
-    # explicit entry records that the exemption is deliberate and temporary.
-    "tests.benchmark.test_structured_linear.test_per_cell_cost_is_flat_in_n": (
-        "superseded by the operation-count performance gates; deleted when the "
-        "structured-redaction proximity scan is linearized"
-    ),
-    "tests.benchmark.test_structured_linear.test_intermediate_size_confirms_scaling": (
-        "superseded by the operation-count performance gates; deleted when the "
-        "structured-redaction proximity scan is linearized"
-    ),
     # -- External-service contract check ------------------------------------
     # Runs only against a populated PRvL baseline behind an external LLM API
     # key; the repo ships the baseline as an empty placeholder and no CI leg

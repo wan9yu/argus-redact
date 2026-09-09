@@ -21,7 +21,7 @@ use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
-use crate::evidence_detector::{context_windows, proximity_evidence};
+use crate::evidence_detector::{context_windows, proximity_evidence, ProximityIndex};
 use crate::person_data::{
     common_words_zh_set, compound_surnames_zh, not_names_zh_set, surnames_zh,
 };
@@ -526,14 +526,14 @@ const BASE_LEN_2: f64 = 0.3;
 /// `chars` is the whole source text as a shared `&[char]` slice (collected once
 /// by `detect_person_names` and threaded in, so per-candidate scoring no longer
 /// re-materializes the entire input — mirrors `person_en.rs`). `candidate`
-/// offsets are **char** offsets into `chars`; `pii_entities[i].start` / `.end`
-/// are also char offsets (Python uses `pii.start` / `pii.end` directly). Only
-/// `start`/`end` are read off each entity — the `type != "self_reference"`
-/// filter lives in `detect_person_names` (T5), not here.
+/// offsets are **char** offsets into `chars`. `prox_index` is the
+/// [`ProximityIndex`] built ONCE by `detect_person_names` over the structural PII
+/// (the `type != "self_reference"` filter is applied upstream, at build time),
+/// so per-candidate scoring no longer re-walks the entity list from zero.
 pub(crate) fn score_candidate(
     candidate: &NameCandidate,
     chars: &[char],
-    pii_entities: &[PatternMatch],
+    prox_index: &ProximityIndex,
 ) -> f64 {
     // before = text[max(0, candidate.start - _CONTEXT_WINDOW) : candidate.start]
     // after  = text[candidate.end : candidate.end + _CONTEXT_WINDOW]
@@ -572,18 +572,18 @@ pub(crate) fn score_candidate(
     //       if distance <= 50:    evidence += 0.5; break
     //       elif distance <= 150: evidence += 0.3; break
     //
-    // The `pii_entities` slice is already filtered upstream (self_reference
-    // dropped in `detect_person_names`), so every entity is eligible — the gate
-    // is `|_| true`. `abs_diff` over usize char offsets == Python `abs()` on
-    // ints. This `+=` runs AFTER the four regex signals, so the accumulation
-    // order the bit-identity goldens lock is preserved (adding the helper's 0.0
-    // when nothing matches is a no-op on the non-negative running total).
+    // `prox_index` is already filtered upstream (self_reference dropped, gate
+    // `|_| true` — every remaining entity eligible — applied when the index was
+    // built in `detect_person_names`). `abs_diff` over usize char offsets ==
+    // Python `abs()` on ints. This `+=` runs AFTER the four regex signals, so the
+    // accumulation order the bit-identity goldens lock is preserved (adding the
+    // helper's 0.0 when nothing matches is a no-op on the non-negative running
+    // total).
     evidence += proximity_evidence(
         candidate.start,
         candidate.end,
-        pii_entities.iter(),
+        prox_index,
         &[(PROXIMITY_NEAR, W_PROXIMITY_NEAR), (PROXIMITY_MID, W_PROXIMITY_MID)],
-        |_| true,
     );
 
     // No evidence signal → don't match at L1b (leave to L2 NER).
@@ -1084,6 +1084,11 @@ pub fn detect_person_names(
         .cloned()
         .collect();
 
+    // Proximity index over the structural PII, built ONCE and shared across every
+    // candidate (gate `|_| true` — the self_reference filter above already
+    // narrowed the set). Replaces the former per-candidate re-walk from zero.
+    let prox_index = ProximityIndex::build(structural_pii.iter(), |_| true);
+
     // grouped: dict[start] -> list[(candidate, score)], insertion-ordered.
     //
     // `generate_candidates` returns candidates STABLE-sorted by `start`, and the
@@ -1098,7 +1103,7 @@ pub fn detect_person_names(
         if occupied.iter().any(|&(s, e)| c.start >= s && c.end <= e) {
             continue;
         }
-        let s = score_candidate(&c, &chars, &structural_pii);
+        let s = score_candidate(&c, &chars, &prox_index);
         // grouped.setdefault(c.start, []).append((c, s))
         match grouped.last_mut() {
             Some((start, variants)) if *start == c.start => variants.push((c, s)),
@@ -1399,7 +1404,8 @@ mod tests {
     // `&[char]`-taking `score_candidate`.
     fn score(candidate: &NameCandidate, text: &str, pii_entities: &[PatternMatch]) -> f64 {
         let chars: Vec<char> = text.chars().collect();
-        score_candidate(candidate, &chars, pii_entities)
+        let prox_index = ProximityIndex::build(pii_entities.iter(), |_| true);
+        score_candidate(candidate, &chars, &prox_index)
     }
 
     // ── Base-by-length (each carries a context-prefix signal so it doesn't zero

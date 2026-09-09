@@ -194,47 +194,187 @@ pub(crate) fn candidates_cjk(
     out
 }
 
-/// Single proximity-corroboration weight for a candidate span `[start, end)`
-/// against `pii_entities`. Scans entities in order; the FIRST entity that (a)
-/// passes `gate` and (b) falls within a bucket contributes that bucket's weight
-/// and STOPS the scan (first-match-wins). An entity that passes `gate` but lies
-/// beyond every bucket edge does NOT stop the scan — a nearer later entity can
-/// still match. Returns 0.0 when nothing corroborates.
+/// A proximity index over the gated-in PII of ONE detector invocation, built
+/// ONCE ([`ProximityIndex::build`]) and shared across every candidate so a
+/// `k`-candidate × `k`-entity input costs O(k log k) instead of the former
+/// O(k²) re-walk from zero per candidate.
 ///
-/// `buckets` are `(max_char_distance, weight)` in ASCENDING distance order; the
-/// first bucket the distance satisfies wins (near before mid). The char distance
-/// is `min(|start − pii.end|, |pii.start − end|)` — the same `abs_diff` gap every
-/// detector uses (matches Python `abs()` on int offsets).
+/// It answers a single query ([`proximity_evidence`]): for a candidate span
+/// `[start, end)` and a set of ascending `(edge, weight)` buckets, return the
+/// proximity weight EXACTLY as the former linear scan did — the weight of the
+/// FIRST gated entity (in the original iteration order) whose char distance
+/// `min(|start − end_i|, |start_i − end|)` falls within a bucket, taking that
+/// entity's own nearest bucket.
 ///
-/// This is the single source for the proximity-bucket loop copy-pasted across
-/// the person / region / occupation / framework detectors. Each site keeps its
-/// own bucket edges/weights and gate policy (person: accept every already-
-/// filtered entity via `|_| true`; the evidence-gated detectors: the
-/// `is_person_identifying` allowlist), so behavior is unchanged. Caller does
-/// `evidence += proximity_evidence(...)` at the SAME point in its accumulation,
-/// preserving the exact `+=` order the bit-identity goldens lock.
-pub(crate) fn proximity_evidence<'a, I>(
+/// The `gate` (person: accept every already-filtered entity; the evidence-gated
+/// detectors: the `is_person_identifying` allowlist) is a pure function of the
+/// entity, identical for every candidate of an invocation, so it is applied ONCE
+/// at build time — the index holds only gated-in entries, in their original
+/// relative order.
+pub(crate) struct ProximityIndex {
+    /// Gated-in entries in original relative order. `entries[i]`'s position `i`
+    /// is monotone in the ORIGINAL pii index, so the minimum `i` among a query's
+    /// hits IS the minimum original index — the entity the former first-match
+    /// scan selected.
+    entries: Vec<ProxEntry>,
+    /// `(end_i, i)` sorted by `end_i` — the BEFORE-side range query
+    /// (`|start − end_i| ≤ E_max` ⇔ `end_i ∈ [start − E_max, start + E_max]`).
+    by_end: Vec<(usize, usize)>,
+    /// `(start_i, i)` sorted by `start_i` — the AFTER-side range query
+    /// (`|start_i − end| ≤ E_max` ⇔ `start_i ∈ [end − E_max, end + E_max]`).
+    by_start: Vec<(usize, usize)>,
+}
+
+struct ProxEntry {
     start: usize,
     end: usize,
-    pii_entities: I,
-    buckets: &[(usize, f64)],
-    gate: impl Fn(&PatternMatch) -> bool,
-) -> f64
-where
-    I: IntoIterator<Item = &'a PatternMatch>,
-{
-    for pii in pii_entities {
-        if !gate(pii) {
-            continue;
-        }
-        let distance = start.abs_diff(pii.end).min(pii.start.abs_diff(end));
-        for &(edge, weight) in buckets {
-            if distance <= edge {
-                return weight;
+    orig_idx: usize,
+}
+
+impl ProximityIndex {
+    /// Build the index once for a detector invocation: apply `gate` to every
+    /// entity in iteration order (so `orig_idx` is the position the former scan
+    /// counted from) and index the survivors by end and by start for the two
+    /// range queries. O(k log k).
+    pub(crate) fn build<'a, I>(pii_entities: I, gate: impl Fn(&PatternMatch) -> bool) -> Self
+    where
+        I: IntoIterator<Item = &'a PatternMatch>,
+    {
+        let mut entries: Vec<ProxEntry> = Vec::new();
+        for (orig_idx, pii) in pii_entities.into_iter().enumerate() {
+            #[cfg(test)]
+            PROX_PROBES.with(|c| c.set(c.get() + 1));
+            if gate(pii) {
+                entries.push(ProxEntry { start: pii.start, end: pii.end, orig_idx });
             }
         }
+        let mut by_end: Vec<(usize, usize)> =
+            entries.iter().enumerate().map(|(i, e)| (e.end, i)).collect();
+        by_end.sort_unstable();
+        let mut by_start: Vec<(usize, usize)> =
+            entries.iter().enumerate().map(|(i, e)| (e.start, i)).collect();
+        by_start.sort_unstable();
+        Self { entries, by_end, by_start }
     }
-    0.0
+}
+
+/// The contiguous sub-slice of a `(key, idx)` list — sorted ascending by `key` —
+/// whose keys lie in the inclusive `[lo, hi]` range, located by two binary
+/// searches. Empty when nothing falls in range. Callers always pass `lo <= hi`
+/// (both from the same position via `saturating_sub`/`saturating_add`); the
+/// `to.max(from)` clamp keeps the helper honest (empty, never a panicking
+/// reversed range) should that ever not hold.
+fn range_slice(sorted: &[(usize, usize)], lo: usize, hi: usize) -> &[(usize, usize)] {
+    let from = sorted.partition_point(|&(k, _)| k < lo);
+    let to = sorted.partition_point(|&(k, _)| k <= hi);
+    &sorted[from..to.max(from)]
+}
+
+/// Single proximity-corroboration weight for a candidate span `[start, end)`
+/// against a prebuilt [`ProximityIndex`]. Returns the weight of the gated entity
+/// with the MINIMUM original index among those within reach — "within reach" =
+/// `min(|start − end_i|, |start_i − end|) ≤ E_max` (`E_max` = the largest bucket
+/// edge) — using THAT entity's own nearest ascending bucket. Returns 0.0 when
+/// nothing corroborates.
+///
+/// Byte-identical to the former linear scan (`for pii in pii_entities { if
+/// !gate(pii) continue; distance = …; first bucket wins; break }`): that scan
+/// returned the FIRST gated entity whose distance satisfied a bucket, i.e. the
+/// minimum-index entity whose distance ≤ E_max (a distance > E_max matches no
+/// bucket and is skipped), taking that entity's own first satisfying bucket. The
+/// index reproduces exactly that selection — proven by the module tests'
+/// differential oracle, which asserts the SAME selected index AND weight against
+/// the retained naive scan over random, nested, end-side-only, unsorted and
+/// two-bucket input.
+///
+/// `buckets` are `(max_char_distance, weight)` in ASCENDING distance order
+/// (`debug_assert`ed); the char distance is `min(|start − pii.end|, |pii.start −
+/// end|)` — the same `abs_diff` gap every detector uses (matches Python `abs()`
+/// on int offsets). Each site keeps its own bucket edges/weights and gate policy
+/// (fixed at build time), so behavior is unchanged. Caller does `evidence +=
+/// proximity_evidence(...)` at the SAME point in its accumulation, preserving the
+/// exact `+=` order the bit-identity goldens lock.
+pub(crate) fn proximity_evidence(
+    start: usize,
+    end: usize,
+    index: &ProximityIndex,
+    buckets: &[(usize, f64)],
+) -> f64 {
+    proximity_evidence_indexed(start, end, index, buckets).1
+}
+
+/// Core of [`proximity_evidence`], also returning the selected entity's ORIGINAL
+/// index (`None` when nothing is within reach) so the differential-oracle fuzz
+/// can assert the SAME entity — not merely the same weight — as the naive scan.
+fn proximity_evidence_indexed(
+    start: usize,
+    end: usize,
+    index: &ProximityIndex,
+    buckets: &[(usize, f64)],
+) -> (Option<usize>, f64) {
+    debug_assert!(
+        buckets.windows(2).all(|w| w[0].0 <= w[1].0),
+        "proximity buckets must be ascending by edge"
+    );
+    let Some(&(e_max, _)) = buckets.last() else {
+        return (None, 0.0);
+    };
+
+    // Both-side reach: an entity is a hit iff |start − end_i| ≤ E_max (it ends
+    // near the candidate's start — the BEFORE side) OR |start_i − end| ≤ E_max
+    // (it starts near the candidate's end — the AFTER side). A single start-
+    // sorted window keyed on the candidate would miss the before side, so query
+    // both indexes and take the union. `saturating_sub` clamps the (never
+    // negative) lower bound; positions are char offsets, so the upper bound never
+    // overflows in practice (`saturating_add` guards it regardless). Selection is
+    // by MINIMUM original index (`i` is monotone in it) — NOT by nearest — so a
+    // farther-but-earlier entity wins exactly as the former first-match scan.
+    let mut best: Option<usize> = None;
+    for &(_, i) in range_slice(
+        &index.by_end,
+        start.saturating_sub(e_max),
+        start.saturating_add(e_max),
+    ) {
+        #[cfg(test)]
+        PROX_PROBES.with(|c| c.set(c.get() + 1));
+        best = Some(best.map_or(i, |b: usize| b.min(i)));
+    }
+    for &(_, i) in range_slice(
+        &index.by_start,
+        end.saturating_sub(e_max),
+        end.saturating_add(e_max),
+    ) {
+        #[cfg(test)]
+        PROX_PROBES.with(|c| c.set(c.get() + 1));
+        best = Some(best.map_or(i, |b: usize| b.min(i)));
+    }
+
+    let Some(i_star) = best else {
+        return (None, 0.0);
+    };
+    // Bucket by the SELECTED entity's OWN distance — recomputed as the min of
+    // both sides, NOT the side that satisfied the range query (the query only
+    // decides membership; the former scan always bucketed on the full min). i* is
+    // a hit, so distance ≤ E_max and the last (widest) bucket always matches.
+    let entry = &index.entries[i_star];
+    let distance = start.abs_diff(entry.end).min(entry.start.abs_diff(end));
+    for &(edge, weight) in buckets {
+        if distance <= edge {
+            return (Some(entry.orig_idx), weight);
+        }
+    }
+    (Some(entry.orig_idx), 0.0)
+}
+
+// `#[cfg(test)]` proximity operation-count counter — incremented once per entity
+// examined (at index build, and per entry scanned by a range query), so a test
+// can pin that the indexed sweep is LINEAR in the k-candidate × k-entity input
+// while the retained naive scan is quadratic. Compiled out of the release
+// `_core`: the counter and every increment live behind `#[cfg(test)]`, so it
+// never exists in shipped code and cannot perturb the byte-identical output.
+#[cfg(test)]
+thread_local! {
+    static PROX_PROBES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 /// Slice the ±`window` before/after context of a `[start, end)` char span out of
@@ -287,6 +427,14 @@ pub fn detect_with(
     let chars: Vec<char> = text.chars().collect();
     let mut out = Vec::new();
 
+    // Build the proximity index ONCE for this invocation (gate applied here), then
+    // share it across every candidate — see [`ProximityIndex`]. The gate is the
+    // `is_person_identifying` allowlist: only PII that names/contacts/locates a
+    // specific person may corroborate by proximity.
+    let prox_index = ProximityIndex::build(pii_entities.iter(), |pii| {
+        is_person_identifying(&pii.type_)
+    });
+
     for (name, start, end) in candidates_cjk(&chars, cfg) {
         let (before, after) = context_windows(&chars, start, end, cfg.window);
 
@@ -309,13 +457,7 @@ pub fn detect_with(
         // org name, or a weak/sensitive attribute does NOT answer that question and
         // must not corroborate. The allowlist gate (is_person_identifying) enforces
         // this; new technical types are safe by default (not present in the list).
-        evidence += proximity_evidence(
-            start,
-            end,
-            pii_entities.iter(),
-            &[(cfg.prox_near, cfg.w_pii_prox)],
-            |pii| is_person_identifying(&pii.type_),
-        );
+        evidence += proximity_evidence(start, end, &prox_index, &[(cfg.prox_near, cfg.w_pii_prox)]);
 
         if evidence >= cfg.threshold {
             out.push(PatternMatch {
@@ -476,5 +618,243 @@ mod tests {
         ] {
             assert!(!is_person_identifying(t), "{t} must NOT corroborate an evidence-gated candidate");
         }
+    }
+
+    // ── Proximity: indexed sweep is byte-identical to the naive scan + linear ──
+
+    /// The pre-index proximity scan, VERBATIM, as a differential oracle — the
+    /// exact loop `proximity_evidence` carried before the indexed rewrite, plus a
+    /// returned selected-index so the fuzz can assert the SAME entity (not merely
+    /// the same weight). Increments the same `PROX_PROBES` counter (once per
+    /// entity examined) as index build, so the teeth test can pin it O(k²).
+    fn proximity_evidence_naive_indexed<'a, I>(
+        start: usize,
+        end: usize,
+        pii_entities: I,
+        buckets: &[(usize, f64)],
+        gate: impl Fn(&PatternMatch) -> bool,
+    ) -> (Option<usize>, f64)
+    where
+        I: IntoIterator<Item = &'a PatternMatch>,
+    {
+        for (idx, pii) in pii_entities.into_iter().enumerate() {
+            PROX_PROBES.with(|c| c.set(c.get() + 1));
+            if !gate(pii) {
+                continue;
+            }
+            let distance = start.abs_diff(pii.end).min(pii.start.abs_diff(end));
+            for &(edge, weight) in buckets {
+                if distance <= edge {
+                    return (Some(idx), weight);
+                }
+            }
+        }
+        (None, 0.0)
+    }
+
+    /// `detect_with` with the naive (un-indexed) proximity scan — shares the
+    /// candidate scan, windowing and weights, so the ONLY difference from the
+    /// production path is the proximity mechanism, making it a faithful
+    /// differential oracle AND the teeth for the operation-count gate.
+    fn detect_with_naive(
+        text: &str,
+        pii_entities: &[PatternMatch],
+        cfg: &DetectorConfig,
+    ) -> Vec<PatternMatch> {
+        if text.is_empty() {
+            return Vec::new();
+        }
+        let chars: Vec<char> = text.chars().collect();
+        let mut out = Vec::new();
+        for (name, start, end) in candidates_cjk(&chars, cfg) {
+            let (before, after) = context_windows(&chars, start, end, cfg.window);
+            let cue_hit = cfg.cue.is_match(&before).unwrap_or(false)
+                || cfg.cue.is_match(&after).unwrap_or(false);
+            let mut evidence = 0.0_f64;
+            if cue_hit {
+                evidence += cfg.w_cue;
+            }
+            if (end - start) >= cfg.lexicon_conf_min {
+                evidence += cfg.w_lexicon;
+            }
+            evidence += proximity_evidence_naive_indexed(
+                start,
+                end,
+                pii_entities.iter(),
+                &[(cfg.prox_near, cfg.w_pii_prox)],
+                |pii| is_person_identifying(&pii.type_),
+            )
+            .1;
+            if evidence >= cfg.threshold {
+                out.push(PatternMatch {
+                    text: name,
+                    type_: cfg.type_.to_string(),
+                    start,
+                    end,
+                    confidence: evidence.min(1.0),
+                    layer: 1,
+                });
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn proximity_indexed_matches_naive_oracle_fuzz() {
+        // Differential oracle: the indexed sweep must select the SAME entity AND
+        // return the SAME weight as the naive scan for EVERY input. A hand-rolled
+        // xorshift PRNG (fixed seed, fixed iterations, no crate dep) generates pii
+        // lists that are random-length, nested/containing, end-side-only, and
+        // UNSORTED, scored against random-width candidates with one- and two-bucket
+        // configs, under BOTH a filtering gate (gated-out entries must not shift the
+        // min-index selection) and the accept-all gate (the person path). Asserting
+        // on the (index, weight) PAIR — not weight alone — is what catches a before-
+        // side miss (a start-only window) or a closest-wins bug (overlap-only
+        // selection): either can return the right weight while selecting the wrong
+        // entity, and a sorted-only / overlap-only fuzz would pass through it.
+        let types = ["person", "phone", "medical", "jwt", "email"];
+        let mut state: u64 = 0xD1B5_4A32_D192_ED03;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for _ in 0..20_000 {
+            // Candidate span in a tight coordinate space so proximity actually fires.
+            let cstart = (next() % 60) as usize;
+            let cend = cstart + 1 + (next() % 8) as usize;
+            // Random-length, unsorted, nested/containing, end-side-only pii list.
+            let m = (next() % 8) as usize;
+            let pii: Vec<PatternMatch> = (0..m)
+                .map(|_| {
+                    let s = (next() % 80) as usize;
+                    let t = types[(next() as usize) % types.len()];
+                    pm("x", t, s, s + 1 + (next() % 12) as usize)
+                })
+                .collect();
+            // One- and two-bucket ASCENDING configs.
+            let e0 = (next() % 12) as usize;
+            let buckets: Vec<(usize, f64)> = if next() % 2 == 0 {
+                vec![(e0, 0.5), (e0 + (next() % 12) as usize, 0.3)]
+            } else {
+                vec![(e0, 0.4)]
+            };
+            for use_gate in [true, false] {
+                let gate = |p: &PatternMatch| {
+                    if use_gate {
+                        is_person_identifying(&p.type_)
+                    } else {
+                        true
+                    }
+                };
+                let index = ProximityIndex::build(pii.iter(), gate);
+                let got = proximity_evidence_indexed(cstart, cend, &index, &buckets);
+                let want =
+                    proximity_evidence_naive_indexed(cstart, cend, pii.iter(), &buckets, gate);
+                assert_eq!(
+                    got, want,
+                    "indexed diverged from naive: cand=({cstart},{cend}) buckets={buckets:?} \
+                     gate={use_gate} pii={:?}",
+                    pii.iter().map(|p| (p.type_.as_str(), p.start, p.end)).collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+
+    fn count_cfg() -> &'static DetectorConfig {
+        static CELL: OnceLock<DetectorConfig> = OnceLock::new();
+        CELL.get_or_init(|| {
+            // A cue that never matches the degenerate input, so scoring reaches the
+            // proximity step for every candidate (the whole point of the gate).
+            static CUE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"NEVERMATCH").unwrap());
+            DetectorConfig::new(&["糖尿病"], &CUE, "conditions")
+        })
+    }
+
+    /// `糖尿病×k` shape: k `conditions` candidates × k gated-out `medical`
+    /// entities. Returns the proximity operation count for one detector run.
+    fn prox_probes_conditions(k: usize) -> u64 {
+        let input = "糖尿病".repeat(k);
+        let pii: Vec<PatternMatch> = (0..k).map(|i| pm("糖", "medical", i * 3, i * 3 + 3)).collect();
+        PROX_PROBES.with(|c| c.set(0));
+        let _ = detect_with(&input, &pii, count_cfg());
+        PROX_PROBES.with(|c| c.get())
+    }
+
+    fn prox_probes_conditions_naive(k: usize) -> u64 {
+        let input = "糖尿病".repeat(k);
+        let pii: Vec<PatternMatch> = (0..k).map(|i| pm("糖", "medical", i * 3, i * 3 + 3)).collect();
+        PROX_PROBES.with(|c| c.set(0));
+        let _ = detect_with_naive(&input, &pii, count_cfg());
+        PROX_PROBES.with(|c| c.get())
+    }
+
+    #[test]
+    fn conditions_proximity_probe_count_is_linear() {
+        // Operation-count gate: the indexed sweep builds the (empty, all gated-out)
+        // index ONCE — O(k) — and every candidate query then touches zero entries,
+        // so doubling k ~doubles the count (~2×). Two consecutive doublings must
+        // each stay well under the 3.0 midpoint. (Excluded from release:
+        // `PROX_PROBES` is `#[cfg(test)]`.)
+        let k400 = prox_probes_conditions(400);
+        let k800 = prox_probes_conditions(800);
+        let k1600 = prox_probes_conditions(1600);
+        let r1 = k800 as f64 / k400 as f64;
+        let r2 = k1600 as f64 / k800 as f64;
+        assert!(
+            r1 < 3.0 && r2 < 3.0,
+            "proximity must be linear: probes(400)={k400} (800)={k800} (1600)={k1600}, \
+             ratios {r1:.2}/{r2:.2} (quadratic would be ~4×)"
+        );
+    }
+
+    #[test]
+    fn naive_conditions_proximity_probe_count_is_quadratic() {
+        // Pins that the linear gate above has real discriminating power. The naive
+        // scan re-walks all k entities from zero for each of the k candidates →
+        // O(k²), so doubling k ~quadruples the count (~4×). If the indexed rewrite
+        // were reverted to the naive scan, the production ratio would flip from ~2×
+        // to ~4× and `conditions_proximity_probe_count_is_linear` (< 3.0) would fail.
+        let n400 = prox_probes_conditions_naive(400);
+        let n800 = prox_probes_conditions_naive(800);
+        let ratio = n800 as f64 / n400 as f64;
+        assert!(
+            ratio > 3.0,
+            "naive proximity must be quadratic: probes(400)={n400} (800)={n800}, \
+             ratio {ratio:.2} (linear would be ~2×)"
+        );
+    }
+
+    /// `糖尿病×k` with PERSON_IDENTIFYING `phone` entities at ~3-char spacing, so
+    /// the index is POPULATED (not the empty gated-out case) and every candidate's
+    /// ±E_max query touches only a bounded window.
+    fn prox_probes_conditions_gated_in(k: usize) -> u64 {
+        let input = "糖尿病".repeat(k);
+        let pii: Vec<PatternMatch> = (0..k).map(|i| pm("1", "phone", i * 3, i * 3 + 3)).collect();
+        PROX_PROBES.with(|c| c.set(0));
+        let _ = detect_with(&input, &pii, count_cfg());
+        PROX_PROBES.with(|c| c.get())
+    }
+
+    #[test]
+    fn conditions_proximity_query_is_sublinear_with_populated_index() {
+        // Companion to the empty-index gate: pins the sub-linear range-QUERY path,
+        // not just the O(k) build. With the index populated (phone entities), each
+        // candidate's fixed-width ±E_max(50) window covers a bounded number of
+        // entries regardless of k, so the total stays linear (~2×/doubling). A
+        // `range_slice` that degraded to a full linear scan would make each query
+        // O(k) → O(k²) total → ratio ~4× and THIS test would fail — which the
+        // empty-index gate (trivially-empty queries) cannot catch.
+        let k400 = prox_probes_conditions_gated_in(400);
+        let k800 = prox_probes_conditions_gated_in(800);
+        let k1600 = prox_probes_conditions_gated_in(1600);
+        let r1 = k800 as f64 / k400 as f64;
+        let r2 = k1600 as f64 / k800 as f64;
+        assert!(
+            r1 < 3.0 && r2 < 3.0,
+            "populated-index proximity query must be linear: probes(400)={k400} (800)={k800} \
+             (1600)={k1600}, ratios {r1:.2}/{r2:.2} (a full linear range scan would be ~4×)"
+        );
     }
 }

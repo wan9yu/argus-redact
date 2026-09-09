@@ -13,6 +13,7 @@ use serde::Deserialize;
 
 use crate::evidence_detector::{
     candidates_cjk, context_windows, is_person_identifying, proximity_evidence, DetectorConfig,
+    ProximityIndex,
 };
 
 #[derive(Debug, Deserialize)]
@@ -220,6 +221,12 @@ fn region_candidates_scored(
 
     let mut out: Vec<crate::types::PatternMatch> = Vec::new();
 
+    // Build the proximity index ONCE for this invocation (the `is_person_identifying`
+    // allowlist gate is applied here), then share it across every candidate.
+    let prox_index = ProximityIndex::build(pii_entities.iter(), |pii| {
+        is_person_identifying(&pii.type_)
+    });
+
     for (name, start, end) in candidates_cjk(&chars, region_detector()) {
         // before = chars[max(0, start - REGION_WINDOW) : start]
         // after  = chars[end : end + REGION_WINDOW]   (char slices)
@@ -260,12 +267,11 @@ fn region_candidates_scored(
         evidence += proximity_evidence(
             start,
             end,
-            pii_entities.iter(),
+            &prox_index,
             &[
                 (REGION_PROX_NEAR, W_REGION_PII_PROX),
                 (REGION_PROX_MID, W_REGION_PII_MID),
             ],
-            |pii| is_person_identifying(&pii.type_),
         );
 
         if evidence >= REGION_THRESHOLD {

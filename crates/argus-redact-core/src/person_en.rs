@@ -34,7 +34,7 @@ use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
-use crate::evidence_detector::proximity_evidence;
+use crate::evidence_detector::{proximity_evidence, ProximityIndex};
 use crate::person_data::{common_words_en_set, given_names_en_set, surnames_en_set};
 use crate::reserved_range::CharOffsetCursor;
 use crate::types::PatternMatch;
@@ -153,12 +153,15 @@ const PROXIMITY_MID: usize = 150;
 /// capped at 1.0. `lead_clean` is the leading token with its trailing dot
 /// stripped (used for the title + name-like tests); `start`/`end` are the
 /// candidate's char offsets (for proximity). The signals (title / name-like /
-/// proximity) are OR'd additively. Returns 0.0 when no signal fires.
+/// proximity) are OR'd additively. Returns 0.0 when no signal fires. `prox_index`
+/// is the [`ProximityIndex`] built ONCE by the caller over the (self_reference-
+/// filtered) structural PII, so scoring many candidates no longer re-walks the
+/// entity list from zero per candidate.
 fn score_bare_surname(
     lead_clean: &str,
     start: usize,
     end: usize,
-    pii_entities: &[&PatternMatch],
+    prox_index: &ProximityIndex,
 ) -> f64 {
     let mut evidence = 0.0_f64;
 
@@ -179,17 +182,16 @@ fn score_bare_surname(
     }
 
     // Proximity to structural PII — first entity within a bucket wins (near
-    // before mid), via the shared `proximity_evidence` helper. `pii_entities` is
-    // already filtered upstream (self_reference dropped), so every entity is
-    // eligible — the gate is `|_| true`. `abs_diff` over usize char offsets ==
-    // Python `abs(...)` on ints. Adding the helper's 0.0 when nothing matches is
-    // a no-op on the non-negative running total.
+    // before mid), via the shared `proximity_evidence` helper. `prox_index` is
+    // already filtered upstream (self_reference dropped, gate `|_| true` — every
+    // remaining entity eligible — applied when the index was built). `abs_diff`
+    // over usize char offsets == Python `abs(...)` on ints. Adding the helper's
+    // 0.0 when nothing matches is a no-op on the non-negative running total.
     evidence += proximity_evidence(
         start,
         end,
-        pii_entities.iter().copied(),
+        prox_index,
         &[(PROXIMITY_NEAR, W_PROXIMITY_NEAR), (PROXIMITY_MID, W_PROXIMITY_MID)],
-        |_| true,
     );
 
     // No corroboration → don't match at L1 (leave to L2 NER).
@@ -299,6 +301,11 @@ pub fn detect_person_names(
         .iter()
         .filter(|p| p.type_ != "self_reference")
         .collect();
+
+    // Proximity index over the structural PII, built ONCE and shared across every
+    // bare-surname candidate (gate `|_| true` — the self_reference filter above
+    // already narrowed the set). Replaces the former per-candidate re-walk.
+    let prox_index = ProximityIndex::build(structural_pii.iter().copied(), |_| true);
 
     // ── Phase 1: known_names exact match (confidence 1.0). ──
     //   sorted_names = sorted((n for n in known_names if n), key=len, reverse=True)
@@ -473,7 +480,7 @@ pub fn detect_person_names(
         let confidence = if given_names.contains(first_clean) {
             1.0
         } else {
-            let score = score_bare_surname(first_clean, match_start, tok.end, &structural_pii);
+            let score = score_bare_surname(first_clean, match_start, tok.end, &prox_index);
             if score < threshold {
                 // Uncorroborated lone capitalized surname pair — leave to L2 NER.
                 continue;
@@ -533,16 +540,69 @@ pub fn score_person_candidate(
 }
 
 /// `&[char]` core of [`score_person_candidate`], threaded the whole-text char
-/// slice instead of re-collecting `text.chars()` per call. A caller that scores
-/// MANY candidate spans against the same text (e.g. the L2-NER gate) collects
-/// `chars` ONCE and calls this per span, mirroring `person_zh::score_candidate`;
-/// the `&str` [`score_person_candidate`] wrapper is the single-shot convenience
-/// (collect once + delegate) and keeps its frozen signature. Output is identical.
+/// slice instead of re-collecting `text.chars()` per call. The `&str`
+/// [`score_person_candidate`] wrapper is the single-shot convenience (collect
+/// once + delegate) and keeps its frozen signature. Output is identical.
+///
+/// A caller that scores MANY spans against the SAME text + PII (e.g. the L2-NER
+/// gate) MUST use [`score_person_candidates_chars`], which filters the PII and
+/// builds the [`ProximityIndex`] ONCE for the whole batch — calling this per span
+/// re-filters + re-sorts the index on every call (O(spans · g log g)). This
+/// single-span form is the thin wrapper: build the shared index once, delegate.
 pub fn score_person_candidate_chars(
     text_chars: &[char],
     start: usize,
     end: usize,
     pii_entities: &[PatternMatch],
+) -> f64 {
+    let prox_index = build_person_prox_index(pii_entities);
+    score_person_candidate_span(text_chars, start, end, &prox_index)
+}
+
+/// Score MANY externally-supplied person-candidate spans against ONE text + PII
+/// set — the batch form of [`score_person_candidate_chars`], with the
+/// `self_reference` filter and the [`ProximityIndex`] build hoisted OUT of the
+/// per-span loop so an `n`-span × `g`-entity gate costs O(g log g + n) index work
+/// instead of O(n · g log g). Returns one score per span, positionally aligned
+/// with `spans`.
+///
+/// Byte-identical to mapping [`score_person_candidate_chars`] over `spans`: every
+/// span scores against the SAME filtered structural PII in the SAME order, so a
+/// shared index yields the same per-span score as a per-call rebuild (the index
+/// content is a pure function of `pii_entities`, independent of the span).
+pub fn score_person_candidates_chars(
+    text_chars: &[char],
+    spans: &[(usize, usize)],
+    pii_entities: &[PatternMatch],
+) -> Vec<f64> {
+    let prox_index = build_person_prox_index(pii_entities);
+    spans
+        .iter()
+        .map(|&(start, end)| score_person_candidate_span(text_chars, start, end, &prox_index))
+        .collect()
+}
+
+/// Drop `self_reference` PII exactly as `detect_person_names` does (a nearby
+/// "me" / "I" must not grant proximity) and build the proximity index over the
+/// survivors (gate `|_| true` — every remaining entity is eligible). The index
+/// content is a pure function of `pii_entities`, so it can be built once and
+/// shared across any number of candidate spans of the same invocation.
+fn build_person_prox_index(pii_entities: &[PatternMatch]) -> ProximityIndex {
+    let structural_pii: Vec<&PatternMatch> = pii_entities
+        .iter()
+        .filter(|p| p.type_ != "self_reference")
+        .collect();
+    ProximityIndex::build(structural_pii.iter().copied(), |_| true)
+}
+
+/// Score ONE candidate span against a PREBUILT proximity index — the per-span
+/// core shared by the single-shot and batch entry points. `start`/`end` are char
+/// offsets into `text_chars`.
+fn score_person_candidate_span(
+    text_chars: &[char],
+    start: usize,
+    end: usize,
+    prox_index: &ProximityIndex,
 ) -> f64 {
     if start >= end || end > text_chars.len() {
         return 0.0;
@@ -564,13 +624,8 @@ pub fn score_person_candidate_chars(
         return 1.0;
     }
 
-    // Bare candidate → the ONE evidence gate. Drop `self_reference` PII exactly as
-    // `detect_person_names` does (a nearby "me" / "I" must not grant proximity).
-    let structural_pii: Vec<&PatternMatch> = pii_entities
-        .iter()
-        .filter(|p| p.type_ != "self_reference")
-        .collect();
-    score_bare_surname(lead_clean, start, end, &structural_pii)
+    // Bare candidate → the ONE evidence gate, over the prebuilt structural-PII index.
+    score_bare_surname(lead_clean, start, end, prox_index)
 }
 
 /// Python `text[a:b].strip(" \t.") == ""` over a char slice — true when the
@@ -1051,7 +1106,8 @@ mod tests {
         // Candidate "Lake Park" spans chars 0..9. A PII entity placed after the
         // candidate at start = 9 + distance gives min(pend, pstart-9) == distance.
         let p = pii("phone", 9 + distance, 9 + distance + 11);
-        score_bare_surname("Lake", 0, 9, &[&p])
+        let prox_index = ProximityIndex::build([&p], |_| true);
+        score_bare_surname("Lake", 0, 9, &prox_index)
     }
 
     #[test]
@@ -1192,6 +1248,32 @@ mod tests {
         // Empty / out-of-range spans must not panic and score 0.0.
         assert_eq!(score_person_candidate("Smith", 0, 0, &[]), 0.0);
         assert_eq!(score_person_candidate("Smith", 0, 99, &[]), 0.0);
+    }
+
+    #[test]
+    fn batch_scoring_matches_per_span_scoring() {
+        // The 6th-site byte-identity contract: `score_person_candidates_chars`
+        // (proximity index built ONCE for the batch) must return per-span scores
+        // identical to mapping the single-shot `score_person_candidate_chars`
+        // (index rebuilt per call). Mix given-name-led, title-led, bare + PII
+        // proximity, and out-of-range spans, with a `self_reference` entry that
+        // BOTH paths must drop, so the shared vs per-call index is exercised across
+        // every branch.
+        let text = "Marco Rossi met Mr. Smith near Lake Park, 4155551234.";
+        let text_chars: Vec<char> = text.chars().collect();
+        let pii = vec![
+            pii("phone", 42, 52),
+            pii("self_reference", 0, 2), // dropped by the filter in both paths
+        ];
+        let spans = [(0, 11), (16, 25), (31, 40), (0, 999)];
+        let batch = score_person_candidates_chars(&text_chars, &spans, &pii);
+        let per_span: Vec<f64> = spans
+            .iter()
+            .map(|&(s, e)| score_person_candidate_chars(&text_chars, s, e, &pii))
+            .collect();
+        assert_eq!(batch, per_span, "batch scores must equal per-span scores");
+        // Not vacuously all-zero: bare "Lake Park" near the phone scores 0.3 + 0.5.
+        assert!((batch[2] - 0.8).abs() < 1e-9, "Lake Park + phone proximity: {batch:?}");
     }
 
     #[test]
