@@ -141,7 +141,7 @@ assert restored == "张三 13812345678"  # pure
 
 - **Same entity in one call → same pseudonym.** "张三...张三" → "P-012...P-012"
 - **Different calls without key → different pseudonyms.** Fresh random codes each time.
-- **With same salt → same pseudonyms.** `salt=42` always produces the same mapping.
+- **With same salt → same pseudonyms within one call.** `salt=42` makes a single `redact()` call reproducible. It is not yet a full cross-call guarantee: mask-family collision suffixes (`resolve_collision`) are resolved against whatever else is redacted in the SAME call, so the same original text redacted in two separate calls can land on different pseudonym codes if the surrounding entities differ. Reuse `key=` (batch mode) to keep codes stable across calls.
 - **Pseudonym codes are random, not sequential.** P-037 and P-012, not P-001 and P-002. The code numbers reveal nothing about entity count or order.
 - **Layers run bottom-up.** Layer 1 (regex) first, then Layer 2 (NER), then Layer 3 (semantic). Later layers don't re-detect what earlier layers already caught.
 - **Overlapping detections are deduplicated.** If regex and NER both catch the same span, the higher-confidence match wins.

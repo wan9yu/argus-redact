@@ -178,6 +178,13 @@ pub fn mask_landline(value: &str) -> String {
 /// PyO3 boundary as an uncatchable `PanicException`. The binding maps the `Err`
 /// to a catchable Python `ValueError`, so saturation degrades to a normal error
 /// instead of a process-level DoS.
+///
+/// The saturation error carries NO label: `label` is the caller's own visible
+/// text (a masked value, a name, a category label) and this error can surface
+/// verbatim in an HTTP 400 body — echoing it back would leak the very value the
+/// mask/category strategy exists to hide. `resolve_collision_tracked` in
+/// `replace.rs` re-wraps this with the entity TYPE (never the label) for callers
+/// that want more than the bare fact of saturation.
 pub fn resolve_collision(label: &str, used: &HashSet<String>) -> Result<String, String> {
     if !used.contains(label) {
         return Ok(label.to_string());
@@ -196,7 +203,7 @@ pub fn resolve_collision(label: &str, used: &HashSet<String>) -> Result<String, 
             return Ok(candidate);
         }
     }
-    Err(format!("too many collisions for label {label:?}"))
+    Err("too many collisions".to_string())
 }
 
 #[cfg(test)]

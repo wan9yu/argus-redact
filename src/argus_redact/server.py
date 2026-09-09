@@ -218,11 +218,21 @@ def _parse_json_object(raw: bytes) -> dict[str, Any]:
     ``except (ValueError, TypeError)`` net the handlers rely on. That surfaced
     as a 500 while every other malformed shape returned a clean 400. Both
     body-parsing endpoints route through here so they cannot drift apart.
+
+    A body nested deep enough (e.g. thousands of ``[`` with no matching ``]``)
+    exhausts the C-accelerated JSON decoder's recursion budget and raises
+    ``RecursionError`` instead of a ``json.JSONDecodeError`` — a ``ValueError``
+    subclass the ``except ValueError`` above does NOT catch, since
+    ``RecursionError`` is a ``RuntimeError`` subclass. Left uncaught it reached
+    the caller as an unhandled 500 rather than the clean 400 every other
+    malformed body gets.
     """
     try:
         body = json.loads(raw)
     except ValueError:
         raise _BadBody("request body must be valid JSON") from None
+    except RecursionError:
+        raise _BadBody("request body nests too deeply") from None
     if not isinstance(body, dict):
         raise _BadBody(f"request body must be a JSON object, got {type(body).__name__}") from None
     return body

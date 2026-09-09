@@ -361,12 +361,21 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
     /// `resolve_collision` for a mask-family label, recording the collision (by
     /// entity type) when a real disambiguation happened. The mask / name_mask /
     /// landline_mask / category arms all need this exact pair.
+    ///
+    /// A saturation `Err` from `resolve_collision` is re-wrapped to name the
+    /// entity TYPE — never the label, which is the caller's own visible masked
+    /// value/name/category text and could otherwise leak through an HTTP 400
+    /// body. The bare `resolve_collision` call sites in `process` below (the
+    /// `remove`/default-redact fallbacks, which have no entity-type-scoped
+    /// tracked variant) still surface the type-less base message — acceptable,
+    /// since those paths don't have a stable "entity type" to attach either.
     fn resolve_collision_tracked(
         &mut self,
         label: &str,
         entity_type: &str,
     ) -> Result<String, String> {
-        let resolved = resolve_collision(label, &self.used_labels)?;
+        let resolved = resolve_collision(label, &self.used_labels)
+            .map_err(|e| format!("{e} for entity type {entity_type}"))?;
         if resolved != label {
             self.mask_collisions.push(entity_type.to_string());
         }
@@ -1602,5 +1611,41 @@ mod tests {
         // the fast forward pass (or the fallback) it claims to cover.
         assert!(fast_seen > 0, "fast forward path never exercised");
         assert!(slow_seen > 0, "splice fallback path never exercised");
+    }
+
+    #[test]
+    fn resolve_collision_tracked_saturated_error_names_type_not_label() {
+        // The label is the caller's own visible masked value/name/category text
+        // (here deliberately label-shaped so a leak would be obvious); a
+        // saturation error must never echo it back, since this error text can
+        // reach an HTTP 400 body.
+        let factory = SeqFactory;
+        let mut session: ReplaceSession<'_, SeqFactory> =
+            ReplaceSession::new(&factory, None, "P-", "O-", None, None);
+        let label = "138****5678";
+        session.used_labels.insert(label.to_string());
+        // Saturate every candidate resolve_collision could produce for this
+        // label by feeding its own output back in as "already used", until it
+        // starts erroring — without hardcoding the circled-digit/numeric-suffix
+        // internals of masks.rs.
+        loop {
+            match resolve_collision(label, &session.used_labels) {
+                Ok(candidate) => {
+                    session.used_labels.insert(candidate);
+                }
+                Err(_) => break,
+            }
+        }
+        let err = session
+            .resolve_collision_tracked(label, "phone")
+            .unwrap_err();
+        assert!(
+            err.contains("phone"),
+            "error should name the entity type: {err}"
+        );
+        assert!(
+            !err.contains(label),
+            "error must NOT leak the offending label: {err}"
+        );
     }
 }

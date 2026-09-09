@@ -12,7 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from argus_redact.exceptions import SecurityWarning
-from argus_redact.glue.redact import _build_type_map, _detect
+from argus_redact.glue.redact import _build_type_map, _detect, _validate_mode
 from argus_redact.pure.lang_detect import detect_languages
 from argus_redact.pure.replacer import (
     make_structured_session,
@@ -134,21 +134,59 @@ def _parse_paths(paths: list[str | list[str]]) -> list[list[str]]:
     taken verbatim with no ``.``/``[*]`` parsing — the escape hatch for a key
     that literally contains a dot or bracket (``[["a.b"]]`` targets the single
     top-level key ``"a.b"``, which no dot-notation string could reach).
+
+    Raises:
+        TypeError: if an entry is neither ``str`` nor ``list`` (e.g. a tuple),
+            or a list entry's segments are not all ``str`` (e.g. ``["user", 1]``)
+            — either would otherwise crash later with a raw, less legible
+            ``AttributeError`` when the segment is compared or ``.isdigit()``-checked.
+        ValueError: if a selector resolves to zero path segments (``""``, ``"."``,
+            or ``[]``), or a list-entry segment is the empty string (``[""]``) —
+            such a selector can never match any leaf, so it is almost certainly a
+            typo that would otherwise silently redact nothing. The dot-notation
+            string form already drops empty segments from ``"[*]".split(".")``
+            noise (see below); a list entry takes segments VERBATIM, so an
+            empty-string segment there must be rejected explicitly for the two
+            forms to agree — otherwise ``paths=[[""]]`` would silently pass
+            where the equivalent ``paths=[""]`` correctly raises.
     """
     parsed = []
     for path in paths:
+        if not isinstance(path, (str, list)):
+            raise TypeError(
+                f"paths entries must be a str or a list of str segments, "
+                f"got {type(path).__name__}: {path!r}"
+            )
         if isinstance(path, list):
-            parsed.append(list(path))
-            continue
-        segments = []
-        for part in path.replace("[*]", ".*").split("."):
-            # A leading (or doubled) "[*]" turns into an empty segment once split
-            # on ".": "[*].phone" -> ".*.phone" -> ['', '*', 'phone']. A top-level
-            # list leaf's walk-path never carries that empty prefix, so the path
-            # would never match and the leaf silently goes unredacted. Drop empty
-            # segments so "[*].phone" behaves the same as "*.phone".
-            if part:
-                segments.append(part)
+            bad_segs = [seg for seg in path if not isinstance(seg, str)]
+            if bad_segs:
+                raise TypeError(
+                    f"paths list-entry segments must all be str, got "
+                    f"{type(bad_segs[0]).__name__} in {path!r}"
+                )
+            if any(seg == "" for seg in path):
+                raise ValueError(
+                    f"paths list-entry {path!r} contains an empty-string segment; "
+                    f"pass a non-empty selector, or paths=None to redact the "
+                    f"whole document"
+                )
+            segments = list(path)
+        else:
+            segments = []
+            for part in path.replace("[*]", ".*").split("."):
+                # A leading (or doubled) "[*]" turns into an empty segment once
+                # split on ".": "[*].phone" -> ".*.phone" -> ['', '*', 'phone']. A
+                # top-level list leaf's walk-path never carries that empty prefix,
+                # so the path would never match and the leaf silently goes
+                # unredacted. Drop empty segments so "[*].phone" behaves the same
+                # as "*.phone".
+                if part:
+                    segments.append(part)
+        if not segments:
+            raise ValueError(
+                f"paths selector {path!r} resolves to zero path segments; pass a "
+                f"non-empty selector, or paths=None to redact the whole document"
+            )
         parsed.append(segments)
     return parsed
 
@@ -268,12 +306,22 @@ def redact_json(
 
     Raises:
         ValueError: if the document nests deeper than ``_MAX_STRUCTURED_DEPTH``,
-            or if ``on_unscannable`` is not ``"warn"``/``"raise"``.
+            if ``mode`` is not a recognized detection mode, if ``on_unscannable``
+            is not ``"warn"``/``"raise"``, if ``paths`` is an empty (but not
+            ``None``) list, or if a ``paths`` selector resolves to zero path
+            segments (``""``, ``"."``, or ``[]``).
         TypeError: if ``on_unscannable="raise"`` and the document contains a leaf
-            whose type cannot be scanned for PII.
+            whose type cannot be scanned for PII, if ``paths`` is a bare ``str``,
+            or if a ``paths`` entry (or one of its list-entry segments) is not a
+            ``str``.
     """
+    _validate_mode(mode)
     if isinstance(paths, str):
         raise TypeError("paths must be a list of path strings, not a str")
+    if paths is not None and not paths:
+        raise ValueError(
+            "paths must be a non-empty list of selectors, or None for the whole document"
+        )
     if on_unscannable not in ("warn", "raise"):
         raise ValueError(
             f"redact_json: on_unscannable must be 'warn' or 'raise', got {on_unscannable!r}"
@@ -653,7 +701,14 @@ def redact_csv(
     Returns:
         ``(redacted_csv, key)``; with ``with_aliases`` an ``aliases`` element is
         appended → ``(redacted_csv, key, aliases)``.
+
+    Raises:
+        ValueError: if ``mode`` is not a recognized detection mode. Checked
+            FIRST — even before the empty-input fast path — so an invalid mode
+            is never silently accepted just because the input happened to be
+            empty.
     """
+    _validate_mode(mode)
     rows = _parse_csv_rows(csv_text)
 
     if not rows:

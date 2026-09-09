@@ -339,7 +339,27 @@ def _pre_detected_pipeline(
 
     Returns ``(entities, restored_types)``; ``restored_types`` is PII-free (type
     names only) and empty when the invariant did not fire.
+
+    Raises:
+        ValueError: if any entity's span is malformed — negative ``start``/``end``,
+            ``start > end``, or ``start`` past the end of ``text``. This path takes
+            caller-supplied spans (unlike ``_detect``'s Rust-produced ones) and
+            builds the pure-Python ``PatternMatch`` directly, so a malformed span
+            is never range-checked by the PyO3 ``usize`` wrapper the way
+            ``_detect``'s entities are — left unchecked, it either fails open (a
+            garbage splice that skips the intended redaction) or corrupts the
+            output. An ``end`` past ``len(text)`` is intentionally NOT rejected
+            here: Rust ``assemble_splice`` clamps it at splice time, so a
+            documented out-of-range end (e.g. a caller passing a whole-line span
+            without measuring its exact length) still redacts to the end of the
+            text, and the original (unclamped) span is preserved in
+            ``report=True`` entity details.
     """
+    for e in pre_detected:
+        if e.start < 0 or e.end < 0 or e.start > e.end or e.start > len(text):
+            raise ValueError(
+                f"pre_detected span out of range: ({e.start}, {e.end}) for text length {len(text)}"
+            )
     merged = merge_entities(pre_detected, text=text)
     entities = _apply_type_filter(merged, types, types_exclude)
     return restore_lost_coverage(
@@ -366,6 +386,21 @@ _LANG_NER_ADAPTERS = {
 VALID_MODES = ("auto", "fast", "ner")
 
 
+def _validate_mode(mode: str) -> None:
+    """Raise ``ValueError`` for a ``mode`` outside ``VALID_MODES``.
+
+    Extracted from ``_validate_redact_inputs`` so the structured faces
+    (``redact_json``/``redact_csv``) can validate ``mode`` on its own — they have
+    no single ``text`` string to size-check, so running the FULL validator would
+    impose ``MAX_INPUT_SIZE`` (a whole-document byte cap ``structured.py`` never
+    had) on a JSON document or CSV table. Byte-identical message to the check
+    ``_validate_redact_inputs`` used to run inline, so ``redact()`` /
+    ``redact_pseudonym_llm`` error text is unchanged.
+    """
+    if mode not in VALID_MODES:
+        raise ValueError(f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}")
+
+
 def _validate_redact_inputs(
     text: str,
     mode: str,
@@ -388,8 +423,7 @@ def _validate_redact_inputs(
             f"Input text ({len(text)} chars) exceeds maximum allowed size "
             f"({MAX_INPUT_SIZE} chars). Split into smaller chunks."
         )
-    if mode not in VALID_MODES:
-        raise ValueError(f"Invalid mode '{mode}'. Must be one of: {', '.join(VALID_MODES)}")
+    _validate_mode(mode)
     if types is not None and types_exclude is not None:
         raise ValueError("types and types_exclude are mutually exclusive")
 
