@@ -1,7 +1,7 @@
 import ast
 import pathlib
 
-PURE = pathlib.Path("src/argus_redact/pure")
+PURE = pathlib.Path(__file__).parents[2] / "src/argus_redact/pure"
 
 
 def test_no_pure_module_has_no_core_redaction_fallback():
