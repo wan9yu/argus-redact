@@ -93,7 +93,9 @@ regression band itself) while min-of-7 spanned ~3%.
 `tests/benchmark/baseline.json` was deliberately **not** re-measured. Since
 `min <= median`, the committed numbers now act as a conservative ceiling: a
 current run reads as equal-or-improved against them, and the gate only fails on
-a real regression (`compare_baseline.py` fails on regression only — an
+a real regression once provenance matches (`compare_baseline.py` refuses
+outright, before comparing any measurement, on a platform/python mismatch or a
+missing commit label; past that check it fails only on regression — an
 improvement exits 0). The baseline is due a refresh from a CI-Linux run at the
 next intentional perf change; until then treat its absolute values as an older,
 slightly pessimistic reference rather than a current measurement.

@@ -209,8 +209,9 @@ Test data format:
 ## Maintenance & Governance
 
 argus-redact is currently maintained by a single author. The project is past its
-"hobby" phase (v0.6.x with downstream production users, mutation-tested core,
-perf-budget CI gate, multi-platform release pipeline) but the bus factor is **1**.
+"hobby" phase (v0.6.x with downstream production users, mutation testing that
+runs on the core crate within a CI time budget, perf-budget CI gate,
+multi-platform release pipeline) but the bus factor is **1**.
 Contributions that lower it are explicitly welcomed:
 
 - **Co-reviewers for the Rust core** (`crates/argus-redact-core/`) — most needed;

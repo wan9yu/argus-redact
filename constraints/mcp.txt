@@ -1,0 +1,26 @@
+# Constraints for the optional `mcp` extra (pyproject.toml: mcp = ["mcp>=2.0,<3.0"]).
+#
+# `pip install -c constraints/mcp.txt` — a constraints file only pins versions
+# for packages that are already part of the install; it does not add them as
+# new dependencies on its own.
+#
+# Why pinned: pyproject.toml's `mcp>=2.0,<3.0` range is intentionally broad (any
+# 2.x release), but a floating range means CI resolves whatever 2.x is newest at
+# install time, not the version the test suite was written against. When the
+# range resolves past 2.0.0, tests/integration/test_mcp.py's assertion on the
+# clean-error message for an all-separator `lang` value stops matching the
+# library's actual error text. Pinning here keeps CI on the version the suite
+# is verified against until the test is updated for a newer `mcp` release.
+#
+# mcp-types is mcp's own runtime dependency (mcp==2.0.0 requires
+# mcp-types==2.0.0 exactly), pinned here too for an explicit, self-documenting
+# resolution rather than relying on mcp's own metadata.
+#
+# NOTE: dependabot's pip ecosystem (.github/dependabot.yml) tracks
+# pyproject.toml, not this file — a constraints file isn't a dependency
+# manifest dependabot understands, so this pin will NOT auto-update. Tracked
+# follow-up: loosen it once tests/integration/test_mcp.py's clean-error-message
+# assertion is made robust to newer 2.x error text, or move the pin into a
+# requirements file dependabot can see.
+mcp==2.0.0
+mcp-types==2.0.0

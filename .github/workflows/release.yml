@@ -37,6 +37,17 @@ jobs:
     uses: ./.github/workflows/test.yml
     secrets: inherit
 
+  # Perf budget gate, re-run on the release tag and BLOCKING (see `release:`
+  # job's `needs:` below). Without this, perf.yml only triggers on main
+  # pushes/PRs, so a baseline-touch exemption taken earlier on main is never
+  # re-checked at the tag that actually ships — the perf gate would silently
+  # self-exempt, and even if it didn't, nothing downstream would have depended
+  # on its result.
+  perf:
+    needs: preflight
+    uses: ./.github/workflows/perf.yml
+    secrets: inherit
+
   build-wheels:
     needs: test
     strategy:
@@ -122,7 +133,11 @@ jobs:
           path: dist/*.tar.gz
 
   release:
-    needs: [build-wheels, build-sdist]
+    # `perf` runs in parallel with build-wheels/build-sdist (no wall-time cost)
+    # but gates HERE, at the irreversible-publish choke point: a regression or
+    # a provenance refusal must block PyPI/crates.io/GitHub Release, not just
+    # turn a dangling leg red after publish has already happened.
+    needs: [build-wheels, build-sdist, perf]
     runs-on: ubuntu-latest
     permissions:
       contents: write   # GitHub Release create
@@ -132,6 +147,11 @@ jobs:
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
+          # Distribution artifacts ONLY. This Release run also calls test.yml and
+          # perf.yml, which upload junit-*.xml and current.json respectively; an
+          # unscoped download would merge those into dist/ and break
+          # `twine upload dist/*` (InvalidDistribution) and pollute the Release.
+          pattern: "{wheels-*,sdist}"
           path: dist
           merge-multiple: true
 
@@ -149,9 +169,13 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          # Routed through the shell environment rather than interpolated
+          # directly into the `run:` script — a ref name is attacker-influenced
+          # and could otherwise inject shell syntax into the command line.
+          TAG: ${{ github.ref_name }}
         run: |
-          gh release create "${{ github.ref_name }}" dist/* \
-            --title "${{ github.ref_name }}" \
+          gh release create "$TAG" dist/*.whl dist/*.tar.gz \
+            --title "$TAG" \
             --generate-notes
 
   # The HF Space deploy lives in its own workflow (deploy-demo.yml) so it can also run

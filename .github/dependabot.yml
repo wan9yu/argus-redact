@@ -11,3 +11,34 @@ updates:
       actions:
         patterns:
           - "*"
+
+  # Python: pyproject.toml's runtime + optional-dependency extras (dev, serve,
+  # mcp, presidio, language packs).
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      python:
+        patterns:
+          - "*"
+
+  # Rust workspace (Cargo.toml at the repo root + member crates' Cargo.lock).
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      cargo:
+        patterns:
+          - "*"
+
+  # Demo browser-test harness (tests/demo/package.json + package-lock.json).
+  - package-ecosystem: "npm"
+    directory: "/tests/demo"
+    schedule:
+      interval: "weekly"
+    groups:
+      npm:
+        patterns:
+          - "*"

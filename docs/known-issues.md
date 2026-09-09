@@ -360,27 +360,38 @@ A byte-identical sub-quadratic rewrite of the candidate/occupancy scan — the s
 approach used for the v0.8.13 Layer-1 hint pass — is tracked for a follow-up
 release.
 
-### Perf-budget baseline is platform-specific and drifts
+### Perf-budget baseline is platform/interpreter-specific and drifts
 
-- **What**: The performance gate (`.github/workflows/perf.yml`) compares each
-  PR's measured timings against the committed `tests/benchmark/baseline.json`
-  with a fixed ±10% threshold. Those numbers are specific to the CI runner
-  (`ubuntu-latest`) and its image, so the baseline legitimately **drifts**: it
-  shifts when the runner image's speed changes, and a deliberate design change
-  can move a single metric (e.g. the v0.7.x streaming "detect-once on a ±W
-  context window" raised the single-large-feed `streaming_feed_per_chunk` cost —
-  the inherent price of cross-sentence-correct streaming). Until the baseline is
-  refreshed after such a shift, the gate reads red on otherwise-unrelated PRs.
+- **What**: The performance gate (`.github/workflows/perf.yml`) compares
+  measured timings against the committed `tests/benchmark/baseline.json` with
+  a ±25% threshold per workload. Those numbers are specific to the CI runner
+  (`ubuntu-latest`, Python 3.12) and its image, so the baseline legitimately
+  **drifts**: it shifts when the runner image's speed changes, and a
+  deliberate design change can move a single metric (e.g. the v0.7.x streaming
+  "detect-once on a ±W context window" raised the single-large-feed
+  `streaming_feed_per_chunk` cost — the inherent price of
+  cross-sentence-correct streaming). Until the baseline is refreshed after such
+  a shift, the gate reads red on otherwise-unrelated PRs. `compare_baseline.py`
+  also refuses the comparison outright (exit 2, before any delta is computed)
+  when the current run's `platform` or `python` (major.minor) doesn't match
+  the baseline's, or when either side is missing a `commit` provenance label —
+  so a red run here is not necessarily a real performance regression.
 - **Why we won't fix**: a fixed absolute threshold is the simplest reliable
   regression signal; an auto-/relative baseline would mask the regressions the
-  gate exists to catch. The gate runs on PRs only (a cheap signal on change),
-  and editing `baseline.json` in a PR deliberately **exempts** the gate — the
-  caller-owned escape hatch for an intentional refresh or an accepted-cost
-  change.
-- **What you should do**: refresh the baseline from a **CI (Linux) measurement**,
-  never a local dev machine — the comparison is platform-blind ±10%, so a
-  macOS/laptop baseline will spuriously trip on the Linux runner. A PR that
-  touches `baseline.json` is auto-exempted; the perf job's `Measure` step prints
+  gate exists to catch. The gate runs on PRs, on pushes to `main`, and — as a
+  reusable `workflow_call` from `release.yml` — on release tags too, where it
+  now blocks publish. Editing `baseline.json` in a PR/main push deliberately
+  **exempts** the gate (the caller-owned escape hatch for an intentional
+  refresh or an accepted-cost change); that self-exemption is disabled at a
+  release tag, so a baseline edited earlier can't sail through unreviewed at
+  the point it matters most.
+- **What you should do**: refresh the baseline from a **CI (`ubuntu-latest`)
+  measurement**, never a local dev machine — the platform/python provenance
+  check refuses a macOS/laptop-produced baseline outright rather than let it
+  silently compare against the Linux numbers. `make perf-update` enforces this
+  itself (it refuses to run outside `$GITHUB_ACTIONS`). A PR that touches
+  `baseline.json` is auto-exempted (except at a release tag); the perf job's
+  `Measure` step prints
   the current Linux `current.json` to copy in. Re-baseline (with a one-line note
   in the commit) whenever a deliberate design change shifts a metric — this is
   expected periodic maintenance, not a defect.

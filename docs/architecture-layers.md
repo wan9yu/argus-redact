@@ -82,7 +82,7 @@ underlying `specs` registry plus the **PRvL evaluation standard**
 | PII type registry | Names stable; new types added (additive). |
 | Compliance metadata (`PIPL_REFERENCES` etc.) | Key set stable; values updated when laws/regulations change. |
 | Pseudonym derivation chain | SHAKE-256 + HMAC, deterministic given salt + value. Chain frozen for replay across versions. |
-| Performance | Sub-ms `mode="fast"` per 1KB on Apple M1 Max; perf budget CI gate at ±10% per release. |
+| Performance | Sub-ms `mode="fast"` per 1KB on Apple M1 Max; perf budget CI gate at ±25% per release. |
 
 ### What the primitive does NOT promise
 

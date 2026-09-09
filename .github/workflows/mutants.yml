@@ -16,7 +16,13 @@ permissions:
 jobs:
   mutants-core:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    # `make mutants-core`'s current 11-file list has measured ~305 minutes and
+    # repeatedly failed to complete under the prior 300-minute timeout; 360
+    # gives that SAME file set real headroom. This is close to GitHub Actions'
+    # practical per-job ceiling — widening the --file list further (see the
+    # Makefile's mutants-core comment) needs a sharded matrix (`cargo mutants
+    # --shard k/N`), not another timeout bump.
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -46,4 +52,7 @@ jobs:
         with:
           name: mutants-core-report
           path: crates/argus-redact-core/mutants.out/
-          if-no-files-found: ignore
+          # A missing report means the run never produced output at all (crashed
+          # before cargo-mutants wrote anything) — that must fail loudly, not be
+          # swallowed as an empty-but-green artifact upload.
+          if-no-files-found: error

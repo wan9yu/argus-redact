@@ -13,16 +13,26 @@ on:
     paths-ignore:
       - "**/*.md"
       - "docs/**"
+  # Callable from release.yml so the perf gate also runs at a release tag,
+  # not just on main pushes/PRs — see the tag-ref exemption override below.
+  workflow_call:
 
 permissions:
   contents: read
 
 # Supersede an in-flight run when a newer commit lands on the same ref. The group
-# keys on both the workflow name and the ref, so a push to main can only ever
-# cancel another push to main — never a pull_request run (whose ref is
+# keys on the workflow name, a `-perf-` tag, and the ref, so a push to main can
+# only ever cancel another push to main — never a pull_request run (whose ref is
 # `refs/pull/<n>/merge`) and never a tag run (`refs/tags/…`).
+#
+# The `-perf-` tag is required, not decorative: release.yml calls both this
+# workflow and test.yml via workflow_call, and `github.workflow` in a called
+# workflow resolves to the CALLER's name ("Release"), not this file's — so
+# without a disjoint literal, this group and test.yml's would both resolve to
+# `Release-refs/tags/vX.Y.Z` at a release tag, and `cancel-in-progress` on
+# either could cancel the other's run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-perf-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -68,9 +78,23 @@ jobs:
           EVENT_BEFORE: ${{ github.event.before }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_SHA: ${{ github.sha }}
+          EVENT_REF: ${{ github.ref }}
         shell: bash
         run: |
           set -uo pipefail
+          # release.yml calls this workflow at tag-push time. The baseline-touch
+          # exemption below exists for the PR/main-push case, where a human
+          # deliberately updates the baseline in the same change under review. At
+          # a release tag that review window has already closed, so the perf gate
+          # must never self-exempt there — otherwise a baseline edited earlier on
+          # main would sail through the release with no perf comparison at all.
+          case "${EVENT_REF}" in
+            refs/tags/*)
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+              echo "Tag ref — baseline-touch exemption disabled; perf gate always runs at release."
+              exit 0
+              ;;
+          esac
           # RANGE is a single git revision-range token; empty means "no range is
           # available for this event", which yields no exemption.
           if [ "${EVENT_NAME}" = "pull_request" ]; then

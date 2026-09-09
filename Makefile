@@ -63,16 +63,40 @@ gen-confusables:
 gen-confusables-check:
 	@PYTHONPATH=src python -m argus_redact.specs.gen_confusables --check
 
+# Must run under GitHub Actions (see the $$GITHUB_ACTIONS check below): the
+# committed baseline's "platform" is "ubuntu-latest", and compare_baseline.py's
+# provenance refusal (exit 2) now rejects any comparison where platform
+# doesn't match exactly. A local run would stamp `uname -s` ("Darwin"/"Linux"),
+# producing a baseline.json that every subsequent CI perf-check would then
+# refuse to compare against — a local machine cannot produce a CI-valid
+# baseline, so this refuses outright rather than writing one that looks fine
+# and silently breaks the next gate run.
 perf-update:
+	@if [ -z "$$GITHUB_ACTIONS" ]; then \
+		echo "ERROR: make perf-update must run in GitHub Actions (ubuntu-latest)." >&2; \
+		echo "A local run would stamp this machine's platform (uname -s), which" >&2; \
+		echo "compare_baseline.py's provenance check would then refuse against" >&2; \
+		echo "every future ubuntu-latest CI measurement. Dispatch/re-run the perf.yml" >&2; \
+		echo "job and commit the baseline it produces instead." >&2; \
+		exit 1; \
+	fi
 	PYTHONPATH=src python tests/benchmark/run_perf_budget.py \
 		--output tests/benchmark/baseline.json \
-		--platform "$$(uname -s)" \
+		--platform "ubuntu-latest" \
 		--commit "$$(git rev-parse --short HEAD)"
 	@echo "Baseline updated. Review and commit tests/benchmark/baseline.json"
 
+# A local `make perf-check` is ADVISORY only. It stamps this machine's REAL
+# platform (uname -s) and sets ARGUS_PERF_ADVISORY=1, so compare_baseline.py
+# downgrades the inevitable platform mismatch (a laptop vs the ubuntu-latest
+# baseline) to a printed advisory instead of the exit-2 refusal — rather than
+# forging "ubuntu-latest" to sneak past the provenance gate. The timings come
+# from different hardware than the baseline was measured on, so this is a smoke
+# check; trust the perf.yml CI run for the real gate.
 perf-check:
-	@PYTHONPATH=src python tests/benchmark/run_perf_budget.py --output /tmp/argus-perf-current.json && \
-		python tests/benchmark/compare_baseline.py /tmp/argus-perf-current.json tests/benchmark/baseline.json; \
+	@PYTHONPATH=src python tests/benchmark/run_perf_budget.py --output /tmp/argus-perf-current.json \
+		--platform "$$(uname -s)" --commit "$$(git rev-parse --short HEAD)" && \
+		ARGUS_PERF_ADVISORY=1 python tests/benchmark/compare_baseline.py /tmp/argus-perf-current.json tests/benchmark/baseline.json; \
 		status=$$?; rm -f /tmp/argus-perf-current.json; exit $$status
 
 # Refresh the FAST-mode detection recall/precision baseline (deterministic).
@@ -123,6 +147,15 @@ tag-version-check:
 # redact_l1 / person_en / person_zh / patterns). The `--file` glob resolves
 # against the workspace ROOT, so we cd into the crate and use the `**/file.rs`
 # glob form.
+#
+# This list is intentionally NOT wider than the 11 files below: the run
+# already takes ~305 minutes at this size, and mutants.yml's timeout-minutes
+# (360) is GitHub Actions' effective per-job ceiling headroom, not a dial that
+# can keep going up — adding more files here (e.g. fakers/reserved_range/
+# merger/masks/streaming) without also sharding the file set (`cargo mutants
+# --shard k/N` across a matrix) would just make the job time out dark again.
+# Widening coverage is a tracked follow-up that needs the sharded-matrix
+# rework, not a bigger --file list on its own.
 mutants-core:
 	cd crates/argus-redact-core && cargo mutants \
 		--file '**/seed.rs' --file '**/validators.rs' --file '**/restore.rs' \

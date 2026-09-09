@@ -50,4 +50,5 @@ mutants.out*/
 tests/demo/node_modules/
 tests/demo/test-results/
 tests/demo/playwright-report/
-tests/demo/package-lock.json
+# tests/demo/package-lock.json is committed (reproducible npm installs for the
+# demo-e2e / Playwright job) — intentionally NOT listed here.
