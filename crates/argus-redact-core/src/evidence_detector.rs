@@ -258,6 +258,19 @@ impl ProximityIndex {
     }
 }
 
+/// Build a [`ProximityIndex`] gated by the shared `is_person_identifying`
+/// allowlist — only PII that names/contacts/locates a specific person may
+/// corroborate by proximity. The single call site of the `is_person_identifying`
+/// gate for every evidence-gated CJK detector (occupation, region, and the
+/// evidence detector itself), so they share ONE gate closure — identical to the
+/// per-site `|pii| is_person_identifying(&pii.type_)` each formerly inlined.
+pub(crate) fn build_person_identifying_index<'a, I>(pii_entities: I) -> ProximityIndex
+where
+    I: IntoIterator<Item = &'a PatternMatch>,
+{
+    ProximityIndex::build(pii_entities, |pii| is_person_identifying(&pii.type_))
+}
+
 /// The contiguous sub-slice of a `(key, idx)` list — sorted ascending by `key` —
 /// whose keys lie in the inclusive `[lo, hi]` range, located by two binary
 /// searches. Empty when nothing falls in range. Callers always pass `lo <= hi`
@@ -431,9 +444,7 @@ pub fn detect_with(
     // share it across every candidate — see [`ProximityIndex`]. The gate is the
     // `is_person_identifying` allowlist: only PII that names/contacts/locates a
     // specific person may corroborate by proximity.
-    let prox_index = ProximityIndex::build(pii_entities.iter(), |pii| {
-        is_person_identifying(&pii.type_)
-    });
+    let prox_index = build_person_identifying_index(pii_entities.iter());
 
     for (name, start, end) in candidates_cjk(&chars, cfg) {
         let (before, after) = context_windows(&chars, start, end, cfg.window);

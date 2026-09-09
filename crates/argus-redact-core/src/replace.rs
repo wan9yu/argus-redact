@@ -427,11 +427,7 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
                 cell_added.push(cand.to_string());
             }
         }
-        let mut resolved = if track {
-            self.resolve_collision_tracked(cand, entity_type)?
-        } else {
-            resolve_collision(cand, &self.used_labels)?
-        };
+        let mut resolved = self.resolve_maybe_tracked(cand, entity_type, track)?;
         // Cover doc forms that already carry the `①`-suffixed (or `(21)`-suffixed)
         // disambiguation: keep bumping while the resolved label ALSO appears in the
         // document. Terminates — the text is finite and each pass consumes a fresh
@@ -441,13 +437,27 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
             if self.used_labels.insert(resolved.clone()) {
                 cell_added.push(resolved.clone());
             }
-            resolved = if track {
-                self.resolve_collision_tracked(cand, entity_type)?
-            } else {
-                resolve_collision(cand, &self.used_labels)?
-            };
+            resolved = self.resolve_maybe_tracked(cand, entity_type, track)?;
         }
         Ok(resolved)
+    }
+
+    /// Resolve one candidate against the reserved set, dispatching on `track`:
+    /// the `mask_collisions`-recording resolver (mask family / category) when
+    /// `true`, else the bare `resolve_collision`. Extracted so
+    /// [`resolve_against_document`](Self::resolve_against_document) expresses the
+    /// dispatch once instead of at both the seed and bump sites.
+    fn resolve_maybe_tracked(
+        &mut self,
+        cand: &str,
+        entity_type: &str,
+        track: bool,
+    ) -> Result<String, String> {
+        if track {
+            self.resolve_collision_tracked(cand, entity_type)
+        } else {
+            resolve_collision(cand, &self.used_labels)
+        }
     }
 
     /// The set of code prefixes whose `<PREFIX>-<digits>` forms are scanned for
@@ -546,7 +556,11 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
         // Reverted per-cell via `cell_added` below (kept iff it became a key
         // original), keeping the per-cell reserved set byte-identical to the
         // stateless single-call path.
-        if capture_indoc {
+        // Every needle `scan_code_tokens` builds is `"{prefix}-"`, so a cell whose
+        // text carries no `-` can never yield a match — short-circuit on that cheap
+        // check to skip the prefix `HashSet` build and the O(P×N) scan entirely
+        // (provably byte-identical: the loop body would insert nothing).
+        if capture_indoc && text.contains('-') {
             let prefixes = self.code_prefixes(type_info);
             for cap in scan_code_tokens(text, &prefixes) {
                 if self.used_labels.insert(cap.clone()) {
@@ -1109,6 +1123,18 @@ fn scan_code_tokens(text: &str, prefixes: &[&str]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // A tiny deterministic LCG so the fuzz tests are reproducible without a dep.
+    struct Lcg(u64);
+    impl Lcg {
+        fn next(&mut self, bound: usize) -> usize {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((self.0 >> 33) as usize) % bound.max(1)
+        }
+    }
 
     // A deterministic RandomSource that returns a fixed sequence (cycling).
     struct SeqRng {
@@ -1761,18 +1787,6 @@ mod tests {
         // normal pipeline merges away but the Presidio bring-your-own-detector
         // path can still feed in, which the end-to-end goldens cannot reach.
 
-        // A tiny deterministic LCG so the fuzz is reproducible without a dep.
-        struct Lcg(u64);
-        impl Lcg {
-            fn next(&mut self, bound: usize) -> usize {
-                self.0 = self
-                    .0
-                    .wrapping_mul(6364136223846793005)
-                    .wrapping_add(1442695040888963407);
-                ((self.0 >> 33) as usize) % bound.max(1)
-            }
-        }
-
         // Dedup EXACTLY as `process` does: stable descending sort by start, keep
         // the first-seen (start,end). Shared by the reference and the production
         // driver so the differential isolates the ASSEMBLY change (the dedup is
@@ -1904,7 +1918,7 @@ mod tests {
         );
     }
 
-    // --- In-document code capture (T4) ---
+    // --- In-document code capture ---
 
     // A factory whose stream draws 83811 first (→ P-83811), then 42. Independent
     // of seed, so it forces the exact collision with a document that already
@@ -2116,17 +2130,6 @@ mod tests {
         //       code genuinely collides with a code the OFF path would mint.
         // Teeth: with the capture-seed block removed, a seeded code lands in
         // `key1` on the pseudonym path and assertion (1) fails.
-
-        struct Lcg(u64);
-        impl Lcg {
-            fn next(&mut self, bound: usize) -> usize {
-                self.0 = self
-                    .0
-                    .wrapping_mul(6364136223846793005)
-                    .wrapping_add(1442695040888963407);
-                ((self.0 >> 33) as usize) % bound.max(1)
-            }
-        }
 
         // Run one cell through a fresh session with capture on/off.
         fn run(

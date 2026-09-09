@@ -26,16 +26,11 @@ _DEEPLY_NESTED = "[" * 100_000
 
 @pytest.fixture(scope="module")
 def client():
-    import warnings
-
     from starlette.testclient import TestClient
 
-    from argus_redact import SecurityWarning
-    from argus_redact.server import create_app
+    from tests.integration.conftest import _make_app
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", SecurityWarning)
-        app = create_app(allow_no_auth=True)
+    app = _make_app()
 
     with TestClient(app) as client:
         yield client

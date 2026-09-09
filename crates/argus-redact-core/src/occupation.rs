@@ -27,8 +27,8 @@ use fancy_regex::Regex;
 use serde::Deserialize;
 
 use crate::evidence_detector::{
-    candidates_cjk, context_windows, is_person_identifying, proximity_evidence, DetectorConfig,
-    ProximityIndex,
+    build_person_identifying_index, candidates_cjk, context_windows, proximity_evidence,
+    DetectorConfig,
 };
 
 #[derive(Debug, Deserialize)]
@@ -279,9 +279,7 @@ pub fn detect_occupation_zh(
 
     // Build the proximity index ONCE for this invocation (the `is_person_identifying`
     // allowlist gate is applied here), then share it across every candidate.
-    let prox_index = ProximityIndex::build(pii_entities.iter(), |pii| {
-        is_person_identifying(&pii.type_)
-    });
+    let prox_index = build_person_identifying_index(pii_entities.iter());
 
     for (name, start, end, is_lexicon) in occupation_candidates(&chars) {
         // before = chars[max(0, start - OCC_WINDOW) : start]

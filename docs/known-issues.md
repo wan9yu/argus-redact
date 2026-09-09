@@ -186,6 +186,38 @@
   entity type names from a fixed vocabulary of your own rather than deriving
   them from matched text.
 
+### Optional extras `dev` / `serve` / `presidio` are not version-pinned yet
+
+- **What**: only the optional `mcp` extra is version-pinned, through
+  `constraints/mcp.txt` (installed with `pip install -c constraints/mcp.txt`),
+  because a floating `mcp>=2.0,<3.0` range let CI resolve a newer 2.x whose error
+  text broke a suite assertion. The other optional extras — `dev`, `serve`, and
+  `presidio` — still resolve to whatever satisfies their `pyproject.toml` ranges
+  at install time, so a transitive upgrade can move CI onto an untested version
+  without any manifest change.
+- **Why it is only partly closed**: a constraints file is not a lockfile — it
+  pins exact versions only for the packages named in it, and dependabot's pip
+  ecosystem tracks `pyproject.toml`, not `constraints/`, so these pins do not
+  auto-update.
+- **Planned follow-up**: a CI-generated full lockfile covering every extra, so
+  the whole install is reproducible and refreshed through one tracked artifact
+  rather than per-extra hand-maintained constraints.
+
+### The per-cell structured-redaction wall-clock flatness test was removed
+
+- **What**: a wall-clock test asserted that `ReplaceSession`'s per-cell redaction
+  cost stayed flat as the document grew (per-cell cost flat in N). It was removed
+  alongside the proximity / absorption linearization work.
+- **Why**: the removed test guarded a DIFFERENT property from what the
+  linearization changed — the per-cell `ReplaceSession` cost, not the proximity
+  walk — so the linearization did not itself re-establish it, and a wall-clock
+  assertion is runner-noise-sensitive. It was dropped rather than kept as a flaky
+  guard over a property the change did not touch.
+- **Planned follow-up**: a `#[cfg(test)]` per-cell operation-count gate — a
+  deterministic count of the per-cell work rather than a wall-clock measurement —
+  to restore coverage of the flat-per-cell-cost property without the timing
+  flakiness.
+
 ## Deprecation Notices
 
 ### bare `restore()` without `guard=` — flip shipped in v0.8.0
