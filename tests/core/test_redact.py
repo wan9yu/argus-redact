@@ -267,6 +267,27 @@ class TestRedactConfigValidation:
         restored = restore(redacted, key, guard=False)
         assert "13812345678" in restored
 
+    def test_should_reject_misspelled_settings_key(self):
+        # A misspelled per-type SETTING (visible_sufix instead of
+        # visible_suffix) was previously silently ignored — the Rust core's
+        # parse_config never reads it, so the typo had no effect and no error.
+        with pytest.raises(ValueError, match="visible_sufix|unknown"):
+            redact(
+                "x 13812345678",
+                config={"phone": {"strategy": "mask", "visible_sufix": 4}},
+                salt=b"0" * 32,
+            )
+
+    def test_should_accept_unregistered_entity_type_key(self):
+        # An unrecognized ENTITY-TYPE key (config's own top-level key) is a
+        # separate check, out of scope here — and must keep working.
+        redact("x", config={"location": {"strategy": "mask"}}, salt=b"0" * 32)
+
+    def test_should_accept_underscore_custom_type_key(self):
+        # Underscore-named custom types (register_pii_type permits them) must
+        # not be mistaken for the reserved `_unified_prefix` sentinel.
+        redact("x", config={"_internal_id": {"strategy": "mask"}}, salt=b"0" * 32)
+
 
 # ══════════════════════════════════════════════════════════════
 # Detailed mode

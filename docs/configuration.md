@@ -118,7 +118,9 @@ those names implied is controlled elsewhere:
 - **Confidence floor** → the top-level `min_confidence=` argument to `redact()`.
 - **Unified prefix / language / salt** → the `unified_prefix=`, `lang=`, `salt=` args.
 - **Fixed vs per-session pseudonyms** → persist and reuse `key=`; a reused key gives the
-  same code for the same value. There is no `rotation` key.
+  same code for the same value. There is no `rotation` key. `redact_json` accepts this
+  same `key=` for cross-call linking; `redact_csv` does not take a `key=` argument at
+  all, so each `redact_csv` call always starts a fresh key.
 - **Mask character** is always `*`.
 
 ---

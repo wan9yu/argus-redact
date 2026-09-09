@@ -17,6 +17,7 @@ from argus_redact.pure.lang_detect import detect_languages
 from argus_redact.pure.replacer import (
     make_structured_session,
     replace_into_session,
+    warn_alias_collisions,
     warn_coverage_restored,
     warn_mask_collisions,
 )
@@ -589,6 +590,12 @@ def restore_json(
     # documents, but merges the key + compiles the pattern ONCE for the whole
     # document instead of on every leaf.
     session = make_structured_restorer(key, aliases=aliases)
+    # An alias claimed by two originals means the restored value for that
+    # alias may be the WRONG IDENTITY — the same condition batch `restore`
+    # warns about, single-sourced through `warn_alias_collisions`. The
+    # collisions are resolved once when the session merges the key, so this
+    # fires right after construction, mirroring `StreamingRestorer.__init__`.
+    warn_alias_collisions(list(session.alias_collisions))
 
     def _walk(obj: Any, depth: int = 0) -> Any:
         if depth > _MAX_STRUCTURED_DEPTH:
@@ -801,6 +808,9 @@ def restore_csv(
     # the key + compiles the pattern ONCE for the whole document instead of on
     # every cell.
     session = make_structured_restorer(key, aliases=aliases)
+    # Same alias-collision warning as restore_json — see its call site for the
+    # full rationale.
+    warn_alias_collisions(list(session.alias_collisions))
     output_rows: list[list[str]] = []
     for row in _parse_csv_rows(csv_text):
         output_rows.append([session.restore_cell(cell) for cell in row])

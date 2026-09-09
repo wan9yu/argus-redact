@@ -380,8 +380,17 @@ def _get_entity_config(
     return {}
 
 
+# Every per-type SETTINGS key the Rust core's `parse_config` (replace.rs)
+# actually reads. Kept as the single source `_validate_config` checks unknown
+# keys against, so a typo (`visible_sufix`) is rejected instead of silently
+# doing nothing.
+_KNOWN_SETTINGS_KEYS = frozenset(
+    {"strategy", "prefix", "replacement", "label", "visible_prefix", "visible_suffix"}
+)
+
+
 def _validate_config(config: dict | None, *, allow_internal: bool = False) -> None:
-    """Validate config, raise ValueError on invalid strategy.
+    """Validate config, raise ValueError on invalid strategy or unknown setting.
 
     Default validates against the PUBLIC ``VALID_STRATEGIES`` — the set a user's
     ``config`` may select from. ``allow_internal=True`` (set only for configs
@@ -389,6 +398,12 @@ def _validate_config(config: dict | None, *, allow_internal: bool = False) -> No
     the internal-only strategies (``remove_bracketed``). The user-facing error
     always lists the public strategies, so an internal strategy is never
     advertised as selectable.
+
+    Also rejects a per-type SETTINGS dict carrying a key outside
+    ``_KNOWN_SETTINGS_KEYS`` (e.g. a misspelled ``visible_sufix``) — that dict
+    is the ``config[entity_type]`` value, not ``config`` itself, so an
+    unrecognized entity-type key (a custom type ``config`` maps to) is
+    unaffected and still accepted.
     """
     if not config:
         return
@@ -409,6 +424,19 @@ def _validate_config(config: dict | None, *, allow_internal: bool = False) -> No
         if not isinstance(type_config, dict):
             raise TypeError(
                 f"config[{entity_type!r}] must be a dict, got {type(type_config).__name__}"
+            )
+        # Reject an unknown per-type SETTING (e.g. a misspelled `visible_sufix`)
+        # rather than silently ignoring it — the Rust core's `parse_config`
+        # reads exactly this set of keys, so anything else was never applied
+        # and a typo here previously failed silently. This validates the
+        # SETTINGS half only: an unrecognized ENTITY-TYPE key (config's own
+        # top-level keys, e.g. a custom `register_pii_type` type) is untouched
+        # by this check and stays accepted.
+        unknown = set(type_config) - _KNOWN_SETTINGS_KEYS
+        if unknown:
+            raise ValueError(
+                f"config[{entity_type!r}] has unknown setting(s): {sorted(unknown)}. "
+                f"Valid: {sorted(_KNOWN_SETTINGS_KEYS)}"
             )
         strategy = type_config.get("strategy")
         if strategy and strategy not in valid:

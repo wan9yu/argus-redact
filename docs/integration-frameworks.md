@@ -161,10 +161,10 @@ Passing `redacted=` is what enables the supplementary injection heuristic (H). `
 
 ### Middleware
 
-Automatically redact request bodies and restore response bodies:
+Automatically redact request bodies before they are forwarded:
 
 ```python
-from argus_redact import redact, restore
+from argus_redact import redact
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 import json
@@ -172,29 +172,33 @@ import json
 app = FastAPI()
 
 class RedactBodyMiddleware(BaseHTTPMiddleware):
-    """Redact PII in request body, restore in response body."""
+    """Redact PII in the request body before it is forwarded downstream."""
 
     async def dispatch(self, request: Request, call_next):
-        # Read and redact request body
+        key: dict = {}
         body = await request.body()
         if body:
-            text = body.decode("utf-8")
             try:
-                data = json.loads(text)
+                data = json.loads(body.decode("utf-8"))
                 if "text" in data:
                     redacted, key = redact(data["text"])
                     data["text"] = redacted
-                    data["_redact_key"] = key  # pass key through
-                    # Reconstruct request with redacted body
+                    # Reconstruct request with the redacted body. `key` stays
+                    # a local variable — it is NEVER written into the body,
+                    # a header, or a log: that would hand whatever the
+                    # request is forwarded to the means to reverse the
+                    # redaction it just received.
                     request._body = json.dumps(data).encode()
-            except (json.JSONDecodeError, KeyError):
-                pass
+            except (UnicodeDecodeError, json.JSONDecodeError, KeyError):
+                pass  # not a JSON body this middleware knows how to redact
 
         response = await call_next(request)
         return response
 
 app.add_middleware(RedactBodyMiddleware)
 ```
+
+To restore PII in the response, use the guard-by-default `restore_body()` helper (`argus_redact.integrations.fastapi_middleware.restore_body`) at the endpoint — see "Endpoint-level" below, and this doc's `guarded_restore()` note further down.
 
 **Limitations and future directions:** The `messages` helper requires each message to be a `dict` with a string `content` key. It fails closed (raises `TypeError`) on other shapes — bare-string elements, dicts without a `content` key (such as OpenAI tool/function-call messages whose payload lives in `tool_calls` or `arguments`), and dicts with a list `content` (multimodal messages). Recursive redaction of text parts inside multimodal `content` arrays and tool-call argument strings is a future direction.
 
