@@ -216,7 +216,11 @@
 - **Planned follow-up**: a `#[cfg(test)]` per-cell operation-count gate — a
   deterministic count of the per-cell work rather than a wall-clock measurement —
   to restore coverage of the flat-per-cell-cost property without the timing
-  flakiness.
+  flakiness. The pattern is already in the tree to mirror: `evidence_detector.rs`
+  counts proximity probes and `replace.rs` counts in-document-scan emit work,
+  each pinning a capped/linear path against a retained quadratic oracle
+  (`count(2k)/count(k) < 3.0`). Extending the same probe to the remaining
+  `ReplaceSession` per-cell work is a scoped, low-cost task.
 
 ### A set of extras-gated tests runs on no CI leg (reachability gate is report-only)
 
@@ -738,7 +742,7 @@ release.
 | Issue | Version | Fix |
 |-------|---------|-----|
 | Compliance metadata SSOT not exposed for downstream | v0.6.5 | New top-level exports `PIPL_REFERENCES`, `GDPR_SPECIAL_CATEGORIES`, `HIPAA_PHI_CATEGORIES` projected from the PII type registry. Drift-guard test (`tests/architecture/test_compliance_metadata_export.py`) ensures every type cites ≥1 PIPL article. See [API reference → Compliance metadata exports](api-reference.md#compliance-metadata-exports-v065) for shapes and usage. |
-| Performance regressions could land silently | v0.6.4 | New `.github/workflows/perf.yml` runs 5-run median over 6 workloads on every PR; compares against committed `tests/benchmark/baseline.json` with 10% threshold. Touching the baseline file in a PR exempts the gate (caller-owned). |
+| Performance regressions could land silently | v0.6.4 | New `.github/workflows/perf.yml` runs 5-run median over 6 workloads on every PR; compares against committed `tests/benchmark/baseline.json` with a 10% threshold (later revised to the ±25% band described under Design Constraints above). Touching the baseline file in a PR exempts the gate (caller-owned). |
 | Hypothesis property tests for security invariants | v0.6.3 | New `tests/security/property/`: 6 properties (round-trip, faker-in-reserved-range derived from registry, determinism, keep-whitelist, state round-trip, pseudonym format). Findings landed as fixes in same release. |
 | Mutation testing pass on `pure/{replacer,restore,pseudonym}.py` | v0.6.3 | One-shot mutmut run against the then-pure-Python implementations of those three modules (502 mutants killed / 296 survived / 0 real bugs found); 27 targeted unit tests added to kill survivors. Those numbers are a v0.6.3 snapshot and are not reproducible from the current tree — the logic has since moved to the Rust core, where mutation testing runs over the security-critical and Layer-1 modules via `make mutants-core` (cargo-mutants). |
 | `SECURITY.md` + GitHub private vulnerability reporting | v0.6.3 | Canonical disclosure channel; supported-versions table; threat-model link to `docs/security.md`; SLA tiers. |
