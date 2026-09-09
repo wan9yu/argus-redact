@@ -78,6 +78,10 @@ select = ["E", "F", "W", "I"]
 # were silently never run.
 testpaths = ["tests", "scripts"]
 pythonpath = ["src"]
+# Default globs (`test_*.py`, `*_test.py`) plus `decision_table_*.py`: the
+# frozen compliance decision table lives in `tests/compliance/decision_table_*.py`
+# and would otherwise be collected by nothing, silently skipping its checks.
+python_files = ["test_*.py", "*_test.py", "decision_table_*.py"]
 markers = [
     "slow: marks tests that require model loading (deselect with '-m \"not slow\"')",
     "ner: marks tests that require NER models",

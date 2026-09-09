@@ -221,25 +221,25 @@ jobs:
           name: junit-presidio
           path: junit-presidio.xml
 
-  # Reachability gate (non-required for now — see `continue-on-error` below):
-  # diffs the canonical test inventory (a `--collect-only` run with an empty
-  # `-m ""` marker expression, which overrides the legs' `not ner and not
-  # semantic and not slow` deselect, so nothing gated behind those markers
-  # disappears from the count) against the union of tests that actually
-  # executed across every junit-xml leg above. A test that is collected but
-  # never runs anywhere — silently deselected, gated behind a marker/skip
-  # condition no leg ever satisfies — shows up here instead of staying
-  # invisible.
+  # Reachability gate: diffs the canonical test inventory (a `--collect-only`
+  # run with an empty `-m ""` marker expression, which overrides the legs'
+  # `not ner and not semantic and not slow` deselect, so nothing gated behind
+  # those markers disappears from the count) against the union of tests that
+  # actually executed across every junit-xml leg above. A test that is
+  # collected but never runs anywhere — silently deselected, gated behind a
+  # marker/skip condition no leg ever satisfies — shows up here instead of
+  # staying invisible.
   #
-  # Every pytest leg above still deselects `ner`/`semantic`/`slow` (or is a
-  # narrower integration/presidio suite), so those ids are EXPECTED to report
-  # as never-run today, until a leg — or a written, reasoned allowlist entry
-  # in the script itself — actually covers them. That expected gap is why
-  # this job does not block the workflow yet.
+  # The `ner`/`semantic`/`slow` tests are never-run BY DESIGN: no leg installs
+  # the NER / Layer-3 models. The gate collects that model-gated set itself
+  # (`-m "ner or semantic or slow"`) and treats those never-run ids as
+  # expected, so they need no per-id maintenance. The base/integration/presidio
+  # legs together cover every other collected test, so any remaining never-run
+  # id is a real gap and fails this job. (This job blocks the workflow; add it
+  # to the branch-protection required set to enforce it on PRs.)
   reachability:
     needs: [test, integration, integration-presidio]
     if: always()
-    continue-on-error: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
