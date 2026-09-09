@@ -12,8 +12,8 @@
 # library's actual error text. Pinning here keeps CI on the version the suite
 # is verified against until the test is updated for a newer `mcp` release.
 #
-# mcp-types is mcp's own runtime dependency (mcp==2.0.0 requires
-# mcp-types==2.0.0 exactly), pinned here too for an explicit, self-documenting
+# mcp-types is mcp's own runtime dependency (mcp==2.1.1 requires
+# mcp-types==2.1.1 exactly), pinned here too for an explicit, self-documenting
 # resolution rather than relying on mcp's own metadata.
 #
 # NOTE: dependabot's pip ecosystem (.github/dependabot.yml) tracks
@@ -22,5 +22,5 @@
 # follow-up: loosen it once tests/integration/test_mcp.py's clean-error-message
 # assertion is made robust to newer 2.x error text, or move the pin into a
 # requirements file dependabot can see.
-mcp==2.0.0
-mcp-types==2.0.0
+mcp==2.1.1
+mcp-types==2.1.1
