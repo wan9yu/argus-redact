@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import sys
+import threading
 import warnings
 from decimal import Decimal
 from typing import Any
@@ -35,6 +36,11 @@ __all__ = [
 # caller's own stack; it is far deeper than any real LLM/CSV payload nests. The
 # SAME limit is enforced symmetrically on both the redact and restore walks.
 _MAX_STRUCTURED_DEPTH = 128
+
+# Guards the read-raise-parse-restore sequence in ``_parse_csv_rows`` below
+# (see its docstring for why); non-reentrant on purpose — nothing in the
+# guarded section may re-enter ``_parse_csv_rows``.
+_CSV_LIMIT_LOCK = threading.Lock()
 
 
 def _cell_has_pii(text: str, *, mode: str, lang: str | list[str]) -> bool:
@@ -582,22 +588,33 @@ def _parse_csv_rows(csv_text: str) -> list[list[str]]:
     stay symmetric (same dialect) and a comma inside a restored value can't
     reshape the columns.
 
-    ``csv.field_size_limit`` (default 128 KiB) is raised to ``sys.maxsize`` for
+    ``csv.field_size_limit`` (default 128 KiB) is raised to ``2**31 - 1`` for
     the parse and restored afterwards: a single cell over that limit otherwise
     raises an uncaught ``_csv.Error`` (naming the byte count — PII-adjacent).
     Bumping it here fixes BOTH faces at once and with the IDENTICAL limit, since
-    ``redact_csv`` and ``restore_csv`` share this one parser. The limit is a
-    process-global, so the previous value is restored in ``finally`` and a
-    concurrent parse can never observe it unbounded past this call."""
-    old_limit = csv.field_size_limit()
-    try:
-        # 2**31-1, not sys.maxsize: a C long is 32-bit on Windows (LLP64), so
-        # csv.field_size_limit(sys.maxsize) raises OverflowError there. 2 GB per
-        # field is still far past any real cell, and safe on every platform.
-        csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
-        return list(csv.reader(io.StringIO(csv_text)))
-    finally:
-        csv.field_size_limit(old_limit)
+    ``redact_csv`` and ``restore_csv`` share this one parser. The cap is
+    ``2**31 - 1``, not ``sys.maxsize``: a C ``long`` is 32-bit on Windows
+    (LLP64), so ``csv.field_size_limit(sys.maxsize)`` raises ``OverflowError``
+    there. 2 GB per field is still far past any real cell, and safe on every
+    platform.
+
+    The limit is a process-global, not thread-local, so the read of the old
+    value, the raise, the parse, and the restore all happen inside
+    ``_CSV_LIMIT_LOCK``. Without that lock two concurrent calls interleave on
+    the same global: thread B can read the limit while thread A has it
+    raised, then restore A's raised value instead of the true original, so
+    the effective limit only ever grows. The lock is what makes this
+    concurrency-safe, not the ``finally``. Scope: this serializes argus's own
+    parses against each other; a third-party caller mutating
+    ``csv.field_size_limit`` from elsewhere in the same process, outside this
+    lock, is out of scope."""
+    with _CSV_LIMIT_LOCK:
+        old_limit = csv.field_size_limit()
+        try:
+            csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
+            return list(csv.reader(io.StringIO(csv_text)))
+        finally:
+            csv.field_size_limit(old_limit)
 
 
 def _serialize_csv_rows(rows: list[list[str]]) -> str:
