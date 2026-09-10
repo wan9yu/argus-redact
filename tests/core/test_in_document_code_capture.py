@@ -22,7 +22,7 @@ substitution path.
 from argus_redact import redact, restore
 
 
-def test_pseudonym_does_not_reissue_in_document_code():
+def test_redact_should_not_reissue_a_code_already_in_the_document():
     text = "老客户P-83811推荐了新客户王芳"
     out, key = redact(text, lang="zh", salt=42)
     # 王芳 must NOT be minted as P-83811 (already in the document): the count of
@@ -34,7 +34,7 @@ def test_pseudonym_does_not_reissue_in_document_code():
     assert "P-83811" not in minted, f"王芳 must not re-issue the document's own code: {key}"
 
 
-def test_restore_does_not_corrupt_preexisting_code():
+def test_restore_should_not_corrupt_a_preexisting_code():
     text = "老客户P-83811推荐了新客户王芳"
     out, key = redact(text, lang="zh", salt=42)
     back = restore(out, key, guard=False)

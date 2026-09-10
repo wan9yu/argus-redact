@@ -26,7 +26,7 @@ def _rust_entities(entities):
     ]
 
 
-def test_core_replace_returns_four_tuple_with_signals_dict():
+def test_core_replace_should_return_four_tuple_with_signals_dict():
     entities = [make_match("张三", "person", 0)]
     type_info, custom_fakers = _build_type_info(entities, None, ["zh"])
 
@@ -51,7 +51,7 @@ def test_core_replace_returns_four_tuple_with_signals_dict():
     assert isinstance(signals["mask_collisions"], list)
 
 
-def test_core_replace_signals_keep_downgraded_true_on_downgrade():
+def test_core_replace_should_signal_keep_downgraded_when_type_lacks_whitelist_entry():
     # bank_card has no self_reference/kinship whitelist entry, so a "keep"
     # strategy config downgrades — mirrors pure/replacer.py's
     # `_keep_downgraded_entities` selection.
@@ -76,7 +76,7 @@ def test_core_replace_signals_keep_downgraded_true_on_downgrade():
     assert signals["keep_downgraded"] is True
 
 
-def test_core_restore_returns_two_tuple_with_signals_dict():
+def test_core_restore_should_return_two_tuple_with_signals_dict():
     restored, signals = _core.restore("P-00001说话", {"P-00001": "张三"})
 
     assert restored == "张三说话"
@@ -84,7 +84,7 @@ def test_core_restore_returns_two_tuple_with_signals_dict():
     assert isinstance(signals["alias_collisions"], list)
 
 
-def test_core_restore_signals_alias_collisions_populated_on_collision():
+def test_core_restore_should_populate_alias_collisions_when_aliases_collide():
     # Two distinct fakes claim the same alias string -> the losing claim lands
     # in alias_collisions (mirrors tests/core/test_alias_collision.py).
     key = {"P-1": "Alice", "P-2": "Bob"}

@@ -1,7 +1,7 @@
 from argus_redact.pure.security_events import PROVENANCE_FAILED, security_event
 
 
-def test_security_event_shape():
+def test_security_event_should_produce_expected_shape():
     e = security_event(PROVENANCE_FAILED, count=1, detail="nonce absent")
     assert e == {
         "type": "security",
@@ -11,5 +11,5 @@ def test_security_event_shape():
     }
 
 
-def test_security_event_default_detail_none():
+def test_security_event_should_default_detail_to_none_when_omitted():
     assert security_event(PROVENANCE_FAILED, count=2)["detail"] is None

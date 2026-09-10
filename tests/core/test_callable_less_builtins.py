@@ -32,7 +32,7 @@ from tests.conftest import make_match
 
 
 class TestBuiltinCallableLess:
-    def test_builtin_phone_redacts_with_no_faker_reserved_on_registration(self):
+    def test_builtin_zh_phone_should_redact_realistically_when_faker_reserved_is_none(self):
         """zh/phone has `faker_reserved=None`; realistic redaction still fires,
         resolving the faker via `_core.builtin_faker_name`."""
         from argus_redact.specs.registry import get
@@ -54,7 +54,7 @@ class TestBuiltinCallableLess:
         assert fakes[0].startswith("19999"), f"Got {fakes[0]}"
         assert key[fakes[0]] == "13912345678"
 
-    def test_build_type_info_resolves_builtin_faker_name(self):
+    def test_build_type_info_should_resolve_the_builtin_faker_name(self):
         """`_build_type_info` populates `faker_name` from the `_core` association
         (not from any Python callable) and flags it built-in, not custom."""
         entities = [make_match("13912345678", "phone", 0)]
@@ -71,7 +71,7 @@ class TestLangPreferenceOrder:
     must follow detected-lang preference EXACTLY (the `_resolve_realistic_faker`
     order: detected langs → 'shared' → any registered)."""
 
-    def test_faker_name_resolves_zh_for_zh_langs(self):
+    def test_faker_name_should_resolve_to_zh_when_langs_are_zh(self):
         info, _ = _build_type_info(
             [make_match("13912345678", "phone", 0)],
             {"phone": {"strategy": "realistic"}},
@@ -81,7 +81,7 @@ class TestLangPreferenceOrder:
         # Cross-check the SSOT association directly.
         assert _core.builtin_faker_name("phone", "zh") == "fake_phone_reserved"
 
-    def test_faker_name_resolves_en_for_en_langs(self):
+    def test_faker_name_should_resolve_to_en_when_langs_are_en(self):
         info, _ = _build_type_info(
             [make_match("(415) 555-1234", "phone", 0)],
             {"phone": {"strategy": "realistic"}},
@@ -90,8 +90,9 @@ class TestLangPreferenceOrder:
         assert info["phone"]["faker_name"] == "fake_phone_en_reserved"
         assert _core.builtin_faker_name("phone", "en") == "fake_phone_en_reserved"
 
-    def test_zh_langs_produce_zh_shaped_fake(self):
+    def test_realistic_fake_should_have_zh_shape_when_langs_are_zh(self):
         text = "请拨打 13912345678"
+
         _, key, _ = replace(
             text,
             [make_match("13912345678", "phone", 4)],
@@ -99,11 +100,13 @@ class TestLangPreferenceOrder:
             salt=42,
             langs=["zh"],
         )
+
         fake = next(iter(key))
         assert fake.startswith("19999"), f"Expected zh phone shape, got {fake}"
 
-    def test_en_langs_produce_en_shaped_fake(self):
+    def test_realistic_fake_should_have_en_shape_when_langs_are_en(self):
         text = "call (415) 555-1234"
+
         _, key, _ = replace(
             text,
             [make_match("(415) 555-1234", "phone", 5)],
@@ -111,6 +114,7 @@ class TestLangPreferenceOrder:
             salt=42,
             langs=["en"],
         )
+
         fake = next(iter(key))
         # en phone faker uses the NANP 555-01XX reserved range.
         assert "(555)" in fake or "555-01" in fake, f"Expected en phone shape, got {fake}"
@@ -141,7 +145,7 @@ class TestCustomFakerStillRoutesViaCallback:
         unregister("shared", "callable_less_test_account")
         _clear_faker_caches()
 
-    def test_custom_type_flagged_custom_and_in_custom_fakers(self):
+    def test_custom_type_should_be_flagged_custom_and_listed_in_custom_fakers(self):
         entities = [make_match("ACC-9876543210", "callable_less_test_account", 0)]
         config = {"callable_less_test_account": {"strategy": "realistic"}}
         info, custom = _build_type_info(entities, config, ["en"])
@@ -150,7 +154,7 @@ class TestCustomFakerStillRoutesViaCallback:
         assert info["callable_less_test_account"]["faker_name"] is None
         assert custom["callable_less_test_account"] is self._faker
 
-    def test_custom_type_redacts_via_callback(self):
+    def test_custom_type_should_redact_via_the_custom_callback(self):
         text = "Account number ACC-9876543210"
         start = text.index("ACC-9876543210")
         entities = [make_match("ACC-9876543210", "callable_less_test_account", start)]

@@ -9,7 +9,7 @@ def _pm(text, type_, start, end):
     return _core.PatternMatch(text, type_, start, end, 1.0, 1)
 
 
-def test_returns_filtered_untouched_when_nothing_was_lost():
+def test_restore_lost_coverage_should_return_filtered_untouched_when_nothing_was_lost():
     phone = _pm("13800138000", "phone", 15, 26)
     out, restored = _core.restore_lost_coverage(
         [phone], [(15, 26)], [phone], None, None, False, "irrelevant"
@@ -18,7 +18,7 @@ def test_returns_filtered_untouched_when_nothing_was_lost():
     assert restored == []
 
 
-def test_restores_a_phone_absorbed_by_a_type_filtered_winner():
+def test_restore_lost_coverage_should_restore_a_phone_absorbed_by_a_filtered_winner():
     phone = _pm("13800138000", "phone", 15, 26)
     med = _pm("number 13800138000", "medical", 8, 26)
     out, restored = _core.restore_lost_coverage(
@@ -30,11 +30,12 @@ def test_restores_a_phone_absorbed_by_a_type_filtered_winner():
         False,
         "Contact number 13800138000 for details",
     )
+
     assert [(e.text, e.type) for e in out] == [("13800138000", "phone")]
     assert restored == ["phone"]
 
 
-def test_does_not_restore_an_entity_the_filter_itself_excludes():
+def test_restore_lost_coverage_should_not_restore_an_entity_the_filter_itself_excludes():
     sr = _pm("我们", "self_reference", 11, 13)
     out, restored = _core.restore_lost_coverage(
         [sr], [(11, 13)], [], None, None, True, "今天天气不错我们出去走走"

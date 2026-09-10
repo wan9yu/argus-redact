@@ -56,7 +56,7 @@ def _register_test_account(monkeypatch):
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_custom_faker_routes_through_rust_callback():
+def test_custom_faker_should_route_through_rust_callback():
     """Custom faker_reserved must run via the Rust callback (the only redact path).
 
     With the pure-Python orchestrator deleted, ``replace()`` always takes the
@@ -87,7 +87,7 @@ def test_custom_faker_routes_through_rust_callback():
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_custom_faker_key_maps_fake_to_original():
+def test_custom_faker_should_map_key_fake_to_original():
     """The key dict must contain fake→original after the Rust callback path."""
 
     text = f"ref {_INPUT_VALUE} end"
@@ -114,7 +114,7 @@ def test_custom_faker_key_maps_fake_to_original():
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_adapter_realistic_default_fires_custom_faker_without_config():
+def test_realistic_default_adapter_should_fire_custom_faker_without_config():
     """A `realistic`-default adapter must fire its faker with NO config override.
 
     Pre-port: `_resolve_default_strategy('vehicle_vin')` → 'realistic' (the
@@ -157,7 +157,7 @@ def test_adapter_realistic_default_fires_custom_faker_without_config():
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_adapter_pseudonym_default_applies_without_config():
+def test_pseudonym_default_adapter_should_apply_without_config():
     """A `pseudonym`-default adapter must pseudonymize with NO config override.
 
     Pre-port read the 'pseudonym' default from the registry; post-port the Rust

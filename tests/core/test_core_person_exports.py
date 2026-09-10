@@ -26,7 +26,7 @@ def _pm(text, type_, start, end, confidence=1.0, layer=1):
 # ── zh: proximity signal fires when a structural PII sits nearby ──────────────
 
 
-def test_zh_proximity_pii_boosts_confidence():
+def test_zh_person_detection_should_boost_confidence_when_pii_is_adjacent():
     text = "张明的电话是13800138000"
     pii = [_pm("13800138000", "phone", 6, 17)]
     out = _core.detect_person_names_zh(text, pii)
@@ -41,7 +41,7 @@ def test_zh_proximity_pii_boosts_confidence():
     assert _tuples(out) == _tuples(py)
 
 
-def test_zh_baseline_without_pii():
+def test_zh_person_detection_should_use_baseline_confidence_when_no_pii_given():
     text = "张明的电话是13800138000"
     out = _core.detect_person_names_zh(text)
     assert _tuples(out) == [("张明", "person", 0, 2, 0.8, 0)]
@@ -51,7 +51,7 @@ def test_zh_baseline_without_pii():
 # ── zh: known_names get confidence 1.0, bypassing scoring ─────────────────────
 
 
-def test_zh_known_names_confidence_one():
+def test_zh_known_name_lookup_should_assign_full_confidence():
     text = "请联系王芳"
     out = _core.detect_person_names_zh(text, None, ["王芳"])
     assert _tuples(out) == [("王芳", "person", 3, 5, 1.0, 0)]
@@ -61,7 +61,7 @@ def test_zh_known_names_confidence_one():
 # ── zh: a self_reference entity in pii_entities is filtered (no boost) ────────
 
 
-def test_zh_self_reference_in_pii_is_filtered():
+def test_zh_person_detection_should_ignore_self_reference_entities_in_pii():
     text = "张明的电话是13800138000"
     # The orchestrator strips type=="self_reference" before proximity scoring,
     # so this entity must NOT boost the name — result equals the 0.8 baseline.
@@ -81,7 +81,7 @@ def test_zh_self_reference_in_pii_is_filtered():
 # ── en: known_names get confidence 1.0 ────────────────────────────────────────
 
 
-def test_en_known_names_confidence_one():
+def test_en_known_name_lookup_should_assign_full_confidence():
     text = "Contact Alice Johnson today"
     out = _core.detect_person_names_en(text, known_names=["Alice Johnson"])
     assert isinstance(out, list)
@@ -93,7 +93,7 @@ def test_en_known_names_confidence_one():
 # ── en: surname + given name assembled from the data pools ────────────────────
 
 
-def test_en_surname_plus_given():
+def test_en_person_detection_should_combine_surname_and_given_name():
     text = "Please call James Smith now"
     out = _core.detect_person_names_en(text)
     assert _tuples(out) == [("James Smith", "person", 12, 23, 1.0, 0)]
@@ -103,13 +103,13 @@ def test_en_surname_plus_given():
 # ── defaults: omitting optional args behaves like the Python detector ─────────
 
 
-def test_zh_defaults_match_python():
+def test_zh_binding_should_match_python_when_optional_args_omitted():
     # Omitting pii/known/threshold => empty slices + threshold 0.8.
     text = "张明的电话是13800138000"
     assert _tuples(_core.detect_person_names_zh(text)) == _tuples(py_zh(text))
 
 
-def test_zh_threshold_default_is_score_threshold():
+def test_zh_threshold_default_should_equal_explicit_0_8():
     # Explicit threshold=0.8 must match the omitted-threshold default.
     text = "张明的电话是13800138000"
     omitted = _core.detect_person_names_zh(text)
@@ -117,12 +117,12 @@ def test_zh_threshold_default_is_score_threshold():
     assert _tuples(omitted) == _tuples(explicit)
 
 
-def test_en_defaults_match_python():
+def test_en_binding_should_match_python_when_optional_args_omitted():
     text = "Please call James Smith now"
     assert _tuples(_core.detect_person_names_en(text)) == _tuples(py_en(text))
 
 
-def test_empty_text_returns_empty():
+def test_person_detection_should_return_empty_when_text_is_empty():
     assert _core.detect_person_names_zh("") == []
     assert _core.detect_person_names_en("") == []
 
@@ -137,19 +137,19 @@ def test_empty_text_returns_empty():
 # the uncompilable name is skipped, normal names still match, and nothing crashes.
 
 
-def test_en_pathological_known_name_does_not_crash():
+def test_en_known_names_should_skip_uncompilable_pattern_without_crashing():
     huge = "A" * 500_000
     out = _core.detect_person_names_en("Email Alice please", known_names=[huge, "Alice"])
     assert _tuples(out) == [("Alice", "person", 6, 11, 1.0, 0)]
 
 
-def test_zh_pathological_known_name_does_not_crash():
+def test_zh_known_names_should_skip_uncompilable_pattern_without_crashing():
     huge = "张" * 500_000
     out = _core.detect_person_names_zh("联系李雷", None, [huge, "李雷"])
     assert _tuples(out) == [("李雷", "person", 2, 4, 1.0, 0)]
 
 
-def test_redact_pathological_name_does_not_raise_panic():
+def test_redact_should_not_raise_panic_for_pathological_name():
     """Top-level redact() must not surface a PyO3 PanicException for a huge name."""
     import argus_redact
 

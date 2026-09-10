@@ -192,7 +192,7 @@ class TestReplaceCollisionNumbering:
 class TestReplaceReturns3Tuple:
     """Lockdown for v0.6.0 replace() signature: (text, key, aliases) and no aliases_out kwarg."""
 
-    def test_replace_returns_three_values(self):
+    def test_replace_should_return_three_values(self):
         from argus_redact._types import PatternMatch
         from argus_redact.pure.replacer import replace
 
@@ -204,7 +204,7 @@ class TestReplaceReturns3Tuple:
         assert isinstance(key, dict)
         assert isinstance(aliases, dict)
 
-    def test_replace_no_aliases_out_kwarg(self):
+    def test_replace_should_reject_aliases_out_kwarg(self):
         import pytest
 
         from argus_redact._types import PatternMatch

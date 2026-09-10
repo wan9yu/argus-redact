@@ -41,7 +41,7 @@ def _ignore_warnings():
 
 
 class TestDecimalLeaf:
-    def test_decimal_leaf_with_pii_is_redacted_not_forwarded_verbatim(self):
+    def test_decimal_leaf_with_pii_should_be_redacted_not_forwarded_verbatim(self):
         # A Decimal phone (every SQL NUMERIC column / parse_float=Decimal
         # produces one) must be scanned via str() and redacted, not forwarded
         # verbatim as a Decimal.
@@ -54,7 +54,7 @@ class TestDecimalLeaf:
         assert "13800138000" not in str(out["phone"])
         assert len(key) == 1
 
-    def test_clean_decimal_leaf_round_trips_as_original_decimal(self):
+    def test_clean_decimal_leaf_should_round_trip_as_original_decimal(self):
         # Fidelity mirror of the int/float arm: a Decimal with no detectable PII
         # is NOT coerced to str — it round-trips byte-for-byte as the original
         # Decimal object (str is used only as the detection probe).
@@ -66,7 +66,7 @@ class TestDecimalLeaf:
         assert type(out["amount"]) is Decimal
         assert not [w for w in rec if "un-scannable" in str(w.message)]
 
-    def test_redacted_decimal_leaf_round_trips_through_restore_json(self):
+    def test_redacted_decimal_leaf_should_round_trip_through_restore_json(self):
         data = {"phone": Decimal("13800138000")}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -83,7 +83,7 @@ class TestDecimalLeaf:
 
 
 class TestUuidLeaf:
-    def test_clean_uuid_leaf_round_trips_as_original_uuid_without_unscannable_warning(self):
+    def test_clean_uuid_leaf_should_round_trip_as_original_uuid_without_unscannable_warning(self):
         # A UUID is scanned via str() (no detectable phone/ID PII in the
         # canonical form), so it round-trips as the original UUID and must NOT
         # be flagged as an un-scannable leaf.
@@ -103,7 +103,7 @@ class TestUuidLeaf:
 
 
 class TestBytesLeaf:
-    def test_bytes_leaf_with_pii_is_redacted_not_forwarded_verbatim(self):
+    def test_bytes_leaf_with_pii_should_be_redacted_not_forwarded_verbatim(self):
         # A national-ID stored as a byte string (msgpack raw=True / BSON) must
         # be utf-8-decoded, scanned, and redacted — not forwarded verbatim.
         data = {"id": b"110101199003074258"}
@@ -115,7 +115,7 @@ class TestBytesLeaf:
         assert "110101199003074258" not in out["id"]
         assert len(key) == 1
 
-    def test_bytearray_leaf_with_pii_is_redacted(self):
+    def test_bytearray_leaf_with_pii_should_be_redacted(self):
         data = {"id": bytearray(b"110101199003074258")}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -123,7 +123,7 @@ class TestBytesLeaf:
         assert not isinstance(out["id"], (bytes, bytearray))
         assert "110101199003074258" not in str(out["id"])
 
-    def test_clean_bytes_leaf_round_trips_as_original_bytes(self):
+    def test_clean_bytes_leaf_should_round_trip_as_original_bytes(self):
         data = {"blob": b"hello world"}
         with warnings.catch_warnings(record=True) as rec:
             warnings.simplefilter("always")
@@ -132,7 +132,7 @@ class TestBytesLeaf:
         assert type(out["blob"]) is bytes
         assert not [w for w in rec if "un-scannable" in str(w.message)]
 
-    def test_bytes_leaf_targeted_by_paths_is_redacted_not_leaked_with_empty_key(self):
+    def test_bytes_leaf_targeted_by_paths_should_be_redacted_not_leaked_with_empty_key(self):
         # The brief's second repro: redact_json({"a": b"<pii>"}, paths=["a"])
         # must redact (decode + scan the targeted leaf), never silently leak
         # with an empty key.
@@ -143,7 +143,7 @@ class TestBytesLeaf:
         assert "13800138000" not in str(out["a"])
         assert len(key) == 1
 
-    def test_redacted_bytes_leaf_round_trips_through_restore_json(self):
+    def test_redacted_bytes_leaf_should_round_trip_through_restore_json(self):
         data = {"id": b"110101199003074258"}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -151,7 +151,7 @@ class TestBytesLeaf:
         restored = restore_json(out, key)
         assert restored["id"] == "110101199003074258"
 
-    def test_restore_json_decodes_and_restores_a_placeholder_delivered_as_bytes(self):
+    def test_restore_json_should_decode_and_restore_a_placeholder_delivered_as_bytes(self):
         # Symmetric mirror: a placeholder that arrives at restore as a byte
         # string (a leaf re-serialized through msgpack raw=True) is decoded and
         # restored — before the fix restore_json returned bytes verbatim.
@@ -163,7 +163,7 @@ class TestBytesLeaf:
         restored = restore_json({"note": placeholder.encode("utf-8")}, key)
         assert "13800138000" in str(restored["note"])
 
-    def test_restore_json_passes_through_a_clean_byte_string_unchanged(self):
+    def test_restore_json_should_pass_through_a_clean_byte_string_unchanged(self):
         # A byte string with no placeholder round-trips as the ORIGINAL bytes.
         assert restore_json({"blob": b"hello world"}, {"P-1": "Alice"})["blob"] == b"hello world"
 
@@ -174,18 +174,18 @@ class TestBytesLeaf:
 
 
 class TestUnscannableLeaf:
-    def test_arbitrary_object_leaf_emits_unscannable_security_warning(self):
+    def test_arbitrary_object_leaf_should_emit_unscannable_security_warning(self):
         data = {"x": object()}
         with pytest.warns(SecurityWarning, match="un-scannable"):
             redact_json(data, mode="fast", lang="zh", salt=_HI_SALT)
 
-    def test_non_decodable_bytes_leaf_emits_unscannable_warning_and_passes_through(self):
+    def test_non_decodable_bytes_leaf_should_emit_unscannable_warning_and_pass_through(self):
         data = {"x": b"\xff\xfe"}
         with pytest.warns(SecurityWarning, match="un-scannable"):
             out, key = redact_json(data, mode="fast", lang="zh", salt=_HI_SALT)
         assert out["x"] == b"\xff\xfe"
 
-    def test_unscannable_leaf_no_longer_suppresses_selector_missed_warning(self):
+    def test_unscannable_leaf_should_no_longer_suppress_selector_missed_warning(self):
         # The compound bug: an un-scannable leaf never registered as "leaf seen",
         # so a paths= selector that matched nothing was wrongly SUPPRESSED. Now
         # the leaf is seen, so the selector-missed warning fires.
@@ -193,7 +193,7 @@ class TestUnscannableLeaf:
         with pytest.warns(SecurityWarning, match="matched no"):
             redact_json(data, paths=["nonexistent"], mode="fast", lang="zh", salt=_HI_SALT)
 
-    def test_ordinary_numeric_bool_none_still_do_not_emit_unscannable_warning(self):
+    def test_ordinary_numeric_bool_none_should_still_not_emit_unscannable_warning(self):
         # Non-vacuity: the new warning must not fire for the primitive leaves the
         # existing arms handle (None in particular is a benign JSON-null
         # passthrough, not an un-scannable leak).
@@ -210,7 +210,9 @@ class TestOnUnscannableRaise:
     un-coercible leaf a hard error instead of a warn-and-forward, mirroring
     `redact_body(on_missing_field='raise')`."""
 
-    def test_raise_fails_closed_on_non_utf8_bytes_leaf_without_leaking_the_value(self):
+    def test_on_unscannable_raise_should_fail_closed_without_leaking_when_bytes_are_non_utf8(
+        self,
+    ):
         data = {"ssn_note": b"\xff SSN 123-45-6789"}
         with pytest.raises(TypeError) as exc:
             redact_json(data, mode="fast", lang="zh", salt=_HI_SALT, on_unscannable="raise")
@@ -221,26 +223,26 @@ class TestOnUnscannableRaise:
         # … and NEVER the PII value carried in the un-scannable bytes.
         assert "123-45-6789" not in msg
 
-    def test_raise_fails_closed_on_arbitrary_object_leaf(self):
+    def test_on_unscannable_raise_should_fail_closed_when_leaf_is_arbitrary_object(self):
         with pytest.raises(TypeError, match="un-scannable"):
             redact_json(
                 {"x": object()}, mode="fast", lang="zh", salt=_HI_SALT, on_unscannable="raise"
             )
 
-    def test_default_still_warns_and_forwards(self):
+    def test_on_unscannable_default_should_warn_and_forward(self):
         # Default is unchanged: warn + forward, no raise.
         data = {"x": b"\xff\xfe"}
         with pytest.warns(SecurityWarning, match="un-scannable"):
             out, key = redact_json(data, mode="fast", lang="zh", salt=_HI_SALT)
         assert out["x"] == b"\xff\xfe"
 
-    def test_raise_does_not_fire_on_a_fully_scannable_document(self):
+    def test_on_unscannable_raise_should_not_raise_when_document_is_fully_scannable(self):
         # A document with no un-scannable leaf redacts normally under 'raise'.
         data = {"note": "手机13800138000"}
         out, key = redact_json(data, mode="fast", lang="zh", salt=_HI_SALT, on_unscannable="raise")
         assert "13800138000" not in repr(out)
 
-    def test_unknown_on_unscannable_value_is_rejected(self):
+    def test_unknown_on_unscannable_value_should_be_rejected(self):
         # A typo in a security switch must not silently fall back to 'warn'.
         with pytest.raises(ValueError, match="on_unscannable"):
             redact_json(
@@ -254,16 +256,18 @@ class TestOnUnscannableRaise:
 
 
 class TestBriefCombinedRepro:
-    def test_decimal_and_bytes_pii_redacted_beside_the_int_forms(self):
+    def test_decimal_and_bytes_pii_should_be_redacted_beside_the_int_forms(self):
         data = {
             "phone": Decimal("13800138000"),
             "id": b"110101199003074258",
             "phone_ok": 13800138000,
             "idc": 110101199003074258,
         }
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             out, key = redact_json(data, lang="zh", mode="fast", salt=42)
+
         blob = repr(out)
         assert "13800138000" not in blob
         assert "110101199003074258" not in blob

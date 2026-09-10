@@ -203,7 +203,7 @@ class TestCrossLeafAliasKey:
     obscuring the shared key with spurious duplicates.
     """
 
-    def test_repeated_entity_across_json_leaves_maps_to_one_alias(self):
+    def test_repeated_entity_across_json_leaves_should_map_to_one_alias(self):
         """Same phone in two JSON leaves → identical alias + single key entry."""
         data = {
             "message1": "电话13812345678",
@@ -219,7 +219,7 @@ class TestCrossLeafAliasKey:
         assert alias in redacted["message1"], "alias absent from first leaf"
         assert alias in redacted["message2"], "alias absent from second leaf"
 
-    def test_repeated_entity_across_json_leaves_restores_fully(self):
+    def test_repeated_entity_across_json_leaves_should_restore_fully(self):
         """restore_json recovers the original phone from both leaves."""
         data = {
             "first": "电话13812345678",
@@ -231,7 +231,7 @@ class TestCrossLeafAliasKey:
         assert "13812345678" in restored["first"]
         assert "13812345678" in restored["second"]
 
-    def test_repeated_entity_across_csv_cells_maps_to_one_alias(self):
+    def test_repeated_entity_across_csv_cells_should_map_to_one_alias(self):
         """Same phone in two CSV cells → identical alias + single key entry."""
         csv_text = "col1,col2\n电话13812345678,再次确认13812345678"
         redacted_csv, key = redact_csv(csv_text, mode="fast", salt=42, has_header=True)
@@ -239,7 +239,7 @@ class TestCrossLeafAliasKey:
         assert "13812345678" not in redacted_csv
         assert len(key) == 1, f"Expected 1 key entry for one unique phone, got {len(key)}: {key}"
 
-    def test_repeated_entity_across_csv_cells_restores_fully(self):
+    def test_repeated_entity_across_csv_cells_should_restore_fully(self):
         """restore_csv recovers the original phone from both cells."""
         csv_text = "col1,col2\n电话13812345678,再次确认13812345678"
         redacted_csv, key = redact_csv(csv_text, mode="fast", salt=42, has_header=True)
@@ -247,7 +247,7 @@ class TestCrossLeafAliasKey:
 
         assert "13812345678" in restored
 
-    def test_distinct_entities_across_csv_cells_accumulate_key(self):
+    def test_distinct_entities_across_csv_cells_should_accumulate_key(self):
         """Two DISTINCT PII values in separate CSV cells → key has 2 entries + both restore.
 
         Non-vacuity: a broken per-cell accumulation that resets the key dict before
@@ -267,7 +267,7 @@ class TestCrossLeafAliasKey:
         assert "13812345678" in restored, "phone not restored from CSV cell"
         assert "110101199003074610" in restored, "id number not restored from CSV cell"
 
-    def test_distinct_entities_across_json_leaves_accumulate_key(self):
+    def test_distinct_entities_across_json_leaves_should_accumulate_key(self):
         """Two DISTINCT PII values in separate JSON leaves → key has 2 entries + both restore.
 
         Non-vacuity: a broken per-leaf accumulation that resets the key dict before
@@ -297,7 +297,7 @@ class TestCrossLeafAliasKey:
 
 
 class TestRestoreJsonSessionEquivalence:
-    def test_restore_json_session_equivalence(self):
+    def test_restore_json_should_match_per_cell_restore_walk(self):
         """restore_json's session-based walk must match a per-cell restore() walk.
 
         Guards the session refactor: routing every leaf through ONE shared
@@ -382,7 +382,7 @@ class TestRedactCSV:
         with pytest.warns(SecurityWarning, match="header"):
             redact_csv(csv_text, mode="fast", salt=bytes(range(32)))
 
-    def test_restore_csv_preserves_row_structure_when_restored_value_has_comma(self):
+    def test_restore_csv_should_preserve_row_structure_when_restored_value_has_comma(self):
         """A restored original value containing a comma must not split its cell.
 
         Neither the fast-mode regex layer nor NER (unavailable in this

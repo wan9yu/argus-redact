@@ -33,7 +33,7 @@ _ALL_LANG_NAME_PAIRS = sorted({(td.lang, td.name) for td in list_types()})
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_at_least_all_registered_pairs_swept():
+def test_sweep_should_cover_at_least_all_registered_pairs():
     """Sanity: the sweep covers the full registry, not a hardcoded handful."""
     assert len(_ALL_LANG_NAME_PAIRS) >= 40, (
         f"expected the full (lang, name) registry sweep (>=40 pairs), got "
@@ -43,7 +43,7 @@ def test_at_least_all_registered_pairs_swept():
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
 @pytest.mark.parametrize("lang, name", _ALL_LANG_NAME_PAIRS)
-def test_default_strategy_matches_rust_applied_strategy(lang, name):
+def test_default_strategy_should_match_rust_applied_strategy(lang, name):
     """Python-reported default strategy == what the Rust extension actually
     applies, per (lang, name) — not just per name."""
     entities = [make_match(name, name, 0)]
@@ -56,7 +56,7 @@ def test_default_strategy_matches_rust_applied_strategy(lang, name):
     )
 
 
-def test_resolve_default_strategy_prefers_the_detected_language():
+def test_resolve_default_strategy_should_prefer_the_detected_language():
     """A type registered under two languages with DIFFERENT default strategies
     resolves to the typedef matching the caller's detected language, not
     whichever one happened to register first — the bug this task fixes."""
@@ -74,7 +74,7 @@ def test_resolve_default_strategy_prefers_the_detected_language():
         unregister("zh", name)
 
 
-def test_resolve_default_strategy_falls_back_to_shared_then_first():
+def test_resolve_default_strategy_should_fall_back_to_shared_when_no_lang_matches():
     """No matching detected language (including none given at all) → prefer
     'shared' → else the first-registered typedef (the old lang-blind
     fallback), never an error — the SAME 3-tier order
@@ -97,7 +97,7 @@ def test_resolve_default_strategy_falls_back_to_shared_then_first():
         unregister("shared", name)
 
 
-def test_resolve_default_strategy_falls_back_to_first_registered_when_no_shared():
+def test_resolve_default_strategy_should_fall_back_to_first_registered_when_no_shared():
     """No detected-lang match and no 'shared' registration → the first-
     registered typedef (the old lang-blind behaviour), never an error."""
     from argus_redact.specs.registry import PIITypeDef, register, unregister

@@ -14,7 +14,7 @@ from argus_redact.pure.grammar import normalize_grammar_en
 
 
 class TestGrammarRestoreScope:
-    def test_unrelated_i_is_not_mangled_by_restored_pronoun_fix(self):
+    def test_restore_should_preserve_unrelated_i_is_when_not_produced_by_restoration(self):
         # The restored "P-1" -> "I is here" gets grammar-fixed to "I am here",
         # but the unrelated "The letter I is silent." must survive verbatim —
         # it was never produced by a substitution.
@@ -27,7 +27,7 @@ class TestGrammarRestoreScope:
         assert "The letter I is silent." in result
         assert result == "I am here. The letter I is silent."
 
-    def test_correctly_conjugated_restored_pronoun_not_over_corrected(self):
+    def test_restore_should_not_over_correct_when_pronoun_already_correct(self):
         # "P-1 am fine" restores to "I am fine", which is already correct —
         # the grammar fix must not touch it (no "I is"/"I has"/... pattern).
         key = {"P-1": "I"}
@@ -37,7 +37,7 @@ class TestGrammarRestoreScope:
 
         assert result == "I am fine"
 
-    def test_no_self_ref_key_leaves_text_byte_identical(self):
+    def test_restore_should_leave_text_unchanged_when_key_has_no_self_ref_pronoun(self):
         # No key value is a self-ref pronoun -> the grammar fix must never
         # fire at all, regardless of what verbs happen to sit in the text.
         key = {"P-1": "Alice"}
@@ -47,7 +47,7 @@ class TestGrammarRestoreScope:
 
         assert result == "Alice is here. The letter I is silent."
 
-    def test_two_close_together_self_ref_restorations_both_get_fixed(self):
+    def test_restore_should_fix_both_pronouns_when_restorations_are_close_together(self):
         # Two separate "I" restorations close together: the first window
         # (12 chars past the first restored "I") reaches byte 13 of the
         # output — far enough to cover the *second* restored "I" itself, but
@@ -74,7 +74,7 @@ class TestGrammarRestoreWePronoun:
     through pseudonymize -> normalize -> restore as `we has` (silently wrong).
     """
 
-    def test_we_have_roundtrips_through_forward_normalize_and_restore(self):
+    def test_restore_should_roundtrip_we_have_after_forward_normalize(self):
         key = {"P-1": "we"}
         # Simulate the forward pseudonymize + normalize step redact() performs:
         # "we have a meeting" -> (pseudonymize "we") "P-1 have a meeting"
@@ -86,7 +86,7 @@ class TestGrammarRestoreWePronoun:
 
         assert result == "we have a meeting"
 
-    def test_we_do_roundtrips_through_forward_normalize_and_restore(self):
+    def test_restore_should_roundtrip_we_do_after_forward_normalize(self):
         key = {"P-1": "we"}
         forward = normalize_grammar_en("P-1 do the work", ["we"])
         assert forward == "P-1 does the work"
@@ -95,7 +95,7 @@ class TestGrammarRestoreWePronoun:
 
         assert result == "we do the work"
 
-    def test_we_dont_roundtrips_through_forward_normalize_and_restore(self):
+    def test_restore_should_roundtrip_we_dont_after_forward_normalize(self):
         key = {"P-1": "we"}
         forward = normalize_grammar_en("P-1 don't know", ["we"])
         assert forward == "P-1 doesn't know"
@@ -104,7 +104,7 @@ class TestGrammarRestoreWePronoun:
 
         assert result == "we don't know"
 
-    def test_we_is_restores_to_we_are(self):
+    def test_restore_should_convert_we_is_to_we_are(self):
         # There's no forward "are"->"is" rule (VERB_PAIRS has no "are" entry),
         # so this exercises the reverse rule directly the same way the "I"
         # copula case is exercised elsewhere in this file — "we is" must not
@@ -116,7 +116,7 @@ class TestGrammarRestoreWePronoun:
 
         assert result == "we are here"
 
-    def test_i_am_and_i_have_still_roundtrip(self):
+    def test_i_am_and_i_have_should_still_roundtrip_when_we_rules_are_added(self):
         # Control: adding "we" reversals must not regress the pre-existing
         # "I" reversals.
         key = {"P-1": "I"}
@@ -129,7 +129,7 @@ class TestGrammarRestoreWePronoun:
         assert forward_have == "P-1 has a cat"
         assert restore(forward_have, key, guard=False) == "I have a cat"
 
-    def test_correctly_conjugated_we_verb_not_over_corrected(self):
+    def test_restore_should_not_over_correct_we_verb_when_already_correct(self):
         # "we have"/"we are" are already correct — restoring them must not
         # trigger any reverse rule (no "we is"/"we has"/... pattern present).
         key = {"P-1": "we"}

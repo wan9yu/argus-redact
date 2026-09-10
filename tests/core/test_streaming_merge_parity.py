@@ -37,7 +37,7 @@ def _mock_ner_adapter() -> MagicMock:
     return adapter
 
 
-def test_batch_and_streaming_agree_on_fused_person_merge():
+def test_batch_and_streaming_should_agree_on_fused_person_merge():
     """Same NER mock, same text — batch and streaming must redact the same
     set of originals (with the same PII types), and neither may leak the
     fused wrong span or a trailing fragment of it.

@@ -34,7 +34,7 @@ What is locked, and against WHICH reference (this is load-bearing):
 
 NON-VACUITY: every differential compares two INDEPENDENT engines (Rust ``_core``
 vs Python ``produce_hints`` / ``redact``); there are no ``x == x`` self-compares.
-``test_corpus_nonempty`` guards every corpus against silent emptying. The
+``test_corpora_should_not_shrink_below_floor`` guards every corpus against silent emptying. The
 ``test_*_tamper_reasoned`` tests prove the assertions are real by confirming a
 frozen-expected value differs from a deliberately-wrong value (we cannot perturb
 the compiled Rust, so we prove the gate would catch a regression by reasoning over
@@ -211,7 +211,7 @@ _HINT_CORPUS = [
 
 
 @pytest.mark.parametrize("case", _HINT_CORPUS, ids=[c[0] for c in _HINT_CORPUS])
-def test_hint_parity_core_vs_live_python(case):
+def test_hint_production_should_match_python_reference(case):
     """_core.produce_hints_l1(ents, text) == LIVE Python produce_hints(...), all 4 types.
 
     Rust-vs-Python differential (NOT self-compare). If the Rust text_intent /
@@ -226,7 +226,7 @@ def test_hint_parity_core_vs_live_python(case):
     assert core_hints == py_hints, f"hint drift for {_label!r}: core={core_hints} py={py_hints}"
 
 
-def test_hint_parity_command_pii_precedence_is_instruction():
+def test_text_intent_should_be_instruction_when_command_and_pii_coexist():
     """Pins command-with-PII precedence: command AND other_pii → instruction.
 
     If you change pure/hints.produce_hints so a command with PII falls through to
@@ -241,7 +241,7 @@ def test_hint_parity_command_pii_precedence_is_instruction():
     assert intent == "instruction"  # command beats narrative
 
 
-def test_hint_parity_command_kinship_is_tier1_instruction():
+def test_self_reference_tier_should_stay_one_when_kinship_present_under_command():
     """Pins command-with-kinship: → instruction text_intent AND tier 1 (NOT tier 3).
 
     Tier 3 is reserved for command + pronoun-only (no kinship, no PII). Kinship
@@ -258,7 +258,7 @@ def test_hint_parity_command_kinship_is_tier1_instruction():
     assert by["self_reference_tier"]["has_kinship"] is True
 
 
-def test_hint_parity_control_char_command_matches_python():
+def test_text_intent_should_be_instruction_when_control_char_separates_command():
     """\\s control-char fidelity: a U+001D-separated 'können Sie' command + 'me'.
 
     The de COMMAND_PATTERNS regex uses `\\s+`; with the U+001D separator a naive
@@ -276,7 +276,7 @@ def test_hint_parity_control_char_command_matches_python():
     assert any(e.type == "self_reference" for e in py_ents)
 
 
-def test_hint_parity_cjk_leading_control_strip():
+def test_text_intent_should_be_instruction_when_leading_control_char_precedes_command():
     """CJK strip: leading U+001C before a zh command pronoun. Python str.strip()
 
     drops it; Rust py_strip must too, so the stripped text still starts with 帮我
@@ -302,7 +302,7 @@ _THRESHOLD_CORPUS = [
 
 
 @pytest.mark.parametrize("case", _THRESHOLD_CORPUS, ids=[c[0] for c in _THRESHOLD_CORPUS])
-def test_get_person_threshold_core_equals_python(case):
+def test_person_threshold_should_match_python_and_pinned_constant(case):
     """_core.get_person_threshold == Python get_person_threshold, and == the pinned constant.
 
     Pins the 1.2 / 0.8 constants AND the Rust-vs-Python parity over the same hints.
@@ -325,7 +325,7 @@ _FILTER_CORPUS = [
 
 
 @pytest.mark.parametrize("case", _FILTER_CORPUS, ids=[c[0] for c in _FILTER_CORPUS])
-def test_filter_self_reference_core_equals_python(case):
+def test_self_reference_filter_should_match_python_reference(case):
     """_core.filter_self_reference == Python filter_self_reference over real entities + hints."""
     _label, text, lang = case
     py_ents = _real_entities(text, lang)
@@ -467,13 +467,14 @@ _REDACT_CORPUS = [
 
 
 @pytest.mark.parametrize("case", _REDACT_CORPUS, ids=[c[0] for c in _REDACT_CORPUS])
-def test_redact_l1_equals_redact_fast(case):
+def test_redact_l1_should_match_redact_fast_path(case):
     """_core.redact_l1 (redacted, key) == LIVE redact(mode="fast") (redacted, key).
 
     Path-equivalence: the bundled iOS entry must stay byte-identical to the shipped
     Python fast path. Compares two independent code paths (NOT self).
     """
     _label, text, lang, config, names, types, types_exclude, unified_prefix = case
+
     core_redacted, core_key, _aliases, _kd, _mc = _core_redact_fast(
         text,
         lang,
@@ -492,11 +493,12 @@ def test_redact_l1_equals_redact_fast(case):
         types_exclude=types_exclude,
         unified_prefix=unified_prefix,
     )
+
     assert core_redacted == py_redacted, f"redacted drift for {_label!r}"
     assert dict(core_key) == dict(py_key), f"key drift for {_label!r}"
 
 
-def test_redact_l1_keep_downgrade_equals_redact_fast():
+def test_redact_l1_should_match_redact_fast_when_keep_is_downgraded():
     """keep-downgrade: strategy='keep' on a non-self_reference type is downgraded.
 
     Both engines must downgrade identically (keep_downgraded=True on the Rust side)
@@ -504,18 +506,20 @@ def test_redact_l1_keep_downgrade_equals_redact_fast():
     """
     text = "张三的电话13812345678"
     config = {"phone": {"strategy": "keep"}}
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         core_redacted, core_key, _aliases, keep_downgraded, _mc = _core_redact_fast(
             text, "zh", config=config
         )
         py_redacted, py_key = _py_redact_fast(text, "zh", config=config)
+
     assert keep_downgraded is True  # the non-self_reference 'keep' was downgraded
     assert core_redacted == py_redacted
     assert dict(core_key) == dict(py_key)
 
 
-def test_redact_l1_keep_whitelist_self_reference_not_downgraded():
+def test_keep_strategy_should_not_downgrade_self_reference_kinship():
     """The self_reference kinship whitelist ('我妈') is genuinely kept (no downgrade)."""
     out = _core_redact_fast("我妈说她13812345678", "zh")
     redacted, _key, _aliases, keep_downgraded, _mc = out
@@ -528,7 +532,7 @@ def test_redact_l1_keep_whitelist_self_reference_not_downgraded():
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def test_threshold_flip_instruction_suppresses_name():
+def test_borderline_person_should_be_kept_only_when_intent_is_instruction():
     """Pins the 1.2 instruction threshold: an instruction-intent zh text SUPPRESSES
 
     a borderline person name (王芳), while the SAME name in a narrative is REDACTED
@@ -543,7 +547,7 @@ def test_threshold_flip_instruction_suppresses_name():
     assert "王芳" not in narr_redacted
 
 
-def test_validator_jwt_accept_vs_reject():
+def test_jwt_validator_should_accept_valid_and_reject_missing_alg():
     """Pins the jwt validator: a 3-segment HS256 jwt is detected (redacted); a
 
     3-segment jwt whose header lacks "alg" is REJECTED (left verbatim). If you
@@ -557,7 +561,7 @@ def test_validator_jwt_accept_vs_reject():
     assert _JWT_NOALG in reject_redacted  # rejected (no "alg") → left verbatim
 
 
-def test_validator_organization_accept_vs_reject():
+def test_organization_validator_should_accept_named_org_and_reject_bare_suffix():
     """Pins the organization validator: a named org (阿里巴巴有限公司) is detected;
 
     a bare suffix with no name before it (这是公司) is REJECTED (left verbatim).
@@ -568,7 +572,7 @@ def test_validator_organization_accept_vs_reject():
     assert reject_redacted == "这是公司"  # rejected → unchanged
 
 
-def test_validator_school_accept_vs_reject():
+def test_school_validator_should_accept_named_school_and_reject_bare_suffix():
     """Pins the school validator: a named school (北京大学) is detected; a bare
 
     suffix with no name before it (这是大学) is REJECTED (left verbatim).
@@ -584,7 +588,7 @@ def test_validator_school_accept_vs_reject():
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def test_corpus_nonempty():
+def test_corpora_should_not_shrink_below_floor():
     """Guard: every corpus has cases. An accidentally-emptied corpus would make the
 
     parametrized differentials vacuously pass (0 cases collected) — this fails loudly.
@@ -595,7 +599,7 @@ def test_corpus_nonempty():
     assert len(_FILTER_CORPUS) >= 3
 
 
-def test_hint_differential_is_real_not_self_compare():
+def test_hint_parity_gate_should_reject_a_wrong_intent():
     """Tamper-reasoned proof (family A): the differential compares Rust _core to an
 
     INDEPENDENT Python reference. We confirm the gate would catch a regression by
@@ -628,7 +632,7 @@ def test_hint_differential_is_real_not_self_compare():
     assert core is not py
 
 
-def test_redact_differential_is_real_not_self_compare():
+def test_redact_parity_gate_should_reject_a_wrong_expectation():
     """Tamper-reasoned proof (family B): redact_l1 and redact(fast) are independent
 
     code paths. We confirm the equality is meaningful by showing the redacted output
@@ -644,7 +648,7 @@ def test_redact_differential_is_real_not_self_compare():
     assert dict(core_key) == dict(py_key) and len(core_key) > 0
 
 
-def test_threshold_constants_are_distinct():
+def test_person_thresholds_should_differ_between_instruction_and_narrative():
     """Tamper-reasoned proof (family C): the two threshold constants are DISTINCT,
 
     so the threshold-flip gate cannot pass vacuously. If 1.2 and 0.8 were ever
@@ -656,8 +660,10 @@ def test_threshold_constants_are_distinct():
     narr_hints = _core.produce_hints_l1(
         _to_core(_real_entities("我的电话是13800138000", "zh")), "我的电话是13800138000"
     )
+
     instr_th = _core.get_person_threshold(instr_hints)
     narr_th = _core.get_person_threshold(narr_hints)
+
     assert instr_th == 1.2
     assert narr_th == 0.8
     assert instr_th != narr_th  # the flip is real — distinct constants drive distinct behavior

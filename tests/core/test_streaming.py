@@ -105,7 +105,7 @@ class TestStreamingRestorer:
         with pytest.raises(ValueError, match="Unknown strategy"):
             StreamingRestorer({}, strategy="invalid")
 
-    def test_shared_instance_concurrent_feed_raises_already_borrowed(self):
+    def test_concurrent_feed_should_raise_already_borrowed(self):
         """The single-session guarantee the class docstring documents must be
         REAL, not just prose: two threads sharing one `StreamingRestorer` and
         calling `feed()` concurrently trip the underlying Rust session's
@@ -210,7 +210,7 @@ class TestStreamingRestorerMaxBuffer:
             restorer.feed("x" * 10)  # no boundary chars at all
             assert len(restorer._buffer) <= restorer._max_buffer
 
-    def test_buffer_stays_bounded_even_when_a_fake_exceeds_max_buffer(self):
+    def test_buffer_should_stay_bounded_when_a_fake_exceeds_max_buffer(self):
         """H7 bound must hold even in the degenerate config where a key fake is
         longer than max_buffer — otherwise the whole buffer becomes a held-back
         prefix (cut == 0) and grows without limit. Forward progress is
@@ -227,13 +227,13 @@ class TestStreamingRestorerMaxBuffer:
             restorer.feed("F")  # no boundary; each char extends the prefix
             assert len(restorer._buffer) <= bound
 
-    def test_default_max_buffer_mirrors_streaming_redactor(self):
+    def test_default_max_buffer_should_equal_streaming_redactor_default(self):
         from argus_redact.glue._detect_partial import DEFAULT_MAX_BUFFER
 
         restorer = StreamingRestorer({})
         assert restorer._max_buffer == DEFAULT_MAX_BUFFER == 4096
 
-    def test_force_flush_does_not_split_a_pseudonym_token(self):
+    def test_force_flush_should_not_split_a_pseudonym_token(self):
         """Force-flushing past the cap must not corrupt the eventual restore —
         no fake token may be split across the force-flush boundary."""
         text = "填充" * 300 + "电话13912345678。"
@@ -330,7 +330,7 @@ class TestStreamingRestorerRealisticMode:
         out += restorer.flush()
         assert out == text
 
-    def test_streaming_restorer_session_equivalence(self):
+    def test_should_match_one_shot_restore_across_small_chunks(self):
         """StreamingRestorer restores through a precompiled session (built once
         at construction) instead of calling ``restore()`` fresh per chunk —
         dribbling the same downstream text through many tiny feed() calls must
@@ -393,10 +393,12 @@ class TestStreamingRedactor:
             "或拨 13987654321 找老陈。",
             "身份证 110101199003077651 已核对。",
         ]
+
         outs = [r.feed(c) for c in chunks]
         final = r.flush()
         joined_in = "".join(chunks)
         joined_out = "".join(o.downstream_text for o in outs) + final.downstream_text
+
         assert restore(joined_out, r.aggregate_key(), guard=False) == joined_in
 
     def test_should_avoid_collision_across_chunks(self):
@@ -460,6 +462,7 @@ class TestStreamingRedactor:
             names=["张三"],
             reserved_names={"person_zh": ()},  # disable zh canonical names
         )
+
         # 张三 is in canonical list — without override, the chunk would be
         # flagged as polluted. With override it passes through. flush() emits.
         r.feed("客户张三电话13912345678。")
@@ -470,7 +473,7 @@ class TestStreamingRedactor:
 class TestIncrementalKwargRemoved:
     """v0.6.0: incremental=False is removed; passing it must raise TypeError."""
 
-    def test_incremental_kwarg_no_longer_accepted(self):
+    def test_incremental_kwarg_should_raise_type_error(self):
         import pytest
 
         from argus_redact.streaming import StreamingRedactor
@@ -487,7 +490,7 @@ class TestStreamingRedactorIncremental:
     held until flush() or until ≥ W chars of forward context arrive.
     """
 
-    def test_default_mode_is_incremental_in_v058(self):
+    def test_default_mode_should_redact_via_feed_and_flush(self):
         """With the detection-context window, feed()+flush() together redact."""
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         # Short text (< W=128) is held for context; combine feed+flush output.
@@ -497,7 +500,7 @@ class TestStreamingRedactorIncremental:
         assert "13912345678" not in combined
         assert combined != ""
 
-    def test_cross_chunk_phone_zh(self):
+    def test_zh_phone_should_be_redacted_across_chunk_boundary(self):
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         out1 = r.feed("电话1391")  # no boundary → buffered
         assert out1.downstream_text == ""
@@ -509,7 +512,7 @@ class TestStreamingRedactorIncremental:
             f"phone should be redacted across chunks, got {combined!r}"
         )
 
-    def test_cross_chunk_id_zh(self):
+    def test_zh_id_should_be_redacted_across_chunk_boundary(self):
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         # A valid Chinese id (110101199003074610 — correct checksum) split mid-value
         # across two chunks. The id must be redacted, never emitted raw across the cut.
@@ -518,7 +521,7 @@ class TestStreamingRedactorIncremental:
         out += r.flush().downstream_text
         assert "110101199003074610" not in out, f"id should be redacted across chunks, got {out!r}"
 
-    def test_cross_chunk_email(self):
+    def test_email_should_be_redacted_across_chunk_boundary(self):
         r = StreamingRedactor(salt=b"x", lang="en", mode="fast")
         r.feed("Email me at user@")
         out = r.feed("company.com.")
@@ -528,7 +531,7 @@ class TestStreamingRedactorIncremental:
             f"email should be redacted across chunks, got {combined!r}"
         )
 
-    def test_flush_drains_remaining_buffer(self):
+    def test_flush_should_drain_remaining_buffer(self):
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         r.feed("最后一句没有标点，电话1391")
         flushed = r.feed("2345678")  # still no boundary, and buffer < W → held
@@ -538,7 +541,7 @@ class TestStreamingRedactorIncremental:
             f"flush should emit pending entity, got {final.downstream_text!r}"
         )
 
-    def test_shift_entities_clamps_left_straddler_to_in_range_tail(self):
+    def test_shift_entities_should_clamp_left_straddler_to_in_range_tail(self):
         # Clamp restore-safety (C1 face 3), mirroring the core ``shift_spans`` unit
         # test: an entity whose head reaches back into the already-emitted
         # left-context (start < lo) is clamped to start=0 AND its text TRUNCATED to
@@ -555,7 +558,7 @@ class TestStreamingRedactorIncremental:
         assert out[0].end == 5
         assert out[0].text == "defgh"  # dropped lo-start=3 head chars
 
-    def test_flush_idempotent_on_empty(self):
+    def test_flush_should_be_idempotent_when_buffer_is_empty(self):
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         # Short sentence (< W) is held; first flush() drains it.
         r.feed("电话13912345678。")
@@ -565,7 +568,7 @@ class TestStreamingRedactorIncremental:
         assert result.downstream_text == ""
         assert result.key == {}
 
-    def test_aggregate_key_preserved_across_incremental_chunks(self):
+    def test_aggregate_key_should_reuse_the_same_fake_across_chunks(self):
         """Same original across chunks must reuse the same fake (not minted twice)."""
         r = StreamingRedactor(salt=b"x", lang="zh", mode="fast")
         r.feed("第一次提到13912345678。")
@@ -609,15 +612,17 @@ class TestStreamingRedactorRealisticKeyIsolation:
             f"audit placeholder leaked into downstream_text: {combined!r}"
         )
 
-    def test_aggregate_key_still_has_both_realistic_and_audit_spaces(self):
+    def test_aggregate_key_should_retain_both_realistic_and_audit_fakes(self):
         """The fix must not strip audit space from the returned unified key —
         restore() needs both the realistic fake AND the audit placeholder
         mapped back to the same original."""
         r = StreamingRedactor(salt=b"test-salt", lang="zh", mode="fast")
         r.feed("请拨打 13912345678 联系王建国。")
         r.flush()
+
         agg = r.aggregate_key()
         fakes_for_name = [k for k, v in agg.items() if v == "王建国"]
+
         assert len(fakes_for_name) == 2, (
             f"expected exactly one realistic fake and one audit placeholder "
             f"for 王建国, got {fakes_for_name}"
@@ -627,7 +632,7 @@ class TestStreamingRedactorRealisticKeyIsolation:
         assert len(audit_fakes) == 1, fakes_for_name
         assert len(realistic_fakes) == 1, fakes_for_name
 
-    def test_seed_sweep_never_leaks_audit_placeholder_into_downstream(self):
+    def test_audit_placeholder_should_not_leak_across_hash_seeds(self):
         """Determinism: the original bug's leak was hash-seed dependent
         (measured ~60% leak rate pre-fix over 41 seeds via a scratch harness
         feeding the unified key as existing_key=). Sweep PYTHONHASHSEED over a
@@ -647,6 +652,7 @@ class TestStreamingRedactorRealisticKeyIsolation:
             'print(out1.downstream_text + "|" + out2.downstream_text, end="")\n'
         )
         leaking_seeds = []
+
         for seed in range(26):
             proc = subprocess.run(
                 [sys.executable, "-c", script],
@@ -662,6 +668,7 @@ class TestStreamingRedactorRealisticKeyIsolation:
             assert proc.returncode == 0, f"subprocess failed for seed={seed}: {proc.stderr}"
             if _AUDIT_PLACEHOLDER_RE.search(proc.stdout):
                 leaking_seeds.append((seed, proc.stdout))
+
         assert leaking_seeds == [], f"audit placeholder leaked at seeds: {leaking_seeds}"
 
 
@@ -689,7 +696,7 @@ class TestStreamingRestorerStraddleParity:
         return result.downstream_text, dict(result.key)
 
     @pytest.mark.parametrize("strategy", ["sentence", "none"])
-    def test_every_two_way_split_matches_batch(self, strategy):
+    def test_every_two_way_split_should_match_batch_restore(self, strategy):
         reply, key = self._reply_and_key()
         expected = restore(reply, key, guard=False)
         mismatches = []
@@ -701,14 +708,14 @@ class TestStreamingRestorerStraddleParity:
         assert mismatches == [], f"{strategy}: {len(mismatches)} split points differ from batch"
 
     @pytest.mark.parametrize("strategy", ["sentence", "none"])
-    def test_one_char_at_a_time_matches_batch(self, strategy):
+    def test_one_char_at_a_time_feed_should_match_batch_restore(self, strategy):
         reply, key = self._reply_and_key()
         restorer = StreamingRestorer(dict(key), strategy=strategy)
         out = "".join(restorer.feed(c) for c in reply) + restorer.flush()
         assert out == restore(reply, key, guard=False)
 
     @pytest.mark.parametrize("strategy", ["sentence", "none"])
-    def test_cut_after_a_complete_numeric_fake_keeps_the_digit_boundary(self, strategy):
+    def test_cut_after_a_complete_numeric_fake_should_keep_the_digit_boundary(self, strategy):
         """A cut immediately after a whole fake must not manufacture a digit
         boundary the batch path refuses to honour."""
         key = {"19999123456": "13912345678"}
@@ -719,14 +726,14 @@ class TestStreamingRestorerStraddleParity:
         assert out == batch
         assert "13912345678" not in out
 
-    def test_fake_longer_than_max_buffer_is_not_split(self):
+    def test_fake_longer_than_max_buffer_should_not_be_split(self):
         key = {"user57711@example.org": "zhangwei@qq.com"}  # 21-char fake
         head, tail = "xxuser57711@example.o", "rg tail"
         restorer = StreamingRestorer(dict(key), strategy="sentence", max_buffer=16)
         out = restorer.feed(head) + restorer.feed(tail) + restorer.flush()
         assert out == restore(head + tail, key, guard=False)
 
-    def test_buffer_headroom_is_bounded_by_the_longest_fake(self):
+    def test_buffer_headroom_should_be_bounded_by_the_longest_fake(self):
         """Forward progress with a FIXED headroom (the longest fake) — which is
         what the docstring promises — not unbounded growth."""
         long_fake = "F" * 40
@@ -736,7 +743,7 @@ class TestStreamingRestorerStraddleParity:
             restorer.feed("F")
             assert len(restorer._buffer) <= bound
 
-    def test_key_is_snapshotted_at_construction(self):
+    def test_key_should_be_snapshotted_at_construction(self):
         """A post-construction mutation of the caller's dict must not change the
         hold decisions — the session already snapshotted the key."""
         key = {"P-100": "Alice"}
@@ -764,20 +771,22 @@ class TestStreamingRestorerSentenceBoundaryInsideRestorable:
     """
 
     @pytest.mark.parametrize("granularity", ["char", "token"])
-    def test_dotted_key_fake_restores_under_sentence_strategy(self, granularity):
+    def test_dotted_key_fake_should_restore_under_sentence_strategy(self, granularity):
         key = {"John Q. Public": "Susan Miller"}
         text = "Signed by John Q. Public"
         expected = restore(text, key, guard=False)
         assert expected == "Signed by Susan Miller"  # batch baseline (already correct)
+
         parts = (
             list(text) if granularity == "char" else ["Signed ", "by ", "John ", "Q. ", "Public"]
         )
         assert "".join(parts) == text
+
         restorer = StreamingRestorer(dict(key), strategy="sentence")
         out = "".join(restorer.feed(p) for p in parts) + restorer.flush()
         assert out == expected
 
-    def test_none_strategy_was_already_correct_for_the_dotted_fake(self):
+    def test_none_strategy_should_correctly_restore_the_dotted_fake(self):
         """Control: ``"none"`` already restored the dotted fake (it routes its
         flush through the straddle hold-back) — the defect was sentence-only."""
         key = {"John Q. Public": "Susan Miller"}
@@ -786,7 +795,7 @@ class TestStreamingRestorerSentenceBoundaryInsideRestorable:
         out = "".join(restorer.feed(c) for c in text) + restorer.flush()
         assert out == restore(text, key, guard=False) == "Signed by Susan Miller"
 
-    def test_builtin_en_realistic_fake_is_dotted_and_restores(self):
+    def test_builtin_en_realistic_fake_should_restore_under_sentence_strategy(self):
         """Not a hypothetical key: the built-in en realistic pool emits
         ``John Q. Public`` (a fake with an interior ``". "``), so a real
         pseudonym-llm reply hits the same sentence split and must restore when
@@ -802,20 +811,22 @@ class TestStreamingRestorerSentenceBoundaryInsideRestorable:
         assert out == restore(reply, result.key, guard=False) == "Signed by Susan Miller"
 
     @pytest.mark.parametrize("granularity", ["char", "word"])
-    def test_honorific_alias_restores_under_sentence_strategy(self, granularity):
+    def test_honorific_alias_should_restore_under_sentence_strategy(self, granularity):
         key = expand_aliases({"P-1": "Susan Miller"})
         assert "Mr. Miller" in key  # expand_aliases emits the honorific alias
         text = "Hello there. Please ask Mr. Miller about it. Thanks."
         expected = restore(text, key, guard=False)
         assert "Susan Miller" in expected and "Mr. Miller" not in expected
+
         parts = list(text) if granularity == "char" else [t for t in re.split(r"(\s+)", text) if t]
         assert "".join(parts) == text
+
         restorer = StreamingRestorer(dict(key), strategy="sentence")
         out = "".join(restorer.feed(p) for p in parts) + restorer.flush()
         assert out == expected
         assert "Mr. Miller" not in out  # the honorific was actually restored
 
-    def test_genuine_boundary_not_inside_a_restorable_still_emits_at_boundary(self):
+    def test_genuine_boundary_should_still_emit_when_not_inside_a_restorable(self):
         """Control: a real sentence boundary that is NOT inside a restorable must
         still cut there — the hold-back is 0, so the completed sentences emit
         BEFORE flush (bounded latency, not buffer-the-whole-stream)."""
@@ -841,13 +852,13 @@ class TestStreamingRestorerDigitRunHoldBack:
     regression of up to ``max_buffer // 2`` with no matching risk to guard.
     """
 
-    def test_no_numeric_fake_flushes_a_trailing_digit_run_immediately(self):
+    def test_digit_run_should_flush_immediately_when_no_numeric_fake_in_key(self):
         restorer = StreamingRestorer({"P-1": "Alice"}, strategy="none")
         out = restorer.feed("the total is 4200")
         assert out == "the total is 4200"
         assert restorer._buffer == ""
 
-    def test_numeric_fake_still_gets_the_digit_boundary_hold_back(self):
+    def test_digit_run_should_hold_back_when_key_has_a_numeric_fake(self):
         """The gate must not disable the digit-boundary guard when the key
         DOES contain an all-digit fake: a chunk boundary landing inside a
         digit run must not manufacture a digit boundary that lets the numeric
@@ -874,13 +885,13 @@ class TestStreamingRestorerAliases:
         alias = next(iter(result.aliases.values()))[0]
         return dict(result.key), dict(result.aliases), f"Sure — {alias} can be reached later."
 
-    def test_aliases_restore_on_the_streaming_path(self):
+    def test_aliases_should_restore_on_the_streaming_path(self):
         key, aliases, reply = self._fixture()
         restorer = StreamingRestorer(key, aliases=aliases)
         out = restorer.feed(reply) + restorer.flush()
         assert out == restore(reply, key, aliases=aliases, guard=False)
 
-    def test_alias_straddling_a_chunk_boundary_still_restores(self):
+    def test_alias_should_restore_when_straddling_a_chunk_boundary(self):
         key, aliases, reply = self._fixture()
         expected = restore(reply, key, aliases=aliases, guard=False)
         mismatches = []
@@ -891,11 +902,11 @@ class TestStreamingRestorerAliases:
                 mismatches.append(i)
         assert mismatches == []
 
-    def test_aliases_default_to_none(self):
+    def test_aliases_should_default_to_none(self):
         restorer = StreamingRestorer({"P-1": "Alice"})
         assert restorer.feed("P-1 ok.\n") == "Alice ok.\n"
 
-    def test_colliding_aliases_warn_like_the_batch_path(self):
+    def test_colliding_aliases_should_warn_like_the_batch_path(self):
         """An alias claimed by two originals means the restored value for that
         alias may be the WRONG IDENTITY. Batch ``restore`` warns; enabling
         aliases on the streaming path without the same warning would make the
@@ -911,19 +922,19 @@ class TestStreamingRestorerAliases:
             restorer.feed("X ok.\n")
         assert not any("wrong identity" in str(w.message) for w in caught)
 
-    def test_non_colliding_aliases_do_not_warn(self):
+    def test_non_colliding_aliases_should_not_warn(self):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             StreamingRestorer({"A": "Alice", "B": "Bob"}, aliases={"A": ("X",), "B": ("Y",)})
         assert not any(issubclass(w.category, SecurityWarning) for w in caught)
 
-    def test_bare_string_alias_value_rejected_not_split_into_chars(self):
+    def test_bare_string_alias_value_should_be_rejected_not_split_into_chars(self):
         # The SHIP-BLOCKER footgun this seam closes: __init__ used to pre-mangle
         # `{k: tuple(v)}` BEFORE any validation existed, so `{"P-1": "abc"}`
         # silently became `('a', 'b', 'c')` instead of raising.
         with pytest.raises(ValueError):
             StreamingRestorer({"P-1": "Alice"}, aliases={"P-1": "abc"})
 
-    def test_non_str_alias_element_rejected(self):
+    def test_non_str_alias_element_should_be_rejected(self):
         with pytest.raises(ValueError):
             StreamingRestorer({"P-1": "Alice"}, aliases={"P-1": [123]})

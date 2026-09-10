@@ -57,17 +57,17 @@ NEGATIVES = [
 ]
 
 
-def test_region_precision_floor():
+def test_region_detector_should_have_zero_false_positives():
     fps = [t for t in NEGATIVES if _detects_region(t)]
     assert fps == [], f"region detector false-positives (must be 0): {fps}"
 
 
-def test_region_recall_floor():
+def test_region_detector_should_meet_recall_floor():
     hits = sum(1 for t in POSITIVES if _detects_region(t))
     assert hits >= 8, f"region recall floor 8/9: only {hits}/{len(POSITIVES)} detected"
 
 
-def test_parent_city_prefix_absorbed():
+def test_region_detector_should_absorb_parent_city_prefix():
     # 上海浦东新区 must redact as ONE location, not leave bare 上海.
     out, _ = redact(
         "我住在上海浦东新区，平时很忙。",
@@ -85,7 +85,7 @@ def test_parent_city_prefix_absorbed():
 # ---------------------------------------------------------------------------
 
 
-def test_region_technical_pii_only_not_corroborated():
+def test_region_detector_should_not_corroborate_when_only_technical_pii_is_nearby():
     # url_token and ip_address are technical/non-personal PII; after the
     # proximity-allowlist fix they no longer corroborate a bare region.
     # A district with ONLY a url_token or ip_address nearby (no cue) must
@@ -99,14 +99,14 @@ def test_region_technical_pii_only_not_corroborated():
     )
 
 
-def test_region_personal_pii_still_corroborates():
+def test_region_detector_should_corroborate_when_personal_pii_is_nearby():
     # phone IS in the person-identifying allowlist; it must still promote a
     # bare region to redaction (lexicon 0.3 + phone-prox 0.3 = 0.6 ≥ 0.5).
     # Regression guard: the fix must not break the existing phone-proximity path.
     assert _detects_region("西湖区 13800138000"), "phone must still corroborate a bare region"
 
 
-def test_region_mixed_technical_and_personal_pii():
+def test_region_detector_should_corroborate_when_technical_and_personal_pii_are_both_nearby():
     # When BOTH a url_token (excluded) and a phone (person-identifying) are
     # nearby, the phone corroborates and the region IS redacted.
     assert _detects_region(

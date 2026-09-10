@@ -58,9 +58,10 @@ def _build_snapshot() -> dict:
     return snap
 
 
-def test_freeze_or_compare_detection_snapshot():
+def test_pattern_detection_should_match_frozen_snapshot():
     """If the fixture is absent, write it (one-time, on v0.7.0). Otherwise assert equal."""
     current = _build_snapshot()
+
     if not FIXTURE.exists():
         FIXTURE.parent.mkdir(parents=True, exist_ok=True)
         FIXTURE.write_text(
@@ -69,6 +70,7 @@ def test_freeze_or_compare_detection_snapshot():
         raise AssertionError(
             "Wrote v0.7.0 detection snapshot — re-run to compare. COMMIT the fixture."
         )
+
     frozen = json.loads(FIXTURE.read_text(encoding="utf-8"))
     # A lang that silently drops out of `current` must FAIL, not pass vacuously.
     missing = set(frozen) - set(current)
@@ -77,7 +79,7 @@ def test_freeze_or_compare_detection_snapshot():
         assert current[lang] == frozen[lang], f"detection drift in lang={lang}"
 
 
-def test_named_validator_near_miss_via_rust():
+def test_match_patterns_should_report_invalid_ssn_as_near_miss():
     results, near = match_patterns("ssn 000-12-3456", _load_patterns("en"))
     assert any(n.type == "ssn" for n in near)
     assert not any(r.type == "ssn" for r in results)

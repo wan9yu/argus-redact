@@ -22,7 +22,7 @@ from argus_redact import redact
 
 
 class TestProfileWithFileConfig:
-    def test_profile_plus_file_path_config_succeeds(self, tmp_path):
+    def test_redact_should_succeed_when_profile_and_file_path_config_are_combined(self, tmp_path):
         """(a) profile= + a real config file path together must not crash."""
         config_path = tmp_path / "config.json"
         config_path.write_text(json.dumps({"phone": {"strategy": "mask"}}), encoding="utf-8")
@@ -37,7 +37,7 @@ class TestProfileWithFileConfig:
         assert "13800138000" not in redacted
         assert key
 
-    def test_profile_plus_file_path_config_user_override_wins(self, tmp_path):
+    def test_user_config_from_file_should_override_profile_base_config(self, tmp_path):
         """User config (from the file) overrides the profile's base config."""
         config_path = tmp_path / "config.json"
         # gdpr forces phone -> remove; the user file asks for mask instead.
@@ -53,7 +53,7 @@ class TestProfileWithFileConfig:
         # mask keeps a partial digit run visible; remove would not.
         assert any(ch.isdigit() for ch in redacted)
 
-    def test_profile_with_missing_config_file_still_raises_filenotfound(self, tmp_path):
+    def test_redact_should_raise_filenotfound_when_config_file_is_missing(self, tmp_path):
         """A genuinely missing file still raises FileNotFoundError, not the
         old dict-update crash — ordering changed but the error for a bad
         path is unchanged."""
@@ -64,13 +64,13 @@ class TestProfileWithFileConfig:
 
 
 class TestValidateConfigNonDict:
-    def test_list_config_raises_clean_type_error(self):
+    def test_redact_should_raise_typeerror_when_config_is_not_a_dict(self):
         """(c) a non-dict config raises a TypeError naming `config`, not an
         AttributeError from inside `.items()`."""
         with pytest.raises(TypeError, match="config"):
             redact("call 13800138000", lang="zh", config=[("phone", {})])
 
-    def test_list_config_error_is_not_attribute_error(self):
+    def test_redact_should_not_raise_attributeerror_when_config_is_not_a_dict(self):
         try:
             redact("call 13800138000", lang="zh", config=[("phone", {})])
         except AttributeError:
@@ -86,11 +86,11 @@ class TestValidateConfigNonDictEntryValue:
     (``continue``), so the strategy was quietly ignored instead of raising.
     """
 
-    def test_non_dict_entry_value_raises_typeerror_naming_the_key(self):
+    def test_redact_should_raise_typeerror_naming_the_key_when_entry_value_is_not_a_dict(self):
         with pytest.raises(TypeError, match=r"config\['phone'\]"):
             redact("电话13800138000", lang="zh", config={"phone": "mask"})
 
-    def test_non_dict_entry_value_is_not_silently_ignored(self):
+    def test_redact_should_not_silently_ignore_a_non_dict_config_entry_value(self):
         """Before the fix this silently degraded to the default strategy
         instead of raising — confirm it's a hard failure, not a no-op."""
         try:
@@ -100,7 +100,7 @@ class TestValidateConfigNonDictEntryValue:
         else:
             pytest.fail("non-dict config[phone] value should raise, not silently redact")
 
-    def test_valid_dict_config_still_redacts(self):
+    def test_redact_should_still_redact_when_config_entry_value_is_a_valid_dict(self):
         """Positive control: a correctly-shaped dict config is unaffected."""
         redacted, key = redact("电话13800138000", lang="zh", config={"phone": {"strategy": "mask"}})
 
@@ -116,11 +116,11 @@ class TestValidateConfigUnderscoreKeyNarrowing:
     instead of raising on the unknown strategy.
     """
 
-    def test_underscore_named_custom_type_bad_strategy_still_raises(self):
+    def test_redact_should_raise_when_underscore_named_type_has_a_bad_strategy(self):
         with pytest.raises(ValueError, match="bogus_typo"):
             redact("x", config={"_internal_id": {"strategy": "bogus_typo"}})
 
-    def test_unified_prefix_sentinel_still_raises(self):
+    def test_redact_should_raise_when_unified_prefix_is_used_as_a_config_type(self):
         """Unchanged behavior: `_unified_prefix` remains a reserved sentinel
         rejected by its own dedicated check, not by the per-type loop."""
         with pytest.raises(ValueError, match="_unified_prefix"):
@@ -144,7 +144,7 @@ class TestProfileConfigDeepMerge:
     digits ("78") and prefix ("138") of the original number in plaintext.
     """
 
-    def test_partial_override_keeps_profile_strategy(self):
+    def test_redact_should_keep_profile_strategy_when_user_config_overrides_a_sub_field(self):
         redacted, key = redact(
             "Call 13812345678",
             lang="zh",
@@ -162,7 +162,7 @@ class TestProfileConfigDeepMerge:
         assert "*" not in redacted
         assert key
 
-    def test_type_only_in_user_config_applies_fully(self):
+    def test_redact_should_apply_user_config_fully_when_type_is_absent_from_profile(self):
         """Control: a user config for a type NOT present in the profile's
         config still applies in full (nothing to merge against)."""
         redacted, key = redact(
@@ -177,7 +177,7 @@ class TestProfileConfigDeepMerge:
         assert "110101199003077758" not in redacted
         assert key
 
-    def test_user_supplied_strategy_still_overrides_profile(self):
+    def test_redact_should_let_user_strategy_override_profile_strategy(self):
         """Control: when the user DOES specify "strategy", their value wins
         over the profile's, same as before the deep-merge fix."""
         redacted, key = redact(
@@ -191,7 +191,7 @@ class TestProfileConfigDeepMerge:
         assert any(ch.isdigit() for ch in redacted)
         assert key
 
-    def test_cached_profile_not_poisoned_by_prior_merge(self):
+    def test_profile_config_should_not_be_mutated_by_a_prior_merge(self):
         """Control: the profile dict is module-level/shared. A merge for one
         call must not mutate it in place — a later call (even with a
         different or absent user config) must still see gdpr's original

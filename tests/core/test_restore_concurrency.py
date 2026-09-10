@@ -61,7 +61,7 @@ def _run_conflict_probe(restore_one) -> list[str]:
     return errors
 
 
-def test_shared_core_restorer_concurrent_restore_cell_raises_already_borrowed():
+def test_shared_restorer_should_raise_already_borrowed_when_used_concurrently():
     """The raw ``_core.StructuredRestorer`` binding — the SSOT of the
     guarantee. Concurrent ``restore_cell`` on one shared instance must raise
     ``Already borrowed``, never restore both cells silently."""

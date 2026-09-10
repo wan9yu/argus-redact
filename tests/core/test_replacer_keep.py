@@ -20,14 +20,14 @@ def _entity(text: str, ent_type: str, start: int, end: int) -> PatternMatch:
 
 
 class TestKeepStrategyValidation:
-    def test_keep_is_in_valid_strategies(self):
+    def test_keep_should_be_a_valid_strategy(self):
         assert "keep" in VALID_STRATEGIES
 
 
 class TestKeepDowngradesForNonSelfReferenceType:
     """v0.6.1: ``keep`` on phone / ssn / id_number is a footgun — downgrade."""
 
-    def test_keep_on_phone_downgrades_and_warns(self):
+    def test_keep_should_downgrade_and_warn_when_applied_to_phone(self):
         text = "phone 13912345678"
         entities = [_entity("13912345678", "phone", 6, 17)]
         config = {"phone": {"strategy": "keep"}}
@@ -41,7 +41,7 @@ class TestKeepDowngradesForNonSelfReferenceType:
             "no SecurityWarning emitted for keep downgrade"
         )
 
-    def test_keep_on_ssn_downgrades(self):
+    def test_keep_should_downgrade_when_applied_to_ssn(self):
         text = "ssn 123-45-6789"
         entities = [_entity("123-45-6789", "ssn", 4, 15)]
         config = {"ssn": {"strategy": "keep"}}
@@ -56,7 +56,7 @@ class TestKeepDowngradesForNonSelfReferenceType:
 class TestKeepWorksForSelfReferencePronouns:
     """The legitimate use case: pronouns / kinship that the LLM needs verbatim."""
 
-    def test_keep_preserves_zh_pronoun(self):
+    def test_keep_should_preserve_zh_self_reference_pronoun(self):
         text = "我叫张伟, 电话13800138000"
         entities = [
             _entity("我", "self_reference", 0, 1),
@@ -74,7 +74,7 @@ class TestKeepWorksForSelfReferencePronouns:
         assert "张伟" not in redacted, "person should be redacted"
         assert "我" not in key.values(), "kept self_reference should not be in key dict"
 
-    def test_keep_preserves_en_pronoun(self):
+    def test_keep_should_preserve_en_self_reference_pronoun(self):
         text = "I am John"
         entities = [
             _entity("I", "self_reference", 0, 1),
@@ -86,7 +86,7 @@ class TestKeepWorksForSelfReferencePronouns:
         assert redacted.startswith("I "), "pronoun 'I' should be preserved"
         assert "John" not in redacted
 
-    def test_keep_rejects_self_reference_with_non_pronoun_text(self):
+    def test_keep_should_downgrade_when_self_reference_holds_non_pronoun_text(self):
         """If L3 misclassifies a sensitive string as self_reference, downgrade."""
         text = "patient SSN 123-45-6789"
         # Layer-3 mistakenly assigns type=self_reference
@@ -103,7 +103,7 @@ class TestKeepWorksForSelfReferencePronouns:
 
 
 class TestInvalidStrategyStillRejects:
-    def test_unknown_strategy_still_raises(self):
+    def test_replace_should_raise_when_strategy_is_unknown(self):
         text = "phone 13912345678"
         entities = [_entity("13912345678", "phone", 6, 17)]
         config = {"phone": {"strategy": "bogus"}}

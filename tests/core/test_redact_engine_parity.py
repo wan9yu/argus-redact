@@ -112,8 +112,9 @@ def _build():
     return snap
 
 
-def test_redact_engine_parity():
+def test_redact_engine_output_should_match_the_frozen_v072_snapshot():
     current = _build()
+
     if not FIXTURE.exists():
         FIXTURE.parent.mkdir(parents=True, exist_ok=True)
         FIXTURE.write_text(
@@ -121,5 +122,6 @@ def test_redact_engine_parity():
             encoding="utf-8",
         )
         raise AssertionError("Wrote v0.7.2 redact-engine snapshot — re-run to compare. COMMIT it.")
+
     frozen = json.loads(FIXTURE.read_text(encoding="utf-8"))
     assert current == frozen, "redact-engine output drift vs frozen v0.7.2"

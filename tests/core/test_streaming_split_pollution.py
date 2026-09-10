@@ -18,7 +18,7 @@ from argus_redact.streaming import StreamingRedactor
 
 
 class TestSplitReservedValueRaises:
-    def test_reserved_phone_split_across_two_chunks_raises(self):
+    def test_flush_should_raise_when_reserved_phone_split_across_chunks(self):
         # 19999123456 is a reserved-range fake phone; splitting it across the
         # chunk boundary hides it from the eager whole-token check, but the
         # reassembled emit slice at flush sees it whole.
@@ -28,7 +28,7 @@ class TestSplitReservedValueRaises:
         with pytest.raises(PseudonymPollutionError):
             r.flush()
 
-    def test_reserved_phone_fed_one_char_at_a_time_raises(self):
+    def test_flush_should_raise_when_reserved_phone_fed_one_char_at_a_time(self):
         # Char-by-char is the strongest proof that the REASSEMBLED-buffer scan
         # (not the per-chunk check) is what fires: no single feed carries more
         # than one digit of the reserved value.
@@ -38,7 +38,7 @@ class TestSplitReservedValueRaises:
                 r.feed(ch)
             r.flush()
 
-    def test_reserved_phone_split_reassembles_only_at_flush_raises(self):
+    def test_flush_should_raise_when_reserved_value_reassembles_only_at_flush(self):
         # Each chunk carries only a fragment of the reserved phone, so the eager
         # check misses every one; the value becomes whole only in the flushed
         # tail — the flush() path must still catch it.
@@ -49,7 +49,7 @@ class TestSplitReservedValueRaises:
         with pytest.raises(PseudonymPollutionError):
             r.flush()
 
-    def test_reserved_split_emitted_mid_stream_by_feed_raises(self):
+    def test_feed_should_raise_when_reserved_split_value_emits_mid_stream(self):
         # A split reserved value followed by >W (128) chars of clean forward
         # context is emitted by feed() itself (not held for flush), exercising
         # the feed() emit path through the same emit-time scan.
@@ -63,7 +63,7 @@ class TestSplitReservedValueRaises:
 
 
 class TestGuardDoesNotOverfire:
-    def test_clean_stream_token_by_token_redacts_without_raising(self):
+    def test_stream_should_redact_correctly_when_input_is_clean(self):
         # The buffer holds INPUT only (never argus's own reserved-range fakes),
         # so the emit-time scan cannot spuriously raise on the fake this
         # redactor itself produces. A clean stream must still redact correctly.
@@ -76,7 +76,7 @@ class TestGuardDoesNotOverfire:
         original = "用户张伟的电话是13800138000，请处理。"
         assert restore(out, r.aggregate_key(), guard=False) == original
 
-    def test_strict_input_false_stays_silent_on_split_reserved(self):
+    def test_guard_should_stay_silent_when_strict_input_is_disabled(self):
         # The public opt-out is preserved: strict_input=False disables the scan
         # even for a split reserved value.
         r = StreamingRedactor(salt=42, lang="zh", strict_input=False)

@@ -23,22 +23,22 @@ from argus_redact.structured import restore_csv, restore_json
 
 
 class TestNoGuardOrAnchorKeyword:
-    def test_restore_json_accepts_no_guard_or_anchor_keyword(self):
+    def test_restore_json_should_accept_no_guard_or_anchor_keyword(self):
         params = inspect.signature(restore_json).parameters
         assert "guard" not in params
         assert "anchor" not in params
 
-    def test_restore_csv_accepts_no_guard_or_anchor_keyword(self):
+    def test_restore_csv_should_accept_no_guard_or_anchor_keyword(self):
         params = inspect.signature(restore_csv).parameters
         assert "guard" not in params
         assert "anchor" not in params
 
 
 class TestDocstringStatesUnguarded:
-    def test_restore_json_docstring_states_unguarded(self):
+    def test_restore_json_docstring_should_state_unguarded(self):
         doc = (inspect.getdoc(restore_json) or "").lower()
         assert "unguarded" in doc
 
-    def test_restore_csv_docstring_states_unguarded(self):
+    def test_restore_csv_docstring_should_state_unguarded(self):
         doc = (inspect.getdoc(restore_csv) or "").lower()
         assert "unguarded" in doc

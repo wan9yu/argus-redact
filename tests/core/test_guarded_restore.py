@@ -34,33 +34,33 @@ def _round_trip(inject: bool = False):
     return redacted, key, anchor, reply
 
 
-def test_clean_round_trip_restores_and_strips_the_nonce():
+def test_guarded_restore_should_restore_the_original_and_strip_the_nonce():
     _redacted, key, anchor, reply = _round_trip()
     out = guarded_restore(reply, key, anchor=anchor)
     assert out == f"张三的电话是{_PHONE}"
     assert anchor.nonce not in out
 
 
-def test_h_events_reach_the_caller_on_the_default_path():
+def test_guarded_restore_should_warn_on_suspected_injection_by_default():
     """The D1 defect, pinned: events must never be computed and then dropped."""
     redacted, key, anchor, reply = _round_trip(inject=True)
     with pytest.warns(SecurityWarning, match="injection_suspected"):
         guarded_restore(reply, key, redacted=redacted, anchor=anchor)
 
 
-def test_h_events_returned_when_detailed():
+def test_guarded_restore_should_include_injection_suspected_event_when_detailed():
     redacted, key, anchor, reply = _round_trip(inject=True)
     _out, details = guarded_restore(reply, key, redacted=redacted, anchor=anchor, detailed=True)
     assert "injection_suspected" in [e["reason_code"] for e in details["security_events"]]
 
 
-def test_strict_fails_closed_on_injection_before_substituting():
+def test_strict_guard_should_fail_closed_when_injection_suspected():
     redacted, key, anchor, reply = _round_trip(inject=True)
     with pytest.raises(RestoreGuardError):
         guarded_restore(reply, key, redacted=redacted, anchor=anchor, strict=True)
 
 
-def test_h_is_advisory_without_strict():
+def test_guarded_restore_should_proceed_when_injection_suspected_without_strict():
     """By design: H is a heuristic and never becomes the guarantee (that is P + S)."""
     redacted, key, anchor, reply = _round_trip(inject=True)
     with warnings.catch_warnings():
@@ -69,21 +69,21 @@ def test_h_is_advisory_without_strict():
     assert _PHONE in out  # the restore proceeded
 
 
-def test_no_h_check_without_the_redacted_prompt():
+def test_h_check_should_be_skipped_when_redacted_prompt_is_not_given():
     """H needs the redacted prompt. Without it, no H event — and no crash."""
     _redacted, key, anchor, reply = _round_trip(inject=True)
     _out, details = guarded_restore(reply, key, anchor=anchor, detailed=True)
     assert "injection_suspected" not in [e["reason_code"] for e in details["security_events"]]
 
 
-def test_fail_closed_when_no_anchor():
+def test_guarded_restore_should_fail_closed_when_no_anchor_is_given():
     _redacted, key, _anchor, reply = _round_trip()
     with pytest.warns(SecurityWarning, match="guard_no_anchor"):
         out = guarded_restore(reply, key)  # guard=True default, no anchor
     assert _PHONE not in out  # fail-closed: nothing substituted
 
 
-def test_fail_closed_warning_is_attributed_to_the_caller_not_guarded_restore():
+def test_fail_closed_warning_should_be_attributed_to_the_caller():
     """guarded_restore() sits one frame deeper than a direct restore() call: the
     chain is warn -> _fail_closed -> pure.restore -> glue.restore -> guarded_restore
     -> caller. A stacklevel hardcoded for restore()'s own call depth misattributes
@@ -100,7 +100,7 @@ def test_fail_closed_warning_is_attributed_to_the_caller_not_guarded_restore():
     )
 
 
-def test_fail_closed_and_h_fire_together_produce_one_accurate_warning():
+def test_guarded_restore_should_emit_one_warning_when_fail_closed_and_h_fire_together():
     """FINDING 1 (v0.7.20 review): restore()'s own P/S warning and guarded_restore's H
     warning used to be emitted separately, over disjoint event lists — so when a
     fail-closed P/S trip and an advisory H hit occurred together, the caller got TWO
@@ -125,7 +125,7 @@ def test_fail_closed_and_h_fire_together_produce_one_accurate_warning():
     assert _PHONE not in out  # genuinely fail-closed: nothing was substituted
 
 
-def test_clean_ps_with_h_only_produces_one_advisory_warning():
+def test_guarded_restore_should_emit_one_advisory_warning_when_only_h_fires():
     """Counterpart to the mixed case above: when P/S are clean and only H fires, the
     single warning must still say the restore proceeded (it did)."""
     redacted, key, anchor, reply = _round_trip(inject=True)
@@ -142,7 +142,7 @@ def test_clean_ps_with_h_only_produces_one_advisory_warning():
     assert _PHONE in out  # advisory only — the restore genuinely proceeded
 
 
-def test_guard_none_through_guarded_restore_still_emits_deprecation_warning():
+def test_guarded_restore_should_forward_deprecation_warning_when_guard_is_none():
     """Proves the SecurityWarning suppression added for the fix above is scoped to
     SecurityWarning only: restore()'s DeprecationWarning (bare guard=None) must still
     reach the caller through guarded_restore."""
@@ -154,7 +154,7 @@ def test_guard_none_through_guarded_restore_still_emits_deprecation_warning():
 # --- H4: detailed=True must include "outcome", matching restore(detailed=True) -----
 
 
-def test_detailed_includes_complete_outcome_on_clean_round_trip():
+def test_guarded_restore_detailed_outcome_should_be_complete_when_round_trip_is_clean():
     """A clean guarded restore is COMPLETE — nothing was withheld or blocked."""
     _redacted, key, anchor, reply = _round_trip()
     out, details = guarded_restore(reply, key, anchor=anchor, detailed=True)
@@ -165,7 +165,7 @@ def test_detailed_includes_complete_outcome_on_clean_round_trip():
     assert details["outcome"] == expected_details["outcome"]
 
 
-def test_detailed_includes_blocked_outcome_when_guard_fails_closed():
+def test_guarded_restore_detailed_outcome_should_be_blocked_when_guard_fails_closed():
     """No anchor -> guard fails closed; detailed must say BLOCKED, not silently
     drop the outcome the way the plain security_events-only dict used to."""
     _redacted, key, _anchor, reply = _round_trip()
@@ -176,7 +176,7 @@ def test_detailed_includes_blocked_outcome_when_guard_fails_closed():
     assert _PHONE not in out  # genuinely nothing substituted
 
 
-def test_detailed_includes_partial_outcome_when_scope_withholds():
+def test_guarded_restore_detailed_outcome_should_be_partial_when_scope_withholds():
     """A restricted anchor.scope withholds an out-of-scope pseudonym present in
     the text -> PARTIAL. Must match what restore(detailed=True) reports for the
     same inputs."""
@@ -196,7 +196,7 @@ def test_detailed_includes_partial_outcome_when_scope_withholds():
     assert details["outcome"] == expected_details["outcome"]
 
 
-def test_key_file_path_is_accepted(tmp_path):
+def test_guarded_restore_should_accept_a_key_file_path(tmp_path):
     """Routes through the GLUE restore, so a str key-file path works (presidio bypassed this)."""
     import json
 
@@ -220,7 +220,7 @@ class TestGuardedRestoreAliases:
         person_fake = next(p for p, original in key.items() if original == "张三")
         return redacted, key, anchor, person_fake
 
-    def test_alias_form_restores_with_aliases_kwarg(self):
+    def test_alias_form_should_restore_to_canonical_form_when_aliases_kwarg_given(self):
         redacted, key, anchor, person_fake = self._redact_person()
         alias = "Zhang San"
         reply = redacted.replace(person_fake, alias) + "\n" + anchor.nonce
@@ -230,7 +230,7 @@ class TestGuardedRestoreAliases:
         assert "张三" in out
         assert alias not in out
 
-    def test_alias_form_not_restored_without_aliases_kwarg(self):
+    def test_alias_form_should_not_restore_without_aliases_kwarg(self):
         redacted, key, anchor, person_fake = self._redact_person()
         alias = "Zhang San"
         reply = redacted.replace(person_fake, alias) + "\n" + anchor.nonce
@@ -241,7 +241,7 @@ class TestGuardedRestoreAliases:
         assert "张三" not in out
         assert alias in out
 
-    def test_malformed_aliases_rejected_not_silently_corrupted(self):
+    def test_aliases_kwarg_should_raise_value_error_when_shape_is_malformed(self):
         # guarded_restore calls pure.restore.restore DIRECTLY (see its module
         # docstring) — this is the one choke point all 5 integrations share,
         # so a malformed shape must raise ValueError here rather than reach
@@ -250,12 +250,12 @@ class TestGuardedRestoreAliases:
         with pytest.raises(ValueError):
             guarded_restore("x", key, anchor=anchor, aliases={person_fake: "Zhang San"})
 
-    def test_non_str_alias_element_rejected(self):
+    def test_aliases_kwarg_should_raise_value_error_when_element_is_not_a_string(self):
         _redacted, key, anchor, person_fake = self._redact_person()
         with pytest.raises(ValueError):
             guarded_restore("x", key, anchor=anchor, aliases={person_fake: [123]})
 
-    def test_display_marker_forwarded(self):
+    def test_display_marker_should_be_forwarded_through_guarded_restore(self):
         # guard=False keeps this deterministic — the marker/alias forwarding is
         # the same _restore call the guarded path uses.
         key = {"P-1": "张三"}

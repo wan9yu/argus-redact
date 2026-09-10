@@ -35,7 +35,7 @@ def _round_trip(text: str = "张三的电话是13912345678"):
 # ── D0: the nonce must not survive into the restored output ──────────────────
 
 
-def test_guarded_restore_strips_the_nonce():
+def test_guarded_restore_should_strip_the_nonce():
     original, key, anchor, llm_reply = _round_trip()
     out = restore(llm_reply, key, guard=True, anchor=anchor)
     assert anchor.nonce not in out
@@ -43,7 +43,7 @@ def test_guarded_restore_strips_the_nonce():
     assert out == original
 
 
-def test_guarded_restore_strips_nonce_in_detailed_mode():
+def test_guarded_restore_should_strip_nonce_when_detailed():
     original, key, anchor, llm_reply = _round_trip()
     out, details = restore(llm_reply, key, guard=True, anchor=anchor, detailed=True)
     assert anchor.nonce not in out
@@ -51,7 +51,7 @@ def test_guarded_restore_strips_nonce_in_detailed_mode():
     assert details["security_events"] == []
 
 
-def test_guarded_restore_strips_nonce_echoed_inline():
+def test_guarded_restore_should_strip_nonce_when_echoed_inline():
     """Defensive: the prompt asks for the token on its own line, but a model may
     inline it. It must still not reach the caller."""
     original, key, anchor, _ = _round_trip()
@@ -64,14 +64,14 @@ def test_guarded_restore_strips_nonce_echoed_inline():
 # ── D3: fail-closed must be observable on the default path ───────────────────
 
 
-def test_fail_closed_no_anchor_warns():
+def test_guarded_restore_should_warn_and_withhold_pii_when_no_anchor_given():
     _original, key, _anchor, llm_reply = _round_trip()
     with pytest.warns(SecurityWarning, match="guard_no_anchor"):
         out = restore(llm_reply, key, guard=True)  # no anchor -> fail closed
     assert "13912345678" not in out  # still fail-closed: no PII substituted
 
 
-def test_fail_closed_bad_nonce_warns(caplog):
+def test_guarded_restore_should_warn_and_log_fail_closed_when_nonce_is_tampered(caplog):
     import logging
 
     original, key, anchor, _ = _round_trip()
@@ -88,7 +88,7 @@ def test_fail_closed_bad_nonce_warns(caplog):
     assert any("restore fail-closed" in r.message for r in caplog.records)
 
 
-def test_fail_closed_warning_is_attributed_to_the_caller():
+def test_fail_closed_warning_should_be_attributed_to_the_caller():
     """The fail-closed path goes restore() -> _fail_closed() -> warn, one frame deeper
     than the partial-restore path. A single hardcoded stacklevel cannot serve both; if it
     points inside argus, warnings' dedup collapses a whole loop into one warning."""
@@ -101,7 +101,7 @@ def test_fail_closed_warning_is_attributed_to_the_caller():
     )
 
 
-def test_fail_closed_warning_says_pii_was_withheld():
+def test_fail_closed_warning_should_state_pii_was_blocked():
     """Counterpart to the advisory case: here nothing was substituted at all — a
     TOTAL fail-closed — and the message must say so as BLOCKED, not the weaker
     'NOT substituted' phrasing that could also describe a partial restore."""
@@ -115,14 +115,14 @@ def test_fail_closed_warning_says_pii_was_withheld():
     assert "NO originals were substituted" in msg
 
 
-def test_clean_guarded_restore_does_not_warn():
+def test_guarded_restore_should_not_warn_when_the_nonce_is_valid():
     _original, key, anchor, llm_reply = _round_trip()
     with warnings.catch_warnings():
         warnings.simplefilter("error", SecurityWarning)
         restore(llm_reply, key, guard=True, anchor=anchor)  # must not raise
 
 
-def test_strict_still_raises_and_does_not_rely_on_the_warning():
+def test_strict_guarded_restore_should_raise_when_no_anchor_is_given():
     from argus_redact import RestoreGuardError
 
     _original, key, _anchor, llm_reply = _round_trip()
@@ -130,7 +130,7 @@ def test_strict_still_raises_and_does_not_rely_on_the_warning():
         restore(llm_reply, key, guard=True, strict=True)
 
 
-def test_legacy_paths_unchanged():
+def test_legacy_guard_values_should_preserve_prior_behavior():
     """guard=False stays a silent legacy restore; guard=None keeps its DeprecationWarning."""
     original, key, _anchor, _ = _round_trip()
     redacted, _ = redact(original, lang="zh", mode="fast", key=dict(key))
@@ -141,7 +141,7 @@ def test_legacy_paths_unchanged():
         assert restore(redacted, key, guard=None) == original
 
 
-def test_deprecation_warning_is_attributed_to_the_caller():
+def test_deprecation_warning_should_be_attributed_to_the_caller():
     """A deprecation warning exists to say WHERE the caller must change their code.
     Hardcoded, it pointed at argus's own glue/restore.py — useless, and warnings' dedup
     then collapses a whole loop of bare restores into a single warning."""
@@ -169,7 +169,7 @@ def _redact_two(text: str = "张三的电话是13912345678，李四的电话是1
     return redacted, key
 
 
-def test_core_restore_guarded_complete_with_echoed_nonce():
+def test_core_restore_guarded_should_report_complete_when_nonce_is_echoed():
     """A real anchor's nonce, echoed as the prompt asks, restores in full: the
     binding reports outcome == 'complete', no events, and the nonce is gone."""
     original, key, anchor, llm_reply = _round_trip()
@@ -183,7 +183,7 @@ def test_core_restore_guarded_complete_with_echoed_nonce():
     assert events == []
 
 
-def test_core_restore_guarded_unguarded_when_nonce_is_none():
+def test_core_restore_guarded_should_be_unguarded_when_nonce_is_none():
     """`nonce=None` takes the unguarded core path — no `Anchor` is built at
     all — so it is always 'complete', and nothing strips a trailing token that
     was never a pseudonym in the first place. Distinct from the next test,
@@ -195,16 +195,18 @@ def test_core_restore_guarded_unguarded_when_nonce_is_none():
     assert anchor.nonce in restored  # unguarded: no provenance check to strip it
 
 
-def test_core_restore_guarded_blocked_when_nonce_not_echoed():
+def test_core_restore_guarded_should_report_blocked_when_nonce_is_not_echoed():
     """A real `nonce` is supplied (an `Anchor` IS built) but the reply never
     echoes it — the provenance check fails closed: raw text back, untouched,
     outcome 'blocked', one `provenance_failed` event with no `tokens`."""
     original, key, anchor, _llm_reply = _round_trip()
     redacted, _ = redact(original, lang="zh", mode="fast", key=dict(key))
     tampered = redacted + "\ndeadbeef" * 4  # anchor.nonce never appears
+
     restored, alias_collisions, events, outcome = _core.restore_guarded(
         tampered, key, nonce=anchor.nonce, scope=list(anchor.scope)
     )
+
     assert outcome == "blocked"
     assert restored == tampered
     assert alias_collisions == []
@@ -212,7 +214,7 @@ def test_core_restore_guarded_blocked_when_nonce_not_echoed():
     assert events[0]["tokens"] is None
 
 
-def test_core_restore_guarded_partial_on_out_of_scope_pseudonym():
+def test_core_restore_guarded_should_report_partial_when_pseudonym_is_out_of_scope():
     """A scope narrower than `key` withholds the excluded pseudonym(s) and
     reports them via an `out_of_scope_pseudonym` event carrying the withheld
     codes in `tokens`."""

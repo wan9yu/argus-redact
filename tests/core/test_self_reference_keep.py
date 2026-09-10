@@ -12,12 +12,12 @@ from argus_redact.pure.hints import produce_hints
 from argus_redact.pure.replacer import _resolve_default_strategy
 
 
-def test_self_reference_default_strategy_is_keep():
+def test_self_reference_default_strategy_should_be_keep():
     # v0.6.8: typedef is the runtime SSOT; DEFAULT_STRATEGIES is deleted.
     assert _resolve_default_strategy("self_reference") == "keep"
 
 
-def test_issue_12_self_reference_verbatim_repro():
+def test_self_reference_should_stay_verbatim_on_issue_12_input():
     """Issue #12 input — the pronoun part stays preserved through the full pipeline."""
     text = "我叫张伟, 手机 13800138000. 请原样复述我的姓名和手机号码"
     redacted, _ = redact(text, mode="fast", lang="zh", salt=42)
@@ -25,7 +25,7 @@ def test_issue_12_self_reference_verbatim_repro():
     assert "我的" in redacted
 
 
-def test_self_reference_still_emits_tier_hint_under_keep():
+def test_self_reference_should_emit_tier_hint_under_keep_strategy():
     # Even though self_reference text is no longer replaced, detection upstream
     # still produces an entity, so produce_hints() still emits the tier hint.
     entities = [

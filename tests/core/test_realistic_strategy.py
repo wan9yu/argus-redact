@@ -63,7 +63,9 @@ class TestRealisticStrategy:
             ("年龄", "零岁", "age"),
         ],
     )
-    def test_realistic_falls_back_to_pseudonym_when_faker_cannot_fake(self, prefix, token, type_):
+    def test_realistic_should_fall_back_to_pseudonym_when_value_is_unfakeable(
+        self, prefix, token, type_
+    ):
         """A noise faker that can't fake the value must fail closed to a
         pseudonym, not raise — the entity stays redacted, the original is gone."""
         text = prefix + token
@@ -77,7 +79,7 @@ class TestRealisticStrategy:
         assert fakes[0] != token
         assert key[fakes[0]] == token
 
-    def test_redact_pseudonym_llm_does_not_crash_on_unfakeable_date(self):
+    def test_redact_pseudonym_llm_should_fail_closed_when_date_is_unfakeable(self):
         """Regression: year-month / Chinese-numeral DOBs the noise faker can't
         shift previously crashed redact_pseudonym_llm with a ValueError. They
         must now fail closed (pseudonym), removing the date from both outputs."""
@@ -187,7 +189,7 @@ class TestLangAwareLookup:
 class TestFakerTupleEnforced:
     """v0.6.0: faker_reserved must return tuple[str, list[str]]; bare string raises."""
 
-    def test_bare_string_faker_raises_type_error(self):
+    def test_replace_should_raise_when_faker_reserved_returns_bare_string(self):
         def bad_faker(value, rng):
             return "FAKE"  # legacy bare-string return
 
@@ -230,7 +232,7 @@ class TestRealisticNumeric:
 class TestRealisticFakerNoOriginalCollision:
     """A realistic fake must never equal ANOTHER entity's real original."""
 
-    def test_fake_must_not_equal_another_entitys_original(self):
+    def test_realistic_fake_should_not_equal_another_entitys_original(self):
         # 王涛 and 彩云 are both persons. With this salt the faker for 王涛 rolls
         # 彩云 — the OTHER person's real name. If the uniqueness predicate ignores
         # other originals, 彩云 appears verbatim in the output as 王涛's fake: a
@@ -243,5 +245,6 @@ class TestRealisticFakerNoOriginalCollision:
             names=["王涛", "彩云"],
             config={"person": {"strategy": "realistic"}},
         )
+
         for original in ("王涛", "彩云"):
             assert original not in redacted, f"real name {original!r} leaked: {redacted!r}"

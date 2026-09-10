@@ -40,12 +40,12 @@ NEGATIVES = [
 ]
 
 
-def test_condition_precision_floor():
+def test_condition_detector_should_avoid_false_positives_on_non_health_text():
     fps = [t for t in NEGATIVES if _detects(t)]
     assert fps == [], f"condition false-positives (must be 0): {fps}"
 
 
-def test_condition_recall_floor():
+def test_condition_detector_should_meet_recall_floor_on_positives():
     hits = sum(1 for t in POSITIVES if _detects(t))
     assert hits >= 4, f"condition recall floor 4/5: only {hits}/{len(POSITIVES)}"
 
@@ -55,7 +55,7 @@ def test_condition_recall_floor():
 # ---------------------------------------------------------------------------
 
 
-def test_condition_technical_pii_only_not_corroborated():
+def test_condition_should_not_be_corroborated_when_only_technical_pii_present():
     # jwt is a technical/non-personal token; after the proximity-allowlist fix
     # it no longer corroborates an evidence-gated condition.  焦虑症 (3-char,
     # in the framework lexicon) scores lexicon weight 0.3 but gets no proximity
@@ -68,7 +68,7 @@ def test_condition_technical_pii_only_not_corroborated():
     )
 
 
-def test_condition_personal_pii_still_corroborates():
+def test_condition_should_be_corroborated_when_personal_pii_present():
     # phone IS person-identifying; it still promotes 焦虑症 via proximity
     # (lexicon 0.3 + phone-prox 0.3 = 0.6 ≥ 0.5 threshold) → IS detected.
     # Regression guard: the fix must not break the phone-proximity path.
@@ -77,7 +77,7 @@ def test_condition_personal_pii_still_corroborates():
     )
 
 
-def test_condition_mixed_technical_and_personal_pii():
+def test_condition_should_still_be_corroborated_when_personal_pii_accompanies_technical():
     # jwt alone is excluded; phone still corroborates → IS detected.
     assert _detects("焦虑症 eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abc 13800138000"), (
         "phone must still corroborate even when a jwt is also present"

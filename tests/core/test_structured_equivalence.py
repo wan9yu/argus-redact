@@ -74,14 +74,14 @@ def _ignore_salt_warning():
 
 
 class TestCsvEquivalence:
-    def test_csv_redacted_text_and_key_byte_identical(self):
+    def test_redact_csv_should_produce_byte_identical_text_and_key(self):
         with warnings.catch_warnings():
             _ignore_salt_warning()
             redacted, key = redact_csv(_CSV_INPUT, mode="fast", salt=42, has_header=True)
         assert redacted == _CSV_REDACTED
         assert key == _CSV_KEY
 
-    def test_csv_repeated_original_reuses_same_code_across_cells(self):
+    def test_repeated_phone_across_csv_cells_should_reuse_same_code(self):
         with warnings.catch_warnings():
             _ignore_salt_warning()
             redacted, key = redact_csv(_CSV_INPUT, mode="fast", salt=42, has_header=True)
@@ -93,14 +93,14 @@ class TestCsvEquivalence:
 
 
 class TestJsonEquivalence:
-    def test_json_redacted_text_and_key_byte_identical(self):
+    def test_redact_json_should_produce_byte_identical_text_and_key(self):
         with warnings.catch_warnings():
             _ignore_salt_warning()
             redacted, key = redact_json(_JSON_INPUT, mode="fast", salt=42)
         assert redacted == _JSON_REDACTED
         assert key == _JSON_KEY
 
-    def test_json_repeated_original_reuses_same_code_across_leaves(self):
+    def test_repeated_phone_across_json_leaves_should_reuse_same_code(self):
         with warnings.catch_warnings():
             _ignore_salt_warning()
             redacted, key = redact_json(_JSON_INPUT, mode="fast", salt=42)
@@ -112,7 +112,7 @@ class TestJsonEquivalence:
 
 
 class TestJsonWithTypesEquivalence:
-    def test_json_with_types_byte_identical(self):
+    def test_redact_json_with_types_should_produce_byte_identical_text_key_and_types(self):
         with warnings.catch_warnings():
             _ignore_salt_warning()
             redacted, key, types = redact_json(_JT_INPUT, mode="fast", salt=42, with_types=True)
@@ -167,40 +167,45 @@ class TestPersistedRngContinuation:
     diverged from the per-cell-reseeded reference.
     """
 
-    def test_csv_two_persons_sequential_draws_pin_second_code(self):
+    def test_redact_csv_should_pin_second_persons_code_across_sequential_draws(self):
         with warnings.catch_warnings():
             _ignore_salt_warning()
             redacted, key = redact_csv(
                 _CRUX_CSV_INPUT, mode="fast", salt=42, has_header=True, lang="zh"
             )
+
         assert redacted == _CRUX_CSV_REDACTED
         assert key == _CRUX_CSV_KEY
         assert key["P-83811"] == "张三"
         assert key["P-14593"] == "李四"
         assert "P-83811" != "P-14593"
+
         restored = restore(redacted, key, guard=False)
         assert restored == _CRUX_CSV_INPUT.replace("\n", "\r\n")
 
-    def test_json_two_persons_sequential_draws_pin_second_code(self):
+    def test_redact_json_should_pin_second_persons_code_across_sequential_draws(self):
         with warnings.catch_warnings():
             _ignore_salt_warning()
             redacted, key = redact_json(_CRUX_JSON_INPUT, mode="fast", salt=42, lang="zh")
+
         assert redacted == _CRUX_JSON_REDACTED
         assert key == _CRUX_JSON_KEY
         assert key["P-83811"] == "张三"
         assert key["P-14593"] == "李四"
         assert "P-83811" != "P-14593"
+
         restored_a = restore(redacted["a"], key, guard=False)
         restored_c = restore(redacted["b"]["c"], key, guard=False)
         assert restored_a == _CRUX_JSON_INPUT["a"]
         assert restored_c == _CRUX_JSON_INPUT["b"]["c"]
 
-    def test_json_with_types_repeated_original_across_leaves_reuses_code(self):
+    def test_redact_json_with_types_should_reuse_code_for_repeated_person_across_leaves(self):
         with warnings.catch_warnings():
             _ignore_salt_warning()
             redacted, key, types = redact_json(
                 _CRUX_JT_INPUT, mode="fast", salt=42, lang="zh", with_types=True
             )
+
         assert redacted == _CRUX_JT_REDACTED
         assert key == _CRUX_JT_KEY
         assert types == _CRUX_JT_TYPES
@@ -244,7 +249,7 @@ _PATH_KEY = {
 
 
 class TestPathScopedJsonGolden:
-    def test_path_scoped_redaction_and_decoys_byte_identical(self):
+    def test_path_scoped_redact_should_preserve_decoys_and_match_golden(self):
         import copy
 
         with warnings.catch_warnings():
@@ -259,7 +264,7 @@ class TestPathScopedJsonGolden:
         assert redacted == _PATH_REDACTED
         assert key == _PATH_KEY
 
-    def test_path_scoped_roundtrip_restores_original(self):
+    def test_path_scoped_redact_then_restore_should_return_original(self):
         import copy
 
         with warnings.catch_warnings():
@@ -287,7 +292,7 @@ _RT_CSV_RESTORED = "name,phone\r\n张三,13812345678\r\n李四,15900001234"
 
 
 class TestCsvRestoreRoundTrip:
-    def test_redact_then_restore_csv_reconstructs_data(self):
+    def test_restore_csv_should_reconstruct_original_data_after_redact(self):
         with warnings.catch_warnings():
             _ignore_salt_warning()
             redacted, key = redact_csv(_RT_CSV_INPUT, mode="fast", lang="zh", salt=42)
@@ -312,7 +317,7 @@ _DET_CSV = "name,phone\n张三,13812345678\n李四,15900001234"
 
 
 class TestCrossInstanceDeterminism:
-    def test_redact_json_is_deterministic_across_instances(self):
+    def test_redact_json_should_be_deterministic_across_instances(self):
         import copy
 
         with warnings.catch_warnings():
@@ -322,7 +327,7 @@ class TestCrossInstanceDeterminism:
         assert r1 == r2
         assert k1 == k2
 
-    def test_redact_csv_is_deterministic_across_instances(self):
+    def test_redact_csv_should_be_deterministic_across_instances(self):
         with warnings.catch_warnings():
             _ignore_salt_warning()
             r1, k1 = redact_csv(_DET_CSV, mode="fast", lang="zh", salt=42)

@@ -29,25 +29,25 @@ def _anchor_ok(text: str):
 class TestGlueGuardPassthrough:
     """guard kwargs thread from the public entry through glue to pure."""
 
-    def test_guard_true_anchor_restores_via_public_api(self):
+    def test_restore_should_restore_originals_when_guard_true_with_anchor(self):
         """guard=True + valid anchor → originals restored, nonce present."""
         a, resp = _anchor_ok("你好 P-001，号码 138****5678")
         out = restore(resp, KEY, guard=True, anchor=a)
         assert "张三" in out
         assert "13912345678" in out
 
-    def test_guard_true_no_anchor_fail_closed_via_public_api(self):
+    def test_restore_should_fail_closed_when_guard_true_without_anchor(self):
         """guard=True, no anchor → fail-closed (un-restored text), no exception."""
         out, details = restore("P-001 138****5678", KEY, guard=True, detailed=True)
         assert "张三" not in out
         assert details["security_events"][0]["reason_code"] == "guard_no_anchor"
 
-    def test_guard_true_strict_raises_via_public_api(self):
+    def test_restore_should_raise_when_guard_true_strict_without_anchor(self):
         """guard=True + strict=True + no anchor → RestoreGuardError raised."""
         with pytest.raises(RestoreGuardError):
             restore("P-001", KEY, guard=True, strict=True)
 
-    def test_detailed_true_returns_tuple_via_public_api(self):
+    def test_restore_should_return_tuple_when_detailed_true(self):
         """detailed=True → (str, dict) even on a clean call."""
         a, resp = _anchor_ok("P-001 here")
         result = restore(resp, KEY, guard=True, anchor=a, detailed=True)
@@ -60,7 +60,7 @@ class TestGlueGuardPassthrough:
 class TestGlueKeyFilePathBackcompat:
     """str key-file path still loads and restores correctly."""
 
-    def test_str_path_key_loads_and_restores(self, tmp_path):
+    def test_restore_should_load_key_and_restore_when_key_is_str_path(self, tmp_path):
         """A str path to a JSON key file is resolved at the glue boundary."""
         key_file = tmp_path / "key.json"
         key_file.write_text(json.dumps(KEY))
@@ -68,7 +68,7 @@ class TestGlueKeyFilePathBackcompat:
         out = restore("P-001 来了", str(key_file), guard=False)
         assert "张三" in out
 
-    def test_str_path_key_with_guard_kwargs(self, tmp_path):
+    def test_restore_should_restore_when_str_path_key_used_with_guard_kwargs(self, tmp_path):
         """str path + guard kwargs: file loads, then guard logic runs."""
         key_file = tmp_path / "key.json"
         key_file.write_text(json.dumps(KEY))
@@ -80,7 +80,7 @@ class TestGlueKeyFilePathBackcompat:
 class TestGlueBackwardCompat:
     """guard=None (the legacy path) still returns a bare str (backward compatibility)."""
 
-    def test_guard_none_returns_str(self):
+    def test_restore_should_return_bare_str_when_guard_none(self):
         """guard=None still runs the legacy restore and returns a bare str."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")  # DeprecationWarning + R4 SecurityWarning
@@ -88,7 +88,7 @@ class TestGlueBackwardCompat:
         assert isinstance(result, str)
         assert "张三" in result
 
-    def test_guard_none_emits_deprecation_warning(self):
+    def test_restore_should_emit_deprecation_warning_when_guard_none(self):
         """guard=None still emits the migration DeprecationWarning."""
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")

@@ -235,6 +235,7 @@ class TestRedactConfig:
             mode="fast",
             config=example["config"],
         )
+
         assert example["entity_text"] not in redacted
         replacement = [k for k, v in key.items() if v == example["entity_text"]]
         assert len(replacement) == 1
@@ -460,8 +461,10 @@ class TestMultiLanguageNER:
                 ],
             }
         )
+
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact("张三和John在星巴克聊天", salt=42, mode="ner", lang=["zh", "en"])
+
         assert "张三" not in redacted
         assert "John" not in redacted
         restored = restore(redacted, key, guard=False)
@@ -477,10 +480,12 @@ class TestMultiLanguageNER:
                 ],
             }
         )
+
         with patch("argus_redact.glue.redact._get_ner_adapters", return_value=[adapter]):
             redacted, key = redact(
                 "张三和田中和김철수开会", salt=42, mode="ner", lang=["zh", "ja", "ko"]
             )
+
         for name in ("张三", "田中", "김철수"):
             assert name not in redacted
         restored = restore(redacted, key, guard=False)
@@ -519,11 +524,13 @@ class TestRedactWithSemantic:
         adapter = _mock_semantic_adapter(
             {"那个地方": [NEREntity("那个地方", "location", 8, 12, 0.7)]}
         )
+
         with (
             patch("argus_redact.glue.redact._get_ner_adapters", return_value=[ner]),
             patch("argus_redact.glue.redact._get_semantic_adapter", return_value=adapter),
         ):
             redacted, key = redact("老王说他上周在那个地方见了人", salt=42, mode="ner", lang="zh")
+
         assert "那个地方" in redacted
         adapter.detect.assert_not_called()
 
@@ -539,12 +546,14 @@ class TestRedactWithSemantic:
         ner = MagicMock()
         ner.detect.return_value = [NEREntity("老王", "person", 0, 2, 0.85)]
         sem = _mock_semantic_adapter({"那个地方": [NEREntity("那个地方", "location", 8, 12, 0.7)]})
+
         with (
             patch("argus_redact.glue.redact._get_ner_adapters", return_value=[ner]),
             patch("argus_redact.glue.redact._get_semantic_adapter", return_value=sem),
         ):
             text = "老王说他上周在那个地方见了人，电话13812345678"
             redacted, key = redact(text, salt=42, mode="auto", lang="zh")
+
         for pii in ("老王", "那个地方", "13812345678"):
             assert pii not in redacted
         restored = restore(redacted, key, guard=False)
@@ -670,7 +679,7 @@ class TestPreDetectedMergeAndFilter:
     branch.
     """
 
-    def test_overlapping_entities_merge_and_roundtrip_clean(self):
+    def test_pre_detected_entities_should_merge_when_spans_overlap(self):
         """Two overlapping phone spans must be deduped (merged) into ONE
         entity before replacement. Without the merge, the key ends up with a
         second, dead entry (a fake string that never appears in the redacted
@@ -694,7 +703,7 @@ class TestPreDetectedMergeAndFilter:
         assert len(key) == 1, f"expected merged overlap to yield a single key entry, got {key!r}"
         assert restore(redacted, key, guard=False) == text
 
-    def test_non_overlapping_entities_still_correct(self):
+    def test_pre_detected_entities_should_roundtrip_when_spans_dont_overlap(self):
         """Positive control: disjoint spans are unaffected by the merge (a
         no-op on already-non-overlapping input) and still round-trip."""
         from argus_redact._types import PatternMatch
@@ -711,7 +720,7 @@ class TestPreDetectedMergeAndFilter:
         assert "13900139000" not in redacted
         assert restore(redacted, key, guard=False) == text
 
-    def test_types_allowlist_filters_pre_detected_entities(self):
+    def test_types_allowlist_should_filter_pre_detected_entities(self):
         """types=["phone"] must drop the person entity from a _pre_detected
         list, not just from internally-detected entities."""
         from argus_redact._types import PatternMatch
@@ -727,7 +736,7 @@ class TestPreDetectedMergeAndFilter:
         assert "13800138000" not in redacted
         assert "Zhang Wei" in redacted
 
-    def test_unknown_type_name_rejected_on_pre_detected_branch(self):
+    def test_unknown_type_name_should_be_rejected_on_pre_detected_branch(self):
         """T2's ``_reject_unknown_type_names`` guard must fire on this branch
         too — inherited via the shared ``_apply_type_filter`` helper, not
         skipped because detection was bypassed."""

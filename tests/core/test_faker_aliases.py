@@ -19,7 +19,7 @@ def _fake(faker_name: str, value: str, type_: str) -> tuple[str, list]:
 
 
 class TestPersonAliases:
-    def test_zh_person_returns_pinyin_alias(self):
+    def test_zh_person_should_include_pinyin_alias(self):
         fake, aliases = _fake("fake_person_reserved", "王建国", "person")
         assert fake in _core.reserved_person_names_zh()
         assert isinstance(aliases, list)
@@ -27,7 +27,7 @@ class TestPersonAliases:
         # The alias is a pinyin/Latin form of the fake name
         assert all(any(c.isalpha() and c.isascii() for c in a) for a in aliases)
 
-    def test_en_person_returns_zh_alias(self):
+    def test_en_person_should_include_zh_alias(self):
         fake, aliases = _fake("fake_person_en_reserved", "John Smith", "person")
         assert fake in _core.reserved_person_names_en()
         assert isinstance(aliases, list)
@@ -37,52 +37,52 @@ class TestPersonAliases:
 
 
 class TestNonPersonFakersReturnEmptyAliases:
-    def test_zh_phone_empty_aliases(self):
+    def test_zh_phone_should_return_empty_aliases(self):
         fake, aliases = _fake("fake_phone_reserved", "13912345678", "phone")
         assert fake.startswith("19999")
         assert aliases == []
 
-    def test_zh_phone_landline_empty_aliases(self):
+    def test_zh_phone_landline_should_return_empty_aliases(self):
         _, aliases = _fake("fake_phone_landline_reserved", "010-12345678", "phone_landline")
         assert aliases == []
 
-    def test_zh_id_number_empty_aliases(self):
+    def test_zh_id_number_should_return_empty_aliases(self):
         _, aliases = _fake("fake_id_number_reserved", "110101199001011234", "id_number")
         assert aliases == []
 
-    def test_zh_bank_card_empty_aliases(self):
+    def test_zh_bank_card_should_return_empty_aliases(self):
         _, aliases = _fake("fake_bank_card_reserved", "4111111111111111", "bank_card")
         assert aliases == []
 
-    def test_zh_passport_empty_aliases(self):
+    def test_zh_passport_should_return_empty_aliases(self):
         _, aliases = _fake("fake_passport_reserved", "E12345678", "passport")
         assert aliases == []
 
-    def test_zh_license_plate_empty_aliases(self):
+    def test_zh_license_plate_should_return_empty_aliases(self):
         _, aliases = _fake("fake_license_plate_reserved", "京A12345", "license_plate")
         assert aliases == []
 
-    def test_en_phone_empty_aliases(self):
+    def test_en_phone_should_return_empty_aliases(self):
         _, aliases = _fake("fake_phone_en_reserved", "(415) 555-1234", "phone")
         assert aliases == []
 
-    def test_en_ssn_empty_aliases(self):
+    def test_en_ssn_should_return_empty_aliases(self):
         _, aliases = _fake("fake_ssn_en_reserved", "123-45-6789", "ssn")
         assert aliases == []
 
-    def test_en_credit_card_empty_aliases(self):
+    def test_en_credit_card_should_return_empty_aliases(self):
         _, aliases = _fake("fake_credit_card_en_reserved", "4111111111111111", "credit_card")
         assert aliases == []
 
-    def test_email_empty_aliases(self):
+    def test_email_should_return_empty_aliases(self):
         _, aliases = _fake("fake_email_reserved", "user@example.com", "email")
         assert aliases == []
 
-    def test_ip_empty_aliases(self):
+    def test_ip_should_return_empty_aliases(self):
         _, aliases = _fake("fake_ip_reserved", "192.168.1.1", "ip_address")
         assert aliases == []
 
-    def test_mac_empty_aliases(self):
+    def test_mac_should_return_empty_aliases(self):
         _, aliases = _fake("fake_mac_reserved", "aa:bb:cc:dd:ee:ff", "mac_address")
         assert aliases == []
 
@@ -90,7 +90,7 @@ class TestNonPersonFakersReturnEmptyAliases:
 class TestAddressAliases:
     """v0.5.10: address fakers now emit cross-language transliteration aliases."""
 
-    def test_zh_address_returns_en_alias_with_number(self):
+    def test_zh_address_should_include_en_alias_with_number(self):
         fake, aliases = _fake("fake_address_reserved", "北京市朝阳区某路1号", "address")
         assert fake.startswith("滨海市")
         assert aliases, f"zh address fake {fake!r} should have at least one en alias"
@@ -100,7 +100,7 @@ class TestAddressAliases:
             assert alias[0].isdigit(), f"alias {alias!r} should start with the street number"
             assert any(c.isalpha() and c.isascii() for c in alias)
 
-    def test_en_address_returns_zh_alias(self):
+    def test_en_address_should_include_zh_alias(self):
         fake, aliases = _fake("fake_address_en_reserved", "1234 Main St", "address")
         assert "," in fake  # Sanity: picked from the table
         assert aliases, f"en address fake {fake!r} should have at least one zh alias"
@@ -109,7 +109,7 @@ class TestAddressAliases:
 
 
 class TestReplaceAttachesAliasesToResult:
-    def test_person_zh_alias_in_result_aliases(self):
+    def test_person_zh_should_attach_alias_to_result(self):
         from argus_redact import redact_pseudonym_llm
 
         r = redact_pseudonym_llm("联系王建国", lang="zh", salt=b"x")
@@ -121,7 +121,7 @@ class TestReplaceAttachesAliasesToResult:
             f"expected aliases on realistic person fake; key={r.key}, aliases={r.aliases}"
         )
 
-    def test_phone_no_aliases(self):
+    def test_phone_should_have_no_aliases(self):
         from argus_redact import redact_pseudonym_llm
 
         r = redact_pseudonym_llm("电话13912345678", lang="zh", salt=b"x")

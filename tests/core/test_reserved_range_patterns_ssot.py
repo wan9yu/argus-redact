@@ -11,7 +11,7 @@ cosmetic differences: Python 3.11 ``re.escape`` unnecessarily escapes spaces;
 import argus_redact._core as _core
 
 
-def test_core_reserved_range_patterns_match_python_dict():
+def test_core_reserved_range_patterns_should_match_canonical_python_dict():
     # Canonical snapshot — derived from the original Python dict.
     # Note: spaces in person_en / address_en are NOT backslash-escaped here;
     # Python 3.11 re.escape() over-escapes spaces ("\\ ") while fancy_regex::escape
@@ -49,5 +49,6 @@ def test_core_reserved_range_patterns_match_python_dict():
         "taiwan_arc_zh": r"(?<![A-Za-z0-9])WW\d{8}(?!\d)",
         "tw_id_zh": r"(?<![A-Za-z0-9])W\d{9}(?!\d)",
     }
+
     got = dict(_core.reserved_range_patterns())
     assert got == EXPECTED

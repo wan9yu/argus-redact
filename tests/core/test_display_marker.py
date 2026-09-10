@@ -134,7 +134,7 @@ class TestRestoreWithMarkers:
         # so 张明 is still replaced but the trailing ⓕ remains.
         assert result == "王建国ⓕ"
 
-    def test_restore_scoped_strip_preserves_unrelated_asterisks(self):
+    def test_restore_should_preserve_unrelated_asterisks_when_stripping_marker(self):
         """A global marker strip would destroy markdown `**bold**` and mangle
         the masked value `138****5678`. The strip must be scoped to marker
         occurrences trailing a key fake only — everywhere else, `*` is
@@ -147,7 +147,7 @@ class TestRestoreWithMarkers:
         assert "13812345678" in result
         assert result == "See **bold** and note*. Reach 13812345678"
 
-    def test_restore_scoped_strip_round_trip_normal_fake(self):
+    def test_restore_should_roundtrip_with_scoped_strip_when_no_stray_markers(self):
         """Control: with no confounding stray markers, mark_for_display then a
         marker-scoped restore is still a clean inverse (existing behavior
         preserved by the fix)."""
@@ -157,7 +157,7 @@ class TestRestoreWithMarkers:
         result = restore(marked, key, display_marker="ⓕ", guard=False)
         assert result == "联系 王建国 拨 13912345678"
 
-    def test_restore_scoped_strip_leaves_unrelated_marker_elsewhere(self):
+    def test_restore_should_leave_unrelated_marker_when_not_trailing_a_fake(self):
         """A fake appearing mid-text has its trailing marker stripped, but an
         unrelated marker elsewhere in the text (not trailing any fake) is
         left alone."""
@@ -166,7 +166,7 @@ class TestRestoreWithMarkers:
         result = restore(text, key, display_marker="*", guard=False)
         assert result == "张三 said *hi* to Bob"
 
-    def test_restore_empty_key_preserves_unrelated_markers(self):
+    def test_restore_should_preserve_unrelated_markers_when_key_is_empty(self):
         """C6 sibling of the scoped-strip fix: with an EMPTY key, no fakes
         were ever marked, so there is nothing to strip. Restoring must not
         fall back to a global marker strip that destroys unrelated markdown
@@ -176,7 +176,7 @@ class TestRestoreWithMarkers:
         assert result == text
         assert "**bold**" in result
 
-    def test_restore_empty_key_control_nonempty_key_still_scoped(self):
+    def test_restore_should_stay_scoped_when_key_is_nonempty(self):
         """Control: the non-empty-key path (already fixed via the Rust core)
         still restores the fake and preserves unrelated `**bold**` markup."""
         text = "See **bold**. Reach 138****5678*"

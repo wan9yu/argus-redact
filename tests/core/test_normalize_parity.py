@@ -70,7 +70,7 @@ def _build():
     }
 
 
-def test_normalize_and_detect_parity():
+def test_normalize_and_detect_should_match_the_frozen_v071_fixture():
     current = _build()
     if not FIXTURE.exists():
         FIXTURE.parent.mkdir(parents=True, exist_ok=True)
@@ -80,5 +80,6 @@ def test_normalize_and_detect_parity():
         raise AssertionError(
             "Wrote v0.7.1 normalize snapshot — re-run to compare. COMMIT the fixture."
         )
+
     frozen = json.loads(FIXTURE.read_text(encoding="utf-8"))
     assert current == frozen, "normalize/detect drift vs frozen v0.7.1 output"

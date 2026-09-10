@@ -67,7 +67,7 @@ def _py_l1_hints(entities, text, near_misses=None):
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def test_produce_hints_l1_returns_types_hint_instances():
+def test_produce_hints_l1_should_return_types_hint_instances():
     from argus_redact._types import Hint
 
     ents = [_pm("me", "self_reference", 0, 2), _pm("555-1234", "phone", 18, 26)]
@@ -77,16 +77,18 @@ def test_produce_hints_l1_returns_types_hint_instances():
     assert all(isinstance(h, Hint) for h in out)
 
 
-def test_produce_hints_l1_self_reference_plus_pii_equals_python():
+def test_produce_hints_l1_should_match_python_when_self_reference_and_other_pii_present():
     # Self-reference + other PII → pii_density(medium) + self_reference_tier(1)
     # + text_intent(narrative). Full Rust-vs-Python parity over all emitted types.
     ents = [_pm("me", "self_reference", 0, 2), _pm("555-1234", "phone", 18, 26)]
     text = "me and the number 555-1234 are here"
+
     core = _core.produce_hints_l1(ents, text)
     py = _py_l1_hints(
         [PyPM("me", "self_reference", 0, 2, 1.0, 1), PyPM("555-1234", "phone", 18, 26, 1.0, 1)],
         text,
     )
+
     assert core == py
     # Confirm the exact data value types Python uses (int tier, bool kinship, str intent).
     by_type = {h.type: h.data for h in core}
@@ -114,7 +116,7 @@ def test_produce_hints_l1_self_reference_plus_pii_equals_python():
         ([("我妈", "self_reference", 3, 5)], "请帮我找我妈"),
     ],
 )
-def test_produce_hints_l1_decision_tree_equals_python(ents, text):
+def test_produce_hints_l1_should_match_python_across_decision_tree_cases(ents, text):
     core_ents = [_pm(*e) for e in ents]
     py_ents = [PyPM(e[0], e[1], e[2], e[3], 1.0, 1) for e in ents]
     assert _core.produce_hints_l1(core_ents, text) == _py_l1_hints(py_ents, text)
@@ -125,20 +127,20 @@ def test_produce_hints_l1_decision_tree_equals_python(ents, text):
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def test_get_person_threshold_instruction_is_1_2():
+def test_get_person_threshold_should_return_1_2_when_intent_is_instruction():
     hints = _core.produce_hints_l1([_pm("me", "self_reference", 12, 14)], "please tell me about it")
     assert _core.get_person_threshold(hints) == 1.2
     assert _core.get_person_threshold(hints) == py_get_person_threshold(hints)
 
 
-def test_get_person_threshold_narrative_is_0_8():
+def test_get_person_threshold_should_return_0_8_when_intent_is_narrative():
     ents = [_pm("me", "self_reference", 0, 2), _pm("555", "phone", 11, 14)]
     hints = _core.produce_hints_l1(ents, "me and the 555 number")
     assert _core.get_person_threshold(hints) == 0.8
     assert _core.get_person_threshold(hints) == py_get_person_threshold(hints)
 
 
-def test_get_person_threshold_neutral_and_empty_default_0_8():
+def test_get_person_threshold_should_default_to_0_8_when_neutral_or_empty():
     neutral = _core.produce_hints_l1([], "hello world")
     assert _core.get_person_threshold(neutral) == 0.8
     assert _core.get_person_threshold([]) == 0.8
@@ -158,7 +160,7 @@ def _fents_py():
     return [PyPM("me", "self_reference", 0, 2, 1.0, 1), PyPM("555", "phone", 11, 14, 1.0, 1)]
 
 
-def test_filter_self_reference_tier1_keeps_all():
+def test_filter_self_reference_should_keep_self_reference_when_tier_is_1():
     # tier 1 (self-ref + other PII) keeps the self_reference.
     hints = _core.produce_hints_l1(_fents_core(), "me and the 555 number")
     core = _core.filter_self_reference(_fents_core(), hints)
@@ -170,7 +172,7 @@ def test_filter_self_reference_tier1_keeps_all():
     assert _tuples(core) == _tuples(py)
 
 
-def test_filter_self_reference_tier2_drops_self_reference():
+def test_filter_self_reference_should_drop_self_reference_when_tier_is_2():
     # tier 2 (pure pronoun, no PII, no command) drops the self_reference.
     hints = _core.produce_hints_l1([_pm("me", "self_reference", 5, 7)], "just me here")
     core = _core.filter_self_reference(_fents_core(), hints)
@@ -179,7 +181,7 @@ def test_filter_self_reference_tier2_drops_self_reference():
     assert _tuples(core) == _tuples(py)
 
 
-def test_filter_self_reference_no_tier_hint_drops_self_reference():
+def test_filter_self_reference_should_drop_self_reference_when_no_tier_hint():
     core = _core.filter_self_reference(_fents_core(), [])
     py = py_filter_self_reference(_fents_py(), [])
     assert _tuples(core) == [("555", "phone", 11, 14, 1.0, 1)]
@@ -259,10 +261,11 @@ def _py_pre_merge_detect(text, langs, names=None):
         ("张三 and John Smith met, phone 13800138000", ["zh", "en"], None),
     ],
 )
-def test_detect_l1_components_equal_python_pre_merge(text, lang, names):
+def test_detect_l1_should_match_python_pre_merge_components(text, lang, names):
     layer1, person, _regions, _job_titles, _framework, hints, near_misses = _core.detect_l1(
         text, lang, names
     )
+
     assert all(isinstance(m, _core.PatternMatch) for m in layer1 + person + near_misses)
     py_entities, py_near = _py_pre_merge_detect(text, lang, names)
     # layer1 ++ person == Python pre-merge entities (RAW order).
@@ -271,6 +274,7 @@ def test_detect_l1_components_equal_python_pre_merge(text, lang, names):
     assert [(m.text, m.type, m.start, m.end) for m in near_misses] == [
         (m.text, m.type, m.start, m.end) for m in py_near
     ]
+
     # hints == the FULL Python produce_hints (all 4 types) over the SAME inputs
     # detect_l1 used: layer1 (person is not a hint input) + py_near. The near_miss
     # regions align because line ~262 already locks detect_l1's near_misses to
@@ -284,7 +288,7 @@ def test_detect_l1_components_equal_python_pre_merge(text, lang, names):
     assert hints == py_hints
 
 
-def test_detect_l1_default_names_is_empty():
+def test_detect_l1_should_behave_like_empty_names_when_names_omitted():
     # Omitting known_names behaves like the empty-names default.
     a = _core.detect_l1("Contact John Smith today", ["en"])
     b = _core.detect_l1("Contact John Smith today", ["en"], None)
@@ -385,7 +389,7 @@ _FIXTURE_CASES = [
 
 
 @pytest.mark.parametrize("case", _FIXTURE_CASES, ids=[c[0] for c in _FIXTURE_CASES])
-def test_redact_l1_matches_t1_fixture(case):
+def test_redact_l1_should_match_t1_fixture(case):
     """`_core.redact_l1` == the frozen T1 (redacted, key) at SALT=42."""
     label, text, lang, config, names, unified_prefix = case
     golden = json.loads(FIXTURE_REDACT.read_text(encoding="utf-8"))[label]
@@ -397,23 +401,25 @@ def test_redact_l1_matches_t1_fixture(case):
 
 
 @pytest.mark.parametrize("case", _FIXTURE_CASES, ids=[c[0] for c in _FIXTURE_CASES])
-def test_redact_l1_matches_python_redact_fast(case):
+def test_redact_l1_should_match_python_redact_fast(case):
     """`_core.redact_l1` (redacted, key) == live Python `redact(mode='fast')`."""
     _label, text, lang, config, names, unified_prefix = case
     redacted, key, _aliases, _kd, _mc = _core_redact_fast(
         text, lang, config=config, names=names, unified_prefix=unified_prefix
     )
+
     kw = dict(mode="fast", lang=lang, salt=SALT, config=config)
     if names is not None:
         kw["names"] = names
     if unified_prefix is not None:
         kw["unified_prefix"] = unified_prefix
     py_redacted, py_key = redact(text, **kw)
+
     assert redacted == py_redacted
     assert dict(key) == dict(py_key)
 
 
-def test_redact_l1_keep_downgraded_surfaces():
+def test_redact_l1_should_surface_keep_downgraded_flag():
     """The 5-tuple's `keep_downgraded` flag is surfaced (False on a clean run)."""
     out = _core_redact_fast("张三的电话13812345678，身份证110101199003074610", "zh")
     assert len(out) == 5
@@ -424,7 +430,7 @@ def test_redact_l1_keep_downgraded_surfaces():
     assert mask_collisions == []
 
 
-def test_redact_l1_type_filter_keeps_only_listed():
+def test_redact_l1_should_keep_only_listed_types_when_types_filter_given():
     """`types` keeps only listed types (phone dropped, bank_card masked)."""
     redacted, key, _aliases, _kd, _mc = _core_redact_fast(
         "电话13812345678 银行卡6217000000000000",
@@ -432,12 +438,13 @@ def test_redact_l1_type_filter_keeps_only_listed():
         config={"phone": {"strategy": "mask"}, "bank_card": {"strategy": "mask"}},
         types=["bank_card"],
     )
+
     assert "13812345678" in redacted  # phone left intact (filtered out)
     assert "13812345678" not in key.values()
     assert "6217000000000000" in key.values()  # bank_card masked
 
 
-def test_redact_l1_type_filter_exclude_listed():
+def test_redact_l1_should_leave_excluded_type_intact_when_types_exclude_given():
     """`types_exclude` drops the listed type (phone left intact)."""
     redacted, _key, _aliases, _kd, _mc = _core_redact_fast(
         "电话13812345678 银行卡6217000000000000",
@@ -455,7 +462,7 @@ def test_redact_l1_type_filter_exclude_listed():
 
 
 @pytest.mark.slow  # ~1MB scan; excluded from the canonical fast suite. Proves the find_iter no-panic fix.  # noqa: E501
-def test_redact_pathological_single_token_does_not_raise():
+def test_redact_should_not_raise_when_input_is_one_pathological_token():
     """A ~1MB single token (within the 1MB cap) tripped fancy_regex's backtrack /
     stack-overflow limit, which used to escape as a PanicException from `redact`.
     The graceful `find_iter` now stops scanning rather than panicking, so the
@@ -502,7 +509,7 @@ def _as_tuples(hints):
         ([], "id 110101199003078888", [_pm("110101199003078888", "id_number", 3, 21, 0.3)]),
     ],
 )
-def test_produce_hints_l1_matches_python_all_four_types(entities, text, near_misses):
+def test_produce_hints_l1_should_match_python_across_all_hint_types(entities, text, near_misses):
     rust = _core.produce_hints_l1(entities, text, near_misses)
     py = py_produce_hints(entities, text, near_misses=near_misses)
     assert _as_tuples(rust) == _as_tuples(py)

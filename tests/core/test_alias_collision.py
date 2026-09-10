@@ -39,7 +39,7 @@ _SUBPROCESS_CODE = (
 )
 
 
-def test_alias_collision_restore_is_deterministic_across_processes():
+def test_restore_should_be_deterministic_across_process_hash_seeds():
     """The alias-merge winner must not depend on the process's HashMap
     iteration order — two separate process runs must restore "Shared" to the
     SAME original every time."""
@@ -48,6 +48,7 @@ def test_alias_collision_restore_is_deterministic_across_processes():
         "PYTHONPATH": _REPO_SRC,
         "PYTHONUTF8": "1",
     }
+
     out1 = subprocess.check_output(
         [sys.executable, "-c", _SUBPROCESS_CODE],
         env={**base_env, "PYTHONHASHSEED": "1"},
@@ -58,17 +59,18 @@ def test_alias_collision_restore_is_deterministic_across_processes():
         env={**base_env, "PYTHONHASHSEED": "2"},
         encoding="utf-8",
     )
+
     assert out1 == out2, "alias-merge winner depends on HashMap iteration order — not deterministic"
 
 
-def test_alias_collision_emits_security_warning():
+def test_restore_should_emit_security_warning_when_aliases_collide():
     """Two fakes aliasing to the same string must fire a SecurityWarning
     naming the collision — the restored identity for the loser may be wrong."""
     with pytest.warns(SecurityWarning, match="alias"):
         restore(_TEXT, _KEY, aliases=_ALIASES, guard=False)
 
 
-def test_no_collision_no_alias_warning():
+def test_restore_should_not_emit_security_warning_when_aliases_dont_collide():
     """A single alias with no collision fires no alias-collision warning."""
     key = {"P-1": "Alice"}
     aliases = {"P-1": ["Al"]}
@@ -80,7 +82,7 @@ def test_no_collision_no_alias_warning():
     assert result == "hello Alice"
 
 
-def test_alias_collision_warn_false_suppresses_warning():
+def test_restore_should_suppress_security_warning_when_warn_is_false():
     """``_warn=False`` must suppress the alias_collision SecurityWarning too —
     the same suppression contract every other restore() warning already
     respects (see restore()'s ``_warn`` docstring)."""
@@ -91,7 +93,7 @@ def test_alias_collision_warn_false_suppresses_warning():
         restore(_TEXT, _KEY, aliases=_ALIASES, guard=False, _warn=False)
 
 
-def test_alias_collision_count_is_distinct_not_raw():
+def test_restore_should_dedup_collision_count_when_three_fakes_collide():
     """A 3-way collision on the SAME alias string is 1 DISTINCT collided alias,
     not 2 — the Rust core pushes "Shared" onto alias_collisions once per
     losing claim (2 entries for a 3-way collision), so the Python-side count
@@ -101,7 +103,7 @@ def test_alias_collision_count_is_distinct_not_raw():
         restore("hello Shared", _KEY_3WAY, aliases=_ALIASES_3WAY, guard=False)
 
 
-def test_alias_collision_event_wired_into_detailed_guarded_restore():
+def test_restore_detailed_should_include_alias_collision_event():
     """``restore(guard=True, detailed=True)`` must surface an
     ``alias_collision`` security_event — mirroring the out-param idiom that
     wires ``mask_collision`` into ``redact(detailed=True)``'s security_events
@@ -110,11 +112,13 @@ def test_alias_collision_event_wired_into_detailed_guarded_restore():
 
     anchor = make_anchor(_KEY)
     text = f"{_TEXT}\n{anchor.nonce}"
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SecurityWarning)
         _result, details = restore(
             text, _KEY, aliases=_ALIASES, guard=True, anchor=anchor, detailed=True
         )
+
     events = [e for e in details["security_events"] if e["reason_code"] == "alias_collision"]
     assert len(events) == 1
     assert events[0]["count"] == 1

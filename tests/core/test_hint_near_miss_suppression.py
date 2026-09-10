@@ -27,7 +27,7 @@ def _to_core(matches):
     ]
 
 
-def test_near_miss_suppressed_when_span_claimed_by_another_type():
+def test_near_miss_should_be_suppressed_when_span_is_claimed_by_another_type():
     text = "卡号 6217000000000001"
     pan = "6217000000000001"
     accepted = [_pm(pan, "bank_card", 3)]
@@ -36,14 +36,14 @@ def test_near_miss_suppressed_when_span_claimed_by_another_type():
     assert not any("near_miss" in str(k) for k in _kinds(hints))
 
 
-def test_near_miss_kept_when_nothing_claims_the_span():
+def test_near_miss_should_be_kept_when_nothing_claims_the_span():
     text = "id 110101199003078888"
     near_misses = [_pm("110101199003078888", "id_number", 3, conf=0.3)]
     hints = produce_hints([], text, near_misses=near_misses)
     assert any("near_miss" in str(k) for k in _kinds(hints))
 
 
-def test_near_miss_kept_when_the_claimer_is_the_SAME_type():
+def test_near_miss_should_be_kept_when_the_claimer_is_the_same_type():
     """Same type = the same detector disagreeing with itself; not the case we suppress."""
     text = "id 110101199003078888"
     span = "110101199003078888"
@@ -53,7 +53,7 @@ def test_near_miss_kept_when_the_claimer_is_the_SAME_type():
     assert any("near_miss" in str(k) for k in _kinds(hints))
 
 
-def test_near_miss_kept_when_another_type_merely_TOUCHES_the_span():
+def test_near_miss_should_be_kept_when_another_type_merely_touches_the_span():
     """Touching is not overlapping: `entity.end == near_miss.start` must KEEP the hint.
 
     The boundary the suppression rule must not cross. An off-by-one (`<` → `<=`) in the
@@ -72,7 +72,7 @@ def test_near_miss_kept_when_another_type_merely_TOUCHES_the_span():
     assert any("near_miss" in str(k) for k in _kinds(hints))
 
 
-def test_rust_and_python_agree():
+def test_rust_and_python_hint_production_should_agree():
     """The Python produce_hints is a parity-test-only oracle. Keep it honest.
 
     Both sides of the branch: the SUPPRESSED case and every KEPT case (same-type
@@ -111,8 +111,10 @@ def test_rust_and_python_agree():
             True,
         ),
     ]
+
     for label, text, accepted, nm, expect_hint in cases:
         rust = _core.produce_hints_l1(_to_core(accepted), text, _to_core(nm))
         py = produce_hints(accepted, text, near_misses=nm)
+
         assert rust == py, label
         assert any("near_miss" in k for k in _kinds(rust)) is expect_hint, label

@@ -36,20 +36,22 @@ class TestChecksumIdsRedactedOutsideHomeLang:
             (PAN, "pan"),
         ],
     )
-    def test_id_redacted_in_en_document(self, value, type_):
+    def test_checksum_id_should_be_redacted_when_routed_outside_home_language(self, value, type_):
         text = f"Reference number: {value}"
         redacted, _key, types = redact(text, lang="en", mode="fast", salt=42, with_types=True)
         assert value not in redacted, f"{type_} leaked in an en-routed document"
         assert type_ in types.values(), f"{type_} was not the type assigned to the match"
 
-    def test_all_four_detected_together_in_one_en_document(self):
+    def test_redact_should_detect_all_four_checksum_ids_in_one_en_document(self):
         # The regression this guards: before the flag, an en-routed doc loaded
         # NONE of these four patterns, so all four passed through verbatim.
         text = (
             f"My CPF is {CPF} and our company CNPJ is {CNPJ}. "
             f"My Number is {MY_NUMBER} and my PAN card is {PAN}."
         )
+
         redacted, key, types = redact(text, lang="en", mode="fast", salt=42, with_types=True)
+
         for value in (CPF, CNPJ, MY_NUMBER, PAN):
             assert value not in redacted
         assert set(types.values()) == {"cpf", "cnpj", "my_number", "pan"}
@@ -64,7 +66,7 @@ class TestChecksumIdsRedactedOutsideHomeLang:
             (PAN, "pan"),
         ],
     )
-    def test_id_round_trips_when_detected_outside_home_lang(self, value, type_):
+    def test_checksum_id_should_round_trip_when_detected_outside_home_language(self, value, type_):
         text = f"Reference number: {value}"
         redacted, key = redact(text, lang="en", mode="fast", salt=42)
         assert value not in redacted
@@ -78,7 +80,7 @@ class TestFormatOnlyIdsStayLanguageScoped:
     A bare 12-digit or 11-digit run must NOT be redacted as a foreign ID just
     because it sits in an en-routed document."""
 
-    def test_aadhaar_shaped_digits_not_redacted_as_aadhaar_in_en(self):
+    def test_aadhaar_shaped_digits_should_not_be_redacted_as_aadhaar_in_en(self):
         aadhaar_like = "2345 6789 0123"
         text = f"Order number {aadhaar_like} confirmed."
         redacted, _key, types = redact(text, lang="en", mode="fast", salt=42, with_types=True)
@@ -86,7 +88,7 @@ class TestFormatOnlyIdsStayLanguageScoped:
         # Digits may or may not be redacted by an unrelated en pattern; the
         # invariant under test is only that `aadhaar` itself did not fire.
 
-    def test_de_tax_id_shaped_digits_not_redacted_as_tax_id_in_en(self):
+    def test_de_tax_id_shaped_digits_should_not_be_redacted_as_tax_id_in_en(self):
         tax_id_like = "26 953 417 121"  # 11 digits, de tax_id shape
         text = f"Order number {tax_id_like} confirmed."
         redacted, _key, types = redact(text, lang="en", mode="fast", salt=42, with_types=True)
@@ -106,7 +108,7 @@ class TestHomeLangTypeLabelsUnchanged:
             ("in", PAN, "pan"),
         ],
     )
-    def test_home_lang_still_typed_correctly(self, lang, value, type_):
+    def test_checksum_id_should_keep_its_type_label_in_its_home_language(self, lang, value, type_):
         _redacted, _key, types = redact(
             f"{value}", lang=lang, mode="fast", salt=42, with_types=True
         )

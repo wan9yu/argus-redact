@@ -26,33 +26,33 @@ def call():
     return _call
 
 
-def test_default_returns_2_tuple(call):
+def test_redact_should_return_2_tuple_by_default(call):
     r = call()
     assert isinstance(r, tuple) and len(r) == 2
 
 
-def test_with_types_only_returns_3_tuple(call):
+def test_redact_should_return_3_tuple_when_with_types_is_set(call):
     r = call(with_types=True)
     assert isinstance(r, tuple) and len(r) == 3
     _redacted, _key, types = r
     assert isinstance(types, dict)
 
 
-def test_detailed_only_returns_3_tuple(call):
+def test_redact_should_return_3_tuple_when_detailed_is_set(call):
     r = call(detailed=True)
     assert isinstance(r, tuple) and len(r) == 3
     _redacted, _key, details = r
     assert isinstance(details, dict)
 
 
-def test_report_only_returns_report_object(call):
+def test_redact_should_return_report_object_when_report_is_set(call):
     r = call(report=True)
     # The exact type is RedactReport (dataclass); just lock that it's NOT a
     # tuple — the report object encapsulates everything.
     assert not isinstance(r, tuple)
 
 
-def test_detailed_wins_over_with_types(call):
+def test_redact_should_prefer_detailed_over_with_types(call):
     """``detailed=True`` + ``with_types=True`` (no report) → detailed shape."""
     r_both = call(detailed=True, with_types=True)
     r_detailed = call(detailed=True)
@@ -62,7 +62,7 @@ def test_detailed_wins_over_with_types(call):
     assert "stats" in r_both[2]
 
 
-def test_report_wins_over_detailed_and_with_types(call):
+def test_redact_should_prefer_report_over_detailed_and_with_types(call):
     r_all = call(report=True, detailed=True, with_types=True)
     r_report = call(report=True)
     # Same shape — both return the RedactReport object
@@ -70,14 +70,14 @@ def test_report_wins_over_detailed_and_with_types(call):
     assert not isinstance(r_all, tuple)
 
 
-def test_report_wins_over_detailed(call):
+def test_redact_should_prefer_report_over_detailed(call):
     r_both = call(report=True, detailed=True)
     r_report = call(report=True)
     assert type(r_both) is type(r_report)
     assert not isinstance(r_both, tuple)
 
 
-def test_report_wins_over_with_types(call):
+def test_redact_should_prefer_report_over_with_types(call):
     r_both = call(report=True, with_types=True)
     r_report = call(report=True)
     assert type(r_both) is type(r_report)

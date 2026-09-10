@@ -30,7 +30,7 @@ REDACTED_KEY_PAIRS = [
 ]
 
 
-def test_structured_restorer_matches_core_restore():
+def test_structured_restorer_should_match_core_restore():
     for text, key in REDACTED_KEY_PAIRS:
         restorer = _core.StructuredRestorer(key)
         expected_restored, _signals = _core.restore(text, key)
@@ -38,7 +38,7 @@ def test_structured_restorer_matches_core_restore():
         assert restorer.restore_cell(text) == expected_restored
 
 
-def test_wipe_key_does_not_invalidate_session():
+def test_wipe_key_should_not_invalidate_the_session():
     key = {"P-1": "王建国"}
     text = "P-1 phoned"
     restorer = make_structured_restorer(key)
@@ -51,7 +51,7 @@ def test_wipe_key_does_not_invalidate_session():
     assert restorer.restore_cell(text) == "王建国 phoned"
 
 
-def test_session_wipe_drops_state():
+def test_session_wipe_should_drop_restored_state():
     key = {"P-1": "王建国"}
     text = "P-1 phoned"
     restorer = make_structured_restorer(key)
@@ -61,7 +61,7 @@ def test_session_wipe_drops_state():
     assert restorer.restore_cell(text) == text
 
 
-def test_make_structured_restorer_shared_session_raises_already_borrowed():
+def test_shared_restorer_session_should_raise_already_borrowed_when_used_concurrently():
     """The single-session guarantee `make_structured_restorer`'s docstring
     documents must be REAL, not just prose: a concurrent `restore_cell` on a
     SHARED session from two threads hits the underlying Rust runtime borrow
@@ -111,19 +111,19 @@ class TestMakeStructuredRestorerAliasesValidation:
     malformed shape must raise ValueError here too (restore_json/restore_csv
     reach this exact construction point)."""
 
-    def test_rejects_bare_string_alias_value(self):
+    def test_aliases_should_be_rejected_when_value_is_a_bare_string(self):
         with pytest.raises(ValueError):
             make_structured_restorer({"P-1": "Alice"}, aliases={"P-1": "abc"})
 
-    def test_rejects_non_str_alias_element(self):
+    def test_aliases_should_be_rejected_when_element_is_not_a_string(self):
         with pytest.raises(ValueError):
             make_structured_restorer({"P-1": "Alice"}, aliases={"P-1": [123]})
 
-    def test_accepts_tuple_valued_aliases(self):
+    def test_aliases_should_be_accepted_when_value_is_a_tuple(self):
         restorer = make_structured_restorer({"P-1": "Alice"}, aliases={"P-1": ("Al",)})
         assert restorer.restore_cell("Al ok") == "Alice ok"
 
-    def test_none_and_empty_dict_are_equivalent(self):
+    def test_none_and_empty_dict_aliases_should_behave_identically(self):
         # Collapsing both onto the same Rust-constructor branch (aliases=None)
         # must not change observable behavior for either caller shape.
         none_restorer = make_structured_restorer({"P-1": "Alice"}, aliases=None)

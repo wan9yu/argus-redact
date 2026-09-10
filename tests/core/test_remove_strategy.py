@@ -12,7 +12,7 @@ from argus_redact import redact, restore
 
 
 class TestRemoveEmptyReplacementNoKeyEntry:
-    def test_empty_replacement_removes_both_values_and_registers_no_empty_key(self):
+    def test_redact_should_remove_values_and_omit_empty_key_when_replacement_is_empty(self):
         text = "Call 13812345678 or 13900001111"
         config = {"phone": {"strategy": "remove", "replacement": ""}}
         redacted, key = redact(text, salt=42, mode="fast", lang="en", config=config)
@@ -21,7 +21,7 @@ class TestRemoveEmptyReplacementNoKeyEntry:
         assert "13900001111" not in redacted
         assert "" not in key, f"empty-string key entry must never be registered: {key!r}"
 
-    def test_restore_after_empty_replacement_is_a_clean_no_op(self):
+    def test_restore_should_be_a_clean_no_op_when_replacement_was_empty(self):
         text = "Call 13812345678 or 13900001111"
         config = {"phone": {"strategy": "remove", "replacement": ""}}
         redacted, key = redact(text, salt=42, mode="fast", lang="en", config=config)
@@ -43,7 +43,7 @@ class TestRemoveNonEmptyReplacementStillRoundTrips:
     """Positive control: a non-empty `remove` replacement is unaffected — it
     still registers its key entry and restores normally."""
 
-    def test_non_empty_replacement_registers_key_and_restores(self):
+    def test_remove_strategy_should_round_trip_when_replacement_is_non_empty(self):
         text = "电话13812345678"
         config = {"phone": {"strategy": "remove", "replacement": "[PHONE]"}}
         redacted, key = redact(text, salt=42, mode="fast", config=config)
@@ -54,7 +54,7 @@ class TestRemoveNonEmptyReplacementStillRoundTrips:
         restored = restore(redacted, key, guard=False)
         assert "13812345678" in restored
 
-    def test_default_remove_strategy_pseudonym_code_still_roundtrips(self):
+    def test_remove_strategy_should_round_trip_when_no_replacement_is_configured(self):
         # No explicit `replacement` configured → falls back to the per-type
         # pseudonym generator path (untouched by this fix).
         text = "电话13812345678"

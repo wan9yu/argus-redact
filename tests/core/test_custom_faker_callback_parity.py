@@ -361,7 +361,9 @@ _GOLDEN: dict[tuple[int, str, str], tuple] = {
 @pytest.mark.parametrize("salt_name", list(_SALTS))
 @pytest.mark.parametrize("lang_name", list(_LANGS))
 @pytest.mark.parametrize("scenario_idx", range(len(_SCENARIOS)))
-def test_custom_faker_callback_golden(scenario_idx: int, salt_name: str, lang_name: str):
+def test_custom_faker_callback_replace_should_match_frozen_golden(
+    scenario_idx: int, salt_name: str, lang_name: str
+):
     """replace() output through the custom-faker callback path is frozen.
 
     Exercises all curated scenarios (phone / person+aliases / MRN / multi /
@@ -403,7 +405,7 @@ def test_custom_faker_callback_golden(scenario_idx: int, salt_name: str, lang_na
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_custom_faker_tuple_enforcement():
+def test_replace_should_raise_when_custom_faker_returns_non_tuple():
     """A faker that returns a bare string (not a tuple) must raise through replace()."""
 
     def _bad_faker(value: str, rng) -> str:
@@ -432,7 +434,7 @@ def test_custom_faker_tuple_enforcement():
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_custom_faker_multi_lang_preference():
+def test_replace_should_use_the_lang_matching_faker_when_multiple_variants_are_registered():
     """zh+en same-named type → replace() picks the lang-preferred variant.
 
     Register test_parity_lang_person for both zh and en with different fakers.
@@ -481,7 +483,7 @@ def test_custom_faker_multi_lang_preference():
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_custom_faker_collision_reroll():
+def test_replace_should_reroll_custom_faker_when_first_attempt_collides():
     """Pre-seeding the key with the faker's first output forces a re-roll.
 
     Compute the faker's attempt-0 output from the HMAC seed, pre-populate the
@@ -516,7 +518,7 @@ def test_custom_faker_collision_reroll():
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_no_custom_uses_builtin_rust_path():
+def test_replace_should_use_builtin_path_when_no_custom_faker_is_registered():
     """Built-in-only entities → empty custom_fakers → Rust path produces a valid triple."""
     builtin_value = "13912345678"
     text = f"Phone: {builtin_value}"
@@ -537,7 +539,7 @@ def test_no_custom_uses_builtin_rust_path():
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_custom_faker_roundtrip():
+def test_restore_should_recover_original_when_redacted_via_custom_faker():
     """restore() on a custom-faker-redacted text must return the original."""
     text = f"Patient {_MRN_VALUE} needs review."
     entities = [make_match(_MRN_VALUE, "test_parity_mrn", 8)]

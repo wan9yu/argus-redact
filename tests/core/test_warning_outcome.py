@@ -39,7 +39,7 @@ def _warn_text(fn):
 # ── (a) total fail-closed: BLOCKED ────────────────────────────────────────────
 
 
-def test_total_fail_closed_says_blocked():
+def test_security_warning_should_say_blocked_when_anchor_is_none():
     red, key, a, inj = _mk()  # anchor=None → total fail-closed
     txt = _warn_text(lambda: restore(inj, key, guard=True, anchor=None))
     assert "BLOCKED" in txt and "NO originals were substituted" in txt
@@ -49,7 +49,7 @@ def test_total_fail_closed_says_blocked():
 # ── (b) total fail-closed + advisory injection: still BLOCKED, not partial ──
 
 
-def test_total_fail_closed_plus_injection_still_says_blocked():
+def test_security_warning_should_say_blocked_when_injection_event_is_also_present():
     # even with an advisory injection event, nothing was substituted
     red, key, a, inj = _mk()
     txt = _warn_text(lambda: guarded_restore(inj, key, redacted=red, anchor=None))
@@ -60,7 +60,7 @@ def test_total_fail_closed_plus_injection_still_says_blocked():
 # ── (c) partial: out-of-scope pseudonyms withheld, in-scope substituted ─────
 
 
-def test_partial_out_of_scope_says_partial():
+def test_security_warning_should_say_partial_when_pseudonyms_are_out_of_scope():
     a = make_anchor({"P-001": "张三"})  # scope = {P-001} only
     key = {"P-001": "张三", "P-999": "王五"}
     resp = f"P-001 和 P-999 都在\n{a.nonce}"
@@ -77,7 +77,7 @@ def test_partial_out_of_scope_says_partial():
 # ── (d) complete + advisory injection: ADVISORY ONLY, restore proceeded ─────
 
 
-def test_complete_plus_advisory_injection_says_advisory_only():
+def test_security_warning_should_say_advisory_only_when_restore_completes_with_injection():
     red, key, a, inj = _mk()
     injected = inj + a.nonce  # valid nonce → P passes; no out-of-scope hits → S clean
     txt = _warn_text(lambda: guarded_restore(injected, key, redacted=red, anchor=a))

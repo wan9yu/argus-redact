@@ -26,23 +26,23 @@ from argus_redact.pure.restore import restore
 
 
 # --- V6AGA ---------------------------------------------------------------
-def test_unknown_type_name_raises():
+def test_redact_should_raise_when_types_contains_unknown_name():
     with pytest.raises(ValueError, match="telephone"):
         redact("电话13800138000", types=["telephone"])
 
 
-def test_miscased_type_name_raises():
+def test_redact_should_raise_when_types_contains_miscased_name():
     # "Phone" is not the SSOT name "phone"; silently redacting nothing is fail-open.
     with pytest.raises(ValueError, match="Phone"):
         redact("电话13800138000", types=["Phone"])
 
 
-def test_unknown_types_exclude_name_raises():
+def test_redact_should_raise_when_types_exclude_contains_unknown_name():
     with pytest.raises(ValueError, match="fone"):
         redact("电话13800138000", types_exclude=["fone"])
 
 
-def test_valid_type_names_still_work():
+def test_redact_should_succeed_when_type_names_are_valid():
     out, key = redact("电话13800138000", types=["phone"])
     assert "13800138000" not in out  # correctly redacted
     # a valid subset that happens to match nothing is fine (no raise)
@@ -51,7 +51,7 @@ def test_valid_type_names_still_work():
 
 
 # --- D50YP ---------------------------------------------------------------
-def test_partial_warning_does_not_claim_in_scope_substitution_when_none():
+def test_partial_restore_warning_should_not_claim_substitution_when_none_present():
     red, key = redact("张三的电话是13800138000，李四的邮箱abc@x.com", lang="zh", mode="fast")
     items = list(key.items())
     in_scope = items[0][0]  # in scope, NOT present in the text below
@@ -59,9 +59,11 @@ def test_partial_warning_does_not_claim_in_scope_substitution_when_none():
     nonce = "a1b2c3d4e5f6a7b8"  # 16 chars, a plausible provenance token
     anchor = Anchor(nonce=nonce, scope=frozenset({in_scope}))
     text = f"only {out_ps} appears here\n{nonce}"
+
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         restore(text, key, guard=True, anchor=anchor)
+
     msg = " | ".join(str(x.message) for x in w if issubclass(x.category, SecurityWarning))
     assert "PARTIAL" in msg
     # Must NOT assert in-scope substitution happened (none were present here).
@@ -70,7 +72,7 @@ def test_partial_warning_does_not_claim_in_scope_substitution_when_none():
 
 
 # --- QQZJG ---------------------------------------------------------------
-def test_deprecation_warning_not_future_tense_for_shipped_flip():
+def test_guard_none_deprecation_warning_should_not_use_future_tense():
     red, key = redact("张三的电话是13800138000", lang="zh", mode="fast")
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
@@ -81,12 +83,12 @@ def test_deprecation_warning_not_future_tense_for_shipped_flip():
 
 
 # --- F5 (v0.8.2) -----------------------------------------------------------
-def test_strategy_overrides_unknown_type_key_raises():
+def test_strategy_overrides_should_raise_when_type_key_is_unknown():
     with pytest.raises(ValueError, match="Phone"):
         redact_pseudonym_llm("电话13800138000", salt=42, strategy_overrides={"Phone": "realistic"})
 
 
-def test_strategy_overrides_valid_type_key_still_works():
+def test_strategy_overrides_should_apply_when_type_key_is_valid():
     result = redact_pseudonym_llm(
         "电话13800138000", salt=42, strategy_overrides={"phone": "remove"}
     )
@@ -101,7 +103,7 @@ class TestPseudonymLLMPreDetectedMergeAndFilter:
     types/types_exclude filter); this branch had the identical defect.
     """
 
-    def test_overlapping_entities_merge_before_replace(self):
+    def test_pre_detected_entities_should_merge_before_replace_when_overlapping(self):
         """Two overlapping phone spans must be deduped (merged) before either
         replace pass. Detection ran once and both the realistic and audit
         passes consume the SAME merged entity list, so one merged entity
@@ -124,7 +126,7 @@ class TestPseudonymLLMPreDetectedMergeAndFilter:
         assert "13800138000" not in result.audit_text
         assert len(result.key) == 2, f"expected merged overlap, got {result.key!r}"
 
-    def test_types_exclude_unknown_type_rejected_on_pre_detected_branch(self):
+    def test_pre_detected_branch_should_raise_when_types_exclude_has_unknown_type(self):
         """The unknown-type-name guard must fire on this branch too —
         inherited via the shared ``_apply_type_filter`` helper, not skipped
         because detection was bypassed by ``_pre_detected``."""

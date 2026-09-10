@@ -14,12 +14,12 @@ def _pm(text, type_, start=0):
     )
 
 
-def test_keep_downgraded_event_none_when_no_keep():
+def test_keep_downgraded_event_should_return_none_when_no_field_is_downgraded_to_keep():
     ents = [_pm("张三", "person")]
     assert keep_downgraded_event(ents, {"person": {"strategy": "pseudonym"}}) is None
 
 
-def test_keep_downgraded_event_pii_free_detail():
+def test_keep_downgraded_event_should_report_type_without_value_when_keep_strategy_is_used():
     ents = [_pm("4111111111111111", "bank_card")]
     ev = keep_downgraded_event(ents, {"bank_card": {"strategy": "keep"}})
     assert ev["type"] == "security"
@@ -29,7 +29,7 @@ def test_keep_downgraded_event_pii_free_detail():
     assert "4111111111111111" not in ev["detail"]  # PII-free
 
 
-def test_keep_downgraded_count_is_unique_texts_detail_is_sorted_types():
+def test_keep_downgraded_event_should_count_unique_texts_and_sort_types_in_detail():
     ents = [
         _pm("4111111111111111", "bank_card"),
         _pm("4111111111111111", "bank_card", 20),  # duplicate text
@@ -41,12 +41,12 @@ def test_keep_downgraded_count_is_unique_texts_detail_is_sorted_types():
     assert ev["detail"] == "types: bank_card, phone"  # sorted, deduped types
 
 
-def test_residual_personal_data_true_for_pseudonym():
+def test_residual_personal_data_should_return_true_when_pseudonym_strategy_applies():
     ents = [_pm("张三", "person")]
     assert residual_personal_data(ents) is True
 
 
-def test_residual_personal_data_true_for_mask():
+def test_residual_personal_data_should_return_true_when_mask_strategy_applies():
     # mask writes surrogate->original into the returned key (e.g.
     # {'138****8000': '13800138000'}), and restore() recovers the original
     # from that key — a retained recovery key means the output is still
@@ -56,7 +56,7 @@ def test_residual_personal_data_true_for_mask():
     assert residual_personal_data(ents) is True
 
 
-def test_residual_personal_data_true_for_keep():
+def test_residual_personal_data_should_return_true_when_keep_strategy_applies():
     # keep leaves the original value verbatim in the redacted output (no
     # key entry is even needed — the PII is right there), so this is also
     # residual personal data.
@@ -64,6 +64,6 @@ def test_residual_personal_data_true_for_keep():
     assert residual_personal_data(ents) is True
 
 
-def test_residual_personal_data_false_for_empty():
+def test_residual_personal_data_should_return_false_when_no_entities_detected():
     # Nothing detected -> nothing retained, nothing to recover.
     assert residual_personal_data([]) is False

@@ -86,7 +86,7 @@ _GOLDEN_CHOICE = [
 ]
 
 
-def test_core_shakerng_randint_stream_is_frozen():
+def test_shakerng_randint_stream_should_match_frozen_golden():
     rs = _core.ShakeRng(_SEED_RANDINT)
     got = [rs.randint(0, 9) for _ in range(len(_GOLDEN_RANDINT_0_9))]
     assert got == _GOLDEN_RANDINT_0_9
@@ -94,7 +94,7 @@ def test_core_shakerng_randint_stream_is_frozen():
     assert got_hi == _GOLDEN_RANDINT_HI
 
 
-def test_core_shakerng_choice_stream_is_frozen():
+def test_shakerng_choice_stream_should_match_frozen_golden():
     rs = _core.ShakeRng(_SEED_CHOICE)
     got = [rs.choice(_CHOICE_POOL) for _ in range(len(_GOLDEN_CHOICE))]
     assert got == _GOLDEN_CHOICE

@@ -14,8 +14,9 @@ import argus_redact._core as _core
 # ── zh person names ──────────────────────────────────────────────────────────
 
 
-def test_reserved_person_names_zh_order():
+def test_reserved_person_names_zh_should_match_the_frozen_order():
     assert list(_core.reserved_person_names_zh()) == [
+
         "张三",
         "李四",
         "王五",
@@ -32,8 +33,9 @@ def test_reserved_person_names_zh_order():
     ]
 
 
-def test_reserved_person_names_aliases_zh_order():
+def test_reserved_person_names_aliases_zh_should_match_the_frozen_order():
     assert list(_core.reserved_person_names_aliases_zh()) == [
+
         ("张三", ["Zhang San", "Zhang3", "ZhangSan"]),
         ("李四", ["Li Si", "Li4", "LiSi"]),
         ("王五", ["Wang Wu", "Wang5", "WangWu"]),
@@ -53,7 +55,7 @@ def test_reserved_person_names_aliases_zh_order():
 # ── zh cities ────────────────────────────────────────────────────────────────
 
 
-def test_reserved_cities_zh_order():
+def test_reserved_cities_zh_should_match_the_frozen_order():
     assert list(_core.reserved_cities_zh()) == [
         ("滨海市", "东江区", ["八荒街", "九垣街", "十方路", "万象路"]),
         ("滨海市", "西陆区", ["青鸾街", "白虎街", "玄武路"]),
@@ -61,8 +63,9 @@ def test_reserved_cities_zh_order():
     ]
 
 
-def test_reserved_addresses_zh_aliases_order():
+def test_reserved_addresses_zh_aliases_should_match_the_frozen_order():
     assert list(_core.reserved_addresses_zh_aliases()) == [
+
         (("滨海市", "东江区", "八荒街"), ["Bahuang Street, Dongjiang District, Binhai City"]),
         (("滨海市", "东江区", "九垣街"), ["Jiuyuan Street, Dongjiang District, Binhai City"]),
         (("滨海市", "东江区", "十方路"), ["Shifang Road, Dongjiang District, Binhai City"]),
@@ -78,8 +81,9 @@ def test_reserved_addresses_zh_aliases_order():
 # ── en person names ──────────────────────────────────────────────────────────
 
 
-def test_reserved_person_names_en_order():
+def test_reserved_person_names_en_should_match_the_frozen_order():
     assert list(_core.reserved_person_names_en()) == [
+
         "John Doe",
         "Jane Doe",
         "Jane Roe",
@@ -93,8 +97,9 @@ def test_reserved_person_names_en_order():
     ]
 
 
-def test_reserved_person_names_aliases_en_order():
+def test_reserved_person_names_aliases_en_should_match_the_frozen_order():
     assert list(_core.reserved_person_names_aliases_en()) == [
+
         ("John Doe", ["约翰·多伊", "约翰多伊"]),
         ("Jane Doe", ["简·多伊", "简多伊"]),
         ("Jane Roe", ["简·罗", "简罗"]),
@@ -111,7 +116,7 @@ def test_reserved_person_names_aliases_en_order():
 # ── en addresses ─────────────────────────────────────────────────────────────
 
 
-def test_reserved_addresses_en_order():
+def test_reserved_addresses_en_should_match_the_frozen_order():
     assert list(_core.reserved_addresses_en()) == [
         "1313 Mockingbird Lane, Springfield, USA",
         "742 Evergreen Terrace, Springfield, USA",
@@ -122,7 +127,7 @@ def test_reserved_addresses_en_order():
     ]
 
 
-def test_reserved_addresses_en_aliases_order():
+def test_reserved_addresses_en_aliases_should_match_the_frozen_order():
     assert list(_core.reserved_addresses_en_aliases()) == [
         ("1313 Mockingbird Lane, Springfield, USA", ["美国斯普林菲尔德嘲鸫巷1313号"]),
         ("742 Evergreen Terrace, Springfield, USA", ["美国斯普林菲尔德常青露台742号"]),
@@ -136,7 +141,7 @@ def test_reserved_addresses_en_aliases_order():
 # ── RFC / shared pools ───────────────────────────────────────────────────────
 
 
-def test_rfc2606_domains_order():
+def test_rfc2606_domains_should_match_the_frozen_order():
     assert list(_core.rfc2606_domains()) == [
         "example.com",
         "example.org",
@@ -144,7 +149,7 @@ def test_rfc2606_domains_order():
     ]
 
 
-def test_rfc5737_prefixes_order():
+def test_rfc5737_prefixes_should_match_the_frozen_order():
     assert list(_core.rfc5737_prefixes()) == [
         "192.0.2",
         "198.51.100",
@@ -152,32 +157,32 @@ def test_rfc5737_prefixes_order():
     ]
 
 
-def test_rfc7042_mac_prefix():
+def test_rfc7042_mac_prefix_should_match_the_frozen_value():
     assert _core.rfc7042_mac_prefix() == "00:00:5E:00:53"
 
 
 # ── zh document-ID single-value pools ────────────────────────────────────────
 
 
-def test_passport_prefixes_zh_order():
+def test_passport_prefixes_zh_should_match_the_frozen_order():
     assert list(_core.passport_prefixes_zh()) == ["E", "G"]
 
 
-def test_plate_special_prefixes_zh_order():
+def test_plate_special_prefixes_zh_should_match_the_frozen_order():
     assert list(_core.plate_special_prefixes_zh()) == ["测", "领"]
 
 
-def test_hkid_reserved_letter():
+def test_hkid_reserved_letter_should_match_the_frozen_value():
     assert _core.hkid_reserved_letter() == "Z"
 
 
-def test_twid_reserved_letter():
+def test_twid_reserved_letter_should_match_the_frozen_value():
     assert _core.twid_reserved_letter() == "W"
 
 
-def test_macau_reserved_lead():
+def test_macau_reserved_lead_should_match_the_frozen_value():
     assert _core.macau_reserved_lead() == "9"
 
 
-def test_twarc_reserved_prefix():
+def test_twarc_reserved_prefix_should_match_the_frozen_value():
     assert _core.twarc_reserved_prefix() == "WW"

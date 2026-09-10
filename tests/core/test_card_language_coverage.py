@@ -34,13 +34,13 @@ class TestCardRedactedInNonEnZhScripts:
             "카드번호 4111-1111-1111-1111",  # ko, hangul
         ],
     )
-    def test_pan_redacted_under_auto(self, text):
+    def test_pan_should_be_redacted_when_script_is_ja_or_ko(self, text):
         redacted, _ = redact(text, lang="auto", mode="fast", salt=42)
         assert PAN not in redacted
         assert PAN_DIGITS not in redacted.replace("-", "")
 
     @pytest.mark.parametrize("lang", sorted(_SHIPPED_LANGS))
-    def test_pan_redacted_in_every_shipped_pack(self, lang):
+    def test_pan_should_be_redacted_in_every_shipped_pack(self, lang):
         """Iterates the ACTUAL pack list, not a literal.
 
         A PAN is the same digits in any script, so every pack must redact one — either
@@ -57,11 +57,11 @@ class TestCardRedactedInNonEnZhScripts:
         redacted, _ = redact(f"card {PAN}", lang=[lang], mode="fast", salt=42)
         assert PAN not in redacted, f"pack {lang!r} leaks a Luhn-valid PAN in plaintext"
 
-    def test_undashed_pan_redacted_in_kana(self):
+    def test_undashed_pan_should_be_redacted_in_kana(self):
         redacted, _ = redact(f"カード番号 {PAN_DIGITS}", lang="auto", mode="fast", salt=42)
         assert PAN_DIGITS not in redacted
 
-    def test_ja_card_type_resolves_in_specs_ssot(self):
+    def test_ja_card_type_should_resolve_in_specs_ssot(self):
         # The emitted type must resolve a strategy/label/sensitivity — `lookup()`
         # is NOT language-filtered, so the en typedef serves the ja detection.
         from argus_redact.specs.registry import lookup
@@ -73,7 +73,7 @@ class TestCardRedactedInNonEnZhScripts:
         defs = lookup("credit_card")
         assert defs and defs[0].strategy == "mask"
 
-    def test_realistic_strategy_produces_a_fake_card_in_kana(self):
+    def test_realistic_strategy_should_produce_a_fake_card_in_kana(self):
         # Faker resolution is (type, lang) → falls back across langs, so the en
         # card faker must serve a ja-detected card (no crash, no passthrough).
         redacted, key = redact(
@@ -88,19 +88,19 @@ class TestCardRedactedInNonEnZhScripts:
 
 
 class TestEnZhTypeLabelsUnchanged:
-    def test_en_card_still_typed_credit_card(self):
+    def test_en_card_should_stay_typed_credit_card(self):
         _redacted, _key, types = redact(
             f"My card is {PAN}", lang="en", mode="fast", salt=42, with_types=True
         )
         assert set(types.values()) == {"credit_card"}
 
-    def test_zh_card_still_typed_bank_card(self):
+    def test_zh_card_should_stay_typed_bank_card(self):
         _redacted, _key, types = redact(
             f"卡号 {PAN_DIGITS}", lang="zh", mode="fast", salt=42, with_types=True
         )
         assert set(types.values()) == {"bank_card"}
 
-    def test_zh_unionpay_19_digit_still_typed_bank_card(self):
+    def test_zh_unionpay_19_digit_card_should_stay_typed_bank_card(self):
         # 19-digit UnionPay: the zh pattern spans all 19 digits, the (now neutral)
         # en pattern only 16 — the longer span must keep winning.
         pan19 = "6217000000000000000"
@@ -109,7 +109,7 @@ class TestEnZhTypeLabelsUnchanged:
         )
         assert set(types.values()) == {"bank_card"}
 
-    def test_en_card_not_duplicated(self):
+    def test_en_card_should_not_be_duplicated(self):
         redacted, key, types = redact(
             f"My card is {PAN}", lang="en", mode="fast", salt=42, with_types=True
         )

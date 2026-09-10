@@ -25,19 +25,20 @@ _TEXT = "电话13812345678 和 13800005678"
 _CONFIG = {"phone": {"strategy": "mask"}}
 
 
-def test_mask_collision_emits_security_warning():
+def test_redact_should_emit_security_warning_when_masks_collide():
     """A real mask-family collision must fire a SecurityWarning naming it."""
     with pytest.warns(SecurityWarning, match="collided"):
         redact(_TEXT, lang="zh", mode="fast", config=_CONFIG)
 
 
-def test_mask_collision_structured_event_has_right_count():
+def test_redact_detailed_should_report_mask_collision_event_when_masks_collide():
     """redact(detailed=True) surfaces a `mask_collision` security_event."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SecurityWarning)
         _redacted, _key, details = redact(
             _TEXT, lang="zh", mode="fast", config=_CONFIG, detailed=True
         )
+
     events = [e for e in details["security_events"] if e["reason_code"] == "mask_collision"]
     assert len(events) == 1
     assert events[0]["count"] == 1
@@ -48,7 +49,7 @@ def test_mask_collision_structured_event_has_right_count():
     assert "13800005678" not in events[0]["detail"]
 
 
-def test_mask_collision_key_keeps_both_originals():
+def test_key_should_keep_both_originals_when_masks_collide():
     """Signal-not-remove: the collided entry stays in the key (direct restore
     still works) — only the SecurityWarning/event is added."""
     with warnings.catch_warnings():
@@ -60,7 +61,7 @@ def test_mask_collision_key_keeps_both_originals():
     assert "138****5678①" in key
 
 
-def test_no_collision_no_warning_no_event():
+def test_redact_detailed_should_not_report_mask_collision_when_masks_do_not_collide():
     """A single masked phone (no collision) fires neither signal."""
     text = "电话13812345678"
     with warnings.catch_warnings():
@@ -71,7 +72,7 @@ def test_no_collision_no_warning_no_event():
     assert not any(e["reason_code"] == "mask_collision" for e in details["security_events"])
 
 
-def test_redact_json_mask_collision_emits_security_warning():
+def test_redact_json_should_emit_security_warning_when_masks_collide():
     """The structured JSON path is the highest collision-risk shape (a column of
     similar phone/ID numbers masking to the same string) — it must warn too,
     not just the one-shot `redact()` path."""
@@ -80,7 +81,7 @@ def test_redact_json_mask_collision_emits_security_warning():
         redact_json(data, paths=["a", "b"], config=_CONFIG)
 
 
-def test_redact_csv_mask_collision_emits_security_warning():
+def test_redact_csv_should_emit_security_warning_when_masks_collide():
     """Same collision risk, CSV shape: two rows/cells of similar phone numbers
     masking to the same visible string."""
     csv_text = "phone\n13812345678\n13800005678"
@@ -88,7 +89,7 @@ def test_redact_csv_mask_collision_emits_security_warning():
         redact_csv(csv_text, config=_CONFIG)
 
 
-def test_redact_json_no_collision_no_warning():
+def test_redact_json_should_not_warn_when_masks_do_not_collide():
     """A structured redact with no collision (a single phone) fires no
     SecurityWarning."""
     data = {"a": "13812345678"}
@@ -97,7 +98,7 @@ def test_redact_json_no_collision_no_warning():
         redact_json(data, paths=["a"], config=_CONFIG)
 
 
-def test_redact_csv_no_collision_no_warning():
+def test_redact_csv_should_not_warn_when_masks_do_not_collide():
     """Same negative control, CSV shape: distinct (non-colliding) phone values."""
     csv_text = "phone\n13812345678\n19999999999"
     with warnings.catch_warnings():

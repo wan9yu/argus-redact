@@ -30,7 +30,7 @@ def _fixture():
     return red, key
 
 
-def test_empty_nonce_fails_closed_not_destroys():
+def test_guarded_restore_should_fail_closed_without_destroying_text_when_nonce_is_empty():
     red, key = _fixture()
     out, det = restore(
         red, key, guard=True, anchor=Anchor(nonce="", scope=frozenset(key)), detailed=True
@@ -40,7 +40,7 @@ def test_empty_nonce_fails_closed_not_destroys():
     assert any(e["reason_code"] == "provenance_failed" for e in det["security_events"])
 
 
-def test_incidental_substring_nonce_fails_closed():
+def test_guarded_restore_should_fail_closed_when_nonce_is_an_incidental_substring():
     red, key = _fixture()
     # "的" occurs naturally in the redacted text but was never echoed as a token.
     out, det = restore(
@@ -51,7 +51,7 @@ def test_incidental_substring_nonce_fails_closed():
     assert any(e["reason_code"] == "provenance_failed" for e in det["security_events"])
 
 
-def test_none_nonce_fails_closed_not_raises():
+def test_guarded_restore_should_fail_closed_not_raise_when_nonce_is_none():
     red, key = _fixture()
     out, det = restore(
         red, key, guard=True, anchor=Anchor(nonce=None, scope=frozenset(key)), detailed=True
@@ -60,7 +60,7 @@ def test_none_nonce_fails_closed_not_raises():
     assert det["outcome"] == "blocked"
 
 
-def test_legit_trailing_echo_still_restores():
+def test_guarded_restore_should_restore_when_nonce_is_echoed_on_trailing_line():
     # Also pins the producer/consumer coupling: make_anchor's token must be at
     # least as long as the length floor the guard rejects below, or every genuine
     # nonce would fail closed here. A shrink of make_anchor's token_hex arg trips
@@ -73,7 +73,7 @@ def test_legit_trailing_echo_still_restores():
     assert anchor.nonce not in out  # echo stripped
 
 
-def test_legit_ownline_echo_midreply_still_restores():
+def test_guarded_restore_should_restore_when_nonce_is_echoed_on_own_line_midreply():
     red, key = _fixture()
     anchor = make_anchor(key)
     reply = red + "\n" + anchor.nonce + "\nokay done"  # own-line echo, not last
@@ -82,7 +82,7 @@ def test_legit_ownline_echo_midreply_still_restores():
     assert anchor.nonce not in out
 
 
-def test_short_suffix_nonce_fails_closed():
+def test_guarded_restore_should_fail_closed_when_nonce_is_a_short_text_suffix():
     # A short nonce that coincides with a text suffix (a masked phone ends "8000")
     # must not pass provenance and let the stripper truncate the tail.
     red, key = _fixture()  # red ends with the masked phone "...138****8000"

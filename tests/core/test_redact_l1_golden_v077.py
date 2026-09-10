@@ -267,7 +267,7 @@ def _load(path):
 _CASE_IDS = [c[0] for c in CASES]
 
 
-def test_fixtures_present():
+def test_fixtures_should_be_present_and_non_empty():
     """Guard: both fixtures load and are non-empty (an emptied fixture fails loudly)."""
     assert FIXTURE_REDACT.exists(), f"missing {FIXTURE_REDACT.name}"
     assert FIXTURE_HINTS.exists(), f"missing {FIXTURE_HINTS.name}"
@@ -281,7 +281,7 @@ def test_fixtures_present():
 
 
 @pytest.mark.parametrize("label", _CASE_IDS)
-def test_redact_golden(label):
+def test_redact_should_match_frozen_golden_per_case(label):
     """Current Python redact(mode=fast) == frozen (redacted, key) per case."""
     golden = _load(FIXTURE_REDACT)[label]
     case = next(c for c in CASES if c[0] == label)
@@ -291,7 +291,7 @@ def test_redact_golden(label):
 
 
 @pytest.mark.parametrize("label", _CASE_IDS)
-def test_hints_golden(label):
+def test_hints_should_match_frozen_golden_per_case(label):
     """Current Python L1 hints == frozen L1 hints (all four types) per case."""
     golden = _load(FIXTURE_HINTS)[label]
     case = next(c for c in CASES if c[0] == label)
@@ -301,7 +301,7 @@ def test_hints_golden(label):
 
 
 @pytest.mark.parametrize("label", sorted(_ROUNDTRIP))
-def test_roundtrip_restore(label):
+def test_restore_should_recover_original_after_roundtrip(label):
     """restore(redacted, key) recovers the original (cross-language alias path)."""
     case = next(c for c in CASES if c[0] == label)
     _, text, lang, config, names, unified_prefix = case

@@ -27,12 +27,12 @@ NEGATIVES = [
 ]
 
 
-def test_hobby_precision_floor():
+def test_hobby_should_have_no_false_positives_on_negatives():
     fps = [t for t in NEGATIVES if _detects(t)]
     assert fps == [], f"hobby false-positives (must be 0): {fps}"
 
 
-def test_hobby_recall_floor():
+def test_hobby_should_meet_recall_floor_on_positives():
     hits = sum(1 for t in POSITIVES if _detects(t))
     assert hits >= 4, f"hobby recall floor 4/5: only {hits}/{len(POSITIVES)}"
 
@@ -42,7 +42,7 @@ def test_hobby_recall_floor():
 # ---------------------------------------------------------------------------
 
 
-def test_hobby_technical_pii_only_not_corroborated():
+def test_hobby_should_not_be_corroborated_by_technical_pii_alone():
     # api-key (anthropic_api_key sk-ant-... format) is technical/non-personal; after the
     # proximity-allowlist fix it no longer corroborates an evidence-gated hobby.
     # 乒乓球 (3-char, in hobby lexicon) scores lexicon weight 0.3 but gets no
@@ -56,14 +56,14 @@ def test_hobby_technical_pii_only_not_corroborated():
     )
 
 
-def test_hobby_personal_pii_still_corroborates():
+def test_hobby_should_be_corroborated_by_personal_pii():
     # phone IS person-identifying; it still promotes 乒乓球 via proximity
     # (lexicon 0.3 + phone-prox 0.3 = 0.6 ≥ 0.5 threshold) → IS detected.
     # Regression guard: the fix must not break the phone-proximity path.
     assert _detects("乒乓球 13800138000"), "phone must still corroborate an evidence-gated hobby"
 
 
-def test_hobby_mixed_technical_and_personal_pii():
+def test_hobby_should_be_corroborated_when_personal_and_technical_pii_present():
     # api-key alone is excluded; phone still corroborates → IS detected.
     assert _detects("乒乓球 sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAA 13800138000"), (
         "phone must still corroborate even when an api-key is also present"

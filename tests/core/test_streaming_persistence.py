@@ -14,7 +14,7 @@ from argus_redact.streaming import _STATE_SCHEMA_VERSION, StreamingRedactor
 
 
 class TestExportStateShape:
-    def test_export_state_is_json_serializable(self):
+    def test_export_state_should_be_json_serializable(self):
         r = StreamingRedactor(salt=b"some-session-salt-1234")
         r.feed("张明今天打了13912345678。")
         state = r.export_state()
@@ -24,13 +24,13 @@ class TestExportStateShape:
         loaded = json.loads(encoded)
         assert loaded == state
 
-    def test_export_state_includes_version_stamp(self):
+    def test_export_state_should_include_version_stamp(self):
         r = StreamingRedactor(salt=b"x")
         state = r.export_state()
         assert "version" in state
         assert state["version"] == _STATE_SCHEMA_VERSION
 
-    def test_export_before_flush_preserves_in_flight_tail(self):
+    def test_export_should_preserve_in_flight_tail_when_not_flushed(self):
         # Exporting with an un-flushed in-flight buffer
         # must NOT drop the buffered tail. Text with no trailing sentence
         # boundary stays in _inc_buffer (not yet emitted); a checkpoint there
@@ -51,7 +51,7 @@ class TestExportStateShape:
         assert resumed_tail == expected_tail  # tail carried across the checkpoint
         assert "13912345678" not in resumed_tail
 
-    def test_salt_passed_out_of_band_round_trips_with_edge_bytes(self):
+    def test_salt_should_round_trip_out_of_band_with_edge_bytes(self):
         # v0.6.2: export_state() omits salt by default; caller passes it
         # out-of-band to from_state(state, salt=...).
         salt = bytes([0x00, 0xFF, 0x42, 0x00, 0xFE])
@@ -63,7 +63,7 @@ class TestExportStateShape:
 
 
 class TestRoundTripThroughJson:
-    def test_round_trip_preserves_existing_mappings(self):
+    def test_resumed_redactor_should_map_same_original_to_same_fake(self):
         salt = b"long-session-salt-abc"
         r1 = StreamingRedactor(salt=salt)
         r1.feed("张明今天打了13912345678。")
@@ -84,22 +84,24 @@ class TestRoundTripThroughJson:
             "same original should map to same fake across processes"
         )
 
-    def test_resumed_redactor_keeps_growing_aggregate_key(self):
+    def test_resumed_redactor_should_keep_growing_aggregate_key(self):
         salt = b"salt-xyz"
         r1 = StreamingRedactor(salt=salt)
         r1.feed("张明的手机13912345678。")
         r1.flush()  # emit to populate aggregate_key
         keys_before = set(r1.aggregate_key().keys())
+
         state = r1.export_state()
         r2 = StreamingRedactor.from_state(state, salt=salt)
         r2.feed("张明又说了一遍13912345678，加上李华15812345678。")
         r2.flush()  # emit
         keys_after = set(r2.aggregate_key().keys())
+
         assert keys_before <= keys_after, "resume must not lose mappings"
         # New entity (李华 / 158...) added in r2
         assert len(keys_after) > len(keys_before)
 
-    def test_round_trip_preserves_reserved_names_override(self):
+    def test_resumed_redactor_should_honor_reserved_names_override(self):
         # `reserved_names={"person_zh": ()}` disables canonical-name pollution
         # detection; this option must round-trip.
         salt = b"with-reserved-override"
@@ -116,7 +118,7 @@ class TestRoundTripThroughJson:
         # Same input must still pass the pollution check on r2
         r2.feed("张三再次来电15812345678。")  # would raise without override
 
-    def test_resumed_session_matches_uninterrupted_session(self):
+    def test_resumed_session_should_match_uninterrupted_session(self):
         # Two redactors with the same salt + same chunk sequence — one
         # uninterrupted, the other interrupted-then-resumed via state — must
         # agree on the FULL aggregate key (person fakes included). The checkpoint
@@ -160,7 +162,7 @@ class TestExportStateCompleteness:
     moment the param is added to __init__ but not serialised.
     """
 
-    def test_all_init_params_persisted_in_export_state(self):
+    def test_export_state_should_persist_all_init_params(self):
         """set(__init__ params) - {"self", "salt"} must be a subset of export_state keys."""
         r = StreamingRedactor(salt=b"x")
         state = r.export_state()
@@ -178,7 +180,7 @@ class TestExportStateCompleteness:
 
 
 class TestVersionGate:
-    def test_unsupported_version_raises_value_error(self):
+    def test_from_state_should_raise_value_error_when_version_is_unsupported(self):
         r = StreamingRedactor(salt=b"x")
         state = r.export_state()
         state["version"] = 99
@@ -186,12 +188,12 @@ class TestVersionGate:
             StreamingRedactor.from_state(state, salt=b"x")
         assert "99" in str(exc.value) or "version" in str(exc.value).lower()
 
-    def test_missing_version_raises_value_error(self):
+    def test_from_state_should_raise_value_error_when_version_is_missing(self):
         with pytest.raises(ValueError):
             StreamingRedactor.from_state({"accumulated_key": {}}, salt=b"x")
 
 
-def test_export_from_state_roundtrips_accumulated_types():
+def test_export_state_should_round_trip_accumulated_types():
     # bug #4: _accumulated_types is populated during feed() (backs aggregate_types)
     # but was omitted from export_state() / from_state(), so a resumed redactor
     # under-reported types ({}). It must round-trip like accumulated_key. (Not an

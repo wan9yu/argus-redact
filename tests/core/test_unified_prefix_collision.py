@@ -4,7 +4,7 @@ from argus_redact import redact
 from argus_redact.pure.restore import restore
 
 
-def test_unified_prefix_no_cross_generator_collision():
+def test_unified_prefix_should_not_collide_across_generators():
     # Person (pseudo_gen) + phone-as-remove (a type_gen) both under prefix "U".
     # Pre-fix (salt=63467): both minted U-87217, so the key lost 王明.
     red, key = redact(
@@ -19,7 +19,7 @@ def test_unified_prefix_no_cross_generator_collision():
     assert restore(red, dict(key), guard=False) == "我叫王明，电话13800138000"
 
 
-def test_passport_us_passport_share_prefix_no_collision():
+def test_passport_and_us_passport_should_not_collide_when_sharing_prefix():
     # passport (zh) + us_passport (en) both default to prefix PASS. lang=en alone
     # never triggers the zh "passport" type, so both must be loaded together to
     # actually exercise the cross-generator collision.

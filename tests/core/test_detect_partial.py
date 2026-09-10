@@ -16,10 +16,10 @@ from argus_redact.glue._detect_partial import (
 
 
 class TestLastBoundaryIndex:
-    def test_no_boundary_returns_minus_one(self):
+    def test_boundary_index_should_return_minus_one_when_no_boundary(self):
         assert _last_boundary_index("hello world") == -1
 
-    def test_returns_index_after_boundary(self):
+    def test_boundary_index_should_return_index_after_boundary_when_terminator_present(self):
         # An ASCII boundary counts only when followed by whitespace (a real
         # sentence end). A trailing "." at the buffer end is ambiguous (could be
         # ".com" intra-entity) so it does NOT count until the next char arrives.
@@ -27,28 +27,28 @@ class TestLastBoundaryIndex:
         assert _last_boundary_index("hi.\n") == 4  # '\n' always counts
         assert _last_boundary_index("你好。") == 3  # CJK 。 always counts
 
-    def test_ascii_boundary_at_buffer_end_is_ambiguous(self):
+    def test_boundary_index_should_return_minus_one_when_ascii_boundary_is_ambiguous(self):
         # A trailing ASCII boundary with no following char is ambiguous — wait for
         # the next chunk to disambiguate ". " (sentence end) vs ".com" (entity).
         assert _last_boundary_index("hi.") == -1
         assert _last_boundary_index("a@bcd.") == -1  # intra-entity dot, not a boundary
         assert _last_boundary_index("a@bcd.com listening") == -1  # '.' before 'c'
 
-    def test_cjk_and_newline_always_count(self):
+    def test_boundary_index_should_count_boundary_when_cjk_or_newline_at_end(self):
         # CJK full-width punctuation and \n never appear inside ASCII entities and
         # CJK sentences carry no trailing space, so they count even at buffer end.
         assert _last_boundary_index("你好。世界") == 3  # boundary after 。
         assert _last_boundary_index("done\n") == 5
         assert _last_boundary_index("结束！") == 3
 
-    def test_normal_en_sentence_splits_at_dot_space(self):
+    def test_boundary_index_should_return_index_after_dot_space_when_english_sentence(self):
         # "Hello. World" — the '.' is followed by a space → a real sentence end.
         assert _last_boundary_index("Hello. World") == 6  # after ". "
 
-    def test_picks_rightmost_boundary(self):
+    def test_boundary_index_should_return_rightmost_boundary_when_multiple_present(self):
         assert _last_boundary_index("a. b. c") == 5  # after second '. '
 
-    def test_empty_string(self):
+    def test_boundary_index_should_return_minus_one_when_input_is_empty(self):
         assert _last_boundary_index("") == -1
 
 
@@ -60,7 +60,7 @@ class TestContextCutBinding:
     cuts, so each asserts ``redetect`` is ``False``.
     """
 
-    def test_boundary_within_safe_end_returns_cut(self):
+    def test_context_cut_should_return_cut_when_boundary_within_safe_end(self):
         # "abcd。efghij" — 11 chars (a=0..d=3, 。=4, e=5..j=10).
         # W=4: safe_end = 11 - 4 = 7. last boundary ≤ 7 in "abcd。ef" is at index 5
         # (char after 。). snap([], 5) = 5 (no entities to straddle). cut = 5.
@@ -68,25 +68,25 @@ class TestContextCutBinding:
         assert len(text) == 11  # precondition
         assert _core.streaming_context_cut(text, [], 0, 4096, 4, False) == (5, False)
 
-    def test_tail_shorter_than_w_returns_ctx_len(self):
+    def test_context_cut_should_return_ctx_len_when_tail_shorter_than_window(self):
         # "abc" — 3 chars, W=4: safe_end = 3 - 4 < 0 → 0 ≤ ctx_len=0 → hold.
         assert _core.streaming_context_cut("abc", [], 0, 4096, 4, False) == (0, False)
 
-    def test_force_flush_returns_len(self):
+    def test_context_cut_should_return_full_length_when_force_flush(self):
         # force_flush=True → emit everything (cut = len regardless of boundaries).
         text = "abc"
         assert _core.streaming_context_cut(text, [], 0, 4096, 4, True) == (3, False)
 
-    def test_evidence_context_window_constant_matches_binding(self):
+    def test_evidence_context_window_should_equal_128(self):
         # _EVIDENCE_CONTEXT_WINDOW is the W used by StreamingRedactor.
         assert _EVIDENCE_CONTEXT_WINDOW == 128
 
-    def test_ctx_len_respected(self):
+    def test_context_cut_should_return_cut_beyond_ctx_len_when_boundary_exceeds_it(self):
         # ctx_len=3 means the first 3 chars are already-emitted left-context.
         # W=4, "abcd。efghij" (11 chars): safe_end=7, boundary=5 > ctx_len=3 → cut=5.
         assert _core.streaming_context_cut("abcd。efghij", [], 3, 4096, 4, False) == (5, False)
 
-    def test_entity_straddle_snaps_cut_back(self):
+    def test_context_cut_should_snap_back_when_entity_straddles_boundary(self):
         # W=4, text has boundary at 5 but an entity spans [3, 8).
         # snap(target=5) → 3 (entity start); cut = max(3, ctx_len=0) = 3.
         text = "abcd。efghij"
@@ -94,7 +94,7 @@ class TestContextCutBinding:
         result = _core.streaming_context_cut(text, spans, 0, 4096, 4, False)
         assert result == (3, False)
 
-    def test_forced_bounded_drain_split_sets_redetect(self):
+    def test_context_cut_should_flag_redetect_when_forced_split_spans_whole_buffer(self):
         # A boundary-less buffer AT max_buffer whose sole entity spans [0, len) past
         # the drain point: snap chains to 0 ≤ ctx_len, so the cut is FORCED to the
         # raw len - CARRY_WINDOW and ``redetect`` is True (the emit slice must be
@@ -112,20 +112,20 @@ class TestContextCutBinding:
 class TestEmitPossibleBinding:
     """PyO3 ``streaming_emit_possible`` binding."""
 
-    def test_short_buffer_no_boundary_returns_false(self):
+    def test_emit_possible_should_return_false_when_buffer_short_with_no_boundary(self):
         # Buffer shorter than W with no boundary → emit_possible is False.
         assert (
             _core.streaming_emit_possible("hello world", 0, DEFAULT_MAX_BUFFER, 128, False) is False
         )
 
-    def test_force_flush_returns_true(self):
+    def test_emit_possible_should_return_true_when_force_flush(self):
         assert _core.streaming_emit_possible("x", 0, DEFAULT_MAX_BUFFER, 128, True) is True
 
-    def test_buffer_at_max_returns_true(self):
+    def test_emit_possible_should_return_true_when_buffer_at_max(self):
         text = "x" * DEFAULT_MAX_BUFFER
         assert _core.streaming_emit_possible(text, 0, DEFAULT_MAX_BUFFER, 128, False) is True
 
-    def test_boundary_in_safe_window_returns_true(self):
+    def test_emit_possible_should_return_true_when_boundary_in_safe_window(self):
         # 256 chars of filler + 。 + 128 more chars → safe_end = 385 - 128 = 257;
         # boundary at 257 > ctx_len=0 → emit_possible True.
         text = "啊" * 256 + "。" + "啊" * 128
@@ -139,7 +139,7 @@ class TestDetectSkipGate:
     returns False, and must still call ``_detect`` when an emit IS possible.
     """
 
-    def test_detect_not_called_on_hold_feed(self):
+    def test_detect_should_not_be_called_when_feed_provably_holds(self):
         # A short boundary-less buffer (< W chars, no sentence boundary) provably
         # holds → emit_possible=False → _detect must NOT be called.
         import argus_redact.glue._detect_partial as _dp
@@ -155,7 +155,7 @@ class TestDetectSkipGate:
         assert redetect is False
         assert entities == []
 
-    def test_detect_called_when_emit_possible(self):
+    def test_detect_should_be_called_when_emit_is_possible(self):
         # A buffer with a sentence boundary in the safe window → emit_possible=True
         # → _detect MUST be called (the gate must not over-skip).
         import argus_redact.glue._detect_partial as _dp

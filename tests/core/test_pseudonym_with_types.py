@@ -35,12 +35,12 @@ def _run():
 
 
 class TestPopulatedAndCanonical:
-    def test_types_is_non_empty_dict(self):
+    def test_types_should_be_a_non_empty_dict(self):
         result = _run()
         assert isinstance(result.types, dict)
         assert result.types  # non-empty
 
-    def test_values_are_canonical_ssot_names(self):
+    def test_type_values_should_be_canonical_ssot_names(self):
         values = set(_run().types.values())
         # Canonical names, NOT the audit-prefix reverse-parse garbage.
         assert "bank_card" in values  # not "cn_bank_card"
@@ -60,7 +60,7 @@ class TestParityWithRedactWithTypes:
     with no audit-prefix path divergence.
     """
 
-    def test_type_sets_match(self):
+    def test_type_sets_should_match_redact_with_types(self):
         pseudo_types = set(_run().types.values())
 
         _, _key, type_map = redact(
@@ -77,13 +77,13 @@ class TestParityWithRedactWithTypes:
 
 
 class TestBothFakeSpacesTyped:
-    def test_every_key_fake_is_typed(self):
+    def test_every_key_fake_should_be_typed(self):
         result = _run()
         # Every fake in the unified key (realistic fakes AND [TYPE-] audit
         # placeholders) corresponds to a detected entity and is typed.
         assert set(result.types) == set(result.key)
 
-    def test_realistic_and_audit_fakes_both_present(self):
+    def test_email_fakes_should_include_realistic_and_audit_forms(self):
         result = _run()
         # A realistic email fake (e.g. user...@example.org) and an audit email
         # placeholder ([EMAI-...]) both map to "email".
@@ -99,7 +99,7 @@ class TestCollisionCase:
     carries ``e.type`` directly, so it distinguishes them.
     """
 
-    def test_passport_variants_distinguished(self):
+    def test_passport_variants_should_be_distinguished(self):
         result = _run()
         values = set(result.types.values())
         assert "passport" in values
@@ -111,7 +111,7 @@ class TestCollisionCase:
 
 
 class TestStreaming:
-    def test_chunks_carry_types_and_aggregate(self):
+    def test_streaming_should_carry_and_aggregate_types_across_chunks(self):
         r = StreamingRedactor(salt=_SALT, lang="zh", mode=_MODE)
         results = [
             r.feed("请拨打 13912345678 联系我。"),
@@ -131,7 +131,7 @@ class TestStreaming:
         agg["__mutated__"] = "x"
         assert "__mutated__" not in r.aggregate_types()
 
-    def test_empty_stream_has_empty_types(self):
+    def test_empty_stream_should_produce_empty_types(self):
         r = StreamingRedactor(salt=_SALT, lang="zh", mode=_MODE)
         result = r.flush()  # nothing fed
         assert result.downstream_text == ""
@@ -139,7 +139,7 @@ class TestStreaming:
 
 
 class TestNonBreaking:
-    def test_construct_without_types_defaults_empty(self):
+    def test_result_should_default_types_to_empty_dict(self):
         # Existing consumers that build the result with only the old fields.
         result = PseudonymLLMResult(audit_text="a", downstream_text="b", display_text="c")
         assert result.types == {}

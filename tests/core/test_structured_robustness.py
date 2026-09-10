@@ -38,12 +38,12 @@ def _deep(n: int, leaf: str = "x") -> dict:
 
 
 class TestDictKeyLeak:
-    def test_phone_number_dict_key_triggers_security_warning(self):
+    def test_dict_key_should_warn_when_it_contains_pii(self):
         data = {"13800138000": "some label"}
         with pytest.warns(SecurityWarning, match="key"):
             redact_json(data, mode="fast", lang="zh", salt=_HI_SALT)
 
-    def test_pii_dict_key_is_preserved_verbatim(self):
+    def test_pii_dict_key_should_be_preserved_verbatim(self):
         # Documented: keys are structural identifiers, preserved verbatim (like a
         # CSV header). The warning is the mitigation, not key-redaction.
         data = {"13800138000": "x"}
@@ -52,7 +52,7 @@ class TestDictKeyLeak:
             out, key = redact_json(data, mode="fast", lang="zh", salt=42)
         assert "13800138000" in out
 
-    def test_ordinary_dict_key_does_not_warn(self):
+    def test_ordinary_dict_key_should_not_warn(self):
         # Value carries PII (redacted) but the key "name" is not PII → no key
         # warning. Non-vacuity for the positive test above.
         data = {"name": "李四15900001234"}
@@ -68,19 +68,19 @@ class TestDictKeyLeak:
 
 
 class TestCsvFieldSizeLimit:
-    def test_redact_csv_handles_cell_over_field_size_limit(self):
+    def test_redact_csv_should_handle_cell_over_field_size_limit(self):
         big = "a" * (csv.field_size_limit() + 100)
         csv_text = f"header\n{big}"
         redacted, key = redact_csv(csv_text, mode="fast", salt=42)
         assert big in redacted  # a huge non-PII cell survives, no crash
 
-    def test_restore_csv_handles_cell_over_field_size_limit(self):
+    def test_restore_csv_should_handle_cell_over_field_size_limit(self):
         big = "a" * (csv.field_size_limit() + 100)
         csv_text = f"header\n{big}"
         restored = restore_csv(csv_text, {})
         assert big in restored
 
-    def test_field_size_limit_is_restored_after_parse(self):
+    def test_field_size_limit_should_be_restored_after_parse(self):
         # The bump must be scoped to the parse, not leaked into the caller's
         # process-global csv state.
         before = csv.field_size_limit()
@@ -94,15 +94,15 @@ class TestCsvFieldSizeLimit:
 
 
 class TestDeepJsonRecursion:
-    def test_redact_json_deep_raises_valueerror_not_recursionerror(self):
+    def test_redact_json_should_raise_valueerror_not_recursionerror_when_too_deep(self):
         with pytest.raises(ValueError, match="depth"):
             redact_json(_deep(1000), mode="fast", salt=42)
 
-    def test_restore_json_deep_raises_valueerror_not_recursionerror(self):
+    def test_restore_json_should_raise_valueerror_not_recursionerror_when_too_deep(self):
         with pytest.raises(ValueError, match="depth"):
             restore_json(_deep(1000), {})
 
-    def test_shallow_json_within_limit_still_redacts(self):
+    def test_redact_json_should_redact_normally_when_within_depth_limit(self):
         redacted, key = redact_json(_deep(40, "手机13800138000"), mode="fast", salt=42)
         assert "13800138000" not in str(redacted)
 
@@ -113,7 +113,7 @@ class TestDeepJsonRecursion:
 
 
 class TestPathsNumericIndex:
-    def test_numeric_list_index_path_redacts_leaf(self):
+    def test_numeric_list_index_path_should_redact_matching_leaf(self):
         data = {"users": [{"ssn": "110101199003074610"}]}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -121,7 +121,7 @@ class TestPathsNumericIndex:
         assert "110101199003074610" not in str(out)
         assert len(key) == 1
 
-    def test_numeric_index_matches_every_list_position(self):
+    def test_numeric_index_should_match_every_list_position(self):
         # A numeric index is treated as a wildcard (the walk carries "*" for all
         # list positions), so users.0.ssn redacts EVERY element's ssn. Documented
         # limitation — a specific index cannot be singled out.
@@ -132,7 +132,7 @@ class TestPathsNumericIndex:
         assert "110101199003074610" not in str(out)
         assert "440524188001010014" not in str(out)
 
-    def test_paths_matching_numeric_leaf_with_pii_redacts_it(self):
+    def test_paths_matching_numeric_leaf_should_redact_pii(self):
         # A numeric JSON leaf can now be targeted by `paths=` too (v0.8.10):
         # matching it is not string-leaf-only.
         data = {"phone": 13800138000, "note": "no pii here"}
@@ -142,7 +142,7 @@ class TestPathsNumericIndex:
         assert out["phone"] != 13800138000
         assert len(key) == 1
 
-    def test_paths_targeting_numeric_leaf_does_not_false_positive_zero_match(self):
+    def test_paths_targeting_numeric_leaf_should_not_warn_zero_match(self):
         # A `paths=` selector that DOES match a numeric leaf must not be reported
         # as a zero-match selector — the numeric branch must participate in the
         # same target-hit bookkeeping the string-leaf branch does.
@@ -152,7 +152,7 @@ class TestPathsNumericIndex:
             redact_json(data, paths=["age"], mode="fast", lang="zh", salt=_HI_SALT)
         assert not [w for w in rec if "matched no" in str(w.message)]
 
-    def test_segment_list_path_targets_a_dotted_key(self):
+    def test_segment_list_path_should_target_a_dotted_key(self):
         # A caller-supplied path selector may be a pre-split list of segments
         # instead of a dot-notation string, so a key containing a literal "."
         # (unreachable via dot-notation) can still be targeted.
@@ -163,12 +163,12 @@ class TestPathsNumericIndex:
         assert "13800138000" not in str(out["a.b"])
         assert out["safe"] == "no pii here"
 
-    def test_zero_match_selector_warns_on_nonempty_subtree(self):
+    def test_zero_match_selector_should_warn_on_nonempty_subtree(self):
         data = {"name": "张三", "note": "手机13800138000"}
         with pytest.warns(SecurityWarning, match="matched no"):
             redact_json(data, paths=["nonexistent.field"], mode="fast", salt=_HI_SALT)
 
-    def test_matching_selector_does_not_warn_zero_match(self):
+    def test_matching_selector_should_not_warn_zero_match(self):
         data = {"note": "手机13800138000"}
         with warnings.catch_warnings(record=True) as rec:
             warnings.simplefilter("always")
@@ -182,7 +182,7 @@ class TestPathsNumericIndex:
 
 
 class TestNumericLeafScope:
-    def test_numeric_leaf_with_pii_gets_redacted(self):
+    def test_numeric_leaf_should_be_redacted_when_it_carries_pii(self):
         # PREFERRED route (v0.8.10): a numeric JSON leaf (e.g. a phone/national-ID
         # stored as a JSON number, not a string) is coerced to str for DETECTION
         # and, when it carries PII, actually redacted — it no longer silently
@@ -196,7 +196,7 @@ class TestNumericLeafScope:
         assert "13800138000" not in out["phone"]
         assert len(key) == 1
 
-    def test_numeric_leaf_redaction_round_trips_through_restore_json(self):
+    def test_numeric_leaf_redaction_should_round_trip_through_restore_json(self):
         data = {"phone": 13800138000}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -206,7 +206,7 @@ class TestNumericLeafScope:
         # becomes a placeholder string, so restore gives back the string form.
         assert restored["phone"] == "13800138000"
 
-    def test_numeric_leaf_with_pii_no_longer_emits_the_out_of_scope_warning(self):
+    def test_numeric_leaf_should_not_warn_out_of_scope_when_it_carries_pii(self):
         # Non-vacuity for the redaction above: the leak the old "numeric leaves
         # are out of scope" warning flagged is now closed by actually redacting,
         # so that warning must not fire.
@@ -216,7 +216,7 @@ class TestNumericLeafScope:
             redact_json(data, mode="fast", lang="zh", salt=_HI_SALT)
         assert not [w for w in rec if "numeric" in str(w.message)]
 
-    def test_numeric_leaf_without_pii_preserves_int_type_and_value(self):
+    def test_numeric_leaf_should_preserve_int_type_and_value_when_it_has_no_pii(self):
         data = {"age": 30}
         with warnings.catch_warnings(record=True) as rec:
             warnings.simplefilter("always")
@@ -225,7 +225,7 @@ class TestNumericLeafScope:
         assert type(out["age"]) is int
         assert not [w for w in rec if "numeric" in str(w.message)]
 
-    def test_numeric_leaf_without_pii_preserves_float_fidelity(self):
+    def test_numeric_leaf_should_preserve_float_fidelity_when_it_has_no_pii(self):
         data = {"score": 3.14159}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -233,7 +233,7 @@ class TestNumericLeafScope:
         assert out["score"] == 3.14159
         assert type(out["score"]) is float
 
-    def test_numeric_leaf_without_pii_preserves_large_int_fidelity(self):
+    def test_numeric_leaf_should_preserve_large_int_fidelity_when_it_has_no_pii(self):
         # Arbitrary-precision Python ints (beyond 64-bit range) must round-trip
         # byte-for-byte — the leaf is never actually coerced in the output, only
         # probed as a string for detection.
@@ -245,7 +245,7 @@ class TestNumericLeafScope:
         assert out["ref"] == big
         assert type(out["ref"]) is int
 
-    def test_ordinary_numeric_and_bool_and_none_do_not_warn(self):
+    def test_ordinary_numeric_bool_and_none_should_not_warn(self):
         data = {"age": 30, "active": True, "deleted": None}
         with warnings.catch_warnings(record=True) as rec:
             warnings.simplefilter("always")
@@ -267,7 +267,7 @@ class TestStructuredAliases:
         assert aliases.get(fake), "realistic person faker must emit aliases"
         return fake, aliases[fake][0]
 
-    def test_realistic_alias_survives_structured_json_restore(self):
+    def test_realistic_alias_should_survive_structured_json_restore(self):
         data = {"note": "我叫张伟，请联系我"}
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -275,12 +275,13 @@ class TestStructuredAliases:
                 data, mode="fast", lang="zh", salt=42, config=self._CFG, with_aliases=True
             )
         _fake, alias = self._fake_and_alias(key, aliases, "张伟")
+
         # An LLM rewrote the fake into its (pinyin) alias form.
         llm_out = {"reply": f"你好 {alias}"}
         restored = restore_json(llm_out, key, aliases=aliases)
         assert "张伟" in restored["reply"]
 
-    def test_json_alias_is_not_restored_without_aliases(self):
+    def test_json_alias_should_not_be_restored_when_aliases_are_omitted(self):
         # Non-vacuity: the alias only round-trips because aliases were threaded.
         data = {"note": "我叫张伟，请联系我"}
         with warnings.catch_warnings():
@@ -292,7 +293,7 @@ class TestStructuredAliases:
         restored = restore_json({"reply": f"你好 {alias}"}, key)
         assert "张伟" not in restored["reply"]
 
-    def test_realistic_alias_survives_structured_csv_restore(self):
+    def test_realistic_alias_should_survive_structured_csv_restore(self):
         csv_text = "note\n我叫张伟"
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -303,8 +304,9 @@ class TestStructuredAliases:
         restored = restore_csv(f"note\n你好{alias}", key, aliases=aliases)
         assert "张伟" in restored
 
-    def test_with_aliases_is_opt_in_default_arity_unchanged(self):
+    def test_with_aliases_should_be_opt_in_with_unchanged_default_arity(self):
         data = {"note": "我叫张伟"}
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             assert len(redact_json(data, mode="fast", salt=42, config=self._CFG)) == 2
@@ -336,19 +338,19 @@ class TestStructuredAliasesRejection:
     `_normalize_aliases` seam — a malformed shape must raise ValueError
     before the document/CSV is ever walked, not silently corrupt it."""
 
-    def test_restore_json_rejects_bare_string_alias_value(self):
+    def test_restore_json_should_reject_bare_string_alias_value(self):
         with pytest.raises(ValueError):
             restore_json({"note": "hello"}, {"P-1": "Alice"}, aliases={"P-1": "abc"})
 
-    def test_restore_json_rejects_non_str_alias_element(self):
+    def test_restore_json_should_reject_non_str_alias_element(self):
         with pytest.raises(ValueError):
             restore_json({"note": "hello"}, {"P-1": "Alice"}, aliases={"P-1": [123]})
 
-    def test_restore_csv_rejects_bare_string_alias_value(self):
+    def test_restore_csv_should_reject_bare_string_alias_value(self):
         with pytest.raises(ValueError):
             restore_csv("note\nhello", {"P-1": "Alice"}, aliases={"P-1": "abc"})
 
-    def test_restore_csv_rejects_non_str_alias_element(self):
+    def test_restore_csv_should_reject_non_str_alias_element(self):
         with pytest.raises(ValueError):
             restore_csv("note\nhello", {"P-1": "Alice"}, aliases={"P-1": [123]})
 
@@ -359,7 +361,7 @@ class TestStructuredAliasesRejection:
 
 
 class TestHeaderProbeNoWaste:
-    def test_header_probe_does_not_re_emit_low_entropy_salt_warning(self):
+    def test_header_probe_should_not_re_emit_low_entropy_salt_warning(self):
         # A PII header row (triggers the header warning) with a low-entropy salt.
         # Exactly ONE low-entropy-salt warning (the document-level one) must fire
         # — not one per header cell from a full redact() probe.
@@ -370,7 +372,7 @@ class TestHeaderProbeNoWaste:
         salt_warnings = [w for w in rec if "low-entropy salt" in str(w.message)]
         assert len(salt_warnings) == 1, f"probe re-emitted salt warnings: {len(salt_warnings)}"
 
-    def test_header_probe_still_warns_when_header_carries_pii(self):
+    def test_header_probe_should_warn_when_header_carries_pii(self):
         csv_text = "张三,13812345678\n李四,15900001234"
         with pytest.warns(SecurityWarning, match="header"):
             redact_csv(csv_text, mode="fast", salt=_HI_SALT, has_header=True)

@@ -12,11 +12,11 @@ from argus_redact.exceptions import SecurityWarning
 from argus_redact.pure.replacer import coverage_restored_event, warn_coverage_restored
 
 
-def test_event_is_none_when_nothing_was_restored():
+def test_coverage_restored_event_should_return_none_when_nothing_was_restored():
     assert coverage_restored_event([]) is None
 
 
-def test_event_names_types_only_and_counts_them():
+def test_coverage_restored_event_should_report_types_and_counts_when_types_were_restored():
     event = coverage_restored_event(["phone", "id_number", "phone"])
     assert event["type"] == "security"
     assert event["reason_code"] == "coverage_restored"
@@ -25,12 +25,12 @@ def test_event_names_types_only_and_counts_them():
     assert event["detail"] == "types: id_number, phone"
 
 
-def test_warning_is_silent_when_nothing_was_restored():
+def test_warn_coverage_restored_should_stay_silent_when_nothing_was_restored():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         warn_coverage_restored([])
 
 
-def test_warning_names_the_count_and_is_a_security_warning():
+def test_warn_coverage_restored_should_emit_security_warning_when_types_were_restored():
     with pytest.warns(SecurityWarning, match="coverage"):
         warn_coverage_restored(["phone", "id_number"])

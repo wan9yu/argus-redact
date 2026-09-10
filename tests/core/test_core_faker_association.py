@@ -49,7 +49,7 @@ _BUILTIN_PAIRS = {
 }
 
 
-def test_builtin_faker_name_matches_registry():
+def test_builtin_faker_name_should_match_the_registry_for_every_pair():
     """Every built-in (type, lang) resolves to its associated faker name, and
     each such type is actually registered for that lang (the SSOT pairing)."""
     n = 0
@@ -63,7 +63,7 @@ def test_builtin_faker_name_matches_registry():
     assert n >= 20  # all built-in (type,lang) pairs covered
 
 
-def test_resolver_agrees_with_core_association():
+def test_resolver_should_agree_with_the_core_association_for_every_pair():
     """`_resolve_realistic_faker` (the lang-pref resolver the redact path uses)
     resolves to the associated built-in faker name when its single detected lang
     is the type's registered lang."""
@@ -75,9 +75,9 @@ def test_resolver_agrees_with_core_association():
         assert ref == expected, (type_, lang)
 
 
-def test_builtin_faker_names_matches_pairs():
+def test_builtin_faker_names_should_match_all_builtin_pairs():
     assert set(_core.builtin_faker_names()) == set(_BUILTIN_PAIRS.values())
 
 
-def test_builtin_faker_name_unknown_returns_none():
+def test_builtin_faker_name_should_return_none_for_an_unknown_type():
     assert _core.builtin_faker_name("nonexistent_type", "zh") is None

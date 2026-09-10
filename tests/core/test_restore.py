@@ -325,7 +325,7 @@ class TestRestoreErrors:
 class TestRestoreAutoDetectsMarkers:
     """v0.6.0: restore() automatically strips known preset markers."""
 
-    def test_auto_strips_circled_f(self):
+    def test_restore_should_strip_circled_f_marker_automatically(self):
         from argus_redact.pure.restore import restore
 
         # Pretend display_text has 19999... fake with ⓕ marker appended
@@ -334,7 +334,7 @@ class TestRestoreAutoDetectsMarkers:
         out = restore(text, key, guard=False)
         assert out == "Call 13800138000ⓕ"
 
-    def test_auto_strips_chinese_marker(self):
+    def test_restore_should_strip_chinese_marker_automatically(self):
         from argus_redact.pure.restore import restore
 
         text = "联系张明(假)"
@@ -342,7 +342,7 @@ class TestRestoreAutoDetectsMarkers:
         out = restore(text, key, guard=False)
         assert out == "联系王建国(假)"
 
-    def test_explicit_marker_still_works(self):
+    def test_restore_should_strip_marker_when_explicit_marker_given(self):
         from argus_redact.pure.restore import restore
 
         text = "联系张明🌟"
@@ -350,7 +350,7 @@ class TestRestoreAutoDetectsMarkers:
         out = restore(text, key, display_marker="🌟", guard=False)
         assert out == "联系王建国"
 
-    def test_unknown_custom_marker_still_silent(self):
+    def test_restore_should_leave_unknown_custom_marker_unstripped(self):
         # User-defined custom marker not in presets → caller must pass display_marker=
         from argus_redact.pure.restore import restore
 
@@ -419,21 +419,21 @@ class TestRestoreKeyFileLoadIsGlueOnly:
     accepts only an in-memory Mapping. The public ``argus_redact.restore``
     (glue wrapper) still accepts a ``str`` path for back-compat."""
 
-    def test_pure_restore_accepts_in_memory_mapping(self):
+    def test_pure_restore_should_accept_in_memory_mapping(self):
         from argus_redact.pure.restore import restore as _pure_restore
 
         result = _pure_restore("P-037 is here", {"P-037": "王五"}, guard=False)
 
         assert result == "王五 is here"
 
-    def test_pure_restore_rejects_str_path(self):
+    def test_pure_restore_should_reject_str_path(self):
         # pure layer is I/O-free: a str is no longer a "load this file" signal.
         from argus_redact.pure.restore import restore as _pure_restore
 
         with pytest.raises(TypeError):
             _pure_restore("text", "key.json")
 
-    def test_public_restore_loads_key_file_path(self, tmp_path):
+    def test_public_restore_should_load_key_from_file_path(self, tmp_path):
         import json
 
         from argus_redact import restore as public_restore
@@ -445,7 +445,7 @@ class TestRestoreKeyFileLoadIsGlueOnly:
 
         assert result == "王五 是好人"
 
-    def test_pure_restore_module_is_filesystem_free(self):
+    def test_pure_restore_module_should_be_filesystem_free(self):
         """Structural guard: pure/restore.py must not import the project's
         filesystem helper or json (those moved to glue/restore.py)."""
         import ast

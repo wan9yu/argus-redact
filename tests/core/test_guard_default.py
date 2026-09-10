@@ -22,21 +22,21 @@ from argus_redact.compose.anchor import make_anchor
 from argus_redact.exceptions import SecurityWarning
 
 
-def test_bare_restore_fails_closed_by_default():
+def test_restore_should_fail_closed_when_no_anchor_given():
     """(a) No guard=, no anchor → fail closed; the original is NOT reinserted."""
     result = restore("x P-1 y", {"P-1": "Alice"})
     assert "Alice" not in result
     assert "P-1" in result  # placeholder left in place
 
 
-def test_bare_restore_detailed_reports_guard_no_anchor():
+def test_restore_detailed_should_report_guard_no_anchor_when_no_anchor_given():
     result, details = restore("x P-1 y", {"P-1": "Alice"}, detailed=True)
     assert "Alice" not in result
     codes = [e["reason_code"] for e in details["security_events"]]
     assert "guard_no_anchor" in codes
 
 
-def test_guard_true_with_anchor_round_trips():
+def test_restore_should_round_trip_when_guard_true_with_valid_anchor():
     key = {"P-1": "Alice"}
     anchor = make_anchor(key)
     text = f"hello P-1\n{anchor.nonce}"
@@ -48,7 +48,7 @@ def test_guard_true_with_anchor_round_trips():
 # --- R4: the visible-consequence SecurityWarning ---------------------------
 
 
-def test_guard_none_substituting_emits_security_warning():
+def test_restore_should_emit_security_warning_when_guard_none_substitutes():
     """(b) guard=None that actually substitutes → a SecurityWarning (R4)."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -59,7 +59,7 @@ def test_guard_none_substituting_emits_security_warning():
     )
 
 
-def test_guard_none_still_emits_deprecation_warning():
+def test_restore_should_emit_distinct_deprecation_and_security_warnings_when_guard_none():
     """The migration DeprecationWarning is a DISTINCT warning from R4's SecurityWarning."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -72,7 +72,7 @@ def test_guard_none_still_emits_deprecation_warning():
     assert DeprecationWarning not in {SecurityWarning}
 
 
-def test_guard_none_no_substitution_no_security_warning():
+def test_restore_should_skip_security_warning_when_guard_none_substitutes_nothing():
     """(b) guard=None that substitutes NOTHING → no SecurityWarning (still deprecated)."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -85,7 +85,7 @@ def test_guard_none_no_substitution_no_security_warning():
     assert any(issubclass(w.category, DeprecationWarning) for w in caught)
 
 
-def test_guard_false_is_silent_even_when_substituting():
+def test_restore_should_stay_silent_when_guard_false_even_while_substituting():
     """guard=False is the informed opt-out — NO SecurityWarning, NO DeprecationWarning."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -95,13 +95,13 @@ def test_guard_false_is_silent_even_when_substituting():
     assert not any(issubclass(w.category, DeprecationWarning) for w in caught)
 
 
-def test_guard_false_detailed_returns_empty_events():
+def test_restore_detailed_should_return_empty_events_when_guard_false():
     result, details = restore("x P-1 y", {"P-1": "Alice"}, guard=False, detailed=True)
     assert "Alice" in result
     assert details["security_events"] == []
 
 
-def test_fail_closed_logs_to_ops_channel(caplog):
+def test_fail_closed_should_log_pii_free_warning_to_ops_channel(caplog):
     """_fail_closed emits a PII-free logger.warning (no per-callsite dedup)."""
     import logging
 

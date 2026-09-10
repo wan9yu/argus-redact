@@ -63,10 +63,12 @@ class TestFakeDateOfBirthNoise:
         assert aliases == []
         m = re.search(r"(\d{4})-(\d{2})-(\d{2})", result)
         assert m is not None
+
         year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
         original = date(1990, 3, 15)
         shifted = date(year, month, day)
         delta_days = abs((shifted - original).days)
+
         assert delta_days <= 30, f"Got delta {delta_days}d"
         assert result != "出生日期1990-03-15", "Identity mapping not avoided"
 

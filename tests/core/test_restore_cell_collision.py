@@ -24,7 +24,7 @@ from argus_redact.structured import restore_csv, restore_json
 
 
 class TestBenignLiteralCollisionIsRestoredJSON:
-    def test_a_cell_literal_equal_to_a_pseudonym_code_is_restored(self):
+    def test_restore_json_should_restore_a_cell_literal_that_coincidentally_matches_a_code(self):
         key = {"P-00037": "王五"}
         data = {"literal_field": "P-00037", "unrelated": "hello"}
 
@@ -35,7 +35,7 @@ class TestBenignLiteralCollisionIsRestoredJSON:
 
 
 class TestBenignLiteralCollisionIsRestoredCSV:
-    def test_a_cell_literal_equal_to_a_pseudonym_code_is_restored(self):
+    def test_restore_csv_should_restore_a_cell_literal_that_coincidentally_matches_a_code(self):
         key = {"P-00037": "王五"}
         csv_text = "code,note\nP-00037,literal not a real placeholder\n"
 
@@ -46,10 +46,10 @@ class TestBenignLiteralCollisionIsRestoredCSV:
 
 
 class TestDocstringDocumentsTheHazard:
-    def test_restore_json_docstring_documents_the_collision_hazard(self):
+    def test_restore_json_docstring_should_document_the_collision_hazard(self):
         doc = (inspect.getdoc(restore_json) or "").lower()
         assert "coincidentally" in doc or "coincidental" in doc
 
-    def test_restore_csv_docstring_documents_the_collision_hazard(self):
+    def test_restore_csv_docstring_should_document_the_collision_hazard(self):
         doc = (inspect.getdoc(restore_csv) or "").lower()
         assert "coincidentally" in doc or "coincidental" in doc

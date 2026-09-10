@@ -11,6 +11,7 @@ class TestWithTypes:
             salt=42,
             with_types=True,
         )
+
         assert isinstance(types, dict)
         assert len(types) == len(key)
         for replacement in key:

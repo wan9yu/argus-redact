@@ -14,28 +14,28 @@ def _self_ref(text: str) -> PatternMatch:
 
 
 class TestKinshipLookup:
-    def test_zh_kinship_exact_match(self):
+    def test_is_kinship_should_return_true_when_input_is_zh_kinship_term(self):
         assert _is_kinship(_self_ref("我妈妈"))
         assert _is_kinship(_self_ref("我家人"))
 
-    def test_en_kinship_prefix_match(self):
+    def test_is_kinship_should_return_true_when_input_is_en_kinship_prefix(self):
         assert _is_kinship(_self_ref("my mother"))
         assert _is_kinship(_self_ref("my brother"))
 
-    def test_unknown_text_is_not_kinship(self):
+    def test_is_kinship_should_return_false_when_input_is_unrelated_text(self):
         assert not _is_kinship(_self_ref("我"))
         assert not _is_kinship(_self_ref("hello world"))
 
 
 class TestCommandLookup:
-    def test_zh_command_prefix(self):
+    def test_is_interaction_command_should_return_true_when_zh_command_prefix_given(self):
         assert _is_interaction_command("帮我查一下电话号码")
         assert _is_interaction_command("我想知道这个人的地址")
 
-    def test_en_command_pattern(self):
+    def test_is_interaction_command_should_return_true_when_en_command_pattern_given(self):
         assert _is_interaction_command("Can you help me find my passport?")
         assert _is_interaction_command("Please tell me the phone number.")
 
-    def test_narrative_text_is_not_command(self):
+    def test_is_interaction_command_should_return_false_when_text_is_narrative(self):
         assert not _is_interaction_command("张明今天去了北京")
         assert not _is_interaction_command("The meeting was held in Tokyo.")

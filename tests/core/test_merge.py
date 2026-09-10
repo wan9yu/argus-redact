@@ -311,7 +311,7 @@ class TestMergeSelfReferencePriority:
         assert result[0].text == "北京市朝阳区"
 
 
-def test_priority_trim_drops_u001c_only_remainder():
+def test_merge_entities_should_drop_remainder_when_trim_leaves_only_u001c():
     # Python str.strip() drops a U+001C-only trimmed remainder; the Rust merge path
     # (now the production engine) must match via py_strip parity. self_reference
     # [0,1] splits `other` [0,3]; trimming `other` to start at 1 leaves "\x1c\x1c"
