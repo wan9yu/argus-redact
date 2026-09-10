@@ -12,3 +12,8 @@ htmlcov/
 tests/
 docs/
 .claude/
+target/
+.venv/
+*.so
+*.dSYM
+.DS_Store

@@ -1,11 +1,47 @@
-FROM python:3.12-slim
+# Two-stage build: the wheel is compiled from the Rust core (crates/) and the
+# Python layer (src/) via maturin, then installed into a Rust-free runtime
+# image. The build stage's Python version must match the runtime's — this
+# wheel is not abi3, so it is cp312-specific.
+
+# Base pinned to python:3.12-slim-bookworm. release.yml pins its manylinux/
+# musllinux CI containers by @sha256 digest for full reproducibility; append
+# a "@sha256:<digest>" here too if that same guarantee is needed locally.
+FROM python:3.12-slim-bookworm AS builder
+
+WORKDIR /build
+
+# Rust toolchain pinned to 1.85.0 — tracks the workspace Cargo.toml
+# `rust-version` key; bump both together.
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        patchelf \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- \
+        -y --profile minimal --default-toolchain 1.85.0 \
+    && rustc --version && cargo --version \
+    && pip install --no-cache-dir maturin
+
+# Full maturin input set: the manifest-path crate, the whole workspace it
+# depends on, the Python source tree, and the packaging metadata.
+COPY pyproject.toml README.md LICENSE Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+COPY src/ src/
+
+RUN maturin build --release --locked --interpreter python3.12 --out /dist
+
+# --- runtime: no Rust toolchain, just the prebuilt wheel ---
+FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
-COPY pyproject.toml README.md LICENSE ./
-COPY src/ src/
+COPY --from=builder /dist /dist
 
-RUN pip install --no-cache-dir . requests
+RUN pip install --no-cache-dir /dist/*.whl requests
 
 ENV OLLAMA_HOST=http://host.docker.internal:11434
 
