@@ -94,16 +94,28 @@ def _body_start_line(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
 def test_nontrivial_test_bodies_should_be_grouped_with_blank_lines() -> None:
     # A body of >=10 code lines with zero blank-line grouping is a wall; the
     # convention wants given/when/then separated by blank lines. The threshold
-    # stays generous so short tests and single cohesive loops (a for-loop with an
-    # inline assert has no natural blank point) never trip -- it targets genuine
-    # ungrouped walls, not every multi-line test.
+    # stays generous so short tests never trip. A body that is a SINGLE statement
+    # is never a wall however long it runs -- a multi-line collection literal in
+    # one `assert x == [...]`, or a single for-loop with an inline assert, is
+    # cohesive and has no natural blank point (its line count is data, not
+    # ungrouped steps). Only bodies with >=2 statements can be "ungrouped", so
+    # the wall check targets those -- genuine walls, not every multi-line test.
     offenders: list[str] = []
     for f, node, src in _test_functions():
         lines = src.splitlines()
         span = lines[_body_start_line(node) - 1 : node.end_lineno]
         code = [ln for ln in span if ln.strip() and not ln.strip().startswith("#")]
         blanks = [ln for ln in span if not ln.strip()]
-        if len(code) >= 10 and not blanks:
+        statements = [
+            n
+            for n in node.body
+            if not (
+                isinstance(n, ast.Expr)
+                and isinstance(n.value, ast.Constant)
+                and isinstance(n.value.value, str)
+            )
+        ]
+        if len(code) >= 10 and not blanks and len(statements) >= 2:
             offenders.append(
                 f"{f.relative_to(TESTS.parent)}::{node.name} ({len(code)} code lines, 0 blanks)"
             )

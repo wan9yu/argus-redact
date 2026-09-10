@@ -16,7 +16,6 @@ import argus_redact._core as _core
 
 def test_reserved_person_names_zh_should_match_the_frozen_order():
     assert list(_core.reserved_person_names_zh()) == [
-
         "张三",
         "李四",
         "王五",
@@ -35,7 +34,6 @@ def test_reserved_person_names_zh_should_match_the_frozen_order():
 
 def test_reserved_person_names_aliases_zh_should_match_the_frozen_order():
     assert list(_core.reserved_person_names_aliases_zh()) == [
-
         ("张三", ["Zhang San", "Zhang3", "ZhangSan"]),
         ("李四", ["Li Si", "Li4", "LiSi"]),
         ("王五", ["Wang Wu", "Wang5", "WangWu"]),
@@ -65,7 +63,6 @@ def test_reserved_cities_zh_should_match_the_frozen_order():
 
 def test_reserved_addresses_zh_aliases_should_match_the_frozen_order():
     assert list(_core.reserved_addresses_zh_aliases()) == [
-
         (("滨海市", "东江区", "八荒街"), ["Bahuang Street, Dongjiang District, Binhai City"]),
         (("滨海市", "东江区", "九垣街"), ["Jiuyuan Street, Dongjiang District, Binhai City"]),
         (("滨海市", "东江区", "十方路"), ["Shifang Road, Dongjiang District, Binhai City"]),
@@ -83,7 +80,6 @@ def test_reserved_addresses_zh_aliases_should_match_the_frozen_order():
 
 def test_reserved_person_names_en_should_match_the_frozen_order():
     assert list(_core.reserved_person_names_en()) == [
-
         "John Doe",
         "Jane Doe",
         "Jane Roe",
@@ -99,7 +95,6 @@ def test_reserved_person_names_en_should_match_the_frozen_order():
 
 def test_reserved_person_names_aliases_en_should_match_the_frozen_order():
     assert list(_core.reserved_person_names_aliases_en()) == [
-
         ("John Doe", ["约翰·多伊", "约翰多伊"]),
         ("Jane Doe", ["简·多伊", "简多伊"]),
         ("Jane Roe", ["简·罗", "简罗"]),

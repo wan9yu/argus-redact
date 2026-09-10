@@ -149,9 +149,7 @@ class TestUnionAndAllowlistBehaviour:
 
         assert {p.name for p in resolved} == {"junit-x.xml", "junit-y.xml"}
 
-    def test_resolve_junit_paths_should_resolve_the_path_when_given_a_literal_path(
-        self, tmp_path
-    ):
+    def test_resolve_junit_paths_should_resolve_the_path_when_given_a_literal_path(self, tmp_path):
         target = tmp_path / "junit-local.xml"
         target.write_text("<testsuites/>", encoding="utf-8")
 
