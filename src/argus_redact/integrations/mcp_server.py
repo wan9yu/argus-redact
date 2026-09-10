@@ -36,7 +36,7 @@ mcp = MCPServer("argus-redact")
 # Process-scoped token store with idle TTL + LRU bound (v0.6.2+).
 # Pre-fix the store was unbounded and tokens never expired — combined with
 # no per-session binding, a leaked token could be replayed indefinitely.
-# Per-session binding is a v0.7+ candidate (requires MCPServer API survey).
+# Per-session binding is not implemented (would require an MCPServer API survey).
 #
 _TOKEN_TTL_SECONDS = 5 * 60
 _TOKEN_STORE_MAX = 100

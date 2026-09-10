@@ -338,7 +338,7 @@ register(
         sensitivity=1,
         description=(
             "Date / temporal identifier — detected via NER or Presidio; "
-            "HIPAA shift-by-N is a v0.7+ candidate"
+            "HIPAA date shift-by-N is not implemented"
         ),
     )
 )

@@ -764,7 +764,7 @@ AWS IAM access key ID (does not cover the secret access key — that needs keywo
 | PIPL articles | PIPL Art.13, PIPL Art.51 |
 | HIPAA Safe Harbor | `dates` |
 
-Date / temporal identifier — detected via NER or Presidio; HIPAA shift-by-N is a v0.7+ candidate
+Date / temporal identifier — detected via NER or Presidio; HIPAA date shift-by-N is not implemented
 
 ### `email`
 
