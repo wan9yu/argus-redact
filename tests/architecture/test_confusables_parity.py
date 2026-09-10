@@ -39,14 +39,14 @@ EXPECTED_ENTRY_COUNT = 141
 EXPECTED_SHA256 = "38cd34fc6e2b72a85c5c8a7a4cefbff573f3a894a1962aea773a47287b800356"
 
 
-def test_ron_entry_count_frozen():
+def test_ron_entry_count_should_match_expected_frozen_count():
     text = _ron_text()
     # one "(...)," row per mapping; structural lines never end in "),"
     count = sum(1 for line in text.splitlines() if line.strip().endswith("),"))
     assert count == EXPECTED_ENTRY_COUNT, f"got {count} mapping rows"
 
 
-def test_ron_sha256_frozen():
+def test_ron_sha256_should_match_expected_frozen_hash():
     assert _sha(_ron_text()) == EXPECTED_SHA256
 
 
@@ -64,7 +64,7 @@ def _regen() -> str | None:
     return build_ron(text)[0]
 
 
-def test_ron_matches_live_generator():
+def test_ron_should_match_live_generator_output():
     regen = _regen()
     if regen is None:
         pytest.skip("specs.gen_confusables removed")

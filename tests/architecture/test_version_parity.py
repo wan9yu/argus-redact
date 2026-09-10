@@ -87,7 +87,7 @@ def _source_hash() -> str:
     return _hash_of_files(pairs)
 
 
-def test_pyproject_cargo_and_package_version_agree():
+def test_pyproject_cargo_and_package_versions_should_agree():
     import argus_redact
 
     py_ver = _pyproject_version()
@@ -103,7 +103,7 @@ def test_pyproject_cargo_and_package_version_agree():
     )
 
 
-def test_py_crate_pins_the_current_core_version():
+def test_py_crate_should_pin_the_current_core_version():
     """`crates/argus-redact-py/Cargo.toml` pins argus-redact-core by literal
     version, because a path dependency alone is not publishable. A stale pin
     fails at `cargo publish` — or publishes a py-crate pinning a core version
@@ -129,13 +129,13 @@ def test_py_crate_pins_the_current_core_version():
     )
 
 
-def test_build_stamp_exists():
+def test_core_extension_should_have_a_build_stamp():
     assert hasattr(_core, "__build__"), (
         "_core built without __build__ stamp (rebuild: maturin develop --release)"
     )
 
 
-def test_build_version_matches_source():
+def test_build_stamp_version_should_match_package_version():
     version, _hash = parse_build_stamp(_core.__build__)
     assert version == argus_redact.__version__
 
@@ -143,7 +143,7 @@ def test_build_version_matches_source():
 @pytest.mark.skipif(
     not (_REPO_ROOT / SOURCE_DIRS[0]).exists(), reason="source tree absent (sdist/wheel)"
 )
-def test_build_source_hash_matches_checkout():
+def test_build_stamp_hash_should_match_checkout_source():
     _version, baked = parse_build_stamp(_core.__build__)
     assert baked == _source_hash(), (
         "baked source hash != current checkout — _core is stale; rebuild: maturin develop --release"
@@ -158,5 +158,5 @@ _VECTOR_FILES = [("a.rs", b"alpha"), ("b/c.ron", b"beta"), ("z.rs", b"gamma")]
 _VECTOR_EXPECTED = "b5a7a18b4257178108b7b7f17030063393be16e8e8106a6d405634a344a896e4"
 
 
-def test_shared_vector_agrees():
+def test_hash_of_files_should_match_shared_vector():
     assert _hash_of_files(_VECTOR_FILES) == _VECTOR_EXPECTED

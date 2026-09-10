@@ -39,7 +39,7 @@ ENTRY_POINTS = [
     ENTRY_POINTS,
     ids=[lbl for _, lbl in ENTRY_POINTS],
 )
-def test_entry_point_uses_salt_not_seed(fn, label):
+def test_entry_point_signature_should_use_salt_not_seed(fn, label):
     sig = inspect.signature(fn)
     assert "salt" in sig.parameters, f"{label} missing 'salt' parameter (v0.6.8 canonical name)"
     assert "seed" not in sig.parameters, (
@@ -47,7 +47,7 @@ def test_entry_point_uses_salt_not_seed(fn, label):
     )
 
 
-def test_seed_kwarg_raises_typeerror():
+def test_redact_should_raise_typeerror_when_called_with_seed_kwarg():
     """Passing seed= must raise TypeError (Python's default for unknown kwargs)."""
     with pytest.raises(TypeError):
         redact("test text", seed=42, lang="en")

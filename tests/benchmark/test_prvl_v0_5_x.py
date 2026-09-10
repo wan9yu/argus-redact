@@ -88,7 +88,7 @@ SCENARIOS = {
 class TestPRvLv0_5xBaselineFixtureContract:
     """Always runs (no LLM). Verifies the committed baseline file contract."""
 
-    def test_fixture_shape_when_present(self):
+    def test_baseline_fixture_should_have_required_fields_when_present(self):
         if not FIXTURE_PATH.exists():
             pytest.skip("baseline fixture not committed yet; run with POE_API_KEY first")
         try:
@@ -97,6 +97,7 @@ class TestPRvLv0_5xBaselineFixtureContract:
             pytest.fail(f"baseline fixture is not valid JSON: {e}")
         if not data:
             pytest.skip("baseline fixture is empty (placeholder); run with POE_API_KEY")
+
         for scenario in SCENARIOS:
             for llm in LLMS:
                 key = f"{scenario}|{llm}"
@@ -116,7 +117,7 @@ class TestPRvLv0_5xBaselineRun:
     iterates SCENARIOS × LLMS by hand when running with API access.
     """
 
-    def test_run_baseline_manually(self):
+    def test_baseline_run_should_skip_with_manual_instructions(self):
         # Implementation: for each (scenario, llm), call default redact +
         # pseudonym-llm; send each downstream to the LLM via Poe API; restore
         # both; compute R/U/L. Maintainer captures numbers into the fixture

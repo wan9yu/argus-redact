@@ -8,7 +8,7 @@ import pytest
 from argus_redact.cli import main as cli
 
 
-def test_safe_read_text_refuses_symlink(tmp_path):
+def test_safe_read_text_should_refuse_symlink(tmp_path):
     """The refusal itself, at its birth site — O_NOFOLLOW raises OSError."""
     from argus_redact._safe_io import safe_read_text
 
@@ -20,7 +20,7 @@ def test_safe_read_text_refuses_symlink(tmp_path):
         safe_read_text(str(link))
 
 
-def test_read_input_refuses_symlink(tmp_path, capsys):
+def test_read_input_should_refuse_symlink_without_leaking(tmp_path, capsys):
     """The CLI still refuses, but reports it rather than emitting a traceback.
 
     Previously ``_read_input`` let the ``OSError`` escape, so an operator who
@@ -43,14 +43,16 @@ def test_read_input_refuses_symlink(tmp_path, capsys):
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits")
-def test_write_output_key_mode_0600(tmp_path):
+def test_write_output_should_set_mode_0600(tmp_path):
     out = tmp_path / "out.json"
     cli._write_output('{"key": "x"}', str(out), mode=0o600)
     assert stat.S_IMODE(out.stat().st_mode) == 0o600
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode bits")
-def test_write_output_0600_enforced_over_existing_world_readable(tmp_path):
+def test_write_output_should_enforce_mode_0600_when_overwriting_world_readable_file(
+    tmp_path,
+):
     # A pre-existing world-readable target must be locked down to 0o600 when a
     # key-bearing payload is written into it (os.open mode applies only on create).
     out = tmp_path / "out.json"

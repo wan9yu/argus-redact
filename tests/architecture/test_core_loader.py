@@ -5,7 +5,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_core_loader_exports_has_core_and_underscore_core():
+def test_core_loader_should_export_has_core_and_underscore_core():
     from argus_redact._core_loader import HAS_CORE, _core
 
     assert isinstance(HAS_CORE, bool)
@@ -15,7 +15,7 @@ def test_core_loader_exports_has_core_and_underscore_core():
         assert _core is None
 
 
-def test_no_module_level_core_import_in_consumers():
+def test_consumers_should_not_import_core_at_module_level():
     """Each consumer must go through _core_loader, not its own try-import.
 
     Module-level try-blocks like:
@@ -32,6 +32,7 @@ def test_no_module_level_core_import_in_consumers():
         "src/argus_redact/pure/pseudonym.py",
         "src/argus_redact/glue/redact.py",
     ]
+
     for rel in consumers:
         src = (REPO_ROOT / rel).read_text(encoding="utf-8")
         assert "\ntry:\n    from argus_redact._core" not in src, (

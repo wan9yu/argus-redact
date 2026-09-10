@@ -10,7 +10,7 @@ SRC = pathlib.Path(__file__).resolve().parents[2] / "src" / "argus_redact"
 _PAT = re.compile(r"\bproduce_hints\b(?!_l1)")
 
 
-def test_produce_hints_has_no_production_caller():
+def test_produce_hints_should_have_no_production_caller():
     offenders = []
     for py in SRC.rglob("*.py"):
         if py.name == "hints.py":

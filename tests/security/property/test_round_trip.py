@@ -20,7 +20,7 @@ from tests.security.property.conftest import PROPERTY_SETTINGS
     text=st.text(min_size=1, max_size=200),
     salt=st.binary(min_size=32, max_size=32),
 )
-def test_round_trip_zh(text, salt):
+def test_round_trip_should_recover_the_original_when_lang_is_zh(text, salt):
     """For arbitrary text under zh, full round-trip recovers the original."""
     r = redact_pseudonym_llm(text, salt=salt, lang="zh", _polluted_input_ok=True)
     assert restore(r.downstream_text, r.key, guard=False) == text
@@ -31,7 +31,7 @@ def test_round_trip_zh(text, salt):
     text=st.text(min_size=1, max_size=200),
     salt=st.binary(min_size=32, max_size=32),
 )
-def test_round_trip_en(text, salt):
+def test_round_trip_should_recover_the_original_when_lang_is_en(text, salt):
     """Same property under en."""
     r = redact_pseudonym_llm(text, salt=salt, lang="en", _polluted_input_ok=True)
     assert restore(r.downstream_text, r.key, guard=False) == text

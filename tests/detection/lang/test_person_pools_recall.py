@@ -34,7 +34,7 @@ def _redacted_names(text: str, lang: str) -> list[str]:
 
 
 class TestEnRecall:
-    def test_accented_renee_muller(self):
+    def test_accented_muller_name_should_be_redacted(self):
         # Müller (surname) + Renée (given). redact() folds the accents before the
         # pool lookup, so the de-accented pool entry matches and the span maps
         # back to the ORIGINAL accented text in the restore key.
@@ -42,7 +42,7 @@ class TestEnRecall:
         assert "Müller" not in out
         assert any("Müller" in v for v in key.values())
 
-    def test_hyphen_jean_paul_sartre(self):
+    def test_sartre_should_be_detected_with_hyphenated_given_name(self):
         # Sartre (surname) + Jean-Paul (hyphenated given token, NOT in the given
         # pool → bare pair). The leading token is name-like (the pool-independent
         # signal), so fast-mode L1 emits it WITHOUT extra corroboration; the
@@ -52,18 +52,18 @@ class TestEnRecall:
             "Sartre" in t for t in _redacted_names("Jean-Paul Sartre, phone 4155551234", "en")
         )
 
-    def test_japanese_hiro_suzuki(self):
+    def test_suzuki_should_be_detected_via_given_name_pool(self):
         # Hiro IS in the given pool → given-name-led, emitted with no corroboration.
         assert any("Suzuki" in t for t in _redacted_names("Hiro Suzuki", "en"))
 
-    def test_italian_marco_rossi(self):
+    def test_rossi_should_be_detected_as_bare_surname_pair(self):
         # Marco is NOT in the given pool → bare pair; "Marco" is name-like (the
         # pool-independent signal), so fast-mode L1 emits it on its own (Rossi is
         # the pool-growth surname being pinned). The phone is kept as an extra
         # corroborating signal.
         assert any("Rossi" in t for t in _redacted_names("Marco Rossi, phone 4155551234", "en"))
 
-    def test_south_asian_priya_sharma(self):
+    def test_sharma_should_be_detected(self):
         assert any("Sharma" in t for t in _redacted_names("Priya Sharma", "en"))
 
 
@@ -75,11 +75,11 @@ class TestEnRecall:
 
 
 class TestZhRecall:
-    def test_mo_yan_detects(self):
+    def test_mo_yan_should_be_detected(self):
         # 莫言 (Mo Yan) — the required added-surname recall case.
         assert "莫言" in _redacted_names("我叫莫言", "zh")
 
-    def test_teng_added_surname_detects(self):
+    def test_teng_surname_should_be_detected(self):
         # 滕 — a second added surname, confirming the growth is not a one-off.
         assert any("滕" in v for v in _redacted_names("联系人滕华", "zh"))
 
@@ -88,30 +88,30 @@ class TestZhRecall:
 
 
 class TestZhPrecisionGuard:
-    def test_mo_ming_plain_not_a_name(self):
+    def test_mo_ming_idiom_should_not_be_redacted(self):
         # 莫名其妙 (the idiom) — 莫名 must NOT be redacted as a name in plain
         # prose. 莫 was added for 莫言, and its only common 2-char word (莫名) must
         # stay clear absent an evidence prefix.
         assert _redacted_names("这件事真让人莫名其妙", "zh") == []
 
-    def test_mo_ming_with_context_prefix_not_a_name(self):
+    def test_mo_ming_should_not_be_redacted_when_prefixed_with_context(self):
         # 莫 is a real surname (莫言) but 莫名(其妙) is a common idiom; a glued
         # context-prefix must NOT make 莫名 a name.
         assert _redacted_names("负责人莫名其妙地拒绝了", "zh") == []
         assert _redacted_names("客户莫名担心", "zh") == []
 
-    def test_weng_idiom_not_a_name(self):
+    def test_weng_idioms_should_not_be_redacted(self):
         # 翁 was added (e.g. 翁帆); 塞翁失马 and 富翁 must not redact as names.
         assert _redacted_names("塞翁失马焉知非福", "zh") == []
         assert _redacted_names("他是个亿万富翁", "zh") == []
 
-    def test_chou_mou_not_a_name(self):
+    def test_chou_mou_idiom_should_not_be_redacted(self):
         # 缪 was added (e.g. 缪斯/绸缪 surname is 2nd char); 未雨绸缪 must not redact.
         assert _redacted_names("我们应该未雨绸缪", "zh") == []
 
 
 class TestEnPrecisionGuard:
-    def test_dropped_ferrari_not_a_surname(self):
+    def test_ferrari_should_not_be_detected_as_surname(self):
         # Ferrari was DROPPED for FP risk (ubiquitous car brand). It must NOT be
         # in the surname pool, so "the Ferrari" never anchors a person match.
         from argus_redact.lang.en.person import detect_person_names as d

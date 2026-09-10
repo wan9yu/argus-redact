@@ -27,7 +27,7 @@ _HAS_STARLETTE = importlib.util.find_spec("starlette") is not None
 
 
 class TestOllamaHostValidationDoesNotLeakCredentials:
-    def test_bad_scheme_error_excludes_userinfo(self):
+    def test_validate_ollama_host_should_omit_credentials_when_scheme_is_disallowed(self):
         # socks5:// is rejected by the scheme check before the loopback check
         # ever runs. The message must not carry the embedded user:s3cret
         # userinfo — only the scheme and hostname, which are enough to explain
@@ -46,7 +46,7 @@ class TestOllamaHostValidationDoesNotLeakCredentials:
         assert "socks5" in message
         assert "host" in message
 
-    def test_non_loopback_error_excludes_userinfo(self):
+    def test_validate_ollama_host_should_omit_credentials_when_host_is_non_loopback(self):
         # A non-loopback http(s) host with embedded credentials must also be
         # rejected (absent the remote opt-in) without echoing the userinfo.
         host = "http://user:s3cret@evil.example.com:11434"
@@ -70,7 +70,7 @@ class TestOllamaHostValidatorSourceNeverInterpolatesRawBaseUrl:
     # broad grep over every module would be brittle (see the module
     # docstring); pinning the source of the single known offender is not —
     # the source only changes when someone deliberately edits this function.
-    def test_source_never_interpolates_base_url_into_a_message(self):
+    def test_validate_ollama_host_source_should_not_interpolate_raw_base_url(self):
         source = inspect.getsource(_validate_ollama_host)
         assert "{base_url" not in source, (
             "_validate_ollama_host must not interpolate the raw base_url "
@@ -78,7 +78,7 @@ class TestOllamaHostValidatorSourceNeverInterpolatesRawBaseUrl:
             "raised message — use parsed.scheme / host instead"
         )
 
-    def test_guard_is_not_vacuous(self):
+    def test_validate_ollama_host_messages_should_reference_scheme_or_host(self):
         # Positive control: the guard above only means something if the
         # function's raise messages actually reference SOMETHING derived from
         # the URL (scheme/host) — otherwise "no {base_url" could pass by
@@ -96,7 +96,9 @@ class TestOllamaHostLeakDoesNotReachHttpBody:
     # same false-green risk in test_layer3_log_scrub.py). `_get_semantic_adapter`
     # is NOT mocked — OllamaAdapter() constructs for real and _validate_ollama_host
     # raises before any network call, so the whole path stays offline.
-    def test_bad_ollama_host_400_body_excludes_credentials(self, monkeypatch):
+    def test_redact_400_response_should_exclude_credentials_when_ollama_host_has_userinfo(
+        self, monkeypatch
+    ):
         import argus_redact.glue.redact as glue_redact
         from argus_redact.server import create_app
 
@@ -136,7 +138,7 @@ class TestOllamaRequestFailureLogsTypeOnlyNeverTraceback:
     # site, and the same principle glue/redact.py:616-618 states for Layer-3:
     # "Type only, never exc_info=True: a full traceback can embed input
     # fragments from the adapter call frames."
-    def test_source_never_sets_exc_info_true(self):
+    def test_ollama_adapter_source_should_never_log_with_exc_info_true(self):
         # AST-based (not a plain string grep): the module's own comments
         # legitimately mention "exc_info=True" in prose (mirroring
         # glue/redact.py's identical comment), so a substring search would
@@ -144,6 +146,7 @@ class TestOllamaRequestFailureLogsTypeOnlyNeverTraceback:
         # sites and flags only a real `exc_info=True` keyword argument.
         source = inspect.getsource(ollama_adapter_module)
         tree = ast.parse(source)
+
         offending_calls = [
             node
             for node in ast.walk(tree)
@@ -153,6 +156,7 @@ class TestOllamaRequestFailureLogsTypeOnlyNeverTraceback:
             and isinstance(kw.value, ast.Constant)
             and kw.value.value is True
         ]
+
         assert not offending_calls, (
             "ollama_adapter.py must never log a request failure with "
             "exc_info=True — a full traceback can embed adapter call-frame "
@@ -160,7 +164,7 @@ class TestOllamaRequestFailureLogsTypeOnlyNeverTraceback:
             "mirroring glue/redact.py's Layer-3 failure log."
         )
 
-    def test_request_failure_log_carries_no_traceback_or_exception_text(self, caplog):
+    def test_ollama_request_failure_log_should_omit_traceback_and_secret_text(self, caplog):
         # Simulate a transport failure whose own exception message is
         # secret-bearing (as a real connection error against a
         # userinfo-bearing URL could be) and confirm the log record neither

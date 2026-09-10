@@ -11,7 +11,7 @@ import pytest
 from argus_redact.pure.restore import restore
 
 
-def test_empty_replacement_producer_guard_has_restore_twin():
+def test_restore_should_reject_key_with_empty_replacement():
     # PRODUCER: replace.rs refuses to write an empty replacement into the key.
     # CONSUMER twin: restore() must reject a key that contains an empty-string
     # entry (the only way one could arrive is corruption/hand-building).

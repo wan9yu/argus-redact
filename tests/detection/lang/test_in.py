@@ -34,15 +34,15 @@ class TestIndianPatterns:
 class TestIndianHints:
     """Indian English kinship + command-mode hints."""
 
-    def test_kinship_my_papa_is_kinship(self):
+    def test_is_kinship_should_recognize_my_papa(self):
         entity = PatternMatch(
             text="my papa", type="self_reference", start=0, end=7, confidence=1.0, layer=1
         )
         assert _is_kinship(entity)
 
-    def test_command_pattern_marks_command_mode(self):
+    def test_is_interaction_command_should_return_true_when_text_is_a_polite_command(self):
         assert _is_interaction_command("Kindly share your phone number.")
         assert _is_interaction_command("Please do the needful.")
 
-    def test_narrative_in_is_not_command(self):
+    def test_is_interaction_command_should_return_false_when_text_is_narrative(self):
         assert not _is_interaction_command("The Mumbai office opens at 9 AM.")

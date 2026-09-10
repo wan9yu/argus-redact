@@ -5,12 +5,12 @@ from __future__ import annotations
 from argus_redact.compose import prompt_anchor
 
 
-def test_empty_key_returns_empty_string():
+def test_prompt_anchor_should_return_empty_string_when_key_is_empty():
     assert prompt_anchor({}, lang="zh") == ""
     assert prompt_anchor({}, lang="en") == ""
 
 
-def test_zh_contains_3_rules_and_keyword_phrases():
+def test_prompt_anchor_should_include_rule_phrases_when_lang_is_zh():
     result = prompt_anchor({"P-83811": "黄芳", "138****5678": "13912345678"}, lang="zh")
     assert "完整保留" in result
     assert "不要替换为称谓" in result
@@ -19,7 +19,7 @@ def test_zh_contains_3_rules_and_keyword_phrases():
     assert "138****5678" in result
 
 
-def test_en_contains_3_rules_and_keyword_phrases():
+def test_prompt_anchor_should_include_rule_phrases_when_lang_is_en():
     result = prompt_anchor({"P-83811": "Huang Fang"}, lang="en")
     assert "Preserve these identifiers verbatim" in result
     assert "do not substitute with titles" in result
@@ -27,12 +27,12 @@ def test_en_contains_3_rules_and_keyword_phrases():
     assert "P-83811" in result
 
 
-def test_unknown_lang_falls_back_to_en():
+def test_prompt_anchor_should_fall_back_to_en_when_lang_is_unknown():
     result = prompt_anchor({"P-001": "X"}, lang="fr")
     assert "Preserve" in result  # EN template phrase
 
 
-def test_identifiers_sorted_for_determinism():
+def test_prompt_anchor_should_sort_identifiers_alphabetically():
     """Order matters for snapshot stability + downstream prompt-cache hits."""
     result = prompt_anchor({"P-99": "x", "P-01": "y", "MED-50": "z"}, lang="zh")
     # Sorted alphabetically: MED-50, P-01, P-99
@@ -42,7 +42,7 @@ def test_identifiers_sorted_for_determinism():
     assert idx_med < idx_p01 < idx_p99
 
 
-def test_zh_template_snapshot():
+def test_prompt_anchor_should_match_snapshot_when_lang_is_zh():
     """Lock the zh template text. Drift catches itself."""
     result = prompt_anchor({"P-001": "test"}, lang="zh")
     expected = (
@@ -54,10 +54,11 @@ def test_zh_template_snapshot():
         "脱敏标识符清单：\n"
         "  - P-001"
     )
+
     assert result == expected
 
 
-def test_en_template_snapshot():
+def test_prompt_anchor_should_match_snapshot_when_lang_is_en():
     """Lock the en template text. Drift catches itself."""
     result = prompt_anchor({"P-001": "test"}, lang="en")
     expected = (
@@ -70,4 +71,5 @@ def test_en_template_snapshot():
         "Redaction placeholder list:\n"
         "  - P-001"
     )
+
     assert result == expected

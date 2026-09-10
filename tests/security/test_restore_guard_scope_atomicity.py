@@ -34,7 +34,7 @@ def guarded(text, key, scope, aliases=None):
 
 
 class TestOutOfScopePseudonymsAreWithheldAtomically:
-    def test_zh_name_prefix_is_not_spliced(self):
+    def test_guard_should_not_splice_when_a_zh_name_prefixes_another(self):
         """李明 (in scope) is a strict prefix of 李明华 (out of scope)."""
         key = {"李明": "张伟", "李明华": "王芳"}
         text, meta = guarded("李明华 reported that 李明 left.", key, {"李明"})
@@ -43,7 +43,7 @@ class TestOutOfScopePseudonymsAreWithheldAtomically:
         assert "张伟华" not in text, "an out-of-scope identity was spliced"
         assert meta["outcome"] == "partial"
 
-    def test_code_prefix_is_not_spliced(self):
+    def test_guard_should_not_splice_when_a_code_prefixes_another(self):
         """P-1 (in scope) is a prefix of P-10 (out of scope)."""
         key = {"P-1": "Alice", "P-10": "Ten"}
         text, meta = guarded("P-10 and P-1", key, {"P-1"})
@@ -52,7 +52,7 @@ class TestOutOfScopePseudonymsAreWithheldAtomically:
         assert "Alice0" not in text
         assert meta["outcome"] == "partial"
 
-    def test_three_way_prefix_chain(self):
+    def test_guard_should_not_splice_across_a_three_way_prefix_chain(self):
         key = {"P-1": "Alice", "P-10": "Ten", "P-100": "Hundred"}
         text, _ = guarded("P-100 P-10 P-1", key, {"P-1"})
         assert text == "P-100 P-10 Alice"
@@ -61,7 +61,7 @@ class TestOutOfScopePseudonymsAreWithheldAtomically:
         "scope",
         [{"P-1"}, {"P-10"}, {"P-100"}, {"P-1", "P-10"}, {"P-1", "P-100"}, {"P-1", "P-10", "P-100"}],
     )
-    def test_every_scope_width_only_withholds(self, scope):
+    def test_guard_should_only_withhold_regardless_of_scope_width(self, scope):
         """At any scope width the guard is a pure filter of the unguarded pass.
 
         The oracle tokenises against the FULL key longest-first — the same set
@@ -85,7 +85,7 @@ class TestOutOfScopePseudonymsAreWithheldAtomically:
 
 
 class TestAliasesCannotEscapeScope:
-    def test_alias_of_in_scope_fake_cannot_claim_an_out_of_scope_fake(self):
+    def test_guard_should_not_let_an_alias_claim_an_out_of_scope_fake(self):
         """The dedupe trap: an alias of P-1 IS the out-of-scope fake P-2.
 
         Merging aliases over an already-scoped key cannot see the collision
@@ -99,7 +99,7 @@ class TestAliasesCannotEscapeScope:
         assert text != "Alice and Alice"
         assert meta["outcome"] == "partial"
 
-    def test_alias_of_out_of_scope_fake_is_reported_as_withheld(self):
+    def test_guard_should_report_an_out_of_scope_alias_as_withheld(self):
         """strict=True must fail closed on an out-of-scope alias too."""
         key = {"P-1": "Alice", "P-2": "Bob"}
         text, meta = guarded("P-1 met Bobby", key, {"P-1"}, aliases={"P-2": ("Bobby",)})
@@ -109,7 +109,7 @@ class TestAliasesCannotEscapeScope:
         assert "out_of_scope_pseudonym" in codes
         assert meta["outcome"] == "partial"
 
-    def test_strict_raises_on_an_out_of_scope_alias(self):
+    def test_guard_should_raise_when_strict_and_an_alias_is_out_of_scope(self):
         from argus_redact.pure.restore import RestoreGuardError
 
         key = {"P-1": "Alice", "P-2": "Bob"}

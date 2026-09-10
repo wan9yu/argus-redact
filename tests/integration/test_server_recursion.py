@@ -37,7 +37,9 @@ def client():
 
 
 @pytest.mark.parametrize("endpoint", ["/redact", "/restore"])
-def test_deeply_nested_body_returns_4xx_not_500(client, endpoint):
+def test_redact_and_restore_should_return_4xx_not_500_when_given_deeply_nested_json(
+    client, endpoint
+):
     resp = client.post(
         endpoint, content=_DEEPLY_NESTED, headers={"content-type": "application/json"}
     )

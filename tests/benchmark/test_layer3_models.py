@@ -189,7 +189,7 @@ class TestLayer3ModelBenchmark:
             "yi:9b",
         ],
     )
-    def test_model_benchmark(self, ollama_available, model, capsys):
+    def test_model_should_score_above_minimum_threshold(self, ollama_available, model, capsys):
         # Check model is installed
         try:
             tags = requests.get("http://localhost:11434/api/tags", timeout=3).json()

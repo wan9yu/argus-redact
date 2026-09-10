@@ -25,7 +25,7 @@ def _evaluate():
         os.environ.pop("ARGUS_ABLATION_HINTS", None)
 
 
-def test_result_is_wellformed():
+def test_result_should_be_well_formed():
     res = _evaluate()
     assert res["benchmark"] == "hint_ablation"
     assert res["hint"] == "text_intent"
@@ -36,9 +36,10 @@ def test_result_is_wellformed():
     assert set(res["by_lang"]) == {"zh", "en"}
 
 
-def test_hint_reduces_person_fp_non_vacuously():
+def test_hint_should_reduce_person_fp_non_vacuously():
     res = _evaluate()
     fp = res["person_fp_per_sample"]
+
     # Non-vacuity: the fixture MUST produce person FPs with suppression off — else
     # the suppression below would be vacuously satisfied.
     assert fp["off"] > 0.0, fp
@@ -49,14 +50,14 @@ def test_hint_reduces_person_fp_non_vacuously():
     assert fp["on"] == 0.0, fp
 
 
-def test_both_languages_show_suppression():
+def test_both_languages_should_show_suppression():
     res = _evaluate()
     for lang, r in res["by_lang"].items():
         assert r["off"] > r["on"], (lang, r)
         assert r["off"] > 0.0, (lang, r)
 
 
-def test_env_toggle_does_not_reach_l1b_person_in_fast_mode():
+def test_env_toggle_should_not_reach_l1b_person_in_fast_mode():
     # Records the v0.7.16 architecture: ARGUS_ABLATION_HINTS is applied Python-side
     # AFTER _core.detect_l1, so it never reaches the Rust-internal L1b person
     # threshold in fast mode. The off/on suppression above is therefore exercised

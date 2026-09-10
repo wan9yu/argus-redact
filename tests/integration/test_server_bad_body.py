@@ -35,13 +35,13 @@ def client():
         yield client
 
 
-def test_redact_empty_body_returns_400_not_500(client):
+def test_redact_should_return_400_when_body_is_empty(client):
     resp = client.post("/redact", content="")
     assert resp.status_code == 400
     assert "error" in resp.json()
 
 
-def test_redact_malformed_json_body_returns_400_not_500(client):
+def test_redact_should_return_400_when_body_is_malformed_json(client):
     resp = client.post("/redact", content="{not valid json")
     assert resp.status_code == 400
     assert "error" in resp.json()
@@ -53,7 +53,9 @@ def test_redact_malformed_json_body_returns_400_not_500(client):
     ids=["array", "string", "int", "null", "bool", "float", "empty-array"],
 )
 @pytest.mark.parametrize("endpoint", ["/redact", "/restore"])
-def test_non_object_json_body_returns_400_not_500(client, endpoint, raw):
+def test_redact_and_restore_should_return_400_when_json_body_is_not_an_object(
+    client, endpoint, raw
+):
     """A body that is valid JSON but not an OBJECT used to 500.
 
     ``json.loads`` succeeds, then ``body.get(...)`` raises ``AttributeError``,
@@ -65,7 +67,7 @@ def test_non_object_json_body_returns_400_not_500(client, endpoint, raw):
     assert "error" in resp.json()
 
 
-def test_non_object_json_body_error_names_the_problem(client):
+def test_redact_should_name_the_problem_when_body_is_not_an_object(client):
     """The 400 must say what is wrong — 'invalid JSON' would be a lie, the
     body parsed fine."""
     resp = client.post("/redact", content="[1,2,3]", headers={"content-type": "application/json"})
@@ -73,13 +75,13 @@ def test_non_object_json_body_error_names_the_problem(client):
     assert "object" in resp.json()["error"].lower()
 
 
-def test_object_body_still_200(client):
+def test_redact_should_return_200_when_body_is_a_valid_object(client):
     """Positive control: the dict check must not reject a valid body."""
     resp = client.post("/redact", json={"text": "hello"})
     assert resp.status_code == 200
 
 
-def test_restore_rejects_an_oversized_key_with_413(client):
+def test_restore_should_return_413_when_key_exceeds_max_entries(client):
     """The body cap does not bound the KEY.
 
     A well-formed 10 MiB body carries on the order of half a million minimal
@@ -96,7 +98,7 @@ def test_restore_rejects_an_oversized_key_with_413(client):
     assert "key too large" in resp.json()["error"]
 
 
-def test_restore_accepts_a_key_exactly_at_the_cap(client):
+def test_restore_should_return_200_when_key_is_exactly_at_the_cap(client):
     """The cap is a ceiling, not an off-by-one refusal of the last legal key."""
     from argus_redact.server import MAX_RESTORE_KEY_ENTRIES
 
@@ -105,7 +107,7 @@ def test_restore_accepts_a_key_exactly_at_the_cap(client):
     assert resp.status_code == 200, resp.text
 
 
-def test_redact_rejects_an_oversized_key_with_413(client):
+def test_redact_should_return_413_when_key_exceeds_max_entries(client):
     """Same cap on /redact, which also accepts a caller-supplied key."""
     from argus_redact.server import MAX_RESTORE_KEY_ENTRIES
 
@@ -115,14 +117,14 @@ def test_redact_rejects_an_oversized_key_with_413(client):
     assert "key too large" in resp.json()["error"]
 
 
-def test_restore_empty_body_still_returns_400(client):
+def test_restore_should_return_400_when_body_is_empty(client):
     """Confirms Task 4's /restore fix is intact — same failure mode, other endpoint."""
     resp = client.post("/restore", content="")
     assert resp.status_code == 400
     assert "error" in resp.json()
 
 
-def test_restore_anchor_str_scope_returns_400_not_200(client):
+def test_restore_should_return_400_when_anchor_scope_is_a_string(client):
     """A str scope (e.g. "P-1" instead of ["P-1"]) used to pass straight
     through frozenset() unrejected, becoming frozenset({'P', '-', '1'}) — a
     garbage anchor that still returned 200 instead of a 400."""
@@ -134,11 +136,12 @@ def test_restore_anchor_str_scope_returns_400_not_200(client):
             "anchor": {"nonce": "abc123deadbeef00", "scope": "P-1"},
         },
     )
+
     assert resp.status_code == 400
     assert "error" in resp.json()
 
 
-def test_restore_anchor_non_iterable_scope_returns_400_not_500(client):
+def test_restore_should_return_400_when_anchor_scope_is_not_iterable(client):
     """scope=123 is not iterable; frozenset(123) used to raise an
     unhandled TypeError (500) instead of a clean 400."""
     resp = client.post(
@@ -149,11 +152,12 @@ def test_restore_anchor_non_iterable_scope_returns_400_not_500(client):
             "anchor": {"nonce": "abc123deadbeef00", "scope": 123},
         },
     )
+
     assert resp.status_code == 400
     assert "error" in resp.json()
 
 
-def test_restore_anchor_non_str_nonce_returns_400(client):
+def test_restore_should_return_400_when_anchor_nonce_is_not_a_string(client):
     """A non-str nonce must also be rejected with 400, not passed through."""
     resp = client.post(
         "/restore",
@@ -163,15 +167,17 @@ def test_restore_anchor_non_str_nonce_returns_400(client):
             "anchor": {"nonce": 12345, "scope": ["P-1"]},
         },
     )
+
     assert resp.status_code == 400
     assert "error" in resp.json()
 
 
-def test_restore_anchor_valid_list_scope_still_200(client):
+def test_restore_should_return_200_when_anchor_scope_is_a_valid_list(client):
     """Positive control: a well-formed anchor (list scope, str nonce) that
     round-trips must still return 200 — the new validation must not reject
     valid input."""
     nonce = "abc123deadbeef00"
+
     resp = client.post(
         "/restore",
         json={
@@ -180,6 +186,7 @@ def test_restore_anchor_valid_list_scope_still_200(client):
             "anchor": {"nonce": nonce, "scope": ["P-1"]},
         },
     )
+
     assert resp.status_code == 200
     data = resp.json()
     assert "Alice" in data["restored"]
@@ -193,7 +200,7 @@ def test_restore_anchor_valid_list_scope_still_200(client):
     [{"a": 1}, ["a"], 5, 3.5, True, None],
     ids=["dict", "list", "int", "float", "bool", "null"],
 )
-def test_restore_non_str_text_returns_400_not_a_200_echo(client, text):
+def test_restore_should_return_400_when_text_is_not_a_string(client, text):
     """The guard's fail-closed no-anchor branch returns before any Rust
     call, so a non-``str`` ``text`` was never type-checked: /restore answered
     200 and echoed the garbage back in ``restored``. /redact 400s on the same
@@ -203,9 +210,10 @@ def test_restore_non_str_text_returns_400_not_a_200_echo(client, text):
     assert "error" in resp.json()
 
 
-def test_restore_str_text_still_works(client):
+def test_restore_should_return_200_when_text_is_a_valid_string(client):
     """Positive control: a valid str text is accepted."""
     nonce = "abc123deadbeef00"
+
     resp = client.post(
         "/restore",
         json={
@@ -214,6 +222,7 @@ def test_restore_str_text_still_works(client):
             "anchor": {"nonce": nonce, "scope": ["P-1"]},
         },
     )
+
     assert resp.status_code == 200
     assert "Alice" in resp.json()["restored"]
 
@@ -231,26 +240,26 @@ def small_cap(monkeypatch):
     return 100
 
 
-def test_redact_oversized_body_returns_413(client, small_cap):
+def test_redact_should_return_413_when_body_exceeds_the_cap(client, small_cap):
     text = "x" * (small_cap + 1)
     resp = client.post("/redact", json={"text": text})
     assert resp.status_code == 413
     assert "error" in resp.json()
 
 
-def test_restore_oversized_body_returns_413(client, small_cap):
+def test_restore_should_return_413_when_body_exceeds_the_cap(client, small_cap):
     text = "x" * (small_cap + 1)
     resp = client.post("/restore", json={"text": text, "key": {}})
     assert resp.status_code == 413
     assert "error" in resp.json()
 
 
-def test_redact_body_under_cap_still_200(client, small_cap):
+def test_redact_should_return_200_when_body_is_under_the_cap(client, small_cap):
     resp = client.post("/redact", json={"text": "hello"})
     assert resp.status_code == 200
 
 
-def test_redact_malformed_json_under_cap_still_400(client, small_cap):
+def test_redact_should_return_400_when_body_is_malformed_and_under_the_cap(client, small_cap):
     """A small malformed-JSON body must still map to 400, not get swallowed
     by the new size check."""
     resp = client.post("/redact", content="{not valid json")
@@ -258,7 +267,7 @@ def test_redact_malformed_json_under_cap_still_400(client, small_cap):
     assert "error" in resp.json()
 
 
-def test_redact_chunked_no_content_length_bounds_memory(small_cap):
+def test_redact_should_bound_memory_when_chunked_request_lacks_content_length(small_cap):
     """The size cap must bound memory, not just detect an overage after the
     fact. A chunked request has no Content-Length header, so the only way to
     enforce the cap without buffering the whole body first is to stream it

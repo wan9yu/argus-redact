@@ -142,7 +142,7 @@ class TestConsumeHints:
 
         assert threshold <= 0.8
 
-    def test_person_threshold_default_when_no_hints(self):
+    def test_person_threshold_should_default_to_0_8_when_no_hints(self):
         from argus_redact.pure.hints import get_person_threshold
 
         threshold = get_person_threshold([])

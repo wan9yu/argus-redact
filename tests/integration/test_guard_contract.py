@@ -152,7 +152,7 @@ ADAPTERS = {
 
 
 @pytest.mark.parametrize("name", sorted(ADAPTERS))
-def test_every_integration_surfaces_h_events(name):
+def test_every_integration_should_surface_h_events(name):
     """The D1 defect class: no integration may compute events and then drop them."""
     call, injected = ADAPTERS[name]()
     with pytest.warns(SecurityWarning, match="injection_suspected"):
@@ -160,12 +160,13 @@ def test_every_integration_surfaces_h_events(name):
 
 
 @pytest.mark.parametrize("name", sorted(ADAPTERS))
-def test_h_is_advisory_by_default_everywhere(name):
+def test_restore_should_stay_advisory_when_strict_is_false(name):
     """H is a heuristic. It warns; it does not block. P + S are the guarantee."""
     call, injected = ADAPTERS[name]()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SecurityWarning)
         out = call(injected)
+
     if name == "mcp":
         # mcp's return is a serialized JSON blob, not the restored text itself — check
         # the `restored` field specifically, not the raw payload. A future payload field
@@ -184,7 +185,7 @@ def test_h_is_advisory_by_default_everywhere(name):
 
 
 @pytest.mark.parametrize("name", sorted(ADAPTERS))
-def test_strict_fails_closed_everywhere(name):
+def test_restore_should_fail_closed_when_strict_is_true(name):
     call, injected = ADAPTERS[name]()
     with pytest.raises(RestoreGuardError) as ei:
         call(injected, strict=True)
@@ -195,7 +196,7 @@ def test_strict_fails_closed_everywhere(name):
 
 
 @pytest.mark.parametrize("name", sorted(ADAPTERS))
-def test_detailed_events_are_h_only_when_reachable(name):
+def test_detailed_events_should_be_h_only_when_reachable(name):
     """`detailed=` is real plumbing, not dead code: exercise it directly.
 
     Where an adapter's return shape can carry structured events (presidio,

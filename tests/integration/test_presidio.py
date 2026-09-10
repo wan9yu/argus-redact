@@ -162,7 +162,7 @@ class TestPresidioRestoreAliases:
     installed (it does NOT depend on the presidio-gated fixtures above).
     """
 
-    def test_restore_forwards_aliases(self):
+    def test_restore_should_replace_alias_occurrences_with_the_original(self):
         from argus_redact.integrations.presidio import PresidioBridge
 
         bridge = PresidioBridge()
@@ -173,7 +173,7 @@ class TestPresidioRestoreAliases:
 
         assert out == "张三 and 张三"
 
-    def test_restore_rejects_malformed_aliases(self):
+    def test_restore_should_reject_malformed_alias_value(self):
         from argus_redact.integrations.presidio import PresidioBridge
 
         bridge = PresidioBridge()
@@ -182,7 +182,7 @@ class TestPresidioRestoreAliases:
         with pytest.raises(ValueError):
             bridge.restore("P-1 and Zhang San", key, guard=False, aliases={"P-1": "Zhang San"})
 
-    def test_restore_forwards_display_marker(self):
+    def test_restore_should_strip_the_display_marker_when_given(self):
         from argus_redact.integrations.presidio import PresidioBridge
 
         bridge = PresidioBridge()

@@ -5,7 +5,7 @@ import pytest
 from argus_redact._core_loader import _core
 
 
-def test_detect_l1_rejects_oversized_input():
+def test_detect_l1_should_reject_input_when_it_exceeds_max_input_size():
     big = "a" * (1024 * 1024 + 1)
     with pytest.raises(ValueError, match="input too large|MAX_INPUT_SIZE|exceeds"):
         _core.detect_l1(big, ["en"], [])

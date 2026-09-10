@@ -24,7 +24,7 @@ import pytest
 from argus_redact import redact, restore
 
 
-def test_pseudonym_cross_salt_isolation_holds():
+def test_pseudonym_values_should_stay_isolated_across_different_salts():
     """Salt isolates pseudonymized values: key A cannot restore the name under salt B."""
     text = "我叫张三"
     red_a, key_a = redact(text, lang="zh", mode="fast", salt=11111)
@@ -45,7 +45,7 @@ def test_pseudonym_cross_salt_isolation_holds():
     "designed output-format change",
     strict=False,
 )
-def test_masked_cross_salt_isolation_known_limitation():
+def test_masked_values_should_stay_isolated_across_different_salts():
     """DESIRED (not yet held): a salt-A key must not reconstruct a MASKED value
     redacted under salt B."""
     text = "电话13800138000"

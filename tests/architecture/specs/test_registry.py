@@ -41,7 +41,7 @@ class TestRegistryBasics:
 class TestConsistencyWithPatterns:
     """Verify that specs match the actual patterns in lang/zh/patterns.py."""
 
-    def test_every_pattern_type_has_a_spec(self):
+    def test_every_pattern_type_should_have_a_spec(self):
         pattern_types = {p["type"] for p in ZH_PATTERNS}
         spec_types = {t.name for t in list_types("zh")}
         # phone_landline is separate in specs but uses "phone" type in patterns
@@ -49,7 +49,7 @@ class TestConsistencyWithPatterns:
         for ptype in pattern_types:
             assert ptype in spec_types, f"Pattern type '{ptype}' has no spec"
 
-    def test_spec_label_matches_at_least_one_pattern_label(self):
+    def test_spec_label_should_match_a_pattern_label(self):
         """Each spec label should appear in at least one pattern of the same type."""
         for typedef in list_types("zh"):
             if typedef.name == "phone_landline":
@@ -62,7 +62,7 @@ class TestConsistencyWithPatterns:
                 )
 
     @pytest.mark.parametrize("lang", ["zh", "en", "shared"])
-    def test_typedef_strategy_is_runtime_ssot(self, lang):
+    def test_typedef_strategy_should_be_runtime_ssot(self, lang):
         """v0.6.8: PIITypeDef.strategy is the runtime SSOT (DEFAULT_STRATEGIES
         is being deleted in C2). This test verifies replace() uses the typedef.
 
@@ -147,7 +147,7 @@ class TestSpecModuleCompleteness:
     current type count is stable.
     """
 
-    def test_every_register_module_is_discovered(self):
+    def test_register_modules_should_be_discovered(self):
         """Every register()-calling spec module must be imported by the auto-discovery.
 
         ``register_modules`` is computed from the source text with a FIXED,
@@ -202,7 +202,7 @@ class TestSpecModuleCompleteness:
             f"types (silent type absence + understated coverage)"
         )
 
-    def test_registered_type_count_matches_expected(self):
+    def test_registered_type_count_should_match_expected(self):
         """Type count must not drift from the frozen baseline in test_risk_data_parity.py.
 
         This mirrors the half-1 check in test_risk_data_parity.py but lives in
@@ -224,7 +224,7 @@ class TestRegistryStrategyValidity:
     then crash or no-op at runtime when replace() encounters it.
     """
 
-    def test_all_registered_strategies_are_valid(self):
+    def test_registered_strategies_should_be_valid(self):
         from argus_redact.pure._strategy_kind import VALID_STRATEGIES
 
         invalid = [
@@ -238,23 +238,23 @@ class TestRegistryStrategyValidity:
 class TestSpecCompleteness:
     """Every spec should have minimum required fields."""
 
-    def test_every_spec_has_examples(self):
+    def test_every_spec_should_have_examples(self):
         for typedef in list_types("zh"):
             assert len(typedef.examples) > 0, f"{typedef.lang}/{typedef.name} has no examples"
 
-    def test_every_spec_has_description(self):
+    def test_every_spec_should_have_a_description(self):
         for typedef in list_types("zh"):
             assert typedef.description, f"{typedef.lang}/{typedef.name} has no description"
 
-    def test_every_spec_has_source(self):
+    def test_every_spec_should_have_a_source(self):
         for typedef in list_types("zh"):
             assert typedef.source, f"{typedef.lang}/{typedef.name} has no source reference"
 
-    def test_every_spec_has_label(self):
+    def test_every_spec_should_have_a_label(self):
         for typedef in list_types("zh"):
             assert typedef.label, f"{typedef.lang}/{typedef.name} has no label"
 
-    def test_every_spec_has_sensitivity(self):
+    def test_every_spec_should_have_a_valid_sensitivity(self):
         for typedef in list_types("zh"):
             assert hasattr(typedef, "sensitivity"), (
                 f"{typedef.lang}/{typedef.name} has no sensitivity field"
@@ -263,7 +263,7 @@ class TestSpecCompleteness:
                 f"{typedef.lang}/{typedef.name} sensitivity={typedef.sensitivity} not in 1-4"
             )
 
-    def test_critical_types_have_high_sensitivity(self):
+    def test_critical_types_should_have_high_sensitivity(self):
         critical_types = {"id_number", "bank_card", "social_security"}
         for typedef in list_types("zh"):
             if typedef.name in critical_types:

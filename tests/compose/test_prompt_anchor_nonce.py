@@ -5,19 +5,19 @@ from __future__ import annotations
 from argus_redact.compose import make_anchor, prompt_anchor
 
 
-def test_prompt_anchor_embeds_nonce_when_anchor_given():
+def test_prompt_anchor_should_embed_nonce_when_anchor_given():
     key = {"P-001": "张三"}
     a = make_anchor(key)
     out = prompt_anchor(key, lang="en", anchor=a)
     assert a.nonce in out  # nonce present for the LLM to echo
 
 
-def test_prompt_anchor_backward_compatible_without_anchor():
+def test_prompt_anchor_should_remain_backward_compatible_when_anchor_omitted():
     key = {"P-001": "张三"}
     assert "P-001" in prompt_anchor(key, lang="en")  # today's behavior unchanged
 
 
-def test_nonce_echo_instruction_shape():
+def test_nonce_echo_instructions_should_match_the_pinned_wording():
     """Pin the cross-module contract the guarded restore depends on.
 
     The nonce stripper (`strip_nonce`, in the Rust core's restore module) removes
@@ -37,7 +37,7 @@ def test_nonce_echo_instruction_shape():
         assert template.rstrip().endswith("{nonce}")
 
 
-def test_strip_nonce_round_trips_the_real_instruction():
+def test_guarded_restore_should_return_original_when_reply_echoes_real_nonce():
     """End-to-end: build the reply the way prompt_anchor actually asks for it, and
     assert the guarded restore hands back clean plaintext. Guards against the two
     modules drifting apart."""

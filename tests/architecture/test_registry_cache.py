@@ -4,7 +4,7 @@ from argus_redact.pure.replacer import _registry_generation, _resolve_realistic_
 from argus_redact.specs import registry
 
 
-def test_register_clears_faker_cache():
+def test_unregister_should_clear_the_faker_resolution_cache():
     _resolve_realistic_faker_cached("phone", ("zh",), _registry_generation())  # prime cache
     before = _resolve_realistic_faker_cached.cache_info().currsize
     assert before >= 1
@@ -13,7 +13,7 @@ def test_register_clears_faker_cache():
     assert _resolve_realistic_faker_cached.cache_info().currsize == 0
 
 
-def test_registry_mutation_bumps_the_generation():
+def test_registry_mutation_should_bump_the_generation():
     """The generation — not the clear — is what makes the cache race-safe: an
     entry inserted by a concurrent in-flight resolve lands under the old
     generation and is never read again."""
@@ -23,7 +23,7 @@ def test_registry_mutation_bumps_the_generation():
     assert after > before
 
 
-def test_lookup_survives_a_concurrent_registration():
+def test_registry_lookup_should_survive_concurrent_registration_churn():
     """``lookup()`` iterated ``_REGISTRY`` itself.
 
     ``register()``/``unregister()`` are public API callable from any thread, so

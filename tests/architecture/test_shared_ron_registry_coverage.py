@@ -33,7 +33,7 @@ def _shared_ron_type_names() -> set[str]:
     return names
 
 
-def test_every_shared_ron_type_has_a_registry_row():
+def test_every_shared_ron_type_should_have_a_registry_row():
     """Each distinct type name in shared.ron resolves to at least one PIITypeDef."""
     missing = sorted(name for name in _shared_ron_type_names() if not lookup(name))
     assert not missing, (

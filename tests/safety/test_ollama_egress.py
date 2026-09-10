@@ -9,35 +9,35 @@ from argus_redact import SecurityWarning
 from argus_redact.impure.ollama_adapter import OllamaAdapter
 
 
-def test_loopback_ok():
+def test_ollama_adapter_should_accept_loopback_base_url():
     a = OllamaAdapter(base_url="http://localhost:11434")
     assert a._base_url.startswith("http://localhost")
 
 
-def test_remote_denied_by_default():
+def test_ollama_adapter_should_reject_remote_base_url_by_default():
     with pytest.raises(ValueError, match="non-loopback"):
         OllamaAdapter(base_url="http://evil.example.com:11434")
 
 
-def test_remote_allowed_with_optin_warns(monkeypatch):
+def test_ollama_adapter_should_warn_when_remote_allowed_via_env_opt_in(monkeypatch):
     monkeypatch.setenv("ARGUS_ALLOW_REMOTE_OLLAMA", "1")
     with pytest.warns(SecurityWarning, match="evil.example.com"):
         OllamaAdapter(base_url="http://evil.example.com:11434")
 
 
-def test_bad_scheme_rejected():
+def test_ollama_adapter_should_reject_non_http_scheme():
     with pytest.raises(ValueError, match="scheme"):
         OllamaAdapter(base_url="ftp://localhost:11434")
 
 
-def test_loopback_lookalike_hostname_denied():
+def test_ollama_adapter_should_reject_loopback_lookalike_hostname():
     # A hostname that merely starts with '127.' is NOT loopback (it resolves
     # off-box). The IP-literal loopback check must reject it.
     with pytest.raises(ValueError, match="non-loopback"):
         OllamaAdapter(base_url="http://127.evil.com:11434")
 
 
-def test_failed_request_does_not_log_raw_prompt(caplog):
+def test_ollama_call_should_not_log_raw_prompt_when_request_raises(caplog):
     # Logging hygiene: the retry path logs the failure with exc_info=True. A
     # privacy tool must NOT leak the pre-redaction prompt into logs — the logged
     # traceback is stack frames + the requests ConnectionError message (host/port/
@@ -67,7 +67,7 @@ def test_failed_request_does_not_log_raw_prompt(caplog):
     assert "文本：" not in caplog.text  # the prompt-prefix marker must not leak either
 
 
-def test_failed_request_status_code_does_not_log_raw_prompt(caplog):
+def test_ollama_call_should_not_log_raw_prompt_when_response_status_is_non_200(caplog):
     # Sibling of the exception test above, for the OTHER failure branch: a
     # non-200 response (no exception at all — the request succeeded at the
     # transport level, Ollama/a proxy just answered with an error status). This

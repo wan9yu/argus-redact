@@ -22,7 +22,7 @@ def _fake_bridge_redact(text: str, salt: int = 42) -> tuple[str, dict]:
 
 
 class TestPresidioBridgeGuard:
-    def test_restore_passthrough_without_guard(self):
+    def test_restore_should_warn_and_still_restore_when_guard_is_not_given(self):
         """Calling restore without guard= still works (emits DeprecationWarning)."""
         bridge = PresidioBridge()
         redacted, key = _fake_bridge_redact("电话13812345678")
@@ -33,7 +33,7 @@ class TestPresidioBridgeGuard:
         assert any(issubclass(x.category, DeprecationWarning) for x in w)
         assert "13812345678" in result
 
-    def test_restore_with_guard_and_valid_nonce(self):
+    def test_restore_should_succeed_when_guard_is_true_and_nonce_is_valid(self):
         """guard=True + valid nonce → restores successfully."""
         bridge = PresidioBridge()
         redacted, key = _fake_bridge_redact("电话13812345678")
@@ -44,7 +44,7 @@ class TestPresidioBridgeGuard:
 
         assert "13812345678" in result
 
-    def test_restore_with_guard_no_nonce_fail_closed(self):
+    def test_restore_should_fail_closed_when_nonce_is_missing(self):
         """guard=True + missing nonce → fail-closed (originals not leaked)."""
         bridge = PresidioBridge()
         redacted, key = _fake_bridge_redact("电话13812345678")
@@ -55,7 +55,7 @@ class TestPresidioBridgeGuard:
 
         assert "13812345678" not in result
 
-    def test_restore_with_guard_forged_nonce_fail_closed(self):
+    def test_restore_should_fail_closed_when_nonce_is_forged(self):
         """guard=True + wrong nonce → fail-closed (zero originals leaked)."""
         bridge = PresidioBridge()
         redacted, key = _fake_bridge_redact("电话13812345678")
@@ -66,7 +66,7 @@ class TestPresidioBridgeGuard:
 
         assert "13812345678" not in result
 
-    def test_restore_detailed_surfaces_security_events(self):
+    def test_restore_detailed_should_return_security_events_alongside_text(self):
         """detailed=True returns (text, {security_events}) including guard events."""
         bridge = PresidioBridge()
         redacted, key = _fake_bridge_redact("电话13812345678")
@@ -80,7 +80,7 @@ class TestPresidioBridgeGuard:
         assert "security_events" in details
         assert any(e["reason_code"] == "provenance_failed" for e in details["security_events"])
 
-    def test_restore_h_layer_with_redacted_param(self):
+    def test_restore_should_expose_security_events_when_redacted_context_is_given(self):
         """H layer fires when redacted= is provided and suspicious patterns found."""
         bridge = PresidioBridge()
         # Use a real redact/restore pair to get valid pseudonyms
@@ -105,7 +105,7 @@ class TestPresidioBridgeGuard:
         # we assert the structure, not a specific event count.
         assert "security_events" in details
 
-    def test_prompt_anchor_workflow_end_to_end(self):
+    def test_prompt_anchor_workflow_should_round_trip_the_original_value(self):
         """Full caller workflow: make_anchor → prompt_anchor → restore(guard=True)."""
         bridge = PresidioBridge()
         original = "我的电话是13812345678"

@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 
-def test_realistic_strategy_without_salt_raises():
+def test_realistic_strategy_should_raise_when_no_salt_given():
     """``realistic`` config without seed/salt + no env var must raise."""
     from argus_redact import redact
 
@@ -23,14 +23,14 @@ def test_realistic_strategy_without_salt_raises():
         )
 
 
-def test_pseudonym_llm_without_salt_raises():
+def test_pseudonym_llm_should_raise_when_no_salt_given():
     from argus_redact import redact_pseudonym_llm
 
     with pytest.raises(ValueError, match="salt"):
         redact_pseudonym_llm("王建国的电话13912345678", lang="zh")
 
 
-def test_oversized_int_salt_raises_clean_valueerror():
+def test_pseudonym_llm_should_raise_clean_value_error_when_salt_is_oversized():
     """An int salt >= 2**64 does not fit the 8-byte coercion.
 
     The naive ``salt.to_bytes(8, ...)`` raises ``OverflowError`` (an
@@ -44,7 +44,7 @@ def test_oversized_int_salt_raises_clean_valueerror():
         redact_pseudonym_llm("电话13912345678", salt=2**64, lang="zh")
 
 
-def test_pseudonym_llm_explicit_salt_works():
+def test_pseudonym_llm_should_succeed_when_salt_is_explicit():
     from argus_redact import redact_pseudonym_llm
 
     r = redact_pseudonym_llm(
@@ -56,7 +56,7 @@ def test_pseudonym_llm_explicit_salt_works():
     assert r.downstream_text
 
 
-def test_realistic_with_seed_works():
+def test_realistic_strategy_should_redact_when_given_an_int_salt():
     """``salt=<int>`` is back-compat path: provides 64-bit entropy via 8-byte BE."""
     from argus_redact import redact
 
@@ -70,7 +70,7 @@ def test_realistic_with_seed_works():
     assert key  # non-empty
 
 
-def test_env_var_salt_works(monkeypatch):
+def test_realistic_strategy_should_redact_when_salt_comes_from_env_var(monkeypatch):
     """``ARGUS_REDACT_PSEUDONYM_SALT`` env var fallback still works (no raise)."""
     monkeypatch.setenv("ARGUS_REDACT_PSEUDONYM_SALT", "test-env-salt-value")
     from argus_redact import redact
@@ -83,7 +83,7 @@ def test_env_var_salt_works(monkeypatch):
     assert "13912345678" not in redacted
 
 
-def test_resolve_salt_raises_with_no_inputs(monkeypatch):
+def test_resolve_salt_should_raise_when_no_seed_or_env_var(monkeypatch):
     """Unit test: ``_resolve_salt`` raises when both seed and env are absent."""
     monkeypatch.delenv("ARGUS_REDACT_PSEUDONYM_SALT", raising=False)
     import argus_redact._core as _core
@@ -92,7 +92,7 @@ def test_resolve_salt_raises_with_no_inputs(monkeypatch):
         _core.resolve_salt(None)
 
 
-def test_resolve_salt_returns_bytes_when_provided():
+def test_resolve_salt_should_return_bytes_when_salt_is_given():
     import argus_redact._core as _core
 
     assert _core.resolve_salt(b"\x42" * 32) == b"\x42" * 32

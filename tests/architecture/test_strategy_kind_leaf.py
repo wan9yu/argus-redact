@@ -35,11 +35,11 @@ def _function_local_import_targets(py_path: Path) -> set[str]:
     return out
 
 
-def test_leaf_module_exists():
+def test_leaf_module_should_exist():
     assert _LEAF.exists(), f"expected strategy-kind leaf at {_LEAF}"
 
 
-def test_leaf_imports_neither_registry_nor_replacer():
+def test_leaf_should_import_neither_registry_nor_replacer():
     tree = ast.parse(_LEAF.read_text(encoding="utf-8"))
     imported: set[str] = set()
     for node in ast.walk(tree):
@@ -51,7 +51,7 @@ def test_leaf_imports_neither_registry_nor_replacer():
     assert "argus_redact.pure.replacer" not in imported
 
 
-def test_leaf_has_no_argus_imports():
+def test_leaf_should_have_no_argus_imports():
     """The leaf is dependency-free within the package (only stdlib /
     __future__). This is what lets both registry and replacer import it
     top-level without re-introducing the cycle."""
@@ -66,7 +66,7 @@ def test_leaf_has_no_argus_imports():
     assert not argus_imports, f"leaf must have no argus imports, found {argus_imports}"
 
 
-def test_registry_and_replacer_import_cleanly_top_level():
+def test_registry_and_replacer_should_import_cleanly_top_level():
     # Real cycle symptom would be an ImportError when a fresh interpreter
     # imports BOTH modules top-level in either order. Both orders must succeed.
     for first, second in (
@@ -82,16 +82,18 @@ def test_registry_and_replacer_import_cleanly_top_level():
             f"assert a.is_strategy_reversible is b.is_strategy_reversible; "
             f"print('ok')"
         )
+
         proc = subprocess.run(
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
         )
+
         assert proc.returncode == 0, f"{first} then {second}:\n{proc.stderr}"
         assert "ok" in proc.stdout
 
 
-def test_registry_has_no_lazy_strategy_reversible_import():
+def test_registry_should_have_no_lazy_strategy_reversible_import():
     lazy = _function_local_import_targets(_REGISTRY)
     assert "argus_redact.pure.replacer.is_strategy_reversible" not in lazy, (
         "registry must import is_strategy_reversible top-level from the leaf, "
@@ -99,7 +101,7 @@ def test_registry_has_no_lazy_strategy_reversible_import():
     )
 
 
-def test_replacer_classification_comes_from_leaf_top_level():
+def test_replacer_classification_should_come_from_leaf_top_level():
     tree = ast.parse(_REPLACER.read_text(encoding="utf-8"))
     top_level: set[str] = set()
     for node in tree.body:  # module-level statements only

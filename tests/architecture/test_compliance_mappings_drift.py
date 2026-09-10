@@ -22,7 +22,7 @@ COMPLIANCE_MAPPINGS_PATH = REPO_ROOT / "docs" / "compliance-mappings.md"
 
 
 class TestComplianceMappingsDrift:
-    def test_compliance_mappings_md_matches_registry(self):
+    def test_compliance_mappings_doc_should_match_registry_generated_output(self):
         """Regenerating the doc must produce byte-identical output to the committed
         file. If this fails, run `make compliance-mappings` and commit."""
         from argus_redact.specs.gen_compliance_mappings import render_compliance_mappings
@@ -35,7 +35,7 @@ class TestComplianceMappingsDrift:
             "Run `make compliance-mappings` and commit the result."
         )
 
-    def test_cnpj_renders_under_explicit_downgrades(self):
+    def test_compliance_mappings_doc_should_list_cnpj_under_explicit_downgrades(self):
         """cnpj (a legal-entity registry at sensitivity 2) must render as a cited
         downgrade.
 

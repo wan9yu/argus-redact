@@ -34,15 +34,15 @@ class TestUKPatterns:
 class TestUkHints:
     """British English kinship + command-mode hints."""
 
-    def test_kinship_my_prefix_is_kinship(self):
+    def test_kinship_should_be_detected_for_my_prefix(self):
         entity = PatternMatch(
             text="my mum", type="self_reference", start=0, end=6, confidence=1.0, layer=1
         )
         assert _is_kinship(entity)
 
-    def test_command_pattern_marks_command_mode(self):
+    def test_interaction_command_should_be_detected_for_polite_requests(self):
         assert _is_interaction_command("Could you send me your phone number?")
         assert _is_interaction_command("Please give me a ring.")
 
-    def test_narrative_uk_is_not_command(self):
+    def test_interaction_command_should_not_be_detected_for_narrative_text(self):
         assert not _is_interaction_command("The weather in London is dreadful today.")

@@ -45,7 +45,7 @@ def _inline_samples() -> list[Sample]:
     ]
 
 
-def test_schema_and_nonvacuous():
+def test_evaluate_presidio_should_match_schema_and_be_nonvacuous():
     pytest.importorskip("presidio_analyzer")
     from tests.benchmark.presidio_eval import evaluate_presidio
 
@@ -61,7 +61,7 @@ def test_schema_and_nonvacuous():
     assert result.per_type["email"].tp >= 1
 
 
-def test_fairness_unlabeled_type_is_not_a_false_positive():
+def test_unlabeled_type_should_not_be_scored_as_false_positive():
     pytest.importorskip("presidio_analyzer")
     from tests.benchmark.presidio_eval import evaluate_presidio
 

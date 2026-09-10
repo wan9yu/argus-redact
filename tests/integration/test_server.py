@@ -170,7 +170,7 @@ class TestServerRedact:
 
         assert resp.status_code == 400
 
-    def test_report_and_detailed_agree_on_security_events(self, client):
+    def test_report_should_agree_with_detailed_on_security_events(self, client):
         """`report=True` used to drop the events `detailed=True` carried.
 
         The fixture must actually produce an event. An earlier version of this
@@ -182,15 +182,17 @@ class TestServerRedact:
             "lang": "zh",
             "config": {"bank_card": {"strategy": "keep"}},
         }
+
         report = client.post("/redact", json={**body, "report": True}).json()
         detailed = client.post("/redact", json={**body, "detailed": True}).json()
+
         assert report["security_events"], (
             "fixture must produce at least one security event, or this test "
             "compares two empty lists and cannot fail"
         )
         assert report["security_events"] == detailed["details"].get("security_events", [])
 
-    def test_report_carries_the_compliance_risk_fields(self, client):
+    def test_report_should_include_compliance_risk_fields(self, client):
         """`gdpr_special_category` and `hipaa_categories` shipped in v0.5.9 and
         reached no wire face until v0.8.8."""
         resp = client.post(
@@ -300,7 +302,7 @@ class TestServerInfoHonesty:
     `lang_capabilities`, closing that gap.
     """
 
-    def test_ner_flag_false_when_engines_absent(self, monkeypatch):
+    def test_info_ner_should_be_false_when_no_engines_installed(self, monkeypatch):
         import asyncio
 
         from argus_redact.server import handle_info
@@ -313,7 +315,7 @@ class TestServerInfoHonesty:
             "/info must not report ner: true when neither hanlp nor spacy is installed"
         )
 
-    def test_ner_flag_true_when_engines_installed(self, monkeypatch):
+    def test_info_ner_should_be_true_when_engines_installed(self, monkeypatch):
         import asyncio
 
         from argus_redact.server import handle_info
@@ -471,7 +473,7 @@ class TestServerConcurrency:
     """
 
     @pytest.mark.asyncio
-    async def test_slow_redact_does_not_block_a_concurrent_health_check(self, monkeypatch):
+    async def test_slow_redact_should_not_block_a_concurrent_health_check(self, monkeypatch):
         import asyncio
         import threading
 
@@ -529,7 +531,7 @@ class TestServerConcurrency:
         )
 
     @pytest.mark.asyncio
-    async def test_slow_restore_does_not_block_a_concurrent_health_check(self, monkeypatch):
+    async def test_slow_restore_should_not_block_a_concurrent_health_check(self, monkeypatch):
         # Symmetric to the /redact case: handle_restore offloads its core call
         # too, so an expensive /restore must not stall a concurrent /health.
         import asyncio
@@ -587,7 +589,7 @@ class TestServerNotReadyWithoutLifespan:
     exactly the misuse this guards."""
 
     @pytest.mark.asyncio
-    async def test_redact_without_lifespan_returns_503(self, monkeypatch):
+    async def test_redact_should_return_503_when_lifespan_never_ran(self, monkeypatch):
         import httpx
         from httpx import ASGITransport
 
@@ -607,7 +609,7 @@ class TestServerNotReadyWithoutLifespan:
         )
 
     @pytest.mark.asyncio
-    async def test_restore_without_lifespan_returns_503(self, monkeypatch):
+    async def test_restore_should_return_503_when_lifespan_never_ran(self, monkeypatch):
         # Both handler ladders map _ServerNotReady -> 503, not just /redact.
         import httpx
         from httpx import ASGITransport

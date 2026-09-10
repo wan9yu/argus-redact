@@ -284,7 +284,7 @@ class TestReversibilityThroughLLM:
         if not _check_ollama():
             pytest.skip("Ollama not running")
 
-    def test_pseudonym_survival_rate(self, capsys):
+    def test_pseudonyms_should_survive_an_llm_round_trip_above_baseline(self, capsys):
         """Redact → LLM → restore: do pseudonyms survive?"""
         survived = 0
         total_pseudonyms = 0
@@ -331,7 +331,7 @@ class TestReversibilityThroughLLM:
             f"Pseudonym survival rate {survival_rate:.0%} below 70% — details: {details}"
         )
 
-    def test_pii_not_leaked_through_llm(self, capsys):
+    def test_pii_should_not_leak_through_an_llm_round_trip(self, capsys):
         """PII in original text should NOT appear in LLM output."""
         leaked_count = 0
         total_pii = 0
@@ -371,7 +371,7 @@ class TestUsabilityThroughLLM:
         if not _check_ollama():
             pytest.skip("Ollama not running")
 
-    def test_llm_produces_nonempty_response(self, capsys):
+    def test_llm_should_produce_a_nonempty_response_from_redacted_text(self, capsys):
         """LLM should produce meaningful (non-empty) responses from redacted text."""
         empty_responses = 0
         details = []

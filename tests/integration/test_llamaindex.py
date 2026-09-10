@@ -43,7 +43,7 @@ class TestRedactTransform:
         assert t.last_anchor.nonce
         assert t.last_anchor.scope
 
-    def test_make_prompt_addendum_includes_nonce(self):
+    def test_make_prompt_addendum_should_include_the_nonce_when_a_redaction_occurred(self):
         t = RedactTransform(mode="fast", lang="zh", salt=42)
         t("电话13812345678")
 
@@ -51,12 +51,12 @@ class TestRedactTransform:
 
         assert t.last_anchor.nonce in addendum
 
-    def test_make_prompt_addendum_empty_before_call(self):
+    def test_make_prompt_addendum_should_be_empty_when_no_redaction_occurred(self):
         t = RedactTransform(mode="fast", lang="zh", salt=42)
 
         assert t.make_prompt_addendum() == ""
 
-    def test_make_prompt_addendum_uses_en_template_for_list_lang(self):
+    def test_make_prompt_addendum_should_use_the_english_template_when_lang_is_a_list(self):
         """A list lang (e.g. ['en']) must not collapse to the zh anchor
         template — a mismatched-language nonce-echo can fail-close the
         guarded restore downstream."""
@@ -78,7 +78,7 @@ class TestRedactTransformLock:
     dropping an already-redacted PII entry from the accumulated key.
     """
 
-    def test_has_lock_instance(self):
+    def test_redact_transform_should_expose_a_threading_lock(self):
         t = RedactTransform(mode="fast", lang="zh", salt=42)
 
         assert hasattr(t, "_lock")
@@ -87,7 +87,7 @@ class TestRedactTransformLock:
         assert acquired
         t._lock.release()
 
-    def test_call_holds_lock_across_redact(self):
+    def test_redact_transform_should_hold_lock_across_the_redact_call(self):
         """The lock must be held for the WHOLE mutation (including the
         redact() call itself), mirroring RedactRunnable.invoke — not just
         wrapped around the final attribute writes."""
@@ -122,7 +122,7 @@ class TestRedactTransformLock:
             "RedactTransform.__call__ did not hold its lock across the redact() call"
         )
 
-    def test_concurrent_calls_do_not_lose_a_key_entry(self):
+    def test_concurrent_calls_should_not_lose_a_key_entry(self):
         """Two-thread hammer: without the lock, thread A's stale read of
         last_key (captured before thread B's write) gets written back after
         B, silently dropping B's entry from the accumulated key."""
@@ -225,7 +225,7 @@ class TestRestoreTransform:
 
         assert "13812345678" not in result
 
-    def test_restore_transform_strict_fails_closed_on_injection(self):
+    def test_restore_transform_strict_should_raise_when_response_contains_injection(self):
         """Pattern A could not reach strict= at all before v0.7.20."""
         from argus_redact.pure.restore import RestoreGuardError
 
@@ -267,7 +267,7 @@ class TestRestoreTransformAliases:
     """A cross-language alias form must restore through the guarded
     RestoreTransform when aliases are configured on the constructor."""
 
-    def test_restore_transform_forwards_aliases(self):
+    def test_restore_transform_should_restore_original_when_alias_is_used(self):
         redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
         redacted = redact_t(f"张三的电话是{13912345678}")
         person_fake = next(p for p, o in redact_t.last_key.items() if o == "张三")
@@ -281,7 +281,7 @@ class TestRestoreTransformAliases:
         assert "张三" in out
         assert alias not in out
 
-    def test_restore_transform_rejects_malformed_aliases(self):
+    def test_restore_transform_should_raise_when_alias_value_is_malformed(self):
         # RestoreTransform -> guarded_restore -> pure.restore.restore, the
         # same seam every other face funnels through.
         redact_t = RedactTransform(mode="fast", lang="zh", salt=42)

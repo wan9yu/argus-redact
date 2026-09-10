@@ -43,7 +43,7 @@ def _rows(matches):
 # threshold boundary, so a `>`-vs-`>=` flip or a re-ordered `+=` trips THIS test.
 
 
-def test_threshold_boundary_at_0_8_passes_just_below_fails():
+def test_person_match_should_require_score_at_least_0_8():
     # A 2-char base (0.3) reachable ONLY via the proximity bucket:
     #   distance <= 50 (PROXIMITY_NEAR) → +0.5 → 0.3 + 0.5 == 0.8 (== threshold).
     #   distance == 51 → +0.3 (PROXIMITY_MID) → 0.6 < 0.8 → dropped.
@@ -62,7 +62,7 @@ def test_threshold_boundary_at_0_8_passes_just_below_fails():
     assert below == []
 
 
-def test_confidence_is_nonassociative_f64_exact():
+def test_confidence_sum_should_preserve_exact_float_tail():
     # base 0.3 (2-char) + context-prefix 0.6 → 0.8999999999999999, NOT 0.9.
     # IEEE-754 addition is not associative; this exact tail bit pins the
     # accumulation structure (`base + evidence`, evidence summed in source
@@ -80,7 +80,7 @@ def test_confidence_is_nonassociative_f64_exact():
 # (3rd char begins a common_words entry), in which case the 2-char wins.
 
 
-def test_variant_tie_longest_wins_when_no_swallow():
+def test_variant_resolution_should_prefer_longest_when_no_swallow():
     # 客户何秀珍已登记 → generate_candidates emits 何秀珍 (3) and 何秀 (2) at the
     # same start; context-prefix 客户 pushes both past threshold. No swallow
     # (珍+已 is not a common word) → longest (3-char) wins.
@@ -89,7 +89,7 @@ def test_variant_tie_longest_wins_when_no_swallow():
     assert _rows(out) == [("何秀珍", 2, 5, 1.0)]
 
 
-def test_variant_tie_swallow_drops_to_two_char():
+def test_variant_resolution_should_drop_to_two_char_when_swallowed():
     # 张三预订了机票 → the SINGLE `{1,3}` cap makes the greedy match the 4-char
     # 张三预订, whose 2-char tail 预订 ("to book") is a common word AND there is NO
     # context-prefix before 张三, so resolution treats 预订 as a swallowed word and
@@ -100,7 +100,7 @@ def test_variant_tie_swallow_drops_to_two_char():
     assert _rows(out) == [("张三", 0, 2, 0.8)]
 
 
-def test_single_surname_four_char_foreign_name():
+def test_single_surname_should_detect_a_four_char_foreign_name():
     # 客户马尔克斯已登记 → the SINGLE `{1,3}` cap lets the single surname 马 carry a
     # 3-char given name, so the foreign transliteration 马尔克斯 is detected at its
     # full 4-char length (the old `{1,2}` cap truncated it to 马尔). Its tail 克斯
@@ -110,7 +110,7 @@ def test_single_surname_four_char_foreign_name():
     assert _rows(out) == [("马尔克斯", 2, 6, 1.0)]
 
 
-def test_compound_surname_four_char_triple_given():
+def test_compound_surname_should_detect_a_triple_given_name():
     # 客户欧阳娜娜娜已登记 → the COMPOUND `{1,3}` cap lets the compound surname 欧阳
     # carry a triple given name 娜娜娜 → 欧阳娜娜娜 detected at its full 5-char
     # length (the old `{1,2}` cap stopped at 欧阳娜娜).
@@ -121,7 +121,7 @@ def test_compound_surname_four_char_triple_given():
 # ── Gate 3: scoring-constants lock (each by observable effect) ─────────────────
 
 
-def test_constant_threshold_default_is_0_8():
+def test_default_score_threshold_should_equal_0_8():
     # SCORE_THRESHOLD default 0.8 — the OMITTED-threshold call must behave as 0.8.
     # Build a candidate reachable only at <= 0.8 (2-char + proximity-near = 0.8).
     # If the default threshold rose above 0.8, the omitted-arg call would empty.
@@ -133,7 +133,7 @@ def test_constant_threshold_default_is_0_8():
     assert _rows(omitted) == _rows(explicit)
 
 
-def test_constant_context_window_observable_behavior():
+def test_context_prefix_evidence_should_fire_only_when_adjacent():
     # CONTEXT_WINDOW == 20 (chars). NOTE: the 20-vs-21 boundary is NOT directly
     # observable through detect_*, because _CONTEXT_PREFIX is `$`-anchored to the
     # tail of the `before` window — the context word must sit ADJACENT to the
@@ -149,7 +149,7 @@ def test_constant_context_window_observable_behavior():
     assert broken == []
 
 
-def test_constant_proximity_buckets_50_and_150():
+def test_proximity_evidence_should_drop_when_distance_exceeds_50():
     # PROXIMITY_NEAR == 50 (+W_PROXIMITY_NEAR 0.5) vs PROXIMITY_MID == 150
     # (+W_PROXIMITY_MID 0.3). A bare 2-char name (base 0.3) scored at threshold
     # 0.6 so BOTH buckets emit — and the confidence reveals which bucket fired.
@@ -165,39 +165,39 @@ def test_constant_proximity_buckets_50_and_150():
     assert near[0].confidence == 0.8 and mid[0].confidence == 0.6
 
 
-def test_constant_weight_honorific_suffix_0_5():
+def test_honorific_suffix_weight_should_equal_0_5():
     # W_HONORIFIC_SUFFIX == 0.5 — honorific-only on a 2-char base: 0.3 + 0.5 = 0.8.
     out = _core.detect_person_names_zh("张三先生你好")
     assert _rows(out) == [("张三", 0, 2, 0.8)]  # base 0.3 + 0.5 → change 0.5 → fails
 
 
-def test_constant_weight_pii_suffix_0_5():
+def test_pii_suffix_weight_should_equal_0_5():
     # W_PII_SUFFIX == 0.5 — possessive PII keyword after the name: 0.3 + 0.5 = 0.8.
     out = _core.detect_person_names_zh("张三的手机号码")
     assert _rows(out) == [("张三", 0, 2, 0.8)]
 
 
-def test_constant_weight_paren_phone_0_5():
+def test_paren_phone_weight_should_equal_0_5():
     # W_PAREN_PHONE == 0.5 — parenthesized mobile after the name: 0.3 + 0.5 = 0.8.
     out = _core.detect_person_names_zh("张三（13812345678）")
     assert _rows(out) == [("张三", 0, 2, 0.8)]
 
 
-def test_constant_weight_proximity_near_0_5():
+def test_proximity_near_weight_should_equal_0_5():
     # W_PROXIMITY_NEAR == 0.5 — near-bucket PII only: 0.3 + 0.5 = 0.8.
     text = "张三" + ("，" * 60)
     out = _core.detect_person_names_zh(text, [_pm("13812345678", "phone", 52, 63)])
     assert _rows(out) == [("张三", 0, 2, 0.8)]
 
 
-def test_constant_weight_context_prefix_0_6():
+def test_context_prefix_weight_should_equal_0_6():
     # W_CONTEXT_PREFIX == 0.6 — context-prefix only on a 2-char base:
     # 0.3 + 0.6 == 0.8999999999999999 (pins both the 0.6 weight AND the f64 tail).
     out = _core.detect_person_names_zh("客户张三")
     assert _rows(out) == [("张三", 2, 4, 0.8999999999999999)]
 
 
-def test_constant_base_scores_by_length():
+def test_base_score_should_scale_with_name_length():
     # BASE_LEN_2 (0.3) / BASE_LEN_3 (0.4) / BASE_LEN_4PLUS (0.5), each isolated
     # by a single mid-bucket proximity signal (+0.3) at threshold 0.6 so the
     # confidence == base + 0.3 reveals the base exactly.
@@ -217,7 +217,7 @@ def test_constant_base_scores_by_length():
     assert _rows(out4) == [("欧阳娜娜", 0, 4, 0.8)]  # 0.5 + 0.3
 
 
-def test_constant_zero_evidence_short_circuit_scores_zero():
+def test_zero_evidence_should_short_circuit_the_score_to_0():
     # The `if evidence == 0.0: return 0.0` short-circuit — a real surname-led name
     # with NO structural evidence scores exactly 0.0 (declined at L1b at the
     # default 0.8 threshold; left to L2 NER). Two observations pin it:
@@ -242,7 +242,7 @@ def test_constant_zero_evidence_short_circuit_scores_zero():
 # fingerprint checks (which lock identity, not this structural property).
 
 
-def test_invariant_every_not_name_starts_with_a_surname_char():
+def test_not_names_pool_should_start_with_a_surname_char():
     surnames = set(_core.person_surnames_zh())  # 138 single chars
     not_names = list(_core.person_not_names_zh())
     assert not_names, "not_names pool is empty — fingerprint gate should have caught this"
@@ -250,7 +250,7 @@ def test_invariant_every_not_name_starts_with_a_surname_char():
     assert offenders == [], f"not_names entries not starting with a surname: {offenders[:10]}"
 
 
-def test_invariant_no_empty_or_whitespace_pool_entries():
+def test_person_data_pools_should_contain_no_empty_entries():
     # An empty/whitespace entry would corrupt the SURNAMES char class or a
     # membership test (e.g. "" in neg would block every candidate). Cheap,
     # high-value structural invariant across the zh pools.
@@ -272,7 +272,7 @@ def test_invariant_no_empty_or_whitespace_pool_entries():
 # boundary, the bare-surname suppression, and single-surname-alone → no match.
 
 
-def test_en_confidence_1_0_vs_0_9_boundary():
+def test_en_person_confidence_should_reflect_evidence_strength():
     # given-name-led (first token in GIVEN_NAME_SET) → 1.0.
     known = _core.detect_person_names_en("Email John Smith today.")
     assert _rows(known) == [("John Smith", 6, 16, 1.0)]
@@ -291,7 +291,7 @@ def test_en_confidence_1_0_vs_0_9_boundary():
     assert _rows(titled) == [("Dr. Smith", 0, 9, 0.8999999999999999)]
 
 
-def test_en_single_surname_alone_no_match():
+def test_en_lone_surname_should_not_match():
     # A surname with no preceding adjacent capitalized token (i == 0) is
     # intentionally NOT matched — a lone surname is too weak to emit. If the
     # `i == 0: continue` guard were dropped, "Smith" would surface.
@@ -315,7 +315,7 @@ def test_en_single_surname_alone_no_match():
 # context-prefix / paren-phone confidence below.
 
 
-def test_context_prefix_fs_gs_rs_us_separators_match_python_re():
+def test_context_prefix_should_fire_when_separator_is_a_control_char():
     # _CONTEXT_PREFIX: role word `客户` + a single U+001C-U+001F separator + name.
     # context-prefix fires (+0.6) on a 2-char base (0.3) → 0.8999999999999999
     # (same non-associative f64 tail as the `[：:\s]?` separators above). Each of
@@ -328,7 +328,7 @@ def test_context_prefix_fs_gs_rs_us_separators_match_python_re():
         assert out[0].confidence == 0.8999999999999999
 
 
-def test_paren_phone_control_char_in_gap_matches_python_re():
+def test_paren_phone_should_fire_when_gap_has_a_control_char():
     # _PAREN_PHONE: name + open paren + a U+001D (GS) control char in the gap +
     # a valid 11-digit mobile. paren-phone fires (+0.5) on a 2-char base (0.3) →
     # 0.8. Before the fix the `\s*` gap rejected the control char → no evidence →

@@ -36,7 +36,7 @@ def _mock_response(json_entities):
 
 
 @patch("argus_redact.impure.ollama_adapter.requests.post")
-def test_hostile_l3_type_does_not_reach_any_sink(mock_post):
+def test_l3_type_should_not_reach_any_sink_when_hostile(mock_post):
     # Deliberately wrong start/end: the adapter's string-search fallback finds
     # the real span regardless, so the test doesn't depend on hand-counted
     # character offsets.

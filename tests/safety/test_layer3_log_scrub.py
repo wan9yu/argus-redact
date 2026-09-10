@@ -32,7 +32,7 @@ def _force_l3_failure(monkeypatch):
     monkeypatch.setattr(sem, "detect_semantic", _boom)
 
 
-def test_l3_failure_logs_exception_type_not_traceback(monkeypatch, caplog):
+def test_layer3_failure_log_should_include_type_but_not_traceback_or_input(monkeypatch, caplog):
     _force_l3_failure(monkeypatch)
 
     with caplog.at_level(logging.WARNING, logger="argus_redact"):

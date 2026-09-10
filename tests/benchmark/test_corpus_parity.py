@@ -17,7 +17,7 @@ import _corpus  # noqa: E402
 import pi_perf  # noqa: E402
 
 
-def test_pi_perf_corpora_match_shared_corpus():
+def test_pi_perf_corpora_should_match_the_shared_corpus():
     assert pi_perf._ZH_1KB == _corpus._ZH_1KB
     assert pi_perf._EN_1KB == _corpus._EN_1KB
     assert pi_perf._ZH_SHORT == _corpus._ZH_SHORT

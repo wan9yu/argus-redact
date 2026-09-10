@@ -61,7 +61,7 @@ def _declared() -> set[str]:
     return out
 
 
-def test_every_runtime_import_is_declared_or_allowlisted():
+def test_every_runtime_import_should_be_declared_or_allowlisted():
     imported = _top_level_imports(_SRC)
     third_party = {m for m in imported if m not in sys.stdlib_module_names and m not in _ALLOWLIST}
     undeclared = third_party - _declared()

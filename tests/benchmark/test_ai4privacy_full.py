@@ -92,18 +92,18 @@ class TestThreeLayerComparison:
         # comparison.
         return {}
 
-    def test_layer1_regex_only(self, results):
+    def test_fast_mode_should_produce_benchmark_metrics(self, results):
         r = _run_benchmark("fast", n_examples=200)
         results["fast"] = r
         print("\n=== ai4privacy benchmark (200 examples) ===")
         _print_result(r)
 
-    def test_layer1_plus_2_ner(self, results):
+    def test_ner_mode_should_produce_benchmark_metrics(self, results):
         r = _run_benchmark("ner", n_examples=200)
         results["ner"] = r
         _print_result(r)
 
-    def test_comparison_summary(self, results):
+    def test_comparison_should_report_metrics_when_both_modes_ran(self, results):
         if "fast" not in results or "ner" not in results:
             pytest.skip("previous tests didn't run")
 

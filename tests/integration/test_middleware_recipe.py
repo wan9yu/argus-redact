@@ -125,7 +125,7 @@ def probe(middleware_ns):
         yield client, received
 
 
-def test_redacts_request_body_before_forwarding(probe):
+def test_middleware_should_redact_request_body_before_forwarding(probe):
     client, received = probe
 
     resp = client.post("/echo", json={"text": "call me at 13812345678"})
@@ -134,7 +134,7 @@ def test_redacts_request_body_before_forwarding(probe):
     assert b"13812345678" not in received["body"]  # redacted before it left this process
 
 
-def test_key_is_never_forwarded_downstream(probe):
+def test_middleware_should_not_forward_key_downstream(probe):
     client, received = probe
 
     client.post("/echo", json={"text": "call me at 13812345678"})
@@ -144,7 +144,7 @@ def test_key_is_never_forwarded_downstream(probe):
     assert b"_redact_key" not in received["body"]
 
 
-def test_non_json_body_passes_through_unmodified(probe):
+def test_middleware_should_pass_through_body_unmodified_when_non_json(probe):
     client, received = probe
 
     resp = client.post("/echo", content=b"plain text, not json")
@@ -154,7 +154,7 @@ def test_non_json_body_passes_through_unmodified(probe):
     assert resp.text == "plain text, not json"
 
 
-def test_non_utf8_request_body_does_not_500(probe):
+def test_middleware_should_not_return_500_when_body_is_non_utf8(probe):
     client, _received = probe
 
     resp = client.post(

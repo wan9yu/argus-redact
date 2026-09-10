@@ -36,7 +36,7 @@ def _read_rust_value() -> int:
     return _parse_int_const(_RUST_FILE, r"pub const CARRY_WINDOW\s*:\s*\w+\s*=\s*([\d_]+)")
 
 
-def test_carry_window_python_rust_parity():
+def test_carry_window_constant_should_match_between_python_and_rust():
     """_CARRY_WINDOW in Python must equal Rust CARRY_WINDOW.
 
     If they diverge, the Python wheel path carries a different trailing window

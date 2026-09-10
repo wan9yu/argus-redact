@@ -1,7 +1,7 @@
 """v0.6.11: Layer 2 adapter-author surface — register_pii_type, PIITypeDef, PatternMatch."""
 
 
-def test_adapter_surface_imports():
+def test_adapter_surface_should_be_importable():
     from argus_redact.compose import PatternMatch, PIITypeDef, register_pii_type
 
     assert callable(register_pii_type)
@@ -9,14 +9,14 @@ def test_adapter_surface_imports():
     assert isinstance(PatternMatch, type)
 
 
-def test_adapter_surface_in_all():
+def test_adapter_surface_names_should_be_in_all():
     import argus_redact.compose as c
 
     for name in ("register_pii_type", "PIITypeDef", "PatternMatch"):
         assert name in c.__all__, f"compose.__all__ missing {name!r}"
 
 
-def test_register_pii_type_is_specs_register():
+def test_register_pii_type_should_be_specs_registry_register():
     """compose.register_pii_type IS the underlying specs.registry.register."""
     from argus_redact.compose import register_pii_type
     from argus_redact.specs.registry import register
@@ -24,21 +24,21 @@ def test_register_pii_type_is_specs_register():
     assert register_pii_type is register
 
 
-def test_pii_typedef_is_specs_pii_typedef():
+def test_pii_typedef_should_be_specs_registry_pii_typedef():
     from argus_redact.compose import PIITypeDef
     from argus_redact.specs.registry import PIITypeDef as SpecsPIITypeDef
 
     assert PIITypeDef is SpecsPIITypeDef
 
 
-def test_pattern_match_is_internal_pattern_match():
+def test_pattern_match_should_be_internal_pattern_match():
     from argus_redact._types import PatternMatch as InternalPatternMatch
     from argus_redact.compose import PatternMatch
 
     assert PatternMatch is InternalPatternMatch
 
 
-def test_register_custom_type_round_trips():
+def test_custom_registered_type_should_round_trip_through_redact_and_restore():
     """Full round-trip: register custom type, run redact() with _pre_detected, restore."""
     from argus_redact import redact, restore
     from argus_redact.compose import PatternMatch, PIITypeDef, register_pii_type

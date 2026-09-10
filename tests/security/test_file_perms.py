@@ -39,7 +39,7 @@ def _mode(path) -> int:
     return stat.S_IMODE(os.stat(path).st_mode)
 
 
-def test_safe_write_text_does_not_widen_hardened_existing_file(tmp_path):
+def test_safe_write_text_should_not_widen_permissions_when_file_is_already_hardened(tmp_path):
     from argus_redact._safe_io import safe_write_text
 
     target = tmp_path / "hardened.txt"
@@ -53,7 +53,7 @@ def test_safe_write_text_does_not_widen_hardened_existing_file(tmp_path):
     assert target.read_text(encoding="utf-8") == "new content"
 
 
-def test_safe_write_text_new_file_gets_requested_mode(tmp_path):
+def test_safe_write_text_should_apply_the_requested_mode_when_file_is_new(tmp_path):
     from argus_redact._safe_io import safe_write_text
 
     target = tmp_path / "new.txt"
@@ -62,7 +62,7 @@ def test_safe_write_text_new_file_gets_requested_mode(tmp_path):
     assert _mode(target) == 0o600
 
 
-def test_safe_write_key_still_narrows_existing_world_readable_file(tmp_path):
+def test_safe_write_key_should_narrow_permissions_when_existing_file_is_world_readable(tmp_path):
     from argus_redact._safe_io import safe_write_key
 
     target = tmp_path / "key.json"
@@ -75,7 +75,7 @@ def test_safe_write_key_still_narrows_existing_world_readable_file(tmp_path):
     assert json.loads(target.read_text(encoding="utf-8")) == {"P-001": "Alice"}
 
 
-def test_cli_restore_output_file_is_mode_0600(tmp_path):
+def test_cli_restore_should_write_output_file_at_mode_0600(tmp_path):
     key_file = tmp_path / "key.json"
     output_file = tmp_path / "restored.txt"
 
@@ -106,7 +106,7 @@ def test_cli_restore_output_file_is_mode_0600(tmp_path):
     assert "13812345678" in output_file.read_text(encoding="utf-8")
 
 
-def test_cli_assess_output_file_is_mode_0600(tmp_path):
+def test_cli_assess_should_write_output_file_at_mode_0600(tmp_path):
     output_file = tmp_path / "report.json"
 
     code, _, stderr = run_cli(

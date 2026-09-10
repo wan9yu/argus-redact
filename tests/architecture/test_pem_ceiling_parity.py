@@ -38,7 +38,7 @@ def _read_rust_value() -> int:
     )
 
 
-def test_pem_opener_ceiling_extra_python_rust_parity():
+def test_pem_opener_ceiling_extra_should_match_between_python_and_rust():
     """_PEM_OPENER_CEILING_EXTRA in Python must equal Rust PEM_OPENER_CEILING_EXTRA.
 
     If they diverge, the Python wheel and the Rust WASM core pick different

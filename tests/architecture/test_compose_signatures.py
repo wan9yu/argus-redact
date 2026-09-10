@@ -101,7 +101,7 @@ REDACTREPORT_FIELDS = frozenset(
 
 
 @pytest.mark.parametrize("name,expected", list(COMPOSE_SIGNATURES.items()))
-def test_compose_signature_snapshot(name, expected):
+def test_compose_signature_should_match_the_frozen_snapshot(name, expected):
     fn = getattr(c, name)
     actual = str(inspect.signature(fn))
     assert actual == expected, (
@@ -113,7 +113,7 @@ def test_compose_signature_snapshot(name, expected):
     )
 
 
-def test_pii_typedef_fields_snapshot():
+def test_pii_typedef_fields_should_match_the_frozen_snapshot():
     actual = frozenset(f.name for f in dataclasses.fields(c.PIITypeDef))
     assert actual == PIITYPEDEF_FIELDS, (
         f"PIITypeDef field set changed.\n"
@@ -123,7 +123,7 @@ def test_pii_typedef_fields_snapshot():
     )
 
 
-def test_pattern_match_fields_snapshot():
+def test_pattern_match_fields_should_match_the_frozen_snapshot():
     actual = frozenset(f.name for f in dataclasses.fields(c.PatternMatch))
     assert actual == PATTERNMATCH_FIELDS, (
         f"PatternMatch field set changed.\n"
@@ -133,7 +133,7 @@ def test_pattern_match_fields_snapshot():
     )
 
 
-def test_redact_report_fields_snapshot():
+def test_redact_report_fields_should_match_the_frozen_snapshot():
     actual = frozenset(f.name for f in dataclasses.fields(RedactReport))
     assert actual == REDACTREPORT_FIELDS, (
         f"RedactReport field set changed.\n"

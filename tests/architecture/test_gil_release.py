@@ -96,7 +96,7 @@ def _best_speedup(measure_serial, measure_parallel) -> tuple[float, float, float
 @pytest.mark.skipif(
     (os.cpu_count() or 1) < 4, reason="needs >= 4 cores to observe parallel speedup"
 )
-def test_detect_l1_releases_the_lock_so_threads_actually_parallelise() -> None:
+def test_detect_l1_should_release_the_lock_so_threads_actually_parallelise() -> None:
     # Warm every lazy static (pattern compiles, name pools) before timing.
     _core.detect_l1(TEXT, ["zh", "en"], None)
 
@@ -122,7 +122,7 @@ def test_detect_l1_releases_the_lock_so_threads_actually_parallelise() -> None:
 @pytest.mark.skipif(
     (os.cpu_count() or 1) < 4, reason="needs >= 4 cores to observe parallel speedup"
 )
-def test_restore_releases_the_lock_so_threads_actually_parallelise() -> None:
+def test_restore_should_release_the_lock_so_threads_actually_parallelise() -> None:
     key = {f"P-{i:05d}": f"Person Number {i}" for i in range(4000)}
     text = " ".join(f"P-{i:05d}" for i in range(0, 4000, 40))
 
@@ -145,7 +145,7 @@ def test_restore_releases_the_lock_so_threads_actually_parallelise() -> None:
         return time.perf_counter() - start
 
     speedup, serial, parallel = _best_speedup(restore_serial, restore_parallel)
-    # See test_detect_l1_releases_the_lock...'s comment: held ~1.0x vs
+    # See test_detect_l1_should_release_the_lock...'s comment: held ~1.0x vs
     # released ~1.4x on GitHub-hosted runners, so 1.2 discriminates with
     # margin without false-failing on a 2-core CI box.
     assert speedup > 1.2, (
@@ -180,7 +180,7 @@ def _make_replace_workload() -> tuple[str, list, dict]:
 @pytest.mark.skipif(
     (os.cpu_count() or 1) < 4, reason="needs >= 4 cores to observe parallel speedup"
 )
-def test_replace_releases_the_lock_so_threads_actually_parallelise() -> None:
+def test_replace_should_release_the_lock_so_threads_actually_parallelise() -> None:
     # `_core.replace` was the odd one out: it held the GIL for a CPU-bound pass
     # (unlike detect_l1 / restore), so a large redact serialised every other
     # thread — and, over HTTP, froze the whole server event loop. It must now
@@ -222,7 +222,7 @@ def test_replace_releases_the_lock_so_threads_actually_parallelise() -> None:
         return time.perf_counter() - start
 
     speedup, serial, parallel = _best_speedup(replace_serial, replace_parallel)
-    # See test_detect_l1_releases_the_lock...'s comment for the 1.2 threshold:
+    # See test_detect_l1_should_release_the_lock...'s comment for the 1.2 threshold:
     # a GIL-holding replace tops out ~1.0x on every trial (the 4 threads
     # serialise), a released one clears ~1.4x, so 1.2 fails the un-detached
     # binding while leaving margin on a contended CI box.

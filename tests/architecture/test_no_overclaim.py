@@ -78,7 +78,7 @@ def _unqualified_claims(text: str) -> list[str]:
     return hits
 
 
-def test_no_overclaim_hk_tw_macau():
+def test_user_facing_docs_should_not_overclaim_hk_tw_macau():
     for path in _USER_FACING:
         if not path.exists():
             continue
@@ -90,7 +90,7 @@ def test_no_overclaim_hk_tw_macau():
         )
 
 
-def test_overclaim_guard_is_not_vacuous():
+def test_the_overclaim_guard_should_not_be_vacuous():
     # Positive control — proves the guard discriminates rather than passing
     # vacuously. If this breaks, the main test's green is meaningless.
     assert _unqualified_claims("本工具支持港澳台证件全覆盖。"), (

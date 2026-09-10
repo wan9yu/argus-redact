@@ -21,7 +21,7 @@ _ADAPTER_MOD_PATHS = list(_LANG_NER_ADAPTERS.values())
 
 class TestNERAdapterConfidenceFloors:
     @pytest.mark.parametrize("mod_path", _ADAPTER_MOD_PATHS)
-    def test_adapter_default_confidence_above_ner_filter_floor(self, mod_path):
+    def test_adapter_default_confidence_should_be_at_or_above_ner_filter_floor(self, mod_path):
         """Adapter _DEFAULT_CONFIDENCE >= _DEFAULT_NER_CONFIDENCE (the default filter floor).
 
         If an adapter assigns a default confidence that is below the most
@@ -40,7 +40,7 @@ class TestNERAdapterConfidenceFloors:
             f"NER output will be entirely filtered on default-density text"
         )
 
-    def test_ner_min_confidence_floors_are_monotone(self):
+    def test_ner_min_confidence_floors_should_be_monotone(self):
         """NER density-based min-confidence floors are monotone: high <= medium <= default.
 
         get_ner_min_confidence returns progressively tighter thresholds as PII
@@ -70,7 +70,7 @@ class TestNERAdapterConfidenceFloors:
 
 
 class TestSemanticModelProfileFloors:
-    def test_all_profiles_confidence_above_detect_semantic_default(self):
+    def test_profile_confidence_should_be_at_or_above_semantic_default(self):
         """Each ModelProfile.confidence >= detect_semantic's default min_confidence.
 
         A profile whose confidence is below the detect_semantic filter floor

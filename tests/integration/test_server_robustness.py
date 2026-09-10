@@ -43,7 +43,7 @@ class TestBodyParseOffLoop:
     large body cannot stall the single loop thread and block GET /health."""
 
     @pytest.mark.asyncio
-    async def test_body_parse_is_dispatched_off_the_event_loop(self, monkeypatch):
+    async def test_body_parse_should_run_off_the_event_loop(self, monkeypatch):
         """Structural: the join+parse runs in a worker thread, not the loop thread."""
         import httpx
         from httpx import ASGITransport
@@ -76,7 +76,7 @@ class TestBodyParseOffLoop:
         )
 
     @pytest.mark.asyncio
-    async def test_health_responds_while_a_body_parse_is_in_flight(self, monkeypatch):
+    async def test_health_should_respond_while_a_body_parse_is_in_flight(self, monkeypatch):
         """Concurrency: GET /health returns while a body parse is blocked."""
         import httpx
         from httpx import ASGITransport
@@ -128,7 +128,7 @@ class TestScanTimeout:
     """(2) An honest per-request scan deadline: exceeding it returns 504."""
 
     @pytest.mark.asyncio
-    async def test_redact_scan_exceeding_timeout_returns_504(self, monkeypatch):
+    async def test_redact_scan_should_return_504_when_it_exceeds_the_timeout(self, monkeypatch):
         import httpx
         from httpx import ASGITransport
 
@@ -165,7 +165,7 @@ class TestScanTimeout:
         )
 
     @pytest.mark.asyncio
-    async def test_restore_scan_exceeding_timeout_returns_504(self, monkeypatch):
+    async def test_restore_scan_should_return_504_when_it_exceeds_the_timeout(self, monkeypatch):
         import httpx
         from httpx import ASGITransport
 
@@ -200,7 +200,7 @@ class TestCapacityLimiterBinds:
     second concurrent scan queues for a token rather than running immediately."""
 
     @pytest.mark.asyncio
-    async def test_limiter_at_one_makes_the_second_request_queue(self, monkeypatch):
+    async def test_second_scan_should_queue_when_the_limiter_is_at_one(self, monkeypatch):
         import anyio
         import httpx
         from httpx import ASGITransport
@@ -279,7 +279,7 @@ class TestNoLeakedSlotAfterTimeout:
     """
 
     @pytest.mark.asyncio
-    async def test_timed_out_scan_releases_its_slot_on_completion(self, monkeypatch):
+    async def test_timed_out_scan_should_release_its_slot_on_completion(self, monkeypatch):
         import anyio
         import httpx
         from httpx import ASGITransport
@@ -340,7 +340,7 @@ class TestOverloadShedsHonestly:
     unbounded new scan thread."""
 
     @pytest.mark.asyncio
-    async def test_new_request_sheds_with_504_when_all_slots_are_running(self, monkeypatch):
+    async def test_new_request_should_shed_with_504_when_all_slots_are_running(self, monkeypatch):
         import anyio
         import httpx
         from httpx import ASGITransport
@@ -406,7 +406,7 @@ class TestLifespanWiring:
     point). This is the real production wiring the other tests rely on."""
 
     @pytest.mark.asyncio
-    async def test_lifespan_creates_and_tears_down_the_scan_task_group(self, monkeypatch):
+    async def test_lifespan_should_create_and_tear_down_the_scan_task_group(self, monkeypatch):
         # No ARGUS_API_KEY so create_app returns the bare Starlette app (not the
         # auth-middleware wrapper), whose `.state` the lifespan writes to.
         monkeypatch.delenv("ARGUS_API_KEY", raising=False)
@@ -433,7 +433,9 @@ class TestQueueBackpressure:
     its body. After the running scans drain, capacity recovers."""
 
     @pytest.mark.asyncio
-    async def test_over_the_ceiling_sheds_503_without_queuing_then_recovers(self, monkeypatch):
+    async def test_scans_over_the_ceiling_should_shed_503_without_queuing_then_recover(
+        self, monkeypatch
+    ):
         import anyio
         import httpx
         from httpx import ASGITransport

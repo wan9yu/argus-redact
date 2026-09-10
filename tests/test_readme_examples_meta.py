@@ -5,7 +5,7 @@ from tests.test_readme_examples import _PIN_BLOCK, _REPO_ROOT
 _MIN_PINNED_BLOCKS = 3  # v0.6.8: en hero + zh hero + zh unified_prefix example
 
 
-def test_readme_fixture_finds_minimum_pinned_blocks():
+def test_readme_fixture_should_find_at_least_the_minimum_pinned_blocks():
     total = 0
     for md in [_REPO_ROOT / "README.md", _REPO_ROOT / "README.zh.md"]:
         total += sum(1 for _ in _PIN_BLOCK.finditer(md.read_text(encoding="utf-8")))

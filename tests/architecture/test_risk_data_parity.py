@@ -32,14 +32,14 @@ EXPECTED_TYPE_COUNT = 78
 EXPECTED_SHA256 = "6acd11b5a8be534e44811fac712c6647b56ba23a4cf5edffdca93af5285cc75a"
 
 
-def test_ron_type_count_frozen():
+def test_risk_data_ron_should_match_frozen_type_count():
     text = _ron_text()
     # one "(lang:" opener per type row
     count = text.count("(lang: ")
     assert count == EXPECTED_TYPE_COUNT, f"got {count} type rows"
 
 
-def test_ron_sha256_frozen():
+def test_risk_data_ron_should_match_frozen_sha256():
     assert _sha(_ron_text()) == EXPECTED_SHA256
 
 
@@ -52,7 +52,7 @@ def _regen() -> str | None:
         return None
 
 
-def test_ron_matches_live_registry():
+def test_risk_data_ron_should_match_live_registry():
     regen = _regen()
     if regen is None:
         pytest.skip("specs.gen_risk_data removed")

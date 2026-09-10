@@ -64,7 +64,7 @@ def _read_rust_max_input_size() -> int:
     return _eval_simple_expr(m.group(1))
 
 
-def test_max_input_size_python_rust_parity():
+def test_max_input_size_constant_should_match_between_python_and_rust():
     """Python MAX_INPUT_SIZE must equal Rust MAX_INPUT_SIZE numerically.
 
     The two constants measure different units (code points vs. UTF-8 bytes)

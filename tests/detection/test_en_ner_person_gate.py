@@ -44,7 +44,7 @@ def _ent(text: str, sub: str, etype: str = "person", conf: float = 0.85) -> NERE
 # ── English `person` gating ─────────────────────────────────────────────────
 
 
-def test_en_ner_drops_uncorroborated_bare_prose_person():
+def test_en_ner_gate_should_drop_uncorroborated_bare_prose_person():
     """A spaCy `person` whose lead is a common/place word ("Central Park"), with no
     title and no nearby PII, is DROPPED by the gate — so it survives in the output
     unredacted (L1 also misses it, so the L2 candidate was its only redaction path).
@@ -58,7 +58,7 @@ def test_en_ner_drops_uncorroborated_bare_prose_person():
     assert "Central Park" not in key.values()
 
 
-def test_en_ner_keeps_name_like_person_l1_misses():
+def test_en_ner_gate_should_keep_person_when_name_like_signal_present():
     """A spaCy single-token `person` L1 cannot reach ("Obama" — no surname anchor)
     survives the gate via the name-like signal and IS redacted. Proves the gate is
     not a blanket drop and that L2 still adds recall over L1.
@@ -72,7 +72,7 @@ def test_en_ner_keeps_name_like_person_l1_misses():
     assert restore(redacted, key, guard=False) == text
 
 
-def test_en_ner_gate_is_selective_drop_and_keep_together():
+def test_en_ner_gate_should_filter_selectively_when_given_mixed_candidates():
     """Both candidates injected at once: the common-word FP is dropped, the
     name-like name is kept — single pass, selective filtering (non-vacuous).
     """
@@ -84,7 +84,7 @@ def test_en_ner_gate_is_selective_drop_and_keep_together():
     assert "Obama" not in redacted  # real name kept + redacted
 
 
-def test_en_ner_keeps_pii_proximate_person():
+def test_en_ner_gate_should_keep_person_when_pii_is_nearby():
     """A bare common-word lead ("Lake Park") near structural PII (a phone) clears
     the gate via the proximity signal and is redacted — exercising the L1 pii
     proximity signal wired through the L2 gate.
@@ -97,7 +97,7 @@ def test_en_ner_keeps_pii_proximate_person():
     assert "Lake Park" in key.values()
 
 
-def test_en_ner_non_person_types_unaffected():
+def test_en_ner_gate_should_leave_non_person_types_unmodified():
     """The gate touches ONLY `person`; location/organization spaCy candidates pass
     through unchanged even when their text would fail the person gate.
     """
@@ -113,7 +113,7 @@ def test_en_ner_non_person_types_unaffected():
 # ── zh untouched (the gate is English-only) ─────────────────────────────────
 
 
-def test_zh_ner_person_untouched_by_en_gate():
+def test_zh_ner_person_should_bypass_the_english_gate():
     """A non-English adapter (lang != "en") bypasses the English gate entirely, so
     a zh `person` candidate is redacted exactly as before — even one whose first
     char would never pass the English name-like test.

@@ -27,7 +27,7 @@ from argus_redact import redact
     ],
     ids=["legit-orgs", "no-suffix", "partial-suffix"],
 )
-def test_org_school_patterns_complete_within_backtrack_budget(text):
+def test_org_school_regex_should_stay_within_backtrack_budget(text):
     # Completing (not raising) means the scan stayed within BACKTRACK_LIMIT. A
     # super-linear regression would exhaust the budget and raise (fail-closed),
     # failing this test deterministically — no timing assertion needed.

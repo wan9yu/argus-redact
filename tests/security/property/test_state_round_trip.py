@@ -42,7 +42,7 @@ def _is_unpolluted(chunks: list[str]) -> bool:
     ),
     salt=st.binary(min_size=32, max_size=32),
 )
-def test_state_round_trip_preserves_aggregate_key(chunks, salt):
+def test_state_round_trip_should_preserve_aggregate_key(chunks, salt):
     """Feed chunks → export → from_state → aggregate_key matches."""
     r1 = StreamingRedactor(salt=salt)
     for c in chunks:

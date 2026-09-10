@@ -4,7 +4,7 @@ import pathlib
 PURE = pathlib.Path(__file__).parents[2] / "src/argus_redact/pure"
 
 
-def test_no_pure_module_has_no_core_redaction_fallback():
+def test_pure_modules_should_have_no_core_fallback_branches():
     offenders = []
     for p in sorted(PURE.glob("*.py")):
         tree = ast.parse(p.read_text(encoding="utf-8"))

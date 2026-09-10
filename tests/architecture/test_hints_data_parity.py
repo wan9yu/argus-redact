@@ -95,7 +95,7 @@ def _core_pools() -> dict[str, object]:
 # ── Half 1: frozen-fingerprint side (always runs; survives table deletion) ────
 
 
-def test_core_pools_match_frozen_counts():
+def test_core_pools_should_match_the_frozen_counts():
     pools = _core_pools()
     for key in _LIST_POOLS:
         assert len(pools[key]) == EXPECTED_COUNTS[key], key
@@ -107,7 +107,7 @@ def test_core_pools_match_frozen_counts():
     )
 
 
-def test_core_pools_match_frozen_sha256():
+def test_core_pools_should_match_the_frozen_sha256():
     pools = _core_pools()
     for key in _LIST_POOLS:
         assert _sha_list(pools[key]) == EXPECTED_SHA256[key], key
@@ -141,10 +141,11 @@ def _load_python_truth() -> dict[str, object] | None:
         return None
 
 
-def test_python_source_matches_frozen_fingerprints():
+def test_python_source_should_match_the_frozen_fingerprints():
     truth = _load_python_truth()
     if truth is None:
         pytest.skip("Aggregated Python hint tables removed (pure.hints gone)")
+
     # Counts (sets — the aggregated pools may contain cross-language duplicates,
     # e.g. en/uk/in_ all contribute "my "; membership is what the RON locks).
     for key in _LIST_POOLS:
@@ -156,7 +157,7 @@ def test_python_source_matches_frozen_fingerprints():
     assert _sha_patterns(truth["command_patterns"]) == EXPECTED_SHA256["command_patterns"]
 
 
-def test_core_pools_equal_python_source():
+def test_core_pools_should_equal_the_python_source():
     truth = _load_python_truth()
     if truth is None:
         pytest.skip("Aggregated Python hint tables removed (pure.hints gone)")

@@ -16,18 +16,18 @@ INVALID_ARC = [
 
 
 @pytest.mark.parametrize("text", VALID_ARC)
-def test_arc_detected(text):
+def test_valid_arc_should_be_redacted(text):
     out, key = redact(text, lang="zh", mode="fast", salt=42)
     assert text not in out
 
 
 @pytest.mark.parametrize("text", INVALID_ARC)
-def test_invalid_arc_not_detected(text):
+def test_invalid_arc_should_not_be_redacted(text):
     out, key = redact(text, lang="zh", mode="fast", salt=42)
     assert text in out, f"Invalid ARC {text!r} unexpectedly redacted: {out}"
 
 
-def test_legacy_a_prefix_redacts_as_twid_not_arc():
+def test_legacy_a_prefix_should_classify_as_twid_not_arc():
     """Legacy single-letter prefix (e.g. A123456789) is a TWID shape, not ARC.
 
     Verifies the multi-pattern detection picks the correct type end-to-end:

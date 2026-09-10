@@ -48,15 +48,15 @@ class TestRRN:
 class TestKoreanHints:
     """Korean kinship + command-mode hints."""
 
-    def test_kinship_phrase_is_kinship(self):
+    def test_kinship_phrase_should_be_recognized_as_kinship(self):
         entity = PatternMatch(
             text="저의 어머니", type="self_reference", start=0, end=6, confidence=1.0, layer=1
         )
         assert _is_kinship(entity)
 
-    def test_command_suffix_marks_command_mode(self):
+    def test_command_suffix_should_mark_command_mode(self):
         assert _is_interaction_command("전화번호를 가르쳐 주세요")
         assert _is_interaction_command("연락해 주세요")
 
-    def test_narrative_korean_is_not_command(self):
+    def test_narrative_korean_should_not_be_marked_as_command(self):
         assert not _is_interaction_command("김씨는 서울에 살고 있습니다.")

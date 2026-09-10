@@ -54,7 +54,7 @@ _needs_core = pytest.mark.skipif(not HAS_CORE, reason="compiled _core not availa
 class TestScanAbortedContract:
     """The catastrophe-guard invariant, pinned at the type level."""
 
-    def test_scanaborted_is_an_exception_not_baseexception(self):
+    def test_scanaborted_should_be_an_exception_not_a_baseexception(self):
         # MUST be an Exception subclass: the server's detached worker catches
         # `except Exception` and forwards the error. A BaseException-only abort
         # (e.g. deriving pyo3 PyBaseException directly) would escape that guard,
@@ -76,7 +76,7 @@ class TestScanAbortedContract:
 class TestBindingCancelPin:
     """THE T1d pin — a binding-level unit test, NOT an HTTP-e2e timeout test."""
 
-    def test_pretripped_token_aborts_with_a_pii_free_message(self):
+    def test_pretripped_token_should_abort_with_a_pii_free_message(self):
         token = _core.CancelToken()
         token.cancel()  # pre-trip: the first poll boundary aborts the base scan.
 
@@ -92,14 +92,14 @@ class TestBindingCancelPin:
                 "fixed, content-free string"
             )
 
-    def test_untripped_token_is_byte_identical_to_no_token(self):
+    def test_untripped_token_should_be_byte_identical_to_no_token(self):
         # A present-but-untripped token must not change the output vs the no-token
         # call — the no-cancel path stays byte-identical.
         no_token = _core.detect_l1(_PII_TEXT, ["zh"], [])
         with_token = _core.detect_l1(_PII_TEXT, ["zh"], [], cancel_token=_core.CancelToken())
         assert with_token == no_token
 
-    def test_tokens_are_fresh_and_independent(self):
+    def test_tokens_should_be_fresh_and_independent(self):
         # Each token owns its own flag; cancelling one never trips another. This is
         # the property the server relies on to construct one fresh token per scan.
         a = _core.CancelToken()
@@ -119,7 +119,7 @@ class TestServerSurvivesAbort:
     task group and tear the server down.)"""
 
     @pytest.mark.asyncio
-    async def test_worker_abort_maps_to_504_and_server_survives(self, monkeypatch):
+    async def test_worker_abort_should_map_to_504_and_keep_the_server_alive(self, monkeypatch):
         import httpx
         from httpx import ASGITransport
 
@@ -163,7 +163,7 @@ class TestPerScanTokenIsolation:
     NOT cancel the other. Deterministic (event-gated, no sleep-as-sync)."""
 
     @pytest.mark.asyncio
-    async def test_tripping_one_scans_token_leaves_the_other_untouched(self, monkeypatch):
+    async def test_tripping_one_scans_token_should_leave_the_other_untouched(self, monkeypatch):
         import httpx
         from httpx import ASGITransport
 
@@ -236,7 +236,7 @@ class TestCpuReclamationOnDeadline:
     only frees on the test's explicit release)."""
 
     @pytest.mark.asyncio
-    async def test_deadline_aborts_the_scan_and_frees_its_slot(self, monkeypatch):
+    async def test_deadline_should_abort_the_scan_and_free_its_slot(self, monkeypatch):
         import time
 
         import anyio
@@ -305,7 +305,7 @@ class TestCpuReclamationOnClientDisconnect:
     """
 
     @pytest.mark.asyncio
-    async def test_disconnect_trips_the_token_and_frees_the_slot(self, monkeypatch):
+    async def test_disconnect_should_trip_the_token_and_free_the_slot(self, monkeypatch):
         import time
 
         import anyio
@@ -383,7 +383,7 @@ class TestClientDisconnectMapsTo499:
     handler ladders (redact and restore) — never a 500, never the scan result."""
 
     @pytest.mark.asyncio
-    async def test_both_handlers_map_client_disconnect_to_499(self, monkeypatch):
+    async def test_both_handlers_should_map_client_disconnect_to_499(self, monkeypatch):
         import httpx
         from httpx import ASGITransport
 
@@ -422,7 +422,7 @@ class TestDisconnectWatchIsInvisibleWithoutADisconnect:
     the deadline fires — it never fabricates a disconnect.)"""
 
     @pytest.mark.asyncio
-    async def test_normal_scan_is_byte_identical_200(self, monkeypatch):
+    async def test_normal_scan_should_return_a_byte_identical_200(self, monkeypatch):
         import httpx
         from httpx import ASGITransport
 
@@ -447,7 +447,7 @@ class TestDisconnectWatchIsInvisibleWithoutADisconnect:
         assert resp.json() == {"redacted": "REDACTED", "key": {"P-1": "张伯"}}
 
     @pytest.mark.asyncio
-    async def test_deadline_still_returns_504_and_frees_its_slot(self, monkeypatch):
+    async def test_deadline_should_still_return_504_and_free_its_slot(self, monkeypatch):
         import time
 
         import anyio
@@ -497,7 +497,7 @@ class TestCpuReclamationOnShutdown:
     drain ever hangs — which is exactly what an un-tripped token would cause."""
 
     @pytest.mark.asyncio
-    async def test_shutdown_trips_inflight_tokens_and_drains_promptly(self, monkeypatch):
+    async def test_shutdown_should_trip_inflight_tokens_and_drain_promptly(self, monkeypatch):
         import time
 
         import anyio
@@ -569,7 +569,9 @@ class TestShutdownRegistryHygiene:
     is still unwinding) never raises."""
 
     @pytest.mark.asyncio
-    async def test_completed_scan_drains_its_token_and_double_discard_is_safe(self, monkeypatch):
+    async def test_completed_scan_should_drain_its_token_and_survive_double_discard(
+        self, monkeypatch
+    ):
         from argus_redact import server as server_module
 
         monkeypatch.delenv("ARGUS_API_KEY", raising=False)

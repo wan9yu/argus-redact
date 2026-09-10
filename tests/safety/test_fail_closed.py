@@ -5,17 +5,17 @@ import pytest
 from argus_redact import LayerUnavailableError, redact
 
 
-def test_unknown_lang_raises():
+def test_redact_should_raise_value_error_when_language_is_unknown():
     with pytest.raises(ValueError, match="Unknown language"):
         redact("电话13800138000", lang="cn", mode="fast", salt=42)
 
 
-def test_known_lang_still_works():
+def test_redact_should_succeed_when_language_is_known():
     out, key = redact("电话13800138000", lang="zh", mode="fast", salt=42)
     assert len(key) >= 1
 
 
-def test_ner_mode_no_model_raises(monkeypatch):
+def test_redact_should_raise_layer_unavailable_when_ner_mode_has_no_model(monkeypatch):
     import argus_redact.glue.redact as r
 
     monkeypatch.setattr(r, "_get_ner_adapters", lambda lang, **_kw: [])
@@ -23,7 +23,7 @@ def test_ner_mode_no_model_raises(monkeypatch):
         redact("Contact John Smith", lang="en", mode="ner", salt=42)
 
 
-def test_auto_mode_no_model_warns_not_raises(monkeypatch):
+def test_redact_should_warn_when_auto_mode_has_no_model(monkeypatch):
     import argus_redact.glue.redact as r
     from argus_redact import SecurityWarning
 
@@ -34,7 +34,7 @@ def test_auto_mode_no_model_warns_not_raises(monkeypatch):
     assert isinstance(out, str)
 
 
-def test_auto_mode_strict_raises(monkeypatch):
+def test_redact_should_raise_when_strict_auto_mode_has_no_model(monkeypatch):
     import argus_redact.glue.redact as r
 
     monkeypatch.setattr(r, "_get_ner_adapters", lambda lang, **_kw: [])
@@ -50,7 +50,9 @@ def test_auto_mode_strict_raises(monkeypatch):
 # unconditional-availability contract was untested.
 
 
-def test_ner_no_model_raises_even_for_instruction_intent(monkeypatch):
+def test_redact_should_raise_layer_unavailable_when_ner_has_no_model_for_instruction_intent(
+    monkeypatch,
+):
     import argus_redact.glue.redact as r
 
     monkeypatch.setattr(r, "_get_ner_adapters", lambda lang, **_kw: [])
@@ -58,7 +60,7 @@ def test_ner_no_model_raises_even_for_instruction_intent(monkeypatch):
         redact("Please tell me about myself", mode="ner", lang="en", salt=42)
 
 
-def test_auto_no_model_warns_even_for_instruction_intent(monkeypatch):
+def test_redact_should_warn_when_auto_mode_has_no_model_for_instruction_intent(monkeypatch):
     import argus_redact.glue.redact as r
     from argus_redact import SecurityWarning
 
@@ -70,7 +72,9 @@ def test_auto_no_model_warns_even_for_instruction_intent(monkeypatch):
         redact("Please tell me about myself", mode="auto", lang="en", salt=42)
 
 
-def test_auto_strict_no_model_raises_even_for_instruction_intent(monkeypatch):
+def test_redact_should_raise_when_strict_auto_mode_has_no_model_for_instruction_intent(
+    monkeypatch,
+):
     import argus_redact.glue.redact as r
 
     monkeypatch.setattr(r, "_get_ner_adapters", lambda lang, **_kw: [])
@@ -79,14 +83,14 @@ def test_auto_strict_no_model_raises_even_for_instruction_intent(monkeypatch):
         redact("Please tell me about myself", mode="auto", lang="en", strict=True, salt=42)
 
 
-def test_low_entropy_int_salt_warns():
+def test_redact_should_warn_when_salt_has_low_entropy():
     from argus_redact import SecurityWarning
 
     with pytest.warns(SecurityWarning, match="low-entropy salt"):
         redact("电话13800138000", lang="zh", mode="fast", salt=42)
 
 
-def test_strong_salt_no_warning(recwarn):
+def test_redact_should_not_warn_when_salt_is_strong(recwarn):
     import argus_redact
 
     redact("电话13800138000", lang="zh", mode="fast", salt=b"\x00" * 32)
@@ -104,7 +108,7 @@ def test_strong_salt_no_warning(recwarn):
 # missing package does.
 
 
-def test_ner_adapter_oserror_during_load_is_caught_not_propagated(monkeypatch):
+def test_get_ner_adapters_should_catch_oserror_when_model_load_fails(monkeypatch):
     """A real OSError raised inside adapter.load() (the documented "model not
     downloaded" failure) must be swallowed by `_get_ner_adapters`'s except
     clause and recorded in `unavailable` — not escape as an uncaught OSError."""
@@ -122,7 +126,7 @@ def test_ner_adapter_oserror_during_load_is_caught_not_propagated(monkeypatch):
     assert unavailable == ["en"]
 
 
-def test_ner_mode_raises_layer_unavailable_not_raw_oserror(monkeypatch):
+def test_redact_should_raise_layer_unavailable_when_ner_load_raises_oserror(monkeypatch):
     """mode='ner' with only a load-time OSError available must surface the
     documented LayerUnavailableError, not the raw OSError from spaCy."""
     from argus_redact.lang.en.ner_adapter import SpaCyAdapter
@@ -136,7 +140,7 @@ def test_ner_mode_raises_layer_unavailable_not_raw_oserror(monkeypatch):
         redact("Contact John Smith", lang="en", mode="ner", salt=42)
 
 
-def test_auto_mode_degrades_on_load_time_oserror(monkeypatch):
+def test_redact_should_warn_when_auto_mode_load_raises_oserror(monkeypatch):
     """mode='auto' with only a load-time OSError available must degrade (warn,
     keep going with L1-only) exactly like the "no package installed" case."""
     import argus_redact.glue.redact as r
@@ -181,7 +185,9 @@ def _mock_en_adapter_fails(monkeypatch):
     )
 
 
-def test_partial_multilang_ner_load_marks_stats_partial_and_warns(monkeypatch):
+def test_redact_should_mark_layer_partial_and_warn_when_multilang_ner_load_is_partial(
+    monkeypatch,
+):
     import argus_redact.glue.redact as r
     from argus_redact import SecurityWarning
 
@@ -197,7 +203,7 @@ def test_partial_multilang_ner_load_marks_stats_partial_and_warns(monkeypatch):
     assert result.stats["layer_2_status"] == "partial"
 
 
-def test_partial_multilang_ner_load_raises_under_strict(monkeypatch):
+def test_redact_should_raise_when_strict_multilang_ner_load_is_partial(monkeypatch):
     import argus_redact.glue.redact as r
 
     _mock_zh_adapter_succeeds(monkeypatch)

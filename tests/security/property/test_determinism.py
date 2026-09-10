@@ -23,7 +23,7 @@ _ShakeRng = _core.ShakeRng
     type_name=st.sampled_from(["phone", "person", "id_number", "ssn", "email"]),
     value=st.text(min_size=1, max_size=50),
 )
-def test_seed_from_value_deterministic(salt, type_name, value):
+def test_seed_from_value_should_be_deterministic(salt, type_name, value):
     """Two calls with same args must produce identical bytes."""
     out1 = _seed_from_value(value, type_name, salt)
     out2 = _seed_from_value(value, type_name, salt)
@@ -39,7 +39,7 @@ def test_seed_from_value_deterministic(salt, type_name, value):
     type_name=st.sampled_from(["phone", "person", "id_number"]),
     value=st.text(min_size=1, max_size=50),
 )
-def test_different_salts_diverge(salt_a, salt_b, type_name, value):
+def test_seed_from_value_should_diverge_when_salts_differ(salt_a, salt_b, type_name, value):
     """Different salts produce different outputs (probabilistically 1 - 2^-256)."""
     assume(salt_a != salt_b)
     out_a = _seed_from_value(value, type_name, salt_a)
@@ -52,7 +52,7 @@ def test_different_salts_diverge(salt_a, salt_b, type_name, value):
     salt=st.binary(min_size=32, max_size=32),
     n=st.integers(min_value=2, max_value=20),
 )
-def test_shake_rng_deterministic(salt, n):
+def test_shake_rng_should_be_deterministic(salt, n):
     """_ShakeRng with the same seed produces the same randint sequence."""
     rng_a = _ShakeRng(salt)
     rng_b = _ShakeRng(salt)

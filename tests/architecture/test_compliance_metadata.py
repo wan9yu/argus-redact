@@ -39,12 +39,12 @@ _CREDENTIAL_TYPES = {
 
 
 class TestUniversalPIPLArticles:
-    def test_every_pii_type_includes_art_13(self):
+    def test_every_pii_type_should_include_pipl_art_13(self):
         # PIPL Art.13: lawful basis for processing — universal for any PII.
         for td in list_types():
             assert "PIPL Art.13" in td.pipl_articles, f"{td.lang}/{td.name} missing PIPL Art.13"
 
-    def test_every_pii_type_includes_art_51(self):
+    def test_every_pii_type_should_include_pipl_art_51(self):
         # v0.8.10: PIPL Art.51 (security-measures obligation on all processing)
         # is a universal floor article alongside Art.13.
         for td in list_types():
@@ -56,25 +56,25 @@ class TestSensitivePIMemberArticles:
     (``name in PIPL_SENSITIVE_PI``), not by sensitivity score. Art.55 keeps its
     own IFF test in ``TestSensitivePITypesCoverage`` below."""
 
-    def test_art_28_iff_sensitive_pi(self):
+    def test_pipl_art_28_should_match_sensitive_pi_membership(self):
         for td in list_types():
             has = "PIPL Art.28" in td.pipl_articles
             member = td.name in _PIPL_SENSITIVE_TYPES
             assert has == member, f"{td.lang}/{td.name}: Art.28 present={has} but member={member}"
 
-    def test_art_29_iff_sensitive_pi(self):
+    def test_pipl_art_29_should_match_sensitive_pi_membership(self):
         for td in list_types():
             has = "PIPL Art.29" in td.pipl_articles
             member = td.name in _PIPL_SENSITIVE_TYPES
             assert has == member, f"{td.lang}/{td.name}: Art.29 present={has} but member={member}"
 
-    def test_art_56_iff_sensitive_pi(self):
+    def test_pipl_art_56_should_match_sensitive_pi_membership(self):
         for td in list_types():
             has = "PIPL Art.56" in td.pipl_articles
             member = td.name in _PIPL_SENSITIVE_TYPES
             assert has == member, f"{td.lang}/{td.name}: Art.56 present={has} but member={member}"
 
-    def test_sensitivity_below_3_still_carries_universal_art_51(self):
+    def test_pii_type_should_carry_art_51_when_sensitivity_below_3(self):
         # Inverted from the old "sens<3 must NOT have Art.51": Art.51 is now a
         # universal floor, so even low-sensitivity non-members carry it.
         for td in list_types():
@@ -85,7 +85,7 @@ class TestSensitivePIMemberArticles:
 
 
 class TestSensitivePITypesCoverage:
-    def test_art_55_iff_sensitive_pi_type(self):
+    def test_pipl_art_55_should_match_sensitive_pi_membership(self):
         # Art.55 (impact assessment) on a typedef must align exactly with
         # PIPL_SENSITIVE_PI. As of v0.8.10 Art.55 attaches ONLY via sensitive-PI
         # membership; the old ≥3-entity cardinality trigger in assess_risk() was
@@ -100,7 +100,7 @@ class TestSensitivePITypesCoverage:
 
 
 class TestGDPRSpecialCategory:
-    def test_gdpr_special_category_set_on_art9_types(self):
+    def test_gdpr_special_category_should_be_true_when_type_is_art9(self):
         # Verify each typedef respects the central GDPR_SPECIAL_CATEGORY set
         # (financial is NOT included — PIPL treats it as sensitive PI but
         # GDPR Art.9 does not).
@@ -110,7 +110,7 @@ class TestGDPRSpecialCategory:
                     f"{td.lang}/{td.name} should be GDPR Art.9 special category"
                 )
 
-    def test_credentials_not_gdpr_special_category(self):
+    def test_credential_types_should_not_be_gdpr_special_category(self):
         for td in list_types():
             if td.name in _CREDENTIAL_TYPES:
                 assert td.gdpr_special_category is False, (
@@ -120,7 +120,7 @@ class TestGDPRSpecialCategory:
 
 
 class TestHIPAACategories:
-    def test_safe_harbor_set_has_exactly_18_categories(self):
+    def test_hipaa_safe_harbor_set_should_have_18_categories(self):
         """The official HIPAA Safe Harbor standard enumerates 18 PHI identifiers.
         This test pins the count so a stale-label or accidental deletion is caught
         immediately (the set is the standard reference, not an argus coverage set).
@@ -130,7 +130,7 @@ class TestHIPAACategories:
             f"(expected 18 per 45 CFR 164.514(b)(2)(i))"
         )
 
-    def test_hipaa_categories_are_valid_safe_harbor_values(self):
+    def test_hipaa_phi_category_should_be_a_valid_safe_harbor_value(self):
         for td in list_types():
             if td.hipaa_phi_category is not None:
                 assert td.hipaa_phi_category in HIPAA_SAFE_HARBOR_CATEGORIES, (
@@ -138,14 +138,14 @@ class TestHIPAACategories:
                     f"not in HIPAA Safe Harbor 18 set"
                 )
 
-    def test_credentials_no_hipaa_category(self):
+    def test_credential_types_should_have_no_hipaa_category(self):
         for td in list_types():
             if td.name in _CREDENTIAL_TYPES:
                 assert td.hipaa_phi_category is None, (
                     f"{td.lang}/{td.name} is a credential — no HIPAA PHI category"
                 )
 
-    def test_key_hipaa_categories_covered(self):
+    def test_key_hipaa_categories_should_be_covered_by_some_type(self):
         # Sanity check: the most important HIPAA categories must have at
         # least one type mapping to them.
         all_categories = {td.hipaa_phi_category for td in list_types() if td.hipaa_phi_category}
@@ -161,7 +161,7 @@ class TestHIPAACategories:
 
 
 class TestDefaults:
-    def test_typedef_default_compliance_fields_are_empty(self):
+    def test_typedef_should_default_compliance_fields_to_empty(self):
         # A typedef constructed with only the required positional fields
         # must default to no-compliance metadata. Adding new types without
         # explicit metadata should fail later invariants, not silently

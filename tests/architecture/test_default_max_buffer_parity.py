@@ -38,7 +38,7 @@ def _read_rust_value() -> int:
     )
 
 
-def test_default_max_buffer_python_rust_parity():
+def test_default_max_buffer_should_match_between_python_and_rust():
     """DEFAULT_MAX_BUFFER in Python must equal Rust DEFAULT_MAX_BUFFER.
 
     If they diverge, the Python wheel and the Rust WASM/native-core use

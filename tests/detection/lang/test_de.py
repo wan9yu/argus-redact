@@ -34,15 +34,15 @@ class TestGermanPatterns:
 class TestGermanHints:
     """German kinship + command-mode hints."""
 
-    def test_kinship_prefix_is_kinship(self):
+    def test_is_kinship_should_return_true_for_kinship_prefixed_entity(self):
         entity = PatternMatch(
             text="meine Mutter", type="self_reference", start=0, end=12, confidence=1.0, layer=1
         )
         assert _is_kinship(entity)
 
-    def test_command_pattern_marks_command_mode(self):
+    def test_is_interaction_command_should_return_true_when_input_is_a_command(self):
         assert _is_interaction_command("Können Sie mir die Telefonnummer sagen?")
         assert _is_interaction_command("Bitte kontaktieren Sie mich.")
 
-    def test_narrative_german_is_not_command(self):
+    def test_is_interaction_command_should_return_false_when_input_is_narrative(self):
         assert not _is_interaction_command("Herr Schmidt arbeitet in München.")

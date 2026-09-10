@@ -120,7 +120,9 @@ GOLDEN = [
 
 
 @pytest.mark.parametrize("seed,prefix,code_range,entities,expected", GOLDEN)
-def test_pseudonym_golden(seed, prefix, code_range, entities, expected):
+def test_pseudonym_generator_should_match_the_golden_rng_sequence(
+    seed, prefix, code_range, entities, expected
+):
     g = PseudonymGenerator(prefix=prefix, code_range=tuple(code_range), seed=seed)
     actual = [g.get(e) for e in entities]
     assert actual == expected, (

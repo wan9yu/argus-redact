@@ -16,16 +16,16 @@ from argus_redact.streaming import StreamingRestorer
 from argus_redact.structured import restore_csv, restore_json
 
 
-def test_empty_string_key_entry_raises_not_explodes():
+def test_empty_string_key_entry_should_raise_not_explode():
     with pytest.raises(ValueError, match="empty"):
         restore("abc", {"": "SECRET"}, guard=False)
 
 
-def test_valid_key_still_restores():
+def test_valid_key_should_still_restore():
     assert restore("call PHONE-1", {"PHONE-1": "13800138000"}, guard=False) == "call 13800138000"
 
 
-def test_empty_string_key_entry_raises_via_restore_json():
+def test_restore_json_should_raise_on_empty_string_key_entry():
     # restore_json/restore_csv/StreamingRestorer all route their substitution
     # through the same core restore() — the rejection must fire through each
     # entry point, not just the pure.restore.restore call site tested above.
@@ -33,12 +33,12 @@ def test_empty_string_key_entry_raises_via_restore_json():
         restore_json({"note": "abc"}, {"": "SECRET"})
 
 
-def test_empty_string_key_entry_raises_via_restore_csv():
+def test_restore_csv_should_raise_on_empty_string_key_entry():
     with pytest.raises(ValueError, match="empty"):
         restore_csv("abc\n", {"": "SECRET"})
 
 
-def test_empty_string_key_entry_raises_via_streaming_restorer():
+def test_streaming_restorer_should_raise_on_empty_string_key_entry():
     # StreamingRestorer builds its session once at construction (not lazily
     # per feed()/flush()), so a corrupted key is now rejected immediately —
     # fail-fast, before any chunk is ever fed.
@@ -46,7 +46,7 @@ def test_empty_string_key_entry_raises_via_streaming_restorer():
         StreamingRestorer({"": "SECRET"}, strategy="none")
 
 
-def test_empty_string_alias_also_raises():
+def test_empty_string_alias_should_also_raise():
     # An empty-string ALIAS (not just an empty key) is equally corrupt: it merges
     # into the flat lookup and would reach the alternation the same way. The
     # rejection must catch it too — the core guard runs against the post-merge map.

@@ -96,7 +96,7 @@ _KNOWN_ANCHOR_COUNTS = {
 _RESTORER = re.compile(r"restore_lost_coverage")
 
 
-def test_every_post_merge_pipeline_restores_lost_coverage():
+def test_every_post_merge_pipeline_should_restore_lost_coverage():
     by_file: dict[str, list[str]] = {}
     for rel, anchor in _PIPELINES:
         by_file.setdefault(rel, []).append(anchor)
@@ -135,7 +135,7 @@ def test_every_post_merge_pipeline_restores_lost_coverage():
             )
 
 
-def test_rust_faces_route_through_the_finalize_chokepoint():
+def test_rust_faces_should_route_through_the_finalize_chokepoint():
     """The Rust fast path + streaming face must delegate their post-merge
     sequence to `finalize_entities`, not carry their own inline copy — so the
     single windowed check on the chokepoint (in `_PIPELINES`) guards both.
@@ -157,7 +157,7 @@ def test_rust_faces_route_through_the_finalize_chokepoint():
         )
 
 
-def test_pseudonym_llm_delegates_instead_of_copying_the_pipeline():
+def test_pseudonym_llm_should_delegate_instead_of_copying_the_pipeline():
     """`redact_pseudonym_llm` must have NO merge-then-drop pipeline of its own.
 
     It used to carry a byte-identical copy of `redact()`'s `_pre_detected`
@@ -179,7 +179,7 @@ def test_pseudonym_llm_delegates_instead_of_copying_the_pipeline():
     )
 
 
-def test_the_pipeline_list_still_covers_all_known_sites():
+def test_the_pipeline_list_should_still_cover_all_known_sites():
     """Anti-rot for the LISTS themselves, not just their contents: pins how many
     independent anchors `_PIPELINES` carries PER FILE (a file-set-only check
     would stay green if one of `redact.py`'s TWO independent blocks were silently
@@ -203,7 +203,7 @@ def test_the_pipeline_list_still_covers_all_known_sites():
     )
 
 
-def test_the_gate_is_not_vacuous():
+def test_the_gate_should_not_be_vacuous():
     """Positive control: the regex — and the ordering logic around it — must
     actually fail on a broken pipeline, so the gate cannot silently pass on
     an empty match or an out-of-order match."""

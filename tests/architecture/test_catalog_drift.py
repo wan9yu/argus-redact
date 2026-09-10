@@ -17,7 +17,7 @@ CATALOG_PATH = REPO_ROOT / "docs" / "pii-types.md"
 
 
 class TestCatalogDrift:
-    def test_pii_types_md_matches_registry(self):
+    def test_pii_types_catalog_should_match_the_registry(self):
         """Regenerating the catalog must produce byte-identical output to the
         committed file. If this fails, run `make catalog` and commit."""
         from argus_redact.specs.gen_catalog import render_catalog
@@ -30,7 +30,7 @@ class TestCatalogDrift:
             "Run `make catalog` and commit the result."
         )
 
-    def test_catalog_includes_all_registered_types(self):
+    def test_catalog_should_include_all_registered_types(self):
         from argus_redact.specs.gen_catalog import render_catalog
         from argus_redact.specs.registry import list_types
 
@@ -39,7 +39,7 @@ class TestCatalogDrift:
             heading = f"### `{td.name}`"
             assert heading in catalog, f"Missing in catalog: {td.lang}/{td.name}"
 
-    def test_catalog_omits_empty_out_of_scope_section(self):
+    def test_catalog_should_omit_the_out_of_scope_section_when_it_is_empty(self):
         """v0.5.10: HK / TW / Macau / Taiwan ARC shipped, so the
         'Out of scope' section should not render when ``_OUT_OF_SCOPE``
         is empty. If a future release adds a deferred type, populate

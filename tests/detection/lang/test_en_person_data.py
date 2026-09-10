@@ -13,26 +13,26 @@ import argus_redact._core as _core
 
 
 class TestSurnameData:
-    def test_no_duplicates(self):
+    def test_surnames_should_have_no_duplicates(self):
         surnames = list(_core.person_surnames_en())
         assert len(set(surnames)) == len(surnames)
 
-    def test_non_empty(self):
+    def test_surnames_should_not_be_empty(self):
         assert len(list(_core.person_surnames_en())) > 0
 
-    def test_capitalized(self):
+    def test_surnames_should_be_capitalized(self):
         for name in list(_core.person_surnames_en())[:20]:  # spot-check first 20
             assert name[0].isupper(), f"Surname {name!r} not capitalized"
 
 
 class TestGivenNameData:
-    def test_no_duplicates(self):
+    def test_given_names_should_have_no_duplicates(self):
         given = list(_core.person_given_names_en())
         assert len(set(given)) == len(given)
 
-    def test_non_empty(self):
+    def test_given_names_should_not_be_empty(self):
         assert len(list(_core.person_given_names_en())) > 0
 
-    def test_capitalized(self):
+    def test_given_names_should_be_capitalized(self):
         for name in list(_core.person_given_names_en())[:20]:  # spot-check first 20
             assert name[0].isupper(), f"Given name {name!r} not capitalized"

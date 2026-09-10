@@ -22,7 +22,7 @@ _SALT = b"identity-pass-test-salt-32-byte!"
 _SALT_BYTES = _core.resolve_salt(_SALT)
 
 
-def test_generate_unique_fake_rejects_value_equal_fake():
+def test_custom_faker_should_reroll_when_the_first_result_is_the_identity_value():
     """Re-roll guarantee through the public custom-faker path: even if the faker
     returns the input, the Rust re-roll loop rejects the identity-pass and rolls
     again until it gets a non-identity fake."""
@@ -59,7 +59,7 @@ def test_generate_unique_fake_rejects_value_equal_fake():
         _clear_faker_caches()
 
 
-def test_identity_only_faker_falls_back_to_pseudonym_no_leak():
+def test_realistic_strategy_should_fall_back_to_pseudonym_when_reroll_exhausts():
     """If the faker can only ever return the input, the re-roll loop exhausts.
     The realistic strategy must then fail *closed* — fall back to a pseudonym so
     the entity is still redacted — never echo the identity (a leak) and never
@@ -97,7 +97,7 @@ def test_identity_only_faker_falls_back_to_pseudonym_no_leak():
 
 
 @pytest.mark.parametrize("name", _core.reserved_person_names_en())
-def test_en_reserved_pool_member_never_self_maps_through_wrapper(name):
+def test_en_reserved_pool_member_should_never_map_to_itself(name):
     """For every name in the EN pool, the wrapper produces a different fake
     even when the input itself is a pool member."""
     fake, _ = _core.generate_unique_fake(
@@ -107,12 +107,13 @@ def test_en_reserved_pool_member_never_self_maps_through_wrapper(name):
         salt=_SALT_BYTES,
         used=set(),
     )
+
     assert fake != name, f"identity-pass: {name!r} mapped to itself"
     assert fake in _core.reserved_person_names_en(), f"fake {fake!r} not in reserved pool"
 
 
 @pytest.mark.parametrize("name", _core.reserved_person_names_zh())
-def test_zh_reserved_pool_member_never_self_maps_through_wrapper(name):
+def test_zh_reserved_pool_member_should_never_map_to_itself(name):
     """Same identity-pass guard for the zh cultural-placeholder pool."""
     fake, _ = _core.generate_unique_fake(
         "fake_person_reserved",
@@ -121,11 +122,12 @@ def test_zh_reserved_pool_member_never_self_maps_through_wrapper(name):
         salt=_SALT_BYTES,
         used=set(),
     )
+
     assert fake != name, f"identity-pass: {name!r} mapped to itself"
     assert fake in _core.reserved_person_names_zh(), f"fake {fake!r} not in reserved pool"
 
 
-def test_james_smith_removed_from_en_reserved():
+def test_en_reserved_pool_should_not_include_james_smith_or_bob_loblaw():
     """v0.6.1: ``James Smith`` (statistically the most common US first+last)
     and ``Bob Loblaw`` (real name + sitcom reference) removed."""
     en_pool = _core.reserved_person_names_en()
@@ -133,7 +135,7 @@ def test_james_smith_removed_from_en_reserved():
     assert "Bob Loblaw" not in en_pool
 
 
-def test_en_reserved_pool_has_at_least_ten_names():
+def test_en_reserved_pool_should_have_at_least_ten_names():
     """Pool size guard: must remain ≥ 10 to satisfy the reroll budget."""
     en_pool = _core.reserved_person_names_en()
     assert len(en_pool) >= 10, f"pool shrunk to {len(en_pool)} — under reroll budget"

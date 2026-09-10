@@ -10,14 +10,14 @@ from argus_redact._types import PatternMatch
 
 
 class TestLayerConstants:
-    def test_layer_constants_are_integers(self):
+    def test_layer_constants_should_have_expected_integer_values(self):
         from argus_redact.layers import LAYER_NER, LAYER_REGEX, LAYER_SEMANTIC
 
         assert LAYER_REGEX == 1
         assert LAYER_NER == 2
         assert LAYER_SEMANTIC == 3
 
-    def test_layer_regex_evidence_is_string_sentinel(self):
+    def test_layer_regex_evidence_should_be_a_string_sentinel(self):
         # L1b is a sub-stage of L1, not a separate layer index. PatternMatch.layer
         # field is int-typed; L1b candidates flow through as layer=1.
         from argus_redact.layers import LAYER_REGEX_EVIDENCE
@@ -26,12 +26,12 @@ class TestLayerConstants:
 
 
 class TestLayerNames:
-    def test_layer_names_covers_all_layers(self):
+    def test_layer_names_should_cover_all_layers(self):
         from argus_redact.layers import LAYER_NAMES
 
         assert set(LAYER_NAMES) == {1, 2, 3, "1b"}
 
-    def test_layer_names_descriptions_prefixed(self):
+    def test_layer_names_should_be_prefixed_with_layer_labels(self):
         from argus_redact.layers import LAYER_NAMES
 
         assert LAYER_NAMES[1].startswith("L1:")
@@ -41,21 +41,21 @@ class TestLayerNames:
 
 
 class TestModuleExposure:
-    def test_layers_top_level_attribute(self):
+    def test_layers_should_be_a_top_level_attribute(self):
         # `import argus_redact; argus_redact.layers.LAYER_REGEX` must work.
         import argus_redact
 
         assert hasattr(argus_redact, "layers")
         assert argus_redact.layers.LAYER_REGEX == 1
 
-    def test_layers_in_dunder_all(self):
+    def test_layers_should_be_listed_in_dunder_all(self):
         import argus_redact
 
         assert "layers" in argus_redact.__all__
 
 
 class TestPatternMatchIntegration:
-    def test_pattern_match_layer_field_accepts_layer_constants(self):
+    def test_pattern_match_layer_field_should_accept_layer_constants(self):
         # Constructing a PatternMatch with our layer constants must work —
         # they are int-typed on purpose so existing layer=1/2/3 callers
         # do not break.
@@ -66,7 +66,7 @@ class TestPatternMatchIntegration:
             assert m.layer == lyr
 
 
-def test_glue_redact_uses_layer_constants_not_literals():
+def test_glue_redact_should_use_layer_constants_not_literals():
     """glue/redact.py must consume layers.py SSOT, not bare integer literals.
 
     Audit 2026-05-30 found raw `layer=1/2/3` literals at 6 sites. v0.6.7

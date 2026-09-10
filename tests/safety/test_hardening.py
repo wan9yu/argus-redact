@@ -61,7 +61,7 @@ class TestConfigFilePath:
         assert any("[TEL]" in k for k in key)
 
 
-def test_redact_middleware_no_longer_exists():
+def test_redact_middleware_should_no_longer_exist():
     """v0.6.10: RedactMiddleware was a no-op stub (no __call__); deleted in favor of redact_body."""
     import argus_redact.integrations.fastapi_middleware as m
 
@@ -70,7 +70,7 @@ def test_redact_middleware_no_longer_exists():
     )
 
 
-def test_streaming_buffer_module_gone():
+def test_streaming_buffer_module_should_no_longer_be_importable():
     """v0.6.10: _StreamingBuffer was private; replaced by StreamingRestorer logic in v0.5.x."""
     import pytest
 
@@ -78,7 +78,7 @@ def test_streaming_buffer_module_gone():
         from argus_redact.glue import _streaming_buffer  # noqa
 
 
-def test_generate_pseudonym_function_gone_but_class_stays():
+def test_pseudonym_module_should_drop_the_function_but_keep_the_class():
     """v0.6.10: standalone function duplicated PseudonymGenerator class API; deleted."""
     import argus_redact.pure.pseudonym as p
 
@@ -86,14 +86,16 @@ def test_generate_pseudonym_function_gone_but_class_stays():
     assert hasattr(p, "PseudonymGenerator"), "class must stay"
 
 
-def test_server_bearer_uses_compare_digest():
+def test_server_bearer_auth_should_use_constant_time_comparison():
     """v0.6.10: constant-time comparison closes the timing side-channel."""
     src = (Path(__file__).resolve().parents[2] / "src/argus_redact/server.py").read_text(
         encoding="utf-8"
     )
+
     auth_idx = src.find("authorization")
     assert auth_idx != -1, "could not locate auth check in server.py"
     auth_section = src[auth_idx : auth_idx + 800]
+
     assert "compare_digest" in auth_section, (
         "server bearer comparison still uses raw != — must use secrets.compare_digest"
     )

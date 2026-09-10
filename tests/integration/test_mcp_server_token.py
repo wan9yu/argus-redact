@@ -45,7 +45,7 @@ class TestRedactToolReturnsOnlyToken:
         assert isinstance(data["key_token"], str) and len(data["key_token"]) > 10
 
     @pytest.mark.asyncio
-    async def test_redact_response_no_longer_has_key_field(self, mcp_app):
+    async def test_redact_response_should_not_include_key_field(self, mcp_app):
         # Regression guard: the deprecated raw `key` field was removed in v0.5.5.
         result = await mcp_app.call_tool(
             "redact",
@@ -133,7 +133,7 @@ class TestRestoreToolViaToken:
 
 class TestTokenStoreLifecycle:
     @pytest.mark.asyncio
-    async def test_token_persists_within_process(self, mcp_app):
+    async def test_token_should_persist_within_process(self, mcp_app):
         from argus_redact.integrations.mcp_server import _TOKEN_STORE
 
         result = await mcp_app.call_tool(
@@ -144,7 +144,7 @@ class TestTokenStoreLifecycle:
         assert data["key_token"] in _TOKEN_STORE
 
 
-def test_restore_runs_the_h_check():
+def test_restore_should_warn_on_injection_suspected():
     """MCP had NO injection check at all before v0.7.20. The token store now retains the
     redacted prompt (pseudonyms only — strictly less sensitive than the key it already
     holds), so the H heuristic can run."""

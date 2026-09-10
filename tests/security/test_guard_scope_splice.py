@@ -24,7 +24,7 @@ def _anchor(key, scope):
 
 
 @pytest.mark.filterwarnings("ignore::argus_redact.exceptions.SecurityWarning")
-def test_withheld_prefix_code_is_not_spliced_by_a_shorter_in_scope_code():
+def test_withheld_code_should_not_be_spliced_when_a_shorter_in_scope_code_shares_its_prefix():
     key = {"P-1": "Alice", "P-10": "Ten"}
     anchor = _anchor(key, ["P-1"])
 
@@ -36,7 +36,7 @@ def test_withheld_prefix_code_is_not_spliced_by_a_shorter_in_scope_code():
 
 
 @pytest.mark.filterwarnings("ignore::argus_redact.exceptions.SecurityWarning")
-def test_withheld_realistic_fake_is_not_spliced_when_fakes_share_a_prefix():
+def test_withheld_realistic_fake_should_not_be_spliced_when_fakes_share_a_prefix():
     # 王芳 is a strict prefix of 王芳华, so the withheld 王芳华 used to be
     # rewritten into 张伟华 — a person who exists in neither record.
     key = {"王芳": "张伟", "王芳华": "李明"}
@@ -52,7 +52,7 @@ def test_withheld_realistic_fake_is_not_spliced_when_fakes_share_a_prefix():
 
 
 @pytest.mark.filterwarnings("ignore::argus_redact.exceptions.SecurityWarning")
-def test_guarded_in_scope_substitutions_equal_the_unguarded_ones():
+def test_guarded_in_scope_substitutions_should_match_the_unguarded_result():
     """Whatever the guard DOES substitute must be byte-identical to the
     unguarded result; only the withheld tokens may differ."""
     key = {"P-1": "Alice", "P-10": "Ten", "P-100": "Hundred"}
@@ -66,7 +66,7 @@ def test_guarded_in_scope_substitutions_equal_the_unguarded_ones():
 
 
 @pytest.mark.filterwarnings("ignore::argus_redact.exceptions.SecurityWarning")
-def test_alias_may_not_claim_an_out_of_scope_fakes_slot():
+def test_alias_should_not_claim_an_out_of_scope_fakes_slot():
     """The alias map was merged over the ALREADY-SCOPED key, so an alias of an
     in-scope fake found the out-of-scope fake's slot empty and took it — the
     out-of-scope pseudonym was substituted with the wrong identity, and the
@@ -89,7 +89,7 @@ def test_alias_may_not_claim_an_out_of_scope_fakes_slot():
 
 
 @pytest.mark.filterwarnings("ignore::argus_redact.exceptions.SecurityWarning")
-def test_alias_of_an_out_of_scope_fake_is_withheld():
+def test_alias_of_an_out_of_scope_fake_should_be_withheld():
     key = {"P-1": "Alice", "P-2": "Bob"}
     anchor = _anchor(key, ["P-1"])
 

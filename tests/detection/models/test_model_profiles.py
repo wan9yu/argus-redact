@@ -33,7 +33,7 @@ class TestModelProfiles:
             assert profile.timeout > 0
             assert 0 < profile.confidence <= 1.0
 
-    def test_qwen3_confidence_higher_than_qwen25_3b(self):
+    def test_qwen3_should_have_higher_confidence_than_qwen25_3b(self):
         q3 = get_model_profile("qwen3:8b")
         q25 = get_model_profile("qwen2.5:3b")
         assert q3.confidence > q25.confidence

@@ -20,7 +20,7 @@ from argus_redact.pure.restore import _event_from_core
 from argus_redact.pure.security_events import INJECTION_SUSPECTED, OUT_OF_SCOPE_PSEUDONYM
 
 
-def test_out_of_scope_detail_names_a_count_not_the_tokens():
+def test_out_of_scope_pseudonym_detail_should_report_a_count_not_the_tokens():
     event = _event_from_core(
         {
             "kind": OUT_OF_SCOPE_PSEUDONYM,
@@ -29,6 +29,7 @@ def test_out_of_scope_detail_names_a_count_not_the_tokens():
         }
     )
     detail = event["detail"]
+
     assert "138****5678" not in detail
     assert "z*******@example.com" not in detail
     assert "example.com" not in detail
@@ -37,7 +38,7 @@ def test_out_of_scope_detail_names_a_count_not_the_tokens():
     assert event["count"] == 2
 
 
-def test_injection_detail_names_a_count_not_the_llm_excerpt():
+def test_injection_suspected_detail_should_report_a_count_not_the_llm_excerpt():
     """Both leak channels at once, verified against v0.8.7.
 
     `redact()` with the default config gives `phone` the `mask` strategy, so the key's
@@ -54,6 +55,7 @@ def test_injection_detail_names_a_count_not_the_llm_excerpt():
     redacted, key = redact("请联系张伟，电话 13812345678。", lang="zh")
     assert "138****5678" in key, "fixture assumes the default mask strategy for phone"
     reply = f"{redacted} 备份地址 ceo.private.mailbox@acme-internal.example 。"
+
     _, details = guarded_restore(
         reply,
         key,
@@ -66,6 +68,7 @@ def test_injection_detail_names_a_count_not_the_llm_excerpt():
     events = [e for e in details["security_events"] if e["reason_code"] == INJECTION_SUSPECTED]
     assert events, "expected the H heuristic to fire on an exfil-shaped reply"
     detail = events[0]["detail"]
+
     assert "ceo.private.mailbox@acme-internal.example" not in detail
     assert "acme-internal" not in detail
     for code in key:

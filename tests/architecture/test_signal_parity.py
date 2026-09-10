@@ -42,7 +42,7 @@ from tests.conftest import make_match
 _COLLIDING_PHONES = ("13812345678", "13800005678")
 
 
-def test_redact_surfaces_both_keep_downgraded_and_mask_collision():
+def test_redact_should_surface_both_keep_downgraded_and_mask_collision_events():
     """One `redact(detailed=True)` call whose input BOTH downgrades a `keep`
     entity (bank_card has no self_reference/kinship whitelist entry) AND causes
     a mask-family collision (two phones masking to the same visible label) must
@@ -62,7 +62,7 @@ def test_redact_surfaces_both_keep_downgraded_and_mask_collision():
     assert "mask_collision" in codes, "mask_collision event missing from redact() security_events"
 
 
-def test_structured_redact_csv_public_surface_warns_and_preserves_both_originals():
+def test_redact_csv_should_warn_and_preserve_both_originals_on_mask_collision():
     """The PUBLIC `redact_csv` entry point, over a column of collision-prone
     phone values, must warn about the collision AND still keep both originals
     recoverable in the returned key (signal-not-remove, mirroring the one-shot
@@ -76,7 +76,7 @@ def test_structured_redact_csv_public_surface_warns_and_preserves_both_originals
     assert set(key.values()) == set(_COLLIDING_PHONES)
 
 
-def test_structured_session_mask_collisions_getter_drives_a_mask_collision_event():
+def test_structured_session_mask_collisions_should_drive_a_mask_collision_event():
     """`redact_csv`/`redact_json` read `session.mask_collisions` (a
     `StructuredRedactor` getter, structured.py:154/269) to build their
     SecurityWarning. Drive that SAME getter directly, over the SAME
@@ -97,7 +97,7 @@ def test_structured_session_mask_collisions_getter_drives_a_mask_collision_event
     assert event["reason_code"] == "mask_collision"
 
 
-def test_restore_with_aliases_surfaces_alias_collision():
+def test_restore_should_surface_alias_collision_when_aliases_collide():
     """A key with two fakes -> two originals whose aliases collide on one
     string must yield an `alias_collision` event from
     `restore(..., aliases=..., guard=False, detailed=True)` -- the only Python
@@ -117,7 +117,7 @@ def test_restore_with_aliases_surfaces_alias_collision():
     )
 
 
-def test_restore_full_compat_shape():
+def test_restore_should_return_the_original_text_after_round_trip():
     """A public `redact()` -> `restore()` round-trip proves the core
     `restore_full` compat wrapper's `str` view is unchanged: the text half of
     what `_core.restore` returns (independent of the `signals` dict alongside

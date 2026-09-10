@@ -35,20 +35,20 @@ def _capture_keep_warnings(text: str, pii_type: str) -> list[str]:
     return [str(w.message) for w in caught if issubclass(w.category, SecurityWarning)]
 
 
-def test_keep_downgrade_warning_fires():
+def test_keep_downgrade_warning_should_fire():
     """Guard the guard: if this stops warning, the PII-free assertions below go vacuous."""
     msgs = _capture_keep_warnings(f"卡号{_SECRETS['bank_card']}", "bank_card")
     assert any("downgrad" in m for m in msgs), msgs
 
 
-def test_keep_downgrade_warning_contains_no_raw_pii():
+def test_keep_downgrade_warning_should_contain_no_raw_pii():
     for pii_type, secret in _SECRETS.items():
         msgs = _capture_keep_warnings(f"号码{secret}", pii_type)
         joined = " ".join(msgs)
         assert secret not in joined, f"{pii_type}: raw PII leaked into warning: {joined!r}"
 
 
-def test_keep_downgrade_warning_still_names_the_type():
+def test_keep_downgrade_warning_should_still_name_the_type():
     """PII-free must not mean information-free — the operator still needs the type."""
     msgs = _capture_keep_warnings(f"卡号{_SECRETS['bank_card']}", "bank_card")
     assert any("bank_card" in m for m in msgs), msgs

@@ -24,7 +24,7 @@ from tests.security.property.conftest import PROPERTY_SETTINGS
     text=st.text(min_size=1, max_size=80),
     entity_type=st.sampled_from(["phone", "ssn", "id_number", "email", "person"]),
 )
-def test_keep_outside_whitelist_downgrades(text, entity_type):
+def test_keep_strategy_should_downgrade_when_type_is_outside_the_whitelist(text, entity_type):
     """For non-self_reference type with keep strategy, original is replaced."""
     assume(text not in _KEEP_WHITELIST)  # whitelisted pronouns are exempt
     assume(len(text.strip()) > 0)  # all-whitespace would be a no-op match
@@ -53,7 +53,7 @@ def test_keep_outside_whitelist_downgrades(text, entity_type):
 
 @PROPERTY_SETTINGS
 @given(text=st.sampled_from(sorted(_KEEP_WHITELIST)))
-def test_keep_inside_whitelist_preserves(text):
+def test_keep_strategy_should_preserve_text_when_type_is_in_the_whitelist(text):
     """Whitelisted pronouns / kinship under self_reference are preserved verbatim."""
     entity = PatternMatch(text=text, type="self_reference", start=0, end=len(text), layer=1)
     redacted, _key, _ = replace(

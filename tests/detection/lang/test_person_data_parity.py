@@ -94,7 +94,7 @@ _LIST_POOLS = (
 # ── Half 1: frozen-fingerprint side (always runs; survives T9) ────────────────
 
 
-def test_core_pools_match_frozen_counts():
+def test_core_pools_should_match_frozen_counts():
     pools = _core_pools()
     # surnames is a char string; its "count" is the number of distinct chars.
     assert len(set(pools["surnames_zh"])) == EXPECTED_COUNTS["surnames_zh"]
@@ -104,7 +104,7 @@ def test_core_pools_match_frozen_counts():
         assert len(set(pools[key])) == EXPECTED_COUNTS[key], f"{key} has duplicates"
 
 
-def test_core_pools_match_frozen_sha256():
+def test_core_pools_should_match_frozen_sha256():
     pools = _core_pools()
     # surnames: exact-string fingerprint (order-load-bearing).
     assert _sha_str(pools["surnames_zh"]) == EXPECTED_SHA256["surnames_zh"]
@@ -158,21 +158,23 @@ def _load_python_truth() -> dict[str, object] | None:
     }
 
 
-def test_python_source_matches_frozen_fingerprints():
+def test_python_source_should_match_frozen_fingerprints():
     truth = _load_python_truth()
     if truth is None:
         pytest.skip("Python person-name data sources removed (post-Task-9)")
+
     # Counts.
     assert len(set(truth["surnames_zh"])) == EXPECTED_COUNTS["surnames_zh"]
     for key in _LIST_POOLS:
         assert len(truth[key]) == EXPECTED_COUNTS[key], key
+
     # sha256.
     assert _sha_str(truth["surnames_zh"]) == EXPECTED_SHA256["surnames_zh"]
     for key in _LIST_POOLS:
         assert _sha_list(truth[key]) == EXPECTED_SHA256[key], key
 
 
-def test_core_pools_equal_python_source():
+def test_core_pools_should_equal_python_source():
     truth = _load_python_truth()
     if truth is None:
         pytest.skip("Python person-name data sources removed (post-Task-9)")

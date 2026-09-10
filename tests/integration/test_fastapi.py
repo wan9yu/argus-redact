@@ -85,7 +85,7 @@ class TestRedactBody:
         assert redacted == body
         assert key == {}
 
-    def test_on_missing_field_raise_fails_closed(self):
+    def test_on_missing_field_raise_should_fail_closed_when_text_field_absent(self):
         # Opt-in fail-closed: a security-conscious deployment sets
         # on_missing_field="raise" so an absent field RAISES instead of returning
         # the PII-carrying body un-redacted. A proxy that ignores warnings then
@@ -97,7 +97,7 @@ class TestRedactBody:
                 body, field="text", on_missing_field="raise", mode="fast", lang="zh", salt=42
             )
 
-    def test_on_missing_field_raise_fails_closed_for_messages(self):
+    def test_on_missing_field_raise_should_fail_closed_when_messages_field_absent(self):
         body = {"msgs": [{"role": "user", "content": "手机13812345678"}]}
 
         with pytest.raises(TypeError, match="messages"):
@@ -105,7 +105,7 @@ class TestRedactBody:
                 body, field="messages", on_missing_field="raise", mode="fast", lang="zh", salt=42
             )
 
-    def test_on_missing_field_default_is_warn_and_returns_unchanged(self):
+    def test_on_missing_field_default_should_warn_and_return_unchanged(self):
         # Default (on_missing_field="warn") is unchanged behaviour: warn naming
         # the field, then return the body unchanged with an empty key — so the
         # existing PII-free pass-through flow stays intact.
@@ -117,7 +117,7 @@ class TestRedactBody:
         assert redacted == body
         assert key == {}
 
-    def test_on_missing_field_rejects_unknown_value(self):
+    def test_on_missing_field_should_reject_unknown_value(self):
         # A typo in the security switch must not silently fall back to "warn"
         # (that would itself fail open). An unknown value is a ValueError.
         with pytest.raises(ValueError, match="on_missing_field"):
@@ -146,7 +146,7 @@ class TestRedactBody:
 class TestMessagesFailClosed:
     """messages branch must fail CLOSED on non-conforming shapes."""
 
-    def test_tool_call_message_raises_typeerror(self):
+    def test_messages_should_fail_closed_when_message_has_no_content_key(self):
         """A dict message with no 'content' key (e.g. OpenAI tool-call) raises TypeError."""
         body = {
             "messages": [
@@ -161,16 +161,17 @@ class TestMessagesFailClosed:
                 },
             ]
         }
+
         with pytest.raises(TypeError, match="content"):
             redact_body(body, field="messages", mode="fast", lang="zh", salt=42)
 
-    def test_bare_string_element_raises_typeerror(self):
+    def test_messages_should_fail_closed_when_element_is_a_bare_string(self):
         """A bare-string element in messages raises TypeError."""
         body = {"messages": ["电话13812345678"]}
         with pytest.raises(TypeError, match="not a dict"):
             redact_body(body, field="messages", mode="fast", lang="zh", salt=42)
 
-    def test_list_content_raises_typeerror(self):
+    def test_messages_should_fail_closed_when_content_is_multimodal_list(self):
         """A message with list content (multimodal) raises TypeError."""
         body = {
             "messages": [
@@ -180,7 +181,7 @@ class TestMessagesFailClosed:
         with pytest.raises(TypeError, match="multimodal"):
             redact_body(body, field="messages", mode="fast", lang="zh", salt=42)
 
-    def test_well_formed_messages_still_redact(self):
+    def test_messages_should_redact_and_roundtrip_when_well_formed(self):
         """Well-formed [{role, content: str}] messages still redact and round-trip."""
         body = {
             "messages": [
@@ -188,7 +189,9 @@ class TestMessagesFailClosed:
                 {"role": "user", "content": "我的电话是13812345678，邮箱zhang@example.com"},
             ]
         }
+
         redacted, key = redact_body(body, field="messages", mode="fast", lang="zh", salt=42)
+
         dumped = json.dumps(redacted, ensure_ascii=False)
         # PII must not appear
         assert "13812345678" not in dumped
@@ -196,7 +199,7 @@ class TestMessagesFailClosed:
         # Same entity aliases survive across messages (shared key)
         assert key
 
-    def test_repeated_pii_gets_one_alias(self):
+    def test_repeated_pii_should_map_to_one_alias(self):
         """The same PII across multiple messages maps to one alias (shared key)."""
         body = {
             "messages": [
@@ -286,7 +289,7 @@ class TestRestoreBody:
         with pytest.raises(TypeError):
             restore_body(["not", "a", "string"], key, guard=False)
 
-    def test_empty_key_detailed_returns_outcome_key(self):
+    def test_empty_key_detailed_should_include_outcome_key(self):
         # Shape parity with guarded_restore: the detailed no-op return must carry
         # an "outcome" key too, not just "security_events".
         response = {"result": "no PII here"}
@@ -295,7 +298,7 @@ class TestRestoreBody:
 
         assert "outcome" in details
 
-    def test_restore_body_forwards_aliases(self):
+    def test_restore_body_should_restore_using_aliases(self):
         # A cross-language alias form must restore through restore_body when
         # aliases= is supplied (and not without it).
         key = {"P-1": "张三"}
@@ -306,7 +309,7 @@ class TestRestoreBody:
 
         assert restored["result"] == "张三 and 张三"
 
-    def test_restore_body_rejects_malformed_aliases(self):
+    def test_restore_body_should_reject_malformed_aliases(self):
         # A non-empty key is required: restore_body short-circuits on an
         # empty key before ever reaching guarded_restore.
         key = {"P-1": "张三"}
@@ -315,7 +318,7 @@ class TestRestoreBody:
         with pytest.raises(ValueError):
             restore_body(response, key, field="result", guard=False, aliases={"P-1": "Zhang San"})
 
-    def test_restore_body_forwards_display_marker(self):
+    def test_restore_body_should_restore_using_display_marker(self):
         key = {"P-1": "张三"}
         response = {"result": "P-1ⓕ来了"}
 
@@ -391,7 +394,7 @@ class TestRestoreBodyGuard:
 
         assert "13812345678" in restored["result"]
 
-    def test_detailed_returns_security_events_on_fail(self):
+    def test_detailed_should_include_security_events_when_guard_fails(self):
         """detailed=True surfaces security_events when guard fails."""
         body = {"text": "电话13812345678"}
         redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)
@@ -406,7 +409,7 @@ class TestRestoreBodyGuard:
         assert "security_events" in details
         assert any(e["reason_code"] == "provenance_failed" for e in details["security_events"])
 
-    def test_prompt_anchor_workflow_end_to_end(self):
+    def test_prompt_anchor_workflow_should_roundtrip_end_to_end(self):
         """Full caller workflow: redact_body → make_anchor → prompt_anchor → restore_body."""
         body = {"text": "联系人张三，电话13812345678"}
         redacted, key = redact_body(body, mode="fast", lang="zh", salt=42)

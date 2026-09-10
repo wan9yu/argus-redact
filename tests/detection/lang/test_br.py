@@ -27,15 +27,15 @@ class TestBrazilianPatterns:
 class TestBrazilianHints:
     """Brazilian Portuguese kinship + command-mode hints."""
 
-    def test_kinship_minha_mae_is_kinship(self):
+    def test_minha_mae_should_be_classified_as_kinship(self):
         entity = PatternMatch(
             text="minha mãe", type="self_reference", start=0, end=9, confidence=1.0, layer=1
         )
         assert _is_kinship(entity)
 
-    def test_command_pattern_marks_command_mode(self):
+    def test_interaction_command_should_fire_when_text_is_a_command(self):
         assert _is_interaction_command("Por favor, me diga o número.")
         assert _is_interaction_command("Você pode me ajudar?")
 
-    def test_narrative_br_is_not_command(self):
+    def test_interaction_command_should_not_fire_when_text_is_narrative(self):
         assert not _is_interaction_command("São Paulo é a maior cidade do Brasil.")

@@ -25,7 +25,7 @@ def _text(rel: str) -> str:
     return (_ROOT / rel).read_text(encoding="utf-8")
 
 
-def test_documented_pack_count_matches_registry():
+def test_documented_pack_count_should_match_the_registry():
     claims = [
         ("README.md", f"{_PACK_COUNT} langs"),
         ("README.zh.md", f"{_PACK_COUNT} 种语言"),
@@ -33,21 +33,23 @@ def test_documented_pack_count_matches_registry():
         ("docs/benchmark-report.md", f"{_PACK_COUNT} languages"),
         ("demo/js/strings.js", f"{_PACK_COUNT} 种语言"),
     ]
+
     missing = [f"{rel}: {claim!r}" for rel, claim in claims if claim not in _text(rel)]
+
     assert not missing, (
         f"_LANG_PATTERNS ships {_PACK_COUNT} packs; these surfaces claim otherwise "
         f"(update the doc, or the claim list here if a surface was reworded): {missing}"
     )
 
 
-def test_documented_pack_codes_match_registry():
+def test_documented_pack_codes_should_match_the_registry():
     for rel in ("README.md", "README.zh.md"):
         assert _PACK_CODES in _text(rel), (
             f"{rel} does not spell the shipped pack codes as {_PACK_CODES!r}"
         )
 
 
-def test_regex_only_packs_are_documented_as_such():
+def test_regex_only_packs_should_be_documented_as_such():
     assert _REGEX_ONLY == ["br"], (
         "the set of packs with no NER adapter changed; update the README sentences "
         f"and this expectation together (now: {_REGEX_ONLY})"

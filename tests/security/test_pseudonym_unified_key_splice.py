@@ -53,8 +53,9 @@ _NAMES = [
 _TEXT = "。".join(f"客户{n}提出了问题" for n in _NAMES) + "。"
 
 
-def test_unified_key_never_remaps_a_downstream_code():
+def test_unified_key_should_never_remap_a_downstream_code():
     r = redact_pseudonym_llm(_TEXT, salt=5, lang="zh", mode="fast", _polluted_input_ok=True)
+
     remapped = {
         code: (original, r.key.get(code))
         for code, original in r.downstream_key.items()
@@ -66,19 +67,20 @@ def test_unified_key_never_remaps_a_downstream_code():
     )
 
 
-def test_restore_with_unified_key_recovers_every_name():
+def test_restore_should_recover_every_name_using_the_unified_key():
     r = redact_pseudonym_llm(_TEXT, salt=5, lang="zh", mode="fast", _polluted_input_ok=True)
     restored = restore(r.downstream_text, r.key, guard=False)
     missing = [n for n in _NAMES if n not in restored]
     assert not missing, f"restore lost real names via a unified-key collision: {missing}"
 
 
-def test_audit_codes_are_bracketed_and_realistic_codes_are_not():
+def test_audit_and_realistic_codes_should_stay_in_disjoint_namespaces():
     # The disjointness guarantee: audit-face codes live in a bracketed namespace
     # ("[" ... "]"), realistic (LLM-facing) codes never contain "[". This is what
     # makes it structurally impossible for an audit code to equal a realistic
     # bare-P pool-exhaustion fallback and overwrite its restore mapping.
     r = redact_pseudonym_llm(_TEXT, salt=5, lang="zh", mode="fast", _polluted_input_ok=True)
+
     audit_only = {c: o for c, o in r.key.items() if c not in r.downstream_key}
     assert audit_only, "expected audit-space codes in the unified key"
     assert all(c.startswith("[") and c.endswith("]") for c in audit_only), (
@@ -89,7 +91,7 @@ def test_audit_codes_are_bracketed_and_realistic_codes_are_not():
     )
 
 
-def test_merge_pseudonym_keys_raises_on_hand_built_collision():
+def test_merge_pseudonym_keys_should_raise_when_codes_collide_on_different_originals():
     # A code mapping to two different originals must fail loud, not silently drop.
     realistic = {"P-00001": "Alice", "Q-00002": "Bob"}
     audit = {"P-00001": "Carol"}  # same code, different original
@@ -100,13 +102,13 @@ def test_merge_pseudonym_keys_raises_on_hand_built_collision():
     assert "Alice" not in str(exc.value) and "Carol" not in str(exc.value)
 
 
-def test_merge_pseudonym_keys_tolerates_identical_remap():
+def test_merge_pseudonym_keys_should_be_idempotent_when_codes_agree_on_the_same_original():
     # The same code mapping to the SAME original in both keys is idempotent.
     merged = _merge_pseudonym_keys({"P-1": "Alice"}, {"P-1": "Alice", "[P-2]": "Alice"})
     assert merged == {"P-1": "Alice", "[P-2]": "Alice"}
 
 
-def test_put_key_checked_raises_on_streaming_aggregate_collision():
+def test_put_key_checked_should_raise_when_a_code_is_repointed_to_a_different_original():
     # The streaming aggregate uses the same primitive; a code already mapped to one
     # original must not be re-pointed at another.
     acc = {"P-9": "Alice"}
@@ -115,11 +117,12 @@ def test_put_key_checked_raises_on_streaming_aggregate_collision():
         _put_key_checked(acc, "P-9", "Bob")
 
 
-def test_streaming_aggregate_key_recovers_every_name():
+def test_streaming_aggregate_key_should_recover_every_name():
     r = StreamingRedactor(salt=5, lang="zh", mode="fast", strict_input=False)
     r.feed(_TEXT)
     r.flush()
     agg = r.aggregate_key()
+
     # The chunk emit surfaces the realistic (LLM-facing) codes too; whatever the
     # stream emitted downstream must restore to the right original from the
     # aggregate key.
@@ -134,7 +137,7 @@ def test_streaming_aggregate_key_recovers_every_name():
 # the core and used for the config argus builds itself, but it is deliberately
 # NOT part of the public, user-selectable strategy surface — a user must not be
 # able to reach the bracketed audit namespace via config / strategy_overrides.
-def test_remove_bracketed_rejected_from_public_redact_config():
+def test_remove_bracketed_should_be_rejected_from_the_public_redact_config():
     with pytest.raises(ValueError) as exc:
         redact(
             "电话13800138000",
@@ -143,11 +146,12 @@ def test_remove_bracketed_rejected_from_public_redact_config():
             lang="zh",
             mode="fast",
         )
+
     assert "remove_bracketed" in str(exc.value)
     assert "Unknown strategy" in str(exc.value)
 
 
-def test_remove_bracketed_rejected_from_strategy_overrides():
+def test_remove_bracketed_should_be_rejected_from_strategy_overrides():
     with pytest.raises(ValueError) as exc:
         redact_pseudonym_llm(
             "客户王建国来访",
@@ -158,23 +162,24 @@ def test_remove_bracketed_rejected_from_strategy_overrides():
             strict_input=False,
             strategy_overrides={"person": "remove_bracketed"},
         )
+
     assert "remove_bracketed" in str(exc.value)
 
 
-def test_remove_bracketed_absent_from_public_valid_strategies():
+def test_valid_strategies_should_not_include_remove_bracketed():
     # The public tuple a user's config is validated against must not list it.
     from argus_redact.pure.replacer import VALID_STRATEGIES
 
     assert "remove_bracketed" not in VALID_STRATEGIES
 
 
-def test_remove_bracketed_still_classified_reversible():
+def test_remove_bracketed_should_still_be_classified_reversible():
     # Internal, but still classified (not "unclassified") so the reversibility
     # SSOT covers it; is_strategy_reversible must not raise on it.
     assert is_strategy_reversible("remove_bracketed") is True
 
 
-def test_audit_pass_still_uses_remove_bracketed_end_to_end():
+def test_audit_pass_should_still_use_remove_bracketed_end_to_end():
     # The audit face is unchanged by the visibility restriction: bracketed
     # placeholders, disjoint from the realistic codes, full restore.
     r = redact_pseudonym_llm(

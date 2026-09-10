@@ -28,7 +28,7 @@ def _stream(chunks, *, lang="zh", **kw):
     return "".join(parts), r
 
 
-def test_phone_straddling_max_buffer_redacts():
+def test_phone_should_not_leak_when_straddling_the_forceflush_cut():
     # 4091 boundary-less filler + "电话138" → chunk1 hits exactly 4096 chars with
     # no sentence boundary, forcing a flush. The phone 13800138000 straddles it.
     pad = "啊" * (DEFAULT_MAX_BUFFER - 5)
@@ -36,7 +36,7 @@ def test_phone_straddling_max_buffer_redacts():
     assert "13800138000" not in out, f"raw phone leaked across the force-flush cut: {out[-40:]!r}"
 
 
-def test_email_straddling_max_buffer_redacts():
+def test_email_should_not_leak_when_straddling_the_forceflush_cut():
     # English filler keeps the buffer boundary-less; chunk1 hits exactly 4096
     # chars so the force-flush fires with a@bcd.com straddling the cut.
     head = "a@bc"
@@ -46,7 +46,7 @@ def test_email_straddling_max_buffer_redacts():
     assert "a@bcd.com" not in out, f"raw email leaked across the force-flush cut: {out[-40:]!r}"
 
 
-def test_cjk_org_straddling_max_buffer_redacts():
+def test_org_name_should_not_leak_when_straddling_the_forceflush_cut():
     # A CJK org name straddles the force-flush cut. chunk1 hits exactly 4096
     # chars; the distinctive head of the company name (which sits just before
     # the cut) must not leak unredacted. Today the head fragment emits raw
@@ -60,7 +60,7 @@ def test_cjk_org_straddling_max_buffer_redacts():
     assert head not in out, f"raw org head leaked across the force-flush cut: {out[-40:]!r}"
 
 
-def test_straddling_entity_round_trips_via_aggregate_key():
+def test_restore_should_reconstruct_original_when_entity_straddles_the_cut():
     # (a) An entity straddling the carry boundary must still restore cleanly:
     # restore(out, aggregate_key) == the original concatenated input.
     pad = "啊" * (DEFAULT_MAX_BUFFER - 5)
@@ -69,7 +69,7 @@ def test_straddling_entity_round_trips_via_aggregate_key():
     assert restore(out, r.aggregate_key(), guard=False) == "".join(chunks)
 
 
-def test_entity_before_carry_window_emitted_exactly_once():
+def test_phone_should_be_emitted_once_when_before_the_carry_window():
     # (b) An entity wholly before the len-W cut is emitted once — not duplicated
     # by the carried residual being re-detected next round. Put the phone near
     # the start (well before the carry window) behind a non-boundary comma, then
@@ -85,7 +85,7 @@ def test_entity_before_carry_window_emitted_exactly_once():
     assert out.count(fakes[0]) == 1, "the fake must appear exactly once (no double-emit)"
 
 
-def test_region_evidence_before_cut_not_orphaned():
+def test_region_should_stay_redacted_when_its_evidence_precedes_the_cut():
     # Evidence-gated leak: a bare zh region (西湖区) fires ONLY because a phone is
     # within its proximity window. A sentence boundary lands between the phone and
     # the region, so a naive cut emits the phone in the prefix and carries the bare
@@ -98,7 +98,7 @@ def test_region_evidence_before_cut_not_orphaned():
     assert "13800138000" not in out, f"phone leaked: {out!r}"
 
 
-def test_region_evidence_after_cut_not_orphaned():
+def test_region_should_stay_redacted_when_its_evidence_follows_the_cut():
     # Same leak, mirror direction: the region is in the prefix and its proximate
     # phone is in the residual. Detecting the prefix alone drops the region below
     # threshold → bare region emitted. The snap must carry the region with the PII.
@@ -106,7 +106,7 @@ def test_region_evidence_after_cut_not_orphaned():
     assert "西湖区" not in out, f"bare region leaked across the evidence cut: {out!r}"
 
 
-def test_hobby_cue_across_cut_not_orphaned():
+def test_hobby_should_stay_redacted_when_its_cue_is_split_by_the_cut():
     # The cue-window variant: a hobby (攀岩) fires only because the cue 喜欢 sits in
     # its window. A boundary lands between the cue and the term, so the term is
     # carried bare and re-detected alone (no cue) → leak. A cue is NOT itself a
@@ -116,7 +116,7 @@ def test_hobby_cue_across_cut_not_orphaned():
     assert "攀岩" not in out, f"bare hobby leaked across the cue cut: {out!r}"
 
 
-def test_region_evidence_at_exact_proximity_boundary_not_orphaned():
+def test_region_should_stay_redacted_when_evidence_is_at_the_prox_boundary():
     # Off-by-one guard: the region fires on a phone at EXACTLY proximity distance 50
     # (the inclusive REGION_PROX_NEAR boundary). The carry margin must exceed 50 by
     # one so the snap's left edge lands strictly inside the phone (not on its end)
@@ -127,7 +127,7 @@ def test_region_evidence_at_exact_proximity_boundary_not_orphaned():
     assert "13812345678" not in out, f"phone leaked: {out!r}"
 
 
-def test_dense_boundaryless_forceflush_does_not_split_region():
+def test_region_should_not_leak_when_a_dense_stream_forces_bounded_drain():
     # Bounded-drain split guard: a dense, boundary-less stream of region+phone
     # repeats hits the max_buffer force-flush. The evidence-widening chains the snap
     # to 0, so the engine must drain — and the drain must be snapped CLOSED-ONLY so
@@ -147,7 +147,7 @@ def _pem_key(body_lines: int = 3) -> str:
     return f"-----BEGIN OPENSSH PRIVATE KEY-----\n{body}\n-----END OPENSSH PRIVATE KEY-----"
 
 
-def test_ssh_private_key_streamed_line_by_line_not_leaked():
+def test_ssh_private_key_should_not_leak_when_streamed_line_by_line():
     # A multiline PEM private key fed line-by-line: every '\n' is an always-boundary
     # that would commit the BEGIN line + each body line BEFORE the END marker arrives
     # (neither half matches the ssh_private_key pattern alone) → plaintext leak. The
@@ -161,7 +161,7 @@ def test_ssh_private_key_streamed_line_by_line_not_leaked():
     assert "b3BlbnNzaC1" not in out, f"key body leaked: {out[:120]!r}"
 
 
-def test_ssh_private_key_larger_than_buffer_not_leaked():
+def test_ssh_private_key_should_not_leak_when_larger_than_the_buffer():
     # A COMPLETE key (END present) whose total length exceeds DEFAULT_MAX_BUFFER but
     # stays within the 10000 body bound (so batch redacts it) must NOT be
     # force-flush-split. The dangerous shape is END with NO trailing boundary after
@@ -186,7 +186,7 @@ def test_ssh_private_key_larger_than_buffer_not_leaked():
     assert "b3BlbnNzaC1" not in out2, "body leaked (single feed)"
 
 
-def test_ipv4_split_at_internal_dot_after_force_flush_no_leak():
+def test_ipv4_should_not_leak_when_split_at_an_internal_dot_by_forceflush():
     # An IPv4 (8.8.8.8) straddles the force-flush cut, split at an internal dot.
     # That dot is an ASCII sentence-boundary char, so the OLD _last_boundary_index
     # treated it as a real boundary and emitted the head "8.8" raw — a leak. With
@@ -202,7 +202,7 @@ def test_ipv4_split_at_internal_dot_after_force_flush_no_leak():
     assert pii not in out, f"raw IPv4 leaked across the internal-dot cut: {out[-40:]!r}"
 
 
-def test_email_split_after_dot_after_force_flush_no_leak():
+def test_email_should_not_leak_when_split_after_its_dot_by_forceflush():
     # An email a@bcd.com split right after its dot ("a@bcd." | "com"). The dot is
     # an ASCII boundary char appearing inside the entity; the OLD code emitted
     # "a@bcd." raw because it treated the intra-entity dot as a sentence end.
@@ -216,7 +216,7 @@ def test_email_split_after_dot_after_force_flush_no_leak():
     assert pii not in out, f"raw email leaked across the internal-dot cut: {out[-40:]!r}"
 
 
-def test_email_split_at_dot_no_force_flush_no_leak():
+def test_email_should_not_leak_when_split_at_its_dot_without_a_forceflush():
     # No force-flush at all — small chunks split exactly at the email's dot.
     # "contact me at a@bcd." | "com please." The trailing dot of chunk1 is at the
     # BUFFER END (no next char yet) → ambiguous, must NOT count as a boundary.
@@ -226,7 +226,7 @@ def test_email_split_at_dot_no_force_flush_no_leak():
     assert "a@bcd.com" not in out, f"raw email leaked across the dot split: {out[-40:]!r}"
 
 
-def test_dotted_username_email_split_after_dot_no_partial_leak():
+def test_dotted_username_email_should_not_leak_when_split_after_the_dot():
     # jane.doe@company.com split after the username dot ("jane." | rest). The dot
     # in the username is intra-entity; "jane." must not be emitted raw as a head.
     out, _ = _stream(["please email jane.", "doe@company.com today."], lang="en")
@@ -234,7 +234,7 @@ def test_dotted_username_email_split_after_dot_no_partial_leak():
     assert "jane." not in out, f"dotted-username head leaked across the dot: {out[-40:]!r}"
 
 
-def test_cjk_full_width_boundary_still_splits():
+def test_stream_should_flush_and_redact_at_a_cjk_fullwidth_boundary():
     # CJK full-width 。 always counts as a boundary (it never appears inside an
     # ASCII entity and CJK sentences have no trailing space). A stream split at 。
     # must still flush + redact normally.
@@ -245,7 +245,7 @@ def test_cjk_full_width_boundary_still_splits():
     assert restore(out, r.aggregate_key(), guard=False) == "".join(chunks)
 
 
-def test_normal_sentence_boundary_stream_unchanged():
+def test_stream_should_redact_and_round_trip_at_normal_sentence_boundaries():
     # (d) A normal stream that flushes at sentence boundaries (never hits the
     # force-flush) must behave exactly as before: entities redacted, raw absent,
     # round-trips via aggregate_key.
@@ -254,14 +254,16 @@ def test_normal_sentence_boundary_stream_unchanged():
         "或拨 13987654321 找老陈。",
         "邮箱 user@company.com 已记录。",
     ]
+
     out, r = _stream(chunks, lang="zh")
+
     assert "13912345678" not in out
     assert "13987654321" not in out
     assert "user@company.com" not in out
     assert restore(out, r.aggregate_key(), guard=False) == "".join(chunks)
 
 
-def test_open_ended_entity_does_not_grow_buffer_unbounded():
+def test_buffer_should_stay_bounded_when_the_entity_is_openended():
     # REGRESSION (review A2): an open-ended detected span whose span keeps
     # growing as more boundary-less chars arrive used to drive _carry_cut_index
     # to cut<=0 on EVERY feed (the span runs from buffer-start past the target),
@@ -279,6 +281,7 @@ def test_open_ended_entity_does_not_grow_buffer_unbounded():
     out = r.feed("a@b").downstream_text
     seg = ".co" * 5000  # 15000 boundary-less chars/feed
     emitted_any = False
+
     for _ in range(30):
         res = r.feed(seg)  # must NOT raise ValueError (MAX_INPUT_SIZE)
         if res.downstream_text:
@@ -289,6 +292,7 @@ def test_open_ended_entity_does_not_grow_buffer_unbounded():
             f"buffer grew unbounded: {len(r._inc_buffer)} chars"
         )
     out += r.flush().downstream_text
+
     # Forward progress: across the run SOME downstream text was emitted (the
     # buffer drained at least once), not always "".
     assert emitted_any, "no downstream text ever emitted -- buffer never drained"
@@ -305,7 +309,7 @@ def _mega_github_token(n: int) -> str:
     return "ghp_" + "A" * n
 
 
-def test_forceflush_megabuffer_typed_entity_head_not_leaked():
+def test_github_token_head_should_not_leak_when_forceflush_splits_megabuffer():
     # C1 (CRITICAL leak regression): a >max_buffer boundary-less github_token fed in
     # small chunks. The buffer hits DEFAULT_MAX_BUFFER with the token spanning
     # [0, len); the bounded drain MUST split it. Before the fix the range-shifted
@@ -322,7 +326,7 @@ def test_forceflush_megabuffer_typed_entity_head_not_leaked():
     assert restore(out, r.aggregate_key(), guard=False) == token
 
 
-def test_forceflush_megabuffer_typed_entity_no_leak_en():
+def test_github_token_should_not_leak_across_chunk_sizes_when_forceflush_splits_it():
     # Fuzz oracle extension: a >max_buffer typed entity (EN — the cross-sentence
     # corpus is zh-only) fed under several chunkings. For EVERY chunking the FULL
     # token original (which batch redacts as one unit) must be ABSENT from the
@@ -339,7 +343,7 @@ def test_forceflush_megabuffer_typed_entity_no_leak_en():
         )
 
 
-def test_carry_window_range_token_straddle_not_leaked():
+def test_github_token_should_not_leak_when_its_prefix_is_in_the_carry_window():
     # A ~150-char github_token (length in the 128-256 CARRY_WINDOW range) whose
     # prefix straddles the force-flush chunk boundary. The 'ghp_' prefix (4 chars)
     # sits in the last 256 chars of chunk1 (the carry window); the remaining
@@ -419,7 +423,7 @@ def _chunk(text, size):
     return ["".join(chars[i : i + size]) for i in range(0, len(chars), size)]
 
 
-def test_cross_sentence_committed_incrementally_no_leak():
+def test_cross_sentence_gated_term_should_not_leak_when_committed_incrementally():
     """Cross-sentence evidence leaks are closed by the detection-context window —
     PROVEN on inputs longer than W so the gated cluster commits in a real
     incremental emit (before flush), not only at end-of-stream.
@@ -429,7 +433,8 @@ def test_cross_sentence_committed_incrementally_no_leak():
     window's left-context retention (backward) / forward hold-back (forward) is
     the ONLY reason the candidate is still detected when its sentence commits
     mid-stream; delete it and the candidate emits bare → leak (guarded by the
-    W=0 regression in ``test_fuzz_stream_oracle_is_a_real_guard`` below).
+    W=0 regression in ``test_fuzz_oracle_should_detect_leak_when_the_context_window_is_disabled``
+    below).
     """
     cases = [
         # backward hobby: cue 喜欢 in sentence 1, candidate 攀岩 in sentence 2
@@ -439,6 +444,7 @@ def test_cross_sentence_committed_incrementally_no_leak():
         # forward medical: candidate 花生 in sentence 1, cue 过敏 in sentence 2
         ("我之前吃过花生。后来过敏很严重。" + _FILLER * 12, "花生"),
     ]
+
     for text, term in cases:
         assert len(text) > 128  # precondition: longer than W
         for size in (1, 3, 7):
@@ -483,7 +489,7 @@ _FUZZ_TEXTS = [
 ]
 
 
-def test_fuzz_stream_leak_equivalence():
+def test_streamed_output_should_match_batch_leak_equivalence_across_chunk_sizes():
     """Fuzz oracle: every term batch removes is absent from the streamed output,
     across random chunk sizes — AND the incremental path actually ran.
 
@@ -496,12 +502,14 @@ def test_fuzz_stream_leak_equivalence():
         assert len(text) > 128  # precondition: exercises the incremental path
         removed = _batch_removed_terms(text)
         assert removed  # the corpus must contain removable PII to be meaningful
+
         for size in (1, 2, 3, 5, 7):
             out, pre_emits = _stream_tracked(_chunk(text, size))
             assert pre_emits > 0, (
                 f"no incremental (pre-flush) emit (text len={len(text)}, "
                 f"size={size}) — fuzz oracle inert, window path not exercised"
             )
+
             for term in removed:
                 assert term not in out, (
                     f"raw term {term!r} leaked in streamed output "
@@ -509,7 +517,7 @@ def test_fuzz_stream_leak_equivalence():
                 )
 
 
-def test_region_with_long_url_token_sole_evidence_stream_equals_batch():
+def test_region_should_match_batch_when_sole_evidence_is_a_distant_url_token():
     # The url_token's ?token= sits >W(128) chars into the URL. With the
     # corroborator allowlist, a url_token no longer corroborates a region in
     # EITHER batch or stream, so the bare region behaves identically in both —
@@ -533,7 +541,7 @@ def test_region_with_long_url_token_sole_evidence_stream_equals_batch():
     )
 
 
-def test_fuzz_stream_oracle_is_a_real_guard(monkeypatch):
+def test_fuzz_oracle_should_detect_leak_when_the_context_window_is_disabled(monkeypatch):
     """Regression sentinel: the fuzz oracle MUST fail if the detection-context
     window is broken. Break it (W=0 → no left-context retention AND no forward
     hold-back) and assert a cross-sentence gated term now leaks — proving the
@@ -593,8 +601,9 @@ class TestCheckpointMidPII:
         out += r2.flush().downstream_text
         return out
 
-    def test_checkpoint_mid_phone_straddle_resumes_without_leak(self):
-        # Same construction as test_phone_straddling_max_buffer_redacts: chunk1
+    def test_resume_should_not_leak_phone_when_checkpointed_mid_straddle(self):
+        # Same construction as
+        # test_phone_should_not_leak_when_straddling_the_forceflush_cut: chunk1
         # hits exactly DEFAULT_MAX_BUFFER with no sentence boundary, forcing a
         # bounded-drain emit inside feed() itself that holds the phone's
         # straddling head "138" back in `_inc_buffer`. The checkpoint lands
@@ -609,8 +618,9 @@ class TestCheckpointMidPII:
         )
         assert resumed == baseline, "resume is not transparent vs. an uninterrupted stream"
 
-    def test_checkpoint_mid_email_straddle_resumes_without_leak(self):
-        # Same construction as test_email_straddling_max_buffer_redacts: chunk1
+    def test_resume_should_not_leak_email_when_checkpointed_mid_straddle(self):
+        # Same construction as
+        # test_email_should_not_leak_when_straddling_the_forceflush_cut: chunk1
         # hits exactly DEFAULT_MAX_BUFFER, holding the email head "a@bc" back in
         # `_inc_buffer` when the checkpoint happens.
         head = "a@bc"
@@ -624,21 +634,23 @@ class TestCheckpointMidPII:
         )
         assert resumed == baseline, "resume is not transparent vs. an uninterrupted stream"
 
-    def test_checkpoint_mid_long_token_straddle_resumes_without_leak(self):
+    def test_resume_should_not_leak_token_when_checkpointed_mid_straddle(self):
         # Longer value: same ~150-char github_token as
-        # test_carry_window_range_token_straddle_not_leaked, whose 'ghp_' prefix
-        # sits inside the CARRY_WINDOW (256) at the force-flush cut. The
-        # checkpoint lands right after chunk1's forced drain, before the 150
-        # 'A's tail ever arrives.
+        # test_github_token_should_not_leak_when_its_prefix_is_in_the_carry_window,
+        # whose 'ghp_' prefix sits inside the CARRY_WINDOW (256) at the
+        # force-flush cut. The checkpoint lands right after chunk1's forced
+        # drain, before the 150 'A's tail ever arrives.
         token = "ghp_" + "A" * 150  # 154 chars, in the (128, _CARRY_WINDOW=256] range
         head, tail = token[:4], token[4:]
         pad = "x" * (DEFAULT_MAX_BUFFER - len(head))
         chunk1, chunk2 = pad + head, tail + " done."
         assert len(chunk1) == DEFAULT_MAX_BUFFER  # precondition: chunk1 forces a flush
+
         baseline, r_baseline = _stream([chunk1, chunk2], lang="en")
         assert token in r_baseline.aggregate_key().values(), (
             "precondition invalid: baseline never detected the token"
         )
+
         resumed = self._checkpoint_stream(chunk1, chunk2, lang="en")
         assert token not in resumed, (
             f"raw long token leaked across the checkpoint seam: {resumed[-60:]!r}"

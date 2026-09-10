@@ -150,7 +150,7 @@ def declared_wire_keys(face: str) -> set[str]:
     return {key for d in _FACE_CONTRACT[face].values() for key in d.wire}
 
 
-def test_every_face_decides_every_report_field():
+def test_every_face_should_decide_every_report_field():
     """THE gate. A tenth `RedactReport` field leaves every face missing a decision
     for it, but the assertion is inside a `for` loop: pytest halts at the first
     face reported, not all three at once. The only way to pass is to record what
@@ -166,7 +166,7 @@ def test_every_face_decides_every_report_field():
         )
 
 
-def test_anything_less_than_emitted_carries_a_reason():
+def test_withheld_decisions_should_carry_a_reason():
     for face, decisions in _FACE_CONTRACT.items():
         for name, d in decisions.items():
             if d.state == WITHHELD:
@@ -177,7 +177,7 @@ def test_anything_less_than_emitted_carries_a_reason():
                 )
 
 
-def test_emitted_fields_name_a_wire_key_and_withheld_ones_do_not():
+def test_decisions_should_name_wire_keys_only_when_emitted():
     for face, decisions in _FACE_CONTRACT.items():
         for name, d in decisions.items():
             if d.state == EMIT:
@@ -186,13 +186,13 @@ def test_emitted_fields_name_a_wire_key_and_withheld_ones_do_not():
                 assert not d.wire, f"{face}.{name} is withheld but names wire keys {d.wire}"
 
 
-def test_every_state_is_emit_or_withheld():
+def test_every_decision_should_have_a_known_state():
     for face, decisions in _FACE_CONTRACT.items():
         for name, d in decisions.items():
             assert d.state in (EMIT, WITHHELD), f"{face}.{name} has unknown state {d.state!r}"
 
 
-def test_the_gate_is_not_vacuous():
+def test_field_set_gate_should_reject_incomplete_or_stale_tables():
     """Positive control. The field-set gate passes today only because the table is
     complete, which on its own is an unfalsifiable green — so prove it rejects both
     a missing decision and a decision about a field that does not exist.
@@ -213,7 +213,7 @@ def test_the_gate_is_not_vacuous():
     assert set(complete) == set(_REPORT_FIELDS)
 
 
-def test_a_reasonless_withholding_is_rejected():
+def test_reason_check_should_reject_a_reasonless_withholding():
     """Positive control for the reason requirement.
 
     The previous version of this test built a bare `Decision(WITHHELD)` and
@@ -233,7 +233,7 @@ def test_a_reasonless_withholding_is_rejected():
 
 
 @pytest.mark.skipif(importlib.util.find_spec("starlette") is None, reason="starlette not installed")
-def test_http_redact_report_envelope_matches_the_contract():
+def test_http_redact_report_envelope_should_match_the_contract():
     """The serialised envelope, not field-by-field.
 
     Every plaintext-absence assertion in the server and MCP suites indexes ONE key
@@ -256,7 +256,7 @@ def test_http_redact_report_envelope_matches_the_contract():
     assert set(resp.json()) == declared_wire_keys(HTTP_REDACT_REPORT)
 
 
-def test_cli_assess_envelope_matches_the_contract(tmp_path):
+def test_cli_assess_envelope_should_match_the_contract(tmp_path):
     import argparse
     import io
     import json
@@ -275,7 +275,7 @@ def test_cli_assess_envelope_matches_the_contract(tmp_path):
 
 
 @pytest.mark.skipif(importlib.util.find_spec("mcp") is None, reason="mcp not installed")
-def test_mcp_assess_envelope_matches_the_contract():
+def test_mcp_assess_envelope_should_match_the_contract():
     """Driven through the tool dispatch, not the coroutine directly.
 
     `call_tool` exercises the mcp 2.0 argument parsing and result wrapping that a

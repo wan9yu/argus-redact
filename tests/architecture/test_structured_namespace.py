@@ -10,8 +10,9 @@ Two things are pinned here:
 1. The **circular-import shape**. `argus_redact.structured` imports `redact`
    from the package top, so `__init__.py` can only pull the structured names in
    AFTER `redact` is bound — an earlier insert is a circular ImportError that a
-   plain `import argus_redact` would surface. `test_import_argus_redact_smoke`
-   guards that ordering.
+   plain `import argus_redact` would surface.
+   `test_import_argus_redact_should_succeed_and_resolve_structured_names` guards
+   that ordering.
 2. The **frozen signatures**. Per `docs/stability-contract.md`, the function
    signatures + wire-face key sets are the stable contract; a change needs the
    loud CHANGELOG + gateway notice. These are the signatures at v0.8.10.
@@ -37,7 +38,7 @@ FROZEN_SIGNATURES = {
 }
 
 
-def test_import_argus_redact_smoke():
+def test_import_argus_redact_should_succeed_and_resolve_structured_names():
     """A clean `import argus_redact` in a FRESH interpreter must succeed and
     resolve the structured names — guards the circular-import shape between
     __init__.py and argus_redact.structured (an earlier structured insert is a
@@ -57,14 +58,14 @@ def test_import_argus_redact_smoke():
 
 
 @pytest.mark.parametrize("name", STRUCTURED_NAMES)
-def test_structured_name_present_and_callable(name):
+def test_structured_name_should_be_present_and_callable(name):
     assert name in argus_redact.__all__, f"{name} missing from argus_redact.__all__"
     assert hasattr(argus_redact, name), f"argus_redact has no attribute {name!r}"
     assert callable(getattr(argus_redact, name)), f"{name} is not callable"
 
 
 @pytest.mark.parametrize("name", STRUCTURED_NAMES)
-def test_structured_name_is_the_structured_module_object(name):
+def test_structured_name_should_be_the_structured_module_object(name):
     """The top-level export is the SAME object as argus_redact.structured.<name>
     — a re-export, not a shadowing rebind."""
     import argus_redact.structured as structured
@@ -72,7 +73,7 @@ def test_structured_name_is_the_structured_module_object(name):
     assert getattr(argus_redact, name) is getattr(structured, name)
 
 
-def test_structured_module_dunder_all():
+def test_structured_module_dunder_all_should_list_exactly_the_public_names():
     """argus_redact.structured owns its own __all__ = exactly the 4 public names."""
     import argus_redact.structured as structured
 
@@ -80,7 +81,7 @@ def test_structured_module_dunder_all():
 
 
 @pytest.mark.parametrize("name,expected", list(FROZEN_SIGNATURES.items()))
-def test_structured_signatures_frozen(name, expected):
+def test_structured_signature_should_match_the_frozen_contract(name, expected):
     fn = getattr(argus_redact, name)
     actual = str(inspect.signature(fn))
     assert actual == expected, (

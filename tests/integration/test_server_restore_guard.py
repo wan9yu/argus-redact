@@ -33,10 +33,11 @@ def client():
         yield client
 
 
-def test_restore_with_anchor_round_trips(client):
+def test_restore_should_round_trip_when_anchor_is_valid(client):
     """(c) valid anchor + nonce-carrying text → round-trips, security_events == []."""
     key = {"P-1": "Alice"}
     nonce = "abc123deadbeef00"  # >= 16, a plausible token
+
     resp = client.post(
         "/restore",
         json={
@@ -45,18 +46,20 @@ def test_restore_with_anchor_round_trips(client):
             "anchor": {"nonce": nonce, "scope": ["P-1"]},
         },
     )
+
     assert resp.status_code == 200
     data = resp.json()
     assert "Alice" in data["restored"]
     assert data["security_events"] == []
 
 
-def test_restore_without_anchor_fails_closed(client):
+def test_restore_should_fail_closed_when_no_anchor_is_given(client):
     """(c) no anchor → fail closed; security_events names guard_no_anchor, text un-restored."""
     resp = client.post(
         "/restore",
         json={"text": "hello P-1", "key": {"P-1": "Alice"}},
     )
+
     assert resp.status_code == 200
     data = resp.json()
     assert "Alice" not in data["restored"]
@@ -64,7 +67,7 @@ def test_restore_without_anchor_fails_closed(client):
     assert "guard_no_anchor" in codes
 
 
-def test_restore_legacy_guard_false_round_trips(client):
+def test_restore_should_round_trip_when_guard_is_false(client):
     """A caller opts back into plain substitution with guard=false."""
     resp = client.post(
         "/restore",
@@ -76,7 +79,7 @@ def test_restore_legacy_guard_false_round_trips(client):
     assert data["security_events"] == []
 
 
-def test_restore_strict_no_anchor_returns_400_with_events(client):
+def test_restore_should_return_400_with_events_when_strict_has_no_anchor(client):
     """strict=true + a guard trip → 400 carrying the security events."""
     resp = client.post(
         "/restore",
@@ -88,14 +91,14 @@ def test_restore_strict_no_anchor_returns_400_with_events(client):
     assert "guard_no_anchor" in codes
 
 
-def test_restore_empty_body_returns_400_not_500(client):
+def test_restore_should_return_400_when_body_is_empty(client):
     """(d) a malformed/empty body is a 400 (JSONDecodeError), never an unhandled 500."""
     resp = client.post("/restore", content="")
     assert resp.status_code == 400
     assert "error" in resp.json()
 
 
-def test_restore_non_dict_anchor_returns_400(client):
+def test_restore_should_return_400_when_anchor_is_not_a_dict(client):
     resp = client.post(
         "/restore",
         json={"text": "hi", "key": {"P-1": "Alice"}, "anchor": "not-a-dict"},
@@ -104,7 +107,7 @@ def test_restore_non_dict_anchor_returns_400(client):
 
 
 @pytest.mark.parametrize("bad_guard", [None, 0, "", [], {}, "false", 1])
-def test_restore_non_bool_guard_returns_400_never_unguarded(client, bad_guard):
+def test_restore_guard_should_return_400_when_value_is_not_a_bool(client, bad_guard):
     """An explicit non-bool `guard` is a 400 — never the silent unguarded path.
 
     ``guard`` was the one optional field with no type-check: an explicit JSON
@@ -123,6 +126,7 @@ def test_restore_non_bool_guard_returns_400_never_unguarded(client, bad_guard):
             "guard": bad_guard,
         },
     )
+
     assert resp.status_code == 400, f"guard={bad_guard!r} should 400, got {resp.status_code}"
     data = resp.json()
     assert "guard" in data.get("error", "")
@@ -132,7 +136,7 @@ def test_restore_non_bool_guard_returns_400_never_unguarded(client, bad_guard):
 
 
 @pytest.mark.parametrize("bad_strict", [None, 0, "", [], {}, "false", 1])
-def test_restore_non_bool_strict_returns_400(client, bad_strict):
+def test_restore_strict_should_return_400_when_value_is_not_a_bool(client, bad_strict):
     """`strict` gets the same type-check as `guard` — a non-bool is a 400."""
     resp = client.post(
         "/restore",
@@ -142,7 +146,7 @@ def test_restore_non_bool_strict_returns_400(client, bad_strict):
     assert "strict" in resp.json().get("error", "")
 
 
-def test_restore_bool_guard_and_omitted_still_behave(client):
+def test_restore_guard_should_preserve_semantics_when_bool_or_omitted(client):
     """The fix is surgical: guard true/false and an omitted key keep v0.8.0 meaning."""
     # guard=False → legacy plain substitution, empty events (unchanged).
     r_false = client.post(
@@ -150,6 +154,7 @@ def test_restore_bool_guard_and_omitted_still_behave(client):
     )
     assert r_false.status_code == 200
     assert "Alice" in r_false.json()["restored"]
+
     # guard omitted → fail closed with a guard_no_anchor event (unchanged).
     r_omit = client.post("/restore", json={"text": "hello P-1", "key": {"P-1": "Alice"}})
     assert r_omit.status_code == 200
@@ -157,7 +162,7 @@ def test_restore_bool_guard_and_omitted_still_behave(client):
     assert "guard_no_anchor" in [e["reason_code"] for e in r_omit.json()["security_events"]]
 
 
-def test_restore_narrow_scope_withholds_without_splicing(client):
+def test_restore_should_withhold_without_splicing_when_prefix_pseudonym_is_out_of_scope(client):
     """An out-of-scope pseudonym must come back verbatim, never half-restored.
 
     The in-scope 李明 is a strict prefix of the out-of-scope 李明华. If the
@@ -166,6 +171,7 @@ def test_restore_narrow_scope_withholds_without_splicing(client):
     corrupted identity the response simultaneously reports as "withheld".
     """
     nonce = "abc123deadbeef00"
+
     resp = client.post(
         "/restore",
         json={
@@ -174,6 +180,7 @@ def test_restore_narrow_scope_withholds_without_splicing(client):
             "anchor": {"nonce": nonce, "scope": ["李明"]},
         },
     )
+
     assert resp.status_code == 200
     data = resp.json()
     assert data["restored"] == "李明华 reported that 张伟 left."

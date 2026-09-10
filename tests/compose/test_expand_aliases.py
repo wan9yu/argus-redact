@@ -5,14 +5,15 @@ from __future__ import annotations
 from argus_redact.compose import expand_aliases
 
 
-def test_empty_key_returns_empty_dict():
+def test_expand_aliases_should_return_empty_dict_when_key_is_empty():
     assert expand_aliases({}, lang="zh") == {}
     assert expand_aliases({}, lang="en") == {}
 
 
-def test_single_zh_person_expands_5_aliases():
+def test_expand_aliases_should_generate_five_honorific_aliases_when_lang_is_zh():
     key = {"P-83811": "黄芳"}
     expanded = expand_aliases(key, lang="zh")
+
     # Original entry preserved
     assert expanded["P-83811"] == "黄芳"
     # 5 aliases: 黄先生 / 黄女士 / 黄总 / 黄老师 / 黄医生 — all map to "黄芳"
@@ -25,7 +26,7 @@ def test_single_zh_person_expands_5_aliases():
     assert len(expanded) == 6  # 1 original + 5 aliases
 
 
-def test_single_en_person_expands_5_aliases():
+def test_expand_aliases_should_generate_five_honorific_aliases_when_lang_is_en():
     key = {"P-83811": "John Brown"}
     expanded = expand_aliases(key, lang="en")
     assert expanded["P-83811"] == "John Brown"
@@ -37,7 +38,7 @@ def test_single_en_person_expands_5_aliases():
     assert len(expanded) == 6
 
 
-def test_compound_zh_surname():
+def test_expand_aliases_should_extract_full_surname_when_zh_surname_is_compound():
     """欧阳 / 司马 etc. — 2-char surname handled."""
     key = {"P-001": "欧阳锋"}
     expanded = expand_aliases(key, lang="zh")
@@ -47,7 +48,7 @@ def test_compound_zh_surname():
     assert "欧先生" not in expanded
 
 
-def test_compound_surname_drift_no_bogus_1char_honorific():
+def test_expand_aliases_should_avoid_identity_splice_when_compound_surname_pool_drifts():
     """A compound-surname original the zh DETECTOR reliably produces (长孙无忌)
     must expand to the CORRECT compound honorific (长孙先生) and NEVER a bogus
     1-char one (长先生).
@@ -76,7 +77,7 @@ def test_compound_surname_drift_no_bogus_1char_honorific():
     assert "市长先生" in restored
 
 
-def test_compound_surname_drift_covers_all_core_compound_surnames():
+def test_expand_aliases_should_extract_every_core_recognised_compound_surname():
     """Every compound surname the core detector recognises must extract as a
     2-char surname here — the two pools are single-sourced, so none can drift
     into a truncated 1-char honorific. Guards令狐/南宫/司徒/宇文/慕容/端木/长孙
@@ -91,7 +92,7 @@ def test_compound_surname_drift_covers_all_core_compound_surnames():
         assert f"{compound[0]}先生" not in expanded, f"{compound} truncated to {compound[0]}"
 
 
-def test_unrecognised_zh_surname_emits_no_honorific():
+def test_expand_aliases_should_emit_no_honorific_when_surname_is_unrecognised():
     """Safe fallback: when the leading char is NOT a surname the detector
     recognises, emit NO honorific rather than guessing name[:1]. A missing
     alias is a safe coverage gap; a guessed 1-char surname is the mechanism
@@ -102,7 +103,7 @@ def test_unrecognised_zh_surname_emits_no_honorific():
     assert expanded == {"P-1": "囧铁蛋"}, "unrecognised surname must not mint a guessed honorific"
 
 
-def test_multi_token_en_with_trailing_initial():
+def test_expand_aliases_should_skip_trailing_initial_when_extracting_en_surname():
     """John F. Smith → Smith (skip 'F.' single-letter initial)."""
     key = {"P-001": "John F. Smith"}
     expanded = expand_aliases(key, lang="en")
@@ -113,7 +114,7 @@ def test_multi_token_en_with_trailing_initial():
     assert "Mr. F" not in expanded
 
 
-def test_non_person_pseudonym_skipped():
+def test_expand_aliases_should_skip_non_person_pseudonyms():
     """MED-NNNNN / O-NNNNN / etc. — not expanded (no surname semantics)."""
     key = {"MED-001": "diabetes type 2", "O-002": "Acme Corp"}
     expanded = expand_aliases(key, lang="en")
@@ -124,7 +125,7 @@ def test_non_person_pseudonym_skipped():
     assert len(expanded) == 2
 
 
-def test_mixed_key_only_persons_expanded():
+def test_expand_aliases_should_expand_only_person_entries_in_a_mixed_key():
     """Mixed Person + non-Person — only Person entries generate aliases."""
     key = {
         "P-83811": "黄芳",
@@ -132,6 +133,7 @@ def test_mixed_key_only_persons_expanded():
         "138****5678": "13912345678",
     }
     expanded = expand_aliases(key, lang="zh")
+
     # Original entries preserved
     assert expanded["P-83811"] == "黄芳"
     assert expanded["MED-001"] == "diabetes type 2"
@@ -142,7 +144,7 @@ def test_mixed_key_only_persons_expanded():
     assert len(expanded) == 8
 
 
-def test_alias_collision_not_overwritten():
+def test_expand_aliases_should_keep_existing_mapping_when_alias_key_collides():
     """If alias already in key (rare), keep original mapping."""
     key = {
         "P-001": "黄芳",
@@ -155,7 +157,7 @@ def test_alias_collision_not_overwritten():
     assert expanded["黄总"] == "黄芳"
 
 
-def test_original_dict_not_mutated():
+def test_expand_aliases_should_not_mutate_the_input_dict():
     """expand_aliases must return a new dict, leaving input untouched."""
     key = {"P-83811": "黄芳"}
     snapshot = dict(key)
@@ -163,7 +165,7 @@ def test_original_dict_not_mutated():
     assert key == snapshot  # untouched
 
 
-def test_identity_preservation_all_original_entries_kept():
+def test_expand_aliases_should_keep_all_original_entries():
     """Every (pseudonym → original) pair from input remains in output."""
     key = {
         "P-001": "张三",
@@ -175,14 +177,14 @@ def test_identity_preservation_all_original_entries_kept():
         assert expanded[pseudonym] == original
 
 
-def test_unknown_lang_falls_back_to_en():
+def test_expand_aliases_should_use_en_titles_when_lang_is_unknown():
     """Unknown lang code uses EN titles."""
     key = {"P-001": "John Brown"}
     expanded = expand_aliases(key, lang="fr")
     assert "Mr. Brown" in expanded  # EN title was applied
 
 
-def test_round_trip_restore_with_surname_title_in_llm_output():
+def test_restore_should_resolve_honorific_alias_when_key_is_expanded():
     """End-to-end: simulated LLM emits "黄先生"; expanded key restores to "黄芳"."""
     from argus_redact import restore
 
@@ -207,13 +209,14 @@ def test_round_trip_restore_with_surname_title_in_llm_output():
     assert "13912345678" in restored
 
 
-def test_shared_surname_persons_skip_ambiguous_alias_zh():
+def test_expand_aliases_should_skip_ambiguous_alias_when_zh_persons_share_surname():
     # bug #39: two DISTINCT Persons share surname 张 → the bare 张先生/... alias is
     # ambiguous and cannot restore to one identity. It must NOT be emitted, else it
     # silently binds to the first-iterated Person (a confident wrong-identity
     # restore). Unique surnames are unaffected.
     key = {"P-001": "张伟", "P-002": "张强", "P-003": "李明"}
     expanded = expand_aliases(key, lang="zh")
+
     assert expanded["P-001"] == "张伟" and expanded["P-002"] == "张强"
     for title in ("先生", "女士", "总", "老师", "医生"):
         assert f"张{title}" not in expanded, f"ambiguous 张{title} must not bind to one identity"
@@ -222,7 +225,7 @@ def test_shared_surname_persons_skip_ambiguous_alias_zh():
     assert expanded["李医生"] == "李明"
 
 
-def test_shared_surname_persons_skip_ambiguous_alias_en():
+def test_expand_aliases_should_skip_ambiguous_alias_when_en_persons_share_surname():
     key = {"P-001": "John Brown", "P-002": "Alice Brown", "P-003": "Sara Lee"}
     expanded = expand_aliases(key, lang="en")
     for title in ("Mr.", "Mrs.", "Ms.", "Dr.", "Prof."):
@@ -230,7 +233,7 @@ def test_shared_surname_persons_skip_ambiguous_alias_en():
     assert expanded["Dr. Lee"] == "Sara Lee"  # unique surname still expands
 
 
-def test_generational_suffix_shares_surname_ambiguity_guard_fires():
+def test_expand_aliases_should_suppress_alias_when_surname_has_generational_suffix():
     """bug: "Robert Smith Jr." must extract surname "Smith", not "Jr" — else the
     shared-surname ambiguity guard misses and emits a confident wrong-identity
     "Mr. Smith" -> "John Smith" alias while a distinct "Robert Smith Jr." is
@@ -243,7 +246,7 @@ def test_generational_suffix_shares_surname_ambiguity_guard_fires():
         assert f"{title} Smith" not in expanded
 
 
-def test_generational_suffix_does_not_over_suppress_distinct_surnames():
+def test_expand_aliases_should_still_expand_when_surnames_are_genuinely_distinct():
     """Positive control: the suffix fix must not suppress aliases when the
     surnames are genuinely distinct."""
     key = {"P-1": "John Smith", "P-2": "Robert Jones"}
@@ -252,7 +255,7 @@ def test_generational_suffix_does_not_over_suppress_distinct_surnames():
     assert expanded["Mr. Jones"] == "Robert Jones"
 
 
-def test_lang_default_auto_detects_english_from_latin_names():
+def test_expand_aliases_should_auto_detect_en_when_lang_omitted_and_name_is_latin():
     """expand_aliases with no explicit lang must not default to zh-style
     aliases ("J先生") for Latin-script names — auto-detect from key values."""
     key = {"P-1": "John Smith"}
@@ -262,7 +265,7 @@ def test_lang_default_auto_detects_english_from_latin_names():
     assert not any("先生" in alias for alias in expanded)
 
 
-def test_lang_default_still_auto_detects_chinese():
+def test_expand_aliases_should_auto_detect_zh_when_lang_omitted_and_name_is_chinese():
     """zh control: no explicit lang on Chinese names still produces zh aliases."""
     key = {"P-1": "张伟"}
     expanded = expand_aliases(key)
@@ -270,7 +273,7 @@ def test_lang_default_still_auto_detects_chinese():
     assert expanded["张总"] == "张伟"
 
 
-def test_mixed_language_key_auto_detects_per_person():
+def test_expand_aliases_should_pick_lang_per_person_when_key_is_mixed_language():
     """MIXED key, no explicit lang: each Person's own script decides its
     aliases — a zh name must not run through the en path (and vice versa).
     Before the per-name fix, the whole key shared ONE global decision, so a
@@ -278,6 +281,7 @@ def test_mixed_language_key_auto_detects_per_person():
     "J先生"."""
     key = {"P-1": "张伟", "P-2": "John Smith"}
     expanded = expand_aliases(key)
+
     # zh alias for 张伟
     assert expanded["张先生"] == "张伟"
     # en alias for John Smith
@@ -291,7 +295,7 @@ def test_mixed_language_key_auto_detects_per_person():
         assert f"{title} 伟" not in expanded
 
 
-def test_mixed_language_key_auto_detect_shared_surname_guard_still_fires():
+def test_expand_aliases_should_suppress_ambiguous_alias_when_mixed_key_shares_surname():
     """Regression: within an auto-detected MIXED key, two Latin Persons that
     share a surname must still trigger the ambiguity guard (surnames are
     compared using the per-name extractor, so this must keep working), while

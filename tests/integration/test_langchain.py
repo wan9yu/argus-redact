@@ -46,7 +46,7 @@ class TestRedactRunnable:
         assert runnable.last_anchor.nonce
         assert runnable.last_anchor.scope
 
-    def test_make_prompt_addendum_includes_nonce(self):
+    def test_should_include_nonce_in_prompt_addendum(self):
         runnable = RedactRunnable(mode="fast", lang="zh", salt=42)
         runnable.invoke("电话13812345678")
 
@@ -54,12 +54,12 @@ class TestRedactRunnable:
 
         assert runnable.last_anchor.nonce in addendum
 
-    def test_make_prompt_addendum_empty_before_invoke(self):
+    def test_should_return_empty_addendum_when_not_invoked_yet(self):
         runnable = RedactRunnable(mode="fast", lang="zh", salt=42)
 
         assert runnable.make_prompt_addendum() == ""
 
-    def test_make_prompt_addendum_uses_en_template_for_list_lang(self):
+    def test_should_use_en_template_when_lang_is_a_list(self):
         """A list lang (e.g. ['en']) must not collapse to the zh anchor
         template — a mismatched-language nonce-echo can fail-close the
         guarded restore downstream."""
@@ -123,7 +123,7 @@ class TestRestoreRunnable:
 
         assert "13812345678" not in result
 
-    def test_restore_runnable_strict_fails_closed_on_injection(self):
+    def test_should_fail_closed_when_strict_and_response_is_injected(self):
         """Pattern A could not reach strict= at all before v0.7.20."""
         from argus_redact.pure.restore import RestoreGuardError
 
@@ -173,7 +173,7 @@ class TestRestoreRunnableAliases:
     """A cross-language alias form the LLM emitted must restore through the
     guarded RestoreRunnable when aliases are configured on the constructor."""
 
-    def test_restore_runnable_forwards_aliases(self):
+    def test_should_restore_original_when_llm_uses_an_alias(self):
         redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
         redacted = redact_r.invoke(f"张三的电话是{13912345678}")
         person_fake = next(p for p, o in redact_r.last_key.items() if o == "张三")
@@ -187,7 +187,7 @@ class TestRestoreRunnableAliases:
         assert "张三" in out
         assert alias not in out
 
-    def test_restore_runnable_rejects_malformed_aliases(self):
+    def test_should_reject_malformed_alias_value(self):
         # RestoreRunnable -> guarded_restore -> pure.restore.restore, the same
         # seam every other face funnels through — a bare-string alias value
         # must raise ValueError, not silently split into characters.

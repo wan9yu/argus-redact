@@ -40,7 +40,7 @@ def _stalled_write(fd, data):
     return 0
 
 
-def test_safe_write_text_completes_under_short_write(tmp_path):
+def test_safe_write_text_should_complete_when_os_write_short_writes(tmp_path):
     from argus_redact._safe_io import safe_write_text
 
     target = tmp_path / "out.txt"
@@ -52,7 +52,7 @@ def test_safe_write_text_completes_under_short_write(tmp_path):
     assert target.read_text(encoding="utf-8") == content
 
 
-def test_safe_write_key_completes_under_short_write(tmp_path):
+def test_safe_write_key_should_complete_when_os_write_short_writes(tmp_path):
     """The one that matters: a truncated key file is unrecoverable PII loss."""
     from argus_redact._safe_io import safe_write_key
 
@@ -65,7 +65,7 @@ def test_safe_write_key_completes_under_short_write(tmp_path):
     assert json.loads(target.read_text(encoding="utf-8")) == key
 
 
-def test_safe_atomic_write_text_completes_under_short_write(tmp_path):
+def test_safe_atomic_write_text_should_complete_when_os_write_short_writes(tmp_path):
     from argus_redact._safe_io import safe_atomic_write_text
 
     target = tmp_path / "atomic.txt"
@@ -77,7 +77,7 @@ def test_safe_atomic_write_text_completes_under_short_write(tmp_path):
     assert target.read_text(encoding="utf-8") == content
 
 
-def test_safe_write_text_raises_when_write_makes_no_progress(tmp_path):
+def test_safe_write_text_should_raise_when_write_makes_no_progress(tmp_path):
     """A writer that cannot make progress must raise, not spin and not
     silently return having written nothing."""
     from argus_redact._safe_io import safe_write_text
@@ -88,7 +88,7 @@ def test_safe_write_text_raises_when_write_makes_no_progress(tmp_path):
         safe_write_text(str(target), "some content that never lands")
 
 
-def test_safe_write_key_never_silently_truncates(tmp_path):
+def test_safe_write_key_should_never_silently_truncate(tmp_path):
     """The contract in one assertion: whatever the syscall does, the caller
     either gets the complete file or an exception — never a short one."""
     from argus_redact._safe_io import safe_write_key
@@ -108,7 +108,7 @@ def test_safe_write_key_never_silently_truncates(tmp_path):
     assert target.read_text(encoding="utf-8") == expected
 
 
-def test_empty_content_still_creates_the_file(tmp_path):
+def test_safe_write_text_should_create_file_when_content_is_empty(tmp_path):
     """Regression guard for the loop's termination condition: a zero-length
     buffer must not enter the retry loop at all."""
     from argus_redact._safe_io import safe_write_text

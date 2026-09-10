@@ -97,7 +97,7 @@ _NARROW_NER = [
     # firing here: it fires when a separator follows the place name but
     # misses the bare `X籍` construction this project's own re-id fixtures use
     # to spell place_of_birth (`江苏籍`, `湖南籍`) — see
-    # `test_place_of_birth_is_covered_only_at_ner` and coverage_table.py's
+    # `test_place_of_birth_should_be_covered_only_at_ner` and coverage_table.py's
     # module docstring.
     ("place_of_birth", "zh", "籍贯江苏。", "湖南籍。"),
 ]
@@ -113,7 +113,7 @@ def _redacted(text: str, lang: str, mode: str = "fast") -> str:
     [pytest.param(c, lg, p, "fast") for c, lg, p in _HAVE_FAST]
     + [pytest.param(c, lg, p, "ner", marks=pytest.mark.ner) for c, lg, p in _HAVE_NER],
 )
-def test_have_cells_actually_detect(category, lang, probe, mode):
+def test_have_cells_should_actually_detect(category, lang, probe, mode):
     """A HAVE cell must change the text. Note this asserts CHANGE, not an exact
     output: zh `occupation` over-captures its cue word (`职业是后端工程师。` ->
     `职TITLE-…。`, entity text `业是后端工程师`), a real defect recorded in
@@ -135,7 +135,7 @@ def test_have_cells_actually_detect(category, lang, probe, mode):
     [pytest.param(c, lg, p, "fast") for c, lg, p in _NONE_FAST]
     + [pytest.param(c, lg, p, "ner", marks=pytest.mark.ner) for c, lg, p in _NONE_NER],
 )
-def test_none_cells_really_detect_nothing(category, lang, probe, mode):
+def test_none_cells_should_really_detect_nothing(category, lang, probe, mode):
     """Covers both fast (`_NONE_FAST`) and ner (`_NONE_NER`) rows in one body."""
     assert _redacted(probe, lang, mode=mode) == probe, (
         f"table says {category}/{lang}/{mode} is NONE, but the probe WAS "
@@ -150,7 +150,7 @@ def test_none_cells_really_detect_nothing(category, lang, probe, mode):
     [pytest.param(c, lg, h, m, "fast") for c, lg, h, m in _NARROW_FAST]
     + [pytest.param(c, lg, h, m, "ner", marks=pytest.mark.ner) for c, lg, h, m in _NARROW_NER],
 )
-def test_narrow_cells_hit_one_form_and_miss_another(category, lang, hit, miss, mode):
+def test_narrow_cells_should_hit_one_form_and_miss_another(category, lang, hit, miss, mode):
     """NARROW is the easiest classification to rot, because it decays silently
     in both directions. Pin both edges — at fast (`_NARROW_FAST`) and at ner
     (`_NARROW_NER`), covered by one body."""
@@ -165,7 +165,7 @@ def test_narrow_cells_hit_one_form_and_miss_another(category, lang, hit, miss, m
     assert category in narrow
 
 
-def test_the_probes_are_not_vacuous():
+def test_probes_should_not_be_vacuous():
     """Negative control: the second assertion below must be capable of
     failing. If `_redacted` were a constant mutator that changed any input
     regardless of content, every `!=`-based HAVE assertion above would pass
@@ -182,7 +182,7 @@ def test_the_probes_are_not_vacuous():
     assert _redacted("no pii here at all", "en") == "no pii here at all"
 
 
-def test_every_row_has_exactly_the_categories():
+def test_every_row_should_have_exactly_the_categories():
     """A typo or rename in one row's key (e.g. `medical_condition` renamed to
     `medical_conditions` in that row alone) would silently drop the key from
     the row. `coverage_for` reads a missing key as implicitly `have` — a
@@ -196,7 +196,7 @@ def test_every_row_has_exactly_the_categories():
         )
 
 
-def test_english_gets_nothing_from_the_zh_evidence_detectors():
+def test_english_should_get_nothing_from_the_zh_evidence_detectors():
     """Structural pin for the one ner cell that needs no model: occupation
     detection is zh-gated by construction (the only detector is
     `detect_occupation_zh`, and `crates/argus-redact-core/data/occupations/`
@@ -217,7 +217,7 @@ def test_english_gets_nothing_from_the_zh_evidence_detectors():
 
 
 @pytest.mark.ner
-def test_english_location_is_covered_only_at_ner():
+def test_english_location_should_be_covered_only_at_ner():
     """The first cell that genuinely flips by mode. Marked `ner` because CI has
     no spaCy model."""
     probe = "Lives in Chicago, Illinois."
@@ -230,7 +230,7 @@ def test_english_location_is_covered_only_at_ner():
 
 
 @pytest.mark.ner
-def test_place_of_birth_is_covered_only_at_ner():
+def test_place_of_birth_should_be_covered_only_at_ner():
     """The second cell that flips by mode, in both languages, but NOT to the
     same classification. At fast, coverage is asymmetric and cue-shaped (zh
     needs the full administrative name; en has no signal at all). At ner a
@@ -262,7 +262,7 @@ def test_place_of_birth_is_covered_only_at_ner():
     assert "place_of_birth" not in narrow_ner_en  # fully `have` at ner for en
 
 
-def test_coverage_for_unknown_language_returns_everything_sorted():
+def test_coverage_for_should_return_everything_sorted_when_language_is_unknown():
     """An unknown language is the exact case the fallback branch exists for —
     it must honor the same "both sorted" contract the docstring promises for
     every other row, not fall back to `CATEGORIES`' taxonomy order."""
@@ -282,7 +282,7 @@ def test_coverage_for_unknown_language_returns_everything_sorted():
         ("fr", "ner"),
     ],
 )
-def test_coverage_for_is_always_sorted(lang, mode):
+def test_coverage_for_should_always_return_sorted_tuples(lang, mode):
     """No existing test checked sortedness for a known language — only the
     unknown-language branch was broken, but nothing pinned the promise for
     the measured rows either. `coverage_for` takes no model, so this needs no
@@ -292,7 +292,7 @@ def test_coverage_for_is_always_sorted(lang, mode):
     assert narrow == tuple(sorted(narrow))
 
 
-def test_auto_mode_reads_the_ner_row():
+def test_auto_mode_should_read_the_ner_row():
     """`auto` is documented (module docstring) to read the `ner` row, because
     it is ner plus a best-effort LLM pass that contributes nothing when no
     model is served. Pin the equivalence directly: if `"auto"` were ever

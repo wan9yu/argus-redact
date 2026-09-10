@@ -11,11 +11,11 @@ from __future__ import annotations
 import warnings
 
 
-def test_compose_namespace_importable():
+def test_compose_namespace_should_be_importable():
     import argus_redact.compose  # noqa: F401
 
 
-def test_compose_exports_streaming_classes():
+def test_compose_should_reexport_streaming_classes_without_rebinding():
     from argus_redact.compose import StreamingRedactor, StreamingRestorer
     from argus_redact.streaming import StreamingRedactor as SrcRedactor
     from argus_redact.streaming import StreamingRestorer as SrcRestorer
@@ -32,14 +32,14 @@ def test_compose_exports_streaming_classes():
     assert StreamingRedactor is TopRedactor
 
 
-def test_compose_exports_redact_pseudonym_llm():
+def test_compose_redact_pseudonym_llm_should_match_top_level_alias():
     from argus_redact import redact_pseudonym_llm as top_alias
     from argus_redact.compose import redact_pseudonym_llm
 
     assert redact_pseudonym_llm is top_alias
 
 
-def test_prompt_anchor_real_returns_addendum():
+def test_prompt_anchor_should_return_addendum_containing_key():
     """v0.6.9: prompt_anchor ships real implementation (was stub in v0.6.7-0.6.8)."""
     from argus_redact.compose import prompt_anchor
 
@@ -48,7 +48,7 @@ def test_prompt_anchor_real_returns_addendum():
     assert "P-001" in result
 
 
-def test_expand_aliases_real_returns_expanded_dict():
+def test_expand_aliases_should_include_alias_mappings_for_key():
     """v0.6.9: expand_aliases ships real implementation (was stub in v0.6.7-0.6.8)."""
     from argus_redact.compose import expand_aliases
 
@@ -57,7 +57,7 @@ def test_expand_aliases_real_returns_expanded_dict():
     assert "黄先生" in result and result["黄先生"] == "黄芳"
 
 
-def test_compose_dunder_all_is_exactly_fourteen():
+def test_compose_dunder_all_should_match_expected_names():
     """Lock the namespace surface — any addition is intentional, not accidental.
 
     v0.6.7 baseline: 5 names. v0.6.11 added the adapter-author trio. Theme A

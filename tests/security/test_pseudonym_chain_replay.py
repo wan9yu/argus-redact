@@ -115,7 +115,7 @@ REPLAY_VECTORS = [
     REPLAY_VECTORS,
     ids=[f"{etype}-{lang}-{i}" for i, (_, _, _, lang, etype, _) in enumerate(REPLAY_VECTORS)],
 )
-def test_kdf_chain_replay(salt, input_text, target_value, lang, etype, expected):
+def test_kdf_chain_should_stay_deterministic(salt, input_text, target_value, lang, etype, expected):
     """The same (salt, input, lang) must produce the same placeholder across
     the v0.6.10 -> v1.0 lifecycle. Divergence here = cryptographic chain
     change requiring a major-version bump."""
@@ -132,7 +132,7 @@ def test_kdf_chain_replay(salt, input_text, target_value, lang, etype, expected)
     )
 
 
-def test_full_ff_salt_no_longer_overflows():
+def test_pseudonym_generation_should_not_overflow_when_salt_is_all_ff_bytes():
     """v0.6.11: full-FF salt (32 bytes 0xFF) was OverflowError before — must work now.
 
     Root cause: pseudo_seed_int packs first 8 bytes BE → 0xFFFFFFFFFFFFFFFF

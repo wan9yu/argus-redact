@@ -136,7 +136,7 @@ class TestPRvLMultiLLM:
     """Test pseudonym survival and PII leak across GPT-4o, Claude, Gemini."""
 
     @pytest.mark.parametrize("model", MODELS)
-    def test_pseudonym_survival(self, poe_key, model, capsys):
+    def test_pseudonyms_should_survive_reference_tasks(self, poe_key, model, capsys):
         by_task_type: dict[str, dict] = {}
         details = []
 
@@ -189,7 +189,7 @@ class TestPRvLMultiLLM:
         assert ref_rate >= 0.8, f"{model} reference task survival {ref_rate:.0%} below 80%"
 
     @pytest.mark.parametrize("model", MODELS)
-    def test_pii_not_leaked(self, poe_key, model, capsys):
+    def test_llm_output_should_not_leak_pii(self, poe_key, model, capsys):
         leaked_total = 0
         pii_total = 0
         details = []
@@ -215,7 +215,7 @@ class TestPRvLMultiLLM:
         assert rate <= 0.3, f"{model} PII leak rate {rate:.0%} above 30%"
 
     @pytest.mark.parametrize("model", MODELS)
-    def test_llm_produces_useful_response(self, poe_key, model, capsys):
+    def test_llm_response_should_not_be_empty(self, poe_key, model, capsys):
         empty = 0
         details = []
 

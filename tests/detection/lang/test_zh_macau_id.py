@@ -17,12 +17,12 @@ INVALID_MACAU = [
 
 
 @pytest.mark.parametrize("text", VALID_MACAU)
-def test_macau_detected(text):
+def test_macau_id_should_be_redacted_when_valid(text):
     out, key = redact(text, lang="zh", mode="fast", salt=42)
     assert text not in out
 
 
 @pytest.mark.parametrize("text", INVALID_MACAU)
-def test_invalid_macau_not_detected(text):
+def test_macau_id_should_not_be_redacted_when_invalid(text):
     out, key = redact(text, lang="zh", mode="fast", salt=42)
     assert text in out

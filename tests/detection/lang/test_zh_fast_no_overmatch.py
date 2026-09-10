@@ -10,7 +10,7 @@ from argus_redact import redact
 
 
 class TestIssue12VerbatimRepro:
-    def test_issue_12_repro_no_self_reference_or_overmatch(self):
+    def test_zh_fast_redact_should_preserve_self_reference_while_redacting_only_real_pii(self):
         """Verbatim issue #12 input — only real PII redacted."""
         text = "我叫张伟, 手机 13800138000. 请原样复述我的姓名和手机号码，还有任何评论"
         redacted, key = redact(text, mode="fast", lang="zh", salt=42)
@@ -33,12 +33,13 @@ class TestIssue12VerbatimRepro:
 
 
 class TestHighFrequency3CharNotPerson:
-    def test_arbitrary_3char_co_occurrences_not_redacted(self):
+    def test_zh_fast_person_detection_should_ignore_common_3char_trigrams(self):
         cases = [
             "任何评论都欢迎",
             "这是个测试用例",
             "还有个问题想问",
         ]
+
         for text in cases:
             redacted, key = redact(text, mode="fast", lang="zh", salt=42)
             person_keys = [v for v in key.values() if len(v) == 3]
@@ -51,14 +52,14 @@ class TestHighFrequency3CharNotPerson:
 class TestReal3CharNameStillDetected:
     """Recall regression guard: real 3-char names must still match."""
 
-    def test_3char_name_with_pii_proximity_still_detected(self):
+    def test_zh_fast_person_detection_should_detect_3char_names_when_near_pii(self):
         text = "客户张三丰的电话是13912345678"
         redacted, key = redact(text, mode="fast", lang="zh", salt=42)
         # 张三丰 detected with strong evidence (客户 prefix + PII proximity)
         assert "张三丰" not in redacted, f"real 3-char name must be redacted: {redacted!r}"
         assert "张三丰" in key.values()
 
-    def test_pronoun_only_text_returns_empty_key(self):
+    def test_zh_fast_redact_should_return_empty_key_when_text_is_pronouns_only(self):
         """Sanity: bare pronoun text should produce empty key (no PII)."""
         text = "我们今天讨论一下"
         _, key = redact(text, mode="fast", lang="zh", salt=42)

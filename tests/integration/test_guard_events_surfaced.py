@@ -41,20 +41,20 @@ def _injected_round_trip():
 # ── the events must reach the caller ─────────────────────────────────────────
 
 
-def test_presidio_default_path_warns_instead_of_dropping_events():
+def test_presidio_restore_should_warn_instead_of_dropping_the_event():
     redacted, key, anchor, injected = _injected_round_trip()
     bridge = PresidioBridge.__new__(PresidioBridge)  # no analyzer needed for restore
     with pytest.warns(SecurityWarning, match="injection_suspected"):
         bridge.restore(injected, key, guard=True, anchor=anchor, redacted=redacted)
 
 
-def test_fastapi_default_path_warns_instead_of_dropping_events():
+def test_fastapi_restore_body_should_warn_instead_of_dropping_the_event():
     redacted, key, anchor, injected = _injected_round_trip()
     with pytest.warns(SecurityWarning, match="injection_suspected"):
         restore_body(injected, key, guard=True, anchor=anchor, redacted=redacted)
 
 
-def test_detailed_path_still_returns_the_events():
+def test_presidio_restore_detailed_should_include_the_security_events():
     redacted, key, anchor, injected = _injected_round_trip()
     bridge = PresidioBridge.__new__(PresidioBridge)
     _text, details = bridge.restore(
@@ -66,20 +66,20 @@ def test_detailed_path_still_returns_the_events():
 # ── strict must be reachable through the wrappers (opt-in fail-closed on H) ──
 
 
-def test_presidio_strict_fails_closed_on_injection():
+def test_presidio_restore_should_fail_closed_when_strict_and_injection_suspected():
     redacted, key, anchor, injected = _injected_round_trip()
     bridge = PresidioBridge.__new__(PresidioBridge)
     with pytest.raises(RestoreGuardError):
         bridge.restore(injected, key, guard=True, anchor=anchor, redacted=redacted, strict=True)
 
 
-def test_fastapi_strict_fails_closed_on_injection():
+def test_fastapi_restore_body_should_fail_closed_when_strict_and_injection_suspected():
     redacted, key, anchor, injected = _injected_round_trip()
     with pytest.raises(RestoreGuardError):
         restore_body(injected, key, guard=True, anchor=anchor, redacted=redacted, strict=True)
 
 
-def test_h_layer_is_advisory_by_default_and_still_restores():
+def test_presidio_restore_should_still_succeed_when_injection_suspected_without_strict():
     """By design: without strict=, a suspected injection warns but does NOT block the
     restore. P + S are the guarantee; H only adds signal."""
     redacted, key, anchor, injected = _injected_round_trip()
@@ -90,7 +90,7 @@ def test_h_layer_is_advisory_by_default_and_still_restores():
     assert _PHONE in out  # in-scope pseudonym legitimately restored
 
 
-def test_advisory_warning_does_not_claim_pii_was_withheld():
+def test_injection_warning_should_not_claim_pii_was_withheld():
     """The warning must not LIE. An injection_suspected event is advisory — the restore
     proceeds and the originals ARE substituted. A message saying 'pseudonyms were NOT
     substituted' would send an operator investigating an injection in exactly the wrong
@@ -108,7 +108,7 @@ def test_advisory_warning_does_not_claim_pii_was_withheld():
     assert "PROCEEDED" in msg
 
 
-def test_warning_is_attributed_to_the_caller_not_library_internals():
+def test_security_warning_should_be_attributed_to_the_caller_not_library_internals():
     """stacklevel must point at the caller's line. If it points inside argus, warnings'
     (message, category, module, lineno) dedup collapses every restore in a loop into one
     warning and the user gets no pointer to their own code."""

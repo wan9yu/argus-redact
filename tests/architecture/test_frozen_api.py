@@ -56,7 +56,7 @@ LAYER_1_EXPORTED = frozenset(
 
 
 @pytest.mark.parametrize("name,expected", list(FROZEN_SIGNATURES.items()))
-def test_layer_1_signatures_frozen(name, expected):
+def test_layer_1_signature_should_remain_frozen(name, expected):
     fn = getattr(argus_redact, name)
     actual = str(inspect.signature(fn))
     assert actual == expected, (
@@ -75,7 +75,7 @@ FROZEN_EXCEPTION_PARENTS = {
 }
 
 
-def test_layer_1_exception_classes_unchanged():
+def test_layer_1_exception_classes_should_remain_unchanged():
     """Layer 1 exception class parent chains are frozen."""
     for cls_name, expected_parent in FROZEN_EXCEPTION_PARENTS.items():
         cls = getattr(argus_redact, cls_name)
@@ -88,7 +88,7 @@ def test_layer_1_exception_classes_unchanged():
         )
 
 
-def test_layer_1_exports_present():
+def test_layer_1_exports_should_be_present():
     """All Layer 1 symbols still present in argus_redact.__all__."""
     missing = LAYER_1_EXPORTED - set(argus_redact.__all__)
     assert not missing, f"Layer 1 symbols missing from __all__: {missing}"

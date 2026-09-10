@@ -91,7 +91,7 @@ class TestMCPToolExecution:
         assert "13812345678" in restored["restored"]
 
     @pytest.mark.asyncio
-    async def test_default_salt_is_strong_random_not_grid_searchable(self, mcp_app):
+    async def test_default_salt_should_be_random_when_no_salt_is_given(self, mcp_app):
         # Without an explicit salt the server must use a strong per-call random salt
         # (CSPRNG), so a salted pseudonym code (here a location LOCA-NNNNN) is NOT
         # deterministic / grid-searchable across calls. An explicit int salt remains
@@ -147,7 +147,7 @@ class TestMCPToolExecution:
         assert "argus-redact" in content or "version" in content
 
     @pytest.mark.asyncio
-    async def test_redact_trailing_comma_lang_does_not_crash(self, mcp_app):
+    async def test_redact_should_not_crash_when_lang_has_a_trailing_comma(self, mcp_app):
         """F6 — a trailing comma in lang (e.g. "zh,") used to leave an empty
         string segment in the split list, which _load_patterns/_validate_langs
         rejected as an unknown language code. The empty segment must be
@@ -162,7 +162,7 @@ class TestMCPToolExecution:
         assert "13812345678" not in data["redacted"]
 
     @pytest.mark.asyncio
-    async def test_redact_multi_lang_csv_still_works(self, mcp_app):
+    async def test_redact_should_work_when_lang_is_a_multi_value_csv(self, mcp_app):
         """Positive control: a genuine multi-lang CSV (no empty segment)
         still works after the fix."""
         result = await mcp_app.call_tool(
@@ -175,7 +175,7 @@ class TestMCPToolExecution:
         assert "13812345678" not in data["redacted"]
 
     @pytest.mark.asyncio
-    async def test_redact_all_separator_lang_raises_clean_error(self, mcp_app):
+    async def test_redact_should_raise_a_clean_error_when_lang_is_only_separators(self, mcp_app):
         """A lang of only separators (e.g. ",") splits down to an empty list.
         Before the central empty-lang guard, redact()'s report/anchor lang[0]
         raised IndexError — an internal 500 over the wire. It must now surface
@@ -186,12 +186,13 @@ class TestMCPToolExecution:
                 "redact",
                 {"text": "电话13812345678", "mode": "fast", "lang": ",", "salt": 42},
             )
+
         message = str(exc_info.value)
         assert "No language specified" in message
         assert "index out of range" not in message
 
     @pytest.mark.asyncio
-    async def test_assess_trailing_comma_lang_does_not_crash(self, mcp_app):
+    async def test_assess_should_not_crash_when_lang_has_a_trailing_comma(self, mcp_app):
         """F6 — same empty-segment fix applies to the assess tool's lang split."""
         result = await mcp_app.call_tool(
             "assess",
@@ -203,7 +204,7 @@ class TestMCPToolExecution:
         assert data["entities_found"] > 0
 
     @pytest.mark.asyncio
-    async def test_assess_envelope_carries_no_plaintext_anywhere(self, mcp_app):
+    async def test_assess_envelope_should_carry_no_plaintext_anywhere(self, mcp_app):
         """Envelope-scoped, not field-scoped.
 
         Every other plaintext-absence assertion in this suite indexes one key

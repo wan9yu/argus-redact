@@ -87,39 +87,39 @@ class TestOrganizationFalsePositiveRejection:
     full production pipeline the caller receives.
     """
 
-    def test_bare_legal_form_not_org(self):
+    def test_organization_should_reject_when_name_is_only_a_legal_suffix(self):
         assert _orgs_schools("有限公司") == []
 
-    def test_verb_plus_bare_suffix_not_org(self):
+    def test_organization_should_reject_when_a_verb_precedes_bare_suffix(self):
         assert _orgs_schools("这个需求需要改成公司统一处理") == []
 
-    def test_quantifier_plus_bare_suffix_not_org(self):
+    def test_organization_should_reject_when_a_quantifier_precedes_bare_suffix(self):
         assert _orgs_schools("这是一家公司") == []
 
-    def test_verb_plus_group_not_org(self):
+    def test_organization_should_reject_when_a_verb_precedes_bare_group_word(self):
         assert _orgs_schools("我们要成立集团来运营这块业务") == []
 
-    def test_prep_run_plus_bare_suffix_not_org(self):
+    def test_organization_should_reject_when_a_preposition_run_precedes_bare_suffix(self):
         assert _orgs_schools("把这个项目挂到有限公司名下") == []
 
-    def test_category_word_not_org(self):
+    def test_organization_should_reject_when_name_is_a_category_word(self):
         assert _orgs_schools("上市公司信息披露要求很严") == []
 
-    def test_demonstrative_measure_not_org(self):
+    def test_organization_should_reject_when_a_demonstrative_precedes_bare_suffix(self):
         assert _orgs_schools("这家公司管理混乱") == []
         assert _orgs_schools("那家公司倒闭了") == []
         assert _orgs_schools("几家公司联合竞标") == []
 
-    def test_scope_word_not_org(self):
+    def test_organization_should_reject_when_a_scope_word_precedes_bare_group(self):
         assert _orgs_schools("整个集团都在裁员") == []
 
-    def test_noise_prefix_bare_suffix_not_org(self):
+    def test_organization_should_reject_when_noise_prefix_leaves_bare_suffix(self):
         # the leading-noise strip reduces 请查一下公司 to a bare 公司 → rejected
         assert _orgs_schools("请查一下公司税号") == []
 
 
 class TestSchoolFalsePositiveRejection:
-    def test_demonstrative_measure_not_school(self):
+    def test_school_should_reject_when_a_demonstrative_precedes_bare_suffix(self):
         assert _orgs_schools("这所大学很难考") == []
         assert _orgs_schools("那所中学离家很近") == []
 
@@ -127,13 +127,13 @@ class TestSchoolFalsePositiveRejection:
 class TestNamePlusGenericSuffixStillOrg:
     """Recall guard: a real name + a category word is STILL detected as an org."""
 
-    def test_name_plus_fen_gongsi_is_org(self):
+    def test_organization_should_still_match_when_a_brand_name_precedes_generic_suffix(self):
         assert ("organization", "腾讯分公司") in _orgs_schools("腾讯分公司也在招人")
 
-    def test_jianshe_bank_survives(self):
+    def test_organization_should_still_match_when_name_includes_generic_bank_suffix(self):
         assert ("organization", "中国建设银行") in _orgs_schools("中国建设银行今天发布了公告")
 
-    def test_guanli_gongsi_survives(self):
+    def test_organization_should_still_match_when_name_includes_generic_management_suffix(self):
         assert ("organization", "华夏基金管理有限公司") in _orgs_schools(
             "华夏基金管理有限公司调整了持仓"
         )

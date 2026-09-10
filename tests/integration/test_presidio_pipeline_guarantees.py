@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 
-def test_presidio_respects_max_input_size():
+def test_presidio_redact_should_reject_input_over_max_input_size():
     """MAX_INPUT_SIZE guard inherited via public redact()."""
     pytest.importorskip("presidio_analyzer")
     from argus_redact.integrations.presidio import PresidioBridge
@@ -20,7 +20,7 @@ def test_presidio_respects_max_input_size():
         bridge.redact(huge_text)
 
 
-def test_presidio_rejects_non_string_input():
+def test_presidio_redact_should_reject_non_string_input():
     """isinstance(text, str) check inherited."""
     pytest.importorskip("presidio_analyzer")
     from argus_redact.integrations.presidio import PresidioBridge
@@ -30,7 +30,7 @@ def test_presidio_rejects_non_string_input():
         bridge.redact(b"bytes not str")  # type: ignore
 
 
-def test_presidio_returns_redacted_and_key():
+def test_presidio_redact_should_return_redacted_text_and_key():
     """End-to-end smoke: Presidio detects, argus-redact replaces."""
     pytest.importorskip("presidio_analyzer")
     from argus_redact.integrations.presidio import PresidioBridge
@@ -50,7 +50,7 @@ class _NoOpAnalyzer:
         return []
 
 
-def test_presidio_empty_detection_still_routes_through_redact_pipeline():
+def test_presidio_redact_should_still_emit_telemetry_when_detection_is_empty():
     """The empty-detection branch must run the SAME redact() pipeline as the
     detected path — telemetry included — not an early return that skips it.
     Before the fix, `if not results: return text, key or {}` short-circuited
@@ -73,7 +73,7 @@ def test_presidio_empty_detection_still_routes_through_redact_pipeline():
     assert records, "empty-detection path must still run redact()'s telemetry emission"
 
 
-def test_presidio_empty_detection_with_existing_key_preserves_it():
+def test_presidio_redact_should_preserve_an_existing_key_when_detection_is_empty():
     """The empty-detection route (above) must also honor a pre-existing key: when
     nothing new is detected, the returned key is value-equal to the key that was
     passed in (object identity may differ) — not silently dropped or replaced

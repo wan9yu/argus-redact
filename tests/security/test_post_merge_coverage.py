@@ -106,46 +106,46 @@ def _pre_detected_pair(entity_type: str, start: int, end: int) -> list[PatternMa
 
 
 class TestSelfReferenceTypeConfusion:
-    def test_whole_document_span_does_not_leak(self):
+    def test_redact_should_not_leak_the_phone_when_self_reference_spans_the_whole_document(self):
         redacted, key = _run("self_reference", 0, len(TEXT))
         assert PHONE not in redacted
         assert key
 
-    def test_span_starting_before_the_victim_does_not_leak(self):
+    def test_redact_should_not_leak_the_phone_when_self_reference_starts_before_the_victim(self):
         redacted, key = _run("self_reference", 8, 26)
         assert PHONE not in redacted
         assert key
 
-    def test_exact_same_span_does_not_leak(self):
+    def test_redact_should_not_leak_the_phone_when_self_reference_exactly_matches_the_victim(self):
         redacted, key = _run("self_reference", 15, 26)
         assert PHONE not in redacted
         assert key
 
 
 class TestTypeFilterDropsAWinner:
-    def test_requested_type_is_not_returned_in_plaintext(self):
+    def test_redact_should_not_leak_the_phone_when_the_types_filter_drops_the_winner(self):
         redacted, key = _run("medical", 8, 26, types=["phone"])
         assert PHONE not in redacted
         assert key
 
-    def test_excluding_the_winner_does_not_expose_the_loser(self):
+    def test_redact_should_not_leak_the_phone_when_types_exclude_drops_the_winner(self):
         redacted, key = _run("medical", 8, 26, types_exclude=["medical"])
         assert PHONE not in redacted
         assert key
 
-    def test_benign_case_without_a_filter_is_unchanged(self):
+    def test_redact_should_not_leak_the_phone_when_no_type_filter_is_applied(self):
         redacted, _key = _run("medical", 8, 26)
         assert PHONE not in redacted
 
 
 class TestTheComplianceArtifactsTellTheTruth:
-    def test_report_does_not_claim_clean_while_restoring(self):
+    def test_report_should_flag_residual_risk_when_the_types_filter_drops_the_winner(self):
         report = _run("medical", 8, 26, types=["phone"], report=True)
         assert PHONE not in report.redacted_text
         assert report.residual_personal_data is True
         assert report.risk.level != "none"
 
-    def test_report_carries_the_coverage_restored_event(self):
+    def test_report_should_include_a_coverage_restored_event_when_a_filter_drops_the_winner(self):
         report = _run("medical", 8, 26, types=["phone"], report=True)
         events = [e for e in report.security_events if e["reason_code"] == "coverage_restored"]
         assert len(events) == 1
@@ -157,12 +157,12 @@ class TestTheComplianceArtifactsTellTheTruth:
 
 
 class TestTheDefaultTupleCallerIsWarned:
-    def test_a_firing_warns_even_on_the_two_tuple_path(self):
+    def test_redact_should_warn_about_lost_coverage_when_a_type_filter_drops_the_winner(self):
         with pytest.warns(SecurityWarning, match="lost redaction coverage"):
             redacted, _key = _run("medical", 8, 26, types=["phone"], suppress_warnings=False)
         assert PHONE not in redacted
 
-    def test_an_ordinary_call_does_not_warn_about_coverage(self):
+    def test_redact_should_not_warn_about_lost_coverage_when_no_filter_is_applied(self):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             redact("张三的手机是13800138000", lang="zh", mode="fast", salt=42)
@@ -177,7 +177,7 @@ class TestPreDetectedBranchOfRedactAlsoHoldsTheInvariant:
     or drops the `restore_lost_coverage` call from this branch, cannot pass
     silently."""
 
-    def test_types_filter_dropping_a_winner_is_restored_via_pre_detected(self):
+    def test_pre_detected_redact_should_not_leak_the_phone_when_a_filter_drops_the_winner(self):
         with pytest.warns(SecurityWarning, match="lost redaction coverage"):
             redacted, key = redact(
                 TEXT,
@@ -187,6 +187,7 @@ class TestPreDetectedBranchOfRedactAlsoHoldsTheInvariant:
                 types=["phone"],
                 _pre_detected=_pre_detected_pair("medical", 8, 26),
             )
+
         assert PHONE not in redacted
         assert key
 
@@ -200,7 +201,7 @@ class TestPseudonymLlmPreDetectedBranchAlsoHoldsTheInvariant:
     callers of `redact_pseudonym_llm`.
     """
 
-    def test_types_filter_dropping_a_winner_is_restored_in_both_text_forms(self):
+    def test_redact_pseudonym_llm_should_restore_both_texts_when_a_filter_drops_the_winner(self):
         with pytest.warns(SecurityWarning, match="lost redaction coverage"):
             result = redact_pseudonym_llm(
                 TEXT,
@@ -210,6 +211,7 @@ class TestPseudonymLlmPreDetectedBranchAlsoHoldsTheInvariant:
                 types=["phone"],
                 _pre_detected=_pre_detected_pair("medical", 8, 26),
             )
+
         # Both text forms share the one detected-then-filtered entity set —
         # a leak here would appear in BOTH, not just one.
         assert PHONE not in result.downstream_text
@@ -229,7 +231,7 @@ class TestSignalReachesEveryEntryPoint:
     absorbed PII, since none of them expose a `security_events` list.
     """
 
-    def test_redact_json_warns(self):
+    def test_redact_json_should_warn_about_lost_coverage_when_self_reference_drops_the_winner(self):
         with (
             patch("argus_redact.glue.redact._get_ner_adapters", return_value=[_no_ner()]),
             patch(
@@ -239,10 +241,11 @@ class TestSignalReachesEveryEntryPoint:
             pytest.warns(SecurityWarning, match="lost redaction coverage"),
         ):
             data, key = redact_json({"note": TEXT}, mode="auto", lang="en", salt=42)
+
         assert PHONE not in data["note"]
         assert key
 
-    def test_redact_csv_warns(self):
+    def test_redact_csv_should_warn_about_lost_coverage_when_self_reference_drops_the_winner(self):
         csv_text = f"note\n{TEXT}\n"
         with (
             patch("argus_redact.glue.redact._get_ner_adapters", return_value=[_no_ner()]),
@@ -253,10 +256,11 @@ class TestSignalReachesEveryEntryPoint:
             pytest.warns(SecurityWarning, match="lost redaction coverage"),
         ):
             redacted_csv, key = redact_csv(csv_text, mode="auto", lang="en", salt=42)
+
         assert PHONE not in redacted_csv
         assert key
 
-    def test_streaming_redactor_warns_on_flush(self):
+    def test_streaming_redactor_should_warn_about_lost_coverage_when_flushed(self):
         # types=["phone"] is reproduction B's caller-owned filter, driven
         # through StreamingRedactor's constructor exactly as server.py would
         # forward it. feed() alone is under the evidence-context window and
@@ -271,8 +275,10 @@ class TestSignalReachesEveryEntryPoint:
         ):
             redactor = StreamingRedactor(salt=42, lang="en", mode="auto", types=["phone"])
             redactor.feed(TEXT)
+
             with pytest.warns(SecurityWarning, match="lost redaction coverage"):
                 result = redactor.flush()
+
         assert PHONE not in result.downstream_text
         assert result.key
 
@@ -283,7 +289,7 @@ class TestTheWarningIsFactualNotAccusatory:
     not accuse the caller of a misconfiguration it cannot tell apart from
     correct, intended use of `types=`/`types_exclude=`."""
 
-    def test_message_names_the_mechanism_not_the_caller(self):
+    def test_warn_coverage_restored_should_describe_the_mechanism_without_blaming_the_caller(self):
         with pytest.warns(SecurityWarning) as caught:
             warn_coverage_restored(["phone"])
         message = str(caught[0].message)

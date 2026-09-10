@@ -73,19 +73,19 @@ class TestMaskVisibleCoercion:
     These assert the pre-port byte-identical mask output.
     """
 
-    def test_numeric_string_visible_values(self):
+    def test_mask_visible_config_should_coerce_numeric_strings_to_int(self):
         config = {"phone": {"strategy": "mask", "visible_prefix": "5", "visible_suffix": "2"}}
         out, _ = redact("Call 13800138000", salt=5, mode="fast", lang=["zh"], config=config)
         # Pre-port: int('5')=5, int('2')=2 → 13800****00 (not the 3+4 default).
         assert out == "Call 13800****00", f"numeric-string coercion failed: {out!r}"
 
-    def test_float_visible_values_truncate(self):
+    def test_mask_visible_config_should_truncate_float_values(self):
         config = {"phone": {"strategy": "mask", "visible_prefix": 2.7, "visible_suffix": 3.9}}
         out, _ = redact("Call 13800138000", salt=5, mode="fast", lang=["zh"], config=config)
         # Pre-port: int(2.7)=2, int(3.9)=3 → 13******000.
         assert out == "Call 13******000", f"float truncation failed: {out!r}"
 
-    def test_negative_visible_values_clamp_to_default(self):
+    def test_mask_visible_config_should_fall_back_to_default_when_values_are_negative(self):
         # Python `int(ec.get(..,0) or 0)` keeps -1, but the negative falls
         # through to the per-type mask default downstream (len <= p+s guard /
         # default branch). Pre-port output: the 3+4 phone default.

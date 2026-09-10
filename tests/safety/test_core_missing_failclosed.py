@@ -4,7 +4,7 @@ never silently return the input unredacted (which would leak PII)."""
 import pytest
 
 
-def test_redact_raises_when_core_missing(monkeypatch):
+def test_redact_should_fail_closed_when_the_core_extension_is_missing(monkeypatch):
     import argus_redact._core_loader as loader
 
     monkeypatch.setattr(loader, "HAS_CORE", False)

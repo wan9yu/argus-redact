@@ -15,7 +15,7 @@ if str(_BENCH) not in sys.path:
 import streaming_equivalence as se  # noqa: E402
 
 
-def test_streaming_equals_batch_all_regimes():
+def test_streaming_should_equal_batch_across_all_chunk_regimes():
     res = se.evaluate(seeds=(1, 2))
     assert res["corpus_docs"] >= 5
     assert res["carry_window_chars"] == 256
@@ -26,7 +26,7 @@ def test_streaming_equals_batch_all_regimes():
         assert r["restore_recovers_pct"] == 100.0, (label, r)
 
 
-def test_corpus_is_non_vacuous():
+def test_corpus_should_contain_removable_pii_in_every_doc():
     # every doc must contain PII that batch actually removes — else the
     # equivalence guarantee above would be vacuously satisfied.
     for lang, text in se._CORPUS:

@@ -12,7 +12,7 @@ def _ledger():
     return AuditLedger(clock=lambda: next(seq))
 
 
-def test_to_from_dict_roundtrip_preserves_verify_and_head():
+def test_audit_ledger_roundtrip_should_preserve_verification_and_head_digest():
     led = _ledger()
     led.append("redact", type_counts={"person": 1})
     led.append("restore", type_counts={})
@@ -23,25 +23,27 @@ def test_to_from_dict_roundtrip_preserves_verify_and_head():
     assert restored.head_digest == led.head_digest
 
 
-def test_from_dict_rejects_bad_schema_version():
+def test_audit_ledger_from_dict_should_reject_unknown_schema_version():
     with pytest.raises(ValueError):
         AuditLedger.from_dict({"schema_version": 999, "entries": []})
 
 
-def test_record_redact_builds_type_counts_and_digest():
+def test_audit_ledger_record_redact_should_compute_type_counts_and_content_digest():
     led = _ledger()
     details = {
         "entities": [{"type": "person"}, {"type": "person"}, {"type": "phone"}],
         "stats": {},
         "security_events": [],
     }
+
     entry = led.record_redact(("REDACTED", {"P-1": "x"}, details))
+
     assert entry.kind == "redact"
     assert entry.type_counts == {"person": 2, "phone": 1}  # counts detections
     assert entry.content_digest == hashlib.sha256("REDACTED".encode("utf-8")).hexdigest()
 
 
-def test_record_restore_has_no_type_counts_and_no_auto_digest():
+def test_audit_ledger_record_restore_should_omit_type_counts_and_content_digest():
     led = _ledger()
     entry = led.record_restore(("张三 came home", {"security_events": []}))
     assert entry.kind == "restore"
@@ -49,7 +51,7 @@ def test_record_restore_has_no_type_counts_and_no_auto_digest():
     assert entry.content_digest is None  # never auto-digest recovered plaintext
 
 
-def test_from_dict_defensively_copies_inner_event_dicts():
+def test_audit_entry_from_dict_should_defensively_copy_security_events():
     d = {
         "seq": 0,
         "timestamp": "t0",
@@ -60,5 +62,7 @@ def test_from_dict_defensively_copies_inner_event_dicts():
         "prev_hash": "",
         "entry_hash": "deadbeef",
     }
+
     entry = AuditEntry.from_dict(d)
+
     assert entry.security_events[0] is not d["security_events"][0]

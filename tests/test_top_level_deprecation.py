@@ -7,7 +7,7 @@ Top-level symbol still resolves (lazy import); removal deferred to v1.0.
 import warnings
 
 
-def test_top_level_streaming_redactor_emits_deprecation():
+def test_top_level_streaming_redactor_should_emit_deprecation_warning():
     import argus_redact
 
     with warnings.catch_warnings(record=True) as w:
@@ -20,7 +20,7 @@ def test_top_level_streaming_redactor_emits_deprecation():
         )
 
 
-def test_top_level_streaming_redactor_still_resolves():
+def test_top_level_streaming_redactor_should_still_resolve():
     """Lazy resolution: the symbol still imports successfully (no v1.0 removal yet)."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -32,7 +32,7 @@ def test_top_level_streaming_redactor_still_resolves():
         assert cls is canonical, "top-level must resolve to compose.StreamingRedactor"
 
 
-def test_compose_streaming_redactor_silent():
+def test_compose_streaming_redactor_should_not_emit_a_warning():
     """argus_redact.compose path emits no warning."""
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
@@ -41,7 +41,7 @@ def test_compose_streaming_redactor_silent():
         assert not any(issubclass(wi.category, DeprecationWarning) for wi in w)
 
 
-def test_unknown_top_level_attribute_raises_attributeerror():
+def test_unknown_top_level_attribute_should_raise_attributeerror():
     """__getattr__ must still raise AttributeError for genuinely unknown names."""
     import pytest
 

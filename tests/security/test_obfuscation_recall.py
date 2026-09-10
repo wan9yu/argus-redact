@@ -22,10 +22,10 @@ def _hidden(text, lang="zh"):
         "请拨打 13800138000͏2024",  # fusion via NEW ignorable -> keep-boundary catches
     ],
 )
-def test_zh_phone_detected_under_obfuscation(text):
+def test_zh_phone_should_be_detected_under_obfuscation(text):
     assert _hidden(text), f"phone leaked under obfuscation: {text!r}"
 
 
-def test_cjk_homograph_digit_detected():
+def test_cjk_homograph_digit_should_be_detected():
     # pre-existing CJK hole: 八 = 8
     assert _hidden("请拨打 13八00138000 咨询")

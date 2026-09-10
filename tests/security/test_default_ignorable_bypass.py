@@ -57,7 +57,7 @@ ALREADY_COVERED = [0x200B, 0x200D, 0x00AD, 0xFEFF, 0x202E, 0x2060, 0xFE0F, 0xE00
     ],
     ids=["phone", "email", "id"],
 )
-def test_ignorable_carrier_does_not_hide_pii(cp, template, secret):
+def test_ignorable_carrier_should_not_hide_pii_from_detection(cp, template, secret):
     carrier = chr(cp)
     # Split the secret in the middle — the position an attacker would pick.
     half = len(secret) // 2
@@ -77,7 +77,7 @@ NEIGHBOURS = ["前面", "hello", "안녕", "こんにちは", "Ω", "— ", "0",
 
 
 @pytest.mark.parametrize("cp", NEWLY_COVERED, ids=lambda cp: f"U+{cp:04X}")
-def test_neighbour_integrity_surrounding_text_is_byte_identical(cp):
+def test_neighbour_text_should_remain_unchanged_when_no_pii_is_present(cp):
     """Brute-force: with no PII present, redaction must be the identity
     function no matter which ignorable carrier sits between the neighbours."""
     carrier = chr(cp)
@@ -92,7 +92,7 @@ def test_neighbour_integrity_surrounding_text_is_byte_identical(cp):
 
 
 @pytest.mark.parametrize("cp", NEWLY_COVERED, ids=lambda cp: f"U+{cp:04X}")
-def test_neighbour_integrity_text_around_a_redacted_span_survives(cp):
+def test_neighbour_text_should_remain_unchanged_when_pii_is_redacted_nearby(cp):
     """With PII present, everything OUTSIDE the replaced span must survive
     byte-for-byte, carrier included — the carrier is only dropped from the
     detection-side view, never from the output."""

@@ -34,24 +34,24 @@ SEED2_RANDINT_0_9 = [1, 5, 1, 2, 6, 8, 0, 2, 0, 6, 3, 9, 2, 7, 6, 9, 8, 3, 6, 2]
 SEED2_RANDINT_MIXED = [2001, 1989, 1985, 2000, 1978, 122, 426, 177, 709, 695, 25, 6, 23, 5, 24]
 
 
-def test_seed_from_value_hmac_seed1():
+def test_seed_from_value_should_stay_byte_stable_when_using_seed1():
     """HMAC-SHA256(salt, "type:value") must stay byte-stable."""
     seed = _seed_from_value("Alice", "person", b"\x00" * 8)
     assert seed.hex() == SEED1_HEX
 
 
-def test_seed_from_value_hmac_seed2():
+def test_seed_from_value_should_stay_byte_stable_when_using_seed2():
     seed = _seed_from_value("测试", "phone", (42).to_bytes(8, "big"))
     assert seed.hex() == SEED2_HEX
 
 
-def test_shake_rng_randint_0_9_seed1():
+def test_shake_rng_should_replay_the_frozen_randint_0_9_sequence_when_using_seed1():
     seed = _seed_from_value("Alice", "person", b"\x00" * 8)
     r = _ShakeRng(seed)
     assert [r.randint(0, 9) for _ in range(20)] == SEED1_RANDINT_0_9
 
 
-def test_shake_rng_randint_mixed_seed1():
+def test_shake_rng_should_replay_the_frozen_mixed_randint_sequence_when_using_seed1():
     seed = _seed_from_value("Alice", "person", b"\x00" * 8)
     r = _ShakeRng(seed)
     seq = (
@@ -62,13 +62,13 @@ def test_shake_rng_randint_mixed_seed1():
     assert seq == SEED1_RANDINT_MIXED
 
 
-def test_shake_rng_randint_0_9_seed2():
+def test_shake_rng_should_replay_the_frozen_randint_0_9_sequence_when_using_seed2():
     seed = _seed_from_value("测试", "phone", (42).to_bytes(8, "big"))
     r = _ShakeRng(seed)
     assert [r.randint(0, 9) for _ in range(20)] == SEED2_RANDINT_0_9
 
 
-def test_shake_rng_randint_mixed_seed2():
+def test_shake_rng_should_replay_the_frozen_mixed_randint_sequence_when_using_seed2():
     seed = _seed_from_value("测试", "phone", (42).to_bytes(8, "big"))
     r = _ShakeRng(seed)
     seq = (
@@ -79,7 +79,7 @@ def test_shake_rng_randint_mixed_seed2():
     assert seq == SEED2_RANDINT_MIXED
 
 
-def test_choice_is_randint_indexed():
+def test_shake_rng_choice_should_index_into_the_shared_randint_stream():
     """choice(seq) == seq[randint(0, len-1)] — the stream is shared."""
     seed = _seed_from_value("Alice", "person", b"\x00" * 8)
     seq = list("abcdefghij")  # len 10

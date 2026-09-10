@@ -11,7 +11,7 @@ from argus_redact import redact, restore
 class TestGoldenSeedDeterminism:
     """Given fixed seed, output must be exactly reproducible."""
 
-    def test_golden_zh_phone(self):
+    def test_redact_should_be_deterministic_when_input_is_zh_phone(self):
         redacted, key = redact("电话13812345678", salt=42, mode="fast")
 
         # If this breaks, seed determinism changed
@@ -22,7 +22,7 @@ class TestGoldenSeedDeterminism:
         assert redacted == redacted2
         assert key == key2
 
-    def test_golden_zh_multi_pii(self):
+    def test_redact_should_be_deterministic_when_input_has_multiple_zh_pii(self):
         text = "张三电话13812345678，邮箱zhang@test.com"
         r1, k1 = redact(text, salt=42, mode="fast", names=["张三"])
         r2, k2 = redact(text, salt=42, mode="fast", names=["张三"])
@@ -30,7 +30,7 @@ class TestGoldenSeedDeterminism:
         assert r1 == r2
         assert k1 == k2
 
-    def test_golden_en_self_reference(self):
+    def test_redact_should_be_deterministic_when_input_is_en_self_reference(self):
         text = "I was diagnosed with diabetes"
         r1, k1 = redact(text, salt=42, mode="fast", lang="en")
         r2, k2 = redact(text, salt=42, mode="fast", lang="en")
@@ -38,7 +38,7 @@ class TestGoldenSeedDeterminism:
         assert r1 == r2
         assert k1 == k2
 
-    def test_golden_pinned_output(self):
+    def test_redact_should_pin_the_pseudonym_code_when_input_is_zh_phone(self):
         """At least one test must pin exact output to catch cross-version regressions."""
         redacted, key = redact("电话13812345678", salt=42, mode="fast")
 
@@ -47,7 +47,7 @@ class TestGoldenSeedDeterminism:
         mask_values = [v for v in key.values() if "138" in v and "5678" in v]
         assert len(mask_values) == 1, f"Expected exactly one mask, got {key}"
 
-    def test_golden_roundtrip_preserves_original(self):
+    def test_redact_then_restore_should_recover_each_original_pii_value(self):
         """redact → restore must recover each specific PII value."""
         cases = [
             (
@@ -62,6 +62,7 @@ class TestGoldenSeedDeterminism:
                 ["diabetes"],
             ),
         ]
+
         for text, kwargs, expected_pii in cases:
             redacted, key = redact(text, **kwargs)
             restored = restore(redacted, key, guard=False)

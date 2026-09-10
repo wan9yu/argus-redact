@@ -30,7 +30,7 @@ def _a_risk() -> RiskResult:
     )
 
 
-def test_risk_payload_covers_every_riskresult_field_except_entities():
+def test_risk_payload_should_include_every_riskresult_field_except_entities():
     declared = {f.name for f in dataclasses.fields(RiskResult)}
     assert set(risk_payload(_a_risk())) == declared - {"entities"}, (
         "RiskResult gained or lost a field. Add it to risk_payload (or, if it must "
@@ -39,28 +39,28 @@ def test_risk_payload_covers_every_riskresult_field_except_entities():
     )
 
 
-def test_risk_payload_omits_entities_so_it_cannot_route_around_a_face_decision():
+def test_risk_payload_should_exclude_entities_and_their_raw_values():
     payload = risk_payload(_a_risk())
     assert "entities" not in payload
     assert "13812345678" not in json.dumps(payload, ensure_ascii=False)
 
 
-def test_risk_payload_is_json_serialisable():
+def test_risk_payload_should_be_json_serialisable():
     json.dumps(risk_payload(_a_risk()), ensure_ascii=False)
 
 
-def test_coverage_payload_covers_every_advisory_field():
+def test_coverage_payload_should_include_every_advisory_field():
     declared = {f.name for f in dataclasses.fields(CoverageAdvisory)}
     payload = coverage_payload(CoverageAdvisory(uncovered=("sex",), narrow=("age",)))
     assert set(payload) == declared
     json.dumps(payload, ensure_ascii=False)
 
 
-def test_coverage_payload_passes_none_through():
+def test_coverage_payload_should_return_none_when_input_is_none():
     assert coverage_payload(None) is None
 
 
-def test_common_report_fields_shares_no_mutable_state_with_the_report():
+def test_common_report_fields_should_not_share_mutable_state_with_the_report():
     """Every face spreads this helper into its envelope. If the projection kept
     the report's own event dicts, a face editing one would reach back into a
     frozen `RedactReport` — and `list()` alone is a shallow copy."""
@@ -76,8 +76,10 @@ def test_common_report_fields_shares_no_mutable_state_with_the_report():
             },
         ),
     )
+
     first = common_report_fields(report)
     second = common_report_fields(report)
+
     assert first["security_events"] is not second["security_events"]
     for projected, original in zip(first["security_events"], report.security_events):
         assert projected is not original
@@ -85,7 +87,7 @@ def test_common_report_fields_shares_no_mutable_state_with_the_report():
         assert original["detail"] != "TAMPERED"
 
 
-def test_common_report_fields_cannot_collide_with_a_face_specific_key():
+def test_common_report_fields_should_not_collide_with_a_face_specific_key():
     """Every face spreads this helper LAST, so a shared key that collided with
     one a face sets explicitly would silently win and the face-contract gate —
     a key-NAME comparison — would not notice the value changed."""
@@ -100,10 +102,11 @@ def test_common_report_fields_cannot_collide_with_a_face_specific_key():
         "compliance",  # CLI
         "entities_found",  # MCP
     }
+
     assert not (set(common_report_fields(report)) & face_specific)
 
 
-def test_common_report_fields_covers_exactly_the_four_shared_keys():
+def test_common_report_fields_should_cover_exactly_the_four_shared_keys():
     report = RedactReport(redacted_text="", key={})
     assert set(common_report_fields(report)) == {
         "residual_personal_data",

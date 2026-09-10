@@ -71,7 +71,7 @@ def _measure(spec: dict) -> Result:
         )
 
 
-def test_fast_detection_recall_precision_no_regression():
+def test_fast_detection_should_not_regress_below_baseline_recall_and_precision():
     spec = _load_baseline()
     base = spec["measurements"]
     result = _measure(spec)

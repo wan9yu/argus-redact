@@ -21,7 +21,7 @@ from tests.security.property.conftest import PROPERTY_SETTINGS
     entity_type=st.sampled_from(["person", "organization"]),
     salt=st.integers(min_value=0, max_value=2**31 - 1),
 )
-def test_pseudonym_output_format(text, entity_type, salt):
+def test_pseudonym_output_should_match_expected_format(text, entity_type, salt):
     """Any pseudonym replacement of any text matches the expected shape."""
     entity = PatternMatch(text=text, type=entity_type, start=0, end=len(text), layer=1)
     redacted, key, _ = replace(

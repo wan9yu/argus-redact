@@ -49,7 +49,7 @@ def _python_sources() -> list[str]:
     ]
 
 
-def test_every_registered_core_binding_has_a_consumer():
+def test_every_registered_core_binding_should_have_a_consumer():
     lib_rs = _LIB_RS.read_text(encoding="utf-8")
     class_names = _exported_class_names()
 

@@ -71,7 +71,7 @@ def _violations(modules: set[str]) -> set[str]:
     sorted(_PURE_DIR.rglob("*.py")),
     ids=lambda p: str(p.relative_to(_PURE_DIR)),
 )
-def test_pure_file_has_no_forbidden_imports(py_path: Path):
+def test_pure_file_should_have_no_forbidden_imports(py_path: Path):
     tree = ast.parse(py_path.read_text(encoding="utf-8"))
     bad = _violations(_imported_modules(tree))
     assert not bad, (
@@ -82,7 +82,7 @@ def test_pure_file_has_no_forbidden_imports(py_path: Path):
     )
 
 
-def test_pure_dir_actually_has_python_files():
+def test_pure_dir_should_have_python_files():
     """Meta guard against silent zero-collection."""
     files = list(_PURE_DIR.rglob("*.py"))
     assert len(files) >= 5, f"Expected ≥5 .py files in pure/, found {len(files)}"

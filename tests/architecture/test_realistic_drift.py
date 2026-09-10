@@ -79,7 +79,7 @@ class TestRealisticDrift:
                 f"_core faker association nor a custom faker_reserved"
             )
 
-    def test_scanner_keys_referenced_by_drift_table_must_exist(self):
+    def test_scanner_drift_table_should_reference_only_existing_scanner_keys(self):
         """If _TYPE_LANG_TO_SCANNER points at a renamed/missing scanner key, fail loudly."""
         missing = set(_TYPE_LANG_TO_SCANNER.values()) - set(_RESERVED_RANGE_PATTERNS)
         assert not missing, (

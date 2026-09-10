@@ -103,7 +103,7 @@ class TestToPatterns:
             spec -= self._PATTERNS_IN_SOURCE
             assert hand == spec, f"Mismatch on '{text[:40]}...': hand={hand} spec={spec}"
 
-    def test_build_patterns_replaces_hand_written(self):
+    def test_build_patterns_should_replace_hand_written(self):
         """build_patterns('zh') should be a drop-in replacement."""
         from argus_redact.specs.registry import build_patterns
 
@@ -152,7 +152,7 @@ class TestToPatternsEn:
                 assert "pattern" in pat
                 assert pat["type"] == typedef.name
 
-    def test_build_patterns_provides_drop_in_for_lang_module(self):
+    def test_build_patterns_should_provide_drop_in_for_lang_module(self):
         """specs/en.py:build_patterns() detects identically to lang/en/patterns.py:PATTERNS.
 
         Since v0.7.1 ``lang/en/patterns.py`` reads from the Rust core SSOT rather

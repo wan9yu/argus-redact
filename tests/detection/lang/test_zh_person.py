@@ -21,7 +21,7 @@ here is the end-to-end behavior through the public API.
 class TestDetectPersonNames:
     """End-to-end: text + existing PII → confirmed person entities."""
 
-    def test_name_with_phone(self):
+    def test_detect_person_names_should_find_name_near_a_phone_number(self):
         from argus_redact._types import PatternMatch
         from argus_redact.lang.zh.person import detect_person_names
 
@@ -30,7 +30,7 @@ class TestDetectPersonNames:
         names = detect_person_names(text, pii_entities=pii)
         assert any(n.text == "张明" for n in names)
 
-    def test_name_with_id_number(self):
+    def test_detect_person_names_should_find_name_near_an_id_number(self):
         from argus_redact._types import PatternMatch
         from argus_redact.lang.zh.person import detect_person_names
 
@@ -39,7 +39,7 @@ class TestDetectPersonNames:
         names = detect_person_names(text, pii_entities=pii)
         assert any(n.text == "何秀珍" for n in names)
 
-    def test_name_from_names_param(self):
+    def test_detect_person_names_should_include_known_names_despite_negative_dict(self):
         from argus_redact.lang.zh.person import detect_person_names
 
         text = "下午和高明开会讨论方案"
@@ -47,7 +47,7 @@ class TestDetectPersonNames:
         names = detect_person_names(text, pii_entities=[], known_names=["高明"])
         assert any(n.text == "高明" for n in names)
 
-    def test_no_false_positives_on_common_words(self):
+    def test_detect_person_names_should_not_flag_common_words_as_names(self):
         from argus_redact.lang.zh.person import detect_person_names
 
         text = "这个王国的黄金储备很高"
@@ -56,7 +56,7 @@ class TestDetectPersonNames:
         assert "王国" not in detected
         assert "黄金" not in detected
 
-    def test_chat_intro_pattern(self):
+    def test_detect_person_names_should_find_name_in_chat_introduction(self):
         from argus_redact.lang.zh.person import detect_person_names
 
         text = "你好我是刘伟，我的电话是13512345678"
@@ -66,7 +66,7 @@ class TestDetectPersonNames:
         names = detect_person_names(text, pii_entities=pii)
         assert any(n.text == "刘伟" for n in names)
 
-    def test_multiple_persons_near_pii(self):
+    def test_detect_person_names_should_find_multiple_names_near_pii(self):
         from argus_redact._types import PatternMatch
         from argus_redact.lang.zh.person import detect_person_names
 
@@ -80,7 +80,7 @@ class TestDetectPersonNames:
         assert "赵宇轩" in detected
         assert "萧伟" in detected
 
-    def test_returns_pattern_match_type(self):
+    def test_detect_person_names_should_return_typed_pattern_matches(self):
         from argus_redact._types import PatternMatch
         from argus_redact.lang.zh.person import detect_person_names
 

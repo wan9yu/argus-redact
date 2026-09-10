@@ -119,7 +119,9 @@ _IDS = [c[0] for c in CASES]
 
 
 @pytest.mark.parametrize("label,text,lang,exp_results,exp_near", CASES, ids=_IDS)
-def test_deferred_validator_parity(label, text, lang, exp_results, exp_near):
+def test_match_patterns_should_reproduce_pre_port_detection(
+    label, text, lang, exp_results, exp_near
+):
     """The Rust regex+validator path reproduces the pre-port detection exactly."""
     results, near_misses = _detect(text, lang)
     # Filter to the 3 ported types: other builtin patterns may co-fire on the
@@ -130,7 +132,7 @@ def test_deferred_validator_parity(label, text, lang, exp_results, exp_near):
     assert got_near == sorted(exp_near), f"near-miss drift for {label!r}"
 
 
-def test_jwt_routes_through_rust_not_python():
+def test_ported_patterns_should_route_to_rust_not_python():
     """Sanity: the loaded jwt/org/school patterns carry a Rust `validator` and
     NO Python `validate` callback (so match_patterns dispatches them to Rust)."""
     for lang in ("en", "zh"):

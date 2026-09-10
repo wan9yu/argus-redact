@@ -21,14 +21,14 @@ def _no_api_key(monkeypatch):
     monkeypatch.delenv("ARGUS_API_KEY", raising=False)
 
 
-def test_create_app_without_api_key_raises_by_default():
+def test_create_app_without_api_key_should_raise_by_default():
     from argus_redact.server import create_app
 
     with pytest.raises(RuntimeError, match="ARGUS_API_KEY"):
         create_app()
 
 
-def test_create_app_with_allow_no_auth_works():
+def test_create_app_with_allow_no_auth_should_succeed_with_a_warning():
     from argus_redact import SecurityWarning
     from argus_redact.server import create_app
 
@@ -41,7 +41,7 @@ def test_create_app_with_allow_no_auth_works():
     )
 
 
-def test_create_app_with_api_key_set_works(monkeypatch):
+def test_create_app_with_api_key_should_succeed(monkeypatch):
     monkeypatch.setenv("ARGUS_API_KEY", "test-key-value")
     from argus_redact.server import create_app
 
@@ -49,7 +49,7 @@ def test_create_app_with_api_key_set_works(monkeypatch):
     assert app is not None
 
 
-def test_cli_serve_insecure_flag_parses():
+def test_cli_serve_insecure_flag_should_parse():
     """The ``--insecure`` flag must be reachable from the CLI parser."""
     from argus_redact.cli.main import _build_parser
 
@@ -58,7 +58,7 @@ def test_cli_serve_insecure_flag_parses():
     assert getattr(args, "insecure", False) is True
 
 
-def test_cli_serve_no_insecure_flag_default():
+def test_cli_serve_should_default_insecure_flag_to_false():
     from argus_redact.cli.main import _build_parser
 
     parser = _build_parser()

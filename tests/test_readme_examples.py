@@ -65,7 +65,7 @@ _PARAMS = [(code, label, line) for md in _SCAN_PATHS for code, label, line in _e
     _PARAMS,
     ids=[f"{label}:L{line}" for (_, label, line) in _PARAMS],
 )
-def test_pinned_readme_example(code, label, line):
+def test_pinned_readme_example_should_match_expected_output(code, label, line):
     actual = _actual_lines(_run_block(code))
     expected = _expected_lines(code)
     assert actual == expected, (

@@ -22,7 +22,7 @@ from argus_redact.integrations.llamaindex import RedactTransform, RestoreTransfo
 # ---------- LangChain ----------
 
 
-def test_langchain_happy_path_roundtrip():
+def test_langchain_redact_restore_should_return_original_when_nonce_is_echoed():
     """Single session: redact → restore returns original verbatim when nonce is echoed."""
     import warnings
 
@@ -40,7 +40,7 @@ def test_langchain_happy_path_roundtrip():
     assert "张三的电话13812345678" in restored
 
 
-def test_langchain_multi_invoke_accumulates_within_session():
+def test_langchain_repeated_invoke_should_accumulate_key_within_session():
     """Within ONE logical session, repeated invoke() accumulates the key.
     This is documented behavior, not a bug — keys merge for round-trip.
     """
@@ -53,7 +53,7 @@ def test_langchain_multi_invoke_accumulates_within_session():
     assert "110101199003074610" in originals
 
 
-def test_langchain_restore_without_key_raises():
+def test_langchain_restore_should_raise_when_redact_never_ran():
     """RestoreRunnable raises SessionStateError if redact never ran."""
     redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
     restore_r = RestoreRunnable(redact_r)
@@ -61,7 +61,7 @@ def test_langchain_restore_without_key_raises():
         restore_r.invoke("some redacted text")
 
 
-def test_langchain_restore_after_reset_raises():
+def test_langchain_restore_should_raise_when_key_was_reset():
     """After .reset(), subsequent restore must raise (state was deliberately cleared)."""
     redact_r = RedactRunnable(mode="fast", lang="zh", salt=42)
     restore_r = RestoreRunnable(redact_r)
@@ -71,7 +71,7 @@ def test_langchain_restore_after_reset_raises():
         restore_r.invoke("anything")
 
 
-def test_langchain_docstring_states_single_session():
+def test_langchain_docstring_should_mention_single_session_semantics():
     """Class-level docstring must mention single-session semantics."""
     doc = (RedactRunnable.__doc__ or "") + " " + (RestoreRunnable.__doc__ or "")
     # Module-level docstring also counts
@@ -84,7 +84,7 @@ def test_langchain_docstring_states_single_session():
     )
 
 
-def test_langchain_no_dead_contextvar_code():
+def test_langchain_source_should_not_contain_dead_contextvar_code():
     """The misleading _current_key ContextVar must be fully removed.
 
     Audit found the contextvar was set() but never get(); claim of
@@ -101,28 +101,31 @@ def test_langchain_no_dead_contextvar_code():
 # ---------- LlamaIndex ----------
 
 
-def test_llamaindex_happy_path_roundtrip():
+def test_llamaindex_redact_restore_should_return_original_when_nonce_is_echoed():
     redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
     restore_t = RestoreTransform(redact_t)
     redacted = redact_t("张三的电话13812345678")
+
     assert "13812345678" not in redacted
     assert "张三" not in redacted
+
     # Round-trip requires nonce echo (guard-by-default)
     nonce = redact_t.last_anchor.nonce
     with warnings.catch_warnings(record=True):
         warnings.simplefilter("always")
         restored = restore_t(redacted + f"\n{nonce}")
+
     assert "张三的电话13812345678" in restored
 
 
-def test_llamaindex_restore_without_key_raises():
+def test_llamaindex_restore_should_raise_when_redact_never_ran():
     redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
     restore_t = RestoreTransform(redact_t)
     with pytest.raises(SessionStateError, match="before paired RedactTransform"):
         restore_t("some redacted text")
 
 
-def test_llamaindex_restore_after_reset_raises():
+def test_llamaindex_restore_should_raise_when_key_was_reset():
     redact_t = RedactTransform(mode="fast", lang="zh", salt=42)
     restore_t = RestoreTransform(redact_t)
     redact_t("张三的电话13812345678")
@@ -131,7 +134,7 @@ def test_llamaindex_restore_after_reset_raises():
         restore_t("anything")
 
 
-def test_llamaindex_docstring_states_single_session():
+def test_llamaindex_docstring_should_mention_single_session_semantics():
     import argus_redact.integrations.llamaindex as mod
 
     doc = (

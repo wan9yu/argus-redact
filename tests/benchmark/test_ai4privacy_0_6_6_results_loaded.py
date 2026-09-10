@@ -12,11 +12,11 @@ from pathlib import Path
 _RESULTS = Path(__file__).parent / "results" / "ai4privacy_0.6.6.json"
 
 
-def test_result_file_present():
+def test_result_file_should_exist():
     assert _RESULTS.exists(), f"Bench result not committed: {_RESULTS}"
 
 
-def test_result_file_schema_valid():
+def test_result_file_should_match_the_expected_schema():
     data = json.loads(_RESULTS.read_text(encoding="utf-8"))
     assert data["version"] == "0.6.6"
     assert data["dataset"] == "ai4privacy"

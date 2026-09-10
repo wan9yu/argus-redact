@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 
-def test_full_salt_bytes_used_in_hmac():
+def test_seed_from_value_should_differ_when_salt_tail_bytes_differ():
     """Salt bytes after position 8 must change the derivation output.
 
     Pre-fix, only salt[:8] flowed into the HMAC (the rest was silently dropped).
@@ -27,7 +27,7 @@ def test_full_salt_bytes_used_in_hmac():
     assert out1 != out2, "salt bytes after position 8 are ignored — entropy collapsed"
 
 
-def test_seed_from_value_returns_bytes_not_int():
+def test_seed_from_value_should_return_bytes_not_int():
     """Pre-fix returned int (8-byte truncation); post-fix returns full SHA-256 digest."""
     import argus_redact._core as _core
 
@@ -36,7 +36,7 @@ def test_seed_from_value_returns_bytes_not_int():
     assert len(out) == 32, f"expected 32-byte HMAC-SHA256 digest, got {len(out)} bytes"
 
 
-def test_entity_type_seed_offset_stable_across_processes(tmp_path):
+def test_type_seed_offset_should_be_stable_when_pythonhashseed_differs(tmp_path):
     """hash(entity_type) is randomized via PYTHONHASHSEED — replaced with SHA-256."""
     import os
 
@@ -55,7 +55,7 @@ def test_entity_type_seed_offset_stable_across_processes(tmp_path):
     assert out1 == out2, "entity_type seed depends on PYTHONHASHSEED — not deterministic"
 
 
-def test_shake_rng_replaces_random_in_generate_unique_fake():
+def test_replacer_should_not_use_random_random_in_realistic_faker_path():
     """Faker output must derive from a SHAKE-256 stream, not Mersenne Twister.
 
     The realistic-faker re-roll loop is owned by the Rust ``_core`` (the
@@ -71,7 +71,7 @@ def test_shake_rng_replaces_random_in_generate_unique_fake():
     )
 
 
-def test_shake_rng_randint_uniform():
+def test_shake_rng_randint_should_be_uniform():
     """ShakeRng.randint(a, b) must produce uniform output (chi-square sanity check)."""
     import argus_redact._core as _core
 
@@ -85,7 +85,7 @@ def test_shake_rng_randint_uniform():
         assert 130 < v < 270, f"bucket {k} count {v} far from uniform"
 
 
-def test_shake_rng_choice_deterministic_for_same_seed():
+def test_shake_rng_choice_should_be_deterministic_when_seed_is_reused():
     """Same seed → same choice (determinism is required for reproducibility)."""
     import argus_redact._core as _core
 
@@ -97,7 +97,7 @@ def test_shake_rng_choice_deterministic_for_same_seed():
     assert r1.choice(seq) == r2.choice(seq)
 
 
-def test_shake_rng_compat_with_random_random_api():
+def test_shake_rng_should_expose_random_random_compatible_api():
     """The RNG must expose the subset of random.Random's API used by faker code."""
     import argus_redact._core as _core
 
@@ -110,7 +110,7 @@ def test_shake_rng_compat_with_random_random_api():
     assert c in ("x", "y", "z")
 
 
-def test_pseudonym_llm_uses_full_salt_bytes_end_to_end():
+def test_redact_pseudonym_llm_should_differ_when_salt_tail_bytes_differ():
     """End-to-end: salt bytes after position 8 must change downstream_text.
 
     Pre-fix, ``_seed_from_salt`` truncated user salt to 8 bytes + 63 bits;
@@ -131,7 +131,7 @@ def test_pseudonym_llm_uses_full_salt_bytes_end_to_end():
     )
 
 
-def test_salt_to_bytes_preserves_full_input():
+def test_salt_to_bytes_should_pass_through_input_unmodified():
     """``_salt_to_bytes`` must pass user salt through verbatim (no 8-byte truncation)."""
     from argus_redact.glue.redact_pseudonym_llm import _salt_to_bytes
 

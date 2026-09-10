@@ -27,7 +27,7 @@ def _reset_store():
     m._TOKEN_STORE.clear()
 
 
-def test_token_evicts_after_idle_ttl(monkeypatch):
+def test_token_should_expire_when_idle_exceeds_the_ttl(monkeypatch):
     import argus_redact.integrations.mcp_server as m
     from argus_redact.compose import make_anchor
 
@@ -45,7 +45,7 @@ def test_token_evicts_after_idle_ttl(monkeypatch):
     assert m._resolve_key_token(token) is None
 
 
-def test_token_access_extends_ttl(monkeypatch):
+def test_token_access_should_extend_the_ttl(monkeypatch):
     import argus_redact.integrations.mcp_server as m
     from argus_redact.compose import make_anchor
 
@@ -63,7 +63,7 @@ def test_token_access_extends_ttl(monkeypatch):
     assert m._resolve_key_token(token) is not None
 
 
-def test_token_store_size_bounded():
+def test_token_store_should_enforce_the_lru_capacity_bound():
     import argus_redact.integrations.mcp_server as m
     from argus_redact.compose import make_anchor
 
@@ -78,13 +78,13 @@ def test_token_store_size_bounded():
     assert len(m._TOKEN_STORE) == m._TOKEN_STORE_MAX
 
 
-def test_resolve_unknown_token_returns_none():
+def test_resolve_key_token_should_return_none_when_token_is_unknown():
     import argus_redact.integrations.mcp_server as m
 
     assert m._resolve_key_token("nonexistent-token") is None
 
 
-def test_token_store_constants_set():
+def test_token_store_constants_should_match_documented_values():
     """TTL and max are documented module-level constants."""
     import argus_redact.integrations.mcp_server as m
 
@@ -92,7 +92,7 @@ def test_token_store_constants_set():
     assert m._TOKEN_STORE_MAX == 100
 
 
-def test_store_entry_is_a_four_tuple_with_redacted_prompt():
+def test_token_store_entry_should_be_a_four_tuple_with_redacted_prompt():
     """v0.7.20: the store retains (key, anchor, redacted, timestamp) so restore
     can run the H heuristic — the redacted prompt (pseudonyms only) is strictly
     less sensitive than the key (pseudonym -> original) already held here, under
@@ -149,7 +149,7 @@ class TestTokenStoreConcurrency:
             t.join()
         return errors
 
-    def test_concurrent_resolve_of_an_expired_token_never_raises(self, monkeypatch):
+    def test_concurrent_resolve_of_an_expired_token_should_never_raise(self, monkeypatch):
         import sys
 
         import argus_redact.integrations.mcp_server as m
@@ -174,7 +174,7 @@ class TestTokenStoreConcurrency:
             sys.setswitchinterval(original)
         assert errors == [], f"raw exceptions escaped _resolve_key_token: {errors[:3]}"
 
-    def test_concurrent_mint_never_raises_and_respects_the_bound(self):
+    def test_concurrent_mint_should_never_raise_and_stay_within_the_bound(self):
         import sys
 
         import argus_redact.integrations.mcp_server as m
@@ -192,7 +192,7 @@ class TestTokenStoreConcurrency:
         assert len(m._TOKEN_STORE) <= m._TOKEN_STORE_MAX
 
 
-def test_restore_tool_docstring_names_lru_eviction_as_an_invalidation_cause():
+def test_restore_tool_docstring_should_name_lru_eviction_as_an_invalidation_cause():
     """The bound is process-GLOBAL, so a busy neighbour session can evict this
     session's key — an MCP client sees a token that was valid a moment ago stop
     resolving. The docstring named only process restart, so the one failure mode

@@ -16,7 +16,7 @@ import pytest
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only attack surface")
-def test_safe_write_text_refuses_symlink_target(tmp_path):
+def test_safe_write_text_should_refuse_a_symlink_target(tmp_path):
     from argus_redact.cli.main import _safe_write_text
 
     target = tmp_path / "real.txt"
@@ -31,7 +31,7 @@ def test_safe_write_text_refuses_symlink_target(tmp_path):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only attack surface")
-def test_safe_write_key_refuses_symlink_target(tmp_path):
+def test_safe_write_key_should_refuse_a_symlink_target(tmp_path):
     from argus_redact.cli.main import _safe_write_key
 
     target = tmp_path / "real_key.json"
@@ -45,7 +45,7 @@ def test_safe_write_key_refuses_symlink_target(tmp_path):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission semantics")
-def test_safe_write_key_uses_mode_0600(tmp_path):
+def test_safe_write_key_should_write_the_key_file_with_mode_0600(tmp_path):
     from argus_redact.cli.main import _safe_write_key
 
     key_path = tmp_path / "key.json"
@@ -57,7 +57,7 @@ def test_safe_write_key_uses_mode_0600(tmp_path):
     assert json.loads(key_path.read_text(encoding="utf-8")) == {"P-001": "Alice"}
 
 
-def test_safe_write_text_writes_content(tmp_path):
+def test_safe_write_text_should_write_the_given_content(tmp_path):
     from argus_redact.cli.main import _safe_write_text
 
     target = tmp_path / "out.txt"
@@ -65,7 +65,7 @@ def test_safe_write_text_writes_content(tmp_path):
     assert target.read_text(encoding="utf-8") == "hello world"
 
 
-def test_safe_write_key_writes_json(tmp_path):
+def test_safe_write_key_should_write_valid_json(tmp_path):
     from argus_redact.cli.main import _safe_write_key
 
     target = tmp_path / "k.json"
@@ -74,7 +74,7 @@ def test_safe_write_key_writes_json(tmp_path):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only attack surface")
-def test_safe_write_text_overwrites_existing_regular_file(tmp_path):
+def test_safe_write_text_should_overwrite_an_existing_regular_file(tmp_path):
     """Overwriting a non-symlink regular file is fine — only symlinks are blocked."""
     from argus_redact.cli.main import _safe_write_text
 

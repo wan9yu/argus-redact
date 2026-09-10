@@ -20,7 +20,7 @@ def salt() -> bytes:
     return b"streaming-export-test-salt-32!"
 
 
-def test_export_state_default_excludes_salt(salt):
+def test_export_state_should_exclude_salt_by_default(salt):
     from argus_redact.compose import StreamingRedactor
 
     r = StreamingRedactor(salt=salt)
@@ -28,7 +28,7 @@ def test_export_state_default_excludes_salt(salt):
     assert "salt" not in state, "v0.6.2: salt must NOT be in default export"
 
 
-def test_export_state_with_include_salt_kwarg_warns(salt):
+def test_export_state_should_warn_when_include_salt_is_true(salt):
     """Back-compat path emits DeprecationWarning."""
     from argus_redact.compose import StreamingRedactor
 
@@ -43,7 +43,7 @@ def test_export_state_with_include_salt_kwarg_warns(salt):
     )
 
 
-def test_from_state_with_explicit_salt_kwarg_round_trips(salt):
+def test_from_state_should_round_trip_when_salt_kwarg_is_given(salt):
     from argus_redact.compose import StreamingRedactor
 
     r1 = StreamingRedactor(salt=salt)
@@ -55,7 +55,7 @@ def test_from_state_with_explicit_salt_kwarg_round_trips(salt):
     assert r2.aggregate_key() == r1.aggregate_key()
 
 
-def test_from_state_legacy_dump_with_embedded_salt_loads_with_warning(salt):
+def test_from_state_should_warn_when_loading_a_legacy_dump_with_embedded_salt(salt):
     """v0.6.0/v0.6.1 dumps that have salt embedded still load — but warn."""
     from argus_redact.compose import StreamingRedactor
 
@@ -71,7 +71,7 @@ def test_from_state_legacy_dump_with_embedded_salt_loads_with_warning(salt):
     ), "no DeprecationWarning emitted for legacy embedded salt"
 
 
-def test_from_state_no_salt_anywhere_raises():
+def test_from_state_should_raise_when_no_salt_is_given():
     """No kwarg AND no embedded salt → raise ValueError."""
     from argus_redact.compose import StreamingRedactor
 
@@ -91,7 +91,7 @@ def test_from_state_no_salt_anywhere_raises():
         StreamingRedactor.from_state(state_without_salt)
 
 
-def test_from_state_explicit_salt_overrides_legacy_embedded(salt):
+def test_from_state_should_prefer_explicit_salt_when_both_are_given(salt):
     """If both kwarg and embedded salt exist, kwarg wins (caller-explicit principle)."""
     from argus_redact.compose import StreamingRedactor
 

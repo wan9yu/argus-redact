@@ -35,7 +35,7 @@ class TestITIN:
         results, _ = match_patterns(example["input"], en_patterns)
         assert_pattern_match(results, example, "itin")
 
-    def test_ssn_and_itin_do_not_cannibalize_each_other(self, en_patterns):
+    def test_ssn_and_itin_should_not_cannibalize_each_other(self, en_patterns):
         # ITIN area 900-999 must be redacted as itin, never as ssn (validate_ssn
         # rejects area>=900), and a valid SSN area must still redact as ssn.
         itin_results, _ = match_patterns("ITIN 912-70-1234", en_patterns)

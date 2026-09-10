@@ -95,5 +95,5 @@ CORPUS = [
 
 
 @pytest.mark.parametrize("text,expected", CORPUS, ids=[c[0] for c in CORPUS])
-def test_org_school_parity(text, expected):
+def test_org_school_detection_should_match_the_pinned_corpus(text, expected):
     assert _org_school(text) == expected

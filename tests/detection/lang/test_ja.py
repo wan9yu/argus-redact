@@ -48,15 +48,15 @@ class TestMyNumber:
 class TestJapaneseHints:
     """Japanese kinship + command-mode hints."""
 
-    def test_kinship_phrase_is_kinship(self):
+    def test_kinship_phrase_should_be_detected_as_kinship(self):
         entity = PatternMatch(
             text="私の母", type="self_reference", start=0, end=3, confidence=1.0, layer=1
         )
         assert _is_kinship(entity)
 
-    def test_command_suffix_marks_command_mode(self):
+    def test_command_suffix_should_mark_command_mode(self):
         assert _is_interaction_command("電話番号を教えてください")
         assert _is_interaction_command("連絡してください")
 
-    def test_narrative_japanese_is_not_command(self):
+    def test_narrative_japanese_should_not_be_marked_as_command(self):
         assert not _is_interaction_command("田中さんは東京に住んでいます。")

@@ -61,7 +61,7 @@ def _fired_ids(samples: list[dict], **redact_kwargs) -> list[str]:
     return [s["id"] for s in samples if _coverage_warnings(s["text"], s["lang"], **redact_kwargs)]
 
 
-def test_never_fires_unfiltered_on_the_detection_baseline_corpus():
+def test_coverage_invariant_should_not_fire_when_unfiltered_on_baseline_corpus():
     """300 generated zh samples, seed=42 — the same corpus AND mode the CI
     detection-recall gate runs on (tests/benchmark/test_detection_baseline.py).
     This is the property that let the fix ship without a benchmark
@@ -75,7 +75,7 @@ def test_never_fires_unfiltered_on_the_detection_baseline_corpus():
     )
 
 
-def test_never_fires_unfiltered_on_the_realistic_scenarios_fixture():
+def test_coverage_invariant_should_not_fire_when_unfiltered_on_realistic_scenarios():
     """53 hand-written realistic documents, a second/independent corpus from
     the generated one above. Note the fixture's key is `input`, not `text`,
     and `lang` may be a list (e.g. `["en", "uk"]`) — both incompatible with
@@ -86,6 +86,7 @@ def test_never_fires_unfiltered_on_the_realistic_scenarios_fixture():
         lang = sc.get("lang", "zh")
         if _coverage_warnings(sc["input"], lang):
             fired.append(sc["id"])
+
     assert fired == [], (
         f"the coverage invariant fired on {len(fired)} benign UNFILTERED realistic "
         f"scenarios ({fired[:5]}); see the baseline-corpus test above for what "
@@ -111,9 +112,12 @@ _PINNED_SEED = 7
         pytest.param({"types_exclude": ["address"]}, 56, id="types_exclude_address"),
     ],
 )
-def test_type_filtered_firing_rate_is_pinned(redact_kwargs, expected_fired):
+def test_coverage_invariant_should_fire_the_pinned_count_when_type_filtered(
+    redact_kwargs, expected_fired
+):
     samples = generate(_PINNED_COUNT, seed=_PINNED_SEED)
     fired = _fired_ids(samples, **redact_kwargs)
+
     assert len(fired) == expected_fired, (
         f"coverage-invariant firing count for redact(**{redact_kwargs}) moved "
         f"from the pinned {expected_fired}/{_PINNED_COUNT} to "
@@ -124,7 +128,7 @@ def test_type_filtered_firing_rate_is_pinned(redact_kwargs, expected_fired):
     )
 
 
-def test_the_lock_can_actually_observe_a_firing():
+def test_coverage_lock_should_catch_a_real_firing():
     """Positive control: a call that DOES lose coverage must be caught by the
     same detector these tests use, so a silent no-op could not pass them."""
     from unittest.mock import MagicMock, patch

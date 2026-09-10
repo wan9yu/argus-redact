@@ -3,14 +3,14 @@
 from pathlib import Path
 
 
-def test_pure_hints_has_no_os_environ():
+def test_pure_hints_module_should_not_reference_os_environ():
     src = Path("src/argus_redact/pure/hints.py").read_text(encoding="utf-8")
     assert "os.environ" not in src, (
         "pure/hints.py must not read os.environ (move env reads to glue)"
     )
 
 
-def test_ablation_env_warns(monkeypatch, caplog):
+def test_warn_ablation_once_should_warn_when_ablation_hints_env_is_off(monkeypatch, caplog):
     import argus_redact.glue.redact as r
 
     monkeypatch.setenv("ARGUS_ABLATION_HINTS", "off")

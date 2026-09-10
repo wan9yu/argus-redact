@@ -351,7 +351,7 @@ _ZH_FROZEN = _load(_ZH_FIXTURE) if _ZH_FIXTURE.exists() else []
 _EN_FROZEN = _load(_EN_FIXTURE) if _EN_FIXTURE.exists() else []
 
 
-def test_fixtures_present():
+def test_person_golden_fixtures_should_be_present_and_nonempty():
     # Guard the soft spot: an emptied/missing fixture would make the
     # parametrize([]) tests silently skip (green). Fail loudly instead.
     assert _ZH_FIXTURE.exists() and len(_ZH_FROZEN) > 0
@@ -359,7 +359,7 @@ def test_fixtures_present():
 
 
 @pytest.mark.parametrize("case", _ZH_FROZEN, ids=[c["id"] for c in _ZH_FROZEN])
-def test_zh_person_golden(case):
+def test_zh_person_detection_should_match_frozen_golden(case):
     actual = _run_zh_case(case)
     expected = case["output"]
     assert len(actual) == len(expected), f"count mismatch for {case['id']}"
@@ -373,7 +373,7 @@ def test_zh_person_golden(case):
 
 
 @pytest.mark.parametrize("case", _EN_FROZEN, ids=[c["id"] for c in _EN_FROZEN])
-def test_en_person_golden(case):
+def test_en_person_detection_should_match_frozen_golden(case):
     actual = _run_en_case(case)
     expected = case["output"]
     assert len(actual) == len(expected), f"count mismatch for {case['id']}"

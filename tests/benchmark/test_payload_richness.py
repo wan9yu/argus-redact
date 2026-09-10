@@ -54,12 +54,12 @@ def _fast_result() -> Result:
     return r
 
 
-def test_payload_has_package_version_string():
+def test_payload_should_include_the_package_version_string():
     payload = build_payload("synthetic", [_fast_result()])
     assert payload["package_version_string"] == __version__
 
 
-def test_payload_modes_include_per_type():
+def test_payload_modes_should_include_per_type_metrics():
     payload = build_payload("synthetic", [_fast_result()])
     fast = payload["modes"]["fast"]
     # legacy overall fields retained (backward compat)
@@ -71,14 +71,14 @@ def test_payload_modes_include_per_type():
     assert person["tp"] == 3 and person["fp"] == 1 and person["fn"] == 2
 
 
-def test_payload_exposes_flat_per_type_mode():
+def test_payload_should_expose_a_flat_per_type_mode_key():
     # The en precision-floor test reads data["per_type_fast"]["person"].
     payload = build_payload("synthetic", [_fast_result()])
     assert "per_type_fast" in payload
     assert payload["per_type_fast"]["person"]["tp"] == 3
 
 
-def test_payload_keeps_legacy_top_level_fields():
+def test_payload_should_keep_legacy_top_level_fields():
     payload = build_payload("synthetic", [_fast_result()])
     assert payload["dataset"] == "synthetic"
     assert payload["language"] == "en"
@@ -87,7 +87,7 @@ def test_payload_keeps_legacy_top_level_fields():
 
 
 @pytest.mark.parametrize("filename", _VERSIONED_RESULTS)
-def test_committed_result_version_matches_filename(filename):
+def test_committed_result_version_should_match_the_filename_token(filename):
     # A result file committed under ``*_X.Y.Z.json`` must self-report that same
     # ``X.Y.Z`` in its ``version`` / ``package_version_string`` fields. Generating
     # the benchmark under an un-bumped build records the OLD version in the file;
@@ -99,6 +99,7 @@ def test_committed_result_version_matches_filename(filename):
     assert m, f"filename has no version token: {filename}"
     expected = m.group(1)
     data = json.loads(path.read_text(encoding="utf-8"))
+
     assert data.get("version") == expected, (
         filename,
         data.get("version"),

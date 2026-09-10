@@ -27,8 +27,9 @@ _DIST_KEYS = {
 }
 
 
-def test_profile_emits_full_distribution():
+def test_profile_should_emit_the_full_percentile_distribution():
     workloads = perf_profile.profile(iterations=3, warmup=1)
+
     assert {"en_1kb", "zh_1kb"} <= set(workloads)
     for label, w in workloads.items():
         assert w["lang"] in ("en", "zh"), label

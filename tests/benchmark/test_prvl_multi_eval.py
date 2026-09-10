@@ -45,7 +45,7 @@ def _run(monkeypatch, tmp_path, reply: str, name: str) -> tuple[dict, "object"]:
     return snap, out
 
 
-def test_schema_and_aggregate(tmp_path, monkeypatch):
+def test_run_should_produce_rows_and_aggregate_matching_the_declared_schema(tmp_path, monkeypatch):
     snap, out = _run(
         tmp_path=tmp_path,
         monkeypatch=monkeypatch,
@@ -80,7 +80,7 @@ def test_schema_and_aggregate(tmp_path, monkeypatch):
     assert parsed["benchmark"] == "prvl_multi"
 
 
-def test_privacy_non_vacuous(tmp_path, monkeypatch):
+def test_privacy_metric_should_flag_only_the_case_that_actually_leaks(tmp_path, monkeypatch):
     # The stub echoes case[0]'s original PII but NOT case[1]'s → leak in one,
     # clean in the other, proving the privacy metric reacts both directions.
     snap, _ = _run(
@@ -98,7 +98,7 @@ def test_privacy_non_vacuous(tmp_path, monkeypatch):
     assert clean["privacy"]["leaked"] == [], "clean output wrongly flagged as a leak"
 
 
-def test_utility_basic_non_vacuous(tmp_path, monkeypatch):
+def test_utility_should_score_refusals_as_zero_and_answers_as_one(tmp_path, monkeypatch):
     refusal, _ = _run(
         tmp_path=tmp_path,
         monkeypatch=monkeypatch,
@@ -121,7 +121,7 @@ def test_utility_basic_non_vacuous(tmp_path, monkeypatch):
     assert all(a["refusal_rate"] == 0.0 for a in answered["aggregate"].values())
 
 
-def test_expected_safety_refusal_tag():
+def test_default_cases_should_tag_health_related_cases_as_expected_safety_refusal():
     # T2: health-extract / health-advice cases are tagged so a frontier-model safety
     # refusal there is separable from a task argus actually broke. Covers both the
     # legacy pair and the expanded fixture corpus' health cases.
@@ -131,7 +131,7 @@ def test_expected_safety_refusal_tag():
     assert cases["summarize_zh"]["expected_safety_refusal"] is False
 
 
-def test_default_cases_expanded_balanced_wellformed():
+def test_default_cases_should_be_well_formed_and_balanced_across_type_and_language():
     # The PRvL+ matrix must be statistically meaningful, not the legacy N=4 toy set.
     # Lock in: >=24 unique cases, a {text} slot in every prompt, every declared PII
     # substring actually present in its own text, and a balanced spread across the
@@ -158,7 +158,7 @@ def test_default_cases_expanded_balanced_wellformed():
     assert by_lang["zh"] >= 10 and by_lang["en"] >= 10, f"language skew: {by_lang}"
 
 
-def test_null_content_does_not_crash(tmp_path, monkeypatch):
+def test_run_should_treat_null_content_as_an_empty_answer_without_crashing(tmp_path, monkeypatch):
     # A model returning null content (finish_reason=length / content filter) must NOT
     # abort the matrix (the bug that lost a full paid run) — it counts as an empty,
     # unusable answer: output "", utility 0.0, no leak.

@@ -35,7 +35,7 @@ def _drive(chunks, strategy="sentence"):
         return out + r.flush()
 
 
-def test_one_shot_restore_refuses_the_embedded_numeric_fake():
+def test_one_shot_restore_should_refuse_the_embedded_numeric_fake():
     """Control: the digit bound does its job when nothing is cut."""
     out = _drive([WHOLE], strategy="none")
     assert "13800138000" not in out
@@ -43,7 +43,7 @@ def test_one_shot_restore_refuses_the_embedded_numeric_fake():
 
 
 @pytest.mark.parametrize("cut_at", range(DEFAULT_MAX_BUFFER - 2, DEFAULT_MAX_BUFFER + 6))
-def test_force_flush_cut_never_splices_pii_into_an_unrelated_number(cut_at):
+def test_force_flush_cut_should_never_splice_pii_into_an_unrelated_number(cut_at):
     out = _drive([WHOLE[:cut_at], WHOLE[cut_at:]])
     assert "13800138000" not in out, (
         f"cut at {cut_at} manufactured a digit boundary and spliced the original "
@@ -52,7 +52,7 @@ def test_force_flush_cut_never_splices_pii_into_an_unrelated_number(cut_at):
     assert out == WHOLE, "the stream must reassemble byte-for-byte"
 
 
-def test_strategy_none_reassembles_byte_for_byte_across_the_hold():
+def test_strategy_none_should_reassemble_byte_for_byte_across_the_hold():
     """``none`` flushes per chunk, but not per chunk IN ISOLATION.
 
     It routes through the same straddle scan as the sentence strategy, so a
@@ -68,13 +68,14 @@ def test_strategy_none_reassembles_byte_for_byte_across_the_hold():
         r = StreamingRestorer({"P-1": "Alice"}, strategy="none")
         outs = [r.feed(c) for c in chunks]
         outs.append(r.flush())
+
     assert "".join(outs) == "abc Alice def"
     # Every chunk is a prefix-extension of what came before — the stream only
     # ever appends, it never rewrites text it already emitted.
     assert "P-1" not in "".join(outs)
 
 
-def test_the_drain_still_makes_forward_progress_on_an_all_digit_blob():
+def test_the_drain_should_make_forward_progress_when_given_an_all_digit_blob():
     """A digit run longer than the whole buffer must not stall the stream."""
     blob = "7" * (DEFAULT_MAX_BUFFER * 3)
     out = _drive([blob[:i] for i in ()] or [blob[: len(blob) // 2], blob[len(blob) // 2 :]])

@@ -42,7 +42,7 @@ def _redact(text, lang):
         (f"card {AR['1']}{PAN}", "en", PAN),  # PAN preceded by Arabic-Indic
     ],
 )
-def test_boundary_exotic_digit_does_not_defeat_detection(text, lang, secret):
+def test_boundary_exotic_digit_should_not_defeat_detection(text, lang, secret):
     out, key = _redact(text, lang)
     assert len(key) >= 1, f"no entity detected — boundary leak: {text!r} -> {out!r}"
     assert secret not in out, f"PII leaked verbatim: {text!r} -> {out!r}"
@@ -56,7 +56,7 @@ def test_boundary_exotic_digit_does_not_defeat_detection(text, lang, secret):
         f"公民身份号码11010{DV['1']}199003070468",  # Devanagari interior
     ],
 )
-def test_interior_exotic_digit_in_checksum_id_is_redacted(text):
+def test_interior_exotic_digit_in_checksum_id_should_be_redacted(text):
     out, key = _redact(text, "zh")
     assert len(key) >= 1, f"interior exotic ID not detected — leak: {text!r} -> {out!r}"
     assert ID not in out, f"ID leaked verbatim: {text!r} -> {out!r}"
@@ -65,7 +65,7 @@ def test_interior_exotic_digit_in_checksum_id_is_redacted(text):
 
 
 # ── No-regression controls (must behave exactly as before the fix) ─────────────
-def test_cjk_homograph_still_protects_both_name_and_phone():
+def test_cjk_homograph_should_still_protect_both_name_and_phone():
     # 张三 = name whose 三 is a digit homograph (=3); the CJK-majority no-fold rule
     # keeps 三 intact so the phone's anchor still matches. BOTH must redact.
     out, key = _redact("客户张三13800138000", "zh")
@@ -74,7 +74,7 @@ def test_cjk_homograph_still_protects_both_name_and_phone():
     assert "张三" not in out
 
 
-def test_space_separated_exotic_digit_still_redacts_the_phone():
+def test_space_separated_exotic_digit_should_still_redact_the_phone():
     # A space between the phone and the exotic digit was already fine (the space is
     # the boundary); it must stay fine.
     out, key = _redact(f"电话{PHONE} {AR['9']}", "zh")
@@ -82,7 +82,7 @@ def test_space_separated_exotic_digit_still_redacts_the_phone():
     assert PHONE not in out
 
 
-def test_cjk_flanked_exotic_digit_is_left_untouched():
+def test_cjk_flanked_exotic_digit_should_be_left_untouched():
     # 一二三٤五六七 — ٤ is flanked by CJK numerals, not ASCII digits. It must NOT fold
     # (frozen behaviour); the mixed 7-char run is not a PII pattern → nothing redacts.
     out, key = _redact("一二三٤五六七", "zh")
@@ -90,7 +90,7 @@ def test_cjk_flanked_exotic_digit_is_left_untouched():
     assert AR["4"] in out  # the exotic digit survives verbatim
 
 
-def test_clean_ascii_pii_unchanged():
+def test_clean_ascii_pii_should_remain_unchanged():
     # Clean ASCII inputs redact exactly as before (no behaviour drift).
     for text, lang, secret in [
         (f"电话{PHONE}", "zh", PHONE),
@@ -102,7 +102,7 @@ def test_clean_ascii_pii_unchanged():
         assert secret not in out
 
 
-def test_genuine_chinese_numeral_phone_still_folds():
+def test_genuine_chinese_numeral_phone_should_still_fold():
     # 一三八… (all-CJK number) still folds to ASCII and is detected + masked, as
     # before. The phone mask keeps first-3/last-4 visible (mapped back onto the
     # original CJK chars), so the frozen output is "电话一三八****八零零零" — the

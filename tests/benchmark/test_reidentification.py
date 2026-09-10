@@ -49,7 +49,7 @@ def _backend_available() -> bool:
         " to run; makes paid LLM calls"
     ),
 )
-def test_reid_harness_runs_and_snapshot_is_wellformed():
+def test_reid_harness_should_produce_a_wellformed_snapshot():
     snap = run_eval(provider=None, model=None, limit=4)  # tiny subset → cheap
     assert snap["benchmark"] == "reidentification"
     assert set(snap["redactors"]) == {"raw", "argus_fast"}

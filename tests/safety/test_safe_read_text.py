@@ -5,7 +5,7 @@ import sys
 import pytest
 
 
-def test_safe_read_text_reads_regular_file(tmp_path):
+def test_safe_read_text_should_return_contents_when_path_is_a_regular_file(tmp_path):
     from argus_redact._safe_io import safe_read_text
 
     p = tmp_path / "normal.txt"
@@ -13,7 +13,7 @@ def test_safe_read_text_reads_regular_file(tmp_path):
     assert safe_read_text(p) == "hello\n"
 
 
-def test_safe_read_text_handles_string_paths(tmp_path):
+def test_safe_read_text_should_return_contents_when_path_is_a_string(tmp_path):
     from argus_redact._safe_io import safe_read_text
 
     p = tmp_path / "normal.txt"
@@ -21,7 +21,7 @@ def test_safe_read_text_handles_string_paths(tmp_path):
     assert safe_read_text(str(p)) == "hello"
 
 
-def test_safe_read_refuses_symlink_posix(tmp_path):
+def test_safe_read_text_should_refuse_symlinks_on_posix(tmp_path):
     if sys.platform == "win32":
         pytest.skip("POSIX-only attack surface")
     real = tmp_path / "real.txt"
@@ -34,7 +34,7 @@ def test_safe_read_refuses_symlink_posix(tmp_path):
         safe_read_text(link)
 
 
-def test_safe_read_refuses_symlink_windows(tmp_path):
+def test_safe_read_text_should_refuse_symlinks_on_windows(tmp_path):
     if sys.platform != "win32":
         pytest.skip("Windows-only branch")
     real = tmp_path / "real.txt"

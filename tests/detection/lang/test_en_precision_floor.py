@@ -44,7 +44,7 @@ def _names(text, **kw):
     return list(key.values())
 
 
-def test_corroborated_names_redact():
+def test_corroborated_names_should_redact():
     # given-name-led — full Given + Surname, both in pools.
     assert any("Smith" in v for v in _names("Contact John Smith"))
     # title / honorific immediately before the surname.
@@ -55,7 +55,7 @@ def test_corroborated_names_redact():
     assert any("Quincy Smith" in v for v in _names("Quincy Smith, phone 4155551234"))
 
 
-def test_lone_surname_in_prose_not_redacted():
+def test_lone_surname_in_prose_should_not_redact():
     # Each of these is a "Capitalized + surname-pool" pair whose leading word is
     # NOT a known given name and which has NO title / nearby PII — under the old
     # ungated 0.9 branch they all over-redacted; the evidence gate now suppresses
@@ -71,7 +71,7 @@ def test_lone_surname_in_prose_not_redacted():
         assert word in out
 
 
-def test_known_names_still_exact():
+def test_known_names_should_always_redact():
     # An explicit known name is always redacted regardless of the gate.
     assert any("Zaphod" in v for v in _names("Reach out to Zaphod.", names=["Zaphod"]))
 
@@ -100,7 +100,7 @@ _NON_ANGLO_FULL_NAMES = [
 
 
 @pytest.mark.parametrize("full_name", _NON_ANGLO_FULL_NAMES)
-def test_non_anglo_full_names_redact_fast(full_name):
+def test_non_anglo_full_names_should_redact(full_name):
     # No title, no nearby PII — corroboration is the name-like leading token
     # alone (base 0.3 + name-like 0.5 = 0.8 >= threshold). The surname must end
     # up in a redacted value.
@@ -108,7 +108,7 @@ def test_non_anglo_full_names_redact_fast(full_name):
     assert any(surname in v for v in _names(full_name)), full_name
 
 
-def test_common_word_pairs_not_redacted():
+def test_common_word_pairs_should_not_redact():
     # The fairness fix must NOT bring back the place/common-word FPs: the leading
     # token here IS a common English word / place term, so the name-like signal
     # does NOT fire and the pair stays suppressed (left to L2 NER).
@@ -132,7 +132,7 @@ def test_common_word_pairs_not_redacted():
     "full_name",
     ["D'Andre Williams", "O'Shea Davis", "D'Angelo Garcia"],
 )
-def test_apostrophe_given_names_redact(full_name):
+def test_apostrophe_given_names_should_redact(full_name):
     surname = full_name.split()[-1]
     assert any(surname in v for v in _names(full_name)), full_name
 
@@ -160,7 +160,7 @@ def test_apostrophe_given_names_redact(full_name):
         "Duke Williams",
     ],
 )
-def test_common_word_given_names_redact(full_name):
+def test_common_word_given_names_should_redact(full_name):
     surname = full_name.split()[-1]
     assert any(surname in v for v in _names(full_name)), full_name
 
@@ -182,7 +182,7 @@ def test_common_word_given_names_redact(full_name):
         "Capital Davis",
     ],
 )
-def test_place_org_pairs_suppressed(text):
+def test_place_org_pairs_should_be_suppressed(text):
     out, _ = redact(text, mode="fast", lang="en", salt=42)
     assert out == text, (text, out)
 
@@ -191,7 +191,7 @@ def test_place_org_pairs_suppressed(text):
 # leading token is a place / nature word kept in the lexicon, so the pair stays
 # suppressed (the fairness fix must not revive these place FPs).
 @pytest.mark.parametrize("text", ["Central Park", "Maple Davis", "Cedar Davis"])
-def test_curated_place_pairs_still_suppressed(text):
+def test_curated_place_pairs_should_stay_suppressed(text):
     out, _ = redact(text, mode="fast", lang="en", salt=42)
     assert out == text, (text, out)
 
@@ -203,7 +203,7 @@ def test_curated_place_pairs_still_suppressed(text):
 # person actually named "Lincoln" or "Crystal"); favoring recall on a real-name
 # reading is the deliberate trade.
 @pytest.mark.parametrize("text", ["Lincoln Park", "Crystal Davis"])
-def test_accepted_ambiguous_residuals_still_redact(text):
+def test_ambiguous_residuals_should_still_redact(text):
     assert _names(text), text
 
 
@@ -217,7 +217,7 @@ def test_accepted_ambiguous_residuals_still_redact(text):
     "full_name",
     ["Summer Davis", "Autumn Davis", "Winter Davis", "Spring Davis"],
 )
-def test_season_names_redact_consistently(full_name):
+def test_season_names_should_redact_consistently(full_name):
     # winter/spring FAIL before this change (left in the lexicon); all four pass
     # after. The surname must end up redacted.
     assert any("Davis" in v for v in _names(full_name)), full_name
@@ -231,7 +231,7 @@ def test_season_names_redact_consistently(full_name):
 # in this pass — the other predominantly-name examples in the audit, e.g. the
 # gem/flower/virtue names, were already absent from the lexicon.)
 @pytest.mark.parametrize("full_name", ["Winter Davis", "Spring Davis"])
-def test_removed_given_names_redact(full_name):
+def test_removed_given_names_should_redact(full_name):
     assert any("Davis" in v for v in _names(full_name)), full_name
 
 
@@ -252,7 +252,7 @@ def test_removed_given_names_redact(full_name):
 # added), so "May" stays name-like. ("April"/"June"/"August" were likewise kept
 # out as predominantly-name month words.) This pins the asymmetry the curation
 # made deliberately between "will" (kept) and "may" (omitted).
-def test_high_freq_ambiguous_kept_as_residual():
+def test_ambiguous_words_should_stay_suppressed_as_residual():
     # KEPT in the lexicon -> suppressed at fast-L1 (recovered by L2 NER).
     for residual in ["Will Davis", "Major Davis", "Drew Davis", "Royal Davis"]:
         out, _ = redact(residual, mode="fast", lang="en", salt=42)
@@ -266,7 +266,7 @@ def test_high_freq_ambiguous_kept_as_residual():
 # "Maple" a curated tree/geo term; both are kept in the lexicon, so the leading
 # token is not name-like and the pair is left to L2 NER.
 @pytest.mark.parametrize("text", ["Central Park", "Maple Davis"])
-def test_curation_controls_still_suppressed(text):
+def test_curation_controls_should_stay_suppressed(text):
     out, _ = redact(text, mode="fast", lang="en", salt=42)
     assert out == text, (text, out)
 
@@ -297,7 +297,7 @@ def test_curation_controls_still_suppressed(text):
         "Nuevo León",
     ],
 )
-def test_lexicon_gap_fps_suppressed(text):
+def test_lexicon_gap_fps_should_be_suppressed(text):
     out, _ = redact(text, mode="fast", lang="en", salt=42)
     assert out == text, (text, out)
 
@@ -310,7 +310,7 @@ def test_lexicon_gap_fps_suppressed(text):
     "full_name",
     ["Marco Rossi", "Hope Johnson", "John Smith", "Raaz Gupta"],
 )
-def test_real_names_still_redact(full_name):
+def test_real_names_should_still_redact(full_name):
     surname = full_name.split()[-1]
     assert any(surname in v for v in _names(full_name)), full_name
 
@@ -358,7 +358,7 @@ def _kaggle_data() -> dict:
     return json.loads(_KAGGLE_PIILO.read_text(encoding="utf-8"))
 
 
-def test_person_floor_precision_not_regressed():
+def test_person_precision_floor_should_hold():
     data = _kaggle_data()
     if "person" in data.get("per_type_fast", {}):
         # Person-specific guard (rich format). Pinned DOWN from 69.6 %.
@@ -373,7 +373,7 @@ def test_person_floor_precision_not_regressed():
         )
 
 
-def test_person_floor_recall_not_regressed():
+def test_person_recall_floor_should_hold():
     data = _kaggle_data()
     if "person" in data.get("per_type_fast", {}):
         # Pinned DOWN from 29.8 %. Recall give-back is bounded — the gate keeps
@@ -386,7 +386,7 @@ def test_person_floor_recall_not_regressed():
         )
 
 
-def test_overall_fast_floor_when_legacy_format():
+def test_overall_fast_floor_should_hold():
     # When the rich per_type_fast is absent (legacy format, pre-refresh) but the
     # file IS present, the overall fast precision/recall still act as a coarse
     # regression guard. With the rich format this asserts the same coarse floor

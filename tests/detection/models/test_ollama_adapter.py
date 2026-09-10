@@ -204,7 +204,7 @@ class TestOllamaAdapter:
         call_body = mock_post.call_args[1]["json"]
         assert call_body["model"] == "qwen2.5:7b"
 
-    def test_allowlisted_types_match_system_prompt(self):
+    def test_system_prompt_types_should_match_allowlist(self):
         # Anti-drift: parse the type names SYSTEM_PROMPT actually declares to the
         # model out of its bullet list, and assert that set is EXACTLY
         # _ALLOWED_SEMANTIC_TYPES. If someone edits the prompt (adds/renames a

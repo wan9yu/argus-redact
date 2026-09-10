@@ -65,13 +65,13 @@ def _no_advisory(monkeypatch: pytest.MonkeyPatch) -> None:
 # ── _check_provenance unit tests (returns (problems, warnings)) ──
 
 
-def test_matching_provenance_has_no_problems() -> None:
+def test_check_provenance_should_return_no_problems_when_matching() -> None:
     problems, warnings = _check_provenance(_current(), _BASELINE)
     assert problems == []
     assert warnings == []
 
 
-def test_platform_mismatch_is_a_problem() -> None:
+def test_check_provenance_should_flag_a_problem_when_platform_mismatches() -> None:
     problems, warnings = _check_provenance(_current(platform="darwin"), _BASELINE)
     assert len(problems) == 1
     assert "platform mismatch" in problems[0]
@@ -80,7 +80,7 @@ def test_platform_mismatch_is_a_problem() -> None:
     assert warnings == []
 
 
-def test_python_minor_mismatch_is_a_problem() -> None:
+def test_check_provenance_should_flag_a_problem_when_python_minor_mismatches() -> None:
     problems, _warnings = _check_provenance(_current(python="3.11"), _BASELINE)
     assert len(problems) == 1
     assert "python mismatch" in problems[0]
@@ -88,7 +88,7 @@ def test_python_minor_mismatch_is_a_problem() -> None:
 
 @pytest.mark.parametrize("which", ["current", "baseline"])
 @pytest.mark.parametrize("bad_commit", [None, "", "unknown"])
-def test_missing_or_unknown_commit_on_either_side_is_a_problem(
+def test_check_provenance_should_flag_a_problem_when_commit_is_missing_or_unknown(
     which: str, bad_commit: str | None
 ) -> None:
     current = _current()
@@ -104,7 +104,7 @@ def test_missing_or_unknown_commit_on_either_side_is_a_problem(
     assert problems == [f"{which} measurement has no commit/provenance label"]
 
 
-def test_differing_but_present_commits_are_not_a_problem() -> None:
+def test_check_provenance_should_ignore_differing_commit_labels() -> None:
     """`commit` is a provenance label to print, never an equality check — the
     baseline's commit is free-text prose, not a SHA the current run could
     match."""
@@ -116,7 +116,7 @@ def test_differing_but_present_commits_are_not_a_problem() -> None:
 # ── advisory mode (ARGUS_PERF_ADVISORY) ──
 
 
-def test_advisory_downgrades_platform_mismatch_to_a_warning(
+def test_check_provenance_should_downgrade_platform_mismatch_to_warning_when_advisory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ARGUS_PERF_ADVISORY", "1")
@@ -127,7 +127,7 @@ def test_advisory_downgrades_platform_mismatch_to_a_warning(
     assert "platform mismatch" in warnings[0]
 
 
-def test_advisory_does_not_downgrade_python_mismatch(
+def test_check_provenance_should_still_flag_python_mismatch_when_advisory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ARGUS_PERF_ADVISORY", "1")
@@ -136,7 +136,7 @@ def test_advisory_does_not_downgrade_python_mismatch(
     assert warnings == []
 
 
-def test_advisory_does_not_downgrade_missing_commit(
+def test_check_provenance_should_still_flag_missing_commit_when_advisory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ARGUS_PERF_ADVISORY", "1")
@@ -147,7 +147,7 @@ def test_advisory_does_not_downgrade_missing_commit(
 # ── main() end-to-end (argv + stdout) ──
 
 
-def test_main_refuses_on_platform_mismatch(
+def test_main_should_refuse_when_platform_mismatches(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
     cur = _write(tmp_path, "current.json", _current(platform="darwin"))
@@ -162,7 +162,7 @@ def test_main_refuses_on_platform_mismatch(
     assert "platform mismatch" in out
 
 
-def test_main_advisory_platform_mismatch_does_not_refuse(
+def test_main_should_not_refuse_platform_mismatch_when_advisory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
     monkeypatch.setenv("ARGUS_PERF_ADVISORY", "1")
@@ -178,7 +178,7 @@ def test_main_advisory_platform_mismatch_does_not_refuse(
     assert "Refusing to compare" not in out
 
 
-def test_main_advisory_still_refuses_python_mismatch(
+def test_main_should_refuse_python_mismatch_even_when_advisory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
     monkeypatch.setenv("ARGUS_PERF_ADVISORY", "1")
@@ -190,7 +190,7 @@ def test_main_advisory_still_refuses_python_mismatch(
     assert "python mismatch" in capsys.readouterr().out
 
 
-def test_main_prints_both_commits_without_equality_comparing_them(
+def test_main_should_print_both_commits_without_comparing_equality(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
     cur = _write(tmp_path, "current.json", _current(commit="totally-different-label"))
@@ -207,7 +207,7 @@ def test_main_prints_both_commits_without_equality_comparing_them(
     assert exit_code in (0, 1)
 
 
-def test_main_exits_zero_on_matching_measurements(
+def test_main_should_exit_zero_when_measurements_match(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
     cur = _write(tmp_path, "current.json", _current())
@@ -217,7 +217,7 @@ def test_main_exits_zero_on_matching_measurements(
     assert main() == 0
 
 
-def test_main_exits_one_on_a_real_regression(
+def test_main_should_exit_one_when_regression_exceeds_threshold(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
     cur = _write(

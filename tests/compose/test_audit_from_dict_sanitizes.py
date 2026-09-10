@@ -36,7 +36,7 @@ def _tampered_dict():
     }
 
 
-def test_from_dict_strips_detail_from_hand_crafted_event():
+def test_from_dict_should_strip_detail_when_event_is_hand_crafted():
     d = _tampered_dict()
     ledger = AuditLedger.from_dict(d)
     event = ledger.entries[0].security_events[0]
@@ -45,7 +45,7 @@ def test_from_dict_strips_detail_from_hand_crafted_event():
     assert "John Smith" not in repr(ledger.entries[0].security_events)
 
 
-def test_from_dict_sanitize_is_noop_for_honest_roundtrip():
+def test_from_dict_should_preserve_integrity_when_roundtrip_is_honest():
     seq = iter(["t0", "t1"])
     led = AuditLedger(clock=lambda: next(seq))
     led.append(
@@ -55,13 +55,15 @@ def test_from_dict_sanitize_is_noop_for_honest_roundtrip():
             {"type": "security", "reason_code": "keep_downgraded", "count": 1, "detail": "张三"}
         ],
     )
+
     d = led.to_dict()
     restored = AuditLedger.from_dict(d)
+
     assert restored.verify() is True
     assert restored.head_digest == led.head_digest
 
 
-def test_from_dict_without_hmac_key_on_hmac_ledger_raises_clearly():
+def test_from_dict_should_raise_a_clear_error_when_hmac_key_is_missing():
     seq = iter(["t0"])
     led = AuditLedger(hmac_key=b"secret", clock=lambda: next(seq))
     led.append("redact", type_counts={"person": 1})
@@ -71,7 +73,7 @@ def test_from_dict_without_hmac_key_on_hmac_ledger_raises_clearly():
         AuditLedger.from_dict(d)
 
 
-def test_from_dict_with_hmac_key_verifies():
+def test_from_dict_should_verify_when_hmac_key_is_provided():
     seq = iter(["t0"])
     led = AuditLedger(hmac_key=b"secret", clock=lambda: next(seq))
     led.append("redact", type_counts={"person": 1})
@@ -80,7 +82,7 @@ def test_from_dict_with_hmac_key_verifies():
     assert restored.verify() is True
 
 
-def test_to_dict_keyless_ledger_marks_hmac_false():
+def test_to_dict_should_mark_hmac_false_when_ledger_is_keyless():
     seq = iter(["t0"])
     led = AuditLedger(clock=lambda: next(seq))
     led.append("redact", type_counts={"person": 1})

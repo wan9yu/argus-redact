@@ -67,7 +67,7 @@ _SCRIPT = (
 )
 
 
-def test_restore_paths_are_identical_across_hash_seeds():
+def test_restore_paths_should_be_identical_across_hash_seeds():
     """Sweep PYTHONHASHSEED over a fresh subprocess per value; the alias-merge
     winner, the non-colliding alias merge, and the check_restore_safety
     warning ordering must all be byte-for-byte identical across every seed.
