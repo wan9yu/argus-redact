@@ -22,41 +22,41 @@ import pytest
 from argus_redact import redact_csv, redact_json
 
 
-def test_redact_json_rejects_invalid_mode():
+def test_redact_json_should_reject_invalid_mode():
     with pytest.raises(ValueError, match="mode"):
         redact_json({"a": "13812345678"}, mode="bogus", salt=b"0" * 32)
 
 
-def test_redact_csv_rejects_invalid_mode_on_empty_input():
+def test_redact_csv_should_reject_invalid_mode_when_input_is_empty():
     # The empty-input path returns early, before any per-cell detection ever
     # runs — mode must still be validated even though there is nothing to redact.
     with pytest.raises(ValueError, match="mode"):
         redact_csv("", mode="bogus", salt=b"0" * 32)
 
 
-def test_redact_csv_rejects_invalid_mode_on_nonempty_input():
+def test_redact_csv_should_reject_invalid_mode_when_input_is_nonempty():
     with pytest.raises(ValueError, match="mode"):
         redact_csv("phone\n13812345678\n", mode="bogus", salt=b"0" * 32)
 
 
 @pytest.mark.parametrize("bad", [[], [""], ["."], [[]], [[""]]])
-def test_empty_selector_rejected(bad):
+def test_redact_json_should_reject_an_empty_selector(bad):
     with pytest.raises(ValueError):
         redact_json({"a": "13812345678"}, paths=bad, salt=b"0" * 32)
 
 
 @pytest.mark.parametrize("bad", [[("user", "phone")], [["user", 1]]])
-def test_nonstr_selector_rejected(bad):
+def test_redact_json_should_reject_a_nonstring_selector(bad):
     with pytest.raises(TypeError):
         redact_json({"a": "13812345678"}, paths=bad, salt=b"0" * 32)
 
 
-def test_paths_none_still_whole_document():
+def test_redact_json_should_redact_the_whole_document_when_paths_is_none():
     out, _key = redact_json({"a": "13812345678"}, paths=None, salt=b"0" * 32)
     assert out["a"] != "13812345678"  # whole-doc default unchanged
 
 
-def test_paths_scoped_selector_still_leaves_other_leaves_untouched():
+def test_redact_json_should_leave_other_leaves_untouched_when_paths_scopes_a_selector():
     # A valid, non-degenerate selector's behavior must be byte-identical to
     # before this change: scoped leaves redact, everything outside stays put.
     data = {"user": {"phone": "13812345678"}, "other": "13800001111"}

@@ -12,7 +12,7 @@ from argus_redact import redact
 from argus_redact.specs.registry import lookup
 
 
-def test_type_registered():
+def test_housing_fund_type_should_be_registered_as_zh_remove_sensitivity_3():
     td = lookup("housing_fund")
     assert td, "housing_fund not registered"
     assert td[0].lang == "zh"
@@ -21,7 +21,7 @@ def test_type_registered():
     assert td[0].sensitivity == 3
 
 
-def test_examples_are_redacted():
+def test_housing_fund_examples_should_be_redacted():
     """Every spec example string: its PII payload must not survive verbatim."""
     td = lookup("housing_fund")[0]
     assert td.examples, "housing_fund has no examples"
@@ -30,7 +30,7 @@ def test_examples_are_redacted():
         assert out != ex, f"housing_fund: example not redacted: {ex!r} -> {out!r}"
 
 
-def test_counterexamples_do_not_fire():
+def test_housing_fund_counterexamples_should_not_fire():
     """Every spec counterexample: housing_fund must not claim the input."""
     td = lookup("housing_fund")[0]
     for cx in td.counterexamples:
@@ -40,7 +40,7 @@ def test_counterexamples_do_not_fire():
         )
 
 
-def test_payloads_disappear():
+def test_housing_fund_payloads_should_disappear():
     cases = {
         "公积金账号：110123456789": "110123456789",
         "住房公积金账户 123456789012": "123456789012",
@@ -51,13 +51,13 @@ def test_payloads_disappear():
         assert payload not in out, f"housing_fund payload survived: {text!r} -> {out!r}"
 
 
-def test_bare_digits_survive():
+def test_bare_digits_should_survive_when_no_anchor_is_present():
     """Anchor-required: a bare digit run with no keyword context must survive."""
     out, _ = redact("110123456789", mode="fast", lang="zh")
     assert out == "110123456789", f"bare digits wrongly redacted: {out!r}"
 
 
-def test_anchor_requires_account_word_not_balance():
+def test_housing_fund_anchor_should_require_account_word_not_balance():
     """公积金余额/amounts must not match — anchor needs 账号/账户, not bare 公积金."""
     out, _ = redact("公积金余额12000", mode="fast", lang="zh")
     assert "12000" in out, f"housing_fund matched an amount, not an account: {out!r}"

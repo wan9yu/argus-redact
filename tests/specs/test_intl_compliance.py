@@ -29,11 +29,12 @@ _EXPECTED = {
 
 
 @pytest.mark.parametrize("name,expected", _EXPECTED.items())
-def test_intl_type_registered_with_compliance(name, expected):
+def test_intl_type_should_be_registered_with_compliance_metadata(name, expected):
     sens, gdpr, hipaa = expected
     tds = lookup(name)
     assert tds, f"{name} is not registered (specs/intl.py not loaded?)"
     td = tds[0]
+
     assert td.sensitivity == sens, f"{name} sensitivity {td.sensitivity} != {sens}"
     assert td.gdpr_special_category is gdpr, (
         f"{name} gdpr_special {td.gdpr_special_category} != {gdpr}"
@@ -44,7 +45,7 @@ def test_intl_type_registered_with_compliance(name, expected):
     assert td.pipl_articles, f"{name} has no PIPL articles"
 
 
-def test_nhs_number_format_spec_does_not_overclaim_checksum():
+def test_nhs_number_format_spec_should_not_overclaim_checksum():
     """nhs_number ships NO MOD11 validator (`checksum` is unset on the typedef) —
     any 10-digit run in a uk-routed doc is redacted as a health identifier
     (fail-safe over-redaction, not checksum-gated). The free-text `format` spec
@@ -61,7 +62,7 @@ def test_nhs_number_format_spec_does_not_overclaim_checksum():
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_nhs_number_assess_risk_flags_health():
+def test_nhs_number_assess_risk_should_flag_health_category():
     # The one health identifier must surface GDPR Art.9 special category + a HIPAA
     # PHI category through assess_risk (the report path), keyed on its own lang.
     import argus_redact._core as _core
@@ -75,7 +76,7 @@ def test_nhs_number_assess_risk_flags_health():
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_foreign_tax_id_no_longer_understated():
+def test_foreign_tax_id_should_no_longer_be_understated():
     # Regression: a German tax_id used to assess as sensitivity-2 with empty
     # compliance. It must now carry PIPL articles via the (de, tax_id) entry (and
     # the any-lang name fallback keeps it working under other langs).

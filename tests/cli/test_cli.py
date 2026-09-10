@@ -347,7 +347,7 @@ class TestInfoCommandHonesty:
     actually reachable.
     """
 
-    def test_no_ner_label_when_engines_absent(self, monkeypatch, capsys):
+    def test_info_should_omit_ner_label_when_engines_are_absent(self, monkeypatch, capsys):
         _patch_ner_engines(monkeypatch, hanlp=False, spacy=False)
 
         cmd_info(argparse.Namespace())
@@ -358,7 +358,7 @@ class TestInfoCommandHonesty:
         )
         assert "2 Entity (NER)          ✗" in stdout
 
-    def test_ner_label_present_when_engines_installed(self, monkeypatch, capsys):
+    def test_info_should_show_ner_label_when_engines_are_installed(self, monkeypatch, capsys):
         """Control: don't over-suppress — with the engines available, "+ NER"
         must still appear for languages that ship an adapter."""
         _patch_ner_engines(monkeypatch, hanlp=True, spacy=True)
@@ -369,7 +369,9 @@ class TestInfoCommandHonesty:
         assert "+ NER" in stdout
         assert "2 Entity (NER)          ✓" in stdout
 
-    def test_zh_ner_label_depends_only_on_hanlp(self, monkeypatch, capsys):
+    def test_zh_ner_label_should_stay_absent_when_only_spacy_is_installed(
+        self, monkeypatch, capsys
+    ):
         """zh's NER engine is hanlp, not spaCy — spaCy alone must not light
         up zh's "+ NER"."""
         _patch_ner_engines(monkeypatch, hanlp=False, spacy=True)
@@ -380,7 +382,7 @@ class TestInfoCommandHonesty:
         zh_line = next(line for line in lines if line.strip().startswith("zh "))
         assert "+ NER" not in zh_line
 
-    def test_ollama_line_does_not_claim_readiness_from_requests_alone(self, capsys):
+    def test_ollama_line_should_not_claim_readiness_from_requests_alone(self, capsys):
         cmd_info(argparse.Namespace())
 
         stdout = capsys.readouterr().out
@@ -394,7 +396,7 @@ class TestInfoCommandHonesty:
 class TestMCPInfoHonesty:
     """Parallel check for the MCP `redact_info` tool — same NER-gating fix."""
 
-    def test_ner_flag_false_when_engines_absent(self, monkeypatch):
+    def test_mcp_info_should_report_ner_false_when_engines_are_absent(self, monkeypatch):
         pytest.importorskip("mcp")
         import asyncio
 
@@ -409,7 +411,7 @@ class TestMCPInfoHonesty:
             "MCP info must not report ner: true when neither hanlp nor spacy is installed"
         )
 
-    def test_ner_flag_true_when_engines_installed(self, monkeypatch):
+    def test_mcp_info_should_report_ner_true_when_engines_are_installed(self, monkeypatch):
         pytest.importorskip("mcp")
         import asyncio
 
@@ -425,7 +427,7 @@ class TestMCPInfoHonesty:
 
 
 class TestSetupCommand:
-    def test_de_uk_in_not_described_as_regex_only(self):
+    def test_setup_should_not_describe_de_uk_in_as_regex_only(self):
         """de/uk/in ship NER adapters — setup must not print 'regex only'."""
         for lang in ("de", "uk", "in"):
             _, stdout, stderr = run_cli("setup", "-l", lang)
@@ -434,7 +436,7 @@ class TestSetupCommand:
                 f"setup for '{lang}' incorrectly claimed regex-only (it ships a spaCy NER adapter)"
             )
 
-    def test_br_is_regex_only(self):
+    def test_setup_should_describe_br_as_regex_only(self):
         """br has no NER adapter — setup correctly says regex only."""
         _, stdout, stderr = run_cli("setup", "-l", "br")
         combined = stdout + stderr
@@ -485,7 +487,7 @@ class TestAssessCommand:
         assert data["summary"]["risk_score"] == 0.0
         assert data["summary"]["risk_level"] == "none"
 
-    def test_assess_reports_coverage_and_layers(self):
+    def test_assess_should_report_coverage_and_layers_used(self):
         """`coverage` and `layers_used` shipped in v0.8.7 and reached no face."""
         code, stdout, _ = run_cli(
             "assess", "-m", "fast", "-l", "zh", stdin="请联系张伟，电话 13812345678。"
@@ -513,7 +515,7 @@ class TestLangCodeCollisionHint:
     catches a plausible mis-guess like `ua` (Ukrainian) or `id` (Indonesian).
     """
 
-    def test_ua_unknown_lang_hints_at_uk_collision(self, tmp_path):
+    def test_lang_flag_should_hint_at_uk_collision_when_given_ua(self, tmp_path):
         key_file = tmp_path / "key.json"
 
         code, stdout, stderr = run_cli(
@@ -533,7 +535,7 @@ class TestLangCodeCollisionHint:
         assert "British" in stderr
         assert "not Ukrainian" in stderr
 
-    def test_id_unknown_lang_hints_at_in_collision(self, tmp_path):
+    def test_lang_flag_should_hint_at_in_collision_when_given_id(self, tmp_path):
         key_file = tmp_path / "key.json"
 
         code, stdout, stderr = run_cli(
@@ -553,7 +555,7 @@ class TestLangCodeCollisionHint:
         assert "Indian" in stderr
         assert "not Indonesian" in stderr
 
-    def test_uk_lang_still_works(self, tmp_path):
+    def test_uk_lang_should_still_work(self, tmp_path):
         """No behavior change: `uk` remains the British-English locale pack."""
         key_file = tmp_path / "key.json"
 

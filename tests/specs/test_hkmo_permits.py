@@ -22,7 +22,7 @@ from argus_redact.specs.registry import lookup
 
 
 @pytest.mark.parametrize("type_name", ["eep", "hrp"])
-def test_type_registered(type_name):
+def test_type_should_be_registered(type_name):
     td = lookup(type_name)
     assert td, f"{type_name} not registered"
     assert td[0].lang == "zh"
@@ -30,7 +30,7 @@ def test_type_registered(type_name):
 
 
 @pytest.mark.parametrize("type_name", ["eep", "hrp"])
-def test_examples_are_redacted(type_name):
+def test_examples_should_be_redacted(type_name):
     """Every spec example string: its PII payload must not survive verbatim."""
     td = lookup(type_name)[0]
     assert td.examples, f"{type_name} has no examples"
@@ -40,7 +40,7 @@ def test_examples_are_redacted(type_name):
 
 
 @pytest.mark.parametrize("type_name", ["eep", "hrp"])
-def test_counterexamples_do_not_fire_this_type(type_name):
+def test_counterexamples_should_not_match_this_type(type_name):
     """Every spec counterexample: THIS type must not claim the input.
 
     Repo convention (see assert_pattern_match): should_match=False is per-type.
@@ -55,7 +55,7 @@ def test_counterexamples_do_not_fire_this_type(type_name):
         )
 
 
-def test_eep_payloads_disappear():
+def test_eep_payload_should_be_redacted():
     cases = {
         "往来港澳通行证C12345678": "C12345678",
         "电子往来港澳通行证CA0000001": "CA0000001",
@@ -67,7 +67,7 @@ def test_eep_payloads_disappear():
         assert payload not in out, f"eep payload survived: {text!r} -> {out!r}"
 
 
-def test_hrp_payloads_disappear():
+def test_hrp_payload_should_be_redacted():
     cases = {
         "港澳居民来往内地通行证H12345678": "H12345678",
         "回乡证 M87654321": "M87654321",
@@ -79,20 +79,20 @@ def test_hrp_payloads_disappear():
         assert payload not in out, f"hrp payload survived: {text!r} -> {out!r}"
 
 
-def test_bare_formats_survive():
+def test_bare_permit_number_should_survive_when_no_keyword_context_is_present():
     """Anchor-required: a bare C/H/M number with no keyword context must survive."""
     for bare in ("C12345678", "H12345678", "M87654321"):
         out, _ = redact(bare, mode="fast", lang="zh")
         assert out == bare, f"bare format wrongly redacted: {bare!r} -> {out!r}"
 
 
-def test_distractor_prefix_is_suppressed():
+def test_eep_number_should_survive_when_preceded_by_a_distractor_keyword():
     """check_context negative backstop: 订单号-prefixed C-number must survive."""
     out, _ = redact("订单号C12345678", mode="fast", lang="zh")
     assert "C12345678" in out, f"distractor-prefixed eep wrongly redacted: {out!r}"
 
 
-def test_illegal_second_letter_does_not_match():
+def test_eep_should_not_match_when_the_second_letter_is_i_or_o():
     """New-segment EEP excludes I/O in the second position."""
     for bad in ("往来港澳通行证CI1234567", "往来港澳通行证CO1234567"):
         out, _ = redact(bad, mode="fast", lang="zh")
@@ -105,26 +105,26 @@ def test_illegal_second_letter_does_not_match():
 # attributed to hrp, and an H/M-prefix input must never be attributed to eep.
 
 
-def test_eep_does_not_fire_on_hrp_input():
+def test_eep_should_not_fire_when_input_is_an_hrp_permit():
     """回乡证 H-prefix payload must not be caught by the eep type."""
     _out, _key, types = redact("回乡证H12345678", mode="fast", lang="zh", with_types=True)
     assert "eep" not in set(types.values()), f"eep fired on an H-prefix (hrp) input: types={types}"
 
 
-def test_hrp_does_not_fire_on_eep_input():
+def test_hrp_should_not_fire_when_input_is_an_eep_permit():
     """双程证 C-prefix payload must not be caught by the hrp type."""
     _out, _key, types = redact("往来港澳通行证C12345678", mode="fast", lang="zh", with_types=True)
     assert "hrp" not in set(types.values()), f"hrp fired on a C-prefix (eep) input: types={types}"
 
 
-def test_eep_input_is_typed_eep_not_hrp():
+def test_eep_input_should_be_typed_as_eep_not_hrp():
     _out, _k, types = redact("往来港澳通行证C12345678", mode="fast", lang="zh", with_types=True)
     assigned = set(types.values())
     assert "eep" in assigned, f"eep did not fire on its own input: types={types}"
     assert "hrp" not in assigned, f"hrp contaminated an eep input: types={types}"
 
 
-def test_hrp_input_is_typed_hrp_not_eep():
+def test_hrp_input_should_be_typed_as_hrp_not_eep():
     _out, _k, types = redact("回乡证H12345678", mode="fast", lang="zh", with_types=True)
     assigned = set(types.values())
     assert "hrp" in assigned, f"hrp did not fire on its own input: types={types}"

@@ -28,12 +28,12 @@ def _pm(start, end):
 
 
 @pytest.mark.parametrize("start,end", [(5, 3), (-1, 3)])
-def test_reject_invalid_span(start, end):
+def test_redact_should_reject_an_invalid_pre_detected_span(start, end):
     with pytest.raises(ValueError):
         redact("hello 13812345678", _pre_detected=[_pm(start, end)], salt=b"0" * 32)
 
 
-def test_out_of_range_end_still_clamps_whole_doc():
+def test_redact_should_clamp_out_of_range_ends_while_reporting_the_original_span():
     out = redact("hello", _pre_detected=[_pm(0, 999)], salt=b"0" * 32, report=True)
     assert out.entities[0]["end"] == 999  # entity_details echoes the ORIGINAL span
     assert out.redacted_text != "hello"  # the whole (clamped) document was redacted

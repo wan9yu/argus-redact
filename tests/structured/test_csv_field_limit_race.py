@@ -30,15 +30,17 @@ def _worker(errors):
         errors.append(e)
 
 
-def test_concurrent_parse_restores_default_limit():
+def test_redact_csv_should_restore_the_default_field_size_limit_when_parsed_concurrently():
     default = csv.field_size_limit()
     errors: list = []
     threads = [threading.Thread(target=_worker, args=(errors,)) for _ in range(8)]
+
     try:
         for t in threads:
             t.start()
         for t in threads:
             t.join()
+
         assert not errors, errors
         assert csv.field_size_limit() == default, "field_size_limit leaked past the call"
     finally:

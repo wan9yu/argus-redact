@@ -17,12 +17,12 @@ def _report(text: str, **kwargs):
     return redact(text, salt=42, report=True, **kwargs)
 
 
-def test_report_carries_a_coverage_advisory():
+def test_report_should_carry_a_coverage_advisory():
     report = _report("现居上海市浦东新区。", lang="zh", mode="fast")
     assert isinstance(report.coverage, CoverageAdvisory)
 
 
-def test_exhaustive_is_always_false():
+def test_coverage_exhaustive_should_always_be_false():
     """A field, not a doc sentence — consumers read fields. It is permanently
     False because the taxonomy is not exhaustive of what can re-identify a
     person, and nothing measured in this project supports claiming otherwise."""
@@ -31,18 +31,18 @@ def test_exhaustive_is_always_false():
         assert report.coverage.exhaustive is False
 
 
-def test_uncovered_and_narrow_are_disjoint():
+def test_coverage_uncovered_and_narrow_should_be_disjoint():
     report = _report("nothing here", lang="en", mode="fast")
     assert not set(report.coverage.uncovered) & set(report.coverage.narrow)
 
 
-def test_english_fast_reports_the_categories_it_cannot_see():
+def test_coverage_should_report_uncovered_categories_when_run_in_english_fast_mode():
     report = _report("Nothing identifying here.", lang="en", mode="fast")
     for expected in ("education", "occupation", "location", "relationship_status"):
         assert expected in report.coverage.uncovered
 
 
-def test_multi_language_call_reports_the_weaker_packs_gap():
+def test_coverage_should_report_the_weaker_packs_gap_when_multiple_languages_are_requested():
     """`occupation` is `have` for zh (cue-anchored to Chinese words) and `none`
     for en. A `lang=["zh", "en"]` call runs BOTH packs, so the advisory must
     reflect the union of what's active — not just `langs[0]` ("zh"), which
@@ -54,7 +54,7 @@ def test_multi_language_call_reports_the_weaker_packs_gap():
     assert "occupation" in report.coverage.uncovered
 
 
-def test_an_empty_result_still_carries_the_advisory():
+def test_report_should_carry_the_advisory_when_no_entities_are_found():
     """The whole point: the advisory must be present precisely when nothing was
     found, because that is when a caller is most likely to read silence as
     safety."""
@@ -64,12 +64,12 @@ def test_an_empty_result_still_carries_the_advisory():
     assert report.coverage.uncovered
 
 
-def test_layers_used_reports_the_layers_that_contributed():
+def test_layers_used_should_report_the_layers_that_contributed():
     report = _report("现居上海市浦东新区。", lang="zh", mode="fast")
     assert report.layers_used == (1,)
 
 
-def test_layers_used_is_honest_on_the_pre_detected_path():
+def test_layers_used_should_reflect_the_entities_when_using_the_pre_detected_path():
     """`layer_stats` is hardcoded to all-zero/skipped on this path
     (glue/redact.py:827-838) even when entities were really detected. Deriving
     `layers_used` from the surviving entities' `.layer` is what keeps it true —
@@ -88,7 +88,7 @@ def test_layers_used_is_honest_on_the_pre_detected_path():
     assert report.layers_used == (1, 2)  # the truth, from the entities
 
 
-def test_coverage_is_none_on_the_pre_detected_path():
+def test_coverage_should_be_none_when_pre_detected_entities_are_supplied():
     """`coverage` is built from `(lang, mode)` alone — a claim about what an
     argus *detection pass* over this configuration could not have found. On
     the `_pre_detected` path argus runs no detection at all: the caller
@@ -106,7 +106,7 @@ def test_coverage_is_none_on_the_pre_detected_path():
     assert report.coverage is None
 
 
-def test_layers_used_keeps_layer_zero_for_an_untagged_pre_detected_entity():
+def test_layers_used_should_keep_layer_zero_when_a_pre_detected_entity_is_untagged():
     """`integrations/presidio.py:106-112` builds `PatternMatch` WITHOUT
     `layer=`, so a caller feeding Presidio-bridged entities through
     `_pre_detected` produces entities left at the dataclass default
@@ -124,7 +124,7 @@ def test_layers_used_keeps_layer_zero_for_an_untagged_pre_detected_entity():
     assert report.layers_used == (0,)
 
 
-def test_stats_stays_json_serialisable():
+def test_stats_should_remain_json_serialisable():
     """`argus-redact assess` runs json.dumps over report.stats
     (cli/main.py:227-246). A dataclass or enum in there raises TypeError, so the
     advisory and layers_used live on the report, never inside stats."""
@@ -140,7 +140,7 @@ def test_stats_stays_json_serialisable():
         ("Contact 555-0142 about the invoice.", "en"),
     ],
 )
-def test_the_advisory_changes_no_redaction_output(text, lang):
+def test_the_advisory_should_not_change_redaction_output(text, lang):
     """Neutrality: the advisory is derived from configuration and never touches
     the entity set, so redacted text must be byte-identical to what the plain
     2-tuple call produces. An advisory that could alter output would be a new

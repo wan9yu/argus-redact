@@ -19,7 +19,9 @@ from argus_redact.specs.registry import lookup
         ("url", "remove", "URL"),
     ],
 )
-def test_type_has_typedef_and_prefix_entries(type_name, expected_strategy, expected_prefix):
+def test_registered_type_should_have_matching_strategy_and_prefix(
+    type_name, expected_strategy, expected_prefix
+):
     """C2: typedef is the runtime SSOT; DEFAULT_PREFIXES still exists."""
     from argus_redact.pure.replacer import DEFAULT_PREFIXES, _resolve_default_strategy
 
@@ -41,7 +43,7 @@ def test_type_has_typedef_and_prefix_entries(type_name, expected_strategy, expec
         ("url", "remove"),
     ],
 )
-def test_type_has_typedef_entry(type_name, expected_strategy):
+def test_registered_type_should_expose_strategy_via_typedef(type_name, expected_strategy):
     """PIITypeDef.strategy is the single source of truth after C2."""
     typedef_list = lookup(type_name)
     assert typedef_list, f"{type_name} has no typedef in registry"

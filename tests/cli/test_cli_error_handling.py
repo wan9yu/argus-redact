@@ -16,7 +16,7 @@ from tests.cli.conftest import run_cli
 
 
 class TestSeedValidation:
-    def test_non_int_seed_gives_clean_error(self, tmp_path):
+    def test_redact_should_show_clean_error_when_seed_is_not_an_int(self, tmp_path):
         key_file = tmp_path / "key.json"
 
         code, stdout, stderr = run_cli(
@@ -37,7 +37,7 @@ class TestSeedValidation:
 
 
 class TestPseudonymLlmRequiresSeed:
-    def test_pseudonym_llm_without_seed_gives_clean_error(self, tmp_path):
+    def test_redact_should_show_clean_error_when_pseudonym_llm_profile_has_no_seed(self, tmp_path):
         key_file = tmp_path / "key.json"
 
         code, stdout, stderr = run_cli(
@@ -56,7 +56,7 @@ class TestPseudonymLlmRequiresSeed:
         assert "Traceback" not in stderr
         assert "--seed" in stderr
 
-    def test_pseudonym_llm_with_seed_succeeds(self, tmp_path):
+    def test_redact_should_succeed_when_pseudonym_llm_profile_has_a_seed(self, tmp_path):
         key_file = tmp_path / "key.json"
 
         code, stdout, stderr = run_cli(
@@ -77,7 +77,7 @@ class TestPseudonymLlmRequiresSeed:
 
 
 class TestTrailingCommaLang:
-    def test_trailing_comma_lang_is_filtered_not_crashed(self, tmp_path):
+    def test_lang_flag_should_filter_empty_segment_when_trailing_comma_given(self, tmp_path):
         key_file = tmp_path / "key.json"
 
         code, stdout, stderr = run_cli(
@@ -99,7 +99,7 @@ class TestTrailingCommaLang:
 
 
 class TestOversizedSeed:
-    def test_oversized_seed_gives_clean_error_not_traceback(self, tmp_path):
+    def test_redact_should_show_clean_error_when_seed_overflows_eight_bytes(self, tmp_path):
         # int(args.seed) accepts arbitrarily large ints; the salt->8-byte
         # coercion then raised an uncaught OverflowError (missed by the CLI's
         # (ValueError, TypeError, FileNotFoundError) net) -> raw traceback.
@@ -126,7 +126,7 @@ class TestOversizedSeed:
 
 
 class TestNonUtf8Stdin:
-    def test_non_utf8_stdin_gives_clean_error_not_traceback(self, tmp_path):
+    def test_redact_should_show_clean_error_when_stdin_is_not_utf8(self, tmp_path):
         # The file branch already guards UnicodeDecodeError; the stdin branch
         # decoded raw bytes as UTF-8 with no guard -> raw traceback. run_cli
         # pins text=True/encoding=utf-8, so bytes stdin needs a direct call.
@@ -158,7 +158,7 @@ class TestNonUtf8Stdin:
 
 
 class TestProfileConfigCliRegression:
-    def test_profile_and_config_file_together_succeeds(self, tmp_path):
+    def test_redact_should_succeed_when_profile_and_config_file_are_combined(self, tmp_path):
         """(b) library-level C1 fix exercised end-to-end through the CLI."""
         import json
 

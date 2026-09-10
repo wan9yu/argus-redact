@@ -25,19 +25,19 @@ def _astuple(r):
     )
 
 
-def test_empty_entities():
+def test_assess_risk_should_return_none_level_when_entities_is_empty():
     r = assess_risk([])
     assert _astuple(r) == (0.0, "none", (), (), (), False, (), False)
 
 
-def test_single_low():
+def test_assess_risk_should_return_low_level_when_single_low_sensitivity_entity():
     r = assess_risk([{"type": "ip_address", "sensitivity": 1}])
     assert r.score == 0.25
     assert r.level == "low"
     assert r.entities == ({"type": "ip_address", "sensitivity": 1},)
 
 
-def test_single_critical_id_number():
+def test_assess_risk_should_flag_pipl_articles_when_id_number_is_critical():
     r = assess_risk([{"type": "id_number", "sensitivity": 4}])
     assert r.score == 1.0
     assert r.level == "critical"
@@ -45,7 +45,7 @@ def test_single_critical_id_number():
     assert "PIPL Art.51" in r.pipl_articles
 
 
-def test_multi_high_critical_amplifies():
+def test_assess_risk_should_amplify_to_critical_when_two_entities_are_high_sensitivity():
     # two sensitivity>=3 entities → +0.1; base 0.75 → 0.85 → critical (cutoff edge)
     r = assess_risk(
         [
@@ -58,7 +58,7 @@ def test_multi_high_critical_amplifies():
     assert "multiple high/critical entities detected" in r.reasons
 
 
-def test_self_reference_amplification():
+def test_assess_risk_should_flag_gdpr_special_category_when_self_reference_amplifies():
     # self_reference + sensitive → +0.15
     r = assess_risk(
         [
@@ -70,7 +70,7 @@ def test_self_reference_amplification():
     assert r.gdpr_special_category is True
 
 
-def test_quasi_id_combo_single_bonus():
+def test_assess_risk_should_apply_quasi_identifier_bonus_only_once_when_multiple_combos_match():
     # date_of_birth+address+phone matches all three quasi-id combos but the break yields +0.1 once
     r = assess_risk(
         [
@@ -83,7 +83,7 @@ def test_quasi_id_combo_single_bonus():
     assert len(combo_reasons) == 1
 
 
-def test_cardinality_alone_does_not_trigger_art55():
+def test_assess_risk_should_not_trigger_art55_when_cardinality_alone_meets_threshold():
     # v0.8.10: the ≥3-entity cardinality Art.55 trigger was removed — Art.55 now
     # attaches only via sensitive-PI membership (the real Art.55(1) hook). Three
     # non-member entities must NOT surface Art.55.
@@ -97,7 +97,7 @@ def test_cardinality_alone_does_not_trigger_art55():
     assert "PIPL Art.55" not in r.pipl_articles
 
 
-def test_ethnicity_membership_crosses_high_to_critical():
+def test_assess_risk_should_cross_to_critical_when_ethnicity_membership_amplifies_self_reference():
     # ethnicity became a sensitive-PI member (Art.28 general clause). self_reference
     # is pinned at sensitivity 1 so the high(0.75)→critical(0.90) crossing is driven
     # PURELY by membership-fed self-ref amplification (+0.15), NOT the two-high-entity
@@ -113,7 +113,7 @@ def test_ethnicity_membership_crosses_high_to_critical():
     assert "self-reference amplification: PII directly linked to user" in r.reasons
 
 
-def test_criminal_record_is_gdpr_art10_not_art9():
+def test_assess_risk_should_classify_criminal_record_under_gdpr_art10_not_art9():
     # criminal_record moved out of GDPR Art.9 into the parallel, mutually exclusive
     # Art.10 regime. The value flows all the way to the wire projection.
     r = assess_risk([{"type": "criminal_record", "sensitivity": 3}])
@@ -122,7 +122,7 @@ def test_criminal_record_is_gdpr_art10_not_art9():
     assert risk_payload(r)["gdpr_art10"] is True
 
 
-def test_unregistered_type_skips_compliance():
+def test_assess_risk_should_skip_compliance_fields_when_type_is_unregistered():
     # arbitrary type name not in the registry → typedef None → no compliance, but
     # cardinality<3 so no Art.55; score still computed from sensitivity.
     r = assess_risk([{"type": "totally_made_up", "sensitivity": 2}])
@@ -131,7 +131,7 @@ def test_unregistered_type_skips_compliance():
     assert r.pipl_articles == ()
 
 
-def test_level_cutoff_high_no_amplification():
+def test_assess_risk_should_return_high_level_when_no_amplification_bonus_applies():
     r = assess_risk(
         [
             {"type": "phone", "sensitivity": 3},
@@ -143,7 +143,7 @@ def test_level_cutoff_high_no_amplification():
     assert r.level == "high"
 
 
-def test_level_cutoff_06_is_high():
+def test_assess_risk_should_return_high_level_when_score_lands_exactly_at_the_medium_high_cutoff():
     # base 0.5 (max sens 2) + 0.1 quasi-id combo {date_of_birth, address} = 0.6;
     # 0.6 is NOT < 0.6, so it maps to "high" (locks the medium/high cutoff edge).
     r = assess_risk(

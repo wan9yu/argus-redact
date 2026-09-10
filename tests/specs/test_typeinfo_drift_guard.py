@@ -37,7 +37,7 @@ _ALL_TYPE_NAMES = sorted({td.name for td in list_types()})
 
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
-def test_at_least_all_builtin_types_swept():
+def test_the_sweep_should_cover_at_least_all_builtin_types():
     """Sanity: the sweep covers the full registry, not a hardcoded handful."""
     # Locks the guard against silently shrinking to a trivial set.
     assert len(_ALL_TYPE_NAMES) >= 40, (
@@ -47,7 +47,7 @@ def test_at_least_all_builtin_types_swept():
 
 @pytest.mark.skipif(not HAS_CORE, reason="Rust core not available")
 @pytest.mark.parametrize("type_name", _ALL_TYPE_NAMES)
-def test_rust_fallback_table_matches_registry(type_name):
+def test_rust_fallback_table_should_match_the_registry(type_name):
     """For every built-in type, the Rust fallback table == registry-derived values.
 
     Calls `_core.build_type_info` with NO registry-defaults map so the Rust

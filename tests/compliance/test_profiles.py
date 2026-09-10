@@ -46,7 +46,7 @@ class TestTypeFiltering:
         assert any("110101" in v for v in values)
         assert not any("138" in v for v in values)
 
-    def test_types_and_types_exclude_are_mutually_exclusive(self):
+    def test_redact_should_reject_when_types_and_types_exclude_are_both_given(self):
         import pytest
 
         with pytest.raises(ValueError, match="mutually exclusive"):
@@ -77,7 +77,7 @@ class TestProfileStrategy:
         assert "zhang" not in redacted
         assert "example.com" not in redacted
 
-    def test_default_profile_still_uses_mask(self):
+    def test_redact_should_use_mask_strategy_when_no_profile_is_given(self):
         """Default profile keeps mask for usability."""
         text = "手机13812345678"
         redacted, key = redact(text, lang="zh", mode="fast")
@@ -105,7 +105,7 @@ class TestProfileStrategy:
 class TestStrictStrategyCoverage:
     """_STRICT_STRATEGIES must cover every mask-default type in the registry."""
 
-    def test_strict_strategies_covers_all_mask_default_types(self):
+    def test_strict_strategies_should_cover_every_mask_default_type(self):
         """Any type whose default strategy is 'mask' must have a non-leaky override
         in _STRICT_STRATEGIES — so compliance profiles never silently leave a
         partial-reveal mask in place.

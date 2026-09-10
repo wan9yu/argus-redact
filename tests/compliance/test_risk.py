@@ -129,7 +129,7 @@ class TestAssessRisk:
         )
         assert with_self.score > financial_only.score
 
-    def test_result_is_frozen_dataclass(self):
+    def test_assess_risk_should_return_a_riskresult_instance(self):
         result = assess_risk([])
         assert isinstance(result, RiskResult)
 
@@ -178,7 +178,7 @@ class TestComplianceMetadataFields:
         result = assess_risk([{"type": "qq", "sensitivity": 2}])
         assert result.hipaa_categories == ()
 
-    def test_empty_entities_have_empty_compliance_fields(self):
+    def test_assess_risk_should_return_empty_compliance_fields_when_no_entities(self):
         result = assess_risk([])
         assert result.gdpr_special_category is False
         assert result.hipaa_categories == ()

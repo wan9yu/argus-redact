@@ -40,7 +40,7 @@ def _quiet_low_entropy_salt():
         yield
 
 
-def test_compose_prompt_anchor_recipe_round_trips():
+def test_compose_prompt_anchor_recipe_should_round_trip():
     """docs/recipes/compose-prompt-anchor.md — Usage block."""
     text = "张三的电话13812345678"
     redacted, key = redact(text, names=["张三"], lang="zh", salt=42)
@@ -57,7 +57,7 @@ def test_compose_prompt_anchor_recipe_round_trips():
     assert anchor_obj.nonce not in restored  # nonce stripped on a clean pass
 
 
-def test_compose_prompt_anchor_recipe_fails_closed_without_the_nonce():
+def test_compose_prompt_anchor_recipe_should_fail_closed_when_the_reply_omits_the_nonce():
     """The guard the recipe now uses actually bites: a reply that dropped the nonce
     restores nothing (provenance failure), rather than silently substituting."""
     text = "张三的电话13812345678"
@@ -71,7 +71,7 @@ def test_compose_prompt_anchor_recipe_fails_closed_without_the_nonce():
     assert "13812345678" not in out  # fail-closed: original not reinserted
 
 
-def test_compose_expand_aliases_recipe_restores_a_retitled_name():
+def test_compose_expand_aliases_recipe_should_restore_a_retitled_name():
     """docs/recipes/compose-expand-aliases.md — Usage block."""
     text = "黄芳的电话13912345678"
     redacted, key = redact(text, names=["黄芳"], lang="zh", salt=42)
@@ -90,7 +90,7 @@ def test_compose_expand_aliases_recipe_restores_a_retitled_name():
     assert anchor_obj.nonce not in restored
 
 
-def test_writing_an_adapter_recipe_round_trips():
+def test_writing_an_adapter_recipe_should_round_trip():
     """docs/recipes/writing-an-adapter.md — the _pre_detected + guarded_restore flow."""
     register_pii_type(
         PIITypeDef(
@@ -121,7 +121,7 @@ def test_writing_an_adapter_recipe_round_trips():
         unregister("en", "employee_id")
 
 
-def test_local_cli_proxy_recipe_uses_the_guard_false_optout():
+def test_local_cli_proxy_recipe_should_restore_the_original_when_the_guard_is_disabled():
     """docs/recipes/local-cli-proxy.py — the streaming/per-chunk proxy has no
     per-exchange anchor, so it restores with guard=False (the documented opt-out).
     A bare guard=True restore with no anchor would fail closed and leave the chunk

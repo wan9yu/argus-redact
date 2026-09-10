@@ -14,32 +14,32 @@ from tests.cli.conftest import run_cli
 class TestParseStrategyOverride:
     """Direct unit tests on the _parse_strategy_override helper."""
 
-    def test_parse_basic_pair(self):
+    def test_parse_strategy_override_should_parse_comma_separated_pairs(self):
         from argus_redact.cli.main import _parse_strategy_override
 
         out = _parse_strategy_override("phone:realistic,address:remove")
         assert out == {"phone": "realistic", "address": "remove"}
 
-    def test_parse_empty_or_none(self):
+    def test_parse_strategy_override_should_return_none_when_input_is_empty_or_none(self):
         from argus_redact.cli.main import _parse_strategy_override
 
         assert _parse_strategy_override(None) is None
         assert _parse_strategy_override("") is None
 
-    def test_parse_extra_whitespace(self):
+    def test_parse_strategy_override_should_strip_whitespace_around_pairs(self):
         from argus_redact.cli.main import _parse_strategy_override
 
         out = _parse_strategy_override(" phone : realistic , address : remove ")
         assert out == {"phone": "realistic", "address": "remove"}
 
-    def test_parse_invalid_pair_no_colon_raises(self):
+    def test_parse_strategy_override_should_raise_value_error_when_pair_has_no_colon(self):
         from argus_redact.cli.main import _parse_strategy_override
 
         with pytest.raises(ValueError) as exc:
             _parse_strategy_override("phone")
         assert "phone" in str(exc.value)
 
-    def test_parse_empty_type_or_strategy_raises(self):
+    def test_parse_strategy_override_should_raise_value_error_when_type_or_strategy_is_empty(self):
         from argus_redact.cli.main import _parse_strategy_override
 
         with pytest.raises(ValueError):

@@ -37,7 +37,7 @@ _RESTORE_PLAINTEXT = re.compile(r"restore\([^)]*\)\s*(?:→|->)\s*plaintext")
 @pytest.mark.parametrize(
     "rel", ["docs/README.md", "docs/security-model.md", "docs/architecture.md"]
 )
-def test_no_bare_restore_returns_plaintext(rel):
+def test_docs_should_not_claim_bare_restore_returns_plaintext(rel):
     hits = _RESTORE_PLAINTEXT.findall(_read(rel))
     assert not hits, (
         f"{rel} still claims `restore(...) -> plaintext`; since v0.8.0 a bare restore "
@@ -55,14 +55,14 @@ _PURE_STRING = re.compile(r"pure string replacement", re.IGNORECASE)
 @pytest.mark.parametrize(
     "rel", ["docs/architecture.md", "docs/performance.md", "docs/api-reference.md"]
 )
-def test_no_pure_string_replacement_claim(rel):
+def test_docs_should_not_claim_restore_is_pure_string_replacement(rel):
     assert not _PURE_STRING.search(_read(rel)), (
         f"{rel} calls restore() 'pure string replacement', which omits the guard. "
         "Annotate restore as guarded-by-default (v0.8.0+)."
     )
 
 
-def test_performance_rust_primitive_string_replacement_line_is_kept():
+def test_performance_doc_should_keep_the_rust_primitive_string_replacement_line():
     # Non-vacuity guard for the anchor above: the accurate Rust-primitive row that
     # legitimately says 'string replacement' (no 'pure') must survive the ban.
     perf = _read("docs/performance.md")
@@ -74,7 +74,7 @@ def test_performance_rust_primitive_string_replacement_line_is_kept():
 _ARCH = "docs/architecture.md"
 
 
-def test_layer3_default_is_qwen3_8b_not_qwen25_3b():
+def test_architecture_doc_should_mark_qwen3_8b_as_the_layer3_default():
     arch = _read(_ARCH)
     assert not re.search(r"qwen2\.5:3b\*\*\s*\(default\)", arch), (
         "architecture.md still marks qwen2.5:3b as the Layer-3 default; the real "
@@ -87,7 +87,7 @@ def test_layer3_default_is_qwen3_8b_not_qwen25_3b():
     assert "qwen2.5:3b" in arch
 
 
-def test_layer3_backend_is_ollama_not_llama_cpp():
+def test_architecture_doc_should_not_claim_layer3_runs_via_llama_cpp():
     arch = _read(_ARCH)
     assert "llama.cpp" not in arch, (
         "architecture.md says Layer 3 runs via llama.cpp; it runs via Ollama "
@@ -96,7 +96,7 @@ def test_layer3_backend_is_ollama_not_llama_cpp():
 
 
 # --- D8: the PII-leak claim is scoped, not an unscoped absolute -----------------
-def test_no_unscoped_pii_leak_absolute():
+def test_sensitive_info_doc_should_not_claim_unscoped_pii_leak_zero_percent():
     si = _read("docs/sensitive-info.md")
     assert "PII leak 0%" not in si, (
         "sensitive-info.md states an unscoped 'PII leak 0%'. Scope it to the PRvL "
@@ -131,14 +131,14 @@ def _defined_reason_codes() -> set[str]:
     }
 
 
-def test_nine_reason_codes_defined():
+def test_reason_codes_should_number_nine():
     assert len(_defined_reason_codes()) == 9, (
         "The reason-code vocabulary changed; update the api-reference guard docs and "
         "this gate's restore-surface set."
     )
 
 
-def test_restore_surface_codes_are_defined_and_documented():
+def test_restore_surface_codes_should_be_defined_and_documented():
     defined = _defined_reason_codes()
     api = _read("docs/api-reference.md")
     for code in _RESTORE_SURFACE_CODES:

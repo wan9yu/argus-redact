@@ -21,7 +21,7 @@ from tests.cli.conftest import run_cli
 
 
 class TestNonObjectKeyFile:
-    def test_redact_rejects_array_key_file_and_leaves_it_intact(self, tmp_path):
+    def test_redact_should_reject_and_preserve_the_key_file_when_it_is_a_json_array(self, tmp_path):
         key_file = tmp_path / "L.json"
         original = "[1, 2, 3]"
         key_file.write_text(original, encoding="utf-8")
@@ -36,7 +36,7 @@ class TestNonObjectKeyFile:
         # The operator's file must survive a rejected run.
         assert json.loads(key_file.read_text(encoding="utf-8")) == [1, 2, 3]
 
-    def test_restore_rejects_array_key_file_cleanly(self, tmp_path):
+    def test_restore_should_reject_the_key_file_cleanly_when_it_is_a_json_array(self, tmp_path):
         key_file = tmp_path / "list.json"
         key_file.write_text("[1, 2, 3]", encoding="utf-8")
 
@@ -46,7 +46,7 @@ class TestNonObjectKeyFile:
         assert "Error:" in stderr
         assert "Traceback" not in stderr
 
-    def test_redact_still_accepts_a_real_existing_key_file(self, tmp_path):
+    def test_redact_should_still_merge_the_key_file_when_it_is_a_json_object(self, tmp_path):
         """Positive control — the object case must keep merging."""
         key_file = tmp_path / "k.json"
         key_file.write_text(
@@ -63,7 +63,7 @@ class TestNonObjectKeyFile:
 
 
 class TestDirectoryAsInput:
-    def test_redact_directory_input_gives_clean_error(self, tmp_path):
+    def test_redact_should_fail_cleanly_when_the_input_path_is_a_directory(self, tmp_path):
         adir = tmp_path / "adir"
         adir.mkdir()
         key_file = tmp_path / "k.json"
@@ -74,7 +74,7 @@ class TestDirectoryAsInput:
         assert "Error:" in stderr
         assert "Traceback" not in stderr
 
-    def test_restore_directory_input_gives_clean_error(self, tmp_path):
+    def test_restore_should_fail_cleanly_when_the_input_path_is_a_directory(self, tmp_path):
         adir = tmp_path / "adir"
         adir.mkdir()
         key_file = tmp_path / "k.json"

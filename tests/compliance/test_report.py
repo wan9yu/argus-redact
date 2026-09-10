@@ -54,12 +54,12 @@ class TestRedactReport:
         assert report.risk.level == "none"
         assert len(report.entities) == 0
 
-    def test_report_has_residual_personal_data_true_for_pseudonym(self):
+    def test_report_should_have_residual_personal_data_true_when_pseudonym_strategy_is_used(self):
         # person entity uses pseudonym strategy by default → residual_personal_data=True
         report = redact("姓名张伟", lang="zh", mode="fast", report=True)
         assert report.residual_personal_data is True
 
-    def test_report_has_residual_personal_data_true_when_all_masked(self):
+    def test_report_should_have_residual_personal_data_true_when_mask_strategy_is_used(self):
         # mask writes surrogate->original into report.key (e.g.
         # {'138****5678': '13812345678'}); restore() can recover the
         # original from that key, so the output is still personal data
@@ -73,7 +73,7 @@ class TestRedactReport:
         )
         assert report.residual_personal_data is True
 
-    def test_report_has_residual_personal_data_true_when_kept(self):
+    def test_report_should_have_residual_personal_data_true_when_keep_strategy_is_used(self):
         # keep leaves the original value verbatim in the output — no key
         # needed for it to still be personal data.
         report = redact(
@@ -85,12 +85,12 @@ class TestRedactReport:
         )
         assert report.residual_personal_data is True
 
-    def test_report_has_residual_personal_data_false_when_nothing_detected(self):
+    def test_report_should_have_residual_personal_data_false_when_nothing_detected(self):
         report = redact("今天天气不错", lang="zh", mode="fast", report=True)
         assert len(report.entities) == 0
         assert report.residual_personal_data is False
 
-    def test_report_residual_personal_data_key_actually_reverses_mask(self):
+    def test_report_residual_personal_data_key_should_reverse_the_mask_output(self):
         # Decisive proof: the flag is True *because* the retained key really
         # does reverse the mask output back to the original.
         from argus_redact import restore
@@ -106,11 +106,11 @@ class TestRedactReport:
         assert report.residual_personal_data is True
         assert restore(report.redacted_text, report.key, guard=False) == text
 
-    def test_report_security_events_empty_when_no_keep_misconfig(self):
+    def test_report_security_events_should_be_empty_when_no_keep_misconfig(self):
         report = redact("手机13812345678", lang="zh", mode="fast", report=True)
         assert report.security_events == ()
 
-    def test_report_security_events_carries_keep_downgraded(self):
+    def test_report_security_events_should_include_keep_downgraded_when_keep_strategy_is_used(self):
         report = redact(
             "卡号4111111111111111",
             lang="zh",
@@ -118,6 +118,7 @@ class TestRedactReport:
             report=True,
             config={"bank_card": {"strategy": "keep"}},
         )
+
         codes = [e["reason_code"] for e in report.security_events]
         assert "keep_downgraded" in codes
         # PII-free: no raw card digits anywhere in the events
