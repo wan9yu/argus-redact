@@ -23,7 +23,7 @@
 //! The KDF-replay unit tests below are the proof: they assert the Rust stream
 //! reproduces sequences frozen from current Python, byte for byte.
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 use sha3::{
     digest::{ExtendableOutput, Update, XofReader},

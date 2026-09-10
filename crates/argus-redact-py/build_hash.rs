@@ -93,7 +93,11 @@ fn hash_keyed(mut items: Vec<(&str, &[u8])>) -> String {
         h.update(b"\0");
         h.update(content);
     }
-    format!("{:x}", h.finalize())
+    // Lowercase, zero-padded, two-hex-digits-per-byte, in digest order — the
+    // exact bytes `format!("{:x}", …)` produced under generic-array's LowerHex
+    // (digest 0.11's `Array` no longer impls LowerHex). Kept manual so the baked
+    // source-hash string is byte-for-byte stable across the crypto crate bump.
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect::<String>()
 }
 
 /// Hashes an in-memory (relpath, content) set with the canonical recipe, used
