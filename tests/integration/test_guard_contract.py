@@ -189,7 +189,7 @@ def test_restore_should_fail_closed_when_strict_is_true(name):
     call, injected = ADAPTERS[name]()
     with pytest.raises(RestoreGuardError) as ei:
         call(injected, strict=True)
-    # Assert the exception came from the H layer specifically. A missing/mismatched
+    # The raised error must come from the H layer specifically. A missing/mismatched
     # nonce also raises RestoreGuardError (from P), which would make this test pass
     # even if H had stopped firing entirely — a false pass this must rule out.
     assert any(e["reason_code"] == "injection_suspected" for e in ei.value.events)

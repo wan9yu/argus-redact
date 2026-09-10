@@ -147,6 +147,7 @@ def test_rust_faces_should_route_through_the_finalize_chokepoint():
     """
     for rel in _CHOKEPOINT_ROUTERS:
         source = (_ROOT / rel).read_text(encoding="utf-8")
+
         assert _CHOKEPOINT_CALL in source, (
             f"{rel} no longer calls {_CHOKEPOINT_CALL!r} — it must route its "
             f"post-merge merge/filter/restore through the shared "
@@ -172,6 +173,7 @@ def test_pseudonym_llm_should_delegate_instead_of_copying_the_pipeline():
         f"grew its own merge-then-drop block again, add it to _PIPELINES and "
         f"_KNOWN_ANCHOR_COUNTS so the restorer check covers it."
     )
+
     assert "merge_entities(" not in source, (
         f"{_DELEGATOR} calls merge_entities directly — it has grown a pipeline "
         f"of its own again. Either delegate to _pre_detected_pipeline, or add "
@@ -188,12 +190,14 @@ def test_the_pipeline_list_should_still_cover_all_known_sites():
     by_file: dict[str, int] = {}
     for rel, _anchor in _PIPELINES:
         by_file[rel] = by_file.get(rel, 0) + 1
+
     assert by_file == _KNOWN_ANCHOR_COUNTS, (
         f"_PIPELINES carries {by_file} anchor(s) per file, expected "
         f"{_KNOWN_ANCHOR_COUNTS} — an entry was silently deleted (fix: restore "
         f"it), or a new pipeline was added (fix: add it to _KNOWN_ANCHOR_COUNTS "
         f"too, deliberately, not as a side effect)."
     )
+
     assert set(_CHOKEPOINT_ROUTERS) == {
         "crates/argus-redact-core/src/redact_l1.rs",
         "crates/argus-redact-core/src/streaming.rs",

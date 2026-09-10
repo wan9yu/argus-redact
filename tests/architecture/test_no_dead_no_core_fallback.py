@@ -18,4 +18,5 @@ def test_pure_modules_should_have_no_core_fallback_branches():
                     offenders.append(f"{p.name}:{node.lineno} if HAS_CORE/else fallback")
                 if test_src.strip() == "not HAS_CORE":
                     offenders.append(f"{p.name}:{node.lineno} if not HAS_CORE")
+
     assert not offenders, f"dead no-core fallback branches remain: {offenders}"

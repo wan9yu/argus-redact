@@ -54,6 +54,7 @@ def test_import_argus_redact_should_succeed_and_resolve_structured_names():
         capture_output=True,
         text=True,
     )
+
     assert result.returncode == 0, f"fresh `import argus_redact` failed:\n{result.stderr}"
 
 

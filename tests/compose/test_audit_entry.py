@@ -36,6 +36,7 @@ def test_entry_should_survive_a_to_dict_from_dict_roundtrip():
         prev_hash="",
         entry_hash="deadbeef",
     )
+
     d = e.to_dict()
     assert isinstance(d["security_events"], list)  # tuple -> list for JSON
     assert AuditEntry.from_dict(d) == e  # frozen dataclass __eq__; tuple restored

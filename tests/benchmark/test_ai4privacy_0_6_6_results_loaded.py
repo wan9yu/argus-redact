@@ -23,6 +23,7 @@ def test_result_file_should_match_the_expected_schema():
     assert data["samples"] == 500
     assert "modes" in data
     assert set(data["modes"]) >= {"fast", "ner"}, "fast and ner modes are mandatory"
+
     for mode, vals in data["modes"].items():
         assert set(vals) >= {"precision", "recall", "f1"}, f"mode {mode!r} missing required fields"
         for k, v in vals.items():

@@ -628,6 +628,7 @@ class TestCheckpointMidPII:
         chunk1, chunk2 = pad + head, "d.com stop."
         assert len(chunk1) == DEFAULT_MAX_BUFFER  # precondition: chunk1 forces a flush
         baseline, _ = _stream([chunk1, chunk2], lang="en")
+
         resumed = self._checkpoint_stream(chunk1, chunk2, lang="en")
         assert "a@bcd.com" not in resumed, (
             f"raw email leaked across the checkpoint seam: {resumed[-40:]!r}"

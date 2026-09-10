@@ -149,6 +149,7 @@ class TestHIPAACategories:
         # Sanity check: the most important HIPAA categories must have at
         # least one type mapping to them.
         all_categories = {td.hipaa_phi_category for td in list_types() if td.hipaa_phi_category}
+
         for required in (
             "names",
             "phone_numbers",

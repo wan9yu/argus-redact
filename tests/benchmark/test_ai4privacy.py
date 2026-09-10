@@ -102,6 +102,7 @@ class TestAi4PrivacyBenchmark:
         print(f"  Recall:    {r['recall']:.2%}")
         print(f"  F1:        {r['f1']:.2%}")
         print(f"  TP={r['tp']} FP={r['fp']} FN={r['fn']}")
+
         for etype, c in r["per_type"].items():
             total_p = c["tp"] + c["fp"]
             total_r = c["tp"] + c["fn"]

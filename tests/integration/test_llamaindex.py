@@ -154,7 +154,7 @@ class TestRedactTransformLock:
             # lock A holds and is still alive after the wait. Either
             # outcome resolves well within this bound — no result depends
             # on the exact wall-clock split, only on which branch B is in
-            # when A is released below.
+            # once A is released below.
             thread_b.join(timeout=0.5)
 
             release.set()

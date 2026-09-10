@@ -99,6 +99,7 @@ def test_the_overclaim_guard_should_not_be_vacuous():
     assert _unqualified_claims("Full HK / TW / Macau ID coverage out of the box."), (
         "guard failed to catch an unqualified English umbrella claim"
     )
+
     # A scoped umbrella claim must pass (no false positive on honest docs).
     assert not _unqualified_claims("港澳台证件全覆盖（暂未覆盖部分边缘情况，见路线图）。"), (
         "guard false-flagged a properly-scoped Chinese claim"

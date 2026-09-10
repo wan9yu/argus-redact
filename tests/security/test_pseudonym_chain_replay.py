@@ -122,6 +122,7 @@ def test_kdf_chain_should_stay_deterministic(salt, input_text, target_value, lan
     result = redact_pseudonym_llm(input_text, salt=salt, lang=lang)
     inverted = {v: k for k, v in result.key.items()}
     actual = inverted.get(target_value)
+
     assert actual == expected, (
         f"KDF derivation changed for ({target_value!r}, {lang}, {etype}).\n"
         f"  expected: {expected!r}\n"
