@@ -2,6 +2,46 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.18 — dependency currency, dead-code removal, and build/test hygiene
+
+An internal-hardening release with no change to redaction output. The RustCrypto
+stack and other dependencies are brought current (byte-for-byte identical
+output), confirmed-dead code is removed, the pure layer is made truly
+filesystem-free, and the Dockerfiles are repaired for the Rust/maturin build.
+
+### Changed
+
+- **Dependencies brought current, output unchanged.** sha2 0.11 / sha3 0.11 /
+  hmac 0.13 (the digest-0.11 family), ron 0.12, base64 0.23, and fancy-regex
+  0.19. SHA-256 / HMAC-SHA256 / SHAKE-256 are unchanged algorithms, so every
+  pseudonym and realistic fake is byte-for-byte identical to v0.8.17 (verified by
+  a fixed-salt golden). sha3 is held at 0.11 rather than 0.12 because 0.12 moves
+  the SHAKE types to a separate pre-1.0 crate the pseudonym KDF should not depend
+  on.
+- **Dead code removed from the crates.io surface.** The unused
+  `ReplaceSession::into_key` method is removed from `argus-redact-core`, and two
+  unused Python-facing bindings (the `restore_grammar_en` wrapper and the
+  `PRESET_MARKER_CHARS` constant) are dropped; their live in-core counterparts
+  remain.
+
+### Fixed
+
+- **The pure layer no longer performs filesystem syscalls.** Warning attribution
+  in `pure/` resolved paths with `os.path.realpath` (an `lstat` at import and on
+  the restore-warning path); it now uses syscall-free string operations, so the
+  deterministic in-memory layer touches no filesystem. A strengthened
+  layer-purity gate enforces this going forward.
+- **The Dockerfiles build again.** Both predated the Rust migration and could no
+  longer build; they are rewritten as two-stage maturin builds — a Rust build
+  stage that produces the wheel, then a Rust-free runtime image that installs it.
+
+### Internal
+
+- The test suite adopts a BDD naming convention
+  (`subject_should_outcome_when_scenario`), locked by an invariant so it cannot
+  rot; the `docs/known-issues.md` "Recently Fixed" log is deduplicated against
+  this CHANGELOG; and stale roadmap markers were retired.
+
 ## v0.8.17 — availability hardening and stricter input validation
 
 A hardening release with no change to redaction output on well-formed input. Two

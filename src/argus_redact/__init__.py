@@ -1,6 +1,6 @@
 """argus-redact: Encrypt PII, not meaning. Locally."""
 
-__version__ = "0.8.17"
+__version__ = "0.8.18"
 
 from argus_redact import layers
 from argus_redact._metadata import (
