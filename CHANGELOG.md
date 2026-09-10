@@ -2,6 +2,61 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.17 — availability hardening and stricter input validation
+
+A hardening release with no change to redaction output on well-formed input. Two
+detection paths that adversarial input could drive super-linear are now linear, a
+per-cell code scan that could be driven quadratic is now capped, and an
+in-document code collision that risked a wrong-identity restore is closed — all
+byte-for-byte identical to v0.8.16 on every input. Separately, malformed requests
+now fail loudly (a 4xx or a `ValueError`) instead of being silently accepted. No
+API change.
+
+### Fixed
+
+- **In-document code scan no longer scales quadratically.** A cell that carried a
+  long code-shaped token (`<PREFIX>-` followed by a long digit run) made the
+  reserved-code scan allocate memory quadratic in the run length — a per-cell CPU
+  and memory cost reachable through any `redact()` call, including over HTTP. The
+  scan now reserves only the prefix widths a minted code can actually take (a code
+  number is a `u32`, so at most ten digits), which is byte-identical on every
+  input and linear in the length of the cell.
+
+- **Person-proximity scoring and Chinese address absorption are now linear.** Two
+  Layer-1 paths that were super-linear on entity-dense adversarial input — the
+  person-evidence proximity scan and the Chinese multi-level address absorption
+  walk — were rewritten to run in linear time. Output is byte-for-byte identical
+  to before; deterministic operation-count tests guard against regression.
+
+- **A code already present in the input is never re-minted.** If a document
+  literally contained a token shaped like the codes argus mints (for example a
+  stray `P-83811`), a freshly minted pseudonym or removal code could collide with
+  it, and a later restore could rewrite the wrong occurrence. Such in-document
+  codes are now reserved before minting, so a fresh code never reuses one.
+
+- **CSV field-size limit is set atomically.** `redact_csv` raised a process-global
+  CSV field-size limit around each parse and restored it afterwards; concurrent
+  calls could race on that global. The raise and restore are now serialized.
+
+### Changed
+
+- **Malformed requests are rejected instead of silently ignored.** `redact_json`
+  and `redact_csv` now reject empty or structurally-empty path selectors; a
+  pre-detected span with an out-of-range or inverted offset is rejected; an
+  unrecognized `mode` is rejected; excessively nested request bodies are bounded;
+  and a `RecursionError` from pathological nesting is reported as a client error
+  (4xx) rather than a server error. Unknown per-type configuration settings keys
+  and restore alias collisions now emit a warning instead of being dropped
+  silently.
+
+### Internal
+
+- The compiled extension now carries a version and source-hash build-provenance
+  stamp; the performance budget is re-checked at the release tag; optional-
+  dependency and workflow pins were tightened; and a reachability check reports
+  tests that are collected but execute on no CI leg (report-only for now, tracked
+  in `docs/known-issues.md`).
+
 ## v0.8.16 — zh organization / school false-positive fix
 
 A precision fix for Chinese Layer 1 detection: ordinary business / education prose that
