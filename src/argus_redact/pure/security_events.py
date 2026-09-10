@@ -68,15 +68,18 @@ _WITHHELD_CODES = frozenset({PROVENANCE_FAILED, GUARD_NO_ANCHOR, OUT_OF_SCOPE_PS
 # the stack — see `_auto_stacklevel` below. The trailing separator prevents a
 # sibling directory with a matching prefix (e.g. `argus_redact_extra`) from
 # being mistaken for a frame inside this package.
-_PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__))) + os.sep
+#
+# Deliberately syscall-free: os.path.dirname and os.sep are pure string
+# operations — no stat-family call touches the filesystem, unlike the
+# canonicalizing helper this used to call. The pure layer must do no
+# filesystem I/O — see docs/architecture.md's Purity Architecture section. On
+# a symlinked source tree this can differ from the canonicalized path; that
+# only affects which exact frame a warning is attributed to (cosmetic), never
+# correctness or security.
+_PACKAGE_DIR = os.path.dirname(os.path.dirname(__file__)) + os.sep
 
 # Stacklevel used when the walk below cannot find a frame outside the package.
 _FALLBACK_STACKLEVEL = 3
-
-# ``os.path.realpath`` is syscall-heavy (an lstat per path component) and the walk
-# runs it once per frame, on every bare restore() — ~30% of the call. The set of
-# ``co_filename`` values is small, fixed and interned, so memoise it.
-_REALPATH_CACHE: dict[str, str] = {}
 
 
 def _auto_stacklevel() -> int:
@@ -109,10 +112,7 @@ def _auto_stacklevel() -> int:
         # warning path over an attribution nicety.
         return _FALLBACK_STACKLEVEL
     while frame is not None:
-        co_filename = frame.f_code.co_filename
-        filename = _REALPATH_CACHE.get(co_filename)
-        if filename is None:
-            filename = _REALPATH_CACHE.setdefault(co_filename, os.path.realpath(co_filename))
+        filename = frame.f_code.co_filename
         if not filename.startswith(_PACKAGE_DIR):
             return level
         frame = frame.f_back

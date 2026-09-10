@@ -465,9 +465,12 @@ restored_text ←─────────────────────
 
 Not all parts of argus-redact are equal. The codebase is structured into three layers by purity — this drives the testing strategy and the future Rust rewrite boundary.
 
+"Pure" means no filesystem, network, subprocess, or higher-layer (glue/impure/integrations) access, and output depending only on arguments — not the absence of all effects; two effects are explicitly permitted because they are the primitive's documented advisory contract and mutate no external state: (1) diagnostic emission via `warnings.warn` and the `logging` module (PII-free, reason-codes only); (2) syscall-free stdlib introspection to attribute those diagnostics — `os.path` string helpers (`dirname`/`normpath`/`sep`, which never touch the filesystem) and `sys._getframe`. Filesystem-touching os calls (`realpath`/`abspath`/`stat`/`getcwd`/`open`/`listdir`/…), `os.environ`/`os.getenv`, pathlib filesystem methods, `io`/`socket`/`subprocess`, and all network clients remain forbidden.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Pure Functions (deterministic, no side effects)            │
+│  Pure Functions (deterministic, in-memory transforms;       │
+│  no filesystem / network / subprocess / higher-layer I/O)   │
 │  → Unit testable, exact assertions, sub-ms                  │
 │  → Rust rewrite candidates                                  │
 │                                                             │
