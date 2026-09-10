@@ -358,11 +358,6 @@ impl<'f, F: PseudoFactory> ReplaceSession<'f, F> {
         &self.result_key
     }
 
-    /// Consume the session, returning the accumulated replacement → original key.
-    pub fn into_key(self) -> HashMap<String, String> {
-        self.result_key
-    }
-
     /// `resolve_collision` for a mask-family label, recording the collision (by
     /// entity type) when a real disambiguation happened. The mask / name_mask /
     /// landline_mask / category arms all need this exact pair.

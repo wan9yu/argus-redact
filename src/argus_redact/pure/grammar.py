@@ -19,8 +19,3 @@ def normalize_grammar_en(text: str, originals: list[str]) -> str:
     path passes just that cell's originals (the cumulative key's extras are no-ops
     on this cell's text, so passing them would only re-marshal a growing key)."""
     return _core.normalize_grammar_en(text, originals)
-
-
-def restore_grammar_en(text: str) -> str:
-    """Reverse grammar normalization after restore."""
-    return _core.restore_grammar_en(text)

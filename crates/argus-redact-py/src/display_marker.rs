@@ -4,7 +4,6 @@ use argus_redact_core::{
     mark_for_display as core_mark,
     strip_display_markers as core_strip,
     resolve_marker as core_resolve,
-    PRESET_MARKER_CHARS,
 };
 
 /// Append `marker` after each fake value (element of `key_fakes`) in `text`.
@@ -25,10 +24,4 @@ pub fn strip_display_markers(text: &str, marker: Option<String>) -> String {
 #[pyfunction]
 pub fn resolve_marker(marker: Option<String>) -> String {
     core_resolve(marker.as_deref())
-}
-
-/// Characters that may appear in any preset marker label.
-#[pyfunction]
-pub fn preset_marker_chars() -> Vec<char> {
-    PRESET_MARKER_CHARS.clone()
 }
