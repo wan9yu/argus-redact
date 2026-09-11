@@ -166,10 +166,15 @@ fn get_prefilter(pattern: &str) -> Option<Arc<Regex>> {
     built
 }
 
-// Context words before a number that suggest it's NOT PII
+// Context words before a number that suggest it's NOT PII. The Latin words carry
+// a left boundary `(?:^|[^A-Za-z0-9])` so a short window ending in an unrelated
+// word that merely ENDS in one of them does not falsely suppress — e.g. `ver` no
+// longer fires on `driver`/`server`/`however`. The CJK words take no boundary:
+// `\b`/`[^A-Za-z]` are meaningless between CJK scalars (all are `\w`), and CJK is
+// not written with intra-word Latin letters, so a bare match is correct there.
 static FALSE_POSITIVE_PREFIX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"(?i)(?:version|ver|v\.|order\s*#|product\s*code|serial\s*#|isbn|sku|calculate|计算|订单号|编号|版本|序列号)\s*$"
+        r"(?i)(?:(?:^|[^A-Za-z0-9])(?:version|ver|v\.|order\s*#|product\s*code|serial\s*#|isbn|sku|calculate)|计算|订单号|编号|版本|序列号)\s*$"
     ).unwrap()
 });
 
@@ -481,6 +486,33 @@ mod tests {
         assert_eq!(out[0].confidence, 0.3, "surfaced as a near-miss, not a confidence-1.0 redaction");
         assert_eq!(out[0].text, "123");
     }
+    #[test]
+    fn latin_fp_prefix_should_require_a_word_boundary() {
+        let phone_ctx = || PatternConfig {
+            type_: "phone".into(),
+            pattern: r"\d{3}".into(),
+            check_context: true,
+            group: None,
+            validator: None,
+        };
+
+        // Ordinary words that merely END in a trigger substring must NOT suppress:
+        // `driver`/`server`/`however` end in `ver` but are not `ver`.
+        for text in ["driver 123", "the server 123", "however 123", "xver 123"] {
+            let out = match_patterns(text, &[phone_ctx()]).unwrap();
+            assert_eq!(out.len(), 1, "{text}: match dropped");
+            assert_eq!(out[0].confidence, 1.0, "{text}: falsely suppressed by a ver substring");
+        }
+
+        // Real prefixes still suppress: standalone Latin trigger (word-bounded) and
+        // every CJK trigger (no boundary needed).
+        for text in ["version 123", "ver 123", "calculate 123", "订单号123", "编号123"] {
+            let out = match_patterns(text, &[phone_ctx()]).unwrap();
+            assert_eq!(out.len(), 1, "{text}: near-miss dropped");
+            assert_eq!(out[0].confidence, 0.3, "{text}: real FP prefix should suppress");
+        }
+    }
+
     #[test]
     fn check_context_suppresses_near_miss() {
         // 订单号 is a FALSE_POSITIVE_PREFIX trigger. The ssn validator FAILS on
