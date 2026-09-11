@@ -368,12 +368,12 @@ pub fn detect_l1_cancellable(
     //     the byte-identical normalize goldens). Candidates run one-at-a-time and
     //     drop before the next, so no more than one alternate view is alive.
     if let Some((chars, omap)) = &core {
-        // Discover the ambiguity ONCE (O(n), capped at MAX_FANOUT_POSITIONS) and the
-        // fusion candidate ONCE (O(n), None with no allocation when there is no
-        // stripped-invisible-between-digits gap). The overwhelmingly common path —
-        // text that normalized but carries no digit ambiguity, e.g. fullwidth
-        // punctuation only — then does zero extra detection work.
-        let (positions, truncated) = fanout::ambiguous_positions(chars);
+        // Discover the ambiguity ONCE (O(n); the FULL position list plus an
+        // over-cap flag) and the fusion candidate ONCE (O(n), None with no
+        // allocation when there is no stripped-invisible-between-digits gap). The
+        // overwhelmingly common path — text that normalized but carries no digit
+        // ambiguity, e.g. fullwidth punctuation only — then does zero extra work.
+        let (positions, over_cap) = fanout::ambiguous_positions(chars);
         let fusion = fanout::fusion_boundary_variant(chars, omap);
         if !positions.is_empty() || fusion.is_some() {
             // Everything below is bounded to LINEAR total cost:
@@ -440,9 +440,11 @@ pub fn detect_l1_cancellable(
             };
 
             if !positions.is_empty() {
-                // (a) fold-all: every homograph read as part of the number. Kept as a
-                //     mutable buffer so the keep-variant loop below can reuse it as
-                //     scratch instead of re-cloning `chars` and re-folding per call.
+                // (a) fold-all extreme: EVERY ambiguous glyph (the full, uncapped
+                //     `positions` list) read as part of the number, so a run of dozens
+                //     of exotic digits is fully recovered. Kept as a mutable buffer so
+                //     the keep-variant loop below can reuse it as scratch instead of
+                //     re-cloning `chars` and re-folding per call.
                 let mut fold_all_chars = fanout::fold_all_variant(chars, &positions);
                 let fold_all_text: String = fold_all_chars.iter().collect();
                 union_candidate(
@@ -452,16 +454,19 @@ pub fn detect_l1_cancellable(
                     &fold_all_text,
                     omap,
                 )?;
-                // (b) one keep-variant per ambiguous position: that position held as a
-                //     boundary while the rest fold (edge exotic, mixed interior+edge run).
-                for &pos in &positions {
+                // (b) one keep-variant per ambiguous position, CAPPED at
+                //     MAX_FANOUT_POSITIONS: that position held as a boundary while the
+                //     rest fold (edge exotic, mixed interior+edge run). The cap bounds
+                //     the keep-variant count; the two uncapped extremes (a) and (c)
+                //     cover a longer list.
+                for &pos in positions.iter().take(fanout::MAX_FANOUT_POSITIONS) {
                     let keep_text = fanout::keep_variant_text(chars, &mut fold_all_chars, pos);
                     union_candidate(&mut layer1, &mut seen, &mut orig_chars, &keep_text, omap)?;
                 }
-                // (c) cap fail-safe: if the ambiguity was truncated to the cap, also try
-                //     the all-keep extreme (nothing folded) so a run bounded by exotics
-                //     on both ends past the cap is still reachable.
-                if truncated {
+                // (c) all-keep extreme: when the list exceeded the cap, also try the
+                //     nothing-folded reading so a run bounded by exotics on both ends
+                //     past the cap is still reachable.
+                if over_cap {
                     let all_keep_text: String = chars.iter().collect();
                     union_candidate(
                         &mut layer1,

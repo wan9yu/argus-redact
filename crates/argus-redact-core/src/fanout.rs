@@ -34,16 +34,22 @@
 //! there is nothing for it to fuse with, so there is only one admissible
 //! reading and no fan-out is generated.
 use crate::normalize::{
-    cn_digit, is_digit_sep, is_nfkc_digit_yielding_non_decimal, is_plain_digit_char,
+    cn_digit, digit_value, is_digit_sep, is_nfkc_digit_yielding_non_decimal, is_plain_digit_char,
 };
-use unicode_normalization::UnicodeNormalization;
 
-/// Hard cap on how many ambiguous positions a single call will report / fan out
-/// over. Real tokens carry 0–1 ambiguous positions; this bounds the pathological
-/// case (an adversarial run of dozens of exotic glyphs) to at most
-/// `2^MAX_FANOUT_POSITIONS` candidates downstream. Beyond the cap, the caller
-/// falls back to the two all-fold / all-keep extremes (still cannot leak) —
-/// that fallback is wired in the caller, not here.
+/// Hard cap on how many ambiguous positions the caller fans out over with a
+/// per-position KEEP variant. Real tokens carry 0–1 ambiguous positions; this
+/// bounds the pathological case (an adversarial run of dozens of exotic glyphs)
+/// to at most `2^MAX_FANOUT_POSITIONS` keep-variant candidates downstream.
+///
+/// [`ambiguous_positions`] returns the FULL (untruncated) position list plus a
+/// flag saying it exceeded this cap; the caller uses the full list to build the
+/// two uncapped extremes — a single all-fold candidate (every ambiguous glyph
+/// read into the number) and the all-keep candidate — and caps only the
+/// per-position keep-variants at this constant. So a run of dozens of exotic
+/// digits is still fully recovered by the all-fold extreme (an earlier cut of
+/// this code folded only the first `MAX_FANOUT_POSITIONS`, leaving the rest of
+/// the number un-normalized and detectable — a leak, not merely a missed recall).
 pub(crate) const MAX_FANOUT_POSITIONS: usize = 4;
 
 /// A digit-ish char for the purpose of anchoring/continuing a run: a genuine
@@ -56,12 +62,11 @@ fn is_run_anchor(c: char) -> bool {
     is_nfkc_digit_yielding_non_decimal(c) || is_plain_digit_char(c)
 }
 
-/// Indices of ambiguous positions in `chars`, ascending, capped at
-/// [`MAX_FANOUT_POSITIONS`] (the first ones encountered, left to right), plus
-/// whether the cap actually truncated a longer list. A caller cannot tell
-/// "exactly [`MAX_FANOUT_POSITIONS`] ambiguous positions" from "more existed
-/// and got cut off" from the `Vec` length alone, so the second element is the
-/// real signal for that distinction.
+/// The FULL list of ambiguous position indices in `chars`, ascending, plus
+/// whether it exceeds [`MAX_FANOUT_POSITIONS`]. The list is NOT truncated — the
+/// caller folds the whole list into its one all-fold extreme and caps only the
+/// per-position keep-variants (see [`MAX_FANOUT_POSITIONS`]). The bool is the
+/// caller's signal to apply that cap and add the all-keep extreme.
 ///
 /// See the module docs for exactly what counts as ambiguous. `chars` is the
 /// `normalize_core` intermediate (post invisible-strip / accent-fold /
@@ -80,10 +85,25 @@ pub(crate) fn ambiguous_positions(chars: &[char]) -> (Vec<usize>, bool) {
         let mut last_anchor_idx = i;
         while i < n {
             if is_nfkc_digit_yielding_non_decimal(chars[i]) {
-                positions.push(i); // exotic member of the run
+                // An exotic (No/So) run member is ambiguous only if it actually has
+                // a same-length ASCII-digit reading; a fraction/unit whose fold has
+                // no single decorated digit (½, ⒛, ㎟) folds to a no-op, so flagging
+                // it would only waste a fan-out slot (and inflate the cap count).
+                if digit_value(chars[i]).is_some() {
+                    positions.push(i);
+                }
                 last_anchor_idx = i;
                 i += 1;
             } else if is_plain_digit_char(chars[i]) {
+                // A run member that is NOT an ASCII digit but still has an ASCII
+                // digit reading — a non-ASCII `Nd` decimal (Arabic-Indic ١,
+                // Devanagari १) or 〇 — is ambiguous: keep the glyph (so an
+                // adjacent ASCII run keeps its boundary anchor), or fold it into
+                // the number so a value written with an exotic digit is recovered.
+                // A plain ASCII digit needs no fold and is a run member only.
+                if !chars[i].is_ascii_digit() && digit_value(chars[i]).is_some() {
+                    positions.push(i);
+                }
                 last_anchor_idx = i;
                 i += 1;
             } else if is_digit_sep(chars[i]) {
@@ -95,52 +115,48 @@ pub(crate) fn ambiguous_positions(chars: &[char]) -> (Vec<usize>, bool) {
                 break;
             }
         }
-        // A CJK digit-yielder immediately LEADING the run (e.g. 三 in
-        // 张三13800138000) is ambiguous: keep it as a name/word char, or fold
-        // it into the run it is butting up against.
-        if run_start > 0 && cn_digit(chars[run_start - 1]).is_some() {
-            positions.push(run_start - 1);
+        // A CJK digit-homograph run immediately LEADING the anchored run — 三 in
+        // 张三13800138000, or the whole 零零 tail fused onto a run — is ambiguous:
+        // keep each char as a name/word char, or fold the WHOLE adjacent run into
+        // the number. Extend over the maximal cn_digit run, not just one char, so a
+        // multi-glyph CJK tail (零零 = 00) is fully recoverable in the all-fold view.
+        let mut k = run_start;
+        while k > 0 && cn_digit(chars[k - 1]).is_some() {
+            k -= 1;
+            positions.push(k);
         }
         // Symmetric TRAILING case.
-        if last_anchor_idx + 1 < n && cn_digit(chars[last_anchor_idx + 1]).is_some() {
-            positions.push(last_anchor_idx + 1);
+        let mut k = last_anchor_idx + 1;
+        while k < n && cn_digit(chars[k]).is_some() {
+            positions.push(k);
+            k += 1;
         }
     }
     positions.sort_unstable();
     positions.dedup();
-    let truncated = positions.len() > MAX_FANOUT_POSITIONS;
-    if truncated {
-        positions.truncate(MAX_FANOUT_POSITIONS);
-    }
-    (positions, truncated)
+    let over_cap = positions.len() > MAX_FANOUT_POSITIONS;
+    (positions, over_cap)
 }
 
 /// Best-effort SAME-LENGTH digit fold for a single ambiguous glyph: the
-/// common case (superscript/subscript/circled single digits, CN digits) is
-/// exactly one source char folding to exactly one ASCII digit, so it can be
-/// substituted in place without touching the surrounding offsets.
+/// common case is exactly one source char reading as exactly one ASCII digit
+/// (superscript/subscript/circled digits, CN digits, `〇`, non-ASCII `Nd`
+/// decimals, and the parenthesised/full-stop forms whose fold contains a single
+/// digit — `⑴` → `1`, `⒈` → `1`), so it can be substituted in place without
+/// touching the surrounding offsets. See [`digit_value`] for the exact reading
+/// table.
 ///
-/// A minority of the exotic table NFKC-folds to MULTIPLE chars (vulgar
-/// fractions `½` → `"1⁄2"`, parenthesised digits `⑴` → `"(1)"`, CJK compat
-/// month/hour/day symbols `㋀` → `"1月"`). Those cannot be represented as a
-/// position-preserving substitution, so this helper returns such a glyph
+/// A glyph whose fold carries zero or ≥2 ASCII digits (vulgar fractions `½` →
+/// `"1⁄2"`, `⒛` → `"20."`, CJK compat month symbols `㋀` → `"1月"`) has no
+/// position-preserving single-digit reading, so this helper returns it
 /// UNCHANGED rather than corrupt or resize the buffer. This is a KNOWN,
 /// currently UNADDRESSED limitation: nothing in this crate recovers a number
-/// that only fuses through one of these multi-char folds — there is no
-/// length-changing "fold everything" pass for this case (contrast
+/// that only fuses through one of these multi-digit folds — there is no
+/// length-changing "expand a multi-char digit fold" pass (contrast
 /// [`fusion_boundary_variant`], which does rebuild the buffer, but to
-/// re-insert a stripped boundary, not to expand a multi-char digit fold).
+/// re-insert a stripped boundary, not to expand a fold).
 fn fold_glyph_same_len(c: char) -> char {
-    if let Some(d) = cn_digit(c) {
-        return d;
-    }
-    if is_nfkc_digit_yielding_non_decimal(c) {
-        let mut folded = c.nfkc();
-        if let (Some(first), None) = (folded.next(), folded.next()) {
-            return first;
-        }
-    }
-    c
+    digit_value(c).unwrap_or(c)
 }
 
 /// The candidate TEXT with position `pos` forced to its KEEP reading —
@@ -258,16 +274,30 @@ mod tests {
     }
 
     #[test]
-    fn fanout_is_bounded() {
+    fn over_cap_returns_the_full_list_and_flags_it() {
         let chars: Vec<char> = "1\u{2467}2\u{2467}3\u{2467}4\u{2467}5\u{2467}6\u{2467}"
             .chars()
-            .collect(); // >4 exotics
-        let (positions, truncated) = super::ambiguous_positions(&chars);
-        assert!(positions.len() <= super::MAX_FANOUT_POSITIONS);
-        // More than MAX_FANOUT_POSITIONS ambiguous positions existed, so the flag
-        // must say so — this is the case the plain length check cannot distinguish
-        // from "exactly the cap, nothing truncated".
-        assert!(truncated);
+            .collect(); // 6 exotic ⑧ — more than MAX_FANOUT_POSITIONS
+        let (positions, over_cap) = super::ambiguous_positions(&chars);
+        // The list is NOT truncated: the caller needs every position to build its
+        // one all-fold extreme (it caps only the per-position keep-variants).
+        assert_eq!(positions.len(), 6);
+        // …and the flag says the list exceeded the cap, so the caller applies it.
+        assert!(over_cap);
+    }
+
+    #[test]
+    fn over_cap_all_fold_recovers_every_digit_past_the_cap() {
+        // D1-04: 138001③⑧⓪⓪⓪ — six exotic circled digits after "138001", more than
+        // the cap. The uncapped all-fold extreme must yield the full ASCII number,
+        // not just the first MAX_FANOUT_POSITIONS folded.
+        let chars: Vec<char> = "138001\u{2462}\u{2467}\u{24ea}\u{24ea}\u{24ea}"
+            .chars()
+            .collect(); // ③=3 ⑧=8 ⓪=0 ⓪=0 ⓪=0
+        let (positions, over_cap) = super::ambiguous_positions(&chars);
+        assert!(over_cap, "5 exotics past a 6-digit head exceeds the cap");
+        let folded: String = super::fold_all_variant(&chars, &positions).into_iter().collect();
+        assert_eq!(folded, "13800138000");
     }
 
     #[test]
@@ -436,15 +466,57 @@ mod tests {
     // ── Author's own test: the documented multi-char-fold limitation ───────
 
     #[test]
-    fn fold_glyph_same_len_leaves_multi_char_folds_unchanged() {
-        // ½ (U+00BD) NFKC-folds to the THREE-char "1⁄2" — not representable
-        // as a same-length substitution, so the helper must return it as-is.
+    fn fold_glyph_same_len_leaves_multi_digit_folds_unchanged() {
+        // ½ (U+00BD) NFKC-folds to "1⁄2" — TWO ASCII digits, no single-digit
+        // reading, so the helper must return it as-is (defer to a length-changing
+        // pass this crate does not build).
         assert_eq!(super::fold_glyph_same_len('\u{bd}'), '\u{bd}');
-        // Contrast: ⑧ (single-char fold) and 三 (CN digit) DO fold.
+        // ⒛ (U+249B) → "20." — also two digits → unchanged.
+        assert_eq!(super::fold_glyph_same_len('\u{249b}'), '\u{249b}');
+        // Single-char folds: ⑧ and 三 fold.
         assert_eq!(super::fold_glyph_same_len('\u{2467}'), '8');
         assert_eq!(super::fold_glyph_same_len('三'), '3');
+        // D1-05: a PUNCTUATION-decorated single digit is a same-length extract —
+        // ⑴ (U+2474) → "(1)" → '1', ⒈ (U+2488) → "1." → '1', 🄀 (U+1F100) → "0.".
+        assert_eq!(super::fold_glyph_same_len('\u{2474}'), '1');
+        assert_eq!(super::fold_glyph_same_len('\u{2488}'), '1');
+        assert_eq!(super::fold_glyph_same_len('\u{1f100}'), '0');
+        // …but a unit / month / hour SYMBOL whose fold merely CONTAINS a digit is
+        // NOT a decorated digit: ㋀ (U+32C0) → "1月", ㎟ (U+339F) → "mm2", ㍘
+        // (U+3358) → "0点" all pass through UNCHANGED (the digit is a label/exponent,
+        // never PII).
+        assert_eq!(super::fold_glyph_same_len('\u{32c0}'), '\u{32c0}');
+        assert_eq!(super::fold_glyph_same_len('\u{339f}'), '\u{339f}');
+        assert_eq!(super::fold_glyph_same_len('\u{3358}'), '\u{3358}');
+        // 〇 (U+3007) and a non-ASCII Nd decimal (Arabic-Indic ١) read as digits.
+        assert_eq!(super::fold_glyph_same_len('\u{3007}'), '0');
+        assert_eq!(super::fold_glyph_same_len('\u{0661}'), '1');
         // An ordinary ASCII digit or letter passes through untouched.
         assert_eq!(super::fold_glyph_same_len('5'), '5');
         assert_eq!(super::fold_glyph_same_len('a'), 'a');
+    }
+
+    #[test]
+    fn ambiguous_positions_flags_a_boundary_non_ascii_nd_digit() {
+        // D1-01: ١ (Arabic-Indic ONE) leading an otherwise-ASCII run. The base
+        // reading keeps ١ (so an adjacent complete ASCII run keeps its anchor); the
+        // all-fold reading folds it, recovering a number written with an exotic
+        // leading digit.
+        let chars: Vec<char> = "\u{0661}3800138000".chars().collect(); // ١3800138000
+        assert_eq!(super::ambiguous_positions(&chars).0, vec![0]);
+        let folded: String = super::fold_all_variant(&chars, &[0]).into_iter().collect();
+        assert_eq!(folded, "13800138000");
+    }
+
+    #[test]
+    fn ambiguous_positions_flags_the_maximal_trailing_cjk_run() {
+        // D1-03: 138001380零零 — a NINE-digit ASCII run with a two-char 零零 (=00)
+        // CJK tail. Both 零 must be flagged (not just the first), so the all-fold
+        // view recovers the full 11-digit number.
+        let chars: Vec<char> = "138001380零零".chars().collect();
+        assert_eq!(super::ambiguous_positions(&chars).0, vec![9, 10]);
+        let (positions, _) = super::ambiguous_positions(&chars);
+        let folded: String = super::fold_all_variant(&chars, &positions).into_iter().collect();
+        assert_eq!(folded, "13800138000");
     }
 }

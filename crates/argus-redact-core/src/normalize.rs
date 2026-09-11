@@ -563,6 +563,59 @@ fn nd_digit_value(c: char) -> Option<u32> {
         .map(|i| c as u32 - DECIMAL_DIGIT_RANGES[i].0 as u32)
 }
 
+/// The single ASCII digit a char *reads as* for FAN-OUT recall, if any:
+///
+/// * an ASCII `0`–`9` (returns itself),
+/// * a CJK numeral homograph — [`cn_digit`]'s 19 entries (`三` → `3`),
+/// * `〇` (U+3007 IDEOGRAPHIC NUMBER ZERO, an `Nl` the 19-entry `_CN_DIGIT_MAP`
+///   omits) → `0`,
+/// * a non-ASCII Unicode `Nd` decimal digit — [`nd_digit_value`] (`١` → `1`),
+/// * a `No`/`So` digit-yielder ([`is_nfkc_digit_yielding_non_decimal`]) whose
+///   NFKC form is a single ASCII digit optionally wrapped in ASCII punctuation —
+///   a DECORATED DIGIT: one char (`¹` → "1", `⑧` → "8") or a punctuated form
+///   (`⑴` → "(1)", `⒈` → "1.", `🄀` → "0.").
+///
+/// `None` otherwise, deliberately for:
+/// * a fold with zero or ≥2 ASCII digits (`½` → "1⁄2", `⒛` → "20.") — no
+///   position-preserving single-digit reading; recovering them would need a
+///   length-changing candidate view with a rebuilt offset map this crate does
+///   not build;
+/// * a fold whose non-digit chars are not ASCII punctuation (`㎟` → "mm2",
+///   `㋀` → "1月", `㍘` → "0点") — a unit/month/hour SYMBOL, not an obscured
+///   number, so its digit is a unit exponent or ideographic label, never PII.
+///
+/// This is the reading table shared with the fan-out generator
+/// ([`crate::fanout`]) — a candidate-view helper, NOT a canonical normalize fold.
+/// Folding these unconditionally in [`normalize_digit_sequences`] would fuse a
+/// boundary digit into a run and break the ASCII-scoped `(?<![0-9])` / `(?![0-9])`
+/// anchors (see the boundary case there); recall folding happens per-candidate.
+pub(crate) fn digit_value(c: char) -> Option<char> {
+    if c.is_ascii_digit() {
+        return Some(c);
+    }
+    if let Some(d) = cn_digit(c) {
+        return Some(d);
+    }
+    if c == '\u{3007}' {
+        return Some('0'); // 〇 IDEOGRAPHIC NUMBER ZERO
+    }
+    if let Some(v) = nd_digit_value(c) {
+        return char::from_digit(v, 10); // v is 0..=9 by construction -> always Some
+    }
+    if is_nfkc_digit_yielding_non_decimal(c) {
+        // A DECORATED DIGIT: exactly one ASCII digit, every other char ASCII
+        // punctuation (⑴ -> "(1)", ⒈ -> "1.", 🄀 -> "0.", ⑧ -> "8"). A fold with
+        // ≥2 digits (½ -> "1⁄2") or a non-punctuation companion (㎟ -> "mm2",
+        // ㋀ -> "1月") is a fraction/unit/label, not an obscured number.
+        let fold: Vec<char> = c.nfkc().collect();
+        let digits = fold.iter().filter(|d| d.is_ascii_digit()).count();
+        if digits == 1 && fold.iter().all(|d| d.is_ascii_digit() || d.is_ascii_punctuation()) {
+            return fold.into_iter().find(|d| d.is_ascii_digit());
+        }
+    }
+    None
+}
+
 /// Walk `chars` and collect each maximal digit run. A run begins at a char that
 /// `classify` maps to `Some`, extends over further `Some` chars and interior
 /// [`is_digit_sep`] separators, and ends at the first char that is neither;
