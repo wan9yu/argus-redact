@@ -62,17 +62,22 @@ API change.
   number is a `u32`, so at most ten digits), which is byte-identical on every
   input and linear in the length of the cell.
 
-- **Person-proximity scoring and Chinese address absorption are now linear.** Two
-  Layer-1 paths that were super-linear on entity-dense adversarial input — the
-  person-evidence proximity scan and the Chinese multi-level address absorption
-  walk — were rewritten to run in linear time. Output is byte-for-byte identical
-  to before; deterministic operation-count tests guard against regression.
+- **Person-proximity scoring is now linear; Chinese address absorption's probe
+  count is bounded.** Two Layer-1 paths that were super-linear on entity-dense
+  adversarial input — the person-evidence proximity scan and the Chinese
+  multi-level address absorption walk — had their comparison/probe counts made
+  linear. Output is byte-for-byte identical to before; deterministic
+  operation-count tests guard against regression. (The address walk still
+  materialized full span text per emitted match, an O(k²) memory cost that a later
+  release closes — see v0.8.19.)
 
 - **A code already present in the input is never re-minted.** If a document
   literally contained a token shaped like the codes argus mints (for example a
   stray `P-83811`), a freshly minted pseudonym or removal code could collide with
   it, and a later restore could rewrite the wrong occurrence. Such in-document
-  codes are now reserved before minting, so a fresh code never reuses one.
+  codes are now reserved before minting within a single `redact()` scan, so a
+  fresh code never reuses one. (Structured `redact_json`/`redact_csv` walks reserve
+  per leaf; cross-leaf reservation is tracked separately — see `docs/known-issues.md`.)
 
 - **CSV field-size limit is set atomically.** `redact_csv` raised a process-global
   CSV field-size limit around each parse and restored it afterwards; concurrent

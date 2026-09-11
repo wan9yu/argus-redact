@@ -350,7 +350,10 @@ pub fn get_person_threshold(hints: &[Hint]) -> f64 {
     for h in hints {
         if let HintKind::TextIntent { intent } = &h.kind {
             if intent == "instruction" {
-                return 1.2; // effectively suppress most candidates
+                // Above the 1.0 confidence cap, so it suppresses EVERY L1b person
+                // candidate (not merely most) — instruction text is cleaned up only
+                // if an NER layer runs. See docs/architecture.md.
+                return 1.2;
             } else if intent == "narrative" {
                 return DEFAULT_PERSON_THRESHOLD;
             }

@@ -163,9 +163,10 @@ pub(crate) fn escaped_alternation<S: AsRef<str>>(ordered_keys: &[S]) -> String {
 /// non-digit char is left unbounded: prefixed pseudonyms ("P-83811") and masked
 /// values ("138****5678") routinely abut digits from an adjacent token (e.g.
 /// "P-83811138****5678"), so bounding them would break their restore. The
-/// narrowness is the safe choice; a digit-bounded numeric fake with inner
-/// separators (e.g. a landline "099-12345678") is not bounded, but that is an
-/// accepted theoretical gap, not a reproduced leak.
+/// narrowness is the conservative first cut; a numeric fake with INNER separators
+/// (e.g. a landline "099-12345678") is not yet bounded, which is a known
+/// restore-boundary gap — widening the bound to keys matching a digit-and-separator
+/// shape without breaking the prefixed-pseudonym case is tracked as follow-up work.
 pub(crate) fn escaped_alternation_digit_bounded<S: AsRef<str>>(ordered_keys: &[S]) -> String {
     ordered_keys
         .iter()

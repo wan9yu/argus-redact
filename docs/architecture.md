@@ -164,7 +164,7 @@ The candidate's distance to the nearest already-detected PII entity (phone, id_n
 
 Base = name length (2 char → 0.3, 3 char → 0.4, ≥ 4 char → 0.5) + the evidence signals above, capped at 1.0.
 
-Threshold = 0.8 → confirmed person entity. The threshold is hint-driven: instruction text raises it to 1.2 (effectively suppresses L1b output) so the cleanup runs only at L2 NER.
+Threshold = 0.8 → confirmed person entity. The threshold is hint-driven: instruction text raises it to 1.2, which is above the 1.0 confidence cap, so it suppresses L1b person output entirely — such text is cleaned up only if an NER layer (L2) runs.
 
 **Configurability**: 20 / 50 / 150 / 0.8 are module-private constants. There is no kwarg or env var to tune them. If your use case needs different values, file feedback — `score_config` is a future-release candidate (no committed timeline).
 
@@ -182,7 +182,7 @@ Layer 1 has a private partial-detection variant `_detect_partial` (since v0.5.7)
 
 **Characteristics:**
 - 1a runs on the full text in one pass (compiled regex union), always confidence = 1.0
-- 1b generates candidates, scores them against evidence signals, confirms above threshold (0.8). Threshold is hint-adjusted: instruction text → 1.2 (effectively suppressed)
+- 1b generates candidates, scores them against evidence signals, confirms above threshold (0.8). Threshold is hint-adjusted: instruction text → 1.2, above the 1.0 confidence cap, so L1b person output is suppressed entirely (not merely reduced)
 - Optional `validate` function per pattern reduces false positives (e.g., Luhn checksum for cards, MOD 11-2 for Chinese ID)
 - Language-independent patterns (email, URL) are shared across all packs
 - O(n) time complexity, < 1ms for typical texts

@@ -448,7 +448,7 @@ Layer 1 应作为所有场景的基线——零依赖、sub-ms、确定性，可
 4. **开源中文 PII 工具缺乏开箱即用方案**——这既是挑战也是机会
 5. **LLM 时代需要可逆加密**——永久删除和固定假名在 LLM pipeline 中均有根本性缺陷
 
-我们开源了首个中文 PII 基准数据集 [pii-bench-zh](https://huggingface.co/datasets/wan9yu/pii-bench-zh)（Apache 2.0, 8,000 样本, 23,206 标注实体），以及参考实现 [argus-redact](https://github.com/wan9yu/argus-redact)（MIT, 3,800 行 Python, 7 语言, 766 测试通过），希望推动中文 PII 检测技术的发展。
+我们开源了首个中文 PII 基准数据集 [pii-bench-zh](https://huggingface.co/datasets/wan9yu/pii-bench-zh)（Apache 2.0, 8,000 样本, 23,206 标注实体），以及参考实现 [argus-redact](https://github.com/wan9yu/argus-redact)（Apache 2.0, Rust 核心 + Python 接口, 7 语言），希望推动中文 PII 检测技术的发展。
 
 ---
 
