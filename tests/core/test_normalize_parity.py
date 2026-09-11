@@ -24,6 +24,7 @@ NORMALIZE_CORPUS = [
     "x²³ super",  # superscripts (NFKC)
     "ﬁle ﬂag",  # ligatures (NFKC)
     "一三八零零一三八零零零",  # Chinese-digit phone (11)
+    "一三八〇〇一三八〇〇〇",  # Chinese-digit phone with 〇 (U+3007) zeros -> folds to 13800138000
     "电话一三八 零零一 三八零零零",  # Chinese digits with separators
     "三月三日",  # short CN — must NOT convert
     "一二三٤五六七",  # Arabic-Indic digit in a CN run (isdigit, not ascii)

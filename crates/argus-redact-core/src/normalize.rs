@@ -726,10 +726,19 @@ fn normalize_digit_sequences(chars: &mut [char]) {
     // letters, vulgar fractions No → "1⁄2"). Run membership is exactly the old
     // `cn_digit(c).is_some() || c.is_numeric()` — `Ascii`/`Exotic`/`Other` are all
     // `is_numeric`, so the runs are byte-identical to before; only the payload is
-    // richer, splitting out the two folds below.
+    // richer, splitting out the two folds below. (`〇` moves from `Other` to
+    // `Cjk('0')` — see the branch below — but it was already `is_numeric`, so it
+    // was already a run member; only its payload changes.)
     let runs = digit_runs(chars, |c| {
         if let Some(ascii) = cn_digit(c) {
             Some(DigitClass::Cjk(ascii))
+        } else if c == '\u{3007}' {
+            // 〇 IDEOGRAPHIC NUMBER ZERO — an `Nl` the 19-entry cn_digit map omits.
+            // A Chinese-digit number can write its zeros as 〇 (一三八〇〇一三八〇〇〇 =
+            // 13800138000); classing it as CJK lets it count toward Fold 1's CJK
+            // majority AND fold to '0' with the rest, instead of surviving as a
+            // lone `Other` that leaves the number half-folded (138〇〇138〇〇〇).
+            Some(DigitClass::Cjk('0'))
         } else if c.is_ascii_digit() {
             Some(DigitClass::Ascii)
         } else if let Some(v) = nd_digit_value(c) {
@@ -1676,6 +1685,26 @@ mod tests {
         assert_eq!(normalize_text("壹贰叁肆伍陆柒捌玖").0, "123456789");
         // A run including 九 (first-row nine) + 零: 七八九零壹贰叁 → "7890123".
         assert_eq!(normalize_text("七八九零壹贰叁").0, "7890123");
+    }
+
+    #[test]
+    fn ideographic_zero_folds_as_a_cjk_digit_in_a_majority_run() {
+        // 〇 (U+3007) is an `Nl` the 19-entry cn_digit map omits, so before the
+        // classifier learned it, a Chinese-digit phone written with 〇 zeros folded
+        // its 一三八 but left the 〇 verbatim (138〇〇138〇〇〇 → leak). Now 〇 counts as
+        // CJK: an all-CJK run folds whole.
+        assert_eq!(normalize_text("一三八〇〇一三八〇〇〇").0, "13800138000");
+        // 〇 at first / interior / last position of a majority-CJK run.
+        assert_eq!(normalize_text("〇一二三四五六").0, "0123456");
+        // A lone boundary 〇 on an otherwise-ASCII run is a minority (1 of 12) → NOT
+        // folded, so the adjacent 11-digit ASCII phone keeps its `(?<![0-9])` anchor.
+        assert_eq!(normalize_text("13800138000〇").0, "13800138000〇");
+        // 〇 is the same DigitClass::Cjk('0') as 零 (already in the cn_digit map), so
+        // its normalization is byte-identical to 零's in every position — including
+        // the majority-fusion case where a dozen leading zeros merge into the run.
+        let z = "零".repeat(12) + "13800138000";
+        let o = "〇".repeat(12) + "13800138000";
+        assert_eq!(normalize_text(&o).0, normalize_text(&z).0);
     }
 
     #[test]
