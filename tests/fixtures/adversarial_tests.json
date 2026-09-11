@@ -448,5 +448,23 @@
     "expected_pii_count": 1,
     "description": "10-digit number matching NHS number pattern; tests whether NHS pattern fires on plain reference numbers",
     "category": "adversarial"
+  },
+  {
+    "id": "fp_unicode_dash_range_en",
+    "input": "revenue grew 100–200% during 2019–2020",
+    "lang": "en",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "Unicode en-dash (U+2013) range notation must not manufacture a phone after the Pd->'-' fold",
+    "category": "false_positive"
+  },
+  {
+    "id": "fp_unicode_dash_range_zh",
+    "input": "营收在2019–2020年增长100–200%",
+    "lang": "zh",
+    "should_find_pii": false,
+    "expected_pii_count": 0,
+    "description": "zh en-dash range notation must not manufacture a phone after the Pd->'-' fold",
+    "category": "false_positive"
   }
 ]

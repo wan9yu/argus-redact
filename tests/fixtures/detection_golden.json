@@ -272,6 +272,14 @@
   "key": {},
   "redacted": "Error code EC1A was logged at 14:32"
  },
+ "adversarial_tests.json:fp_unicode_dash_range_en": {
+  "key": {},
+  "redacted": "revenue grew 100–200% during 2019–2020"
+ },
+ "adversarial_tests.json:fp_unicode_dash_range_zh": {
+  "key": {},
+  "redacted": "营收在2019–2020年增长100–200%"
+ },
  "adversarial_tests.json:fp_version_number_as_ssn": {
   "key": {
    "SSN-54474": "123-45-6789"

@@ -352,6 +352,47 @@ fn confusable(c: char) -> char {
         .unwrap_or(c)
 }
 
+/// Unicode dash punctuation (`Pd`), excluding ASCII `-`, plus three `Sm` minus
+/// forms (U+2212 MINUS SIGN and the U+207B/U+208B super/subscript minuses, whose
+/// NFKC form is U+2212). 28 code points / 21 ranges, UCD 14.0.0, sorted.
+/// Folded 1:1 to ASCII `-` (detection-side) so a phone/id written with a Word/PDF
+/// dash (`138–0013–8000`) matches the same regex as the ASCII-hyphen form. Folded
+/// at Step 2 (pre-NFKC) so the super/subscript minuses fold before NFKC would turn
+/// them into an unfoldable U+2212. NFKC natively maps only the fullwidth/compat few
+/// (U+FE63, U+FF0D); these are the rest.
+const PD_DASH: &[(char, char)] = &[
+    ('\u{58a}', '\u{58a}'),
+    ('\u{5be}', '\u{5be}'),
+    ('\u{1400}', '\u{1400}'),
+    ('\u{1806}', '\u{1806}'),
+    ('\u{2010}', '\u{2015}'),
+    ('\u{207b}', '\u{207b}'), // SUPERSCRIPT MINUS (Sm) — folded pre-NFKC so its
+    ('\u{208b}', '\u{208b}'), // and SUBSCRIPT MINUS's NFKC-to-U+2212 form can't slip
+    ('\u{2212}', '\u{2212}'),
+    ('\u{2e17}', '\u{2e17}'),
+    ('\u{2e1a}', '\u{2e1a}'),
+    ('\u{2e3a}', '\u{2e3b}'),
+    ('\u{2e40}', '\u{2e40}'),
+    ('\u{2e5d}', '\u{2e5d}'),
+    ('\u{301c}', '\u{301c}'),
+    ('\u{3030}', '\u{3030}'),
+    ('\u{30a0}', '\u{30a0}'),
+    ('\u{fe31}', '\u{fe32}'),
+    ('\u{fe58}', '\u{fe58}'),
+    ('\u{fe63}', '\u{fe63}'),
+    ('\u{ff0d}', '\u{ff0d}'),
+    ('\u{10ead}', '\u{10ead}'),
+];
+
+/// Fold any Unicode dash (see [`PD_DASH`]) to ASCII `-`; other chars unchanged.
+fn fold_dash(c: char) -> char {
+    if c >= '\u{58a}' && in_sorted_char_ranges(c, PD_DASH) {
+        '-'
+    } else {
+        c
+    }
+}
+
 pub(crate) fn cn_digit(c: char) -> Option<char> {
     // _CN_DIGIT_MAP (normalize.py:98-118): 19 entries -> ASCII digit char
     Some(match c {
@@ -802,9 +843,9 @@ pub(crate) fn normalize_core(text: &str) -> Option<(Vec<char>, Vec<usize>)> {
     }
     chars = folded_chars;
     offset_map = folded_map;
-    // Step 2: confusables (1:1)
+    // Step 2: confusables + Unicode-dash fold (both 1:1)
     for c in chars.iter_mut() {
-        *c = confusable(*c);
+        *c = fold_dash(confusable(*c));
     }
     // Step 3: per-char NFKC (only if the joined string isn't already NFKC)
     let joined: String = chars.iter().collect();
@@ -1132,6 +1173,26 @@ mod tests {
 
         let (out, _) = normalize_text(&format!("13800{}138000", '\u{e31}'));
         assert!(out.contains("13800138000"), "a ccc0 mark split a phone: {out:?}");
+    }
+
+    #[test]
+    fn unicode_dashes_fold_to_ascii_hyphen_so_they_cannot_break_a_separated_run() {
+        for c in [
+            '\u{2010}', '\u{2013}', '\u{2014}', '\u{2015}', '\u{2212}', '\u{207b}', '\u{208b}',
+            '\u{301c}', '\u{ff0d}',
+        ] {
+            assert_eq!(fold_dash(c), '-', "U+{:04X} should fold to ASCII '-'", c as u32);
+        }
+        assert_eq!(fold_dash('-'), '-', "ASCII hyphen unchanged");
+        assert_eq!(fold_dash('a'), 'a', "non-dash unchanged");
+
+        let (out, _) = normalize_text("138–0013–8000"); // U+2013 en-dashes
+        assert!(out.contains("138-0013-8000"), "Unicode dash not folded to '-': {out:?}");
+
+        // super/subscript minus fold pre-NFKC, before NFKC would produce an
+        // unfoldable U+2212.
+        let (sup, _) = normalize_text("138⁻0013⁻8000"); // U+207B
+        assert!(sup.contains("138-0013-8000"), "superscript minus not folded: {sup:?}");
     }
 
     #[test]
