@@ -5,7 +5,7 @@
 //! used as a place a person is associated with, gated on positive evidence so
 //! 北京时间 / 北京大学 don't fire. Shared by PyO3 + wasm; feeds the default
 //! `remove` strategy for `location`.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{LazyLock, OnceLock};
 
 use fancy_regex::Regex;
@@ -188,12 +188,35 @@ pub(crate) fn detect_regions_zh(
     // keeps its capacity so no per-probe heap allocation happens.
     let mut prefix = String::with_capacity(region_detector().max_len() * 4);
     let mut memo: Option<HashMap<usize, usize>> = None;
+    // Pass 1: slide each match's start left via the memoised walk. `m.end` never
+    // moves, so the widened span is always `chars[m.start..m.end]`. Do NOT
+    // materialize `m.text` yet.
     for m in out.iter_mut() {
-        // `m.end` never moves during the walk, so the widened span is always
-        // `chars[m.start..m.end]`. Slide `m.start` left via the memoised walk,
-        // then materialize `m.text` ONCE.
         let memo = memo.get_or_insert_with(HashMap::new);
         m.start = absorb_start(m.start, &chars, region_detector(), &mut prefix, memo);
+    }
+
+    // Pass 2: collapse spans that share a start to the single longest (max `end`).
+    // A shorter same-start span is fully contained in the longer one and coalesces
+    // to it in the downstream overlap merge, so keeping only the longest is
+    // output-identical. It is also what bounds allocation: a degenerate parent
+    // chain (`市辖区`×k住 / `上海市`×k住) absorbs all k matches to the same start,
+    // and materializing every nested prefix `chars[0..3], chars[0..6], …` is
+    // Θ(k²) text — a default-path remote memory-exhaustion vector. Emitting one
+    // span per start makes the materialized text O(input). For non-degenerate
+    // input no two matches share a start, so this pass is a no-op there.
+    let mut max_end: HashMap<usize, usize> = HashMap::new();
+    for m in out.iter() {
+        let e = max_end.entry(m.start).or_insert(0);
+        if m.end > *e {
+            *e = m.end;
+        }
+    }
+    let mut kept: HashSet<usize> = HashSet::new();
+    out.retain(|m| max_end.get(&m.start) == Some(&m.end) && kept.insert(m.start));
+
+    // Pass 3: materialize `m.text` once per surviving span.
+    for m in out.iter_mut() {
         m.text = chars[m.start..m.end].iter().collect();
     }
 
@@ -489,34 +512,49 @@ mod tests {
     }
 
     #[test]
-    fn parent_prefix_absorption_chain_stays_byte_identical() {
-        // The degenerate parent-chain that used to blow up. The trailing `住`
-        // (residence cue) makes every `上海市` candidate clear evidence, and each
-        // walks the full chain leftward, absorbing all preceding parents and
-        // stopping at 0 — so the emitted set is nested {上海市, 上海市上海市, …}.
-        // A naive per-match walk re-probes every prefix from each of the k
-        // matches: O(k²) membership probes, so a legal `上海市`×32000 (288 KB,
-        // under the 1 MiB cap, reachable on a default `redact()`) outran the scan
-        // deadline. Memoising the walk (`absorb_start`) probes each chain position
-        // at most once across all matches — O(k) total, verified linear by the
-        // probe-count gate. This pins the chain-scale output as byte-identical:
-        // same absorption decisions, same final (text, start, end).
+    fn parent_prefix_absorption_chain_emits_one_longest_span() {
+        // The degenerate parent-chain. The trailing `住` (residence cue) makes
+        // every `上海市` candidate clear evidence, and each absorbs the full chain
+        // leftward, stopping at 0 — so all k matches share start 0 with nested
+        // ends {3, 6, 9, …}. Materializing every nested prefix's text is Θ(k²) — a
+        // default-path remote memory-exhaustion vector (`上海市`×k, under the 1 MiB
+        // cap, reachable on a default `redact()`). Only the LONGEST span per start
+        // is emitted now: the shorter nested spans are fully contained in it and
+        // coalesce to it downstream, so the redacted output and the coalesced
+        // report entity are unchanged, while the materialized text is O(input).
         let mut input = "上海市".repeat(3);
         input.push('住');
-        let mut got: Vec<(String, usize, usize)> = detect_regions_zh(&input, &[])
+        let got: Vec<(String, usize, usize)> = detect_regions_zh(&input, &[])
             .into_iter()
             .map(|h| (h.text, h.start, h.end))
             .collect();
-        got.sort();
         assert_eq!(
             got,
-            vec![
-                ("上海市".to_string(), 0, 3),
-                ("上海市上海市".to_string(), 0, 6),
-                ("上海市上海市上海市".to_string(), 0, 9),
-            ],
-            "degenerate parent-chain absorption must stay byte-identical"
+            vec![("上海市上海市上海市".to_string(), 0, 9)],
+            "degenerate parent-chain must emit only the longest absorbed span",
         );
+    }
+
+    #[test]
+    fn parent_prefix_absorption_text_allocation_is_linear() {
+        // Allocation gate (the op-count/probe gate cannot see this): the total
+        // emitted entity text must stay O(input), not Θ(input²). Pre-fix, a
+        // `市辖区`×k住 chain materialized Σ 3·k(k+1)/2 chars; now one span of ≤ input
+        // length. Assert total emitted text ≤ input length for a chain that would
+        // otherwise be quadratic.
+        for k in [200usize, 400, 800] {
+            let mut input = "市辖区".repeat(k);
+            input.push('住');
+            let total: usize = detect_regions_zh(&input, &[])
+                .iter()
+                .map(|h| h.text.chars().count())
+                .sum();
+            assert!(
+                total <= input.chars().count(),
+                "k={k}: total emitted region text {total} exceeds input {} — Θ(k²) allocation regressed",
+                input.chars().count(),
+            );
+        }
     }
 
     // ── Parent-prefix absorption: memoisation is byte-identical + linear ──
@@ -567,6 +605,20 @@ mod tests {
         let mut prefix = String::with_capacity(region_detector().max_len() * 4);
         for m in out.iter_mut() {
             m.start = absorb_start_naive(m.start, &chars, region_detector(), &mut prefix);
+        }
+        // Apply the SAME longest-span-per-start collapse as production, so the
+        // fuzz compares only the absorption WALK (memoised vs naive), not the
+        // shared collapse — keeping it a faithful differential oracle.
+        let mut max_end: HashMap<usize, usize> = HashMap::new();
+        for m in out.iter() {
+            let e = max_end.entry(m.start).or_insert(0);
+            if m.end > *e {
+                *e = m.end;
+            }
+        }
+        let mut kept: HashSet<usize> = HashSet::new();
+        out.retain(|m| max_end.get(&m.start) == Some(&m.end) && kept.insert(m.start));
+        for m in out.iter_mut() {
             m.text = chars[m.start..m.end].iter().collect();
         }
         out
@@ -670,18 +722,20 @@ mod tests {
     }
 
     #[test]
-    fn region_count_grows_linearly_with_chain_length() {
-        // Pins the emitted-region COUNT for the degenerate chain. Every `市辖区`
-        // in `市辖区`×k住 clears evidence (its following `市` is a structural head,
-        // and the final one is followed by the `住` cue), so exactly k matches are
-        // emitted — each absorbed left to start 0. This output is byte-identical
-        // and independent of the absorption memoisation.
-        for (k, expected) in [(3usize, 3usize), (20, 20), (100, 100)] {
+    fn region_count_is_bounded_for_a_degenerate_chain() {
+        // Every `市辖区` in `市辖区`×k住 clears evidence and absorbs left to start 0,
+        // so all k candidates share start 0. Only the longest span per start is
+        // emitted, so the count is 1 regardless of k — this is what bounds the
+        // materialized text to O(input) instead of the Θ(k²) that emitting every
+        // nested prefix would cost. The downstream coalesce produced one location
+        // entity from the old k-match set anyway, so the redacted output and the
+        // report are unchanged.
+        for k in [3usize, 20, 100] {
             let input = "市辖区".repeat(k) + "住";
             assert_eq!(
                 detect_regions_zh(&input, &[]).len(),
-                expected,
-                "expected {expected} emitted regions for 市辖区×{k}住"
+                1,
+                "degenerate 市辖区×{k}住 must emit one longest span, not k"
             );
         }
     }
