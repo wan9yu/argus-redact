@@ -39,6 +39,9 @@ NORMALIZE_CORPUS = [
     "11010١199003070468",  # interior Arabic-Indic Nd (U+0661) -> folds to ASCII
     "11010१199003070468",  # interior Devanagari Nd (U+0967) -> folds to ASCII
     "电话١13800138000",  # boundary Arabic-Indic Nd -> NOT folded (kept verbatim)
+    "13800ั138000",  # ccc=0 Mn (Thai U+0E31) spliced mid-phone -> dropped, digits rejoin
+    "13800￹138000",  # non-DI Cf (U+FFF9 interlinear) spliced -> stripped, digits rejoin
+    "13800⃝138000",  # enclosing mark (U+20DD) spliced -> dropped, digits rejoin
 ]
 LANG_CORPUS = [
     "",
