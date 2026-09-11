@@ -1,0 +1,3692 @@
+{
+ "adversarial_tests.json:adv_base64_encoded_phone": {
+  "key": {},
+  "redacted": "MTM4MTIzNDU2Nzg="
+ },
+ "adversarial_tests.json:adv_credit_card_with_spaces": {
+  "key": {
+   "4532 0*********0366": "4532 0151 1283 0366"
+  },
+  "redacted": "Card: 4532 0*********0366"
+ },
+ "adversarial_tests.json:adv_german_tax_id_edge": {
+  "key": {},
+  "redacted": "Ihre Steuer-ID lautet 02 345 678 901 und ist vertraulich"
+ },
+ "adversarial_tests.json:adv_html_pii_in_attribute": {
+  "key": {
+   "138****5678": "13812345678",
+   "a****@secret.com": "admin@secret.com"
+  },
+  "redacted": "<a href=\"mailto:a****@secret.com\" data-phone=\"138****5678\">Contact</a>"
+ },
+ "adversarial_tests.json:adv_jp_phone_with_country_code": {
+  "key": {},
+  "redacted": "日本からの電話は+81-90-1234-5678です"
+ },
+ "adversarial_tests.json:adv_json_with_pseudonym_key": {
+  "key": {},
+  "redacted": "{\"P-037\": \"some value\", \"P-042\": \"another value\"}"
+ },
+ "adversarial_tests.json:adv_ko_rrn_surrounded_by_digits": {
+  "key": {},
+  "redacted": "9999950101-1234567999"
+ },
+ "adversarial_tests.json:adv_license_plate_in_sentence": {
+  "key": {
+   "PLATE-01192": "沪B·67890",
+   "PLATE-79671": "京A12345"
+  },
+  "redacted": "车辆PLATE-79671在小区停放，旁边是PLATE-01192"
+ },
+ "adversarial_tests.json:adv_many_near_miss_numbers": {
+  "key": {
+   "SSN-54474": "123456789"
+  },
+  "redacted": "Values: SSN-54474, 12345678901234, 1234-5678-9012-3456, 000-00-0000, 99999999"
+ },
+ "adversarial_tests.json:adv_markdown_pii": {
+  "key": {
+   "138****5678": "13812345678",
+   "a****@secret.com": "admin@secret.com"
+  },
+  "redacted": "Contact us at [a****@secret.com](mailto:a****@secret.com) or call **138****5678**"
+ },
+ "adversarial_tests.json:adv_mixed_lang_pii": {
+  "key": {
+   "(21*******0100": "(212) 555-0100",
+   "139****5678": "13912345678",
+   "u***@example.com": "user@example.com"
+  },
+  "redacted": "My US number is (21*******0100 and my Chinese number is 139****5678, email: u***@example.com"
+ },
+ "adversarial_tests.json:adv_nino_valid": {
+  "key": {
+   "NINO-86280": "AB 12 34 56 C"
+  },
+  "redacted": "Your National Insurance number is NINO-86280"
+ },
+ "adversarial_tests.json:adv_pii_with_emoji": {
+  "key": {
+   "138****5678": "13812345678",
+   "z****@test.com": "zhang@test.com"
+  },
+  "redacted": "Call me 📱138****5678 or email 📧z****@test.com"
+ },
+ "adversarial_tests.json:adv_repeated_phone_10x": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "138****5678 138****5678 138****5678 138****5678 138****5678 138****5678 138****5678 138****5678 138****5678 138****5678"
+ },
+ "adversarial_tests.json:adv_sql_injection_like": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "' OR 1=1; SELECT ssn FROM users WHERE phone='138****5678'--"
+ },
+ "adversarial_tests.json:adv_ssn_in_csv_row": {
+  "key": {
+   "SSN-54474": "123-45-6789"
+  },
+  "redacted": "John,Doe,SSN-54474,1990-01-15,Engineer"
+ },
+ "adversarial_tests.json:adv_uk_nhs_vs_phone": {
+  "key": {
+   "NHS_-23411": "1234561234"
+  },
+  "redacted": "Reference number is NHS_-23411 for your record"
+ },
+ "adversarial_tests.json:adv_url_with_email_param": {
+  "key": {
+   "URL-99327": "https://example.com/unsubscribe?email=admin@secret.com&token=abc123"
+  },
+  "redacted": "URL-99327"
+ },
+ "adversarial_tests.json:edge_consecutive_different_pii": {
+  "key": {
+   "(21******0100": "(212)555-0100",
+   "SSN-54474": "123-45-6789",
+   "t***@x.com": "test@x.com"
+  },
+  "redacted": "SSN:SSN-54474Phone:(21******0100Email:t***@x.com"
+ },
+ "adversarial_tests.json:edge_fullwidth_numbers": {
+  "key": {
+   "１３８****５６７８": "１３８１２３４５６７８"
+  },
+  "redacted": "电话：１３８****５６７８"
+ },
+ "adversarial_tests.json:edge_german_iban_no_spaces": {
+  "key": {
+   "IBAN-96780": "DE89370400440532013000"
+  },
+  "redacted": "Bitte überweisen Sie an IBAN-96780"
+ },
+ "adversarial_tests.json:edge_korean_phone_at_boundary": {
+  "key": {
+   "010******5678": "010-1234-5678"
+  },
+  "redacted": "010******5678"
+ },
+ "adversarial_tests.json:edge_long_text_buried_pii": {
+  "key": {
+   "(21*******0199": "(212) 555-0199",
+   "MED-39131": "telecommunications in modern so",
+   "P-83811": "Alexander Graham Bell"
+  },
+  "redacted": "This is a very long document about the history of MED-39131ciety. The telephone was invented in the late 19th century and has since transformed how humans communicate across distances. From the early days of switchboard operators to the modern era of smartphones, the evolution of telephone technology has been nothing short of remarkable. In the early 1900s, telephone networks began spreading across major cities, connecting businesses and households in ways previously unimaginable. The introduction of direct dialing in the mid-20th century eliminated the need for operators, making phone calls faster and more private. The mobile phone revolution of the 1990s untethered communication from fixed locations, giving people the freedom to talk while on the move. Today, smartphones serve as our primary computing devices, capable of far more than simple voice calls. They handle email, web browsing, social media, navigation, and countless other tasks. Speaking of which, you can reach our office at (21*******0199 for more information about our telecommunications history exhibit. The exhibit covers everything from P-83811's first patent to the latest 5G technology deployments around the world. Visitors will find interactive displays, historical artifacts, and multimedia presentations that bring the story of telecommunications to life."
+ },
+ "adversarial_tests.json:edge_mixed_script_email": {
+  "key": {
+   "t*****@example.com": "tanaka@example.com"
+  },
+  "redacted": "メールアドレスはt*****@example.comです"
+ },
+ "adversarial_tests.json:edge_multiple_pii_touching": {
+  "key": {
+   "1***************@test.com": "13812345678zhang@test.com"
+  },
+  "redacted": "1***************@test.com"
+ },
+ "adversarial_tests.json:edge_multiple_types_one_text": {
+  "key": {
+   "139****5678": "13912345678",
+   "ADDR-36501": "北京市海淀区中关村大街1号",
+   "P-83811": "张三",
+   "z*******@qq.com": "zhangsan@qq.com"
+  },
+  "redacted": "P-83811，身份证：110105196307081218，手机：139****5678，邮箱：z*******@qq.com，住在ADDR-36501"
+ },
+ "adversarial_tests.json:edge_newline_in_pii": {
+  "key": {
+   "138****5678": "13812345678",
+   "P-83811": "张三",
+   "z****@test.com": "zhang@test.com"
+  },
+  "redacted": "联系人：P-83811\n手机：138****5678\n邮箱：z****@test.com"
+ },
+ "adversarial_tests.json:edge_only_pii_no_context": {
+  "key": {
+   "SSN-54474": "123-45-6789"
+  },
+  "redacted": "SSN-54474"
+ },
+ "adversarial_tests.json:edge_pii_at_end": {
+  "key": {
+   "SSN-54474": "123-45-6789"
+  },
+  "redacted": "My SSN is SSN-54474"
+ },
+ "adversarial_tests.json:edge_pii_at_start": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "138****5678是我的号码"
+ },
+ "adversarial_tests.json:edge_pii_in_brackets": {
+  "key": {
+   "138****5678": "13812345678",
+   "z****@test.com": "zhang@test.com"
+  },
+  "redacted": "联系方式：[138****5678]（z****@test.com）"
+ },
+ "adversarial_tests.json:edge_pii_in_quotes": {
+  "key": {
+   "(21*******0147": "(212) 555-0147"
+  },
+  "redacted": "Her number is \"(21*******0147\" she said"
+ },
+ "adversarial_tests.json:edge_pii_spans_sentence_boundary": {
+  "key": {},
+  "redacted": "His ID starts with 110101. 199003074610 is the rest."
+ },
+ "adversarial_tests.json:edge_tab_separated_pii": {
+  "key": {
+   "138****5678": "13812345678",
+   "z****@test.com": "zhang@test.com"
+  },
+  "redacted": "Name\t138****5678\tz****@test.com\tBeijing"
+ },
+ "adversarial_tests.json:edge_uk_nino_lowercase": {
+  "key": {},
+  "redacted": "My NINO is ab 12 34 56 c"
+ },
+ "adversarial_tests.json:edge_whitespace_only": {
+  "key": {},
+  "redacted": "   \t\n  \t  "
+ },
+ "adversarial_tests.json:edge_zero_width_space_in_phone": {
+  "key": {
+   "138******5678": "138​1234​5678"
+  },
+  "redacted": "Call me at 138******5678"
+ },
+ "adversarial_tests.json:fp_12_digit_jp_non_mynumber": {
+  "key": {},
+  "redacted": "Serial number 1234 5678 9012 is for the device"
+ },
+ "adversarial_tests.json:fp_date_looks_like_phone": {
+  "key": {},
+  "redacted": "The event was on 2023-01-38000 which was a Tuesday"
+ },
+ "adversarial_tests.json:fp_email_no_tld": {
+  "key": {},
+  "redacted": "config value is user@host with no TLD"
+ },
+ "adversarial_tests.json:fp_german_phone_like_price": {
+  "key": {
+   "080*****4567": "0800-1234567"
+  },
+  "redacted": "Preis: 080*****4567 Hotline kostenlos"
+ },
+ "adversarial_tests.json:fp_hex_looks_like_passport": {
+  "key": {},
+  "redacted": "Commit hash A12345678 merged into main"
+ },
+ "adversarial_tests.json:fp_isbn_as_phone": {
+  "key": {},
+  "redacted": "ISBN 0-306-40615-2 available at all bookstores"
+ },
+ "adversarial_tests.json:fp_math_expression_zh_phone": {
+  "key": {},
+  "redacted": "calculate 13800000000 / 2 = 6900000000"
+ },
+ "adversarial_tests.json:fp_order_number_looks_like_id": {
+  "key": {
+   "ID-03292": "110101199003074610"
+  },
+  "redacted": "Order #ID-03292 has shipped"
+ },
+ "adversarial_tests.json:fp_product_code_16_digits": {
+  "key": {
+   "453957******1486": "4539578763621486"
+  },
+  "redacted": "Product code: 453957******1486 is discontinued"
+ },
+ "adversarial_tests.json:fp_pseudonym_in_natural_text": {
+  "key": {},
+  "redacted": "P-037 is a product code, not a person identifier"
+ },
+ "adversarial_tests.json:fp_uk_postcode_in_code": {
+  "key": {},
+  "redacted": "Error code EC1A was logged at 14:32"
+ },
+ "adversarial_tests.json:fp_version_number_as_ssn": {
+  "key": {
+   "SSN-54474": "123-45-6789"
+  },
+  "redacted": "Software version SSN-54474 is no longer supported"
+ },
+ "benchmark_en.json:credit_card": {
+  "key": {
+   "4111-1*********1111": "4111-1111-1111-1111"
+  },
+  "redacted": "Card number 4111-1*********1111"
+ },
+ "benchmark_en.json:email_only": {
+  "key": {
+   "j***@example.com": "john@example.com"
+  },
+  "redacted": "Email j***@example.com for details"
+ },
+ "benchmark_en.json:no_pii": {
+  "key": {},
+  "redacted": "The weather is nice today"
+ },
+ "benchmark_en.json:phone_standard": {
+  "key": {},
+  "redacted": "Call me at (555) 123-4567"
+ },
+ "benchmark_en.json:ssn_and_phone": {
+  "key": {},
+  "redacted": "SSN 123-45-6789, phone (555) 123-4567"
+ },
+ "benchmark_en.json:ssn_in_sentence": {
+  "key": {},
+  "redacted": "His SSN is 123-45-6789"
+ },
+ "benchmark_zh.json:bank_card": {
+  "key": {
+   "411111******1111": "4111111111111111"
+  },
+  "redacted": "转账到卡号411111******1111"
+ },
+ "benchmark_zh.json:dense_pii": {
+  "key": {
+   "138****5678": "13812345678",
+   "ID-03292": "110101199003074610",
+   "P-83811": "张三",
+   "z****@test.com": "zhang@test.com"
+  },
+  "redacted": "P-83811，手机138****5678，邮箱z****@test.com，身份证ID-03292"
+ },
+ "benchmark_zh.json:email_between_cjk": {
+  "key": {
+   "z****@test.com": "zhang@test.com"
+  },
+  "redacted": "请发送到z****@test.com查收"
+ },
+ "benchmark_zh.json:email_only": {
+  "key": {
+   "z****@company.com": "zhang@company.com"
+  },
+  "redacted": "发邮件到z****@company.com"
+ },
+ "benchmark_zh.json:id_and_phone": {
+  "key": {
+   "159****1234": "15900001234",
+   "ID-03292": "110101199003074610"
+  },
+  "redacted": "身份证ID-03292，手机159****1234"
+ },
+ "benchmark_zh.json:license_plate": {
+  "key": {
+   "PLATE-79671": "京A88888"
+  },
+  "redacted": "车牌PLATE-79671停在门口"
+ },
+ "benchmark_zh.json:multiple_phones": {
+  "key": {
+   "138****5678": "13812345678",
+   "159****1234": "15900001234"
+  },
+  "redacted": "联系人A电话138****5678，联系人B电话159****1234"
+ },
+ "benchmark_zh.json:no_pii": {
+  "key": {},
+  "redacted": "今天天气真不错，适合出去散步"
+ },
+ "benchmark_zh.json:phone_at_start": {
+  "key": {
+   "138****5678": "13812345678",
+   "P-83811": "张三"
+  },
+  "redacted": "138****5678是P-83811的电话"
+ },
+ "benchmark_zh.json:phone_in_sentence": {
+  "key": {
+   "138****5678": "13812345678",
+   "TITLE-53592": "联系张经理"
+  },
+  "redacted": "请TITLE-53592，电话138****5678"
+ },
+ "br_patterns.json:cnpj_invalid": {
+  "key": {},
+  "redacted": "CNPJ: 11.222.333/0001-99"
+ },
+ "br_patterns.json:cnpj_valid": {
+  "key": {
+   "CNPJ-53741": "11.222.333/0001-81"
+  },
+  "redacted": "CNPJ: CNPJ-53741"
+ },
+ "br_patterns.json:cpf_all_same_digits": {
+  "key": {},
+  "redacted": "111.111.111-11"
+ },
+ "br_patterns.json:cpf_digits_only": {
+  "key": {
+   "CPF-14168": "52998224725"
+  },
+  "redacted": "CPF CPF-14168"
+ },
+ "br_patterns.json:cpf_invalid_check_digit": {
+  "key": {},
+  "redacted": "CPF: 529.982.247-99"
+ },
+ "br_patterns.json:cpf_with_dots": {
+  "key": {
+   "CPF-14168": "529.982.247-25"
+  },
+  "redacted": "CPF: CPF-14168"
+ },
+ "br_patterns.json:phone_with_country_code": {
+  "key": {},
+  "redacted": "Tel: +55 (11) 99876-5432"
+ },
+ "br_patterns.json:phone_without_country_code": {
+  "key": {},
+  "redacted": "Ligar: (21) 3456-7890"
+ },
+ "br_patterns.json:plain_text": {
+  "key": {},
+  "redacted": "Bom dia"
+ },
+ "de_patterns.json:iban_no_spaces": {
+  "key": {
+   "IBAN-96780": "DE89370400440532013000"
+  },
+  "redacted": "IBAN IBAN-96780"
+ },
+ "de_patterns.json:iban_valid": {
+  "key": {
+   "IBAN-96780": "DE89 3704 0044 0532 0130 00"
+  },
+  "redacted": "IBAN IBAN-96780"
+ },
+ "de_patterns.json:no_phone_random_digits": {
+  "key": {},
+  "redacted": "Version 0.12.345678901"
+ },
+ "de_patterns.json:no_phone_short": {
+  "key": {},
+  "redacted": "Seite 0 12 345"
+ },
+ "de_patterns.json:phone_berlin": {
+  "key": {},
+  "redacted": "Tel: 030 12345678"
+ },
+ "de_patterns.json:phone_intl": {
+  "key": {},
+  "redacted": "Call +49 171 1234567"
+ },
+ "de_patterns.json:phone_mobile": {
+  "key": {},
+  "redacted": "Handy: 0171 1234567"
+ },
+ "de_patterns.json:phone_munich": {
+  "key": {},
+  "redacted": "Telefon 089/12345678"
+ },
+ "de_patterns.json:phone_valid": {
+  "key": {},
+  "redacted": "Tel: +49 30 12345678"
+ },
+ "de_patterns.json:plain_text": {
+  "key": {},
+  "redacted": "Guten Tag"
+ },
+ "de_patterns.json:tax_id_no_spaces": {
+  "key": {},
+  "redacted": "IdNr 12345678901"
+ },
+ "de_patterns.json:tax_id_valid": {
+  "key": {},
+  "redacted": "Steuer-ID: 12 345 678 901"
+ },
+ "email.json:consecutive_dots_invalid": {
+  "key": {},
+  "redacted": "user..name@example.com"
+ },
+ "email.json:email_between_cjk": {
+  "key": {
+   "P-14593": "李四",
+   "P-83811": "张三",
+   "z****@example.com": "zhang@example.com"
+  },
+  "redacted": "P-83811z****@example.comP-14593"
+ },
+ "email.json:email_is_entire_text": {
+  "key": {
+   "z****@example.com": "zhang@example.com"
+  },
+  "redacted": "z****@example.com"
+ },
+ "email.json:email_with_numbers": {
+  "key": {
+   "t******@gmail.com": "test123@gmail.com"
+  },
+  "redacted": "t******@gmail.com"
+ },
+ "email.json:leading_dot_invalid": {
+  "key": {},
+  "redacted": ".user@example.com"
+ },
+ "email.json:no_email_in_text": {
+  "key": {},
+  "redacted": "no email here"
+ },
+ "email.json:not_email": {
+  "key": {},
+  "redacted": "这不是邮箱@"
+ },
+ "email.json:simple": {
+  "key": {
+   "z****@example.com": "zhang@example.com"
+  },
+  "redacted": "邮箱z****@example.com"
+ },
+ "email.json:two_emails": {
+  "key": {
+   "a***@b.com": "a@b.com",
+   "c***@d.com": "c@d.com"
+  },
+  "redacted": "a***@b.com and c***@d.com"
+ },
+ "email.json:unicode_local_part_mixed": {
+  "key": {
+   "t***@example.com": "test@example.com"
+  },
+  "redacted": "用户t***@example.com"
+ },
+ "email.json:unicode_local_part_zh": {
+  "key": {
+   "张***@example.com": "张三@example.com"
+  },
+  "redacted": "张***@example.com"
+ },
+ "email.json:with_dots": {
+  "key": {
+   "j*******@company.co.uk": "john.doe@company.co.uk"
+  },
+  "redacted": "j*******@company.co.uk"
+ },
+ "email.json:with_plus": {
+  "key": {
+   "u*******@example.com": "user+tag@example.com"
+  },
+  "redacted": "u*******@example.com"
+ },
+ "email.json:with_subdomain": {
+  "key": {
+   "u***@mail.example.co.uk": "user@mail.example.co.uk"
+  },
+  "redacted": "u***@mail.example.co.uk"
+ },
+ "en_credit_card.json:invalid_luhn": {
+  "key": {},
+  "redacted": "4111-1111-1111-1112"
+ },
+ "en_credit_card.json:plain_text": {
+  "key": {},
+  "redacted": "no card here"
+ },
+ "en_credit_card.json:visa_no_separator": {
+  "key": {
+   "411111******1111": "4111111111111111"
+  },
+  "redacted": "411111******1111"
+ },
+ "en_credit_card.json:visa_with_dashes": {
+  "key": {
+   "4111-1*********1111": "4111-1111-1111-1111"
+  },
+  "redacted": "Card 4111-1*********1111"
+ },
+ "en_credit_card.json:visa_with_spaces": {
+  "key": {
+   "4111 1*********1111": "4111 1111 1111 1111"
+  },
+  "redacted": "Card 4111 1*********1111"
+ },
+ "en_date_of_birth.json:dob_abbreviated_month": {
+  "key": {},
+  "redacted": "DOB Mar 7, 1990"
+ },
+ "en_date_of_birth.json:dob_day_month_year": {
+  "key": {},
+  "redacted": "birthdate: 7 March 1990"
+ },
+ "en_date_of_birth.json:dob_iso": {
+  "key": {
+   "DOB-52253": "1990-03-07"
+  },
+  "redacted": "born DOB-52253"
+ },
+ "en_date_of_birth.json:dob_long_month": {
+  "key": {},
+  "redacted": "birthday: March 7, 1990"
+ },
+ "en_date_of_birth.json:dob_mdy_slash": {
+  "key": {},
+  "redacted": "DOB: 03/07/1990"
+ },
+ "en_date_of_birth.json:dob_mdy_unpadded": {
+  "key": {},
+  "redacted": "date of birth 3/7/1990"
+ },
+ "en_date_of_birth.json:dob_ordinal_day": {
+  "key": {},
+  "redacted": "born on 7th March 1990"
+ },
+ "en_date_of_birth.json:no_keyword_iso": {
+  "key": {},
+  "redacted": "deadline 2024-03-07"
+ },
+ "en_date_of_birth.json:no_keyword_random_date": {
+  "key": {},
+  "redacted": "meeting on 03/07/2024"
+ },
+ "en_date_of_birth.json:plain_text": {
+  "key": {},
+  "redacted": "nothing here"
+ },
+ "en_itin.json:itin_embedded": {
+  "key": {},
+  "redacted": "His ITIN 912-70-1234 is on file"
+ },
+ "en_itin.json:itin_group_boundary_high": {
+  "key": {},
+  "redacted": "ITIN 912-99-1234"
+ },
+ "en_itin.json:itin_group_boundary_low": {
+  "key": {},
+  "redacted": "ITIN 912-50-1234"
+ },
+ "en_itin.json:itin_invalid_area_below_900": {
+  "key": {},
+  "redacted": "ITIN 123-45-6789"
+ },
+ "en_itin.json:itin_invalid_group_45": {
+  "key": {},
+  "redacted": "ITIN 912-45-6789"
+ },
+ "en_itin.json:itin_invalid_group_66": {
+  "key": {},
+  "redacted": "ITIN 912-66-1234"
+ },
+ "en_itin.json:itin_invalid_group_93": {
+  "key": {},
+  "redacted": "ITIN 912-93-1234"
+ },
+ "en_itin.json:itin_is_entire_text": {
+  "key": {},
+  "redacted": "912-70-1234"
+ },
+ "en_itin.json:itin_no_separator": {
+  "key": {},
+  "redacted": "ITIN 912701234"
+ },
+ "en_itin.json:itin_with_spaces": {
+  "key": {},
+  "redacted": "ITIN is 912 70 1234"
+ },
+ "en_itin.json:plain_text": {
+  "key": {},
+  "redacted": "no itin here"
+ },
+ "en_itin.json:standard_itin": {
+  "key": {},
+  "redacted": "ITIN 912-70-1234"
+ },
+ "en_passport.json:no_keyword": {
+  "key": {},
+  "redacted": "C12345678"
+ },
+ "en_passport.json:passport_hash": {
+  "key": {},
+  "redacted": "passport # A11223344"
+ },
+ "en_passport.json:passport_lowercase": {
+  "key": {},
+  "redacted": "passport c12345678"
+ },
+ "en_passport.json:passport_standard": {
+  "key": {},
+  "redacted": "passport number C12345678"
+ },
+ "en_passport.json:passport_with_colon": {
+  "key": {},
+  "redacted": "Passport No: B87654321"
+ },
+ "en_passport.json:plain_text": {
+  "key": {},
+  "redacted": "nothing here"
+ },
+ "en_passport.json:too_few_digits": {
+  "key": {},
+  "redacted": "passport C1234567"
+ },
+ "en_phone.json:plain_text": {
+  "key": {},
+  "redacted": "no phone here"
+ },
+ "en_phone.json:too_short": {
+  "key": {},
+  "redacted": "555-1234"
+ },
+ "en_phone.json:us_dashes": {
+  "key": {},
+  "redacted": "555-123-4567"
+ },
+ "en_phone.json:us_dots": {
+  "key": {},
+  "redacted": "555.123.4567"
+ },
+ "en_phone.json:us_no_separator": {
+  "key": {},
+  "redacted": "5551234567"
+ },
+ "en_phone.json:us_standard": {
+  "key": {},
+  "redacted": "Call (555) 123-4567"
+ },
+ "en_phone.json:us_with_country_code": {
+  "key": {},
+  "redacted": "Phone +1-555-123-4567"
+ },
+ "en_self_reference.json:I_in_word": {
+  "key": {},
+  "redacted": "the AI is amazing"
+ },
+ "en_self_reference.json:I_simple": {
+  "key": {},
+  "redacted": "I was diagnosed with diabetes"
+ },
+ "en_self_reference.json:he_not_self": {
+  "key": {},
+  "redacted": "he was diagnosed with diabetes"
+ },
+ "en_self_reference.json:me_object": {
+  "key": {},
+  "redacted": "The doctor told me I have high blood pressure"
+ },
+ "en_self_reference.json:mine_pronoun": {
+  "key": {},
+  "redacted": "that account is mine"
+ },
+ "en_self_reference.json:my_daughter": {
+  "key": {},
+  "redacted": "my daughter is in college"
+ },
+ "en_self_reference.json:my_husband": {
+  "key": {},
+  "redacted": "my husband works at Google"
+ },
+ "en_self_reference.json:my_mom": {
+  "key": {},
+  "redacted": "my mom was hospitalized"
+ },
+ "en_self_reference.json:my_possessive": {
+  "key": {},
+  "redacted": "my phone number is 555-1234"
+ },
+ "en_self_reference.json:myself": {
+  "key": {},
+  "redacted": "I diagnosed myself with anxiety"
+ },
+ "en_self_reference.json:no_pronoun": {
+  "key": {},
+  "redacted": "the weather is nice today"
+ },
+ "en_self_reference.json:our_possessive": {
+  "key": {},
+  "redacted": "our company is bankrupt"
+ },
+ "en_self_reference.json:we_group": {
+  "key": {},
+  "redacted": "we are laying off 200 people"
+ },
+ "en_self_reference.json:you_not_self": {
+  "key": {},
+  "redacted": "you have high blood pressure"
+ },
+ "en_sensitive.json:bio_facial": {
+  "key": {},
+  "redacted": "facial recognition enabled"
+ },
+ "en_sensitive.json:bio_fingerprint": {
+  "key": {},
+  "redacted": "fingerprint collected"
+ },
+ "en_sensitive.json:crim_convicted": {
+  "key": {},
+  "redacted": "convicted of fraud"
+ },
+ "en_sensitive.json:crim_felony": {
+  "key": {},
+  "redacted": "has a felony record"
+ },
+ "en_sensitive.json:crim_sentenced": {
+  "key": {},
+  "redacted": "sentenced to 5 years"
+ },
+ "en_sensitive.json:fin_credit": {
+  "key": {},
+  "redacted": "credit score 680"
+ },
+ "en_sensitive.json:fin_debt": {
+  "key": {},
+  "redacted": "owes $50,000 in debt"
+ },
+ "en_sensitive.json:fin_salary": {
+  "key": {},
+  "redacted": "annual salary $120,000"
+ },
+ "en_sensitive.json:med_diagnosed": {
+  "key": {},
+  "redacted": "diagnosed with diabetes"
+ },
+ "en_sensitive.json:med_hiv": {
+  "key": {},
+  "redacted": "tested HIV positive"
+ },
+ "en_sensitive.json:med_prescribed": {
+  "key": {},
+  "redacted": "prescribed amoxicillin"
+ },
+ "en_sensitive.json:med_surgery": {
+  "key": {},
+  "redacted": "underwent heart surgery"
+ },
+ "en_sensitive.json:none_plain": {
+  "key": {},
+  "redacted": "the weather is nice today"
+ },
+ "en_sensitive.json:pol_democrat": {
+  "key": {},
+  "redacted": "registered Democrat"
+ },
+ "en_sensitive.json:pol_protest": {
+  "key": {},
+  "redacted": "participated in protest rally"
+ },
+ "en_sensitive.json:pol_voted": {
+  "key": {},
+  "redacted": "voted Republican"
+ },
+ "en_sensitive.json:rel_christian": {
+  "key": {},
+  "redacted": "he is a devout Christian"
+ },
+ "en_sensitive.json:rel_muslim": {
+  "key": {},
+  "redacted": "she is Muslim"
+ },
+ "en_sensitive.json:rel_worship": {
+  "key": {},
+  "redacted": "attends Sunday worship"
+ },
+ "en_sensitive.json:so_bisexual": {
+  "key": {},
+  "redacted": "she is bisexual"
+ },
+ "en_sensitive.json:so_gay": {
+  "key": {
+   "ORI-95430": "gay"
+  },
+  "redacted": "identifies as ORI-95430"
+ },
+ "en_sensitive.json:so_lgbt": {
+  "key": {
+   "ORI-95430": "LGBTQ"
+  },
+  "redacted": "ORI-95430 community member"
+ },
+ "en_ssn.json:all_zeros_area": {
+  "key": {},
+  "redacted": "000-45-6789"
+ },
+ "en_ssn.json:invalid_format": {
+  "key": {},
+  "redacted": "12-345-6789"
+ },
+ "en_ssn.json:plain_text": {
+  "key": {},
+  "redacted": "no ssn here"
+ },
+ "en_ssn.json:ssn_area_666": {
+  "key": {},
+  "redacted": "SSN 666-45-6789"
+ },
+ "en_ssn.json:ssn_area_900": {
+  "key": {},
+  "redacted": "SSN 900-45-6789"
+ },
+ "en_ssn.json:ssn_area_987": {
+  "key": {},
+  "redacted": "987-65-4321"
+ },
+ "en_ssn.json:ssn_embedded": {
+  "key": {},
+  "redacted": "His SSN 123-45-6789 is on file"
+ },
+ "en_ssn.json:ssn_is_entire_text": {
+  "key": {},
+  "redacted": "123-45-6789"
+ },
+ "en_ssn.json:ssn_no_separator": {
+  "key": {},
+  "redacted": "SSN 123456789"
+ },
+ "en_ssn.json:ssn_with_spaces": {
+  "key": {},
+  "redacted": "SSN is 123 45 6789"
+ },
+ "en_ssn.json:standard_ssn": {
+  "key": {},
+  "redacted": "SSN is 123-45-6789"
+ },
+ "function_calling.json:book_restaurant": {
+  "key": {
+   "138****5678": "13812345678",
+   "P-83811": "张三"
+  },
+  "redacted": "帮P-83811预订星巴克明天下午3点的位子，电话138****5678"
+ },
+ "function_calling.json:lookup_patient": {
+  "key": {
+   "ID-03292": "110101199003074610",
+   "P-83811": "王五"
+  },
+  "redacted": "查询患者P-83811的体检报告，身份证ID-03292"
+ },
+ "function_calling.json:multi_tool_args": {
+  "key": {
+   "138****5678": "13812345678",
+   "ADDR-36501": "北京市朝阳区建国路100号",
+   "P-83811": "张三"
+  },
+  "redacted": "Send P-83811 a message at 138****5678 saying the package arrived at ADDR-36501"
+ },
+ "function_calling.json:schedule_meeting": {
+  "key": {
+   "(55*******4567": "(555) 123-4567"
+  },
+  "redacted": "Schedule a call with Mary Jane at (55*******4567 for next Monday 2pm"
+ },
+ "function_calling.json:send_email": {
+  "key": {
+   "P-83811": "John Smith",
+   "j***@example.com": "john@example.com"
+  },
+  "redacted": "Send an email to P-83811 at j***@example.com about the meeting at Google HQ tomorrow"
+ },
+ "function_calling.json:transfer_money": {
+  "key": {
+   "411111******1111": "4111111111111111",
+   "P-83811": "张三"
+  },
+  "redacted": "给P-83811转账5000元到银行卡411111******1111"
+ },
+ "iban.json:iban_de": {
+  "key": {
+   "IBAN-96780": "DE89370400440532013000"
+  },
+  "redacted": "IBAN IBAN-96780"
+ },
+ "iban.json:iban_fr": {
+  "key": {
+   "IBAN-96780": "FR1420041010050500013M02606"
+  },
+  "redacted": "IBAN IBAN-96780"
+ },
+ "iban.json:iban_gb": {
+  "key": {
+   "IBAN-96780": "GB29NWBK60161331926819"
+  },
+  "redacted": "UK account IBAN-96780"
+ },
+ "iban.json:iban_invalid_checksum": {
+  "key": {},
+  "redacted": "DE00370400440532013000"
+ },
+ "iban.json:iban_nl": {
+  "key": {
+   "IBAN-96780": "NL91ABNA0417164300"
+  },
+  "redacted": "IBAN-96780"
+ },
+ "iban.json:iban_not_country_prefix": {
+  "key": {},
+  "redacted": "ZZ89370400440532013000"
+ },
+ "iban.json:iban_too_short": {
+  "key": {},
+  "redacted": "DE8937"
+ },
+ "iban.json:iban_with_spaces": {
+  "key": {
+   "IBAN-96780": "DE89 3704 0044 0532 0130 00"
+  },
+  "redacted": "IBAN IBAN-96780"
+ },
+ "in_patterns.json:aadhaar_starts_with_0": {
+  "key": {},
+  "redacted": "0123 4567 8901"
+ },
+ "in_patterns.json:aadhaar_valid": {
+  "key": {},
+  "redacted": "Aadhaar: 2345 6789 0123"
+ },
+ "in_patterns.json:pan_valid": {
+  "key": {
+   "PAN-74620": "ABCPD1234E"
+  },
+  "redacted": "PAN: PAN-74620"
+ },
+ "in_patterns.json:phone_valid": {
+  "key": {},
+  "redacted": "Mobile: +91 9876543210"
+ },
+ "in_patterns.json:plain_text": {
+  "key": {},
+  "redacted": "Namaste"
+ },
+ "ja_my_number.json:invalid_check_digit": {
+  "key": {},
+  "redacted": "123456789019"
+ },
+ "ja_my_number.json:plain_text": {
+  "key": {},
+  "redacted": "マイナンバーはありません"
+ },
+ "ja_my_number.json:too_short": {
+  "key": {},
+  "redacted": "12345678901"
+ },
+ "ja_my_number.json:valid_my_number": {
+  "key": {
+   "MY_N-69455": "123456789018"
+  },
+  "redacted": "マイナンバーMY_N-69455"
+ },
+ "ja_my_number.json:valid_with_spaces": {
+  "key": {
+   "MY_N-69455": "1234 5678 9018"
+  },
+  "redacted": "番号は MY_N-69455"
+ },
+ "ja_phone.json:landline_osaka": {
+  "key": {},
+  "redacted": "06-6123-4567"
+ },
+ "ja_phone.json:landline_parens": {
+  "key": {},
+  "redacted": "03(1234)5678"
+ },
+ "ja_phone.json:landline_tokyo": {
+  "key": {},
+  "redacted": "電話03-1234-5678"
+ },
+ "ja_phone.json:mobile_070": {
+  "key": {},
+  "redacted": "070-1111-2222"
+ },
+ "ja_phone.json:mobile_080": {
+  "key": {},
+  "redacted": "080-9876-5432"
+ },
+ "ja_phone.json:mobile_no_dash": {
+  "key": {
+   "090****5678": "09012345678"
+  },
+  "redacted": "090****5678"
+ },
+ "ja_phone.json:mobile_parens": {
+  "key": {},
+  "redacted": "090(1234)5678"
+ },
+ "ja_phone.json:mobile_standard": {
+  "key": {},
+  "redacted": "携帯番号は090-1234-5678です"
+ },
+ "ja_phone.json:newline_separated_no_cross_line_match": {
+  "key": {},
+  "redacted": "090\n1234\n5678"
+ },
+ "ja_phone.json:plain_text": {
+  "key": {},
+  "redacted": "電話番号はありません"
+ },
+ "ja_phone.json:too_short": {
+  "key": {},
+  "redacted": "090-1234"
+ },
+ "ko_phone.json:landline_busan": {
+  "key": {},
+  "redacted": "051-123-4567"
+ },
+ "ko_phone.json:landline_seoul": {
+  "key": {},
+  "redacted": "02-123-4567"
+ },
+ "ko_phone.json:mobile_no_dash": {
+  "key": {
+   "010****5678": "01012345678"
+  },
+  "redacted": "010****5678"
+ },
+ "ko_phone.json:mobile_space": {
+  "key": {},
+  "redacted": "010 1234 5678"
+ },
+ "ko_phone.json:mobile_standard": {
+  "key": {},
+  "redacted": "전화번호 010-1234-5678"
+ },
+ "ko_phone.json:newline_separated_no_cross_line_match": {
+  "key": {},
+  "redacted": "010\n1234\n5678"
+ },
+ "ko_phone.json:plain_text": {
+  "key": {},
+  "redacted": "전화번호 없음"
+ },
+ "ko_phone.json:too_short": {
+  "key": {},
+  "redacted": "010-1234"
+ },
+ "ko_rrn.json:1800s_gender_9": {
+  "key": {},
+  "redacted": "991231-9123456"
+ },
+ "ko_rrn.json:foreigner_gender_5": {
+  "key": {},
+  "redacted": "880101-5123456"
+ },
+ "ko_rrn.json:invalid_day": {
+  "key": {},
+  "redacted": "900332-1234567"
+ },
+ "ko_rrn.json:invalid_month": {
+  "key": {},
+  "redacted": "901307-1234567"
+ },
+ "ko_rrn.json:plain_text": {
+  "key": {},
+  "redacted": "주민등록번호 없음"
+ },
+ "ko_rrn.json:rrn_entire_text": {
+  "key": {},
+  "redacted": "900307-1234567"
+ },
+ "ko_rrn.json:valid_rrn": {
+  "key": {},
+  "redacted": "주민등록번호 900307-1234567"
+ },
+ "mixed_lang.json:all_types_mixed": {
+  "key": {
+   "138****5678": "13812345678",
+   "j***@test.com": "john@test.com"
+  },
+  "redacted": "Contact: 138****5678, email j***@test.com, SSN 123-45-6789"
+ },
+ "mixed_lang.json:en_ja_mixed": {
+  "key": {
+   "MY_N-69455": "123456789018"
+  },
+  "redacted": "SSN 123-45-6789, マイナンバーMY_N-69455"
+ },
+ "mixed_lang.json:en_name_zh_phone": {
+  "key": {
+   "139****5678": "13912345678"
+  },
+  "redacted": "John的电话是139****5678"
+ },
+ "mixed_lang.json:four_lang_id_numbers": {
+  "key": {
+   "ID-03292": "110101199003074610",
+   "MY_N-69455": "123456789018"
+  },
+  "redacted": "身份证ID-03292，SSN 123-45-6789，マイナンバーMY_N-69455，주민번호900307-1234567"
+ },
+ "mixed_lang.json:four_lang_phones": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "手机138****5678，call (555) 123-4567，携帯090-1234-5678，전화010-1234-5678"
+ },
+ "mixed_lang.json:no_pii_multilang": {
+  "key": {},
+  "redacted": "今天天气不错 nice weather 天気がいい 날씨가 좋다"
+ },
+ "mixed_lang.json:zh_id_en_ssn": {
+  "key": {
+   "ID-03292": "110101199003074610"
+  },
+  "redacted": "中国身份证ID-03292，美国SSN 123-45-6789"
+ },
+ "mixed_lang.json:zh_ja_phone": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "中国电话138****5678，日本携帯090-1234-5678"
+ },
+ "mixed_lang.json:zh_ko_phone": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "中国手机138****5678，韩国전화010-1234-5678"
+ },
+ "mixed_lang.json:zh_phone_en_email": {
+  "key": {
+   "138****5678": "13812345678",
+   "P-83811": "张三",
+   "z****@test.com": "zhang@test.com"
+  },
+  "redacted": "P-83811的手机138****5678，email是z****@test.com"
+ },
+ "mixed_zh_en_sensitive.json:mix_bio_face": {
+  "key": {},
+  "redacted": "入口处facial recognition已开启，需要刷脸验证"
+ },
+ "mixed_zh_en_sensitive.json:mix_contact_pii": {
+  "key": {
+   "138****5678": "13812345678",
+   "t***@qq.com": "test@qq.com"
+  },
+  "redacted": "Contact: 138****5678, email t***@qq.com, SSN 123-45-6789"
+ },
+ "mixed_zh_en_sensitive.json:mix_crim_cn_en": {
+  "key": {
+   "CRIM-66964": "判刑三年",
+   "P-83811": "曾被"
+  },
+  "redacted": "他有criminal record，P-83811CRIM-66964"
+ },
+ "mixed_zh_en_sensitive.json:mix_fin_cn_amount": {
+  "key": {
+   "FIN-86787": "月薪2万元"
+  },
+  "redacted": "FIN-86787，credit score 720"
+ },
+ "mixed_zh_en_sensitive.json:mix_fin_salary": {
+  "key": {},
+  "redacted": "他的annual salary $120,000，在北京算高收入"
+ },
+ "mixed_zh_en_sensitive.json:mix_hiv_report": {
+  "key": {},
+  "redacted": "检测报告显示HIV positive，建议复查"
+ },
+ "mixed_zh_en_sensitive.json:mix_med_cn_en": {
+  "key": {
+   "MED-39131": "糖尿病"
+  },
+  "redacted": "患者diagnosed with MED-39131，需要长期服药"
+ },
+ "mixed_zh_en_sensitive.json:mix_multi_pii": {
+  "key": {
+   "FIN-86787": "月薪3万元",
+   "ID-03292": "110101199003074610",
+   "P-83811": "张三"
+  },
+  "redacted": "P-83811，身份证ID-03292，diagnosed with hypertension，FIN-86787"
+ },
+ "mixed_zh_en_sensitive.json:mix_none": {
+  "key": {},
+  "redacted": "Today天气不错，project进度正常"
+ },
+ "mixed_zh_en_sensitive.json:mix_org_school": {
+  "key": {
+   "P-83811": "北京大学"
+  },
+  "redacted": "就职于Google中国，毕业于P-83811Computer Science学院"
+ },
+ "mixed_zh_en_sensitive.json:mix_pol_party": {
+  "key": {},
+  "redacted": "他是registered Democrat，经常在网上发表对政策的不满"
+ },
+ "mixed_zh_en_sensitive.json:mix_rel_muslim": {
+  "key": {
+   "REL-01865": "斋月"
+  },
+  "redacted": "她是Muslim，REL-01865期间白天不进食"
+ },
+ "mixed_zh_en_sensitive.json:mix_so_lgbt": {
+  "key": {
+   "ORI-59143": "出柜",
+   "ORI-95430": "LGBTQ"
+  },
+  "redacted": "他参加了ORI-95430活动，已经ORI-59143"
+ },
+ "ner_zh.json:complex_sentence": {
+  "key": {},
+  "redacted": "张三和李四在星巴克讨论了去阿里面试的事"
+ },
+ "ner_zh.json:hospital_visit": {
+  "key": {
+   "O-05054": "王五在协和医院"
+  },
+  "redacted": "O-05054做了体检"
+ },
+ "ner_zh.json:no_entities": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "ner_zh.json:person_org_location": {
+  "key": {},
+  "redacted": "王五在阿里巴巴的杭州总部工作"
+ },
+ "ner_zh.json:person_with_phone": {
+  "key": {
+   "138****5678": "13812345678",
+   "P-83811": "张三"
+  },
+  "redacted": "P-83811的手机号是138****5678"
+ },
+ "ner_zh.json:single_person": {
+  "key": {},
+  "redacted": "张三去了北京"
+ },
+ "ner_zh.json:two_persons": {
+  "key": {},
+  "redacted": "张三和李四在聊天"
+ },
+ "realistic_scenarios.json:de_employment_contract_01": {
+  "key": {
+   "017******7890": "0176 34567890",
+   "IBAN-96780": "DE89 3704 0044 0532 0130 00",
+   "TAX_-47510": "86 123 456 782",
+   "a**********@example.de": "a.schneider@example.de"
+  },
+  "redacted": "Arbeitsvertrag\n\nZwischen der Firma TechSoft GmbH und Frau Anna Schneider, geb. am 15.06.1990, wohnhaft in Leopoldstraße 48, 80802 München.\n\nSteueridentifikationsnummer: TAX_-47510\nSozialversicherungsnummer: 12 150690 S 423\nBankverbindung: IBAN IBAN-96780\nTelefon: 017******7890\nE-Mail: a**********@example.de\n\nBeginn des Arbeitsverhältnisses: 01.04.2024"
+ },
+ "realistic_scenarios.json:de_insurance_claim_01": {
+  "key": {
+   "+49********5432": "+49 30 98765432",
+   "IBAN-96780": "DE89 3704 0044 0532 0130 00",
+   "TAX_-47510": "57 234 891 067"
+  },
+  "redacted": "Schadensmeldung Nr. 2024-KFZ-00831\n\nVersicherungsnehmer: Thomas Müller\nSteuer-ID: TAX_-47510\nAnschrift: Friedrichstraße 123, 10117 Berlin\nTelefon: +49********5432\nIBAN: IBAN-96780\n\nSchadenhergang: Am 14.03.2024 gegen 15:30 Uhr ereignete sich auf der A9 Richtung München ein Auffahrunfall. Der Versicherungsnehmer wurde von hinten angefahren."
+ },
+ "realistic_scenarios.json:de_medical_referral_01": {
+  "key": {
+   "069*****5678": "069 12345678"
+  },
+  "redacted": "Überweisungsschein\nPatient: Klaus-Dieter Weber, geb. 22.11.1965\nKrankenversicherungsnr.: A123456789\nAnschrift: Hauptstraße 7, 60313 Frankfurt am Main\nÜberweisende Praxis: Dr. med. Sabine Koch, Tel. 069*****5678\n\nDiagnose: V.a. Bandscheibenvorfall L4/L5\nÜberweisung an: Neurochirurgische Abteilung, Uniklinik Frankfurt"
+ },
+ "realistic_scenarios.json:edge_adjacent_numbers_01": {
+  "key": {
+   "138****1934": "13867251934"
+  },
+  "redacted": "会议室编号110101，参会人数199803，预算126517元。另外请联系138****1934确认场地。"
+ },
+ "realistic_scenarios.json:edge_csv_row_01": {
+  "key": {
+   "176****9876": "17612349876",
+   "187****3456": "18708193456",
+   "621440*********9319": "6214407816184959319",
+   "622503*********5534": "6225034131647525534",
+   "ID-03292": "420106198812058514",
+   "ID-06452": "500108199304156713",
+   "P-14593": "黄磊",
+   "P-83811": "赵明"
+  },
+  "redacted": "id,name,phone,id_number,bank_card\n1,P-83811,176****9876,ID-03292,621440*********9319\n2,P-14593,187****3456,ID-06452,622503*********5534"
+ },
+ "realistic_scenarios.json:edge_json_payload_01": {
+  "key": {
+   "+1-********0237": "+1-415-555-0237",
+   "ADDR-36501": "328 Pine St",
+   "P-83811": "Emily Watson",
+   "SSN-54474": "467-23-4891",
+   "e******@example.com": "ewatson@example.com"
+  },
+  "redacted": "{\"customer\":{\"name\":\"P-83811\",\"ssn\":\"SSN-54474\",\"phone\":\"+1-********0237\",\"email\":\"e******@example.com\",\"address\":\"ADDR-36501, San Francisco, CA 94104\"}}"
+ },
+ "realistic_scenarios.json:edge_log_file_01": {
+  "key": {
+   "+14*****0198": "+14155550198",
+   "411111******1111": "4111111111111111",
+   "IP-94349": "192.168.1.105",
+   "SSN-54474": "441-23-5678",
+   "m***********@example.com": "mary.johnson@example.com"
+  },
+  "redacted": "2024-03-15 14:32:01 INFO  [UserService] User login: email=m***********@example.com, ip=IP-94349\n2024-03-15 14:32:03 INFO  [PaymentService] Processing payment for card=411111******1111, amount=299.99\n2024-03-15 14:32:05 WARN  [AuthService] Failed SSN verification for ssn=SSN-54474, user_id=USR-8891\n2024-03-15 14:32:07 INFO  [SMSService] Sending OTP to phone=+14*****0198"
+ },
+ "realistic_scenarios.json:edge_markdown_table_01": {
+  "key": {
+   "P-03279": "Carol Evans",
+   "P-14593": "Bob Davis",
+   "P-83811": "Alice Brown",
+   "SSN-54474": "403-12-4567",
+   "SSN-66690": "412-34-5678",
+   "SSN-95294": "421-45-6789",
+   "a****@example.com": "alice@example.com",
+   "b***@example.com": "bob@example.com",
+   "c****@example.com": "carol@example.com"
+  },
+  "redacted": "| Name | Phone | SSN | Email |\n|------|-------|-----|-------|\n| P-83811 | 555-0101 | SSN-54474 | a****@example.com |\n| P-14593 | 555-0102 | SSN-66690 | b***@example.com |\n| P-03279 | 555-0103 | SSN-95294 | c****@example.com |"
+ },
+ "realistic_scenarios.json:edge_multiline_pii_01": {
+  "key": {
+   "P-83811": "Rachel Torres"
+  },
+  "redacted": "Name: P-83811\nSSN: 945-\n    12-\n    3678\nThis SSN is split across multiple lines in the source document."
+ },
+ "realistic_scenarios.json:edge_no_pii_de_01": {
+  "key": {},
+  "redacted": "Die Bundesregierung hat heute neue Maßnahmen zur Förderung erneuerbarer Energien angekündigt. Bis 2030 sollen mindestens 80 Prozent des Stroms aus regenerativen Quellen stammen."
+ },
+ "realistic_scenarios.json:edge_no_pii_en_01": {
+  "key": {},
+  "redacted": "The quarterly earnings report shows a 15% increase in revenue compared to the same period last year. Operating margins improved from 22% to 26%, driven primarily by cost optimization in the supply chain."
+ },
+ "realistic_scenarios.json:edge_no_pii_zh_01": {
+  "key": {},
+  "redacted": "今天天气不错，下午三点我们在会议室开会讨论下个季度的产品规划。请大家提前准备好材料，特别是市场分析报告和竞品对比文档。"
+ },
+ "realistic_scenarios.json:edge_pii_in_url_01": {
+  "key": {
+   "415***0198": "4155550198",
+   "SSN-54474": "423-71-8834",
+   "j***@example.com": "john@example.com"
+  },
+  "redacted": "The user's profile can be viewed at https://example.com/user?ssn=SSN-54474&email=j***@example.com and their phone is in the callback param: https://example.com/api?callback=415***0198"
+ },
+ "realistic_scenarios.json:edge_tabular_data_01": {
+  "key": {
+   "135****2341": "13598762341",
+   "138****1934": "13867251934",
+   "150****7456": "15021387456",
+   "ID-03292": "110105199803126517",
+   "ID-06452": "310115200201089515",
+   "ID-70596": "440305198507233513",
+   "P-14593": "李芳",
+   "P-83811": "王建华"
+  },
+  "redacted": "员工信息表:\n工号\t姓名\t手机\t\t身份证号\nE001\tP-83811\t138****1934\tID-03292\nE002\tP-14593\t150****7456\tID-06452\nE003\t陈明辉\t135****2341\tID-70596"
+ },
+ "realistic_scenarios.json:edge_unicode_obfuscation_01": {
+  "key": {
+   "ID-03292": "１１０１０５１９９８０３１２６５１７"
+  },
+  "redacted": "客户身份证号：ID-03292"
+ },
+ "realistic_scenarios.json:edge_zh_phone_no_separator_01": {
+  "key": {
+   "壹叁捌****伍陆柒捌": "壹叁捌壹贰叁肆伍陆柒捌"
+  },
+  "redacted": "请拨打手机号码壹叁捌****伍陆柒捌联系我们的客服代表"
+ },
+ "realistic_scenarios.json:en_credit_card_variants_01": {
+  "key": {
+   "3400 0*******0009": "3400 000000 00009",
+   "4111 1*********1111": "4111 1111 1111 1111",
+   "5500-0*********0004": "5500-0000-0000-0004",
+   "6011 0*********0004": "6011 0000 0000 0004"
+  },
+  "redacted": "Payment methods on file for customer #8827:\n- Visa: 4111 1*********1111, exp 08/27, CVV 123\n- Mastercard: 5500-0*********0004, exp 12/26\n- Amex: 3400 0*******0009, exp 03/28\n- Discover: 6011 0*********0004, exp 11/25\nPlease process refund to the Visa card."
+ },
+ "realistic_scenarios.json:en_customer_service_01": {
+  "key": {
+   "(41*******0198": "(415) 555-0198",
+   "411111******1111": "4111111111111111",
+   "SSN-54474": "423-71-8834"
+  },
+  "redacted": "Case #48291: Customer John Whitfield called regarding unauthorized charges on his Visa ending in 1111. Full card number provided for verification: 411111******1111. Customer SSN on file: SSN-54474. Callback number: (41*******0198. Issue escalated to fraud department."
+ },
+ "realistic_scenarios.json:en_customer_service_02": {
+  "key": {
+   "312*****0147": "312-555-0147",
+   "P-83811": "Sarah Mitchell",
+   "SSN-54474": "451-38-2764",
+   "s***********@example.com": "s.mitchell92@example.com"
+  },
+  "redacted": "Hi, my name is P-83811 and I'd like to update my account. My current address is 742 Evergreen Terrace, Springfield, IL 62704. My email is s***********@example.com and you can reach me at 312*****0147. My SSN is SSN-54474 for identity verification."
+ },
+ "realistic_scenarios.json:en_email_thread_01": {
+  "key": {
+   "+1 **********0312": "+1 (646) 555-0312",
+   "SSN-54474": "434-55-1278",
+   "h***@acmecorp.example.com": "hr@acmecorp.example.com",
+   "j***************@example.com": "jennifer.oconnor@example.com"
+  },
+  "redacted": "From: j***************@example.com\nTo: h***@acmecorp.example.com\nSubject: Direct deposit setup\n\nHi HR team,\n\nPlease set up my direct deposit with the following details:\nBank: Chase\nRouting: 021000021\nAccount: 123456789012\nMy SSN for tax purposes: SSN-54474\n\nThanks,\nJennifer O'Connor\nCell: +1 **********0312"
+ },
+ "realistic_scenarios.json:en_insurance_claim_01": {
+  "key": {
+   "(71*******0892": "(713) 555-0892",
+   "DOB-52253": "07/22/1982",
+   "P-83811": "Christopher J. Anderson",
+   "SSN-54474": "418-55-3042",
+   "c***********@example.com": "c.anderson82@example.com"
+  },
+  "redacted": "CLAIM FORM — Auto Insurance\n\nPolicyholder: P-83811\nPolicy #: AUT-2024-887312\nSSN: SSN-54474\nDOB: DOB-52253\nPhone: (71*******0892\nEmail: c***********@example.com\n\nIncident Date: 03/10/2024\nLocation: Intersection of Main St and 5th Ave, Houston, TX 77002\nDescription: Rear-ended at red light by uninsured driver. Damage to rear bumper and trunk. Police report #HPD-2024-04521 filed."
+ },
+ "realistic_scenarios.json:en_legal_document_01": {
+  "key": {
+   "512*****0294": "512-555-0294",
+   "ADDR-36501": "1847 Oak Valley Drive, Apt 4B",
+   "P-83811": "Margaret Louise Thompson",
+   "SSN-54474": "412-44-6738",
+   "m****************@example.com": "margaret.thompson@example.com"
+  },
+  "redacted": "AFFIDAVIT OF IDENTITY\n\nI, P-83811, residing at ADDR-36501, Austin, TX 78704, do hereby swear under penalty of perjury that the information provided is true. My Social Security Number is SSN-54474 and my date of birth is November 3, 1978. Contact: m****************@example.com, phone 512*****0294."
+ },
+ "realistic_scenarios.json:en_medical_record_01": {
+  "key": {
+   "214*****0823": "214-555-0823",
+   "DOB-52253": "04/17/1985",
+   "P-14593": "Blue Cross",
+   "P-83811": "Robert A. Hernandez",
+   "SSN-54474": "409-62-4513",
+   "SSN-66690": "123456789"
+  },
+  "redacted": "PATIENT: P-83811\nDOB: DOB-52253\nSSN: SSN-54474\nMRN: 00847291\n\nHPI: 39 y/o male presents with chest pain x 2 hours. Pain is substernal, pressure-like, 7/10, radiating to left arm. Hx of HTN, DM2. Contact: wife Maria at 214*****0823. Insurance: P-14593 ID# XYZSSN-66690."
+ },
+ "realistic_scenarios.json:en_phone_formats_01": {
+  "key": {
+   "(20*******0145": "(202) 555-0145",
+   "+1-********0145": "+1-202-555-0145",
+   "202*****0167": "202-555-0167",
+   "202*****0198": "202.555.0198",
+   "202***0134": "2025550134",
+   "P-83811": "David Park"
+  },
+  "redacted": "Emergency contacts for employee P-83811:\n- Home: (20*******0145\n- Cell: 202*****0198\n- Work: 202*****0167\n- International format: +1-********0145\n- Compact: 202***0134\nPlease try cell first."
+ },
+ "realistic_scenarios.json:in_kyc_form_01": {
+  "key": {
+   "PAN-74620": "BXRPK4321F",
+   "r***********@example.in": "rajesh.patel@example.in"
+  },
+  "redacted": "KYC Verification Form\nName: Rajesh Kumar Patel\nAadhaar Number: 2847 3916 5023\nPAN: PAN-74620\nMobile: +91 98765 43210\nAddress: 402, Shanti Apartments, M.G. Road, Bengaluru, Karnataka 560001\nEmail: r***********@example.in\n\nVerification Status: Documents verified by branch manager on 15-Mar-2024."
+ },
+ "realistic_scenarios.json:in_loan_application_01": {
+  "key": {
+   "PAN-18278": "AVDPS1234J",
+   "PAN-74620": "CQZPS5678H"
+  },
+  "redacted": "Home Loan Application — HDFC Bank\nApplicant: Sunita Devi Sharma\nAadhaar: 5612 8934 7012\nPAN Card: PAN-74620\nMonthly Income: ₹85,000\nEmployer: Infosys Ltd, Hinjewadi, Pune\nContact: 9876012345\nCo-applicant: Anil Sharma, Aadhaar: 7123 4567 8901, PAN: PAN-18278"
+ },
+ "realistic_scenarios.json:in_telecom_kyc_01": {
+  "key": {
+   "MY_N-69455": "3456 7890 1234",
+   "PAN-74620": "DQMPK7890L"
+  },
+  "redacted": "SIM Activation — Customer Verification\nName: Ananya Krishnamurthy\nAadhaar: MY_N-69455\nPAN: PAN-74620\nMobile (new): +91 70123 45678\nAlternate: +91 98765 12340\nAddress: B-204, Prestige Lakeside Habitat, Whitefield, Bangalore 560066\n\nVerified by: Agent ID TN-4521\nDate: 15-Mar-2024\nBiometric auth: Passed"
+ },
+ "realistic_scenarios.json:ja_bank_account_01": {
+  "key": {
+   "080******5432": "080-9876-5432"
+  },
+  "redacted": "口座開設申込書\nお名前：鈴木花子\n生年月日：平成2年5月20日\nマイナンバー：234567890129\nご連絡先：080******5432\nご住所：大阪府大阪市北区梅田3丁目1-1 グランフロント大阪タワーA 2301号\n\nご希望の口座種類：普通預金\nお届印の確認が必要です。"
+ },
+ "realistic_scenarios.json:ja_corporate_email_01": {
+  "key": {
+   "03-*****7890": "03-3456-7890",
+   "070******5678": "070-1234-5678",
+   "i**************@example.co.jp": "ichiro.yamamoto@example.co.jp"
+  },
+  "redacted": "佐藤部長\n\nお疲れ様です。新規取引先の担当者情報をお送りします。\n\n会社名：株式会社テクノソリューション\n担当者：山本一郎\n電話：03-*****7890\n携帯：070******5678\nメール：i**************@example.co.jp\n\n来週月曜日の打ち合わせ、よろしくお願いいたします。\n\n営業部 高橋"
+ },
+ "realistic_scenarios.json:ja_hospital_record_01": {
+  "key": {
+   "090******5678": "090-1234-5678",
+   "MY_N-69455": "123456789018",
+   "t*******@example.co.jp": "t.tanaka@example.co.jp"
+  },
+  "redacted": "患者情報\n氏名：田中太郎\nマイナンバー：MY_N-69455\n電話番号：090******5678\n住所：東京都渋谷区神宮前1丁目2-3 メゾン原宿405号室\nメール：t*******@example.co.jp\n\n診察内容：2024年3月15日受診。主訴は2週間前からの腰痛。理学所見上、L4/5レベルに圧痛あり。MRI検査を予約。"
+ },
+ "realistic_scenarios.json:ko_civil_service_01": {
+  "key": {
+   "010******5432": "010-9876-5432",
+   "RRN-94525": "850315-1234567",
+   "c**********@example.co.kr": "chulsoo.kim@example.co.kr"
+  },
+  "redacted": "민원 접수 내역\n민원인: 김철수\n주민등록번호: RRN-94525\n연락처: 010******5432\n주소: 서울특별시 강남구 테헤란로 152 강남파이낸스센터 8층\n이메일: c**********@example.co.kr\n\n민원 내용: 주민등록등본 발급 요청\n처리 기한: 2024년 3월 20일"
+ },
+ "realistic_scenarios.json:ko_hospital_intake_01": {
+  "key": {
+   "010******4321": "010-8765-4321",
+   "010******6789": "010-2345-6789",
+   "RRN-94525": "920708-2345678"
+  },
+  "redacted": "환자 접수\n성명: 박영희\n주민등록번호: RRN-94525\n전화번호: 010******6789\n보호자: 박동수 (부), 연락처 010******4321\n\n증상: 3일 전부터 지속되는 기침과 38.5도 발열. 코로나 PCR 검사 필요."
+ },
+ "realistic_scenarios.json:ko_real_estate_01": {
+  "key": {
+   "010******7890": "010-3456-7890",
+   "010******8901": "010-4567-8901",
+   "RRN-63872": "901215-2678901",
+   "RRN-94525": "780422-1567890"
+  },
+  "redacted": "부동산 매매계약서\n매도인: 이정호, 주민등록번호 RRN-94525\n매수인: 최미선, 주민등록번호 RRN-63872\n소재지: 경기도 성남시 분당구 판교로 235 판교테크노밸리 A동 1502호\n매매대금: 12억 5천만원\n계약일: 2024년 3월 15일\n매도인 연락처: 010******7890\n매수인 연락처: 010******8901"
+ },
+ "realistic_scenarios.json:mixed_en_de_business_01": {
+  "key": {
+   "151*****6789": "151 23456789",
+   "IBAN-96780": "DE44 5001 0517 5407 3249 31",
+   "i***@example.de": "info@example.de"
+  },
+  "redacted": "Dear Herr Becker,\n\nThank you for your order. Please wire the payment to our German account:\nIBAN: IBAN-96780\nBIC: ESSEDE5FXXX\n\nOur office address: Kurfürstendamm 195, 10707 Berlin.\nFor questions, contact our team at +49 151*****6789 or i***@example.de.\n\nBest regards,\nMichael Braun\nSteuer-ID: 65 432 178 903"
+ },
+ "realistic_scenarios.json:mixed_zh_en_resume_01": {
+  "key": {
+   "138******5678": "138-1234-5678",
+   "ADDR-36501": "上海市浦东新区张杨路1088号",
+   "ID-03292": "310115200201089515",
+   "P-03279": "汤臣一品",
+   "P-14593": "复旦大学",
+   "P-83811": "陈大明",
+   "d************@example.com": "david.chen.sh@example.com"
+  },
+  "redacted": "简历 / Resume\n\n姓名/Name: P-83811 (David Chen)\n电话/Phone: +86 138******5678\nEmail: d************@example.com\n身份证号: ID-03292\n\n教育背景/Education:\n- P-14593 计算机科学 本科 2020-2024\n- Stanford University, M.S. Computer Science, 2024-2026 (expected)\n\n目前居住: ADDR-36501P-032793号楼1801"
+ },
+ "realistic_scenarios.json:mixed_zh_en_support_01": {
+  "key": {
+   "159****4567": "15921234567",
+   "P-83811": "周我",
+   "l*********@example.com": "liwei_2024@example.com"
+  },
+  "redacted": "Hi，我是来自上海的客户Li Wei，我的会员账号注册邮箱是l*********@example.com。上P-83811在你们app上买的东西一直没发货，订单号#SH20240315001。我手机号是159****4567，麻烦尽快处理，谢谢！My English name is William Li if that helps."
+ },
+ "realistic_scenarios.json:uk_hmrc_letter_01": {
+  "key": {},
+  "redacted": "Dear Mr Richardson,\n\nYour Self Assessment tax return for the year 2023/24 is now due.\n\nUTR: 1234567890\nNational Insurance number: SH 12 34 56 B\nAddress on file: 7 Castle Street, Edinburgh EH2 3AH\n\nPlease submit your return by 31 January 2025 or you may incur a penalty. For assistance, call HMRC on 0300 200 3310.\n\nYours faithfully,\nHM Revenue & Customs"
+ },
+ "realistic_scenarios.json:uk_letting_agent_01": {
+  "key": {},
+  "redacted": "Tenant application summary:\nApplicant: Priya Sharma\nCurrent address: Flat 3, 28 Victoria Road, Manchester M14 5QA\nNational Insurance: AB 98 76 54 A\nMobile: 07700 900456\nEmployer: Barclays PLC, Canary Wharf, London E14 5HP\nSalary: £52,000 p.a.\nReferences: Previous landlord Mr. G. Williams, tel 0161 555 0987"
+ },
+ "realistic_scenarios.json:uk_nhs_record_01": {
+  "key": {
+   "j*********@example.co.uk": "j.thornton@example.co.uk"
+  },
+  "redacted": "Patient Record — NHS Trust\nName: James Oliver Thornton\nNHS Number: 943 476 5918\nNINO: AB 12 34 56 C\nAddress: 14 Kensington High Street, London W8 4PT\nGP: Dr Elizabeth Hargreaves, Willow Surgery\nTel: 020 7946 0321\nEmail: j*********@example.co.uk\n\nPresenting complaint: Persistent cough for 3 weeks, non-productive. No haemoptysis. Ex-smoker (quit 2019)."
+ },
+ "realistic_scenarios.json:zh_address_record_01": {
+  "key": {
+   "137****1234": "13706891234",
+   "ADDR-36501": "山东省青岛市市南区香港中路67号",
+   "ID-03292": "370202198706093215",
+   "P-83811": "吴晓峰"
+  },
+  "redacted": "收件人：P-83811，电话137****1234，地址：ADDR-36501远洋大厦12层1203室，邮编266071。身份证号ID-03292，务必本人签收。"
+ },
+ "realistic_scenarios.json:zh_address_record_02": {
+  "key": {
+   "189****6789": "18951236789",
+   "ADDR-36501": "江苏省南京市玄武区珠江路528号",
+   "ID-03292": "320102200012257815",
+   "P-83811": "方孙雨辰"
+  },
+  "redacted": "租赁合同登记：承租P-83811，身份证号ID-03292，联系方式189****6789，租赁房屋位于ADDR-36501德基大厦A座2502室，月租金8500元，押一付三。"
+ },
+ "realistic_scenarios.json:zh_chat_log_01": {
+  "key": {
+   "176****9876": "17612349876",
+   "ID-03292": "420106198812058514"
+  },
+  "redacted": "小刘：哥，我换号了，新号码是176****9876\n老赵：好的，记住了。你身份证拍给我了吗？办宽带要用\n小刘：发了，ID-03292\n老赵：收到，明天帮你去营业厅办"
+ },
+ "realistic_scenarios.json:zh_chat_log_02": {
+  "key": {
+   "139****1234": "13908761234",
+   "622826*********5598": "6228265423511615598",
+   "O-05054": "对方公司",
+   "O-37498": "财务转账需要我们的银行",
+   "O-91256": "中国工商银行",
+   "P-83811": "方联系人",
+   "TITLE-53592": "黄经理"
+  },
+  "redacted": "[2024-03-15 14:32] TITLE-53592：合同签好了，O-05054的O-37498信息\n[2024-03-15 14:33] TITLE-53592：开户行：O-91256成都春熙路支行\n[2024-03-15 14:33] TITLE-53592：账号：622826*********5598\n[2024-03-15 14:34] 助理小王：好的，我这边对接。对P-83811电话139****1234"
+ },
+ "realistic_scenarios.json:zh_court_filing_01": {
+  "key": {
+   "186****7654": "18629087654",
+   "ADDR-36501": "陕西省西安市碑林区长安北路128号",
+   "ADDR-93837": "西安市高新区科技路48号",
+   "CRIM-66964": "起诉",
+   "ETH-34986": "汉族",
+   "ID-03292": "610103199508182415",
+   "O-05054": "某某科技有限公司",
+   "P-83811": "安小区"
+  },
+  "redacted": "民事CRIM-66964状\n\n原告：杨柳，女，1995年8月18日出生，ETH-34986，住ADDR-36501盛世长P-838113栋1单元801室。身份证号码：ID-03292。联系电话：186****7654。\n\n被告：O-05054，住所地：ADDR-93837。\n\n诉讼请求：\n一、判令被告返还原告购房定金人民币50,000元；\n二、诉讼费由被告承担。"
+ },
+ "realistic_scenarios.json:zh_customer_record_01": {
+  "key": {
+   "138****1934": "13867251934",
+   "ID-03292": "110105199803126517",
+   "P-83811": "王建华"
+  },
+  "redacted": "客户P-83811先生来电投诉，手机号138****1934，称其在2024年3月15日购买的商品存在质量问题，身份证号ID-03292，要求全额退款并赔偿。客服已记录工单，稍后回电处理。"
+ },
+ "realistic_scenarios.json:zh_customer_record_02": {
+  "key": {
+   "150****7456": "15021387456",
+   "622210*********0010": "6222104332181960010",
+   "ID-03292": "310115200201089515",
+   "O-05054": "反映其银行",
+   "P-14593": "常消费",
+   "P-83811": "李女士"
+  },
+  "redacted": "P-83811（手机：150****7456）O-05054卡622210*********0010在昨日有一笔异P-14593￥3,280.00，非本人操作。已核实身份证号ID-03292，建议冻结账户并提交争议申请。"
+ },
+ "realistic_scenarios.json:zh_ecommerce_01": {
+  "key": {
+   "186****7654": "18629087654",
+   "ADDR-36501": "陕西省西安市碑林区长安北路1号"
+  },
+  "redacted": "订单详情：\n订单号：2024031512345678\n买家：杨柳\n手机：186****7654\n收货地址：ADDR-36501省体育场东门\n付款方式：银行卡尾号9319\n商品：Apple iPhone 15 Pro 256GB 原色钛金属\n金额：￥8,999.00\n状态：已发货"
+ },
+ "realistic_scenarios.json:zh_email_mixed_01": {
+  "key": {
+   "137****4567": "13761234567",
+   "TITLE-53592": "客户经理",
+   "k********@examplebank.com": "kefu_zhao@examplebank.com"
+  },
+  "redacted": "尊敬的赵先生，您好！您在我行办理的信用卡（尾号5534）本期账单金额为￥12,680.50，还款截止日为2024年4月5日。如有疑问请致电客服热线400-820-1234或联系您的TITLE-53592（手机：137****4567，邮箱：k********@examplebank.com）。"
+ },
+ "realistic_scenarios.json:zh_hr_record_01": {
+  "key": {
+   "138****0001": "13857120001",
+   "138****6789": "13857126789",
+   "621733*********9409": "6217338908386379409",
+   "ADDR-36501": "浙江省杭州市西湖区文三路391号",
+   "ID-03292": "330106199605204518",
+   "O-05054": "工商银行",
+   "P-14593": "刘建国",
+   "P-83811": "刘思远",
+   "TITLE-53592": "新员"
+  },
+  "redacted": "TITLE-53592工入职登记表\n姓名：P-83811  工号：EMP20240315\n身份证号：ID-03292\n手机：138****6789\n紧急联系人：P-14593（父）138****0001\n户籍地址：ADDR-36501\n银行卡号（O-05054）：621733*********9409\n入职日期：2024年3月15日"
+ },
+ "realistic_scenarios.json:zh_license_plate_context_01": {
+  "key": {
+   "135****5678": "13512345678",
+   "139****4567": "13901234567",
+   "ADDR-36501": "车辆在北京市朝阳区建国路",
+   "P-14593": "李某",
+   "P-83811": "王某",
+   "PLATE-01192": "沪B·67890",
+   "PLATE-79671": "京A·12345"
+  },
+  "redacted": "交通事故报告：2024年3月15日下午2时，PLATE-79671号ADDR-36501与东三环交叉口与PLATE-01192号车辆发生碰撞。京A车驾驶员P-83811，手机139****4567；沪B车驾驶员P-14593，手机135****5678。"
+ },
+ "realistic_scenarios.json:zh_medical_note_01": {
+  "key": {
+   "135****2341": "13598762341",
+   "186****2198": "18675432198",
+   "AGE-60066": "38岁",
+   "ID-03292": "440305198507233513",
+   "P-03279": "陈丽",
+   "P-14593": "高血压病",
+   "P-83811": "陈明辉"
+  },
+  "redacted": "患者P-83811，男，AGE-60066，身份证号ID-03292。主诉：反复头痛伴恶心3天。查体：BP 145/95mmHg，神清，颈软。初步诊断：P-145932级。联系电话135****2341，家属联系人：P-03279（妻），电话186****2198。"
+ },
+ "realistic_scenarios.json:zh_medical_note_02": {
+  "key": {
+   "187****3456": "18708193456",
+   "AGE-60066": "年龄：32",
+   "GEN-49484": "性别：女",
+   "ID-03292": "510107199110151514",
+   "P-14593": "周晨起恶",
+   "P-83811": "张淑芬"
+  },
+  "redacted": "门诊病历\n姓名：P-83811  GEN-49484  AGE-60066岁\n身份证号：ID-03292\n联系电话：187****3456\n就诊日期：2024-09-12\n主诉：停经40天，恶心呕吐1周\n现病史：末次月经2024-08-03，近一P-14593心明显\n处理：查血HCG，B超检查"
+ },
+ "realistic_scenarios.json:zh_wechat_group_01": {
+  "key": {
+   "138****0001": "13812340001",
+   "150****0003": "15012340003",
+   "186****0002": "18698760002",
+   "P-83811": "张小明",
+   "TITLE-53592": "班主任"
+  },
+  "redacted": "TITLE-53592李老师：各位家长好，周六春游需要填写家长同意书，请回复孩子姓名+家长手机号。\n小明妈妈：P-83811，138****0001\n朵朵爸爸：王朵朵，186****0002\n乐乐妈妈：刘乐乐，150****0003\nTITLE-53592李老师：收到，感谢配合！出发时间早上8点校门口集合。"
+ },
+ "redact_config.json:default_config_unchanged": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "电话138****5678"
+ },
+ "redact_config.json:id_number_mask_instead_of_remove": {
+  "key": {
+   "ID-03292": "110101199003074610"
+  },
+  "redacted": "身份证ID-03292"
+ },
+ "redact_config.json:phone_pseudonym_with_prefix": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "电话138****5678"
+ },
+ "redact_config.json:phone_remove_instead_of_mask": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "电话138****5678"
+ },
+ "redact_roundtrip.json:bank_card": {
+  "key": {
+   "411111******1111": "4111111111111111"
+  },
+  "redacted": "银行卡号411111******1111请妥善保管"
+ },
+ "redact_roundtrip.json:dense_pii_paragraph": {
+  "key": {
+   "138****5678": "13812345678",
+   "411111******1111": "4111111111111111",
+   "P-83811": "张先生",
+   "PLATE-79671": "沪A12345",
+   "z****@test.com": "zhang@test.com"
+  },
+  "redacted": "客户P-83811，手机138****5678，邮箱z****@test.com，银行卡411111******1111，车牌PLATE-79671"
+ },
+ "redact_roundtrip.json:email_only": {
+  "key": {
+   "z****@example.com": "zhang@example.com"
+  },
+  "redacted": "邮箱z****@example.com请查收"
+ },
+ "redact_roundtrip.json:id_number_only": {
+  "key": {
+   "ID-03292": "110101199003074610"
+  },
+  "redacted": "身份证号ID-03292ok"
+ },
+ "redact_roundtrip.json:license_plate": {
+  "key": {
+   "PLATE-79671": "京A88888"
+  },
+  "redacted": "他开的车是PLATE-79671，停在楼下"
+ },
+ "redact_roundtrip.json:multiple_pii": {
+  "key": {
+   "138****5678": "13812345678",
+   "t***@example.com": "test@example.com"
+  },
+  "redacted": "电话138****5678，邮箱t***@example.com"
+ },
+ "redact_roundtrip.json:no_pii": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "redact_roundtrip.json:phone_and_id": {
+  "key": {
+   "138****5678": "13812345678",
+   "ID-03292": "110101199003074610"
+  },
+  "redacted": "联系人电话138****5678，身份证ID-03292"
+ },
+ "redact_roundtrip.json:phone_only": {
+  "key": {
+   "138****5678": "13812345678",
+   "P-83811": "张三"
+  },
+  "redacted": "P-83811的电话是138****5678"
+ },
+ "redact_roundtrip.json:pii_at_boundaries": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "138****5678"
+ },
+ "shared_gender.json:gender_en_female": {
+  "key": {
+   "GEN-49484": "Sex: F"
+  },
+  "redacted": "GEN-49484"
+ },
+ "shared_gender.json:gender_en_male": {
+  "key": {
+   "GEN-49484": "gender: male"
+  },
+  "redacted": "GEN-49484"
+ },
+ "shared_gender.json:gender_zh_female": {
+  "key": {
+   "GEN-49484": "性别女"
+  },
+  "redacted": "GEN-49484"
+ },
+ "shared_gender.json:gender_zh_male": {
+  "key": {
+   "GEN-49484": "性别：男"
+  },
+  "redacted": "GEN-49484"
+ },
+ "shared_gender.json:gender_zh_nanxing": {
+  "key": {
+   "GEN-49484": "男性"
+  },
+  "redacted": "他是GEN-49484"
+ },
+ "shared_gender.json:plain_text": {
+  "key": {},
+  "redacted": "nothing here"
+ },
+ "shared_imei.json:imei_keyword_cn": {
+  "key": {
+   "IMEI-13642": "490154203237518"
+  },
+  "redacted": "设备IMEI号IMEI-13642"
+ },
+ "shared_imei.json:imei_no_keyword": {
+  "key": {},
+  "redacted": "353456789012345"
+ },
+ "shared_imei.json:imei_standard": {
+  "key": {
+   "IMEI-13642": "353456789012345"
+  },
+  "redacted": "IMEI: IMEI-13642"
+ },
+ "shared_imei.json:imei_too_short": {
+  "key": {},
+  "redacted": "IMEI: 35345678901234"
+ },
+ "shared_imei.json:plain_text": {
+  "key": {},
+  "redacted": "nothing here"
+ },
+ "shared_ip.json:ipv4_cidr_private": {
+  "key": {
+   "IP-94349": "192.168.1.0/24"
+  },
+  "redacted": "内网段IP-94349"
+ },
+ "shared_ip.json:ipv4_cidr_public": {
+  "key": {
+   "IP-94349": "8.8.8.8/24",
+   "P-83811": "许来源"
+  },
+  "redacted": "允P-83811: IP-94349"
+ },
+ "shared_ip.json:ipv4_max_octets": {
+  "key": {
+   "IP-94349": "255.255.255.255"
+  },
+  "redacted": "地址IP-94349"
+ },
+ "shared_ip.json:ipv4_octet_too_large": {
+  "key": {},
+  "redacted": "无效地址256.1.2.3"
+ },
+ "shared_ip.json:ipv4_public": {
+  "key": {
+   "IP-94349": "8.8.8.8"
+  },
+  "redacted": "访问来源: IP-94349"
+ },
+ "shared_ip.json:ipv4_single_digits": {
+  "key": {
+   "IP-94349": "1.2.3.4"
+  },
+  "redacted": "IP: IP-94349"
+ },
+ "shared_ip.json:ipv4_standard": {
+  "key": {
+   "IP-94349": "192.168.1.100"
+  },
+  "redacted": "服务器IP是IP-94349"
+ },
+ "shared_ip.json:ipv6_collapsed": {
+  "key": {
+   "IP-94349": "::1"
+  },
+  "redacted": "地址 IP-94349 是本机"
+ },
+ "shared_ip.json:ipv6_full": {
+  "key": {
+   "IP-94349": "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+  },
+  "redacted": "IPv6: IP-94349"
+ },
+ "shared_ip.json:ipv6_prefix_collapse": {
+  "key": {
+   "IP-94349": "2001:db8::1"
+  },
+  "redacted": "服务器 IP-94349 上线"
+ },
+ "shared_ip.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "shared_ip.json:version_number_not_ip": {
+  "key": {},
+  "redacted": "version 1.2.3.4 released"
+ },
+ "shared_mac.json:mac_colon": {
+  "key": {
+   "MAC-44859": "AA:BB:CC:DD:EE:FF"
+  },
+  "redacted": "MAC地址MAC-44859"
+ },
+ "shared_mac.json:mac_dash": {
+  "key": {
+   "MAC-44859": "AA-BB-CC-DD-EE-FF"
+  },
+  "redacted": "device mac: MAC-44859"
+ },
+ "shared_mac.json:mac_lowercase": {
+  "key": {
+   "MAC-44859": "aa:bb:cc:dd:ee:ff"
+  },
+  "redacted": "mac MAC-44859"
+ },
+ "shared_mac.json:mac_too_short": {
+  "key": {},
+  "redacted": "AA:BB:CC:DD:EE"
+ },
+ "shared_mac.json:plain_text": {
+  "key": {},
+  "redacted": "nothing here"
+ },
+ "shared_secrets.json:anthropic_basic": {
+  "key": {
+   "ANT-KEY-85890": "sk-ant-api03-FAKE0000000000000000000000000000abcdefghij"
+  },
+  "redacted": "ANTHROPIC_API_KEY=ANT-KEY-85890"
+ },
+ "shared_secrets.json:anthropic_not_matched_by_openai": {
+  "key": {
+   "ANT-KEY-85890": "sk-ant-TEST0000000000000000000000000000000000fakekey"
+  },
+  "redacted": "我的密钥是 ANT-KEY-85890"
+ },
+ "shared_secrets.json:aws_akia_fake": {
+  "key": {
+   "AWS-KEY-41701": "AKIA0000TEST1234FAKE"
+  },
+  "redacted": "aws_access_key_id = AWS-KEY-41701"
+ },
+ "shared_secrets.json:aws_akia_standard": {
+  "key": {
+   "AWS-KEY-41701": "AKIAIOSFODNN7EXAMPLE"
+  },
+  "redacted": "AWS credentials: AWS-KEY-41701"
+ },
+ "shared_secrets.json:aws_lowercase_rejected": {
+  "key": {},
+  "redacted": "akiaIOSFODNN7EXAMPLE"
+ },
+ "shared_secrets.json:github_gho": {
+  "key": {
+   "GH-TOKEN-67143": "gho_0000000000000000000000000000000000FAKE"
+  },
+  "redacted": "OAuth: GH-TOKEN-67143"
+ },
+ "shared_secrets.json:github_ghp": {
+  "key": {
+   "GH-TOKEN-67143": "ghp_0000000000000000000000000000000000FAKE"
+  },
+  "redacted": "TOKEN=GH-TOKEN-67143"
+ },
+ "shared_secrets.json:github_pat_fine_grained": {
+  "key": {
+   "GH-TOKEN-67143": "github_pat_11ABCDEFG0000000000000_fakesuffix0000abcde"
+  },
+  "redacted": "new token: GH-TOKEN-67143"
+ },
+ "shared_secrets.json:github_wrong_prefix": {
+  "key": {},
+  "redacted": "ghx_0000000000000000000000000000000000FAKE"
+ },
+ "shared_secrets.json:jwt_invalid_header_rejected": {
+  "key": {},
+  "redacted": "eyJABC.eyJDEF.GHIJKL"
+ },
+ "shared_secrets.json:jwt_valid": {
+  "key": {
+   "JWT-21680": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.FakeSig123_-abcdef"
+  },
+  "redacted": "Authorization: Bearer JWT-21680"
+ },
+ "shared_secrets.json:openai_sk_basic": {
+  "key": {
+   "OAI-KEY-69792": "sk-TEST1234567890abcdefghij1234567890ABCDEFGHIJ"
+  },
+  "redacted": "OPENAI_API_KEY=OAI-KEY-69792"
+ },
+ "shared_secrets.json:openai_sk_proj": {
+  "key": {
+   "OAI-KEY-69792": "sk-proj-FAKE00000000000000000000000000000000000001test"
+  },
+  "redacted": "export key: OAI-KEY-69792"
+ },
+ "shared_secrets.json:openai_too_short": {
+  "key": {},
+  "redacted": "key sk-short123"
+ },
+ "shared_secrets.json:plain_text_no_secret": {
+  "key": {},
+  "redacted": "今天天气不错，没有任何 secret 信息"
+ },
+ "shared_secrets.json:ssh_openssh_key": {
+  "key": {
+   "SSH-KEY-43343": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEKEYDATA0000000000000000000000000000\n-----END OPENSSH PRIVATE KEY-----"
+  },
+  "redacted": "key file content:\nSSH-KEY-43343"
+ },
+ "shared_secrets.json:ssh_rsa_key": {
+  "key": {
+   "SSH-KEY-43343": "-----BEGIN RSA PRIVATE KEY-----\nFAKERSA0000000000000\n-----END RSA PRIVATE KEY-----"
+  },
+  "redacted": "SSH-KEY-43343"
+ },
+ "shared_secrets.json:ssh_unterminated_no_match": {
+  "key": {},
+  "redacted": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEDATA without closing marker"
+ },
+ "shared_url_token.json:plain_text": {
+  "key": {},
+  "redacted": "nothing here"
+ },
+ "shared_url_token.json:url_access_token": {
+  "key": {
+   "URL-99327": "https://example.com/oauth?access_token=eyJhbGciOiJI"
+  },
+  "redacted": "callback URL-99327"
+ },
+ "shared_url_token.json:url_api_key": {
+  "key": {
+   "URL-99327": "https://api.service.com/v1?api_key=sk_live_1234567890abcdef"
+  },
+  "redacted": "URL-99327"
+ },
+ "shared_url_token.json:url_no_token": {
+  "key": {},
+  "redacted": "visit https://example.com/page"
+ },
+ "shared_url_token.json:url_token_param": {
+  "key": {
+   "URL-99327": "https://example.com/verify?token=abc123def456"
+  },
+  "redacted": "链接 URL-99327"
+ },
+ "uk_patterns.json:nino_valid": {
+  "key": {},
+  "redacted": "NINO: AB 12 34 56 C"
+ },
+ "uk_patterns.json:phone_valid": {
+  "key": {},
+  "redacted": "Call +44 20 7946 0958"
+ },
+ "uk_patterns.json:plain_text": {
+  "key": {},
+  "redacted": "Good morning"
+ },
+ "uk_patterns.json:postcode_standard": {
+  "key": {},
+  "redacted": "Address: SW1A 1AA London"
+ },
+ "zh_address.json:city_name_only": {
+  "key": {},
+  "redacted": "我在北京"
+ },
+ "zh_address.json:embedded_in_sentence": {
+  "key": {
+   "ADDR-36501": "杭州市西湖区文三路200号"
+  },
+  "redacted": "他住在ADDR-36501"
+ },
+ "zh_address.json:full_address": {
+  "key": {
+   "ADDR-36501": "北京市朝阳区建国路100号"
+  },
+  "redacted": "ADDR-36501"
+ },
+ "zh_address.json:informal_district_street": {
+  "key": {
+   "ADDR-36501": "朝阳建国路100号"
+  },
+  "redacted": "快递寄到ADDR-36501"
+ },
+ "zh_address.json:informal_district_street_no_num": {
+  "key": {
+   "ADDR-36501": "海淀中关村大街"
+  },
+  "redacted": "地址在ADDR-36501"
+ },
+ "zh_address.json:informal_with_building": {
+  "key": {
+   "ADDR-36501": "南山深南大道100号5栋"
+  },
+  "redacted": "ADDR-36501"
+ },
+ "zh_address.json:municipality_district": {
+  "key": {
+   "ADDR-36501": "天津市河西区友谊路50号"
+  },
+  "redacted": "ADDR-36501"
+ },
+ "zh_address.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_address.json:province_city_district": {
+  "key": {
+   "ADDR-36501": "广东省深圳市南山区科技路1号"
+  },
+  "redacted": "ADDR-36501"
+ },
+ "zh_address.json:with_building": {
+  "key": {
+   "ADDR-36501": "上海市浦东新区陆家嘴环路1000号3栋"
+  },
+  "redacted": "ADDR-36501"
+ },
+ "zh_address.json:with_room": {
+  "key": {
+   "ADDR-36501": "杭州市西湖区文三路200号8楼801室"
+  },
+  "redacted": "ADDR-36501"
+ },
+ "zh_age.json:age_0_valid": {
+  "key": {
+   "AGE-60066": "0岁"
+  },
+  "redacted": "宝宝AGE-60066"
+ },
+ "zh_age.json:age_150_invalid": {
+  "key": {},
+  "redacted": "她150岁了"
+ },
+ "zh_age.json:age_aged_en": {
+  "key": {
+   "AGE-60066": "aged 72"
+  },
+  "redacted": "AGE-60066"
+ },
+ "zh_age.json:age_nianji": {
+  "key": {
+   "AGE-60066": "年龄：28"
+  },
+  "redacted": "AGE-60066"
+ },
+ "zh_age.json:age_sui": {
+  "key": {
+   "AGE-60066": "35岁"
+  },
+  "redacted": "他今年AGE-60066"
+ },
+ "zh_age.json:age_unrealistic_999": {
+  "key": {},
+  "redacted": "他999岁"
+ },
+ "zh_age.json:age_year_old_en": {
+  "key": {
+   "AGE-60066": "5-year-old"
+  },
+  "redacted": "a AGE-60066 child"
+ },
+ "zh_age.json:age_years_old_en": {
+  "key": {
+   "AGE-60066": "35 years old"
+  },
+  "redacted": "he is AGE-60066"
+ },
+ "zh_age.json:age_zhou_sui": {
+  "key": {
+   "AGE-60066": "周岁52"
+  },
+  "redacted": "患者AGE-60066"
+ },
+ "zh_age.json:no_keyword_number": {
+  "key": {},
+  "redacted": "共35人参加"
+ },
+ "zh_age.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_bank_card.json:ccb_bin_no_luhn": {
+  "key": {
+   "621700******7890": "6217001234567890"
+  },
+  "redacted": "卡号621700******7890"
+ },
+ "zh_bank_card.json:ccb_bin_with_spaces": {
+  "key": {
+   "6217 0*********7890": "6217 0012 3456 7890"
+  },
+  "redacted": "建行卡 6217 0*********7890"
+ },
+ "zh_bank_card.json:icbc_bin_no_luhn": {
+  "key": {
+   "622202******7890": "6222021234567890"
+  },
+  "redacted": "工行卡622202******7890"
+ },
+ "zh_bank_card.json:luhn_invalid": {
+  "key": {},
+  "redacted": "4111111111111112"
+ },
+ "zh_bank_card.json:random_16_digits_no_bin": {
+  "key": {},
+  "redacted": "1234567890123456"
+ },
+ "zh_bank_card.json:unionpay_valid": {
+  "key": {
+   "621226*********0004": "6212262200000000004"
+  },
+  "redacted": "卡号621226*********0004"
+ },
+ "zh_bank_card.json:unionpay_with_spaces": {
+  "key": {
+   "6212 2************* 004": "6212 2622 0000 0000 004"
+  },
+  "redacted": "卡号6212 2************* 004"
+ },
+ "zh_bank_card.json:visa_valid": {
+  "key": {
+   "411111******1111": "4111111111111111"
+  },
+  "redacted": "银行卡411111******1111"
+ },
+ "zh_bank_card.json:visa_with_dashes": {
+  "key": {
+   "4111-1*********1111": "4111-1111-1111-1111"
+  },
+  "redacted": "卡号4111-1*********1111"
+ },
+ "zh_bank_card.json:visa_with_spaces": {
+  "key": {
+   "4111 1*********1111": "4111 1111 1111 1111"
+  },
+  "redacted": "银行卡4111 1*********1111"
+ },
+ "zh_biometric.json:bio_dna": {
+  "key": {
+   "BIO-50742": "DNA检测"
+  },
+  "redacted": "BIO-50742结果"
+ },
+ "zh_biometric.json:bio_hongmo": {
+  "key": {
+   "BIO-50742": "虹膜扫描"
+  },
+  "redacted": "BIO-50742完成"
+ },
+ "zh_biometric.json:bio_renlian": {
+  "key": {
+   "BIO-50742": "人脸识别"
+  },
+  "redacted": "BIO-50742通过"
+ },
+ "zh_biometric.json:bio_shengwen": {
+  "key": {
+   "BIO-50742": "声纹录入"
+  },
+  "redacted": "BIO-50742成功"
+ },
+ "zh_biometric.json:bio_zhiwen": {
+  "key": {
+   "BIO-50742": "指纹信息"
+  },
+  "redacted": "已采集BIO-50742"
+ },
+ "zh_biometric.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_credit_code.json:all_same_digits": {
+  "key": {},
+  "redacted": "信用代码111111111111111111"
+ },
+ "zh_credit_code.json:contains_forbidden_letter_I": {
+  "key": {},
+  "redacted": "信用代码9I110108MA01YBNX62"
+ },
+ "zh_credit_code.json:government_agency": {
+  "key": {
+   "BIZ-81071": "111000000000123600"
+  },
+  "redacted": "机关代码BIZ-81071"
+ },
+ "zh_credit_code.json:invalid_checksum": {
+  "key": {},
+  "redacted": "信用代码91110108MA01YBNX6A"
+ },
+ "zh_credit_code.json:lowercase_should_match": {
+  "key": {
+   "BIZ-81071": "91110108ma01ybnx62"
+  },
+  "redacted": "代码：BIZ-81071"
+ },
+ "zh_credit_code.json:nonprofit_org": {
+  "key": {
+   "BIZ-81071": "52100000500000784G"
+  },
+  "redacted": "社会组织代码BIZ-81071"
+ },
+ "zh_credit_code.json:plain_text": {
+  "key": {},
+  "redacted": "天气不错"
+ },
+ "zh_credit_code.json:standard_enterprise": {
+  "key": {
+   "BIZ-81071": "91110108MA01YBNX62"
+  },
+  "redacted": "企业信用代码：BIZ-81071"
+ },
+ "zh_credit_code.json:too_short": {
+  "key": {},
+  "redacted": "代码9111010MA01YBN"
+ },
+ "zh_credit_code.json:with_context_prefix": {
+  "key": {
+   "BIZ-81071": "91320507MA1WLGBX0B"
+  },
+  "redacted": "统一社会信用代码BIZ-81071"
+ },
+ "zh_criminal_record.json:cr_andi": {
+  "key": {
+   "CRIM-66964": "犯罪记录"
+  },
+  "redacted": "他有CRIM-66964"
+ },
+ "zh_criminal_record.json:cr_juliu": {
+  "key": {
+   "CRIM-66964": "行政拘留"
+  },
+  "redacted": "CRIM-66964十五天"
+ },
+ "zh_criminal_record.json:cr_panxing": {
+  "key": {
+   "CRIM-66964": "判刑三年"
+  },
+  "redacted": "被CRIM-66964"
+ },
+ "zh_criminal_record.json:cr_qianke": {
+  "key": {
+   "CRIM-66964": "有前科"
+  },
+  "redacted": "此人CRIM-66964"
+ },
+ "zh_criminal_record.json:cr_xingju": {
+  "key": {
+   "CRIM-66964": "刑事拘留"
+  },
+  "redacted": "被CRIM-66964"
+ },
+ "zh_criminal_record.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_date_of_birth.json:dob_chinese_numeral_december": {
+  "key": {
+   "DOB-52253": "十二月二十五日"
+  },
+  "redacted": "出生日期DOB-52253"
+ },
+ "zh_date_of_birth.json:dob_chinese_numeral_hao": {
+  "key": {
+   "DOB-52253": "三月七号"
+  },
+  "redacted": "出生DOB-52253"
+ },
+ "zh_date_of_birth.json:dob_chinese_numeral_ri": {
+  "key": {
+   "DOB-52253": "三月七日"
+  },
+  "redacted": "生日是DOB-52253"
+ },
+ "zh_date_of_birth.json:dob_dash_format": {
+  "key": {
+   "DOB-52253": "1990-03-07"
+  },
+  "redacted": "出生日期：DOB-52253"
+ },
+ "zh_date_of_birth.json:dob_dot_format": {
+  "key": {
+   "DOB-52253": "1990.03.07"
+  },
+  "redacted": "生于DOB-52253"
+ },
+ "zh_date_of_birth.json:dob_mdy_slash": {
+  "key": {
+   "DOB-52253": "03/07/1990"
+  },
+  "redacted": "born: DOB-52253"
+ },
+ "zh_date_of_birth.json:dob_nian_yue_ri_padded": {
+  "key": {
+   "DOB-52253": "1990年03月07日"
+  },
+  "redacted": "出生日期DOB-52253"
+ },
+ "zh_date_of_birth.json:dob_nian_yue_ri_unpadded": {
+  "key": {
+   "DOB-52253": "1990年3月7日"
+  },
+  "redacted": "他生于DOB-52253"
+ },
+ "zh_date_of_birth.json:dob_short_year": {
+  "key": {
+   "DOB-52253": "90年3月"
+  },
+  "redacted": "生日是DOB-52253"
+ },
+ "zh_date_of_birth.json:dob_slash_format": {
+  "key": {
+   "DOB-52253": "1990/03/07"
+  },
+  "redacted": "出生日期DOB-52253"
+ },
+ "zh_date_of_birth.json:no_keyword_iso": {
+  "key": {},
+  "redacted": "会议时间2024-03-07"
+ },
+ "zh_date_of_birth.json:no_keyword_plain_date": {
+  "key": {},
+  "redacted": "2024年3月7日开会"
+ },
+ "zh_date_of_birth.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_ethnicity.json:eth_hanzu": {
+  "key": {
+   "ETH-34986": "民族：汉族"
+  },
+  "redacted": "ETH-34986"
+ },
+ "zh_ethnicity.json:eth_huizu": {
+  "key": {
+   "ETH-34986": "民族回族"
+  },
+  "redacted": "ETH-34986"
+ },
+ "zh_ethnicity.json:eth_mengguzu": {
+  "key": {
+   "ETH-34986": "民族：蒙古族"
+  },
+  "redacted": "ETH-34986"
+ },
+ "zh_ethnicity.json:eth_weiwuerzu": {
+  "key": {
+   "ETH-34986": "民族维吾尔族"
+  },
+  "redacted": "ETH-34986"
+ },
+ "zh_ethnicity.json:eth_zangzu": {
+  "key": {
+   "ETH-34986": "藏族"
+  },
+  "redacted": "他是ETH-34986"
+ },
+ "zh_ethnicity.json:no_keyword_zu": {
+  "key": {
+   "O-05054": "家族企业"
+  },
+  "redacted": "O-05054"
+ },
+ "zh_ethnicity.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_financial.json:fin_daikuan": {
+  "key": {
+   "FIN-86787": "房贷余额120万"
+  },
+  "redacted": "FIN-86787"
+ },
+ "zh_financial.json:fin_generic_money": {
+  "key": {},
+  "redacted": "这个项目投资500万"
+ },
+ "zh_financial.json:fin_nianshouru": {
+  "key": {
+   "FIN-86787": "年收入50万"
+  },
+  "redacted": "FIN-86787"
+ },
+ "zh_financial.json:fin_qianzhai": {
+  "key": {
+   "FIN-86787": "欠债30万"
+  },
+  "redacted": "FIN-86787"
+ },
+ "zh_financial.json:fin_xinyong": {
+  "key": {
+   "FIN-86787": "信用评分680分"
+  },
+  "redacted": "FIN-86787"
+ },
+ "zh_financial.json:fin_yuexin": {
+  "key": {
+   "FIN-86787": "月薪2万元"
+  },
+  "redacted": "FIN-86787"
+ },
+ "zh_financial.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_id_number.json:all_zeros_region": {
+  "key": {},
+  "redacted": "000000199003074610"
+ },
+ "zh_id_number.json:invalid_checksum": {
+  "key": {},
+  "redacted": "110101199003071235"
+ },
+ "zh_id_number.json:invalid_checksum_not_detected": {
+  "key": {},
+  "redacted": "身份证号110101199003071234"
+ },
+ "zh_id_number.json:invalid_day_32": {
+  "key": {},
+  "redacted": "110101199001324610"
+ },
+ "zh_id_number.json:invalid_month_13": {
+  "key": {},
+  "redacted": "110101199013074610"
+ },
+ "zh_id_number.json:old_15_digit_embedded": {
+  "key": {
+   "ID-03292": "110101900307456"
+  },
+  "redacted": "证件号码ID-03292请核实"
+ },
+ "zh_id_number.json:old_15_digit_id": {
+  "key": {
+   "ID-03292": "110101900307123"
+  },
+  "redacted": "身份证ID-03292"
+ },
+ "zh_id_number.json:old_15_digit_invalid_month": {
+  "key": {},
+  "redacted": "110101901307123"
+ },
+ "zh_id_number.json:order_number_not_detected": {
+  "key": {
+   "BIZ-81071": "123456789012345678"
+  },
+  "redacted": "订单号BIZ-81071"
+ },
+ "zh_id_number.json:too_short": {
+  "key": {},
+  "redacted": "11010119900307123"
+ },
+ "zh_id_number.json:valid_id": {
+  "key": {
+   "ID-03292": "110101199003074610"
+  },
+  "redacted": "身份证号ID-03292"
+ },
+ "zh_id_number.json:valid_id_born_2000s": {
+  "key": {
+   "ID-03292": "32010620050101123X"
+  },
+  "redacted": "新世代身份证ID-03292"
+ },
+ "zh_id_number.json:valid_id_embedded": {
+  "key": {
+   "ID-03292": "110101199003074610"
+  },
+  "redacted": "办理人身份证号码是ID-03292，请核实"
+ },
+ "zh_id_number.json:valid_id_lowercase_x": {
+  "key": {
+   "ID-03292": "11010119900307002x"
+  },
+  "redacted": "ID-03292"
+ },
+ "zh_id_number.json:valid_id_mixed_separators": {
+  "key": {
+   "ID-03292": "110101 1990 0307 4610"
+  },
+  "redacted": "身份证ID-03292"
+ },
+ "zh_id_number.json:valid_id_with_dashes": {
+  "key": {
+   "ID-03292": "110101-19900307-4610"
+  },
+  "redacted": "身份证ID-03292"
+ },
+ "zh_id_number.json:valid_id_with_spaces": {
+  "key": {
+   "ID-03292": "110101 19900307 4610"
+  },
+  "redacted": "身份证 ID-03292"
+ },
+ "zh_id_number.json:valid_id_x_check": {
+  "key": {
+   "ID-03292": "11010119900307002X"
+  },
+  "redacted": "身份证ID-03292"
+ },
+ "zh_job_title.json:job_ceo_en": {
+  "key": {
+   "TITLE-53592": "CEO"
+  },
+  "redacted": "the TITLE-53592 announced"
+ },
+ "zh_job_title.json:job_dongshizhang": {
+  "key": {
+   "TITLE-53592": "张董事长"
+  },
+  "redacted": "TITLE-53592出席"
+ },
+ "zh_job_title.json:job_jingli": {
+  "key": {
+   "TITLE-53592": "项目经理"
+  },
+  "redacted": "TITLE-53592说"
+ },
+ "zh_job_title.json:job_yisheng": {
+  "key": {
+   "TITLE-53592": "骨科医生"
+  },
+  "redacted": "TITLE-53592建议"
+ },
+ "zh_job_title.json:job_zhuren": {
+  "key": {
+   "TITLE-53592": "一下李主任"
+  },
+  "redacted": "问TITLE-53592"
+ },
+ "zh_job_title.json:job_zongjian": {
+  "key": {
+   "TITLE-53592": "技术总监"
+  },
+  "redacted": "TITLE-53592负责"
+ },
+ "zh_job_title.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_license_plate.json:beijing_normal": {
+  "key": {
+   "PLATE-79671": "京A12345"
+  },
+  "redacted": "车牌PLATE-79671"
+ },
+ "zh_license_plate.json:embedded_in_sentence": {
+  "key": {
+   "PLATE-79671": "京A88888"
+  },
+  "redacted": "他的车是PLATE-79671，停在楼下"
+ },
+ "zh_license_plate.json:guangdong_with_dot": {
+  "key": {
+   "PLATE-79671": "粤B·12345"
+  },
+  "redacted": "PLATE-79671"
+ },
+ "zh_license_plate.json:invalid_province": {
+  "key": {},
+  "redacted": "中A12345"
+ },
+ "zh_license_plate.json:new_energy_6digits": {
+  "key": {
+   "PLATE-79671": "京AD12345"
+  },
+  "redacted": "PLATE-79671"
+ },
+ "zh_license_plate.json:new_energy_f_prefix": {
+  "key": {
+   "PLATE-79671": "沪AF01234"
+  },
+  "redacted": "PLATE-79671"
+ },
+ "zh_license_plate.json:plain_text": {
+  "key": {},
+  "redacted": "这不是车牌号"
+ },
+ "zh_license_plate.json:shanghai_normal": {
+  "key": {
+   "PLATE-79671": "沪C67890"
+  },
+  "redacted": "PLATE-79671"
+ },
+ "zh_license_plate.json:sichuan": {
+  "key": {
+   "PLATE-79671": "川A123AB"
+  },
+  "redacted": "PLATE-79671"
+ },
+ "zh_license_plate.json:too_short": {
+  "key": {},
+  "redacted": "京A123"
+ },
+ "zh_medical.json:med_aizi": {
+  "key": {
+   "MED-39131": "HIV阳性"
+  },
+  "redacted": "MED-39131"
+ },
+ "zh_medical.json:med_chachulai": {
+  "key": {
+   "MED-39131": "糖尿病"
+  },
+  "redacted": "查出来是MED-39131"
+ },
+ "zh_medical.json:med_chide": {
+  "key": {
+   "MED-39131": "降压药"
+  },
+  "redacted": "吃的MED-39131"
+ },
+ "zh_medical.json:med_dele": {
+  "key": {
+   "MED-39131": "高血压"
+  },
+  "redacted": "得了MED-39131"
+ },
+ "zh_medical.json:med_drug_amoxicillin": {
+  "key": {
+   "MED-39131": "阿莫西林"
+  },
+  "redacted": "我吃了MED-39131"
+ },
+ "zh_medical.json:med_drug_aspirin_chi": {
+  "key": {
+   "MED-39131": "阿司匹林"
+  },
+  "redacted": "每天吃MED-39131"
+ },
+ "zh_medical.json:med_drug_banlangen": {
+  "key": {
+   "MED-39131": "板蓝根"
+  },
+  "redacted": "喝了MED-39131"
+ },
+ "zh_medical.json:med_drug_cephalosporin": {
+  "key": {
+   "MED-39131": "头孢"
+  },
+  "redacted": "吃了MED-39131"
+ },
+ "zh_medical.json:med_drug_ganmaoling": {
+  "key": {
+   "MED-39131": "感冒灵"
+  },
+  "redacted": "喝了MED-39131"
+ },
+ "zh_medical.json:med_drug_ibuprofen": {
+  "key": {
+   "MED-39131": "布洛芬"
+  },
+  "redacted": "我吃了MED-39131"
+ },
+ "zh_medical.json:med_drug_insulin": {
+  "key": {
+   "MED-39131": "胰岛素"
+  },
+  "redacted": "打了MED-39131"
+ },
+ "zh_medical.json:med_drug_lianhua": {
+  "key": {
+   "MED-39131": "连花清瘟"
+  },
+  "redacted": "吃了MED-39131"
+ },
+ "zh_medical.json:med_drug_loratadine": {
+  "key": {
+   "MED-39131": "氯雷他定"
+  },
+  "redacted": "吃了MED-39131"
+ },
+ "zh_medical.json:med_drug_metformin": {
+  "key": {
+   "MED-39131": "二甲双胍"
+  },
+  "redacted": "他吃的MED-39131"
+ },
+ "zh_medical.json:med_drug_omeprazole": {
+  "key": {
+   "MED-39131": "奥美拉唑"
+  },
+  "redacted": "吃了MED-39131"
+ },
+ "zh_medical.json:med_drug_paracetamol": {
+  "key": {
+   "MED-39131": "对乙酰氨基酚"
+  },
+  "redacted": "吃了MED-39131"
+ },
+ "zh_medical.json:med_drug_penicillin": {
+  "key": {
+   "MED-39131": "青霉素"
+  },
+  "redacted": "吃了MED-39131"
+ },
+ "zh_medical.json:med_fuyong": {
+  "key": {
+   "MED-39131": "阿莫西林"
+  },
+  "redacted": "服用MED-39131"
+ },
+ "zh_medical.json:med_gaoxueya": {
+  "key": {
+   "MED-39131": "高血压"
+  },
+  "redacted": "患有MED-39131"
+ },
+ "zh_medical.json:med_kaile": {
+  "key": {
+   "MED-39131": "阿司匹林"
+  },
+  "redacted": "开了MED-39131"
+ },
+ "zh_medical.json:med_quezhen": {
+  "key": {
+   "MED-39131": "糖尿病"
+  },
+  "redacted": "确诊MED-39131"
+ },
+ "zh_medical.json:med_shoushu": {
+  "key": {
+   "MED-39131": "做了心脏搭桥手术"
+  },
+  "redacted": "MED-39131"
+ },
+ "zh_medical.json:med_zhenduan": {
+  "key": {
+   "MED-39131": "抑郁症"
+  },
+  "redacted": "诊断为MED-39131"
+ },
+ "zh_medical.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_military_id.json:armed_police": {
+  "key": {
+   "MIL-94946": "87654321",
+   "P-83811": "武字第"
+  },
+  "redacted": "P-83811MIL-94946号"
+ },
+ "zh_military_id.json:conscript_cert": {
+  "key": {
+   "MIL-94946": "12345678"
+  },
+  "redacted": "义务兵证MIL-94946"
+ },
+ "zh_military_id.json:no_keyword": {
+  "key": {},
+  "redacted": "号码是12345678"
+ },
+ "zh_military_id.json:officer_standard": {
+  "key": {
+   "MIL-94946": "12345678"
+  },
+  "redacted": "军字第MIL-94946号"
+ },
+ "zh_military_id.json:officer_with_context": {
+  "key": {
+   "MIL-94946": "11223344"
+  },
+  "redacted": "他的军官证号是军字第MIL-94946号"
+ },
+ "zh_military_id.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_military_id.json:soldier_cert": {
+  "key": {
+   "MIL-94946": "12345678"
+  },
+  "redacted": "士兵证号MIL-94946"
+ },
+ "zh_military_id.json:too_few_digits": {
+  "key": {},
+  "redacted": "军字第1234567号"
+ },
+ "zh_organization.json:no_org_bare_suffix_question": {
+  "key": {},
+  "redacted": "有公司来招聘"
+ },
+ "zh_organization.json:no_org_verb_prefix_swallow": {
+  "key": {},
+  "redacted": "请查一下公司税号"
+ },
+ "zh_organization.json:org_bare_gongsi": {
+  "key": {},
+  "redacted": "去公司上班"
+ },
+ "zh_organization.json:org_embedded_verb": {
+  "key": {
+   "O-05054": "华为技术有限公司"
+  },
+  "redacted": "就职于O-05054"
+ },
+ "zh_organization.json:org_gufen": {
+  "key": {
+   "O-05054": "华为技术股份有限公司"
+  },
+  "redacted": "O-05054"
+ },
+ "zh_organization.json:org_jituan": {
+  "key": {
+   "O-05054": "阿里巴巴集团"
+  },
+  "redacted": "O-05054宣布"
+ },
+ "zh_organization.json:org_with_verb_prefix_trim": {
+  "key": {
+   "O-05054": "腾讯公司"
+  },
+  "redacted": "请查一下O-05054的信息"
+ },
+ "zh_organization.json:org_yinhang": {
+  "key": {
+   "O-05054": "中国工商银行"
+  },
+  "redacted": "O-05054办理"
+ },
+ "zh_organization.json:org_yiyuan": {
+  "key": {
+   "O-05054": "北京协和医院"
+  },
+  "redacted": "O-05054检查"
+ },
+ "zh_organization.json:org_youxian_gongsi": {
+  "key": {
+   "O-05054": "腾讯计算机系统有限公司"
+  },
+  "redacted": "O-05054"
+ },
+ "zh_organization.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_passport.json:no_passport_bare_code": {
+  "key": {},
+  "redacted": "编号G12345678的订单"
+ },
+ "zh_passport.json:no_passport_version": {
+  "key": {},
+  "redacted": "版本V20250101已发布"
+ },
+ "zh_passport.json:passport_embedded": {
+  "key": {
+   "P-83811": "徐明",
+   "PASS-99256": "E12345678"
+  },
+  "redacted": "旅客P-83811的护照号码PASS-99256已过期"
+ },
+ "zh_passport.json:passport_valid": {
+  "key": {
+   "PASS-99256": "G12345678"
+  },
+  "redacted": "护照号PASS-99256"
+ },
+ "zh_person.json:no_person_bare_name_in_sentence": {
+  "key": {},
+  "redacted": "李明去了超市买东西"
+ },
+ "zh_person.json:no_person_code": {
+  "key": {},
+  "redacted": "帮我看看这段代码"
+ },
+ "zh_person.json:no_person_company": {
+  "key": {
+   "O-05054": "华为公司"
+  },
+  "redacted": "O-05054发布了新产品"
+ },
+ "zh_person.json:no_person_dynasty": {
+  "key": {},
+  "redacted": "唐朝是中国历史上的伟大朝代"
+ },
+ "zh_person.json:no_person_generic": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_person.json:no_person_place": {
+  "key": {},
+  "redacted": "黄山风景区很漂亮"
+ },
+ "zh_person.json:no_person_plan": {
+  "key": {},
+  "redacted": "这个方案不错"
+ },
+ "zh_person.json:no_person_standalone": {
+  "key": {},
+  "redacted": "张三说了话"
+ },
+ "zh_person.json:person_basic_three_char": {
+  "key": {
+   "139****5678": "13912345678",
+   "P-83811": "王小明"
+  },
+  "redacted": "联系人P-83811，电话139****5678"
+ },
+ "zh_person.json:person_basic_two_char": {
+  "key": {
+   "138****5678": "13812345678",
+   "P-83811": "张三"
+  },
+  "redacted": "客户P-83811的手机号是138****5678"
+ },
+ "zh_person.json:person_cardholder": {
+  "key": {
+   "O-05054": "持卡人吴静的银行"
+  },
+  "redacted": "O-05054卡"
+ },
+ "zh_person.json:person_doctor": {
+  "key": {
+   "MED-39131": "处方",
+   "P-83811": "黄磊",
+   "TITLE-53592": "主治医生"
+  },
+  "redacted": "TITLE-53592P-83811开了MED-39131"
+ },
+ "zh_person.json:person_mr": {
+  "key": {
+   "P-83811": "刘伟"
+  },
+  "redacted": "请联系P-83811先生"
+ },
+ "zh_person.json:person_ms": {
+  "key": {
+   "P-83811": "赵敏"
+  },
+  "redacted": "P-83811女士已确认"
+ },
+ "zh_person.json:person_name_field": {
+  "key": {
+   "ID-03292": "110101199003074610",
+   "P-83811": "马超"
+  },
+  "redacted": "姓名：P-83811，身份证ID-03292"
+ },
+ "zh_person.json:person_near_phone": {
+  "key": {
+   "138****5678": "13812345678",
+   "P-83811": "张三"
+  },
+  "redacted": "P-83811138****5678"
+ },
+ "zh_person.json:person_owner": {
+  "key": {
+   "P-83811": "周杰",
+   "PLATE-79671": "京A12345"
+  },
+  "redacted": "车主P-83811的车牌PLATE-79671"
+ },
+ "zh_person.json:person_patient": {
+  "key": {
+   "P-83811": "李芳"
+  },
+  "redacted": "患者P-83811因头痛就诊"
+ },
+ "zh_person.json:person_recipient": {
+  "key": {
+   "138****5678": "13812345678",
+   "P-83811": "高强"
+  },
+  "redacted": "收件人P-83811，电话138****5678"
+ },
+ "zh_person.json:person_register": {
+  "key": {
+   "136****5678": "13612345678",
+   "P-83811": "孙艳"
+  },
+  "redacted": "登记人：P-83811，手机136****5678"
+ },
+ "zh_person.json:person_sender": {
+  "key": {
+   "137****5678": "13712345678",
+   "P-83811": "何娟"
+  },
+  "redacted": "寄件人：P-83811，联系方式137****5678"
+ },
+ "zh_person.json:person_teacher": {
+  "key": {
+   "P-83811": "陈华"
+  },
+  "redacted": "P-83811老师的课程"
+ },
+ "zh_person.json:person_traveler": {
+  "key": {
+   "P-83811": "徐明",
+   "PASS-99256": "E12345678"
+  },
+  "redacted": "旅客P-83811的护照号PASS-99256"
+ },
+ "zh_person.json:person_user": {
+  "key": {
+   "P-83811": "林涛"
+  },
+  "redacted": "用户P-83811完成实名认证"
+ },
+ "zh_phone.json:landline_beijing": {
+  "key": {
+   "010*****5678": "010-12345678"
+  },
+  "redacted": "座机010*****5678"
+ },
+ "zh_phone.json:landline_no_dash": {
+  "key": {
+   "075*****5678": "075512345678"
+  },
+  "redacted": "075*****5678"
+ },
+ "zh_phone.json:landline_shanghai": {
+  "key": {
+   "021*****4321": "021-87654321"
+  },
+  "redacted": "电话021*****4321"
+ },
+ "zh_phone.json:landline_three_digit_area": {
+  "key": {
+   "075******5678": "0755-12345678"
+  },
+  "redacted": "075******5678"
+ },
+ "zh_phone.json:mobile_embedded_in_sentence": {
+  "key": {
+   "139****5678": "13912345678",
+   "P-83811": "张三"
+  },
+  "redacted": "请联系P-83811，手机号是139****5678，谢谢"
+ },
+ "zh_phone.json:mobile_invalid_prefix_10": {
+  "key": {},
+  "redacted": "10012345678"
+ },
+ "zh_phone.json:mobile_invalid_prefix_11": {
+  "key": {},
+  "redacted": "11012345678"
+ },
+ "zh_phone.json:mobile_invalid_prefix_12": {
+  "key": {},
+  "redacted": "12012345678"
+ },
+ "zh_phone.json:mobile_prefix_13": {
+  "key": {
+   "130****5678": "13012345678"
+  },
+  "redacted": "130****5678"
+ },
+ "zh_phone.json:mobile_prefix_14": {
+  "key": {
+   "140****5678": "14012345678"
+  },
+  "redacted": "140****5678"
+ },
+ "zh_phone.json:mobile_prefix_15": {
+  "key": {
+   "150****5678": "15012345678"
+  },
+  "redacted": "150****5678"
+ },
+ "zh_phone.json:mobile_prefix_16": {
+  "key": {
+   "160****5678": "16012345678"
+  },
+  "redacted": "160****5678"
+ },
+ "zh_phone.json:mobile_prefix_17": {
+  "key": {
+   "170****5678": "17012345678"
+  },
+  "redacted": "170****5678"
+ },
+ "zh_phone.json:mobile_prefix_18": {
+  "key": {
+   "180****5678": "18012345678"
+  },
+  "redacted": "180****5678"
+ },
+ "zh_phone.json:mobile_prefix_19": {
+  "key": {
+   "190****5678": "19012345678"
+  },
+  "redacted": "190****5678"
+ },
+ "zh_phone.json:mobile_standard": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "手机号138****5678"
+ },
+ "zh_phone.json:mobile_too_long": {
+  "key": {},
+  "redacted": "138123456789"
+ },
+ "zh_phone.json:mobile_too_short": {
+  "key": {},
+  "redacted": "1381234567"
+ },
+ "zh_phone.json:mobile_with_country_code": {
+  "key": {
+   "+86*******5678": "+8613812345678"
+  },
+  "redacted": "电话+86*******5678"
+ },
+ "zh_phone.json:mobile_with_dashes": {
+  "key": {
+   "138******5678": "138-1234-5678"
+  },
+  "redacted": "138******5678"
+ },
+ "zh_phone.json:mobile_with_spaces": {
+  "key": {
+   "138******5678": "138 1234 5678"
+  },
+  "redacted": "138******5678"
+ },
+ "zh_phone.json:mobile_with_two_part_space": {
+  "key": {
+   "138*****5678": "138 12345678"
+  },
+  "redacted": "138*****5678"
+ },
+ "zh_phone.json:phone_adjacent_to_punctuation": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "（138****5678）"
+ },
+ "zh_phone.json:phone_after_colon": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "电话：138****5678。"
+ },
+ "zh_phone.json:phone_is_entire_text": {
+  "key": {
+   "138****5678": "13812345678"
+  },
+  "redacted": "138****5678"
+ },
+ "zh_phone.json:two_phones_in_text": {
+  "key": {
+   "138****5678": "13812345678",
+   "159****1111": "15900001111",
+   "P-14593": "李四",
+   "P-83811": "张三"
+  },
+  "redacted": "P-83811138****5678，P-14593159****1111"
+ },
+ "zh_political.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_political.json:pol_dangyuan": {
+  "key": {
+   "POL-95877": "党员"
+  },
+  "redacted": "他是POL-95877"
+ },
+ "zh_political.json:pol_toupiao": {
+  "key": {
+   "POL-95877": "投票给了民主党"
+  },
+  "redacted": "POL-95877"
+ },
+ "zh_political.json:pol_tuandangyuan": {
+  "key": {
+   "POL-95877": "共青团员"
+  },
+  "redacted": "他是POL-95877"
+ },
+ "zh_political.json:pol_youxing": {
+  "key": {
+   "POL-95877": "抗议游行"
+  },
+  "redacted": "参加了POL-95877"
+ },
+ "zh_political.json:pol_zhengzhi": {
+  "key": {
+   "POL-95877": "政治面貌：群众"
+  },
+  "redacted": "POL-95877"
+ },
+ "zh_religion.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_religion.json:rel_fojiato": {
+  "key": {
+   "REL-01865": "佛教徒"
+  },
+  "redacted": "虔诚的REL-01865"
+ },
+ "zh_religion.json:rel_jidtu": {
+  "key": {
+   "REL-01865": "基督徒"
+  },
+  "redacted": "他是REL-01865"
+ },
+ "zh_religion.json:rel_libai": {
+  "key": {
+   "REL-01865": "做礼拜"
+  },
+  "redacted": "每周REL-01865"
+ },
+ "zh_religion.json:rel_musilin": {
+  "key": {
+   "REL-01865": "穆斯林"
+  },
+  "redacted": "她是REL-01865"
+ },
+ "zh_religion.json:rel_shoushi": {
+  "key": {
+   "REL-01865": "受洗入教"
+  },
+  "redacted": "已经REL-01865"
+ },
+ "zh_school.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_school.json:school_bare": {
+  "key": {},
+  "redacted": "上大学很重要"
+ },
+ "zh_school.json:school_daxue": {
+  "key": {
+   "P-83811": "北京大学"
+  },
+  "redacted": "考入P-83811"
+ },
+ "zh_school.json:school_fuzhong": {
+  "key": {
+   "P-83811": "人大附中"
+  },
+  "redacted": "P-83811的学生"
+ },
+ "zh_school.json:school_xiaoxue": {
+  "key": {
+   "P-83811": "实验小学"
+  },
+  "redacted": "P-83811报名"
+ },
+ "zh_school.json:school_xueyuan": {
+  "key": {
+   "P-83811": "计算机学院"
+  },
+  "redacted": "P-83811很好"
+ },
+ "zh_school.json:school_youeryuan": {
+  "key": {
+   "P-83811": "蓝天幼儿园"
+  },
+  "redacted": "P-83811招生"
+ },
+ "zh_self_reference.json:multiple_wo": {
+  "key": {
+   "O-05054": "在协和医院",
+   "TITLE-53592": "医生"
+  },
+  "redacted": "我O-05054做了体检，TITLE-53592说我血糖偏高"
+ },
+ "zh_self_reference.json:ni_not_self": {
+  "key": {
+   "MED-39131": "了糖尿病"
+  },
+  "redacted": "你确诊MED-39131"
+ },
+ "zh_self_reference.json:no_pronoun": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_self_reference.json:ta_not_self": {
+  "key": {
+   "MED-39131": "了糖尿病"
+  },
+  "redacted": "他确诊MED-39131"
+ },
+ "zh_self_reference.json:wo_baba": {
+  "key": {
+   "MED-39131": "了高血压"
+  },
+  "redacted": "我爸确诊MED-39131"
+ },
+ "zh_self_reference.json:wo_erzi": {
+  "key": {
+   "P-83811": "儿子在北大附小"
+  },
+  "redacted": "我儿子83811上学"
+ },
+ "zh_self_reference.json:wo_fuqin": {
+  "key": {},
+  "redacted": "我父亲退休了"
+ },
+ "zh_self_reference.json:wo_laogong": {
+  "key": {},
+  "redacted": "我老公在华为上班"
+ },
+ "zh_self_reference.json:wo_laopo": {
+  "key": {},
+  "redacted": "我老婆怀孕了"
+ },
+ "zh_self_reference.json:wo_mama": {
+  "key": {},
+  "redacted": "我妈在301医院住院"
+ },
+ "zh_self_reference.json:wo_muqin": {
+  "key": {},
+  "redacted": "我母亲住院了"
+ },
+ "zh_self_reference.json:wo_nver": {
+  "key": {},
+  "redacted": "我女儿今年高考"
+ },
+ "zh_self_reference.json:wo_possessive": {
+  "key": {},
+  "redacted": "我的手机号是138"
+ },
+ "zh_self_reference.json:wo_simple": {
+  "key": {
+   "MED-39131": "了糖尿病"
+  },
+  "redacted": "我确诊MED-39131"
+ },
+ "zh_self_reference.json:women": {
+  "key": {},
+  "redacted": "我们公司裁员了"
+ },
+ "zh_self_reference.json:women_possessive": {
+  "key": {},
+  "redacted": "我们的产品很好"
+ },
+ "zh_sexual_orientation.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_sexual_orientation.json:so_chugui": {
+  "key": {
+   "ORI-95430": "出柜"
+  },
+  "redacted": "他已经ORI-95430"
+ },
+ "zh_sexual_orientation.json:so_lgbt": {
+  "key": {
+   "ORI-95430": "LGBT"
+  },
+  "redacted": "ORI-95430群体"
+ },
+ "zh_sexual_orientation.json:so_shuangxing": {
+  "key": {
+   "ORI-95430": "双性恋"
+  },
+  "redacted": "她是ORI-95430"
+ },
+ "zh_sexual_orientation.json:so_tongxinglian": {
+  "key": {
+   "ORI-95430": "同性恋"
+  },
+  "redacted": "他是ORI-95430"
+ },
+ "zh_sexual_orientation.json:so_tongzhi_fp": {
+  "key": {},
+  "redacted": "各位同志们好"
+ },
+ "zh_social_account.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_social_account.json:qq_lowercase": {
+  "key": {
+   "QQ-59271": "2345678901"
+  },
+  "redacted": "加我qq QQ-59271"
+ },
+ "zh_social_account.json:qq_min_length": {
+  "key": {
+   "QQ-59271": "10001"
+  },
+  "redacted": "QQ:QQ-59271"
+ },
+ "zh_social_account.json:qq_no_keyword": {
+  "key": {},
+  "redacted": "数字是12345678"
+ },
+ "zh_social_account.json:qq_standard": {
+  "key": {
+   "QQ-59271": "12345678"
+  },
+  "redacted": "我的QQ是QQ-59271"
+ },
+ "zh_social_account.json:qq_too_short": {
+  "key": {},
+  "redacted": "QQ:1234"
+ },
+ "zh_social_account.json:qq_with_colon": {
+  "key": {
+   "QQ-59271": "987654321"
+  },
+  "redacted": "QQ：QQ-59271"
+ },
+ "zh_social_account.json:wechat_custom": {
+  "key": {
+   "WECH-31585": "zhangsan_2024"
+  },
+  "redacted": "我的微信：WECH-31585"
+ },
+ "zh_social_account.json:wechat_no_keyword": {
+  "key": {},
+  "redacted": "用户名abc_xyz123"
+ },
+ "zh_social_account.json:wechat_standard": {
+  "key": {
+   "WECH-31585": "wxid_abc123"
+  },
+  "redacted": "微信号WECH-31585"
+ },
+ "zh_social_account.json:wechat_starts_with_digit": {
+  "key": {},
+  "redacted": "微信号123abc"
+ },
+ "zh_social_account.json:wechat_too_short": {
+  "key": {},
+  "redacted": "微信号abcde"
+ },
+ "zh_social_account.json:wechat_with_hyphen": {
+  "key": {
+   "WECH-31585": "my-name-123"
+  },
+  "redacted": "WeChat: WECH-31585"
+ },
+ "zh_social_account.json:wechat_with_wx_prefix": {
+  "key": {
+   "WECH-31585": "test_user88"
+  },
+  "redacted": "加我wx: WECH-31585"
+ },
+ "zh_social_security.json:no_keyword_bare_id": {
+  "key": {
+   "ID-03292": "110101199003074610"
+  },
+  "redacted": "ID-03292"
+ },
+ "zh_social_security.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_social_security.json:shebao_18digit": {
+  "key": {
+   "ID-03292": "110101199003074610"
+  },
+  "redacted": "社保号ID-03292"
+ },
+ "zh_social_security.json:shebao_card_with_colon": {
+  "key": {
+   "ID-03292": "110101199003074610"
+  },
+  "redacted": "社保卡号：ID-03292"
+ },
+ "zh_social_security.json:shebao_city_format": {
+  "key": {
+   "SOC-56760": "A12345678"
+  },
+  "redacted": "社保卡号：SOC-56760"
+ },
+ "zh_social_security.json:shehui_baozhang": {
+  "key": {
+   "ID-03292": "110101199003074610"
+  },
+  "redacted": "社会保障号ID-03292"
+ },
+ "zh_workplace.json:no_keyword": {
+  "key": {},
+  "redacted": "在华为工作"
+ },
+ "zh_workplace.json:plain_text": {
+  "key": {},
+  "redacted": "今天天气不错"
+ },
+ "zh_workplace.json:wp_danwei": {
+  "key": {
+   "O-05054": "北京市第一医院"
+  },
+  "redacted": "单位：O-05054"
+ },
+ "zh_workplace.json:wp_gongzhi": {
+  "key": {
+   "P-83811": "于百度公"
+  },
+  "redacted": "供职P-83811司"
+ },
+ "zh_workplace.json:wp_gongzuo_danwei": {
+  "key": {
+   "WORK-67729": "中国电信"
+  },
+  "redacted": "工作单位：WORK-67729"
+ },
+ "zh_workplace.json:wp_jiuzhi": {
+  "key": {
+   "WORK-67729": "华为技术"
+  },
+  "redacted": "就职于WORK-67729"
+ }
+}
