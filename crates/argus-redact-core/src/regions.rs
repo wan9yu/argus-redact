@@ -196,15 +196,27 @@ pub(crate) fn detect_regions_zh(
         m.start = absorb_start(m.start, &chars, region_detector(), &mut prefix, memo);
     }
 
-    // Pass 2: collapse spans that share a start to the single longest (max `end`).
-    // A shorter same-start span is fully contained in the longer one and coalesces
-    // to it in the downstream overlap merge, so keeping only the longest is
-    // output-identical. It is also what bounds allocation: a degenerate parent
-    // chain (`市辖区`×k住 / `上海市`×k住) absorbs all k matches to the same start,
-    // and materializing every nested prefix `chars[0..3], chars[0..6], …` is
-    // Θ(k²) text — a default-path remote memory-exhaustion vector. Emitting one
-    // span per start makes the materialized text O(input). For non-degenerate
-    // input no two matches share a start, so this pass is a no-op there.
+    // Pass 2 + 3: collapse same-start spans to the longest, then materialize text.
+    collapse_to_longest_per_start(&chars, &mut out);
+
+    out
+}
+
+/// Collapse region matches that share a start to the single longest (max `end`),
+/// then materialize each surviving span's `text` from `chars`.
+///
+/// A shorter same-start span is fully contained in the longer one and coalesces to
+/// it in the downstream overlap merge, so keeping only the longest is
+/// output-identical. It is also what bounds allocation: a degenerate parent chain
+/// (`市辖区`×k住 / `上海市`×k住) absorbs all k matches to the same start, and
+/// materializing every nested prefix `chars[0..3], chars[0..6], …` would be Θ(k²)
+/// text — a default-path remote memory-exhaustion vector. Emitting one span per
+/// start makes the materialized text O(input). For non-degenerate input no two
+/// matches share a start, so the collapse is a no-op there.
+///
+/// Shared by [`detect_regions_zh`] and its differential-test oracle so the two
+/// differ only in the absorption WALK, never in this collapse.
+fn collapse_to_longest_per_start(chars: &[char], out: &mut Vec<crate::types::PatternMatch>) {
     let mut max_end: HashMap<usize, usize> = HashMap::new();
     for m in out.iter() {
         let e = max_end.entry(m.start).or_insert(0);
@@ -214,13 +226,9 @@ pub(crate) fn detect_regions_zh(
     }
     let mut kept: HashSet<usize> = HashSet::new();
     out.retain(|m| max_end.get(&m.start) == Some(&m.end) && kept.insert(m.start));
-
-    // Pass 3: materialize `m.text` once per surviving span.
     for m in out.iter_mut() {
         m.text = chars[m.start..m.end].iter().collect();
     }
-
-    out
 }
 
 /// The candidate scan + per-candidate evidence gate — everything before
@@ -606,21 +614,10 @@ mod tests {
         for m in out.iter_mut() {
             m.start = absorb_start_naive(m.start, &chars, region_detector(), &mut prefix);
         }
-        // Apply the SAME longest-span-per-start collapse as production, so the
-        // fuzz compares only the absorption WALK (memoised vs naive), not the
-        // shared collapse — keeping it a faithful differential oracle.
-        let mut max_end: HashMap<usize, usize> = HashMap::new();
-        for m in out.iter() {
-            let e = max_end.entry(m.start).or_insert(0);
-            if m.end > *e {
-                *e = m.end;
-            }
-        }
-        let mut kept: HashSet<usize> = HashSet::new();
-        out.retain(|m| max_end.get(&m.start) == Some(&m.end) && kept.insert(m.start));
-        for m in out.iter_mut() {
-            m.text = chars[m.start..m.end].iter().collect();
-        }
+        // Apply the SAME longest-span-per-start collapse as production (the shared
+        // helper), so the fuzz compares only the absorption WALK (memoised vs
+        // naive), not the collapse — keeping it a faithful differential oracle.
+        super::collapse_to_longest_per_start(&chars, &mut out);
         out
     }
 

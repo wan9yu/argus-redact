@@ -402,6 +402,15 @@ pub(crate) fn cn_digit(c: char) -> Option<char> {
     })
 }
 
+/// A CJK numeral homograph that READS as an ASCII digit: [`cn_digit`]'s 19 entries
+/// plus `〇` (U+3007 IDEOGRAPHIC NUMBER ZERO, an `Nl` the frozen 19-entry map
+/// deliberately omits) → `'0'`. This is the "CJK digit including 〇" concept the
+/// digit-sequence classifier and [`digit_value`] both need; `cn_digit` itself stays
+/// frozen at 19 entries.
+pub(crate) fn cjk_digit(c: char) -> Option<char> {
+    cn_digit(c).or_else(|| (c == '\u{3007}').then_some('0'))
+}
+
 /// Non-decimal (`No`/`So`) characters whose NFKC fold CONTAINS an ASCII digit.
 ///
 /// 222 code points / 19 merged ranges: superscripts (¹²³), subscripts (₀-₉),
@@ -593,11 +602,8 @@ pub(crate) fn digit_value(c: char) -> Option<char> {
     if c.is_ascii_digit() {
         return Some(c);
     }
-    if let Some(d) = cn_digit(c) {
-        return Some(d);
-    }
-    if c == '\u{3007}' {
-        return Some('0'); // 〇 IDEOGRAPHIC NUMBER ZERO
+    if let Some(d) = cjk_digit(c) {
+        return Some(d); // cn_digit's 19 entries + 〇
     }
     if let Some(v) = nd_digit_value(c) {
         return char::from_digit(v, 10); // v is 0..=9 by construction -> always Some
@@ -606,12 +612,21 @@ pub(crate) fn digit_value(c: char) -> Option<char> {
         // A DECORATED DIGIT: exactly one ASCII digit, every other char ASCII
         // punctuation (⑴ -> "(1)", ⒈ -> "1.", 🄀 -> "0.", ⑧ -> "8"). A fold with
         // ≥2 digits (½ -> "1⁄2") or a non-punctuation companion (㎟ -> "mm2",
-        // ㋀ -> "1月") is a fraction/unit/label, not an obscured number.
-        let fold: Vec<char> = c.nfkc().collect();
-        let digits = fold.iter().filter(|d| d.is_ascii_digit()).count();
-        if digits == 1 && fold.iter().all(|d| d.is_ascii_digit() || d.is_ascii_punctuation()) {
-            return fold.into_iter().find(|d| d.is_ascii_digit());
+        // ㋀ -> "1月") is a fraction/unit/label, not an obscured number. One pass
+        // over the 1–4-char fold, no allocation: bail on a 2nd digit or a
+        // non-punctuation companion.
+        let mut digit = None;
+        for d in c.nfkc() {
+            if d.is_ascii_digit() {
+                if digit.is_some() {
+                    return None; // ≥2 digits
+                }
+                digit = Some(d);
+            } else if !d.is_ascii_punctuation() {
+                return None; // a non-punctuation companion (unit/label)
+            }
         }
+        return digit;
     }
     None
 }
@@ -730,15 +745,12 @@ fn normalize_digit_sequences(chars: &mut [char]) {
     // `Cjk('0')` — see the branch below — but it was already `is_numeric`, so it
     // was already a run member; only its payload changes.)
     let runs = digit_runs(chars, |c| {
-        if let Some(ascii) = cn_digit(c) {
+        if let Some(ascii) = cjk_digit(c) {
+            // cn_digit's 19 entries + 〇 (U+3007 IDEOGRAPHIC NUMBER ZERO): classing 〇
+            // as CJK lets a Chinese-digit number written with 〇 zeros (一三八〇〇一三八〇〇〇
+            // = 13800138000) count toward Fold 1's CJK majority AND fold to '0' with
+            // the rest, instead of a lone `Other` leaving it half-folded (138〇〇138〇〇〇).
             Some(DigitClass::Cjk(ascii))
-        } else if c == '\u{3007}' {
-            // 〇 IDEOGRAPHIC NUMBER ZERO — an `Nl` the 19-entry cn_digit map omits.
-            // A Chinese-digit number can write its zeros as 〇 (一三八〇〇一三八〇〇〇 =
-            // 13800138000); classing it as CJK lets it count toward Fold 1's CJK
-            // majority AND fold to '0' with the rest, instead of surviving as a
-            // lone `Other` that leaves the number half-folded (138〇〇138〇〇〇).
-            Some(DigitClass::Cjk('0'))
         } else if c.is_ascii_digit() {
             Some(DigitClass::Ascii)
         } else if let Some(v) = nd_digit_value(c) {
