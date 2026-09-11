@@ -2,6 +2,52 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.19 — detection-correctness hardening (obfuscated-number leaks and a region DoS)
+
+A detection-correctness release. It closes a family of default-path leaks where a
+phone or ID number written with non-ASCII or decorated digits, Unicode dashes, or
+spliced invisible marks survived redaction, and one remotely-reachable
+memory-exhaustion DoS. Output is byte-for-byte identical on every input already
+handled correctly (the per-input detection golden and the normalize parity
+fixture change zero existing entries); the change is that previously-missed,
+obfuscated PII is now detected.
+
+### Fixed
+
+- **A Chinese region/address scan could exhaust memory over HTTP.** `detect_regions_zh`
+  emitted every nested prefix of a degenerate repeated-region run, each materializing
+  full span text — Θ(k²) memory that a ~150–300 KB request (well under the input caps)
+  could turn into gigabytes. It now emits only the longest span per shared start,
+  byte-identical output at linear memory.
+- **Numbers written with non-ASCII, decorated, or CJK digits are now detected.** A
+  phone/ID hidden with an Arabic-Indic or Devanagari digit at a run boundary, a
+  parenthesised/full-stop digit (`⑴`, `⒈`, `🄀`), a long CJK-zero tail, the ideographic
+  zero `〇` (`一三八〇〇一三八〇〇〇` = 13800138000), or more exotic digits than the fan-out
+  cap previously slipped through with `residual_personal_data=False`. The fan-out
+  recall path and the Chinese-digit fold now recover them.
+- **Phones/IDs split by a Unicode dash are now detected.** A number written with a
+  Word/PDF en- or em-dash, an Armenian hyphen, a math minus, or a super/subscript
+  minus (`138–0013–8000`, `138⁻0013⁻8000`) is folded to an ASCII hyphen for detection
+  (a legitimate `100–200%` range is preserved — the fold is detection-side only).
+- **A digit run split by an invisible or combining mark is now rejoined.** A format
+  character outside Default_Ignorable (Arabic number signs, interlinear annotation),
+  a `ccc=0` combining mark (e.g. Thai U+0E31), or an enclosing mark spliced between
+  digits no longer breaks a phone/ID run.
+- **The `ver`/`v.` false-positive prefix no longer suppresses real numbers.** The
+  Latin false-positive-prefix guard now requires a word boundary, so `driver`,
+  `server`, and `however` before a phone number stop suppressing it while
+  `version`/`serial #`/`order #` still do.
+
+### Internal
+
+- A per-input detection golden (`tests/fixtures/detection_golden.json`) freezes the
+  redacted text and key for every fixture input, catching individual detection drift
+  the aggregate-with-tolerance baseline hides.
+- Documentation truth pass: scoped an over-broad "now linear" CHANGELOG claim, an
+  in-document-code reservation caveat, the instruction-intent person-threshold
+  behaviour, a restore-boundary limitation, and the reference-implementation license
+  (Apache-2.0).
+
 ## v0.8.18 — dependency currency, dead-code removal, and build/test hygiene
 
 An internal-hardening release with no change to redaction output. The RustCrypto
