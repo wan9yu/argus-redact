@@ -16,6 +16,7 @@ Configure in Claude Desktop (~/Library/Application Support/Claude/claude_desktop
 
 from __future__ import annotations
 
+import functools
 import json
 import secrets
 import threading
@@ -23,6 +24,7 @@ import time
 from collections import OrderedDict
 
 from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from argus_redact import RedactReport, __version__, redact
 from argus_redact.compose import make_anchor, prompt_anchor
@@ -31,6 +33,27 @@ from argus_redact.glue.redact import _effective_lang, _parse_lang_arg
 from argus_redact.pure.wire import common_report_fields, risk_payload
 
 mcp = MCPServer("argus-redact")
+
+
+def _as_tool_error(fn):
+    """Translate anticipated ``ValueError`` into MCP ``ToolError``.
+
+    mcp 2.2+ treats any other exception as a crash and withholds its text from
+    the client (``Error executing tool <name>`` only). A missing language or
+    expired token is a caller mistake the model can correct, so it must travel
+    as ``ToolError``. mcp 2.0 wraps every exception the same way and still
+    includes the original text, so this stays compatible with the extra's
+    ``mcp>=2.0,<3.0`` range.
+    """
+
+    @functools.wraps(fn)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await fn(*args, **kwargs)
+        except ValueError as exc:
+            raise ToolError(str(exc)) from exc
+
+    return wrapper
 
 
 # Process-scoped token store with idle TTL + LRU bound (v0.6.2+).
@@ -113,6 +136,7 @@ def _resolve_key_token(token: str) -> tuple[dict, object, str] | None:
 
 
 @mcp.tool(name="redact")
+@_as_tool_error
 async def redact_text(
     text: str,
     lang: str = "zh",
@@ -153,12 +177,15 @@ async def redact_text(
     # ints are grid-searchable on small PII domains.
     effective_salt: int | bytes = salt if salt is not None else secrets.token_bytes(32)
 
-    redacted_text, key = redact(
+    out = redact(
         text,
         lang=lang_param,
         mode=mode,
         salt=effective_salt,
     )
+    if isinstance(out, RedactReport):
+        raise TypeError("redact(report=False) must return (text, key)")
+    redacted_text, key = out[0], out[1]
     anchor = make_anchor(key)
     token = _create_key_token(key, anchor, redacted_text)
 
@@ -176,6 +203,7 @@ async def redact_text(
 
 
 @mcp.tool(name="restore")
+@_as_tool_error
 async def restore_text(
     text: str,
     key_token: str = "",
@@ -231,7 +259,7 @@ async def restore_text(
     # detailed=True would otherwise suppress it (guarded_restore's default is "warn
     # iff not detailed"). Surfacing stays guarded_restore's decision — one warning
     # over the merged (P/S + H) list, not a second one re-derived here.
-    restored, details = guarded_restore(
+    restored_out = guarded_restore(
         text,
         key_dict,
         redacted=redacted,
@@ -241,6 +269,9 @@ async def restore_text(
         detailed=True,
         warn=True,
     )
+    if isinstance(restored_out, str):
+        raise TypeError("guarded_restore(detailed=True) must return (text, details)")
+    restored, details = restored_out
     events = details.get("security_events", [])
 
     payload: dict = {"restored": restored}
@@ -250,6 +281,7 @@ async def restore_text(
 
 
 @mcp.tool(name="assess")
+@_as_tool_error
 async def assess_text(
     text: str,
     lang: str = "zh",
@@ -270,12 +302,16 @@ async def assess_text(
     # _parse_lang_arg); a single code passes straight through as a str.
     lang_param = _parse_lang_arg(lang, strip=True)
 
-    report: RedactReport = redact(
+    report = redact(
         text,
         lang=lang_param,
         mode=mode,
         report=True,
     )
+    if not isinstance(report, RedactReport):
+        raise TypeError("redact(report=True) must return a RedactReport")
+    if report.risk is None:
+        raise TypeError("RedactReport.risk is unset")
 
     return json.dumps(
         {
