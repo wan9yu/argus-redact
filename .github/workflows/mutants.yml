@@ -41,7 +41,7 @@ jobs:
 
       - name: Install cargo-mutants
         # v2.85.9
-        uses: taiki-e/install-action@91ddec75689c4c78665b598d188dc821c5a43e5c
+        uses: taiki-e/install-action@4076c08d76dba979c11a7285295b0716c1d67908
         with:
           tool: cargo-mutants
 
