@@ -82,6 +82,7 @@ Write one file in `adapters/`, implement `load()` → `Iterator[Sample]`, add `@
 from . import register
 from .base import DatasetAdapter
 
+
 @register
 class MyAdapter(DatasetAdapter):
     name = "my_dataset"
@@ -90,6 +91,7 @@ class MyAdapter(DatasetAdapter):
 
     def load(self, *, lang=None, limit=1000):
         from datasets import load_dataset
+
         ds = load_dataset("org/my_dataset", split="test", streaming=True)
         for ex in ds:
             # normalize to Sample(text, lang, entities=[Entity(text, type)])

@@ -40,7 +40,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install ruff (pinned for a deterministic lint gate)
-        run: pip install ruff==0.15.9
+        run: pip install ruff==0.16.8
       - name: Ruff lint + format check (mirrors `make lint`)
         run: |
           ruff check src/ tests/
