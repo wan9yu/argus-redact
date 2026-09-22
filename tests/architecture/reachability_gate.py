@@ -74,7 +74,7 @@ ALLOWLIST: dict[str, str] = {
     # key; the repo ships the baseline as an empty placeholder and no CI leg
     # provides the key, so the shape check has nothing to assert.
     "tests.benchmark.test_prvl_v0_5_x.TestPRvLv0_5xBaselineFixtureContract."
-    "test_fixture_shape_when_present": (
+    "test_baseline_fixture_should_have_required_fields_when_present": (
         "PRvL baseline fixture ships as an empty placeholder; this shape check runs "
         "only against a populated baseline, which needs an external LLM API key no CI "
         "leg provides"
@@ -83,23 +83,24 @@ ALLOWLIST: dict[str, str] = {
     # The Python-side person-name data source these compared the Rust core
     # against was removed; the tests are retained as the documented parity
     # contract but skip unconditionally until a Python-side source returns.
-    "tests.detection.lang.test_person_data_parity.test_core_pools_equal_python_source": (
+    "tests.detection.lang.test_person_data_parity.test_core_pools_should_equal_python_source": (
         "the Python person-name data source this compared against was removed; retained "
         "as a documented parity contract with nothing to run until a Python-side source "
         "returns"
     ),
-    "tests.detection.lang.test_person_data_parity.test_python_source_matches_frozen_fingerprints": (
+    "tests.detection.lang.test_person_data_parity."
+    "test_python_source_should_match_frozen_fingerprints": (
         "the Python person-name data source this compared against was removed; retained "
         "as a documented parity contract with nothing to run until a Python-side source "
         "returns"
     ),
     # -- Backend-inapplicable guard-contract parametrizations ---------------
     "tests.integration.test_guard_contract."
-    "test_detailed_events_are_h_only_when_reachable[langchain]": _GUARD_NO_DETAILED,
+    "test_detailed_events_should_be_h_only_when_reachable[langchain]": _GUARD_NO_DETAILED,
     "tests.integration.test_guard_contract."
-    "test_detailed_events_are_h_only_when_reachable[llamaindex]": _GUARD_NO_DETAILED,
+    "test_detailed_events_should_be_h_only_when_reachable[llamaindex]": _GUARD_NO_DETAILED,
     "tests.integration.test_guard_contract."
-    "test_detailed_events_are_h_only_when_reachable[mcp]": _GUARD_NO_DETAILED,
+    "test_detailed_events_should_be_h_only_when_reachable[mcp]": _GUARD_NO_DETAILED,
     # -- Data-conditional adversarial parametrizations (no expected count) --
     "tests.safety.test_adversarial.TestAdversarial."
     "test_should_detect_expected_count[adv_many_near_miss_numbers]": _ADVERSARIAL_NO_COUNT,
@@ -355,6 +356,17 @@ def main(argv: list[str]) -> int:
             "NER / Layer-3 tests.",
             file=sys.stderr,
         )
+
+    stale = sorted(k for k in ALLOWLIST if k not in inventory)
+    if stale:
+        ok = False
+        print(
+            f"STALE ALLOWLIST ({len(stale)}): not in the canonical inventory "
+            "(usually a rename; the gate then reports the new id as unexplained).",
+            file=sys.stderr,
+        )
+        for tc_id in stale:
+            print(f"  {tc_id}", file=sys.stderr)
 
     if unexplained:
         ok = False
