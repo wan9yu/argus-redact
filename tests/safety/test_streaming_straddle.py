@@ -693,6 +693,7 @@ def test_jwt_should_not_leak_when_64_character_feeds_follow_unpunctuated_prefixe
     """
     token = _jwt_680()
     prefixes = list(range(3475, 3701, 25)) + [3800]
+
     assert prefixes == [
         3475,
         3500,
@@ -706,6 +707,7 @@ def test_jwt_should_not_leak_when_64_character_feeds_follow_unpunctuated_prefixe
         3700,
         3800,
     ]
+
     tail = " end"
     for prefix_len in prefixes:
         prefix = " " * prefix_len

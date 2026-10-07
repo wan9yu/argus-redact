@@ -39,9 +39,9 @@ def test_pem_opener_ceiling_extra_should_match_between_python_and_rust():
     """
     rs_val = _read_rust_value()
     assert rs_val == 11_000, (
-        f"PEM opener ceiling changed: Rust PEM_OPENER_CEILING_EXTRA={rs_val}, "
-        "expected 11000"
+        f"PEM opener ceiling changed: Rust PEM_OPENER_CEILING_EXTRA={rs_val}, expected 11000"
     )
+
     src = _PYTHON_FILE.read_text(encoding="utf-8")
     assert "_PEM_OPENER_CEILING_EXTRA" not in src
     assert not re.search(r"\b(?:11_000|11000|8_192|8192)\b", src), (
@@ -49,7 +49,7 @@ def test_pem_opener_ceiling_extra_should_match_between_python_and_rust():
     )
 
 
-def test_glue_cut_path_passes_one_effective_max_buffer_to_both_cuts():
+def test_glue_cut_path_should_pass_one_effective_max_buffer_to_both_cuts():
     """``_context_cut`` must take the ceiling from one binding call.
 
     ``streaming_emit_possible`` and ``streaming_context_cut`` have to see that
@@ -58,6 +58,7 @@ def test_glue_cut_path_passes_one_effective_max_buffer_to_both_cuts():
     src = _PYTHON_FILE.read_text(encoding="utf-8")
     fn = src.split("def _context_cut(", 1)[1]
     fn = fn.split("\ndef ", 1)[0]
+
     bound = re.search(
         r"(\w+)\s*=\s*_core\.streaming_effective_max_buffer\(",
         fn,
@@ -70,17 +71,14 @@ def test_glue_cut_path_passes_one_effective_max_buffer_to_both_cuts():
     assert fn.count("streaming_effective_max_buffer(") == 1, (
         "the cut path must call streaming_effective_max_buffer once"
     )
+
     emit = re.search(r"streaming_emit_possible\((.*?)\)", fn, re.S)
     cut = re.search(r"streaming_context_cut\((.*?)\)", fn, re.S)
-    assert emit and name in emit.group(1), (
-        f"streaming_emit_possible must receive {name}"
-    )
-    assert cut and name in cut.group(1), (
-        f"streaming_context_cut must receive {name}"
-    )
+    assert emit and name in emit.group(1), f"streaming_emit_possible must receive {name}"
+    assert cut and name in cut.group(1), f"streaming_context_cut must receive {name}"
 
 
-def test_glue_appends_jwt_span_from_binding_and_drops_local_pem_extra():
+def test_glue_should_append_jwt_span_from_binding_and_drop_local_pem_extra():
     """The wheel cut path must hold an unclosed JWT via the Rust opener.
 
     A local 11000/8192 addition, a second eyJ scan, or a still-registered
@@ -124,9 +122,7 @@ def test_glue_appends_jwt_span_from_binding_and_drops_local_pem_extra():
     assert "wrap_pyfunction!(streaming::streaming_unclosed_jwt_opener_start" in lib
     assert "wrap_pyfunction!(streaming::streaming_effective_max_buffer" in lib
 
-    py_rs = (_REPO_ROOT / "crates/argus-redact-py/src/streaming.rs").read_text(
-        encoding="utf-8"
-    )
+    py_rs = (_REPO_ROOT / "crates/argus-redact-py/src/streaming.rs").read_text(encoding="utf-8")
     assert "fn streaming_unclosed_jwt_opener_start" in py_rs
     assert "fn streaming_pem_begin_present" not in py_rs
     # Orphan gate scans src/ and tests/. The glue call is the src consumer.
