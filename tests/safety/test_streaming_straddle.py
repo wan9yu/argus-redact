@@ -13,8 +13,10 @@ each test asserts the raw original PII is ABSENT from the concatenated output.
 
 from __future__ import annotations
 
+from argus_redact._core_loader import _core
 from argus_redact.compose import StreamingRedactor
 from argus_redact.glue._detect_partial import (
+    _EVIDENCE_CONTEXT_WINDOW,
     DEFAULT_MAX_BUFFER,
 )
 from argus_redact.pure.restore import restore
@@ -711,16 +713,109 @@ def test_jwt_should_not_leak_when_64_character_feeds_follow_unpunctuated_prefixe
         assert prefix[-1] == " "
         text = prefix + token + tail
         out, redactor = _stream(_chunk(text, 64), lang="en")
-        assert token not in out, (
-            f"prefix {prefix_len}: raw JWT forwarded in 64-character feeds"
-        )
+        assert token not in out, f"prefix {prefix_len}: raw JWT forwarded in 64-character feeds"
         assert token[:40] not in out, (
             f"prefix {prefix_len}: JWT head fragment forwarded in 64-character feeds"
         )
         agg = redactor.aggregate_key()
-        assert token in agg.values(), (
-            f"prefix {prefix_len}: token not in aggregate_key values"
-        )
-        assert token not in agg, (
-            f"prefix {prefix_len}: token must not be an aggregate_key key"
-        )
+        assert token in agg.values(), f"prefix {prefix_len}: token not in aggregate_key values"
+        assert token not in agg, f"prefix {prefix_len}: token must not be an aggregate_key key"
+
+
+def _jwt_validator_accepts(value: str) -> bool:
+    """True iff the wheel jwt validator accepts ``value``.
+
+    ``match_patterns`` sets confidence 0.3 when ``validate_jwt`` rejects.
+    An unknown validator name stays at 1.0, so a pass is only meaningful
+    next to a known rejection.
+    """
+    matches = _core.match_patterns(
+        value,
+        [{"type": "jwt", "pattern": r".+", "validator": "jwt"}],
+    )
+    assert len(matches) == 1, "jwt validator probe must see the whole value"
+    return matches[0].confidence == 1.0
+
+
+def test_wheel_opener_should_not_hold_terminated_or_glued_eyj():
+    """Wheel opener regressions: terminated, empty third, and glued eyJ.
+
+    A terminated non-JWT blob, terminator outside ``[A-Za-z0-9_-.]``, then a
+    sentence boundary and at least W padding, emits before flush and leaves
+    the buffer under 4096. A complete token at end of buffer is unclosed
+    None. An empty third segment still passes validate_jwt and is unclosed
+    at the header char offset. A URL shorter than max_buffer whose
+    non-validating eyJ query ends at ``&`` or space is unclosed None, and a
+    following sentence emits before flush. Glued ``text.eyJ`` is unclosed
+    None. This test does not assert the stream redacts that glued residual.
+    """
+    header = "eyJhbGciOiJIUzI1NiJ9"
+    payload = "eyJzdWIiOiIxMjMifQ"
+    # Two segments: validate_jwt is false. A later 1.0 is the validator, not
+    # a missing callback left at confidence 1.0.
+    assert _jwt_validator_accepts(f"{header}.{payload}") is False
+
+    assert _core.streaming_unclosed_jwt_opener_start("text.eyJ") is None, (
+        "glued text.eyJ must not be an unclosed opener"
+    )
+
+    complete = f"{header}.{payload}.sig"
+    assert _jwt_validator_accepts(complete) is True
+    complete_buf = f"note {complete}"
+    assert complete_buf.endswith(complete)
+    assert _core.streaming_unclosed_jwt_opener_start(complete) is None
+    assert _core.streaming_unclosed_jwt_opener_start(complete_buf) is None, (
+        "a complete JWT at end of buffer must be unclosed None, not the header"
+    )
+
+    empty = f"{header}.{payload}."
+    assert _jwt_validator_accepts(empty) is True, "empty third segment must still pass validate_jwt"
+    empty_buf = f"前缀 {empty}"
+    header_off = len("前缀 ")
+    byte_off = len("前缀 ".encode())
+    assert byte_off != header_off, "prefix must be multibyte"
+    assert empty_buf.find("eyJ") == header_off
+    payload_off = empty_buf.rfind("eyJ")
+    assert payload_off != header_off
+    unclosed = _core.streaming_unclosed_jwt_opener_start(empty_buf)
+    assert unclosed == header_off, "empty third segment must be unclosed at the header char offset"
+    assert unclosed != payload_off
+    assert unclosed != byte_off
+
+    # {"typ":"JWT"} has no alg, so validate_jwt is false. ``&`` and space
+    # are outside the scan charset, so the query run does not reach EOS.
+    query = "eyJ0eXAiOiJKV1QifQ.payload.sig"
+    assert _jwt_validator_accepts(query) is False
+    url_amp = f"https://example.com/cb?token={query}&next=1"
+    url_space = f"https://example.com/cb?token={query} "
+    assert len(url_amp) < DEFAULT_MAX_BUFFER
+    assert len(url_space) < DEFAULT_MAX_BUFFER
+    assert _core.streaming_unclosed_jwt_opener_start(url_amp) is None, (
+        "eyJ query terminated by & must be unclosed None"
+    )
+    assert _core.streaming_unclosed_jwt_opener_start(url_space) is None, (
+        "eyJ query terminated by space must be unclosed None"
+    )
+    w = _EVIDENCE_CONTEXT_WINDOW
+    for label, url in (("amp", url_amp), ("space", url_space)):
+        followed = url + "Noted here. " + ("z" * w)
+        assert len("z" * w) >= w
+        redactor = StreamingRedactor(salt=42, mode="fast", lang="en")
+        emitted = redactor.feed(followed).downstream_text
+        assert emitted, f"{label}: following sentence did not emit before flush"
+
+    blob = "eyJnot-a-jwt!"
+    assert blob[-1] not in ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-.")
+    assert _core.streaming_unclosed_jwt_opener_start(blob) is None
+    # Longer than the base ceiling, shorter than the raised JWT ceiling, and
+    # boundary-less before the blob. A hold emits nothing and leaves the
+    # buffer at the full length; a release emits at the sentence and shrinks it.
+    text = ("x" * 4000) + blob + " done. " + ("y" * w)
+    assert DEFAULT_MAX_BUFFER < len(text) < DEFAULT_MAX_BUFFER + 8192
+    assert _core.streaming_unclosed_jwt_opener_start(text) is None
+    redactor = StreamingRedactor(salt=42, mode="fast", lang="en")
+    emitted = redactor.feed(text).downstream_text
+    assert emitted, "terminated eyJ blob did not emit before flush"
+    assert len(redactor._inc_buffer) < DEFAULT_MAX_BUFFER, (
+        f"buffer length {len(redactor._inc_buffer)} is not under 4096"
+    )
