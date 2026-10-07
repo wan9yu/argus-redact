@@ -276,6 +276,64 @@ fn ssh_private_key_line_by_line_no_leak() {
     assert!(!ds.contains("b3BlbnNzaC1"), "SSH key body leaked in wasm streaming: {ds}");
 }
 
+/// A validating 680-character JWT whose third segment starts late.
+///
+/// Header is `{"alg":"HS256"}`. The signature is padding, not a MAC. The
+/// second dot is at index 620, so the first 621 characters are not three
+/// segments. `4096 - 3475 = 621`: at the base drain the shortest prefix still
+/// has no closed JWT span, and an entity snap cannot hold the head.
+fn jwt_680() -> String {
+    let header = "eyJhbGciOiJIUzI1NiJ9";
+    let payload = format!("eyJ{}", "A".repeat(596));
+    let signature = "B".repeat(59);
+    let token = format!("{header}.{payload}.{signature}");
+    assert_eq!(token.len(), 680, "fixture token must be 680 characters");
+    assert_eq!(token.as_bytes()[620], b'.', "second dot must sit at index 620");
+    assert!(token[..621].ends_with('.'));
+    assert_eq!(token[..621].matches('.').count(), 2);
+    token
+}
+
+/// 64-character feeds must not forward the 680-character JWT or its head.
+///
+/// Prefix lengths are 3475 through 3700 step 25, and 3800. The character
+/// before `eyJ` is a space, outside `[A-Za-z0-9_-.]`, so this is not the
+/// charset-glued residual. The leak lock is the raw token and its first 40
+/// characters absent from the concatenated downstream, and the token present
+/// in the accumulated key's values rather than its keys. Restore equality is
+/// not the lock: restore is a no-op on a raw forward.
+#[wasm_bindgen_test]
+fn jwt_64_char_feeds_do_not_forward_token_or_head() {
+    let token = jwt_680();
+    let head = &token[..40];
+    let prefixes = [3475, 3500, 3525, 3550, 3575, 3600, 3625, 3650, 3675, 3700, 3800];
+    let tail = " end";
+    for prefix_len in prefixes {
+        let text = format!("{}{token}{tail}", " ".repeat(prefix_len));
+        assert_eq!(text.as_bytes()[prefix_len - 1], b' ');
+        assert!(text[prefix_len..].starts_with("eyJ"));
+        let chunks = chunk(&text, 64);
+        let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+        let (ds, key) = stream(&refs, &Opts::new("en"));
+        assert!(
+            !ds.contains(&token),
+            "prefix {prefix_len}: raw JWT forwarded in 64-character feeds"
+        );
+        assert!(
+            !ds.contains(head),
+            "prefix {prefix_len}: JWT head fragment forwarded in 64-character feeds"
+        );
+        assert!(
+            key.values().any(|v| v == &token),
+            "prefix {prefix_len}: token not in accumulated key values"
+        );
+        assert!(
+            !key.contains_key(&token),
+            "prefix {prefix_len}: token must not be an accumulated-key key"
+        );
+    }
+}
+
 // ── CROSS-RUNTIME PARITY (the SSOT proof) ────────────────────────────────────
 //
 // Expected values captured from the Python one-shot redact path driven through
