@@ -657,3 +657,70 @@ class TestCheckpointMidPII:
             f"raw long token leaked across the checkpoint seam: {resumed[-60:]!r}"
         )
         assert resumed == baseline, "resume is not transparent vs. an uninterrupted stream"
+
+
+def _jwt_680() -> str:
+    """A validating 680-character JWT whose third segment starts late.
+
+    Header is ``{"alg":"HS256"}``. The signature is padding, not a MAC.
+    The second dot is at index 620, so the first 621 characters are not three
+    segments. ``4096 - 3475 = 621``: at the base drain the shortest prefix
+    still has no closed JWT span, and an entity snap cannot hold the head.
+    A short payload would already be a complete token by then.
+    """
+    header = "eyJhbGciOiJIUzI1NiJ9"
+    payload = "eyJ" + "A" * 596  # 599 chars; second dot lands at index 620
+    signature = "B" * 59
+    token = f"{header}.{payload}.{signature}"
+    assert len(token) == 680
+    assert token[620] == "."
+    assert token[:621].endswith(".")
+    assert token[:621].count(".") == 2
+    return token
+
+
+def test_jwt_should_not_leak_when_64_character_feeds_follow_unpunctuated_prefixes():
+    """A 680-character JWT after an unpunctuated prefix must not be forwarded.
+
+    Feeds are 64 characters. Prefix lengths are 3475 through 3700 step 25, and
+    3800. The character before ``eyJ`` is a space, outside ``[A-Za-z0-9_-.]``,
+    so this is not the charset-glued residual. The leak lock is the raw token
+    and its first 40 characters absent from downstream text, and the token
+    present in ``aggregate_key().values()`` rather than the dict keys. Restore
+    equality is not the lock: restore is a no-op on a raw forward.
+    """
+    token = _jwt_680()
+    prefixes = list(range(3475, 3701, 25)) + [3800]
+    assert prefixes == [
+        3475,
+        3500,
+        3525,
+        3550,
+        3575,
+        3600,
+        3625,
+        3650,
+        3675,
+        3700,
+        3800,
+    ]
+    tail = " end"
+    for prefix_len in prefixes:
+        prefix = " " * prefix_len
+        # Space is unpunctuated and not in the JWT scan charset, so ``eyJ`` is a start.
+        assert prefix[-1] == " "
+        text = prefix + token + tail
+        out, redactor = _stream(_chunk(text, 64), lang="en")
+        assert token not in out, (
+            f"prefix {prefix_len}: raw JWT forwarded in 64-character feeds"
+        )
+        assert token[:40] not in out, (
+            f"prefix {prefix_len}: JWT head fragment forwarded in 64-character feeds"
+        )
+        agg = redactor.aggregate_key()
+        assert token in agg.values(), (
+            f"prefix {prefix_len}: token not in aggregate_key values"
+        )
+        assert token not in agg, (
+            f"prefix {prefix_len}: token must not be an aggregate_key key"
+        )
