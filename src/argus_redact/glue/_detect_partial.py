@@ -34,16 +34,6 @@ _EVIDENCE_CONTEXT_WINDOW = 128
 # ``crates/argus-redact-core/src/streaming.rs``.
 _CARRY_WINDOW = 256
 
-# Extra CHARS added to max_buffer while a PEM private-key BEGIN marker is present
-# in the buffer. Mirrors ``PEM_OPENER_CEILING_EXTRA`` in the Rust core. Keeps a
-# complete (BEGIN+END) key whose byte length exceeds DEFAULT_MAX_BUFFER from being
-# force-flush-split by context_cut's bounded-drain. The raise is gated on any
-# private-key BEGIN present (closed OR unclosed) via
-# ``_core.streaming_pem_begin_present`` — the SAME predicate (literal AND
-# private-key regex) the wasm path uses, so wheel and wasm pick the same cut on a
-# non-private-key PEM block (e.g. ``-----BEGIN CERTIFICATE-----``).
-_PEM_OPENER_CEILING_EXTRA = 11_000
-
 
 def _last_boundary_index(text: str) -> int:
     """Index *after* the rightmost REAL sentence-boundary char in ``text``. -1 if none.
@@ -93,9 +83,11 @@ def _context_cut(
 
     The cut is the last real sentence boundary that leaves ≥ W chars of forward
     context (``safe_end = len − W ≥ ctx_len``), snapped off any straddled entity
-    via ``_core.streaming_context_cut``. An in-flight PEM opener is treated as
-    an open-ended entity spanning ``[begin, len+1)`` so the snap holds the cut
-    before BEGIN.
+    via ``_core.streaming_context_cut``. An in-flight PEM opener, and an unclosed
+    JWT opener, are each an open-ended pending span ``[begin, len+1)`` taken
+    from the Rust binding so the snap holds the cut before the opener. The
+    ceiling for both cut inputs is ``streaming_effective_max_buffer``; this
+    module does not add a second extra.
 
     Used by ``StreamingRedactor.feed`` / ``flush`` for detect-once-then-redact-
     range: one detection pass per round drives both the cut decision AND the
@@ -137,6 +129,10 @@ def _context_cut(
     begin = _core.streaming_unclosed_pem_opener_start(combined)
     if begin is not None:
         spans.append((begin, len(combined) + 1, "ssh_private_key"))
+    # Same open-ended shape as the PEM span. The binding is the scan.
+    jwt_begin = _core.streaming_unclosed_jwt_opener_start(combined)
+    if jwt_begin is not None:
+        spans.append((jwt_begin, len(combined) + 1, "jwt"))
     cut, redetect = _core.streaming_context_cut(
         combined, spans, ctx_len, effective_max, _EVIDENCE_CONTEXT_WINDOW, force_flush
     )

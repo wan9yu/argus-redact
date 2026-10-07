@@ -1,12 +1,9 @@
-"""Source-parity test: PEM opener ceiling constant Python ↔ Rust.
+"""Source-parity test: the wheel ceiling comes from one Rust binding.
 
-``_PEM_OPENER_CEILING_EXTRA`` in ``glue/_detect_partial.py`` mirrors
-``PEM_OPENER_CEILING_EXTRA`` in ``crates/argus-redact-core/src/streaming.rs``.
-
-If they drift, the Python wheel and the Rust core pick different max_buffer
-ceilings when a PEM private-key block is in the buffer: the wheel may
-force-flush-split a key whose byte length falls between the two values,
-emitting the header of a complete private key as raw plaintext.
+``glue/_detect_partial.py`` must not keep a second PEM or JWT extra. Core
+still owns ``PEM_OPENER_CEILING_EXTRA``. The wheel calls
+``streaming_effective_max_buffer`` and passes that one result to both cuts,
+and appends the JWT pending span from ``streaming_unclosed_jwt_opener_start``.
 """
 
 from __future__ import annotations
@@ -28,10 +25,6 @@ def _parse_int_const(path: Path, pattern: str) -> int:
     return int(m.group(1).replace("_", ""))
 
 
-def _read_python_value() -> int:
-    return _parse_int_const(_PYTHON_FILE, r"_PEM_OPENER_CEILING_EXTRA\s*=\s*([\d_]+)")
-
-
 def _read_rust_value() -> int:
     return _parse_int_const(
         _RUST_FILE, r"const\s+PEM_OPENER_CEILING_EXTRA\s*:\s*\w+\s*=\s*([\d_]+)"
@@ -39,19 +32,20 @@ def _read_rust_value() -> int:
 
 
 def test_pem_opener_ceiling_extra_should_match_between_python_and_rust():
-    """_PEM_OPENER_CEILING_EXTRA in Python must equal Rust PEM_OPENER_CEILING_EXTRA.
+    """Rust still adds 11000 for a PEM opener; the wheel must not copy it.
 
-    If they diverge, the Python wheel and the Rust WASM core pick different
-    effective max_buffer ceilings for PEM-private-key blocks, causing the wheel
-    path to force-flush-split a complete key and emit its BEGIN header as raw
-    plaintext.
+    A second Python constant would drift from core and force-flush-split a
+    key the wasm path still carries. The wheel ceiling is the binding.
     """
-    py_val = _read_python_value()
     rs_val = _read_rust_value()
-    assert py_val == rs_val, (
-        f"PEM opener ceiling drift: Python _PEM_OPENER_CEILING_EXTRA={py_val} "
-        f"!= Rust PEM_OPENER_CEILING_EXTRA={rs_val}. "
-        f"Update one to match the other."
+    assert rs_val == 11_000, (
+        f"PEM opener ceiling changed: Rust PEM_OPENER_CEILING_EXTRA={rs_val}, "
+        "expected 11000"
+    )
+    src = _PYTHON_FILE.read_text(encoding="utf-8")
+    assert "_PEM_OPENER_CEILING_EXTRA" not in src
+    assert not re.search(r"\b(?:11_000|11000|8_192|8192)\b", src), (
+        "glue must not add a local 11000 or 8192 ceiling extra"
     )
 
 
@@ -84,3 +78,57 @@ def test_glue_cut_path_passes_one_effective_max_buffer_to_both_cuts():
     assert cut and name in cut.group(1), (
         f"streaming_context_cut must receive {name}"
     )
+
+
+def test_glue_appends_jwt_span_from_binding_and_drops_local_pem_extra():
+    """The wheel cut path must hold an unclosed JWT via the Rust opener.
+
+    A local 11000/8192 addition, a second eyJ scan, or a still-registered
+    ``streaming_pem_begin_present`` binding would let the wheel pick a
+    different cut than core.
+    """
+    src = _PYTHON_FILE.read_text(encoding="utf-8")
+    fn = src.split("def _context_cut(", 1)[1]
+    fn = fn.split("\ndef ", 1)[0]
+
+    jwt = re.search(
+        r"(\w+)\s*=\s*_core\.streaming_unclosed_jwt_opener_start\(",
+        fn,
+    )
+    assert jwt, (
+        "glue _context_cut must call streaming_unclosed_jwt_opener_start "
+        "and bind that offset; it must not re-scan"
+    )
+    name = jwt.group(1)
+    assert re.search(
+        rf"spans\.append\(\(\s*{name}\s*,\s*len\(combined\)\s*\+\s*1\s*,"
+        rf"\s*[\"']jwt[\"']\s*\)\)",
+        fn,
+    ), f"must append ({name}, len(combined) + 1, jwt) from the binding"
+    assert "streaming_effective_max_buffer(" in fn
+
+    # The binding is the scan. A local walk would be a second implementation.
+    assert "eyJ" not in src
+    assert "validate_jwt" not in src
+    assert not re.search(r"\[A-Za-z0-9_\-\.\]", src)
+    assert "streaming_pem_begin_present" not in src
+    assert "_PEM_OPENER_CEILING_EXTRA" not in src
+    assert not re.search(r"\b(?:11_000|11000|8_192|8192)\b", src), (
+        "glue must not add a local 11000 or 8192 ceiling extra"
+    )
+
+    lib = (_REPO_ROOT / "crates/argus-redact-py/src/lib.rs").read_text(encoding="utf-8")
+    assert "streaming_pem_begin_present" not in lib, (
+        "streaming_pem_begin_present must be unregistered"
+    )
+    assert "wrap_pyfunction!(streaming::streaming_unclosed_jwt_opener_start" in lib
+    assert "wrap_pyfunction!(streaming::streaming_effective_max_buffer" in lib
+
+    py_rs = (_REPO_ROOT / "crates/argus-redact-py/src/streaming.rs").read_text(
+        encoding="utf-8"
+    )
+    assert "fn streaming_unclosed_jwt_opener_start" in py_rs
+    assert "fn streaming_pem_begin_present" not in py_rs
+    # Orphan gate scans src/ and tests/. The glue call is the src consumer.
+    assert "streaming_unclosed_jwt_opener_start" in src
+    assert "streaming_effective_max_buffer" in src

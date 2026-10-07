@@ -499,10 +499,11 @@ pub fn unclosed_jwt_opener_start(combined: &str) -> Option<usize> {
 /// redacted as one unit (or, past the CAP, bounded-drained — the documented edge,
 /// which a key within the 10000 body bound never reaches).
 ///
-/// SSOT for the force-flush ceiling gate: the wheel calls it via the
-/// `streaming_pem_begin_present` PyO3 binding so wheel + wasm pick the SAME cut on a
-/// non-private-key PEM block (a bare `-----BEGIN ` literal is NOT enough — the full
-/// private-key regex must match).
+/// SSOT for the PEM half of the force-flush ceiling. [`effective_max_buffer`]
+/// calls this directly; the wheel passes that one ceiling into both cut inputs
+/// and does not keep a second PEM predicate. A bare `-----BEGIN ` literal is
+/// NOT enough — the full private-key regex must match, so a certificate block
+/// does not raise the ceiling.
 pub fn pem_begin_present(combined: &str) -> bool {
     combined.contains("-----BEGIN ") && PEM_BEGIN_RE.is_match(combined).unwrap_or(false)
 }

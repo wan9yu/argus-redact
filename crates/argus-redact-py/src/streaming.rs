@@ -16,9 +16,9 @@
 //! - [`streaming_last_boundary_index`] — the sentence-boundary scan.
 //! - [`streaming_unclosed_pem_opener_start`] — start of an in-flight PEM key (the
 //!   open-ended pending span the snap holds the cut before).
-//! - [`streaming_pem_begin_present`] — the force-flush ceiling gate (literal AND
-//!   the private-key regex), so the wheel and wasm raise the ceiling on exactly the
-//!   same PEM blocks.
+//! - [`streaming_unclosed_jwt_opener_start`] — start of an unclosed end-of-buffer
+//!   JWT run. The wheel appends `(begin, len+1, "jwt")` from this offset and
+//!   does not re-scan.
 //! - [`streaming_effective_max_buffer`] — the one ceiling both cut inputs see
 //!   (PEM extra and JWT extra added to the caller base).
 //! - [`streaming_restorer_split`] — the `StreamingRestorer` boundary split.
@@ -31,7 +31,8 @@ use pyo3::prelude::*;
 use argus_redact_core::streaming::{
     context_cut as core_context_cut, effective_max_buffer as core_effective_max_buffer,
     emit_possible as core_emit_possible, last_boundary_index as core_last_boundary_index,
-    pem_begin_present as core_pem_begin_present, restorer_split as core_restorer_split,
+    restorer_split as core_restorer_split,
+    unclosed_jwt_opener_start as core_unclosed_jwt_opener_start,
     unclosed_pem_opener_start as core_unclosed_pem_opener_start,
 };
 
@@ -93,17 +94,6 @@ pub fn streaming_emit_possible(
     core_emit_possible(&chars, ctx_len, max_buffer, w, force_flush)
 }
 
-/// `true` if `combined` holds a PEM private-key BEGIN marker (the literal
-/// `-----BEGIN ` AND the full private-key regex) — complete OR in-flight. Drives the
-/// force-flush ceiling raise in `glue/_detect_partial._context_cut` so the wheel and
-/// the wasm path (core `feed` → `effective_max_buffer`) raise the ceiling on EXACTLY the
-/// same blocks: a `-----BEGIN CERTIFICATE-----` / public-key / CSR block (literal but
-/// not a private key) does NOT raise it. SSOT: `core::pem_begin_present`.
-#[pyfunction]
-pub fn streaming_pem_begin_present(combined: &str) -> bool {
-    core_pem_begin_present(combined)
-}
-
 /// Force-flush ceiling for `combined` given the caller `base`.
 ///
 /// Adds the PEM extra while a private-key BEGIN is present and the JWT extra
@@ -126,6 +116,16 @@ pub fn streaming_effective_max_buffer(combined: &str, base: usize) -> usize {
 #[pyfunction]
 pub fn streaming_unclosed_pem_opener_start(combined: &str) -> Option<usize> {
     core_unclosed_pem_opener_start(combined)
+}
+
+/// CHAR offset of the rightmost UNCLOSED JWT opener in `combined`, else `None`.
+///
+/// `glue/_detect_partial._context_cut` appends `(begin, len+1, "jwt")` when this
+/// returns a start. A complete token returns `None`, so `begin` is never placed
+/// inside one. The wheel must not re-scan. SSOT: `core::unclosed_jwt_opener_start`.
+#[pyfunction]
+pub fn streaming_unclosed_jwt_opener_start(combined: &str) -> Option<usize> {
+    core_unclosed_jwt_opener_start(combined)
 }
 
 /// Split a restorer buffer at its last REAL sentence boundary → `(complete, residual)`.
