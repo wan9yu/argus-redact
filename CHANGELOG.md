@@ -2,7 +2,15 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
-## Unreleased
+## v0.8.20 — streaming JWT hold inside the raised ceiling
+
+A streaming-only fix. Batch `redact()` already replaced a complete JWT; a
+boundary-less `StreamingRedactor` could forward that token when it arrived in
+small chunks after an unpunctuated prefix. The force-flush ceiling now rises
+while a JWT opener is in flight. A drain snaps back to that opener only when a
+safe cut before it is still possible. Past the raised ceiling the stream can
+still emit an unredacted head; the cap is on the buffer, not the token. A
+charset-glued `text.eyJ` is not held.
 
 ### Fixed
 
