@@ -301,7 +301,7 @@ pub fn context_cut(
 /// [`context_cut`] it omits is the spans-dependent [`snap_cut`] refinement, which
 /// can only pull a cut BACK to `ctx_len` (hold) — never the other way — so the
 /// omission keeps `emit_possible` a strict superset of the emit set. Callers MUST
-/// pass the SAME `max_buffer` ([`StreamingRedactor::pem_max_buffer`]) and `w`
+/// pass the SAME `max_buffer` ([`effective_max_buffer`]) and `w`
 /// ([`EVIDENCE_CONTEXT_WINDOW`]) they pass to [`context_cut`].
 pub fn emit_possible(
     chars: &[char],
@@ -401,6 +401,12 @@ const PEM_OPENER_TYPE: &str = "ssh_private_key";
 /// documented head-leak edge) rather than growing the buffer without bound.
 const PEM_OPENER_CEILING_EXTRA: usize = 11_000;
 
+/// Extra CHARS of force-flush headroom granted while a JWT must not be
+/// bounded-drained: an unclosed-at-EOS opener, or a closed validated JWT
+/// longer than [`CARRY_WINDOW`]. A short completed JWT does not get this.
+/// Bounded: past `base + this`, the stream drains (the documented head edge).
+const JWT_OPENER_CEILING_EXTRA: usize = 8_192;
+
 /// CHAR offset of the start of the last UNCLOSED PEM private-key opener in
 /// `combined` (a `-----BEGIN … PRIVATE KEY-----` with no matching `-----END …`
 /// after it), or `None`. Used to (a) hold the carry cut before an in-flight
@@ -495,6 +501,63 @@ pub fn unclosed_jwt_opener_start(combined: &str) -> Option<usize> {
 /// private-key regex must match).
 pub fn pem_begin_present(combined: &str) -> bool {
     combined.contains("-----BEGIN ") && PEM_BEGIN_RE.is_match(combined).unwrap_or(false)
+}
+
+/// Force-flush ceiling for `combined` given a caller `base`.
+///
+/// Adds [`PEM_OPENER_CEILING_EXTRA`] while a PEM private-key BEGIN is present,
+/// and [`JWT_OPENER_CEILING_EXTRA`] while [`jwt_ceiling_applies`]. A short
+/// completed JWT does not raise. The extras add when both are in flight
+/// (`base + 11000 + 8192`). Callers pass this one value to both
+/// [`emit_possible`] and [`context_cut`].
+pub fn effective_max_buffer(combined: &str, base: usize) -> usize {
+    let mut ceiling = base;
+    if pem_begin_present(combined) {
+        ceiling = ceiling.saturating_add(PEM_OPENER_CEILING_EXTRA);
+    }
+    if jwt_ceiling_applies(combined) {
+        ceiling = ceiling.saturating_add(JWT_OPENER_CEILING_EXTRA);
+    }
+    ceiling
+}
+
+/// JWT force-flush raise: an unclosed-at-EOS opener, or a closed validated
+/// JWT (full `shared.ron` match) whose run is longer than [`CARRY_WINDOW`].
+/// A short completed token, a terminated non-JWT `eyJ` blob, and a charset-glued
+/// `text.eyJ` do not raise.
+fn jwt_ceiling_applies(combined: &str) -> bool {
+    if unclosed_jwt_opener_start(combined).is_some() {
+        return true;
+    }
+    closed_validated_jwt_exceeds_carry(combined)
+}
+
+/// A JWT run is ASCII (`[A-Za-z0-9_-.]`), so its byte length is its char length.
+fn closed_validated_jwt_exceeds_carry(combined: &str) -> bool {
+    if !combined.contains("eyJ") {
+        return false;
+    }
+    let bytes = combined.as_bytes();
+    let mut i = 0;
+    while i + 2 < bytes.len() {
+        if bytes[i] == b'e' && bytes[i + 1] == b'y' && bytes[i + 2] == b'J' {
+            let at_start = i == 0 || !is_jwt_run_byte(bytes[i - 1]);
+            if at_start {
+                let mut j = i;
+                while j < bytes.len() && is_jwt_run_byte(bytes[j]) {
+                    j += 1;
+                }
+                let run = &combined[i..j];
+                if jwt_run_is_full_match(run) && run.len() > CARRY_WINDOW {
+                    return true;
+                }
+                i = j.max(i + 1);
+                continue;
+            }
+        }
+        i += 1;
+    }
+    false
 }
 
 /// One emitted/redacted segment: the realistic downstream text + the key
@@ -645,10 +708,10 @@ where
         }
         self.buffer.push_str(chunk);
         let chars: Vec<char> = self.buffer.chars().collect();
-        // `buffer` is not mutated until after the cut below, so the PEM ceiling is
-        // stable across this `feed` — scan for the opener once and pass the bound to
-        // both the emit gate and `context_cut` (they MUST see the same `max_buffer`).
-        let max_buffer = self.pem_max_buffer();
+        // `buffer` is not mutated until after the cut below, so the opener ceiling
+        // is stable across this `feed`. Compute it once and pass that value to both
+        // the emit gate and `context_cut` (they MUST see the same `max_buffer`).
+        let max_buffer = effective_max_buffer(&self.buffer, self.max_buffer);
         // Cheap emit gate: if no spans-independent trigger of `context_cut` can fire
         // for this buffer, the cut provably holds (≤ ctx_len), so skip the expensive
         // full-buffer detect + cut. CONSERVATIVE — `emit_possible` is a strict
@@ -740,20 +803,6 @@ where
             spans.push((begin, len + 1, PEM_OPENER_TYPE.to_string()));
         }
         spans
-    }
-
-    /// Raise the force-flush ceiling while a multi-line PEM private key is present,
-    /// so the whole key (body bound 10000) accumulates and redacts as one unit
-    /// instead of being bounded-drain-split into a plaintext head leak. Gates on
-    /// [`pem_begin_present`] (the same predicate the wheel calls via
-    /// `streaming_pem_begin_present`); bounded by the CAP, past which an
-    /// unterminated/oversized opener is bounded-drained.
-    fn pem_max_buffer(&self) -> usize {
-        if pem_begin_present(&self.buffer) {
-            self.max_buffer.saturating_add(PEM_OPENER_CEILING_EXTRA)
-        } else {
-            self.max_buffer
-        }
     }
 
     /// A copy of the unified key across all fed chunks. Mirrors `aggregate_key`.

@@ -331,13 +331,13 @@ fn emit_possible_is_a_superset_of_context_cut_emit() {
             make_redact(lang_v),
             max_buffer,
         );
-        // `snap_spans` + `pem_max_buffer` read `self.buffer`, so mirror `feed`'s state.
+        // `snap_spans` reads `self.buffer`, so mirror `feed`'s state.
         r.buffer = buffer.clone();
         let chars: Vec<char> = buffer.chars().collect();
-        // Reproduce `feed` EXACTLY: same final spans, same PEM-aware max_buffer, same W.
+        // Reproduce `feed` EXACTLY: same final spans, same opener ceiling, same W.
         let final_entities = r.detect_final(&buffer);
         let spans = r.snap_spans(&final_entities, chars.len());
-        let max = r.pem_max_buffer();
+        let max = effective_max_buffer(&buffer, max_buffer);
         let cc = context_cut(&spans, &chars, ctx_len, max, w, false);
         let ep = emit_possible(&chars, ctx_len, max, w, false);
         if cc.cut > ctx_len {
@@ -1419,5 +1419,120 @@ fn unclosed_jwt_opener_start_classifies_end_of_buffer_runs() {
         unclosed_jwt_opener_start(&format!("text.{incomplete}")),
         None,
         "glued incomplete token is not a start"
+    );
+}
+
+#[test]
+fn effective_max_buffer_adds_pem_and_jwt_extras() {
+    // Ceiling both cut inputs must see. PEM extra stays 11000. JWT extra is
+    // 8192, raised for an unclosed-at-EOS opener or a closed validated JWT
+    // longer than CARRY_WINDOW. A short completed JWT must not raise.
+    // effective(both) == effective(pem) + effective(jwt) - base.
+    let base = DEFAULT_MAX_BUFFER;
+    let pem = "-----BEGIN OPENSSH PRIVATE KEY-----\n";
+    let jwt = incomplete_jwt();
+    let both = format!("{pem}{jwt}");
+
+    let pem_ceiling = effective_max_buffer(pem, base);
+    let jwt_ceiling = effective_max_buffer(&jwt, base);
+    let both_ceiling = effective_max_buffer(&both, base);
+    assert!(pem_ceiling > base, "a PEM opener must raise the ceiling");
+    assert!(jwt_ceiling > base, "an unclosed JWT opener must raise the ceiling");
+    assert_eq!(
+        both_ceiling,
+        pem_ceiling + jwt_ceiling - base,
+        "extras add: effective(both) == effective(pem) + effective(jwt) - base"
+    );
+    assert_eq!(pem_ceiling, base + 11_000, "PEM private-key BEGIN still adds 11000");
+    assert_eq!(both_ceiling, base + 11_000 + 8_192);
+
+    let short = complete_jwt();
+    assert!(
+        short.chars().count() <= CARRY_WINDOW,
+        "fixture must be a short completed JWT"
+    );
+    assert!(crate::validators::validate_jwt(&short));
+    assert_eq!(
+        effective_max_buffer(&short, base),
+        base,
+        "a short completed JWT must not raise the ceiling"
+    );
+    assert_eq!(
+        effective_max_buffer(&format!("note {short} done"), base),
+        base,
+        "a short completed JWT inside a buffer must not raise the ceiling"
+    );
+
+    // Closed validated run longer than the carry window. The signature pad is
+    // base64url, so the anchored pattern and validate_jwt both accept it.
+    let long = format!("{JWT_HEADER}.{JWT_PAYLOAD}.{}", "a".repeat(CARRY_WINDOW));
+    assert!(long.chars().count() > CARRY_WINDOW);
+    assert!(crate::validators::validate_jwt(&long));
+    assert_eq!(
+        effective_max_buffer(&long, base),
+        base + 8_192,
+        "a closed validated JWT longer than CARRY_WINDOW must raise the JWT extra"
+    );
+    assert_eq!(
+        effective_max_buffer("see eyJblob then more", base),
+        base,
+        "a terminated non-JWT eyJ blob must not raise the ceiling"
+    );
+
+    // feed must apply that ceiling: an unclosed opener straddling the
+    // unbounded drain, with base <= len < base + 8192 and no sentence
+    // boundary, holds. A PEM-only ceiling drains and emits the header.
+    let feed_base = 400usize;
+    let unclosed = format!("{JWT_HEADER}.eyJ{}", "a".repeat(280));
+    assert!(unclosed.chars().count() > CARRY_WINDOW);
+    // `!` is outside the scan charset and is not a sentence boundary before `e`.
+    // An `x` immediately before `eyJ` would glue the opener and is not this case.
+    let text = format!("{}!{unclosed}", "x".repeat(149));
+    assert!(unclosed_jwt_opener_start(&text).is_some(), "fixture must be an unclosed opener");
+    assert_eq!(
+        effective_max_buffer(&text, feed_base),
+        feed_base + 8_192,
+        "feed fixture must raise the JWT extra"
+    );
+    let len = text.chars().count();
+    assert!(len >= feed_base && len < feed_base + 8_192);
+    assert!(len > CARRY_WINDOW);
+    assert_eq!(last_boundary_index(&text), -1, "fixture must be boundary-less");
+    let header_at = text.find(JWT_HEADER).expect("header");
+    let drain = len - CARRY_WINDOW;
+    assert!(
+        header_at < drain && drain < header_at + unclosed.len(),
+        "precondition: the unbounded drain splits the opener"
+    );
+
+    let lang_v = s(&["en"]);
+    let mut r = StreamingRedactor::with_max_buffer(
+        make_detect(lang_v.clone()),
+        make_redact(lang_v),
+        feed_base,
+    );
+    let res = r.feed(&text).expect("feed");
+    assert!(
+        !res.segment.downstream_text.contains(JWT_HEADER),
+        "feed emitted the JWT header; the raised ceiling did not reach the cut"
+    );
+    assert_eq!(
+        res.segment.downstream_text, "",
+        "in-flight JWT below the raised ceiling must hold, not drain"
+    );
+    assert_eq!(r.buffer(), text, "a hold must leave the buffer unchanged");
+
+    // Same length, no opener: ceiling stays at base, so the drain still emits.
+    let plain = "x".repeat(len);
+    let lang_v = s(&["en"]);
+    let mut plain_r = StreamingRedactor::with_max_buffer(
+        make_detect(lang_v.clone()),
+        make_redact(lang_v),
+        feed_base,
+    );
+    let plain_res = plain_r.feed(&plain).expect("feed");
+    assert!(
+        !plain_res.segment.downstream_text.is_empty(),
+        "boundary-less text at base with no opener must still drain"
     );
 }

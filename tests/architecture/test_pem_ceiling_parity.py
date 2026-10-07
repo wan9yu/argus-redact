@@ -53,3 +53,34 @@ def test_pem_opener_ceiling_extra_should_match_between_python_and_rust():
         f"!= Rust PEM_OPENER_CEILING_EXTRA={rs_val}. "
         f"Update one to match the other."
     )
+
+
+def test_glue_cut_path_passes_one_effective_max_buffer_to_both_cuts():
+    """``_context_cut`` must take the ceiling from one binding call.
+
+    ``streaming_emit_possible`` and ``streaming_context_cut`` have to see that
+    same result. A local PEM-only addition drops the JWT extra on one path.
+    """
+    src = _PYTHON_FILE.read_text(encoding="utf-8")
+    fn = src.split("def _context_cut(", 1)[1]
+    fn = fn.split("\ndef ", 1)[0]
+    bound = re.search(
+        r"(\w+)\s*=\s*_core\.streaming_effective_max_buffer\(",
+        fn,
+    )
+    assert bound, (
+        "glue _context_cut must call streaming_effective_max_buffer and bind "
+        "that one result; a local PEM extra is not the shared ceiling"
+    )
+    name = bound.group(1)
+    assert fn.count("streaming_effective_max_buffer(") == 1, (
+        "the cut path must call streaming_effective_max_buffer once"
+    )
+    emit = re.search(r"streaming_emit_possible\((.*?)\)", fn, re.S)
+    cut = re.search(r"streaming_context_cut\((.*?)\)", fn, re.S)
+    assert emit and name in emit.group(1), (
+        f"streaming_emit_possible must receive {name}"
+    )
+    assert cut and name in cut.group(1), (
+        f"streaming_context_cut must receive {name}"
+    )

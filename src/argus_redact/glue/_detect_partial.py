@@ -108,16 +108,9 @@ def _context_cut(
     itself. The caller (``StreamingRedactor``) is responsible for warning; this
     function only forwards.
     """
-    # Raise the max_buffer ceiling while any PEM private-key BEGIN is present
-    # (opened or closed) so a complete key larger than DEFAULT_MAX_BUFFER is
-    # carried whole rather than force-flush-split. Gated on the SAME predicate the
-    # wasm path uses (literal AND private-key regex) so wheel and wasm pick the
-    # same cut on a non-private-key PEM block.
-    effective_max = (
-        max_buffer + _PEM_OPENER_CEILING_EXTRA
-        if _core.streaming_pem_begin_present(combined)
-        else max_buffer
-    )
+    # One ceiling for both cut inputs. The binding adds the PEM extra and the
+    # JWT extra; a local addition would drop one of them on this path only.
+    effective_max = _core.streaming_effective_max_buffer(combined, max_buffer)
     # Spans-independent conservative gate: skip the expensive _detect when
     # context_cut is GUARANTEED to hold regardless of entity layout (no sentence
     # boundary in the safe window, buffer below effective_max, force_flush=False).

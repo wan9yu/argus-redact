@@ -19,6 +19,8 @@
 //! - [`streaming_pem_begin_present`] — the force-flush ceiling gate (literal AND
 //!   the private-key regex), so the wheel and wasm raise the ceiling on exactly the
 //!   same PEM blocks.
+//! - [`streaming_effective_max_buffer`] — the one ceiling both cut inputs see
+//!   (PEM extra and JWT extra added to the caller base).
 //! - [`streaming_restorer_split`] — the `StreamingRestorer` boundary split.
 //!
 //! The detection orchestration (`_detect`) and the redaction pipeline
@@ -27,8 +29,8 @@
 use pyo3::prelude::*;
 
 use argus_redact_core::streaming::{
-    context_cut as core_context_cut, emit_possible as core_emit_possible,
-    last_boundary_index as core_last_boundary_index,
+    context_cut as core_context_cut, effective_max_buffer as core_effective_max_buffer,
+    emit_possible as core_emit_possible, last_boundary_index as core_last_boundary_index,
     pem_begin_present as core_pem_begin_present, restorer_split as core_restorer_split,
     unclosed_pem_opener_start as core_unclosed_pem_opener_start,
 };
@@ -94,12 +96,24 @@ pub fn streaming_emit_possible(
 /// `true` if `combined` holds a PEM private-key BEGIN marker (the literal
 /// `-----BEGIN ` AND the full private-key regex) — complete OR in-flight. Drives the
 /// force-flush ceiling raise in `glue/_detect_partial._context_cut` so the wheel and
-/// the wasm path (core `feed` → `pem_max_buffer`) raise the ceiling on EXACTLY the
+/// the wasm path (core `feed` → `effective_max_buffer`) raise the ceiling on EXACTLY the
 /// same blocks: a `-----BEGIN CERTIFICATE-----` / public-key / CSR block (literal but
 /// not a private key) does NOT raise it. SSOT: `core::pem_begin_present`.
 #[pyfunction]
 pub fn streaming_pem_begin_present(combined: &str) -> bool {
     core_pem_begin_present(combined)
+}
+
+/// Force-flush ceiling for `combined` given the caller `base`.
+///
+/// Adds the PEM extra while a private-key BEGIN is present and the JWT extra
+/// while an unclosed-at-EOS opener exists or a closed validated JWT is longer
+/// than the carry window. A short completed JWT does not raise. The wheel
+/// passes this one value to both `streaming_emit_possible` and
+/// `streaming_context_cut`. SSOT: `core::effective_max_buffer`.
+#[pyfunction]
+pub fn streaming_effective_max_buffer(combined: &str, base: usize) -> usize {
+    core_effective_max_buffer(combined, base)
 }
 
 /// CHAR offset of the start of the last UNCLOSED PEM private-key opener in
