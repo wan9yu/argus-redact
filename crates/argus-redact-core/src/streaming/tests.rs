@@ -1332,3 +1332,92 @@ fn streaming_restorer_empty_string_key_new_does_not_panic_errors_at_flush() {
     let err = restorer.flush().unwrap_err();
     assert!(err.0.contains("empty"), "unexpected error message: {}", err.0);
 }
+
+/// Header `{"alg":"HS256"}` and payload `{"sub":"123"}` — the golden pair already
+/// accepted by `validate_jwt`. The third segment is what the shared.ron pattern
+/// requires and what an empty-signature buffer omits.
+const JWT_HEADER: &str = "eyJhbGciOiJIUzI1NiJ9";
+const JWT_PAYLOAD: &str = "eyJzdWIiOiIxMjMifQ";
+
+fn complete_jwt() -> String {
+    format!("{JWT_HEADER}.{JWT_PAYLOAD}.sig")
+}
+
+fn incomplete_jwt() -> String {
+    format!("{JWT_HEADER}.{JWT_PAYLOAD}")
+}
+
+fn empty_third_jwt() -> String {
+    format!("{JWT_HEADER}.{JWT_PAYLOAD}.")
+}
+
+fn char_offset_of(text: &str, byte: usize) -> usize {
+    text[..byte].chars().count()
+}
+
+#[test]
+fn unclosed_jwt_opener_start_classifies_end_of_buffer_runs() {
+    // Complete token at end of buffer is closed: None, not the header offset,
+    // and not the payload `eyJ` inside the token.
+    let complete = complete_jwt();
+    assert!(
+        crate::validators::validate_jwt(&complete),
+        "fixture must be a JWT batch would accept"
+    );
+    assert_eq!(unclosed_jwt_opener_start(&complete), None);
+    let payload_inside = complete.find(".eyJ").expect("payload eyJ") + 1;
+    assert_ne!(
+        unclosed_jwt_opener_start(&complete),
+        Some(char_offset_of(&complete, payload_inside)),
+        "begin must not land inside a complete token"
+    );
+    // Multibyte prefix: a byte offset must not be able to satisfy this.
+    let prefixed_complete = format!("前缀 {complete}");
+    let header_byte = prefixed_complete.find("eyJ").expect("header");
+    let header_chars = char_offset_of(&prefixed_complete, header_byte);
+    assert_ne!(header_byte, header_chars, "prefix must be multibyte");
+    assert_eq!(unclosed_jwt_opener_start(&prefixed_complete), None);
+
+    // Incomplete header + payload at EOS: the HEADER char offset, not the
+    // payload `eyJ`. A rightmost-`eyJ` scan is the wrong answer.
+    let incomplete = incomplete_jwt();
+    let prefixed = format!("前缀 {incomplete}");
+    let header_byte = prefixed.find("eyJ").expect("header");
+    let payload_byte = prefixed.rfind("eyJ").expect("payload");
+    assert!(payload_byte > header_byte);
+    let header_off = char_offset_of(&prefixed, header_byte);
+    let payload_off = char_offset_of(&prefixed, payload_byte);
+    assert_ne!(header_off, header_byte, "offset is chars, not bytes");
+    assert_eq!(unclosed_jwt_opener_start(&prefixed), Some(header_off));
+    assert_ne!(unclosed_jwt_opener_start(&prefixed), Some(payload_off));
+
+    // Empty third segment: `validate_jwt` is true, the shared.ron pattern is
+    // not. Hold at the header. Coding "unclosed iff validate_jwt is false"
+    // would return None here.
+    let empty_third = empty_third_jwt();
+    assert!(
+        crate::validators::validate_jwt(&empty_third),
+        "empty signature must still pass validate_jwt"
+    );
+    let prefixed_empty = format!("note {empty_third}");
+    let empty_header = prefixed_empty.find("eyJ").expect("header");
+    assert_eq!(
+        unclosed_jwt_opener_start(&prefixed_empty),
+        Some(char_offset_of(&prefixed_empty, empty_header))
+    );
+
+    // Terminated non-JWT `eyJ` blob. The terminator is outside `[A-Za-z0-9_-.]`,
+    // so the run does not reach end of buffer.
+    assert_eq!(unclosed_jwt_opener_start("eyJnot-a-jwt!"), None);
+    assert_eq!(unclosed_jwt_opener_start("see eyJblob then more"), None);
+
+    // Glued `text.eyJ`: previous char `.` is in the scan charset, so this is
+    // not a start. Must be None even though the `eyJ` run is not a full JWT
+    // (a start-scan that ignores `.` would hold it).
+    assert_eq!(unclosed_jwt_opener_start("text.eyJ"), None);
+    assert_eq!(
+        unclosed_jwt_opener_start(&format!("text.{incomplete}")),
+        None,
+        "glued incomplete token is not a start"
+    );
+}

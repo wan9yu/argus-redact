@@ -34,6 +34,9 @@ crates/*/Cargo.lock
 # Workspace-only notes. Not part of the public tree.
 internal/
 
+# Local Ralph loop state. Not part of the public tree.
+.ralph/
+
 # mutmut workspace (regenerated on every `mutmut run`)
 mutants/
 mutmut-stats.json

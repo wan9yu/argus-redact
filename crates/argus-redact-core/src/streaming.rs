@@ -378,6 +378,15 @@ static PEM_END_RE: LazyLock<Regex> = LazyLock::new(|| {
         .unwrap_or_else(|e| panic!("streaming: PEM_END_RE compile failed: {e}"))
 });
 
+/// Whole-run form of the `jwt` pattern in `data/shared.ron`. Anchored so a
+/// prefix match (or `validate_jwt`'s empty signature) is not a full match.
+/// Parity-by-convention — keep both in sync. Do not widen this to "unclosed
+/// iff `validate_jwt` is false": that predicate accepts `eyJ<h>.eyJ<p>.`.
+static JWT_FULL_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\AeyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\z")
+        .unwrap_or_else(|e| panic!("streaming: JWT_FULL_RE compile failed: {e}"))
+});
+
 /// The pending-span type label for an in-flight PEM opener. [`snap_cut`] is
 /// type-agnostic and treats the `[begin, len)` span with the closed-entity straddle
 /// rule (snap the cut back to `begin`), which is exactly what carrying an
@@ -413,6 +422,62 @@ pub fn unclosed_pem_opener_start(combined: &str) -> Option<usize> {
     }
     // Byte offset → CHAR offset (the snap works in char-space).
     Some(combined[..begin_byte_start].chars().count())
+}
+
+/// A byte of the JWT scan run: base64url plus the segment dot. A preceding
+/// byte in this set glues the `eyJ` (`text.eyJ`) so it is not a start.
+fn is_jwt_run_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.')
+}
+
+/// True iff `run` is a full `shared.ron` jwt match: the anchored pattern (three
+/// non-empty base64url segments, header and payload each starting `eyJ`) AND a
+/// header that would pass [`crate::validators::validate_jwt`]. Either half
+/// alone is not enough — `validate_jwt` accepts an empty signature the pattern
+/// rejects, and the pattern accepts a header the validator rejects.
+fn jwt_run_is_full_match(run: &str) -> bool {
+    JWT_FULL_RE.is_match(run).unwrap_or(false) && crate::validators::validate_jwt(run)
+}
+
+/// CHAR offset of the rightmost UNCLOSED JWT opener in `combined`, or `None`.
+///
+/// A start is `eyJ` at the buffer start or whose previous character is outside
+/// `[A-Za-z0-9_-.]`. The run consumes that charset until a terminator or end of
+/// buffer. A run that hits a terminator is closed. Only a start whose run
+/// reaches end of buffer can be unclosed, and only when that run is not a full
+/// `shared.ron` jwt match. A complete token therefore returns `None` (never a
+/// `begin` on the payload `eyJ` inside it). An empty third segment stays held.
+pub fn unclosed_jwt_opener_start(combined: &str) -> Option<usize> {
+    if !combined.contains("eyJ") {
+        return None;
+    }
+    let bytes = combined.as_bytes();
+    let mut i = 0;
+    let mut candidate: Option<usize> = None;
+    while i + 2 < bytes.len() {
+        if bytes[i] == b'e' && bytes[i + 1] == b'y' && bytes[i + 2] == b'J' {
+            let at_start = i == 0 || !is_jwt_run_byte(bytes[i - 1]);
+            if at_start {
+                let mut j = i;
+                while j < bytes.len() && is_jwt_run_byte(bytes[j]) {
+                    j += 1;
+                }
+                // Reaches end of buffer — a later start cannot, so this is the
+                // rightmost candidate. A terminator before EOS drops it.
+                if j == bytes.len() {
+                    candidate = Some(i);
+                }
+                i = j.max(i + 1);
+                continue;
+            }
+        }
+        i += 1;
+    }
+    let begin_byte = candidate?;
+    if jwt_run_is_full_match(&combined[begin_byte..]) {
+        return None;
+    }
+    Some(combined[..begin_byte].chars().count())
 }
 
 /// True if the buffer holds a PEM private-key BEGIN marker (complete OR in-flight).
