@@ -375,6 +375,7 @@ Provides the local de-identification layer that **PIPL** cross-border transfer, 
 | Who | Contribution |
 |-----|-------------|
 | [@aiedwardyi](https://github.com/aiedwardyi) | Brazilian Portuguese language pack (CPF, CNPJ, phone) |
+| Ninad Phalak (ninadphalak@gmail.com) | Reported the boundary-less streaming JWT leak fixed in v0.8.20 |
 
 ## License
 
