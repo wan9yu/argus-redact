@@ -238,7 +238,7 @@ pub struct ContextCut {
 /// the last `w` already-emitted chars (`ctx_len` of them, as left-context) and
 /// holds back the last `w` chars (forward context). `spans` are the normalized
 /// snap spans over the WHOLE buffer (merged + self-ref-filtered entities plus the
-/// in-flight PEM opener pending span, if any — see [`StreamingRedactor::snap_spans`]).
+/// in-flight PEM and JWT opener pending spans, if any — see [`StreamingRedactor::snap_spans`]).
 ///
 /// The cut is the LAST real sentence boundary that (a) leaves ≥ `w` tail buffered
 /// (`≤ len − w`) and (b) lies past the already-emitted left-context (`> ctx_len`),
@@ -392,6 +392,10 @@ static JWT_FULL_RE: LazyLock<Regex> = LazyLock::new(|| {
 /// rule (snap the cut back to `begin`), which is exactly what carrying an
 /// unterminated key whole requires.
 const PEM_OPENER_TYPE: &str = "ssh_private_key";
+
+/// Pending-span type label for an in-flight JWT opener. Same open-ended shape
+/// as [`PEM_OPENER_TYPE`]: `(begin, len + 1, "jwt")`.
+const JWT_OPENER_TYPE: &str = "jwt";
 
 /// Extra CHARS of force-flush headroom granted while a PEM opener is in flight, on
 /// top of `max_buffer`. Covers the `ssh_private_key` body bound (10000) + the
@@ -790,8 +794,10 @@ where
     }
 
     /// The snap input for [`context_cut`]: the final spans as `(start, end, type)`
-    /// tuples PLUS the in-flight PEM opener pending span (so an unterminated key is
-    /// carried whole). `len` is the buffer length in CHARS.
+    /// tuples PLUS in-flight opener pending spans (PEM and JWT), so an
+    /// unterminated key or an unclosed JWT run is carried whole. `len` is the
+    /// buffer length in CHARS. A complete JWT returns `None` from the opener, so
+    /// `begin` is never placed inside one.
     fn snap_spans(&self, final_entities: &[PatternMatch], len: usize) -> Vec<(usize, usize, String)> {
         let mut spans: Vec<(usize, usize, String)> = final_entities
             .iter()
@@ -801,6 +807,11 @@ where
             // Open-ended (end one past the buffer) so a cut at the buffer end still
             // counts as a straddle and snaps back to BEGIN.
             spans.push((begin, len + 1, PEM_OPENER_TYPE.to_string()));
+        }
+        if let Some(begin) = unclosed_jwt_opener_start(&self.buffer) {
+            // Same open-ended shape as the PEM span. Only an unclosed-at-EOS run
+            // is held; a complete token is already a closed entity or not a hold.
+            spans.push((begin, len + 1, JWT_OPENER_TYPE.to_string()));
         }
         spans
     }

@@ -1536,3 +1536,106 @@ fn effective_max_buffer_adds_pem_and_jwt_extras() {
         "boundary-less text at base with no opener must still drain"
     );
 }
+
+#[test]
+fn over_cap_empty_third_jwt_drain_excludes_header() {
+    // Past the raised JWT ceiling a boundary-less empty-third run that straddles
+    // the drain must snap back to the opener. At `base` the raised ceiling holds,
+    // so there is no emit — the fixture has to be at least `base + 8192`.
+    // Detection does not close an empty third segment (the shared.ron pattern
+    // requires a non-empty signature), so the pending span is the only snap.
+    let base = DEFAULT_MAX_BUFFER;
+    let token = format!("{JWT_HEADER}.eyJ{}.", "a".repeat(CARRY_WINDOW));
+    assert!(
+        crate::validators::validate_jwt(&token),
+        "empty third segment must still pass validate_jwt"
+    );
+    assert!(
+        token.chars().count() > CARRY_WINDOW,
+        "the empty-third run must be longer than the carry window"
+    );
+
+    let len = base + 8_192;
+    let prefix_len = len - token.chars().count();
+    assert!(
+        prefix_len > EVIDENCE_CONTEXT_WINDOW,
+        "begin must sit past W so the residual can start at begin - W"
+    );
+    // `!` is outside the scan charset and is not a sentence boundary before `e`.
+    // An `x` immediately before `eyJ` would glue the opener and is not this case.
+    let text = format!("{}!{token}", "x".repeat(prefix_len - 1));
+    assert_eq!(text.chars().count(), len, "fixture length must be base + 8192");
+    assert!(len >= base + 8_192);
+    assert_eq!(last_boundary_index(&text), -1, "fixture must have no sentence boundary");
+
+    let begin = unclosed_jwt_opener_start(&text).expect("empty-third run is unclosed at EOS");
+    let drain = len - CARRY_WINDOW;
+    assert!(
+        begin < drain && drain < len,
+        "precondition: the empty-third run straddles the drain (begin={begin}, drain={drain}, len={len})"
+    );
+    let header_at = text.find(JWT_HEADER).expect("header");
+    assert_eq!(begin, char_offset_of(&text, header_at), "opener must be the header, not the payload eyJ");
+
+    let lang_v = s(&["en"]);
+    let mut r = StreamingRedactor::with_max_buffer(
+        make_detect(lang_v.clone()),
+        make_redact(lang_v.clone()),
+        base,
+    );
+    let res = r.feed(&text).expect("feed");
+    assert!(
+        !res.segment.downstream_text.contains(JWT_HEADER),
+        "over-cap drain emitted the JWT header"
+    );
+    assert!(
+        !res.segment.downstream_text.is_empty(),
+        "over-cap drain must emit the safe prefix, not hold"
+    );
+
+    let pending: String = r.buffer().chars().skip(r.ctx_len).collect();
+    assert!(
+        pending.starts_with("eyJ"),
+        "buffer[ctx_len:] must start at eyJ, got {:?}",
+        pending.chars().take(24).collect::<String>()
+    );
+    let expected_residual: String = text.chars().skip(begin - EVIDENCE_CONTEXT_WINDOW).collect();
+    assert_eq!(
+        r.buffer(),
+        expected_residual,
+        "residual buffer must start at begin - W, not at eyJ"
+    );
+    assert!(
+        !r.buffer().starts_with("eyJ"),
+        "residual buffer itself must not start at eyJ"
+    );
+
+    // snap_spans appends the JWT pending span and still appends the PEM span.
+    // A PEM opener in the drain fixture would raise the ceiling by another
+    // 11000, so this check is a separate buffer, not the over-cap feed.
+    let pem = "-----BEGIN OPENSSH PRIVATE KEY-----\n";
+    let both = format!("{pem}{token}");
+    let mut snap_r = StreamingRedactor::with_max_buffer(
+        make_detect(lang_v.clone()),
+        make_redact(lang_v),
+        base,
+    );
+    snap_r.buffer = both.clone();
+    let both_len = both.chars().count();
+    let spans = snap_r.snap_spans(&[], both_len);
+    let pem_begin = unclosed_pem_opener_start(&both).expect("pem opener");
+    let jwt_begin = unclosed_jwt_opener_start(&both).expect("jwt opener");
+    assert_ne!(pem_begin, jwt_begin, "the two openers must be distinct spans");
+    assert!(
+        spans.iter().any(|(s, e, t)| {
+            *s == pem_begin && *e == both_len + 1 && t == "ssh_private_key"
+        }),
+        "snap_spans must still append the PEM pending span: {spans:?}"
+    );
+    assert!(
+        spans
+            .iter()
+            .any(|(s, e, t)| *s == jwt_begin && *e == both_len + 1 && t == "jwt"),
+        "snap_spans must append (begin, len+1, jwt): {spans:?}"
+    );
+}
