@@ -1322,7 +1322,7 @@ if final.downstream_text:
     send_to_llm(final.downstream_text)
 ```
 
-Limitations: detection runs per emit-segment (full L1+L2+L3 pipeline on each completed prefix); chunks without sentence punctuation grow the buffer up to 4096 chars before a forced flush. See `docs/design-streaming-incremental.md` for the full design.
+Limitations: detection runs per emit-segment (full L1+L2+L3 pipeline on each completed prefix); chunks without sentence punctuation grow the buffer until a forced flush. The base cap is 4096 characters. An in-flight opener raises that ceiling, so the flush is not unconditional at 4096 while a PEM private-key BEGIN or a JWT opener is in flight. See `docs/design-streaming-incremental.md` for the full design, and `docs/known-issues.md` for the unredacted-head residual past that ceiling.
 
 ### Cross-process resume (v0.5.5+)
 
@@ -1394,7 +1394,7 @@ restorer = StreamingRestorer(dict(result.key), aliases=dict(result.aliases))
 
 **Unguarded by design.** Every `feed()` / `flush()` substitution runs `restore(..., guard=False)` — there is no per-call anchor to check mid-stream, so `StreamingRestorer` cannot fail closed the way `guarded_restore()` does. The first time an instance actually reinserts a pseudonym, it emits a one-time `SecurityWarning`; it does not warn again for the rest of that instance's lifetime. If you need the provenance/scope guard, buffer the full reply and call `guarded_restore()` once instead of streaming the restore.
 
-`StreamingRestorer(key, max_buffer=4096)` bounds the "sentence" strategy's buffer the same way `StreamingRedactor` does: a reply that never emits a sentence terminator is force-flushed once the buffer exceeds `max_buffer`, instead of accumulating without limit. The straddle tail sits on top of that as fixed headroom, so the real bound is `max(max_buffer, longest fake)` — a token is never split just to satisfy the buffer bound.
+`StreamingRestorer(key, max_buffer=4096)` bounds the "sentence" strategy's buffer: a reply that never emits a sentence terminator is force-flushed once the buffer exceeds `max_buffer`, instead of accumulating without limit. The straddle tail sits on top of that as fixed headroom, so the real bound is `max(max_buffer, longest fake)` — a token is never split just to satisfy the buffer bound.
 
 **Single-session, not thread-safe.** Construct one `StreamingRestorer` per thread / per session, same as `StreamingRedactor` above; do not share one instance across threads. `feed()`/`flush()` borrow the underlying Rust restore session's state on every call, so a concurrent call on a shared instance from another thread raises `Already borrowed` instead of corrupting output.
 

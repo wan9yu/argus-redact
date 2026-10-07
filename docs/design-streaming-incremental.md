@@ -39,9 +39,14 @@ Each `feed(chunk)` call:
 2. Find the rightmost boundary character in `combined`.
 3. If found at position `b`: emit `combined[:b]`, keep `combined[b:]` as the
    new buffer.
-4. If no boundary and `len(combined) >= max_buffer (=4096)`: forced flush —
-   emit everything, clear the buffer. Prevents unbounded growth on input
-   without sentence punctuation (raw token streams, JSON, code blocks).
+4. If no boundary and `len(combined)` reaches the force-flush ceiling: forced
+   flush. The base ceiling is `max_buffer` (4096). An in-flight opener raises
+   that ceiling, so the flush is not unconditional at 4096 while a PEM
+   private-key BEGIN or a JWT opener is in flight. Past that ceiling an
+   in-flight or oversized JWT can leave an unredacted head whose carried
+   suffix no longer matches (see `docs/known-issues.md`). This bounds growth
+   on input without sentence punctuation (raw token streams, JSON, code
+   blocks).
 5. Otherwise: hold the buffer, return an empty `PseudonymLLMResult`.
 
 `flush()` runs the forced-flush branch on whatever is left in the buffer at
@@ -73,7 +78,9 @@ We rejected it for v0.5.7 because:
   operate on complete sentences anyway. A byte-level partial scheme would
   need per-layer adaptation; sentence boundaries are uniform.
 
-The forced flush at `max_buffer=4096` is the safety valve for the 2% case.
+The forced flush is the safety valve for the 2% case. The base is
+`max_buffer` (4096); an in-flight opener raises that ceiling, so the flush is
+not unconditional at 4096 while the opener is in flight.
 
 ## Public API
 
