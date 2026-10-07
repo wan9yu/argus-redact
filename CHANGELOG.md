@@ -2,6 +2,12 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## Unreleased
+
+### Fixed
+
+- **A boundary-less stream no longer forwards a complete JWT that batch `redact()` replaces, while the buffer stays inside the raised ceiling.** An in-flight JWT opener raises the force-flush ceiling, and an over-cap drain snaps back to that opener. Past the raised ceiling the stream can still emit an unredacted head; the cap is on the buffer, not the token. A charset-glued `text.eyJ` is not held. Reported by Ninad Phalak (ninadphalak@gmail.com).
+
 ## v0.8.19 — detection-correctness hardening (obfuscated-number leaks and a region DoS)
 
 A detection-correctness release. It closes a family of default-path leaks where a
