@@ -1411,15 +1411,81 @@ fn unclosed_jwt_opener_start_classifies_end_of_buffer_runs() {
     assert_eq!(unclosed_jwt_opener_start("eyJnot-a-jwt!"), None);
     assert_eq!(unclosed_jwt_opener_start("see eyJblob then more"), None);
 
-    // Glued `text.eyJ`: previous char `.` is in the scan charset, so this is
-    // not a start. Must be None even though the `eyJ` run is not a full JWT
-    // (a start-scan that ignores `.` would hold it).
-    assert_eq!(unclosed_jwt_opener_start("text.eyJ"), None);
+    // Charset-glued `text.eyJ`: the forward run starts at `eyJ` and reaches
+    // end of buffer. Hold at that char offset, not the preceding letters.
+    assert_eq!(unclosed_jwt_opener_start("text.eyJ"), Some(5));
+    let glued = format!("text.{incomplete}");
+    let glued_header = glued.find("eyJ").expect("header");
     assert_eq!(
-        unclosed_jwt_opener_start(&format!("text.{incomplete}")),
-        None,
-        "glued incomplete token is not a start"
+        unclosed_jwt_opener_start(&glued),
+        Some(char_offset_of(&glued, glued_header)),
+        "glued incomplete token is held from eyJ"
     );
+    assert_ne!(
+        unclosed_jwt_opener_start(&glued),
+        Some(0),
+        "begin is not the start of the preceding letters"
+    );
+}
+
+#[test]
+fn unclosed_jwt_opener_start_should_hold_charset_glued_eyj_at_its_char_offset() {
+    let incomplete = incomplete_jwt();
+    let complete = complete_jwt();
+    let empty_third = empty_third_jwt();
+
+    // A letter before eyJ, and text.eyJ, at end of buffer: the eyJ char
+    // offset, not the start of the preceding letters, when the forward run
+    // is not a full shared.ron match plus validate_jwt.
+    assert_eq!(unclosed_jwt_opener_start("text.eyJ"), Some(5));
+    assert_ne!(unclosed_jwt_opener_start("text.eyJ"), Some(0));
+    let lettered = format!("a{incomplete}");
+    let lettered_payload = lettered.rfind("eyJ").expect("payload");
+    assert!(lettered_payload > 1);
+    assert_eq!(unclosed_jwt_opener_start(&lettered), Some(1));
+    assert_ne!(
+        unclosed_jwt_opener_start(&lettered),
+        Some(char_offset_of(&lettered, lettered_payload)),
+        "begin must not be the payload eyJ"
+    );
+
+    // Multibyte prefix glued by a letter: char offset, not byte offset.
+    let multibyte = format!("前缀x{incomplete}");
+    let header_byte = multibyte.find("eyJ").expect("header");
+    let header_off = char_offset_of(&multibyte, header_byte);
+    assert_ne!(header_byte, header_off, "prefix must be multibyte");
+    assert_eq!(unclosed_jwt_opener_start(&multibyte), Some(header_off));
+    assert_ne!(unclosed_jwt_opener_start(&multibyte), Some(header_byte));
+    assert_ne!(unclosed_jwt_opener_start(&multibyte), Some(0));
+
+    // A complete token at end of buffer is None, including when letters
+    // precede the header. begin is not the payload eyJ.
+    assert!(crate::validators::validate_jwt(&complete));
+    let lettered_complete = format!("abc{complete}");
+    let payload_byte = lettered_complete.rfind("eyJ").expect("payload");
+    assert_eq!(unclosed_jwt_opener_start(&complete), None);
+    assert_eq!(unclosed_jwt_opener_start(&lettered_complete), None);
+    assert_ne!(
+        unclosed_jwt_opener_start(&lettered_complete),
+        Some(char_offset_of(&lettered_complete, payload_byte)),
+        "begin must not be the payload eyJ of a complete token"
+    );
+
+    // Empty third segment: validate_jwt is true, the pattern is not. Hold at
+    // the header even when a letter glues it. A terminator outside the charset
+    // before end of buffer is None.
+    assert!(
+        crate::validators::validate_jwt(&empty_third),
+        "empty signature must still pass validate_jwt"
+    );
+    let glued_empty = format!("n{empty_third}");
+    let empty_header = glued_empty.find("eyJ").expect("header");
+    assert_eq!(
+        unclosed_jwt_opener_start(&glued_empty),
+        Some(char_offset_of(&glued_empty, empty_header))
+    );
+    assert_eq!(unclosed_jwt_opener_start("xeyJnot-a-jwt!"), None);
+    assert_eq!(unclosed_jwt_opener_start("see eyJblob then more"), None);
 }
 
 #[test]

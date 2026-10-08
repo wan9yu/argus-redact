@@ -434,8 +434,7 @@ pub fn unclosed_pem_opener_start(combined: &str) -> Option<usize> {
     Some(combined[..begin_byte_start].chars().count())
 }
 
-/// A byte of the JWT scan run: base64url plus the segment dot. A preceding
-/// byte in this set glues the `eyJ` (`text.eyJ`) so it is not a start.
+/// A byte of the JWT scan run: base64url plus the segment dot.
 fn is_jwt_run_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.')
 }
@@ -449,45 +448,42 @@ fn jwt_run_is_full_match(run: &str) -> bool {
     JWT_FULL_RE.is_match(run).unwrap_or(false) && crate::validators::validate_jwt(run)
 }
 
-/// CHAR offset of the rightmost UNCLOSED JWT opener in `combined`, or `None`.
+/// CHAR offset of the leftmost unclosed JWT opener in `combined`, or `None`.
 ///
-/// A start is `eyJ` at the buffer start or whose previous character is outside
-/// `[A-Za-z0-9_-.]`. The run consumes that charset until a terminator or end of
-/// buffer. A run that hits a terminator is closed. Only a start whose run
-/// reaches end of buffer can be unclosed, and only when that run is not a full
-/// `shared.ron` jwt match. A complete token therefore returns `None` (never a
-/// `begin` on the payload `eyJ` inside it). An empty third segment stays held.
+/// A candidate is an `eyJ` whose forward `[A-Za-z0-9_-.]` run starts at that
+/// `eyJ` and reaches end of buffer. Preceding letters or a dot do not
+/// disqualify it. Take the leftmost such `eyJ` that is not a full `shared.ron`
+/// match plus [`crate::validators::validate_jwt`], and that is not strictly
+/// inside an earlier reaching run. `begin` is that `eyJ` char offset, not the
+/// start of the preceding letters. A complete token returns `None` (never the
+/// payload `eyJ`). An empty third segment stays held. A terminator outside the
+/// charset before end of buffer is not a candidate.
 pub fn unclosed_jwt_opener_start(combined: &str) -> Option<usize> {
     if !combined.contains("eyJ") {
         return None;
     }
     let bytes = combined.as_bytes();
     let mut i = 0;
-    let mut candidate: Option<usize> = None;
     while i + 2 < bytes.len() {
         if bytes[i] == b'e' && bytes[i + 1] == b'y' && bytes[i + 2] == b'J' {
-            let at_start = i == 0 || !is_jwt_run_byte(bytes[i - 1]);
-            if at_start {
-                let mut j = i;
-                while j < bytes.len() && is_jwt_run_byte(bytes[j]) {
-                    j += 1;
-                }
-                // Reaches end of buffer — a later start cannot, so this is the
-                // rightmost candidate. A terminator before EOS drops it.
-                if j == bytes.len() {
-                    candidate = Some(i);
-                }
-                i = j.max(i + 1);
-                continue;
+            let mut j = i;
+            while j < bytes.len() && is_jwt_run_byte(bytes[j]) {
+                j += 1;
             }
+            if j == bytes.len() {
+                // Leftmost run that reaches end of buffer. A later `eyJ` is
+                // strictly inside this run, so it is not a separate candidate.
+                if jwt_run_is_full_match(&combined[i..]) {
+                    return None;
+                }
+                return Some(combined[..i].chars().count());
+            }
+            i = j.max(i + 1);
+            continue;
         }
         i += 1;
     }
-    let begin_byte = candidate?;
-    if jwt_run_is_full_match(&combined[begin_byte..]) {
-        return None;
-    }
-    Some(combined[..begin_byte].chars().count())
+    None
 }
 
 /// True if the buffer holds a PEM private-key BEGIN marker (complete OR in-flight).
@@ -528,8 +524,8 @@ pub fn effective_max_buffer(combined: &str, base: usize) -> usize {
 
 /// JWT force-flush raise: an unclosed-at-EOS opener, or a closed validated
 /// JWT (full `shared.ron` match) whose run is longer than [`CARRY_WINDOW`].
-/// A short completed token, a terminated non-JWT `eyJ` blob, and a charset-glued
-/// `text.eyJ` do not raise.
+/// A short completed token and a terminated non-JWT `eyJ` blob do not raise.
+/// An unclosed charset-glued `eyJ` does, because it is an opener.
 fn jwt_ceiling_applies(combined: &str) -> bool {
     if unclosed_jwt_opener_start(combined).is_some() {
         return true;

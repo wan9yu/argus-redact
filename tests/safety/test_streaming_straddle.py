@@ -724,6 +724,86 @@ def test_jwt_should_not_leak_when_64_character_feeds_follow_unpunctuated_prefixe
         assert token not in agg, f"prefix {prefix_len}: token must not be an aggregate_key key"
 
 
+_JWT_SCAN = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-.")
+
+
+def test_reported_word_slices_should_not_forward_jwt_when_prefix_ends_on_a_letter():
+    """64-character feeds of the reported word slices must not forward the JWT.
+
+    Filler is ``lorem ipsum dolor sit amet `` sliced to 3475 through 3700 step
+    25, and 3800. ``prefix[-1]`` is a letter, so a space substitution cannot
+    satisfy the fixture. The leak lock is the 680-character token and
+    ``token[:40]`` absent from downstream, and the token in
+    ``aggregate_key().values()`` rather than the keys. The same words trimmed
+    back to a space are the sibling control, not this fixture.
+    """
+    token = _jwt_680()
+    filler = "lorem ipsum dolor sit amet " * 200
+    prefixes = list(range(3475, 3701, 25)) + [3800]
+
+    assert prefixes == [
+        3475,
+        3500,
+        3525,
+        3550,
+        3575,
+        3600,
+        3625,
+        3650,
+        3675,
+        3700,
+        3800,
+    ]
+    assert all(filler[n - 1].isalpha() for n in prefixes)
+
+    for prefix_len in prefixes:
+        prefix = filler[:prefix_len]
+        assert prefix[-1].isalpha(), f"prefix {prefix_len} must end on a letter"
+
+        text = prefix + token + " end"
+        one, _one = _stream([text], lang="en")
+        assert token not in one, f"prefix {prefix_len}: one feed forwarded the glued JWT"
+
+        out, redactor = _stream(_chunk(text, 64), lang="en")
+        assert token not in out, f"prefix {prefix_len}: raw JWT forwarded in 64-character feeds"
+        assert token[:40] not in out, (
+            f"prefix {prefix_len}: JWT head fragment forwarded in 64-character feeds"
+        )
+        agg = redactor.aggregate_key()
+        assert token in agg.values(), f"prefix {prefix_len}: token not in aggregate_key values"
+        assert token not in agg, f"prefix {prefix_len}: token must not be an aggregate_key key"
+
+
+def test_word_prefix_should_not_leak_jwt_when_it_ends_outside_the_scan_charset():
+    """The same words do not forward the JWT when they end on a space.
+
+    A space is outside ``[A-Za-z0-9_-.]``, so ``eyJ`` is an opener. The leak
+    lock is the token and ``token[:40]`` absent from downstream, and the token
+    in ``aggregate_key().values()``. Restore equality is not the lock.
+    """
+    token = _jwt_680()
+    filler = "lorem ipsum dolor sit amet " * 200
+    prefixes = list(range(3475, 3701, 25)) + [3800]
+
+    for prefix_len in prefixes:
+        raw = filler[:prefix_len]
+        cut = max(i for i, ch in enumerate(raw) if ch not in _JWT_SCAN) + 1
+        prefix = raw[:cut]
+        assert prefix[-1] not in _JWT_SCAN
+
+        text = prefix + token + " end"
+        out, redactor = _stream(_chunk(text, 64), lang="en")
+        assert token not in out, (
+            f"prefix {prefix_len}: raw JWT forwarded after a spaced word prefix"
+        )
+        assert token[:40] not in out, (
+            f"prefix {prefix_len}: JWT head forwarded after a spaced word prefix"
+        )
+        agg = redactor.aggregate_key()
+        assert token in agg.values(), f"prefix {prefix_len}: token not in aggregate_key values"
+        assert token not in agg, f"prefix {prefix_len}: token must not be an aggregate_key key"
+
+
 def _jwt_validator_accepts(value: str) -> bool:
     """True iff the wheel jwt validator accepts ``value``.
 
@@ -739,17 +819,16 @@ def _jwt_validator_accepts(value: str) -> bool:
     return matches[0].confidence == 1.0
 
 
-def test_wheel_opener_should_not_hold_terminated_or_glued_eyj():
-    """Wheel opener regressions: terminated, empty third, and glued eyJ.
+def test_wheel_opener_should_hold_charset_glued_eyj_and_release_terminated_eyj():
+    """Wheel opener: hold a charset-glued eyJ; release a terminated one.
 
-    A terminated non-JWT blob, terminator outside ``[A-Za-z0-9_-.]``, then a
-    sentence boundary and at least W padding, emits before flush and leaves
-    the buffer under 4096. A complete token at end of buffer is unclosed
-    None. An empty third segment still passes validate_jwt and is unclosed
-    at the header char offset. A URL shorter than max_buffer whose
-    non-validating eyJ query ends at ``&`` or space is unclosed None, and a
-    following sentence emits before flush. Glued ``text.eyJ`` is unclosed
-    None. This test does not assert the stream redacts that glued residual.
+    A letter before ``eyJ``, and ``text.eyJ``, at end of buffer return the
+    ``eyJ`` char offset when the forward run is not a full match. A complete
+    token returns None, including when letters precede the header, and that
+    begin is not the payload ``eyJ``. An empty third segment still returns
+    the header char offset even though validate_jwt is true. A terminator
+    outside ``[A-Za-z0-9_-.]`` before end of buffer returns None, and a
+    following sentence emits before flush with the buffer under 4096.
     """
     header = "eyJhbGciOiJIUzI1NiJ9"
     payload = "eyJzdWIiOiIxMjMifQ"
@@ -757,9 +836,15 @@ def test_wheel_opener_should_not_hold_terminated_or_glued_eyj():
     # a missing callback left at confidence 1.0.
     assert _jwt_validator_accepts(f"{header}.{payload}") is False
 
-    assert _core.streaming_unclosed_jwt_opener_start("text.eyJ") is None, (
-        "glued text.eyJ must not be an unclosed opener"
+    assert _core.streaming_unclosed_jwt_opener_start("text.eyJ") == 5, (
+        "glued text.eyJ must be held at the eyJ char offset, not the preceding letters"
     )
+    lettered = "a" + f"{header}.{payload}"
+    assert lettered[0].isalpha()
+    assert _core.streaming_unclosed_jwt_opener_start(lettered) == 1, (
+        "a letter before eyJ must be held at the eyJ char offset"
+    )
+    assert _core.streaming_unclosed_jwt_opener_start(lettered) != lettered.rfind("eyJ")
 
     complete = f"{header}.{payload}.sig"
     assert _jwt_validator_accepts(complete) is True
@@ -768,6 +853,13 @@ def test_wheel_opener_should_not_hold_terminated_or_glued_eyj():
     assert _core.streaming_unclosed_jwt_opener_start(complete) is None
     assert _core.streaming_unclosed_jwt_opener_start(complete_buf) is None, (
         "a complete JWT at end of buffer must be unclosed None, not the header"
+    )
+    lettered_complete = "abc" + complete
+    assert _core.streaming_unclosed_jwt_opener_start(lettered_complete) is None, (
+        "letters before a complete token must still be unclosed None"
+    )
+    assert _core.streaming_unclosed_jwt_opener_start(lettered_complete) != (
+        lettered_complete.rfind("eyJ")
     )
 
     empty = f"{header}.{payload}."

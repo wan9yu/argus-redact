@@ -118,11 +118,14 @@ pub fn streaming_unclosed_pem_opener_start(combined: &str) -> Option<usize> {
     core_unclosed_pem_opener_start(combined)
 }
 
-/// CHAR offset of the rightmost UNCLOSED JWT opener in `combined`, else `None`.
+/// CHAR offset of the leftmost unclosed JWT opener in `combined`, else `None`.
 ///
-/// `glue/_detect_partial._context_cut` appends `(begin, len+1, "jwt")` when this
-/// returns a start. A complete token returns `None`, so `begin` is never placed
-/// inside one. The wheel must not re-scan. SSOT: `core::unclosed_jwt_opener_start`.
+/// A candidate is an `eyJ` whose forward `[A-Za-z0-9_-.]` run reaches end of
+/// buffer. A charset-glued `eyJ` is held from that `eyJ`, not from the preceding
+/// letters. `glue/_detect_partial._context_cut` appends `(begin, len+1, "jwt")`
+/// when this returns a start. A complete token returns `None`, so `begin` is
+/// never placed inside one. The wheel must not re-scan. SSOT:
+/// `core::unclosed_jwt_opener_start`.
 #[pyfunction]
 pub fn streaming_unclosed_jwt_opener_start(combined: &str) -> Option<usize> {
     core_unclosed_jwt_opener_start(combined)
