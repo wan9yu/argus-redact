@@ -1351,6 +1351,11 @@ fn empty_third_jwt() -> String {
     format!("{JWT_HEADER}.{JWT_PAYLOAD}.")
 }
 
+/// A validating JWT longer than 4096 and shorter than 4096 + 8192.
+fn long_closed_jwt() -> String {
+    format!("{JWT_HEADER}.{JWT_PAYLOAD}.{}", "a".repeat(4_100))
+}
+
 fn char_offset_of(text: &str, byte: usize) -> usize {
     text[..byte].chars().count()
 }
@@ -1601,6 +1606,173 @@ fn effective_max_buffer_adds_pem_and_jwt_extras() {
         !plain_res.segment.downstream_text.is_empty(),
         "boundary-less text at base with no opener must still drain"
     );
+}
+
+#[test]
+fn closed_validated_jwt_exceeds_carry_should_measure_run_from_eyj() {
+    // The forward run starts at eyJ, not at the preceding letters or dot.
+    // A left boundary is not required. A short completed JWT does not raise.
+    // A space-prefixed twin still raises. PEM still adds 11000.
+    let base = DEFAULT_MAX_BUFFER;
+    let long = long_closed_jwt();
+    assert!(
+        long.chars().count() > CARRY_WINDOW,
+        "fixture must be longer than the carry window"
+    );
+    assert!(crate::validators::validate_jwt(&long));
+    assert_eq!(
+        unclosed_jwt_opener_start(&long),
+        None,
+        "a complete token is not an opener"
+    );
+
+    let lettered = format!("abc{long}");
+    let dotted = format!(".{long}");
+    assert!(!lettered.starts_with("eyJ"));
+    assert!(!dotted.starts_with("eyJ"));
+    assert!(
+        !jwt_run_is_full_match(&lettered),
+        "a run that includes the preceding letters is not the JWT"
+    );
+    assert!(
+        !jwt_run_is_full_match(&dotted),
+        "a run that includes the preceding dot is not the JWT"
+    );
+    let letter_eyj = lettered.find("eyJ").expect("header");
+    let dot_eyj = dotted.find("eyJ").expect("header");
+    assert!(jwt_run_is_full_match(&lettered[letter_eyj..]));
+    assert!(jwt_run_is_full_match(&dotted[dot_eyj..]));
+    assert!(
+        closed_validated_jwt_exceeds_carry(&lettered),
+        "a letter-glued closed JWT longer than CARRY_WINDOW must raise"
+    );
+    assert!(
+        closed_validated_jwt_exceeds_carry(&dotted),
+        "a dot-glued closed JWT longer than CARRY_WINDOW must raise"
+    );
+    assert_eq!(effective_max_buffer(&lettered, base), base + 8_192);
+    assert_eq!(effective_max_buffer(&dotted, base), base + 8_192);
+
+    // Terminated, so the run does not reach end of buffer. The opener is
+    // None; the closed scan still measures from eyJ.
+    let lettered_mid = format!("abc{long}!tail");
+    let dotted_mid = format!(".{long}!tail");
+    assert_eq!(unclosed_jwt_opener_start(&lettered_mid), None);
+    assert_eq!(unclosed_jwt_opener_start(&dotted_mid), None);
+    assert!(closed_validated_jwt_exceeds_carry(&lettered_mid));
+    assert!(closed_validated_jwt_exceeds_carry(&dotted_mid));
+    assert_eq!(effective_max_buffer(&lettered_mid, base), base + 8_192);
+    assert_eq!(effective_max_buffer(&dotted_mid, base), base + 8_192);
+
+    let short = complete_jwt();
+    assert!(
+        short.chars().count() <= CARRY_WINDOW,
+        "fixture must be a short completed JWT"
+    );
+    assert!(!closed_validated_jwt_exceeds_carry(&format!("abc{short}")));
+    assert!(!closed_validated_jwt_exceeds_carry(&format!(".{short}")));
+    assert_eq!(effective_max_buffer(&format!("abc{short}"), base), base);
+    assert_eq!(effective_max_buffer(&format!(".{short}"), base), base);
+    assert_eq!(
+        effective_max_buffer(&format!(" {long}"), base),
+        base + 8_192,
+        "a space-prefixed twin of the long token must still raise the ceiling"
+    );
+
+    let pem = "-----BEGIN OPENSSH PRIVATE KEY-----\n";
+    assert_eq!(effective_max_buffer(pem, base), base + 11_000, "PEM still adds 11000");
+    assert_eq!(
+        effective_max_buffer(&format!("{pem}abc{long}"), base),
+        base + 11_000 + 8_192,
+        "PEM 11000 and the glued JWT extra both add"
+    );
+    let glued_blob = format!("abceyJ{}!", "a".repeat(CARRY_WINDOW));
+    assert!(!closed_validated_jwt_exceeds_carry(&glued_blob));
+    assert_eq!(
+        effective_max_buffer(&glued_blob, base),
+        base,
+        "a terminated non-JWT eyJ blob must not raise the ceiling"
+    );
+}
+
+#[test]
+fn glued_closed_jwt_should_not_drain_header_in_64_character_feeds() {
+    // Non-lorem, charset-glued, longer than 4096 and shorter than 4096+8192.
+    // prefix[-1] is a letter. 64-character feeds, boundary-less tail. The
+    // header must not appear downstream. The leak lock is the token and
+    // token[:40] absent, and the token in aggregate_key values.
+    let base = DEFAULT_MAX_BUFFER;
+    let token = long_closed_jwt();
+    let prefix = "n";
+    let tail = format!(",{}", "z".repeat(80));
+    let text = format!("{prefix}{token}{tail}");
+    assert!(
+        prefix.chars().next_back().is_some_and(|c| c.is_ascii_alphabetic()),
+        "prefix[-1] must be a letter"
+    );
+    assert!(!prefix.contains("lorem"), "fixture must be non-lorem");
+    assert!(token.chars().count() > base && token.chars().count() < base + 8_192);
+    assert!(text.chars().count() > base && text.chars().count() < base + 8_192);
+    assert_eq!(last_boundary_index(&text), -1, "tail must be boundary-less");
+    assert_eq!(
+        unclosed_jwt_opener_start(&text),
+        None,
+        "a complete glued token is not an opener; the closed scan must raise"
+    );
+    assert!(crate::validators::validate_jwt(&token));
+    let header_at = text.find(JWT_HEADER).expect("header");
+    assert!(header_at > 0);
+    assert!(
+        text[..header_at].chars().next_back().is_some_and(|c| c.is_ascii_alphabetic()),
+        "the byte before eyJ must be a letter"
+    );
+
+    let pem = "-----BEGIN OPENSSH PRIVATE KEY-----\n";
+    let short = complete_jwt();
+    assert!(short.chars().count() <= CARRY_WINDOW);
+    assert_eq!(
+        effective_max_buffer(&format!(" {token}"), base),
+        base + 8_192,
+        "a space-prefixed twin of the long token must still raise the ceiling"
+    );
+    assert_eq!(effective_max_buffer(pem, base), base + 11_000, "PEM still adds 11000");
+    assert_eq!(effective_max_buffer(&format!("{prefix}{short}"), base), base);
+    assert_eq!(effective_max_buffer(&format!(".{short}"), base), base);
+
+    let spaced = format!(" {token}{tail}");
+    let spaced_chunks = chunk_chars(&spaced, 64);
+    let spaced_refs: Vec<&str> = spaced_chunks.iter().map(String::as_str).collect();
+    let (spaced_out, spaced_agg) = stream(&spaced_refs, &["en"]);
+    assert!(!spaced_out.contains(JWT_HEADER));
+    assert!(
+        spaced_agg.values().any(|v| v == &token),
+        "space-prefixed twin must be held and redacted whole"
+    );
+
+    assert_eq!(
+        effective_max_buffer(&text, base),
+        base + 8_192,
+        "charset-glued closed JWT must add 8192"
+    );
+    let chunks = chunk_chars(&text, 64);
+    assert!(chunks.len() > 1, "fixture must be fed in more than one chunk");
+    assert!(
+        chunks.iter().rev().skip(1).all(|c| c.chars().count() == 64),
+        "feeds must be 64 characters"
+    );
+    let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let (out, agg) = stream(&refs, &["en"]);
+    assert!(!out.contains(JWT_HEADER), "JWT header drained into downstream text");
+    assert!(!out.contains(&token), "raw JWT forwarded in 64-character feeds");
+    assert!(
+        !out.contains(&token[..40]),
+        "JWT head fragment forwarded in 64-character feeds"
+    );
+    assert!(
+        agg.values().any(|v| v == &token),
+        "token not in aggregate_key values"
+    );
+    assert!(!agg.contains_key(&token), "token must not be an aggregate_key key");
 }
 
 #[test]

@@ -913,3 +913,63 @@ def test_wheel_opener_should_hold_charset_glued_eyj_and_release_terminated_eyj()
     assert len(redactor._inc_buffer) < DEFAULT_MAX_BUFFER, (
         f"buffer length {len(redactor._inc_buffer)} is not under 4096"
     )
+
+
+def test_glued_closed_jwt_should_not_drain_header_when_between_4096_and_raised_ceiling():
+    """A charset-glued closed JWT between 4096 and 4096+8192 must not drain raw.
+
+    Non-lorem letter glue, so ``prefix[-1]`` is a letter and a space
+    substitution cannot pass. Feeds are 64 characters with a boundary-less
+    tail. Downstream contains neither the header, the token, nor
+    ``token[:40]``. The token is in ``aggregate_key().values()``, not the
+    keys. Letter-glued and dot-glued runs longer than the carry window add
+    8192. A short completed JWT does not raise. A space-prefixed twin still
+    raises. PEM still adds 11000.
+    """
+    header = "eyJhbGciOiJIUzI1NiJ9"
+    payload = "eyJzdWIiOiIxMjMifQ"
+    token = f"{header}.{payload}.{'a' * 4100}"
+    prefix = "n"
+    tail = "," + ("z" * 80)
+    text = prefix + token + tail
+    base = DEFAULT_MAX_BUFFER
+    pem = "-----BEGIN OPENSSH PRIVATE KEY-----\n"
+    short = f"{header}.{payload}.sig"
+
+    assert prefix[-1].isalpha(), "prefix[-1] must be a letter"
+    assert "lorem" not in prefix, "fixture must be non-lorem"
+    assert base < len(token) < base + 8192
+    assert base < len(text) < base + 8192
+    assert _core.streaming_last_boundary_index(text) == -1
+    assert _core.streaming_unclosed_jwt_opener_start(text) is None
+    assert _jwt_validator_accepts(token) is True
+    assert _jwt_validator_accepts(short) is True
+    assert len(short) <= 256
+
+    assert _core.streaming_effective_max_buffer(" " + token, base) == base + 8192
+    assert _core.streaming_effective_max_buffer(pem, base) == base + 11_000
+    assert _core.streaming_effective_max_buffer(prefix + short, base) == base
+    assert _core.streaming_effective_max_buffer("." + short, base) == base
+
+    assert _core.streaming_effective_max_buffer(prefix + token, base) == base + 8192, (
+        "a letter-glued closed JWT longer than the carry window must add 8192"
+    )
+    assert _core.streaming_effective_max_buffer("." + token, base) == base + 8192, (
+        "a dot-glued closed JWT longer than the carry window must add 8192"
+    )
+    assert _core.streaming_effective_max_buffer(text, base) == base + 8192, (
+        "the feed buffer's glued closed JWT must raise the ceiling"
+    )
+    assert _core.streaming_effective_max_buffer(pem + prefix + token, base) == (
+        base + 11_000 + 8192
+    ), "PEM still adds 11000 on top of the glued JWT extra"
+
+    chunks = _chunk(text, 64)
+    assert chunks[:-1] and all(len(chunk) == 64 for chunk in chunks[:-1])
+    out, redactor = _stream(chunks, lang="en")
+    assert header not in out, "JWT header drained into downstream text"
+    assert token not in out, "raw JWT forwarded in 64-character feeds"
+    assert token[:40] not in out, "JWT head fragment forwarded in 64-character feeds"
+    agg = redactor.aggregate_key()
+    assert token in agg.values(), "token not in aggregate_key values"
+    assert token not in agg, "token must not be an aggregate_key key"
