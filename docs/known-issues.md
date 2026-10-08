@@ -573,19 +573,25 @@ release.
 - **What**: The cap is on the buffer, not the token. Past the raised ceiling the
   stream can emit an unredacted head of an in-flight or oversized JWT; the
   carried suffix no longer matches, and batch still redacts the same text when
-  that text is a batch JWT match. A charset-glued `text.eyJ` (the character
-  before `eyJ` is in `[A-Za-z0-9_-.]`) is not an opener and is not held.
+  that text is a batch JWT match. An unclosed charset-glued `text.eyJ` is held
+  from that `eyJ` only when its forward run reaches end of buffer and is not a
+  full `shared.ron` match plus `validate_jwt`. The scan charset is
+  `[A-Za-z0-9_-.]`. The hold
+  starts at that `eyJ`, so the preceding letters are not held. A complete token
+  at end of buffer is not an opener. A short completed token does not raise the
+  ceiling. A closed glued token longer than the carry window adds 8192.
+  `flush()` drops the hold and detects what is still buffered; it does not
+  rewrite a head already emitted. An incomplete `eyJ` can still be emitted on
+  that drain.
 - **Why we won't fix**: The ceiling stops boundary-less input from growing the
   buffer without a limit. An in-flight opener raises the 4096 base by a fixed
   extra, and past that raised ceiling the stream drains instead of waiting for
-  the run to close. Treating charset-glued `text.eyJ` as an opener would hold
-  ordinary prose: `.` is in the scan charset `[A-Za-z0-9_-.]`, so that glue is
-  not a start.
-- **What you should do**: If the input has no sentence boundary you control and
-  may carry a long JWT, or if the token is glued as `text.eyJ`, call batch
-  `redact()` on the whole text. Do not treat a head already emitted past the
-  raised ceiling as the same result batch would return. `flush()` only drains
-  what is still buffered; it does not rewrite that head. The ceiling rule is in
+  the run to close. The drain snaps back to the opener only when a safe cut
+  before it is still possible. `flush()` does not snap back; it drops the hold.
+- **What you should do**: If a head has already been emitted past the raised
+  ceiling, call batch `redact()` on the whole text. Do not treat that head as
+  the same result batch would return. `flush()` only drains what is still
+  buffered; it does not rewrite that head. The ceiling rule is in
   [`design-streaming-incremental.md`](design-streaming-incremental.md).
 
 ## Recently Fixed

@@ -12,7 +12,7 @@ import re
 from tests.docs.test_doc_claims import _read
 
 _CONFIRMED_PHRASE = "confirmed on " + "current main"
-_OVERCLAIM = ("merely split", "held whole")
+_OVERCLAIM = ("merely split", "held whole", "never leaks")
 _WHAT_CLAIMS = (
     "cap is on the buffer, not the token",
     "past the raised ceiling",
@@ -22,8 +22,21 @@ _WHAT_CLAIMS = (
     "batch still redacts the same text",
     "charset-glued",
     "text.eyJ",
-    "not held",
+    "from that `eyJ`",
+    "reaches end of buffer",
+    "preceding letters are not held",
 )
+_OLD_GLUED_CLAIMS = (
+    "is not an opener and is not held",
+    "would hold ordinary prose",
+    "not a start",
+    "glued as `text.eyJ`",
+)
+_FIXED_IN_V0820 = (
+    "fixed in v0.8.20",
+    "v0.8.20 修复",
+)
+_V0820_CORRECTION = "**Correction:** v0.8.20 did not hold a charset-glued"
 
 
 def _design_constraint_entries(text: str) -> list[str]:
@@ -108,3 +121,42 @@ def test_public_docs_should_state_stream_jwt_head_past_raised_ceiling() -> None:
         for phrase in _OVERCLAIM:
             assert phrase not in lowered, f"{rel} says {phrase!r}"
         assert _CONFIRMED_PHRASE not in text, f"{rel} contains the banned phrase"
+
+
+def _v0820_section(changelog: str) -> str:
+    start = changelog.find("## v0.8.20")
+    end = changelog.find("## v0.8.19")
+    assert start != -1 and end != -1 and start < end
+    return changelog[start:end]
+
+
+def test_docs_should_retract_the_v0_8_20_charset_glued_claim() -> None:
+    """The published v0.8.20 glued claim must be marked, not left as current behavior."""
+    known = _read("docs/known-issues.md")
+    matches = [
+        entry
+        for entry in _design_constraint_entries(known)
+        if "text.eyJ" in entry and "JWT" in entry
+    ]
+    assert matches, "JWT ceiling entry missing"
+    entry = matches[0]
+    why = _bullet(entry, "Why we won't fix", "What you should do")
+    action = _bullet(entry, "What you should do", None)
+
+    for claim in _OLD_GLUED_CLAIMS:
+        assert claim not in entry, f"known-issues still says {claim!r}"
+        assert claim not in why
+        assert claim not in action
+
+    readme = _read("README.md")
+    readme_zh = _read("README.zh.md")
+    changelog = _v0820_section(_read("CHANGELOG.md"))
+    for phrase in _FIXED_IN_V0820:
+        assert phrase not in readme, f"README.md still says {phrase!r}"
+        assert phrase not in readme_zh, f"README.zh.md still says {phrase!r}"
+
+    assert _V0820_CORRECTION in changelog, "v0.8.20 section has no marked correction"
+    for rel, text in (("JWT entry", entry), ("v0.8.20", changelog)):
+        lowered = text.lower()
+        for phrase in _OVERCLAIM:
+            assert phrase not in lowered, f"{rel} says {phrase!r}"

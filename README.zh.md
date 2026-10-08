@@ -361,7 +361,7 @@ restored = guarded_restore(reply, key, redacted=redacted, anchor=anchor)
 | 贡献者 | 贡献内容 |
 |--------|---------|
 | [@aiedwardyi](https://github.com/aiedwardyi) | 巴西葡萄牙语语言包（CPF、CNPJ、电话）|
-| Ninad Phalak (ninadphalak@gmail.com) | 报告了 v0.8.20 修复的无句读流式 JWT 泄漏 |
+| Ninad Phalak (ninadphalak@gmail.com) | 报告了无句读流式 JWT 泄漏。v0.8.20 没有持有 charset-glued eyJ。 |
 
 ## License
 

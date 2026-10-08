@@ -14,6 +14,9 @@ safe cut before it is still possible. Past the raised ceiling the stream can
 still emit an unredacted head; the cap is on the buffer, not the token. A
 charset-glued `text.eyJ` is not held.
 
+**Correction:** v0.8.20 did not hold a charset-glued `eyJ`. The original bullet
+below describes that published release, not the later contract.
+
 ### Fixed
 
 - **A boundary-less stream no longer forwards a complete JWT that batch `redact()` replaces, while the buffer stays inside the raised ceiling.** An in-flight JWT opener raises the force-flush ceiling. A drain snaps back to that opener only when a safe cut before it is still possible. Past the raised ceiling the stream can still emit an unredacted head; the cap is on the buffer, not the token. A charset-glued `text.eyJ` is not held. Reported by Ninad Phalak (ninadphalak@gmail.com).
