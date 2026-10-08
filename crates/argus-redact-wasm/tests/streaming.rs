@@ -334,6 +334,56 @@ fn jwt_64_char_feeds_do_not_forward_token_or_head() {
     }
 }
 
+/// 64-character feeds of the reported word slices must not forward the JWT.
+///
+/// Filler is `lorem ipsum dolor sit amet ` sliced to 3475 through 3700 step
+/// 25, and 3800. `prefix[-1]` is a letter, so a space substitution cannot
+/// satisfy the fixture. The leak lock is the 680-character token and its first
+/// 40 characters absent from the concatenated downstream, and the token present
+/// in the accumulated key's values rather than its keys. Restore equality is
+/// not the lock.
+#[wasm_bindgen_test]
+fn reported_word_slices_should_not_forward_jwt_when_prefix_ends_on_a_letter() {
+    let token = jwt_680();
+    let head = &token[..40];
+    let filler = "lorem ipsum dolor sit amet ".repeat(200);
+    let prefixes = [3475, 3500, 3525, 3550, 3575, 3600, 3625, 3650, 3675, 3700, 3800];
+    assert!(
+        prefixes.iter().all(|&n| filler.as_bytes()[n - 1].is_ascii_alphabetic()),
+        "reported prefixes must end on a letter so a space substitution cannot pass"
+    );
+
+    for prefix_len in prefixes {
+        let prefix = &filler[..prefix_len];
+        assert!(
+            prefix.as_bytes()[prefix_len - 1].is_ascii_alphabetic(),
+            "prefix {prefix_len} must end on a letter"
+        );
+
+        let text = format!("{prefix}{token} end");
+        let chunks = chunk(&text, 64);
+        let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+        let (ds, key) = stream(&refs, &Opts::new("en"));
+
+        assert!(
+            !ds.contains(&token),
+            "prefix {prefix_len}: raw JWT forwarded in 64-character feeds"
+        );
+        assert!(
+            !ds.contains(head),
+            "prefix {prefix_len}: JWT head fragment forwarded in 64-character feeds"
+        );
+        assert!(
+            key.values().any(|v| v == &token),
+            "prefix {prefix_len}: token not in accumulated key values"
+        );
+        assert!(
+            !key.contains_key(&token),
+            "prefix {prefix_len}: token must not be an accumulated-key key"
+        );
+    }
+}
+
 // ── CROSS-RUNTIME PARITY (the SSOT proof) ────────────────────────────────────
 //
 // Expected values captured from the Python one-shot redact path driven through
