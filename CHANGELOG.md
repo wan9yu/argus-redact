@@ -2,6 +2,18 @@
 
 All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior releases documented in git history and `docs/known-issues.md` "Recently Fixed".
 
+## v0.8.22 — raise the JWT ceiling when the token exceeds the carry window
+
+Reported by Ninad Phalak (ninadphalak@gmail.com).
+
+8192 is added when the JWT itself is longer than the carry window even if the
+charset run is longer. A short completed token does not raise the ceiling.
+Past the raised ceiling the stream can still emit an unredacted head.
+
+### Fixed
+
+- **A closed JWT longer than the carry window raises the ceiling even when the charset run continues past the token.** The forward run is measured from `eyJ`. A later `eyJ` inside that run is not another candidate. A short completed token does not raise the ceiling. Past the raised ceiling an unredacted head can still be emitted. Reported by Ninad Phalak (ninadphalak@gmail.com).
+
 ## v0.8.21 — hold a charset-glued JWT opener from eyJ
 
 Reported by Ninad Phalak (ninadphalak@gmail.com).
