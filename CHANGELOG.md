@@ -7,14 +7,17 @@ All notable changes to argus-redact. Maintained from v0.6.6 forward. Prior relea
 Reported by Ninad Phalak (ninadphalak@gmail.com).
 
 v0.8.20 did not hold a charset-glued `eyJ`. v0.8.21 holds an unclosed
-charset-glued opener from that `eyJ`. A closed glued token longer than the
-carry window adds 8192. Past the raised ceiling the stream can still emit an
-unredacted head. The published v0.8.20 bullet is unchanged; its correction is
-under that heading.
+charset-glued opener from that `eyJ`. 8192 is added when the JWT itself is
+longer than the carry window even if the charset run is longer. Past the
+raised ceiling the stream can still emit an unredacted head. The published
+v0.8.20 bullet is unchanged; its correction is under that heading.
+
+**Correction:** 8192 is added when the JWT itself is longer than the carry
+window even if the charset run is longer.
 
 ### Fixed
 
-- **An unclosed charset-glued JWT opener is held from that `eyJ`.** The forward run must reach end of buffer and must not be a full `shared.ron` match plus `validate_jwt`. Preceding letters are not held. A closed glued token longer than the carry window adds 8192. A short completed token does not raise the ceiling. Past the raised ceiling an unredacted head can still be emitted.
+- **An unclosed charset-glued JWT opener is held from that `eyJ`.** The forward run must reach end of buffer and must not be a full `shared.ron` match plus `validate_jwt`. Preceding letters are not held. 8192 is added when the JWT itself is longer than the carry window even if the charset run is longer. A short completed token does not raise the ceiling. Past the raised ceiling an unredacted head can still be emitted.
 
 ## v0.8.20 — streaming JWT hold inside the raised ceiling
 

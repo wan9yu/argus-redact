@@ -539,9 +539,10 @@ fn jwt_ceiling_applies(combined: &str) -> bool {
 ///
 /// The forward `[A-Za-z0-9_-.]` run starts at that `eyJ`, not at the preceding
 /// letters or dot — the same left edge as [`unclosed_jwt_opener_start`]. A
-/// later `eyJ` strictly inside that run is not a separate candidate. A short
-/// completed JWT does not match. The run is ASCII, so its byte length is its
-/// char length.
+/// prefix of that run may be the full match; the length checked is that JWT,
+/// not the rest of the run. A later `eyJ` strictly inside that run is not a
+/// separate candidate. A short completed JWT does not match. The run is ASCII,
+/// so its byte length is its char length.
 fn closed_validated_jwt_exceeds_carry(combined: &str) -> bool {
     if !combined.contains("eyJ") {
         return false;
@@ -555,7 +556,17 @@ fn closed_validated_jwt_exceeds_carry(combined: &str) -> bool {
                 j += 1;
             }
             let run = &combined[i..j];
-            if jwt_run_is_full_match(run) && run.len() > CARRY_WINDOW {
+            // The third segment cannot contain `.`, so a later dot ends the
+            // prefix that may itself be a full match.
+            let jwt_end = run
+                .bytes()
+                .enumerate()
+                .filter(|(_, b)| *b == b'.')
+                .nth(2)
+                .map(|(idx, _)| idx)
+                .unwrap_or(run.len());
+            let jwt = &run[..jwt_end];
+            if jwt_run_is_full_match(jwt) && jwt.len() > CARRY_WINDOW {
                 return true;
             }
             // A later eyJ inside this run is not a separate candidate.

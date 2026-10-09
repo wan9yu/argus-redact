@@ -123,11 +123,38 @@ def test_public_docs_should_state_stream_jwt_head_past_raised_ceiling() -> None:
         assert _CONFIRMED_PHRASE not in text, f"{rel} contains the banned phrase"
 
 
+_WIDE_8192 = "A closed glued token longer than the carry window adds 8192."
+_CARRY_CORRECTION = (
+    "8192 is added when the JWT itself is longer than the carry window "
+    "even if the charset run is longer."
+)
+
+
+def _flat(text: str) -> str:
+    return " ".join(text.split())
+
+
 def _v0820_section(changelog: str) -> str:
     start = changelog.find("## v0.8.20")
     end = changelog.find("## v0.8.19")
     assert start != -1 and end != -1 and start < end
     return changelog[start:end]
+
+
+def _v0821_section(changelog: str) -> str:
+    start = changelog.find("## v0.8.21")
+    end = changelog.find("## v0.8.20")
+    assert start != -1 and end != -1 and start < end
+    return changelog[start:end]
+
+
+def _v0821_intro_and_bullet(section: str) -> tuple[str, str]:
+    fixed = section.find("### Fixed")
+    intro = section[:fixed] if fixed != -1 else section
+    bullet_at = section.find("- **An unclosed charset-glued JWT opener")
+    assert bullet_at != -1, "v0.8.21 bullet missing"
+    bullet = section[bullet_at:].split("\n", 1)[0]
+    return intro, bullet
 
 
 def test_docs_should_retract_the_v0_8_20_charset_glued_claim() -> None:
@@ -160,3 +187,22 @@ def test_docs_should_retract_the_v0_8_20_charset_glued_claim() -> None:
         lowered = text.lower()
         for phrase in _OVERCLAIM:
             assert phrase not in lowered, f"{rel} says {phrase!r}"
+
+
+def test_docs_should_replace_the_wide_closed_glued_ceiling_sentence() -> None:
+    """The wide 8192 sentence must not remain as the ceiling rule."""
+    known = _flat(_read("docs/known-issues.md"))
+    section = _v0821_section(_read("CHANGELOG.md"))
+    intro, bullet = _v0821_intro_and_bullet(section)
+    intro_flat = _flat(intro)
+    bullet_flat = _flat(bullet)
+
+    assert _WIDE_8192 not in known, "known-issues still has the wide 8192 sentence"
+    assert _WIDE_8192 not in intro_flat, "v0.8.21 intro still has the wide 8192 sentence"
+    assert _WIDE_8192 not in bullet_flat, "v0.8.21 bullet still has the wide 8192 sentence"
+
+    assert _CARRY_CORRECTION in known, "known-issues lacks the corrected ceiling sentence"
+    assert _CARRY_CORRECTION in intro_flat, "v0.8.21 intro lacks the corrected ceiling sentence"
+    assert _CARRY_CORRECTION in bullet_flat, "v0.8.21 bullet lacks the corrected ceiling sentence"
+    assert "**Correction:**" in _read("docs/known-issues.md")
+    assert "**Correction:**" in section, "v0.8.21 section has no marked correction"

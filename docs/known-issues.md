@@ -579,7 +579,10 @@ release.
   `[A-Za-z0-9_-.]`. The hold
   starts at that `eyJ`, so the preceding letters are not held. A complete token
   at end of buffer is not an opener. A short completed token does not raise the
-  ceiling. A closed glued token longer than the carry window adds 8192.
+  ceiling. 8192 is added when the JWT itself is longer than the carry window
+  even if the charset run is longer.
+  **Correction:** 8192 is added when the JWT itself is longer than the carry
+  window even if the charset run is longer.
   `flush()` drops the hold and detects what is still buffered; it does not
   rewrite a head already emitted. An incomplete `eyJ` can still be emitted on
   that drain.

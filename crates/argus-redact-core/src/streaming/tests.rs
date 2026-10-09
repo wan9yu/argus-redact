@@ -1877,3 +1877,182 @@ fn over_cap_empty_third_jwt_drain_excludes_header() {
         "snap_spans must append (begin, len+1, jwt): {spans:?}"
     );
 }
+
+#[test]
+fn longer_run_should_not_emit_jwt_when_charset_continues_past_the_token() {
+    // Non-lorem. A letter precedes eyJ. The charset run continues past the
+    // third segment, then a terminator outside that charset. Equal-run and
+    // short-token ceilings are controls. An end-of-buffer run holds.
+    let base = DEFAULT_MAX_BUFFER;
+    let sig_tail = "QzSigTail";
+    let token = format!(
+        "{JWT_HEADER}.{JWT_PAYLOAD}.{}{sig_tail}",
+        "a".repeat(4_100)
+    );
+    let prefix = "n";
+    let extra = ".xy";
+    let terminator = ",";
+    let tail = "z".repeat(80);
+    let text = format!("{prefix}{token}{extra}{terminator}{tail}");
+
+    assert!(!text.contains("lorem"), "fixture must be non-lorem");
+    assert!(
+        prefix.chars().next_back().is_some_and(|c| c.is_ascii_alphabetic()),
+        "the character before eyJ must be a letter"
+    );
+    assert!(token.chars().count() > base && token.chars().count() < base + 8_192);
+    assert!(text.chars().count() < base + 8_192, "fed text must stay under the raised span");
+    assert!(crate::validators::validate_jwt(&token));
+    assert!(extra.contains('.'));
+    assert!(extra.chars().any(|c| c != '.' && (c.is_ascii_alphanumeric() || c == '_' || c == '-')));
+    assert!(extra.chars().count() < CARRY_WINDOW, "the extra run must be shorter than the carry window");
+    assert!(
+        extra.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')),
+        "the extra must stay inside the scan charset"
+    );
+    assert!(
+        !is_jwt_run_byte(terminator.as_bytes()[0]),
+        "the terminator must sit outside the scan charset"
+    );
+    assert!(
+        !matches!(terminator, "\n" | "。" | "！" | "？" | "；" | "." | "!" | "?" | ";"),
+        "the terminator must not be a sentence boundary"
+    );
+    assert!(
+        !tail.chars().any(|c| matches!(c, '\n' | '。' | '！' | '？' | '；' | '.' | '!' | '?' | ';')),
+        "the tail must have no sentence boundary"
+    );
+    assert_eq!(last_boundary_index(&text), -1, "fixture must be boundary-less");
+
+    let header_at = text.find(JWT_HEADER).expect("header");
+    assert_eq!(header_at, prefix.len());
+    assert!(
+        text[..header_at].chars().next_back().is_some_and(|c| c.is_ascii_alphabetic()),
+        "the character before eyJ must be a letter"
+    );
+    let mut run_end = header_at;
+    let bytes = text.as_bytes();
+    while run_end < bytes.len() && is_jwt_run_byte(bytes[run_end]) {
+        run_end += 1;
+    }
+    assert_eq!(&text[header_at..run_end], format!("{token}{extra}"));
+    assert_eq!(&text[run_end..run_end + terminator.len()], terminator);
+    let token_end = prefix.chars().count() + token.chars().count();
+    assert!(run_end > token_end, "the charset run must continue past the token");
+
+    let detected = make_detect(s(&["en"]))(&text);
+    assert!(
+        detected.entities.iter().any(|e| e.type_ == "jwt" && e.text == token),
+        "fixture: detection on the full buffer must find the exact token"
+    );
+    assert_eq!(
+        unclosed_jwt_opener_start(&text),
+        None,
+        "fixture: a terminated longer run is not an opener"
+    );
+
+    let chunks = chunk_chars(&text, 64);
+    let term_at = text.find(terminator).expect("terminator");
+    let term_chunk = text[..term_at].chars().count() / 64;
+    assert!(term_chunk + 1 < chunks.len(), "fixture: terminator is in the last chunk");
+    assert_eq!(
+        chunks[term_chunk].chars().count(),
+        64,
+        "fixture: the closing chunk must be 64 characters"
+    );
+    assert_eq!(
+        chunks[term_chunk + 1].chars().count(),
+        64,
+        "fixture: the feed after the terminator must be 64 characters"
+    );
+    assert!(
+        chunks.last().is_some_and(|c| !c.contains(terminator)),
+        "fixture: terminator is in the last chunk"
+    );
+    let closing_len: usize = chunks[..=term_chunk].iter().map(|c| c.chars().count()).sum();
+    assert!(
+        closing_len.saturating_sub(CARRY_WINDOW) <= token_end,
+        "fixture: closing chunk pushes len-256 past the token end"
+    );
+
+    // Equal run: the same token, run exactly equal to it, letter glue,
+    // terminator after it. The ceiling is base+8192.
+    let equal = format!("{prefix}{token}!");
+    let equal_eyj = equal.find("eyJ").expect("header");
+    assert_eq!(&equal[equal_eyj..equal_eyj + token.len()], token);
+    assert!(equal[equal_eyj + token.len()..].starts_with('!'));
+    assert_eq!(effective_max_buffer(&equal, base), base + 8_192);
+
+    // Short token: forward run longer than the carry window, terminator
+    // before end of buffer. The ceiling stays at base.
+    let short = complete_jwt();
+    assert!(short.chars().count() <= CARRY_WINDOW, "fixture must be a short completed JWT");
+    let short_run = format!("{short}.{}", "b".repeat(CARRY_WINDOW));
+    assert!(short_run.chars().count() > CARRY_WINDOW);
+    let short_text = format!("n{short_run}!zz");
+    assert!(short_text.ends_with("zz"), "terminator must sit before end of buffer");
+    assert_eq!(unclosed_jwt_opener_start(&short_text), None);
+    assert_eq!(effective_max_buffer(&short_text, base), base);
+
+    // End-of-buffer run: the opener holds. Do not read that hold as a failure.
+    let eob = format!("{prefix}{token}{extra}");
+    assert!(eob.chars().count() >= base && eob.chars().count() < base + 8_192);
+    assert_eq!(last_boundary_index(&eob), -1);
+    assert!(unclosed_jwt_opener_start(&eob).is_some(), "end-of-buffer run must be an opener");
+    let lang_v = s(&["en"]);
+    let mut eob_r = StreamingRedactor::with_max_buffer(
+        make_detect(lang_v.clone()),
+        make_redact(lang_v.clone()),
+        base,
+    );
+    let eob_res = eob_r.feed(&eob).expect("end-of-buffer feed");
+    assert!(
+        eob_res.segment.downstream_text.is_empty(),
+        "end-of-buffer opener must hold"
+    );
+    assert!(!eob_res.segment.downstream_text.contains(JWT_HEADER));
+
+    let mut r = StreamingRedactor::with_max_buffer(
+        make_detect(lang_v.clone()),
+        make_redact(lang_v),
+        base,
+    );
+    let mut out = String::new();
+    let mut fed_len = 0usize;
+    let mut closed = false;
+    let mut followed = false;
+    for (i, chunk) in chunks.iter().enumerate() {
+        fed_len += chunk.chars().count();
+        out.push_str(&r.feed(chunk).expect("feed").segment.downstream_text);
+        if i == term_chunk {
+            closed = true;
+            assert!(
+                r.buffer().chars().count() >= base,
+                "fixture: buffer dropped below 4096 after the closing chunk"
+            );
+            assert!(
+                fed_len.saturating_sub(CARRY_WINDOW) <= token_end,
+                "fixture: closing chunk pushes len-256 past the token end"
+            );
+        } else if closed && !followed {
+            assert_eq!(chunk.chars().count(), 64, "fixture: following feed is not 64 characters");
+            followed = true;
+        }
+    }
+    assert!(closed && followed, "fixture: no 64-character feed ran after the terminator");
+    out.push_str(&r.flush().expect("flush").segment.downstream_text);
+    let agg = r.aggregate_key();
+
+    let header_down = out.contains(JWT_HEADER);
+    let token_down = out.contains(&token);
+    let head_down = out.contains(&token[..40]);
+    let tail_down = out.contains(sig_tail);
+    let in_key = agg.values().any(|v| v == &token);
+    let emission = header_down || token_down || head_down;
+    let hold = !header_down && (!in_key || tail_down);
+    let green = in_key && !header_down && !head_down && !tail_down;
+    assert!(
+        green,
+        "feed result emission={emission} hold={hold} header_down={header_down} token_down={token_down} head_down={head_down} tail_down={tail_down} in_key={in_key}"
+    );
+}
