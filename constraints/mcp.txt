@@ -14,8 +14,8 @@
 # anticipated ValueError into ToolError so clean messages still reach the
 # client; this pin is the version that gate was checked against.
 #
-# mcp-types is mcp's own runtime dependency (mcp==2.2.0 requires
-# mcp-types==2.2.0 exactly), pinned here too for an explicit, self-documenting
+# mcp-types is mcp's own runtime dependency (mcp==2.3.0 requires
+# mcp-types==2.3.0 exactly), pinned here too for an explicit, self-documenting
 # resolution rather than relying on mcp's own metadata.
 #
 # NOTE: dependabot's pip ecosystem (.github/dependabot.yml) tracks
@@ -23,5 +23,5 @@
 # manifest dependabot understands. When dependabot does bump this file (it
 # did for 2.0.0 → 2.2.0), the integration job is the check that the new 2.x
 # still surfaces ToolError text.
-mcp==2.2.0
-mcp-types==2.2.0
+mcp==2.3.0
+mcp-types==2.3.0
